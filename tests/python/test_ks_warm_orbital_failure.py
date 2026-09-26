@@ -68,7 +68,7 @@ struct Owner {
   double warm_energy = std::numeric_limits<double>::infinity();
   std::size_t elements = 8;
   std::uint64_t final_generation = 0, generation = 7;
-  struct { bool converged = false; } output;
+  struct { bool converged = false; double energy = 0.0; } output;
   struct {
     std::uint64_t warm_orbital_frames_retained = 0, warm_orbital_frame_invalidations = 0;
   } movement;
