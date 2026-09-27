@@ -164,7 +164,8 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
         const auto replay =
             generated::run_replay_cpu(p.nocc, p.nvir, in, replay_arena.data(), replay_arena.size());
         result.diagnostic.replay_seconds +=
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started).count();
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started)
+                .count();
         ++result.diagnostic.replay_graph_calls;
         result.diagnostic.replay_r1_max = max_abs(replay.r1, n1);
         result.diagnostic.replay_r2_max = max_abs(replay.r2, n2);

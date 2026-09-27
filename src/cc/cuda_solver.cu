@@ -372,7 +372,8 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         const auto replay = generated::run_replay_cuda(owner.state);
         const auto replay_status = owner.read_status(replay);
         owner.diagnostic.replay_seconds +=
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started).count();
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started)
+                .count();
         ++owner.diagnostic.replay_graph_calls;
         owner.diagnostic.replay_r1_max = replay_status[1];
         owner.diagnostic.replay_r2_max = replay_status[2];

@@ -8,8 +8,9 @@ import json
 import time
 from pathlib import Path
 
-from benchmarks.readme_hf_scaling import scaling_cases
 from vibeqc import Calculator, _native
+
+from benchmarks.readme_hf_scaling import scaling_cases
 
 EXPECTED = {
     3: (-75.01437492827876, -7.626040122204577e-05),

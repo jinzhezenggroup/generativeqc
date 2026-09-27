@@ -181,8 +181,8 @@ class MethodCapabilities:
 
 __all__ = [
     "Atom",
-    "CorrelationResult",
     "CcPerformanceResult",
+    "CorrelationResult",
     "MethodCapabilities",
     "Primitive",
     "Result",
