@@ -63,6 +63,42 @@ def _automatic_libxc_rows() -> tuple[list[tuple[str, str]], list[tuple[str, str,
     return available, blocked
 
 
+def public_method_doc_dependencies() -> tuple[Path, ...]:
+    """Track both catalog data and resolution logic for incremental Sphinx builds."""
+    paths = {
+        Path(__file__).resolve(),
+        MANIFEST,
+        LIBXC_CATALOG,
+        PYTHON / "vibeqc/ks.py",
+        PYTHON / "vibeqc/_generated_methods.py",
+    }
+    for package in ("method", "xc"):
+        directory = PYTHON / "vibeqc_compiler" / package
+        for pattern in ("*.py", "*.json"):
+            paths.update(directory.rglob(pattern))
+    return tuple(sorted(paths))
+
+
+def _compiler_dft_rows() -> list[tuple[str, str, str]]:
+    """Discover named compositions and aliases through the public KS resolver."""
+    if str(PYTHON) not in sys.path:
+        sys.path.insert(0, str(PYTHON))
+
+    from vibeqc.ks import resolve_ks_method
+    from vibeqc_compiler.method import METHOD_ALIASES, METHOD_CATALOG
+
+    rows = []
+    for identifier in sorted(set(METHOD_CATALOG) | set(METHOD_ALIASES)):
+        for suffix in ("rks", "uks"):
+            selector = f"{identifier.lower()}-{suffix}"
+            try:
+                method, _ = resolve_ks_method(selector)
+            except (ValueError, NotImplementedError):
+                continue
+            rows.append((selector, method.identifier, method.spin))
+    return rows
+
+
 def _code_list(values: list[str]) -> str:
     return ", ".join(f"`{value}`" for value in values) if values else "—"
 
@@ -77,8 +113,8 @@ def render_public_methods_markdown() -> str:
         "# Public methods",
         "",
         "This page is rendered automatically by Sphinx from the public native method",
-        "manifest, public composite selectors, and the automatic Libxc semilocal",
-        "capability inventory. It is not a handwritten support list.",
+        "manifest, compiler-discovered DFT names, public composite selectors, and",
+        "the automatic Libxc semilocal inventory. It is not a handwritten support list.",
         "",
         "Backend-, basis-, grid-, spin-, and property-specific admission checks still",
         "apply at execution time and fail closed when a requested combination is not",
@@ -106,6 +142,31 @@ def render_public_methods_markdown() -> str:
             f"|`{method['name']}` | {family} | {properties} | {batch} | "
             f"{aliases} | {status} |"
         )
+
+    # Do not duplicate compatibility selectors already shown in either manifest
+    # table. Compiler discovery owns any newly admitted names and aliases.
+    listed = {
+        selector
+        for method in (*methods, *composites)
+        for selector in (method["name"], *method.get("aliases", []))
+    }
+    lines.extend(
+        [
+            "",
+            "## Compiler-discovered DFT selectors",
+            "",
+            "These additional named compositions and aliases pass the same public",
+            "KS resolver used by Calculator, without requiring another native ABI ID.",
+            "Names already shown in the native or composite tables are omitted here.",
+            "Backend, basis, grid and derivative admission still apply at execution.",
+            "",
+            "| Method | MethodIR identifier | Spin |",
+            "| --- | --- | --- |",
+        ]
+    )
+    for selector, identifier, spin in _compiler_dft_rows():
+        if selector not in listed:
+            lines.append(f"|`{selector}` | `{identifier}` | {spin} |")
 
     lines.extend(
         [

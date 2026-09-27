@@ -8,7 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.render_public_methods_doc import render_public_methods_markdown
+from tools.render_public_methods_doc import (
+    public_method_doc_dependencies,
+    render_public_methods_markdown,
+)
 
 project = "VibeQC"
 author = "VibeQC contributors"
@@ -46,6 +49,8 @@ myst_heading_anchors = 3
 
 def _render_public_methods(app: typing.Any, docname: str, source: list[str]) -> None:
     if docname == "public_methods":
+        for dependency in public_method_doc_dependencies():
+            app.env.note_dependency(str(dependency))
         source[0] = render_public_methods_markdown()
 
 
