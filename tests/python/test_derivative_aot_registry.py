@@ -8,7 +8,13 @@ from vibeqc_compiler.integral.derivative_aot_registry import (
     component_groups,
     entry_prefix_for_key,
     make_key,
+    select_packaged_component_derivative_aot,
     select_packaged_derivative_aot,
+)
+from vibeqc_compiler.integral.first_derivative_schedule import (
+    COMPONENT_LABELS,
+    CPU_AOT_SHARDS,
+    cpu_aot_symbol,
 )
 from vibeqc_compiler.integral.range_separation import CoulombKernel
 from vibeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
@@ -81,3 +87,56 @@ def test_full_range_has_method_neutral_registry_identity() -> None:
     prefix = entry_prefix_for_key(key)
     assert prefix.startswith("vibeqc_derivative_cpu_d1_full_")
     assert "rsh" not in prefix
+
+
+def test_shared_full_range_component_bundle_uses_same_registry() -> None:
+    class Symbol:
+        pass
+
+    library = type("Library", (), {})()
+    for shard in range(CPU_AOT_SHARDS):
+        setattr(library, cpu_aot_symbol(shard), Symbol())
+
+    radial = CoulombKernel("full_range", 0.0)
+    selected = select_packaged_component_derivative_aot(
+        library,
+        backend="cpu",
+        radial=radial,
+    )
+    assert selected is not None
+    assert selected.key.backend == "cpu"
+    assert selected.key.radial == radial
+    assert selected.key.component_domain == COMPONENT_LABELS
+    assert len(selected.symbols) == CPU_AOT_SHARDS
+    assert selected.key.to_payload()["radial"]["family"] == "full_range"
+
+    assert (
+        select_packaged_component_derivative_aot(
+            library,
+            backend="cpu",
+            radial=CoulombKernel("short_range", 0.3),
+        )
+        is None
+    )
+    assert (
+        select_packaged_component_derivative_aot(
+            library,
+            backend="cuda",
+            radial=radial,
+        )
+        is None
+    )
+
+
+def test_component_bundle_fails_closed_when_one_shard_is_missing() -> None:
+    library = type("Library", (), {})()
+    for shard in range(CPU_AOT_SHARDS - 1):
+        setattr(library, cpu_aot_symbol(shard), object())
+    assert (
+        select_packaged_component_derivative_aot(
+            library,
+            backend="cpu",
+            radial=CoulombKernel("full_range", 0.0),
+        )
+        is None
+    )
