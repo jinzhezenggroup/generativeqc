@@ -27,50 +27,6 @@ __device__ inline unsigned cartesian_component_count(unsigned angular) {
   return (angular + 1U) * (angular + 2U) / 2U;
 }
 
-__device__ inline unsigned pair_class(unsigned first, unsigned second) {
-  if (first < second) {
-    const unsigned swap = first;
-    first = second;
-    second = swap;
-  }
-  return first * (first + 1U) / 2U + second;
-}
-
-__device__ inline void canonicalize_shell_slots(const DeviceBatch& batch,
-                                                const std::int32_t (&raw_shell)[4],
-                                                unsigned (&canonical_raw_slot)[4]) {
-  canonical_raw_slot[0] = 0U;
-  canonical_raw_slot[1] = 1U;
-  canonical_raw_slot[2] = 2U;
-  canonical_raw_slot[3] = 3U;
-  if (batch.shell_angular[raw_shell[canonical_raw_slot[0]]] <
-      batch.shell_angular[raw_shell[canonical_raw_slot[1]]]) {
-    const unsigned swap = canonical_raw_slot[0];
-    canonical_raw_slot[0] = canonical_raw_slot[1];
-    canonical_raw_slot[1] = swap;
-  }
-  if (batch.shell_angular[raw_shell[canonical_raw_slot[2]]] <
-      batch.shell_angular[raw_shell[canonical_raw_slot[3]]]) {
-    const unsigned swap = canonical_raw_slot[2];
-    canonical_raw_slot[2] = canonical_raw_slot[3];
-    canonical_raw_slot[3] = swap;
-  }
-  const unsigned first_pair_class =
-      pair_class(batch.shell_angular[raw_shell[canonical_raw_slot[0]]],
-                 batch.shell_angular[raw_shell[canonical_raw_slot[1]]]);
-  const unsigned second_pair_class =
-      pair_class(batch.shell_angular[raw_shell[canonical_raw_slot[2]]],
-                 batch.shell_angular[raw_shell[canonical_raw_slot[3]]]);
-  if (first_pair_class < second_pair_class) {
-    const unsigned first_swap = canonical_raw_slot[0];
-    canonical_raw_slot[0] = canonical_raw_slot[2];
-    canonical_raw_slot[2] = first_swap;
-    const unsigned second_swap = canonical_raw_slot[1];
-    canonical_raw_slot[1] = canonical_raw_slot[3];
-    canonical_raw_slot[3] = second_swap;
-  }
-}
-
 }  // namespace order3_detail
 
 template <unsigned TargetShellClass>
@@ -154,7 +110,8 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
       batch.shell_pair_second[second_pair],
   };
   unsigned canonical_raw_slot[4];
-  order3_detail::canonicalize_shell_slots(batch, raw_shell, canonical_raw_slot);
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
       raw_shell[canonical_raw_slot[1]],

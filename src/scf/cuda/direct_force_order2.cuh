@@ -94,7 +94,7 @@ contracted_eri_cartesian_source_order2_generated_weighted_gradient(
  * Evaluate one exact order-two AO-quartet gradient through compiler-owned force roots.
  *
  * The generic force fallback supplies a one-hot Cartesian component weight. Shell/pair
- * canonicalization remains runtime plumbing; all ERI/derivative algebra is shared with the
+ * canonicalization and ERI/derivative algebra use the same compiler-owned helpers as the
  * generated PSPS/PPSS/DSSS production consumers above.
  */
 __device__ inline CartesianQuartetGradient
@@ -120,45 +120,13 @@ contracted_eri_cartesian_source_order2_generated_gradient(const DeviceBatch& bat
       batch.shell_angular[raw_shell[0]], batch.shell_angular[raw_shell[1]],
       batch.shell_angular[raw_shell[2]], batch.shell_angular[raw_shell[3]]);
 
-  unsigned canonical_raw_slot[4]{};
-  if (shell_class == kPspsShellClass) {
-    unsigned first_p_slot = 4U;
-    unsigned second_p_slot = 4U;
-    for (unsigned slot = 0; slot < 2; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 1U) first_p_slot = slot;
-    }
-    for (unsigned slot = 2; slot < 4; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 1U) second_p_slot = slot;
-    }
-    if (first_p_slot >= 2U || second_p_slot < 2U || second_p_slot >= 4U) return {};
-    canonical_raw_slot[0] = first_p_slot;
-    canonical_raw_slot[1] = 1U - first_p_slot;
-    canonical_raw_slot[2] = second_p_slot;
-    canonical_raw_slot[3] = 5U - second_p_slot;
-  } else if (shell_class == kPpssShellClass) {
-    const bool first_pair_is_pp =
-        batch.shell_angular[raw_shell[0]] == 1U && batch.shell_angular[raw_shell[1]] == 1U;
-    const unsigned pair_begin = first_pair_is_pp ? 0U : 2U;
-    const unsigned other_pair_begin = first_pair_is_pp ? 2U : 0U;
-    canonical_raw_slot[0] = pair_begin;
-    canonical_raw_slot[1] = pair_begin + 1U;
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  } else if (shell_class == kDsssShellClass) {
-    unsigned d_slot = 4U;
-    for (unsigned slot = 0; slot < 4; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 2U) d_slot = slot;
-    }
-    if (d_slot >= 4U) return {};
-    const unsigned pair_begin = d_slot < 2U ? 0U : 2U;
-    const unsigned other_pair_begin = pair_begin == 0U ? 2U : 0U;
-    canonical_raw_slot[0] = d_slot;
-    canonical_raw_slot[1] = pair_begin + (d_slot == pair_begin ? 1U : 0U);
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  } else {
+  if (shell_class != kPspsShellClass && shell_class != kPpssShellClass &&
+      shell_class != kDsssShellClass) {
     return {};
   }
+  unsigned canonical_raw_slot[4];
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
 
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
@@ -256,21 +224,9 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
     return;
   }
 
-  unsigned first_p_slot = 4;
-  unsigned second_p_slot = 4;
-  for (unsigned slot = 0; slot < 2; ++slot) {
-    if (batch.shell_angular[raw_shell[slot]] == 1U) first_p_slot = slot;
-  }
-  for (unsigned slot = 2; slot < 4; ++slot) {
-    if (batch.shell_angular[raw_shell[slot]] == 1U) second_p_slot = slot;
-  }
-  if (first_p_slot >= 2 || second_p_slot < 2 || second_p_slot >= 4) return;
-  const unsigned canonical_raw_slot[4] = {
-      first_p_slot,
-      1U - first_p_slot,
-      second_p_slot,
-      5U - second_p_slot,
-  };
+  unsigned canonical_raw_slot[4];
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
       raw_shell[canonical_raw_slot[1]],
@@ -363,28 +319,8 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
   }
 
   unsigned canonical_raw_slot[4];
-  if constexpr (TargetShellClass == kPpssShellClass) {
-    const bool first_pair_is_pp =
-        batch.shell_angular[raw_shell[0]] == 1U && batch.shell_angular[raw_shell[1]] == 1U;
-    const unsigned pair_begin = first_pair_is_pp ? 0U : 2U;
-    const unsigned other_pair_begin = first_pair_is_pp ? 2U : 0U;
-    canonical_raw_slot[0] = pair_begin;
-    canonical_raw_slot[1] = pair_begin + 1U;
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  } else {
-    unsigned d_slot = 4U;
-    for (unsigned slot = 0; slot < 4; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 2U) d_slot = slot;
-    }
-    if (d_slot >= 4U) return;
-    const unsigned pair_begin = d_slot < 2U ? 0U : 2U;
-    const unsigned other_pair_begin = pair_begin == 0U ? 2U : 0U;
-    canonical_raw_slot[0] = d_slot;
-    canonical_raw_slot[1] = pair_begin + (d_slot == pair_begin ? 1U : 0U);
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  }
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
       raw_shell[canonical_raw_slot[1]],
