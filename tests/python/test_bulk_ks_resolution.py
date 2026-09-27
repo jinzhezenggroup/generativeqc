@@ -278,3 +278,115 @@ def test_bulk_ks_resolution_retains_compiled_cpu_identities(
 
     assert payload["compiled_cpu_binding_identity"] == "a" * 64
     assert payload["compiled_cpu_result_identity"] == "b" * 64
+
+
+def test_public_bulk_ks_requires_exact_public_endpoint_before_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capability = functional_capability("GGA_X_PBE_SOL")
+    public = CapabilityResolution(
+        name=capability.name,
+        identity=capability.identity,
+        required_stages=(
+            "compiled-cpu",
+            "production-domain",
+            "molecular-scf",
+            "public-method",
+        ),
+        qualified_stages=(
+            "graph-imported",
+            "pointwise-validated",
+            "compiled-cpu",
+            "production-domain",
+            "molecular-scf",
+            "public-method",
+        ),
+        public_dft=True,
+    )
+    calls: list[tuple[object, ...]] = []
+
+    def fake_endpoint(name: str, **kwargs: object) -> object:
+        calls.append(("endpoint", name, kwargs))
+        return SimpleNamespace(
+            identity=capability.identity,
+            spin="polarized",
+            public_dft=True,
+        )
+
+    def fake_resolve(
+        name: str,
+        *,
+        required_stages: tuple[str, ...],
+        evidence: dict[str, object] | None = None,
+    ) -> CapabilityResolution:
+        calls.append(("stages", name, required_stages, evidence))
+        return public
+
+    evidence = {"public-method": {"sentinel": True}}
+    monkeypatch.setattr(bulk_ks, "functional_capability", lambda *args, **kwargs: capability)
+    monkeypatch.setattr(bulk_ks, "resolve_endpoint_capability", fake_endpoint)
+    monkeypatch.setattr(bulk_ks, "resolve_capability", fake_resolve)
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
+    )
+
+    result = bulk_ks.resolve_public_bulk_ks(
+        capability.name,
+        spin="polarized",
+        evidence=evidence,
+    )
+
+    assert calls[0] == (
+        "endpoint",
+        capability.name,
+        {
+            "backend": "cpu",
+            "product": "energy",
+            "spin": "polarized",
+            "require_public": True,
+            "evidence": evidence,
+        },
+    )
+    assert calls[1] == (
+        "stages",
+        capability.name,
+        (
+            "compiled-cpu",
+            "production-domain",
+            "molecular-scf",
+            "public-method",
+        ),
+        evidence,
+    )
+    assert result.method.reference == "unrestricted"
+    assert result.to_payload()["public_dft"] is True
+
+
+def test_public_bulk_ks_rejects_endpoint_identity_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capability = functional_capability("GGA_X_PBE_SOL")
+    public = CapabilityResolution(
+        name=capability.name,
+        identity=capability.identity,
+        required_stages=("public-method",),
+        qualified_stages=("public-method",),
+        public_dft=True,
+    )
+    monkeypatch.setattr(bulk_ks, "functional_capability", lambda *args, **kwargs: capability)
+    monkeypatch.setattr(
+        bulk_ks,
+        "resolve_endpoint_capability",
+        lambda *args, **kwargs: SimpleNamespace(
+            identity="0" * 64,
+            spin="unpolarized",
+            public_dft=True,
+        ),
+    )
+    monkeypatch.setattr(bulk_ks, "resolve_capability", lambda *args, **kwargs: public)
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
+    )
+
+    with pytest.raises(RuntimeError, match="endpoint identity changed"):
+        bulk_ks.resolve_public_bulk_ks(capability.name)
