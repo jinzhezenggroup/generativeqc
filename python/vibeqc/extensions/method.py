@@ -158,6 +158,7 @@ __all__ = [
     "UnsupportedMethod",
     "compose",
     "inspect",
+    "libxc",
     "named",
     "resolve",
     "verify",
