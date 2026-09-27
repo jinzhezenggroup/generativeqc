@@ -352,7 +352,7 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points)
+        !view->ao || !view->points)
       throw std::invalid_argument("invalid geometry task lease");
     check(*p);
     drain_geometry(*p);
@@ -416,7 +416,7 @@ int stationary_geometry_external_device(void* pointer, const vibeqc::dft::GridTa
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points || !external_device ||
+        !view->ao || !view->points || !external_device ||
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident nonlocal geometry seed lease");
     check(*p);
@@ -470,7 +470,7 @@ int stationary_geometry_external_device_enqueue(
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points || !external_device ||
+        !view->ao || !view->points || !external_device ||
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid deferred resident nonlocal geometry seed lease");
     check(*p);
@@ -508,7 +508,7 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points)
+        !view->ao || !view->points)
       throw std::invalid_argument("invalid deferred geometry task lease");
     check(*p);
     auto stream = view->stream;
