@@ -31,7 +31,7 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     if len(set(names)) != len(names):
         raise ValueError("native semilocal family names must be unique")
     allowed_coefficients = {"exact", "native-scales"}
-    allowed_exchange = {"none", "full-range-optional", "canonical"}
+    allowed_exchange = {"none", "any", "canonical"}
     for item in families:
         components = item.get("components")
         if not isinstance(components, list) or not 1 <= len(components) <= 4:
