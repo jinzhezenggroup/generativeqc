@@ -6,6 +6,13 @@ from pathlib import Path
 import numpy as np
 from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from vibeqc_compiler.integral.first_derivative_schedule import (
+    CPU_RSH_AOT_COMPONENTS,
+    CPU_RSH_AOT_FAMILIES,
+    CPU_RSH_AOT_OMEGA,
+    CPU_RSH_AOT_SHARDS,
+    cpu_rsh_aot_symbol,
+)
 from vibeqc_compiler.integral.ir import four_center_eri_operator
 from vibeqc_compiler.integral.range_separation import CoulombKernel
 from vibeqc_compiler.integral.shell_spec import cartesian_components
@@ -36,6 +43,8 @@ class RangeExchangeExecutor:
         compiler: typing.Any,
         *,
         device_id: int = 0,
+        aot_library: typing.Any = None,
+        component_executor: typing.Any = None,
     ) -> None:
         if isinstance(compiler, CppCompilerAdapter):
             backend = "cpu"
@@ -69,7 +78,40 @@ class RangeExchangeExecutor:
         self.backend = backend
         self.device_id = device_id
         self._plans: dict[tuple[typing.Any, ...], PreparedWeightedEri] = {}
+        self._component_executor = None
+        self._aot_plans: dict[str, typing.Any] = {}
+        if backend == "cpu" and aot_library is not None and component_executor is not None:
+            prepare = getattr(component_executor, "prepare_dispatch_plan", None)
+            execute = getattr(component_executor, "integral_with_dispatch_plan", None)
+            if callable(prepare) and callable(execute):
+                for family in CPU_RSH_AOT_FAMILIES:
+                    dispatchers = self._packaged_dispatchers(aot_library, family)
+                    if dispatchers:
+                        self._aot_plans[family] = prepare(
+                            dispatchers, CPU_RSH_AOT_COMPONENTS
+                        )
+                if self._aot_plans:
+                    self._component_executor = component_executor
+        self.compilation_work = {
+            "range_exchange_packaged_families": len(self._aot_plans),
+            "range_exchange_aot_shards": len(self._aot_plans) * CPU_RSH_AOT_SHARDS,
+            "range_exchange_runtime_compilations": 0,
+        }
         self.records = 0
+
+    @staticmethod
+    def _packaged_dispatchers(
+        library: typing.Any, family: str
+    ) -> tuple[typing.Any, ...]:
+        dispatchers = []
+        for shard in range(CPU_RSH_AOT_SHARDS):
+            try:
+                dispatchers.append(
+                    getattr(library, cpu_rsh_aot_symbol(family, shard))
+                )
+            except AttributeError:
+                return ()
+        return tuple(dispatchers)
 
     @staticmethod
     def _kernel(primitive: typing.Any) -> CoulombKernel:
@@ -115,7 +157,25 @@ class RangeExchangeExecutor:
             )
         )
         radial = self._kernel(primitive)
-        key = (radial.family.value, radial.omega, angular, component)
+        family = radial.family.value
+        if (
+            self.backend == "cpu"
+            and self._component_executor is not None
+            and radial.omega == CPU_RSH_AOT_OMEGA
+            and family in self._aot_plans
+        ):
+            owners, values, records = (
+                self._component_executor.integral_with_dispatch_plan(
+                    "four_center_eri",
+                    tuple(int(index) for index in indices),
+                    float(weight),
+                    self._aot_plans[family],
+                )
+            )
+            self.records += records
+            return owners, values
+
+        key = (family, radial.omega, angular, component)
         plan = self._plans.get(key)
         if plan is None:
             integral = build_weighted_eri_ir(
@@ -136,6 +196,7 @@ class RangeExchangeExecutor:
                 device_id=self.device_id,
             )
             self._plans[key] = plan
+            self.compilation_work["range_exchange_runtime_compilations"] += 1
         owners = [int(row[0]) for row in rows]
         primitives = tuple(self._primitive_shell(row) for row in rows)
         centers = tuple(
