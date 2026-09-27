@@ -736,7 +736,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   runtime::SolverRegionCudaBinding solver_region_binding() const {
-    const bool replay = configured_replay_enabled() &&
+    const bool replay_functional = is_semilocal_family(functional, SemilocalFamily::Lda) ||
+                                   is_semilocal_family(functional, SemilocalFamily::Pbe);
+    const bool replay = configured_replay_enabled() && replay_functional &&
                         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
     graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
