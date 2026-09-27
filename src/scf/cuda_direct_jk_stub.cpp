@@ -28,13 +28,6 @@ vibeqc_status create_cuda_direct_jk_plan(int, const std::vector<core::System>&, 
   diagnostic = {};
   return unavailable(detail);
 }
-vibeqc_status create_cuda_direct_jk_plan_with_generated_exchange(
-    int, const std::vector<core::System>&, unsigned, double, std::size_t, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
-  if (output) *output = nullptr;
-  diagnostic = {};
-  return unavailable(detail);
-}
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan*) noexcept {}
 vibeqc_status execute_cuda_direct_jk(CudaDirectJkPlan*, FockBuildSpec, const std::vector<double>&,
                                      const std::vector<double>&, std::vector<double>&,
