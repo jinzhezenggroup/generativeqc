@@ -123,8 +123,10 @@ exclusive host-wall timeline: its phase durations sum to `endpoint_seconds`
 without overlap and without introducing CUDA synchronization. The #662 benchmark
 also enables `profile_device=True`: four reusable CUDA events bracket each already
 synchronized source batch, so `work["device_phase_ms"]` separates primitive H2D,
-derivative kernels, reductions, geometry H2D/kernels/reductions, setup work and
-final D2H. Event elapsed times are read only after an existing source synchronization;
+derivative kernels/reductions, geometry H2D and the fused geometry-plus-reduction
+kernel, setup work and final D2H. The retained `geometry_reduction` metric is zero
+for the fused stationary path; its former work is charged to `geometry_kernel`.
+Event elapsed times are read only after an existing source synchronization;
 no extra synchronization point is inserted. `synchronization_wait_wall` measures
 the wall time spent in those existing stream synchronizations and is reported as
 attribution, not double-counted into the additive wall timeline. Transfer bytes,
