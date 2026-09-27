@@ -2,10 +2,11 @@
 
 import typing
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions
+from vibeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
 from vibeqc._dft_gradient import _native_ao_atoms
 from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
 from vibeqc_compiler.dft import NativeAO
@@ -14,12 +15,21 @@ from vibeqc_compiler.xc.grid_response import partition_response
 
 from tools.vibeqc_hessian import (
     directional_rks_response,
+    directional_rks_responses,
     native_rks_xc_hvp_components,
+    rks_hessian,
     rks_hvp,
+    rks_hvp_many,
 )
 from tools.vibeqc_response import GMRESOptions, NativeRKSResponse
 
 H2 = [("H", (0.0, 0.0, -0.72)), ("H", (0.08, -0.03, 0.71))]
+LARGE_HE = [("He", (0.13, -0.21, 0.17))]
+LARGE_HE_BASIS = (
+    Shell(0, 0, (Primitive(1.5, 1.0),)),
+    Shell(0, 2, (Primitive(0.8, 1.0),)),
+    Shell(0, 2, (Primitive(0.35, 1.0),)),
+)
 GRID = GridSpec(radial_points=10, angular_polar=4, angular_azimuth=8)
 
 
@@ -145,6 +155,54 @@ def test_real_rks_geometry_direction_solves_shared_cpks(case: typing.Any) -> Non
         result.response.energy_weighted_density_derivative,
     ):
         assert not value.flags.writeable
+
+
+def test_rks_nuclear_response_multi_rhs_matches_single(
+    case: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The RKS response layer must use one shared solve_many call for all RHSs."""
+    import tools.vibeqc_hessian.rks_directional as rks_directional_module
+
+    _, operator, direction, single = case
+    other = np.roll(direction.reshape(-1), 1).reshape(direction.shape)
+    other /= np.linalg.norm(other)
+
+    calls = []
+    original = rks_directional_module.solve_stationary_nuclear_perturbations
+
+    def counted(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        calls.append((args, kwargs))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        rks_directional_module, "solve_stationary_nuclear_perturbations", counted
+    )
+    result = directional_rks_responses(
+        operator,
+        np.stack((direction, other)),
+        strategy="blocked",
+        solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
+    )
+    assert len(calls) == 1
+    assert result.solve_result.converged
+    assert result.diagnostics["multi_rhs_calls"] == 1
+    assert result.diagnostics["nrhs"] == 2
+    assert result.diagnostics["strategy"] == "blocked"
+    np.testing.assert_allclose(
+        result.responses[0].response.density_derivative,
+        single.response.density_derivative,
+        atol=2e-10,
+        rtol=2e-9,
+    )
+    np.testing.assert_allclose(
+        result.responses[0].response.energy_weighted_density_derivative,
+        single.response.energy_weighted_density_derivative,
+        atol=2e-10,
+        rtol=2e-9,
+    )
+    for response, expected in zip(result.responses, (direction, other), strict=True):
+        assert response.response.solve_result.converged
+        np.testing.assert_array_equal(response.direction, expected)
 
 
 def test_rks_nuclear_response_matches_reconverged_density_and_weighted_density(
@@ -314,3 +372,194 @@ def test_complete_rks_hvp_matches_reconverged_analytic_gradient(
         errors.append(float(np.max(np.abs(result.value - numeric))))
     assert errors[-1] < 4e-4, errors
     assert errors[-1] < max(0.35 * errors[0], 2e-5), errors
+
+
+def test_complete_rks_hvp_many_reuses_one_multi_rhs_response(
+    case: typing.Any, tmp_path: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Complete HVP blocks must not fall back to one CPKS solve per direction."""
+    import tools.vibeqc_hessian.rks_directional as rks_directional_module
+
+    method, operator, direction, _ = case
+    if method != "lda-rks":
+        pytest.skip("one semilocal method is sufficient for multi-RHS orchestration")
+
+    other = np.roll(direction.reshape(-1), 2).reshape(direction.shape)
+    other /= np.linalg.norm(other)
+    calls = []
+    original = rks_directional_module.solve_stationary_nuclear_perturbations
+
+    def counted(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        calls.append((args, kwargs))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        rks_directional_module, "solve_stationary_nuclear_perturbations", counted
+    )
+    result = rks_hvp_many(
+        operator,
+        np.stack((direction, other)),
+        cache=tmp_path / "hvp-many",
+        strategy="blocked",
+        solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
+    )
+
+    assert len(calls) == 1
+    assert result.diagnostics["multi_rhs_calls"] == 1
+    assert result.diagnostics["nrhs"] == 2
+    assert result.diagnostics["strategy"] == "blocked"
+    assert result.directional_responses.solve_result.converged
+    assert not result.diagnostics["full_molecular_hessian_allocated"]
+    assert not result.diagnostics["full_ao_rank_four_weights"]
+    np.testing.assert_array_equal(result.directions, np.stack((direction, other)))
+    np.testing.assert_allclose(
+        result.values,
+        np.stack([item.value for item in result.results]),
+        atol=0,
+        rtol=0,
+    )
+    for item in result.results:
+        assert item.diagnostics["nuclear_response_solves"] == 0
+        assert item.diagnostics["complete_source_coverage"]
+        assert tuple(item.components) == (
+            "one_electron",
+            "coulomb",
+            "xc_ao",
+            "xc_grid",
+            "xc_weight",
+            "overlap_pulay",
+            "nuclear",
+        )
+        np.testing.assert_allclose(
+            sum(item.components.values(), start=np.zeros_like(item.value)),
+            item.value,
+            atol=2e-13,
+            rtol=0,
+        )
+
+
+def test_rks_hessian_assembles_raw_columns_in_blocks(
+    case: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Full assembly must preserve raw HVP columns without symmetrization."""
+    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+
+    _, operator, _, _ = case
+    coordinates = 3 * operator.xc_kernel.basis.natom
+    expected = np.arange(coordinates * coordinates, dtype=np.float64).reshape(
+        coordinates, coordinates
+    )
+    calls = []
+
+    def fake_many(
+        _operator: typing.Any, directions: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        vectors = np.asarray(directions).reshape(len(directions), coordinates)
+        values = (vectors @ expected.T).reshape(len(directions), -1, 3)
+        calls.append((np.array(directions, copy=True), kwargs))
+        return SimpleNamespace(
+            values=values,
+            identity=f"block-{len(calls)}",
+            diagnostics={"multi_rhs_calls": 1, "nrhs": len(directions)},
+        )
+
+    monkeypatch.setattr(rks_molecular_module, "rks_hvp_many", fake_many)
+    result = rks_hessian(
+        operator,
+        block_size=2,
+        strategy="blocked",
+        output_budget_bytes=1 << 20,
+    )
+
+    np.testing.assert_array_equal(result.matrix, expected)
+    assert len(calls) == (coordinates + 1) // 2
+    assert result.diagnostics["block_size"] == 2
+    assert result.diagnostics["block_count"] == len(calls)
+    assert result.diagnostics["strategy"] == "blocked"
+    assert not result.diagnostics["posthoc_symmetrization"]
+    assert not result.diagnostics["public_calculator_endpoint"]
+    assert not result.diagnostics["complete_resource_bound"]
+    assert result.diagnostics["raw_symmetry_error"] == float(
+        np.max(np.abs(expected - expected.T))
+    )
+
+
+def test_rks_hessian_output_budget_fails_before_hvp(
+    case: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Insufficient full-output storage must fail before any HVP is evaluated."""
+    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+
+    _, operator, _, _ = case
+    coordinates = 3 * operator.xc_kernel.basis.natom
+    output_bytes = coordinates * coordinates * np.dtype(np.float64).itemsize
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("HVP work started before the output-budget gate")
+
+    monkeypatch.setattr(rks_molecular_module, "rks_hvp_many", forbidden)
+    with pytest.raises(ValueError, match="output_budget_bytes"):
+        rks_hessian(
+            operator,
+            block_size=2,
+            output_budget_bytes=2 * output_bytes - 1,
+        )
+
+
+def test_rks_hvp_integral_budget_fails_before_response(
+    case: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An undersized integral budget must reject work before CPKS starts."""
+    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+
+    _, operator, direction, _ = case
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("CPKS started before the integral-budget gate")
+
+    monkeypatch.setattr(rks_molecular_module, "directional_rks_response", forbidden)
+    with pytest.raises(MemoryError, match="integral_budget_bytes"):
+        rks_hvp(operator, direction, integral_budget_bytes=1)
+
+
+def test_rks_hvp_admits_resource_bounded_domain_above_12_aos(
+    tmp_path: typing.Any,
+) -> None:
+    """The former 12-AO admission limit is replaced by explicit resource gates."""
+    calculator = Calculator(
+        method="lda-rks",
+        basis=LARGE_HE_BASIS,
+        device="cpu",
+        ks_options=KsOptions(grid=GRID),
+        max_iterations=200,
+        energy_tolerance=1e-13,
+        density_tolerance=1e-11,
+    )
+    direction = np.array([[0.31, -0.27, 0.19]])
+    direction /= np.linalg.norm(direction)
+    with (
+        calculator.prepare_batch([LARGE_HE]) as batch,
+        NativeAO(LARGE_HE, basis=LARGE_HE_BASIS) as basis,
+    ):
+        assert basis.nao == 13
+        batch.execute(strict=True)
+        with NativeRKSResponse.from_native(batch, basis, tile_points=257) as operator:
+            result = rks_hvp(
+                operator,
+                direction,
+                cache=tmp_path / "large-hvp",
+                integral_budget_bytes=64 << 20,
+                solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
+            )
+
+    assert result.diagnostics["complete_source_coverage"]
+    assert result.diagnostics["integral_budget_bytes"] == 64 << 20
+    assert (
+        result.diagnostics["plan_weight_workspace_bound_bytes"]
+        < result.diagnostics["integral_budget_bytes"]
+    )
+    assert np.isfinite(result.value).all()
+    np.testing.assert_allclose(result.value, 0.0, atol=2e-7, rtol=0)
+    for diagnostic in result.diagnostics["integral_providers"].values():
+        assert diagnostic["budget_bytes"] == 64 << 20
+        assert diagnostic["output_accumulator_bytes"] <= diagnostic["budget_bytes"]

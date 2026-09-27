@@ -3,9 +3,9 @@
 This is the first native LDA/PBE RKS composition of the MethodIR-derived
 StationaryHVPPlan, one real CPKS nuclear response, generated first/second
 integral providers, analytic Becke mixed response and native SCF-domain XC
-Hessian contractions. The method-neutral executor is production-owned; this
-method-specific adapter remains a tools endpoint for direct all-electron
-Cartesian CPU RKS, with no public Calculator Hessian capability inferred.
+Hessian contractions. It remains a tools endpoint: direct all-electron
+Cartesian CPU RKS under explicit resource budgets, with no public Calculator
+Hessian capability inferred.
 """
 
 from __future__ import annotations
@@ -20,12 +20,6 @@ from types import MappingProxyType
 
 import numpy as np
 from vibeqc.profiles import canonical_hash
-from vibeqc.second_order import (
-    StationaryHVPContributor,
-    StationaryPerturbationProvider,
-    StationaryResponseDriver,
-    StationarySecondOrderExecutor,
-)
 from vibeqc_compiler.method import StationaryHVPPlan, StationaryMeanField
 from vibeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 from vibeqc_compiler.tensor import execute
@@ -47,6 +41,12 @@ from .rks_directional import (
     directional_rks_response,
     directional_rks_responses,
     native_rks_xc_hvp_components,
+)
+from .stationary_executor import (
+    StationaryHVPContributor,
+    StationaryPerturbationProvider,
+    StationaryResponseDriver,
+    StationarySecondOrderExecutor,
 )
 
 
@@ -146,6 +146,13 @@ def _checked_integral_budget(operator: NativeRKSResponse, budget_bytes: int) -> 
     if plan_weight_workspace > budget_bytes:
         raise MemoryError(
             "RKS Hessian plan-weight numerics exceed integral_budget_bytes"
+        )
+    output_accumulator_bytes = (
+        len(operator._source.atoms) * 3 * np.dtype(np.float64).itemsize
+    )
+    if output_accumulator_bytes > budget_bytes:
+        raise MemoryError(
+            "RKS Hessian integral output accumulator exceeds integral_budget_bytes"
         )
     return plan_weight_workspace
 
@@ -606,6 +613,7 @@ def rks_hessian(
             "output_budget_bytes"
         )
 
+    _checked_integral_budget(operator, integral_budget_bytes)
     matrix = np.empty((coordinates, coordinates), dtype=np.float64)
     cache_path = Path(cache)
     blocks: list[dict[str, typing.Any]] = []
@@ -637,7 +645,12 @@ def rks_hessian(
     operator.validate_current()
     if not np.isfinite(matrix).all():
         raise FloatingPointError("nonfinite RKS Hessian; no result published")
-    symmetry_error = float(np.max(np.abs(matrix - matrix.T), initial=0.0))
+    # Keep at most one additional dense array alive. The nested expression
+    # abs(matrix - matrix.T) would allocate two and violate the output peak.
+    symmetry_scratch = matrix - matrix.T
+    np.abs(symmetry_scratch, out=symmetry_scratch)
+    symmetry_error = float(np.max(symmetry_scratch, initial=0.0))
+    del symmetry_scratch
     identity = canonical_hash(
         {
             "schema": "vibeqc.rks-hessian-block/v1",
