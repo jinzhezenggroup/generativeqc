@@ -544,7 +544,9 @@ def test_rks_hessian_integral_budget_fails_before_output_allocation(
     _, operator, _, _ = case
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
-        raise AssertionError("dense Hessian allocation started before integral budget gate")
+        raise AssertionError(
+            "dense Hessian allocation started before integral budget gate"
+        )
 
     monkeypatch.setattr(rks_molecular_module.np, "empty", forbidden)
     with pytest.raises(error, match="integral_budget_bytes"):
@@ -603,9 +605,7 @@ def test_rks_hvp_above_12_aos_matches_multicenter_gradient(
     tmp_path: typing.Any,
 ) -> None:
     """Qualify the enlarged domain with a nonzero multicenter gradient oracle."""
-    direction = np.array(
-        [[0.13, -0.07, 0.29], [-0.13, 0.07, -0.29]], dtype=np.float64
-    )
+    direction = np.array([[0.13, -0.07, 0.29], [-0.13, 0.07, -0.29]], dtype=np.float64)
     direction /= np.linalg.norm(direction)
 
     def calculator() -> Calculator:
@@ -664,4 +664,3 @@ def test_rks_hvp_above_12_aos_matches_multicenter_gradient(
 
     assert errors[-1] < 6e-4, errors
     assert errors[-1] < max(0.4 * errors[0], 3e-5), errors
-
