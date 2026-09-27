@@ -53,14 +53,30 @@ def test_direct_force_density_has_one_compiler_equation_owner() -> None:
         encoding="utf-8"
     )
     for equation in (
-        "0.5 * total_ab * total_cd",
-        "0.25 * density[physical_offset + ac]",
+        "0.5 * coulomb_coefficient * total_ab * total_cd",
+        "0.5 * exchange_coefficient *",
         "unique_eri_symmetry_permutation",
     ):
         assert equation in generated
         assert equation not in native
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
     assert "direct_force_density_coefficient" in emit_direct_fock_accumulation_header()
+
+
+def test_direct_force_density_exposes_method_neutral_coefficients() -> None:
+    """Let DFT reuse Direct force contraction without changing HF defaults."""
+
+    generated = emit_direct_force_density_coefficient()
+    assert "direct_force_density_coefficient_scaled" in generated
+    assert "double coulomb_coefficient, double exchange_coefficient" in generated
+    assert "if (coulomb_coefficient != 0.0)" in generated
+    assert "if (exchange_coefficient != 0.0)" in generated
+    assert "constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;" in generated
+    assert (
+        "n, physical_offset, spin_offset, density, i, j, k, l, 1.0, "
+        "exchange_coefficient"
+        in generated
+    )
 
 
 def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
