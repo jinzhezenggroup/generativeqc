@@ -80,6 +80,7 @@ class CompiledWeightedEri:
     component_quantums: tuple[tuple[int, ...], ...]
     backend: str
     program_identity: str
+    entry_prefix: str = "vibeqc_weighted"
 
     def validate(self) -> None:
         """Check the mathematical/subset binding before loading a native library.
@@ -119,6 +120,17 @@ class CompiledWeightedEri:
         )
         if quantums != self.component_quantums:
             raise ValueError("weighted ERI component quantum metadata mismatch")
+        if (
+            type(self.entry_prefix) is not str
+            or not self.entry_prefix
+            or not self.entry_prefix.isascii()
+            or not (self.entry_prefix[0].isalpha() or self.entry_prefix[0] == "_")
+            or any(
+                not (character.isalnum() or character == "_")
+                for character in self.entry_prefix
+            )
+        ):
+            raise ValueError("weighted ERI entry prefix requires a C identifier")
         identity = self.native.metadata["identity"]
         if (
             canonical_hash(identity) != self.native.metadata["key"]
@@ -213,6 +225,58 @@ def compile_weighted_eri(
         quantums,
         backend,
         weighted_eri_program_identity(kernel, backend),
+    )
+
+
+
+def packaged_weighted_eri(
+    integral: IntegralIR,
+    library: typing.Any,
+    *,
+    component_indices: typing.Any,
+    entry_prefix: str,
+) -> CompiledWeightedEri:
+    """Bind one build-time CPU weighted-ERI program from an existing library."""
+
+    canonical = canonical_range_weighted_eri_ir(integral)
+    kernel = build_weighted_eri_kernel(canonical, component_indices)
+    path = Path(getattr(library, "_name", library)).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"packaged weighted ERI library not found: {path}")
+    program_identity = weighted_eri_program_identity(kernel, "cpu")
+    identity = {
+        "schema": "vibeqc.weighted-packaged.v1",
+        "backend": "cpu",
+        "program": program_identity,
+        "entry_prefix": entry_prefix,
+    }
+    native = CudaArtifact(
+        path,
+        {
+            "identity": identity,
+            "key": canonical_hash(identity),
+            "binary_sha256": file_hash(path),
+            "compile_seconds": 0.0,
+            "resources": [],
+        },
+    )
+    quantums = tuple(
+        tuple(
+            component.count(axis)
+            for component in kernel.spec.components[index]
+            for axis in "xyz"
+        )
+        for index in kernel.component_indices
+    )
+    return CompiledWeightedEri(
+        native,
+        integral,
+        canonical,
+        kernel.component_indices,
+        quantums,
+        "cpu",
+        program_identity,
+        entry_prefix,
     )
 
 
@@ -350,15 +414,20 @@ class PreparedWeightedEri:
         ):
             raise ValueError("weighted ERI binary hash mismatch")
         lib = self._library = ct.CDLL(str(artifact.native.library))
-        lib.vibeqc_weighted_identity_v2.restype = ct.c_char_p
-        if lib.vibeqc_weighted_identity_v2().decode() != artifact.program_identity:
+
+        def entry(name: str) -> typing.Any:
+            return getattr(lib, f"{artifact.entry_prefix}_{name}_v2")
+
+        identity_entry = entry("identity")
+        identity_entry.restype = ct.c_char_p
+        if identity_entry().decode() != artifact.program_identity:
             raise ValueError("weighted ERI compiled program identity mismatch")
-        lib.vibeqc_weighted_create_v2.argtypes = (
+        entry("create").argtypes = (
             [ct.c_int] * 3
             + [ct.c_size_t] * 3
             + [ct.POINTER(ct.c_void_p), ct.c_char_p, ct.c_size_t]
         )
-        lib.vibeqc_weighted_run_v2.argtypes = [
+        entry("run").argtypes = [
             ct.c_void_p,
             ct.c_void_p,
             ct.c_size_t,
@@ -368,16 +437,16 @@ class PreparedWeightedEri:
             ct.c_char_p,
             ct.c_size_t,
         ]
-        lib.vibeqc_weighted_storage_v2.argtypes = [
+        entry("storage").argtypes = [
             ct.c_void_p,
             ct.POINTER(ct.c_uint64),
             ct.c_char_p,
             ct.c_size_t,
         ]
-        lib.vibeqc_weighted_destroy_v2.argtypes = [ct.c_void_p]
-        lib.vibeqc_weighted_destroy_v2.restype = None
+        entry("destroy").argtypes = [ct.c_void_p]
+        entry("destroy").restype = None
         if artifact.backend == "cuda":
-            lib.vibeqc_weighted_metrics_v2.argtypes = [
+            entry("metrics").argtypes = [
                 ct.c_void_p,
                 ct.POINTER(_Metrics),
                 ct.c_char_p,
@@ -436,7 +505,13 @@ class PreparedWeightedEri:
 
     def _call(self, name: typing.Any, *args: typing.Any) -> None:
         error = ct.create_string_buffer(1024)
-        status = getattr(self._library, name)(*args, error, len(error))
+        mapped = (
+            f"{self.artifact.entry_prefix}_"
+            + name.removeprefix("vibeqc_weighted_")
+            if name.startswith("vibeqc_weighted_")
+            else name
+        )
+        status = getattr(self._library, mapped)(*args, error, len(error))
         if status:
             exception = {
                 1: ValueError,
@@ -575,7 +650,10 @@ class PreparedWeightedEri:
         """Release native resources once, with the shared allocation snapshot lock."""
         with self._lock, _PREPARATION_LOCK:
             if self._handle.value:
-                self._library.vibeqc_weighted_destroy_v2(self._handle)
+                getattr(
+                    self._library,
+                    f"{self.artifact.entry_prefix}_destroy_v2",
+                )(self._handle)
                 self._handle = ct.c_void_p()
             self._records = self._chunk = None
 
