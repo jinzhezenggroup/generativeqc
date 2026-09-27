@@ -727,11 +727,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return 1;
   }
 
+  bool configured_replay_enabled() const noexcept {
+    const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
+    if (selection == nullptr) return false;
+    return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "on") == 0 ||
+           std::strcmp(selection, "true") == 0 || std::strcmp(selection, "small-native") == 0;
+  }
+
   runtime::SolverRegionCudaBinding solver_region_binding() const {
-    return {{"cuda-ks-rks-solver-region-v1", device, stream, arena, fock_binding.source_identity},
-            kCudaKsChunkCapacity,
-            runtime::SolverRegionCompletionMode::Scalar,
-            false};
+    const bool replay_functional = is_semilocal_family(functional, SemilocalFamily::Lda) ||
+                                   is_semilocal_family(functional, SemilocalFamily::Pbe);
+    const bool replay = configured_replay_enabled() && replay_functional &&
+                        n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
+    auto graph = device_chunk_binding();
+    graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
+    return {std::move(graph), kCudaKsChunkCapacity, runtime::SolverRegionCompletionMode::Scalar,
+            replay};
   }
 
   unsigned submission_width() const noexcept {
@@ -751,8 +762,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void enqueue_one(unsigned slot) {
     if (slot >= kCudaKsChunkCapacity) throw std::logic_error("CUDA KS chunk slot overflow");
-    if (generation == std::numeric_limits<std::uint64_t>::max())
-      throw std::overflow_error("CUDA KS density generation exhausted");
     std::string detail;
     check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange, nullptr,
                                           jk_error, false, detail),
@@ -762,10 +771,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                                            nullptr, matrix, range_exchange, nullptr,
                                                            range_jk_error, detail),
             detail);
-    xc->enqueue(density, elements, ++generation);
-    pending_generations[slot] = generation;
-    ++movement.submitted_iterations;
-    const auto potential = xc->view(generation);
+    const auto potential = xc->enqueue_replay_body(density, elements);
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
                                   enabled, fock);
@@ -819,12 +825,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       const unsigned width = submission_width();
       const unsigned remaining = options.max_iterations - output.iterations;
+      if (generation > std::numeric_limits<std::uint64_t>::max() - width)
+        throw std::overflow_error("CUDA KS density generation exhausted");
       pending_iterations =
           solver_region_executor.submit(solver_region_binding(), width, remaining, false,
                                         [&](unsigned slot) { enqueue_one(slot); });
+      movement.submitted_iterations += pending_iterations;
+      // The replay body has no host publication side effects. Publish exactly
+      // once for the physical warmup/capture/replay/fallback selected by the
+      // shared runtime, even when capture internally probes the body twice.
+      for (unsigned slot = 0; slot < pending_iterations; ++slot) {
+        const auto submitted_generation = ++generation;
+        xc->publish_submitted_generation(submitted_generation);
+        pending_generations[slot] = submitted_generation;
+      }
     } catch (...) {
       cudaStreamSynchronize(stream);
       ++movement.synchronizations;
+      solver_region_executor.invalidate();
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
@@ -848,6 +866,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       cudaStreamSynchronize(stream);
+      solver_region_executor.invalidate();
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
@@ -864,6 +883,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
+      solver_region_executor.invalidate();
       device_chunk_region.mark_failure("CUDA KS device chunk returned an invalid iteration count");
       throw std::runtime_error("CUDA KS device chunk returned an invalid iteration count");
     }
@@ -1538,6 +1558,10 @@ CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   out.execution_region_executions = region.executions;
   out.execution_region_failures = region.failures;
   out.execution_region_recoveries = region.recoveries;
+  const auto& replay = impl_->solver_region_executor.replay_metrics();
+  out.execution_region_captures = replay.captures;
+  out.execution_region_replays = replay.replays;
+  out.execution_region_fallbacks = replay.fallbacks;
   if (impl_->xc) {
     const auto& xc = impl_->xc->transfers();
     out.setup_h2d_bytes += xc.setup_h2d_bytes;
