@@ -1578,6 +1578,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                     grid.points[begin:end],
                     np.arange(n, dtype=np.uintp),
                     ingredients,
+                    defer_error_to_consumer=True,
                 ) as task:
                     sources.geometry(
                         task,

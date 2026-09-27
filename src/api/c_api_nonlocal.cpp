@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -8,11 +10,43 @@
 #include "api/handles.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "vibeqc/vibeqc.h"
+#if VIBEQC_HAS_CUDA
+#include "dft/grid_task_view.cuh"
+#include "runtime/cuda_resources.cuh"
+#endif
 
 struct vibeqc_nonlocal_plan {
   vibeqc_context* context{};
   std::unique_ptr<vibeqc::dft::nlc::Vv10Plan> plan;
 };
+
+#if VIBEQC_HAS_CUDA
+struct vibeqc_nonlocal_cuda_force {
+  vibeqc_context* context{};
+  vibeqc::dft::nlc::Vv10Parameters parameters{};
+  vibeqc::dft::nlc::Vv10CudaDeviceLayout layout{};
+  int device{-1};
+  std::size_t point_count{}, next_offset{}, device_bytes{};
+  double density_threshold{};
+  std::uint64_t generation{};
+  cudaStream_t stream{};
+  bool executed{};
+
+  vibeqc::runtime::OwnedCudaBuffer<double> arena;
+  vibeqc::runtime::OwnedCudaBuffer<int> errors;
+  double *coordinates{}, *weights{}, *raw_density{}, *raw_gradient{}, *effective_weights{},
+      *effective_density{}, *effective_gradient{}, *seeds{}, *point_derivative{}, *workspace{};
+
+  ~vibeqc_nonlocal_cuda_force() {
+    if (!stream || device < 0) return;
+    int previous = 0;
+    (void)cudaGetDevice(&previous);
+    (void)cudaSetDevice(device);
+    (void)cudaStreamSynchronize(stream);
+    (void)cudaSetDevice(previous);
+  }
+};
+#endif
 
 namespace {
 
@@ -137,5 +171,196 @@ vibeqc_status vibeqc_nonlocal_plan_execute(vibeqc_nonlocal_plan* plan,
     return vibeqc::api::map_exception(&plan->context->last_detail);
   }
 }
+
+#if VIBEQC_HAS_CUDA
+VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
+    vibeqc_context* context, const vibeqc_nonlocal_descriptor* model, const double* coordinates,
+    std::size_t coordinate_count, const double* weights, std::size_t weight_count,
+    double density_threshold, vibeqc_nonlocal_cuda_force** output) {
+  if (output) *output = nullptr;
+  if (!context || !model || !output || !coordinates || !weights ||
+      !vibeqc::api::valid_descriptor(model))
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(context->mutex);
+  try {
+    if (context->state.executed_backend != VIBEQC_BACKEND_CUDA || context->state.device_id < 0)
+      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    const auto n = static_cast<std::size_t>(model->point_count);
+    if (!n || !model->tile_points || coordinate_count != 3 * n || weight_count != n ||
+        !std::isfinite(density_threshold) || density_threshold <= 0.0)
+      throw std::invalid_argument("invalid resident nonlocal CUDA force shape/policy");
+    for (std::size_t i = 0; i < coordinate_count; ++i)
+      if (!std::isfinite(coordinates[i]))
+        throw std::invalid_argument("resident nonlocal CUDA coordinates must be finite");
+    for (std::size_t i = 0; i < weight_count; ++i)
+      if (!std::isfinite(weights[i]))
+        throw std::invalid_argument("resident nonlocal CUDA weights must be finite");
+
+    auto result = std::make_unique<vibeqc_nonlocal_cuda_force>();
+    result->context = context;
+    result->device = context->state.device_id;
+    result->point_count = n;
+    result->density_threshold = density_threshold;
+    result->parameters = {variant(model->variant), model->b, model->c, model->coefficient};
+    if (!std::isfinite(result->parameters.b) || result->parameters.b <= 0.0 ||
+        !std::isfinite(result->parameters.c) || result->parameters.c <= 0.0 ||
+        !std::isfinite(result->parameters.coefficient) || result->parameters.coefficient <= 0.0)
+      throw std::invalid_argument("resident nonlocal CUDA parameters must be finite and positive");
+    result->layout =
+        vibeqc::dft::nlc::vv10_cuda_device_layout(n, model->tile_points, true, true, true);
+
+    using vibeqc::runtime::size_add;
+    using vibeqc::runtime::size_mul;
+    const auto workspace_doubles = result->layout.workspace_bytes / sizeof(double);
+    std::size_t doubles = 0;
+    for (const auto arrays :
+         {std::size_t{3}, std::size_t{1}, std::size_t{1}, std::size_t{3}, std::size_t{1},
+          std::size_t{1}, std::size_t{3}, std::size_t{6}, std::size_t{3}})
+      doubles = size_add(doubles, size_mul(arrays, n, "resident nonlocal force extent overflow"),
+                         "resident nonlocal force extent overflow");
+    doubles = size_add(doubles, workspace_doubles, "resident nonlocal force extent overflow");
+    const auto arena_bytes =
+        size_mul(doubles, sizeof(double), "resident nonlocal force byte extent overflow");
+    result->device_bytes = size_add(
+        arena_bytes,
+        size_mul(std::size_t{3}, sizeof(int), "resident nonlocal force error extent overflow"),
+        "resident nonlocal force byte extent overflow");
+    if (!model->maximum_bytes || result->device_bytes > model->maximum_bytes)
+      throw std::bad_alloc();
+
+    vibeqc::runtime::CudaDeviceScope device(result->device);
+    vibeqc::runtime::OwnedCudaStream setup(result->device);
+    result->arena.allocate(result->device, doubles);
+    result->errors.allocate(result->device, 3);
+    auto* cursor = result->arena.get();
+    auto take = [&](std::size_t count) {
+      auto* pointer = cursor;
+      cursor += count;
+      return pointer;
+    };
+    result->coordinates = take(3 * n);
+    result->weights = take(n);
+    result->raw_density = take(n);
+    result->raw_gradient = take(3 * n);
+    result->effective_weights = take(n);
+    result->effective_density = take(n);
+    result->effective_gradient = take(3 * n);
+    result->seeds = take(6 * n);
+    result->point_derivative = take(3 * n);
+    result->workspace = take(workspace_doubles);
+    if (cursor != result->arena.get() + doubles)
+      throw std::logic_error("resident nonlocal CUDA force arena partition mismatch");
+
+    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(result->coordinates, coordinates,
+                                                         coordinate_count * sizeof(double),
+                                                         cudaMemcpyHostToDevice, setup.get()));
+    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(result->weights, weights,
+                                                         weight_count * sizeof(double),
+                                                         cudaMemcpyHostToDevice, setup.get()));
+    vibeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(result->errors.get(), 0, 3 * sizeof(int), setup.get()));
+    setup.synchronize();
+    *output = result.release();
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return vibeqc::api::map_exception(&context->last_detail);
+  }
+}
+
+VIBEQC_API void vibeqc_internal_nonlocal_cuda_force_destroy_v1(vibeqc_nonlocal_cuda_force* owner) {
+  delete owner;
+}
+
+VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_collect_v1(
+    vibeqc_nonlocal_cuda_force* owner, const vibeqc::dft::GridTaskView* view, std::size_t offset) {
+  if (!owner || !view) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  try {
+    if (owner->executed || offset != owner->next_offset || !view->stream ||
+        offset > owner->point_count || view->npoint > owner->point_count - offset)
+      throw std::invalid_argument("invalid resident nonlocal CUDA feature tile order");
+    if (!owner->stream)
+      owner->stream = view->stream;
+    else if (owner->stream != view->stream)
+      throw std::invalid_argument("resident nonlocal CUDA feature stream changed");
+    vibeqc::runtime::CudaDeviceScope device(owner->device);
+    if (offset == 0)
+      vibeqc::runtime::cuda_resource_check(
+          cudaMemsetAsync(owner->errors.get(), 0, sizeof(int), owner->stream));
+    vibeqc::dft::nlc::enqueue_vv10_collect_total_features_cuda(
+        owner->stream, *view, offset, owner->point_count, owner->raw_density, owner->raw_gradient,
+        owner->errors.get());
+    owner->next_offset += view->npoint;
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return vibeqc::api::map_exception(&owner->context->last_detail);
+  }
+}
+
+VIBEQC_API vibeqc_status
+vibeqc_internal_nonlocal_cuda_force_execute_v1(vibeqc_nonlocal_cuda_force* owner) {
+  if (!owner) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  try {
+    if (owner->executed || !owner->stream || owner->next_offset != owner->point_count)
+      throw std::invalid_argument("resident nonlocal CUDA force owner is not fully populated");
+    vibeqc::runtime::CudaDeviceScope device(owner->device);
+    auto* errors = owner->errors.get();
+    vibeqc::dft::nlc::enqueue_vv10_molecular_domain_cuda(
+        owner->stream, owner->point_count, owner->density_threshold, owner->weights,
+        owner->raw_density, owner->raw_gradient, owner->effective_weights, owner->effective_density,
+        owner->effective_gradient, errors + 1);
+    vibeqc::dft::nlc::enqueue_vv10_cuda_device(
+        owner->layout, owner->parameters, owner->device, owner->stream, owner->coordinates,
+        owner->effective_weights, owner->effective_density, owner->effective_gradient,
+        owner->workspace, owner->layout.workspace_bytes, owner->workspace, owner->seeds,
+        owner->seeds + owner->point_count, owner->point_derivative,
+        owner->seeds + 5 * owner->point_count, errors + 2);
+    vibeqc::dft::nlc::enqueue_vv10_pack_force_seeds_cuda(
+        owner->stream, owner->point_count, owner->effective_weights, owner->point_derivative,
+        owner->seeds, errors, errors + 1, errors + 2);
+    owner->executed = true;
+    ++owner->generation;
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return vibeqc::api::map_exception(&owner->context->last_detail);
+  }
+}
+
+VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_seed_view_v1(
+    const vibeqc_nonlocal_cuda_force* owner, void** seeds, std::size_t* stride, void** stream,
+    std::uint64_t* generation) {
+  if (!owner || !seeds || !stride || !stream || !generation) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  if (!owner->executed || !owner->stream) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  *seeds = owner->seeds;
+  *stride = owner->point_count;
+  *stream = reinterpret_cast<void*>(owner->stream);
+  *generation = owner->generation;
+  return VIBEQC_STATUS_SUCCESS;
+}
+
+VIBEQC_API vibeqc_status
+vibeqc_internal_nonlocal_cuda_force_reset_v1(vibeqc_nonlocal_cuda_force* owner) {
+  if (!owner) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  if (!owner->executed) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  owner->next_offset = 0;
+  owner->executed = false;
+  return VIBEQC_STATUS_SUCCESS;
+}
+
+VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_metrics_v1(
+    const vibeqc_nonlocal_cuda_force* owner, std::uint64_t* values, std::size_t count) {
+  if (!owner || !values || count != 6) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  const std::array<std::uint64_t, 6> metrics{
+      owner->device_bytes, owner->point_count,        owner->next_offset,
+      owner->generation,   owner->executed ? 1u : 0u, owner->stream ? 1u : 0u,
+  };
+  std::copy(metrics.begin(), metrics.end(), values);
+  return VIBEQC_STATUS_SUCCESS;
+}
+#endif
 
 }  // extern "C"

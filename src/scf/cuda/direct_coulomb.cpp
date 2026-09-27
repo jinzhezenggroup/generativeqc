@@ -14,6 +14,7 @@
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/direct_bounded_dddd.hpp"
 #include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -198,6 +199,8 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
         static_cast<const std::uint32_t*>(allocate(order.size(), sizeof(order[0]), order.data()));
     const auto* device_offsets = static_cast<const std::uint32_t*>(
         allocate(offsets.size(), sizeof(offsets[0]), offsets.data()));
+    plan->pair_order = device_order;
+    plan->pair_class_offsets = device_offsets;
     const auto& b = plan->batch;
     const GeneratedShellPairStream topology{b.batch_size,
                                             static_cast<std::uint32_t>(b.direct_nbf),
@@ -210,8 +213,8 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
                                             b.shell_pair_systems,
                                             b.shell_pair_first,
                                             b.shell_pair_second,
-                                            device_order,
-                                            device_offsets,
+                                            plan->pair_order,
+                                            plan->pair_class_offsets,
                                             plan->shell_bounds,
                                             nullptr,
                                             nullptr,
@@ -239,6 +242,227 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
 } catch (const std::bad_alloc&) {
   // Host topology, transform and owner allocations are optional too.
   return {};
+}
+
+GeneratedExchangePlan::~GeneratedExchangePlan() {
+  if (shared && shared->stream) (void)cudaStreamSynchronize(shared->stream);
+  for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
+}
+
+std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatch& host,
+                                                                  DeviceBatch borrowed,
+                                                                  cudaStream_t stream, int device,
+                                                                  double screening,
+                                                                  std::size_t budget) try {
+  auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget);
+  if (!shared) return {};
+
+  const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
+  const auto matrix = product(product(batch, host.nbf), host.nbf);
+  const auto cartesian = product(product(batch, host.direct_nbf), host.direct_nbf);
+  const auto rectangular = product(product(batch, host.nbf), host.direct_nbf);
+  const auto pairs = host.shell_pair_first.size();
+  constexpr std::size_t pair_classes = detail::kDirectShellPairClassCount;
+  constexpr std::size_t quartet_classes = detail::kDirectQuartetShellClassCount;
+
+  std::size_t additional = 0;
+  const auto charge = [&](std::size_t count, std::size_t width) {
+    additional = runtime::size_add(additional, product(count, width));
+  };
+  charge(product(2, matrix), sizeof(double));       // Interleaved public alpha/beta input.
+  charge(product(2, cartesian), sizeof(double));    // Direct alpha/beta density.
+  charge(product(2, cartesian), sizeof(double));    // Direct raw K output.
+  charge(product(2, rectangular), sizeof(double));  // Density transform scratch.
+  charge(product(2, rectangular), sizeof(double));  // Fock transform scratch.
+  charge(product(2, matrix), sizeof(double));       // Interleaved public raw K.
+  charge(pairs, sizeof(ShellPairDensityBounds));
+  charge(batch, sizeof(double));
+  charge(product(batch, pair_classes), sizeof(double));
+  charge(quartet_classes, sizeof(std::uint32_t));
+  charge(1, sizeof(GeneratedShellPairStream));
+  if (shared->device_bytes > budget || additional > budget - shared->device_bytes) return {};
+
+  auto plan = std::make_unique<GeneratedExchangePlan>();
+  plan->shared = std::move(shared);
+  plan->device_bytes = plan->shared->device_bytes;
+  auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
+    void* pointer{};
+    const auto bytes = product(count, width);
+    check(runtime::resource_cuda_malloc(&pointer, bytes));
+    try {
+      plan->allocations.push_back(pointer);
+    } catch (...) {
+      (void)runtime::resource_cuda_free(pointer);
+      throw;
+    }
+    plan->device_bytes = runtime::size_add(plan->device_bytes, bytes);
+    if (values) check(cudaMemcpyAsync(pointer, values, bytes, cudaMemcpyHostToDevice, stream));
+    return pointer;
+  };
+  auto doubles = [&](std::size_t count) {
+    return static_cast<double*>(allocate(count, sizeof(double)));
+  };
+  plan->public_spin = doubles(product(2, matrix));
+  plan->direct_spin = doubles(product(2, cartesian));
+  plan->direct_exchange = doubles(product(2, cartesian));
+  plan->density_temporary = doubles(product(2, rectangular));
+  plan->fock_temporary = doubles(product(2, rectangular));
+  plan->public_exchange = doubles(product(2, matrix));
+  plan->shell_pair_density_bounds =
+      static_cast<ShellPairDensityBounds*>(allocate(pairs, sizeof(ShellPairDensityBounds)));
+  plan->system_density_bounds = doubles(batch);
+  plan->system_pair_density_bounds = doubles(product(batch, pair_classes));
+  plan->heads = static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
+
+  const auto& b = plan->shared->batch;
+  const GeneratedShellPairStream topology{
+      b.batch_size,
+      static_cast<std::uint32_t>(b.direct_nbf),
+      b.system_shell_offsets,
+      b.system_shell_pair_offsets,
+      b.shell_atoms,
+      b.shell_angular,
+      b.shell_direct_ao_offsets,
+      b.shell_primitive_offsets,
+      b.shell_pair_systems,
+      b.shell_pair_first,
+      b.shell_pair_second,
+      plan->shared->pair_order,
+      plan->shared->pair_class_offsets,
+      plan->shared->shell_bounds,
+      reinterpret_cast<const detail::GeneratedShellPairDensityBounds*>(
+          plan->shell_pair_density_bounds),
+      plan->system_density_bounds,
+      plan->system_pair_density_bounds,
+      nullptr,
+      plan->shared->active,
+      detail::GeneratedFockConsumer::Exchange};
+  plan->topology = static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
+  check(cudaStreamSynchronize(stream));
+  if (plan->device_bytes != runtime::size_add(plan->shared->device_bytes, additional))
+    throw std::logic_error("generated K inventory drift");
+  plan->host_preparation_bytes =
+      runtime::size_add(plan->shared->host_preparation_bytes,
+                        sizeof(*plan) + runtime::vector_bytes(plan->allocations));
+  return plan;
+} catch (cudaError_t error) {
+  if (error != cudaErrorMemoryAllocation) throw;
+  (void)cudaGetLastError();
+  return {};
+} catch (const std::bad_alloc&) {
+  return {};
+}
+
+cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
+                                       const double* alpha, const double* beta,
+                                       double* alpha_exchange, double* beta_exchange) {
+  if (alpha == nullptr || alpha_exchange == nullptr ||
+      (unrestricted ? (beta == nullptr || beta_exchange == nullptr)
+                    : (beta != nullptr || beta_exchange != nullptr)))
+    return cudaErrorInvalidValue;
+
+  auto& shared = *p.shared;
+  const auto b = shared.batch;
+  const std::size_t batch = static_cast<std::size_t>(b.batch_size);
+  const std::size_t public_matrix = product(static_cast<std::size_t>(b.nbf), b.nbf);
+  const std::size_t direct_matrix = product(static_cast<std::size_t>(b.direct_nbf), b.direct_nbf);
+  const std::size_t public_rectangular = product(static_cast<std::size_t>(b.nbf), b.direct_nbf);
+  const std::size_t spin_count = unrestricted ? 2U : 1U;
+  const std::size_t matrix = product(batch, public_matrix);
+  const std::size_t cartesian = product(batch, direct_matrix);
+  const std::size_t rectangular = product(batch, public_rectangular);
+
+  for (std::size_t system = 0; system < batch; ++system) {
+    auto error = cudaMemcpyAsync(p.public_spin + (system * spin_count) * public_matrix,
+                                 alpha + system * public_matrix, public_matrix * sizeof(double),
+                                 cudaMemcpyDeviceToDevice, shared.stream);
+    if (error != cudaSuccess) return error;
+    if (unrestricted) {
+      error = cudaMemcpyAsync(p.public_spin + (system * spin_count + 1U) * public_matrix,
+                              beta + system * public_matrix, public_matrix * sizeof(double),
+                              cudaMemcpyDeviceToDevice, shared.stream);
+      if (error != cudaSuccess) return error;
+    }
+  }
+
+  launch_transform_density_to_direct_right_kernel(
+      blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.public_spin, shared.active, p.density_temporary);
+  launch_transform_density_to_direct_left_kernel(
+      blocks(product(spin_count, cartesian)), 128, 0, shared.stream, b.batch_size,
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.density_temporary, shared.active, p.direct_spin);
+  auto error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+
+  constexpr unsigned threads = 128U;
+  launch_reduce_shell_pair_density_bounds_kernel(
+      unrestricted, static_cast<unsigned>(b.total_shell_pairs), threads,
+      3U * threads * sizeof(double), shared.stream, b, p.direct_spin, shared.active,
+      p.shell_pair_density_bounds);
+  launch_reduce_bounded_system_density_bounds_kernel(
+      static_cast<unsigned>(batch), threads,
+      detail::kDirectShellPairClassCount * threads * sizeof(double), shared.stream, b,
+      p.shell_pair_density_bounds, p.system_density_bounds, p.system_pair_density_bounds);
+  error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+
+  error = cudaMemsetAsync(p.direct_exchange, 0,
+                          product(product(spin_count, cartesian), sizeof(double)), shared.stream);
+  if (error != cudaSuccess) return error;
+  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+                          shared.stream);
+  if (error != cudaSuccess) return error;
+
+  std::size_t count = 0;
+  const auto* kernels = generated::selected_fock_shell_kernels(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    const auto cls = kernels[i].shell_class;
+    if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
+      continue;
+    error = generated::launch_shell_class_streaming_fock(
+        cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
+        b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
+        b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
+        p.heads + cls, nullptr, nullptr);
+    if (error != cudaSuccess) return error;
+  }
+  if (shared.class_mask & kNativeStreamingFockShellClassMask) {
+    launch_bounded_direct_dddd_streaming_kernel(
+        unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
+        shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
+        shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr, nullptr);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+  }
+
+  launch_transform_direct_fock_left_kernel(
+      blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.direct_exchange, shared.active, p.fock_temporary);
+  launch_transform_direct_fock_right_kernel(
+      blocks(product(spin_count, matrix)), 128, 0, shared.stream, b.batch_size,
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.fock_temporary, shared.zero, shared.active, p.public_exchange);
+  error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+
+  for (std::size_t system = 0; system < batch; ++system) {
+    error =
+        cudaMemcpyAsync(alpha_exchange + system * public_matrix,
+                        p.public_exchange + (system * spin_count) * public_matrix,
+                        public_matrix * sizeof(double), cudaMemcpyDeviceToDevice, shared.stream);
+    if (error != cudaSuccess) return error;
+    if (unrestricted) {
+      error =
+          cudaMemcpyAsync(beta_exchange + system * public_matrix,
+                          p.public_exchange + (system * spin_count + 1U) * public_matrix,
+                          public_matrix * sizeof(double), cudaMemcpyDeviceToDevice, shared.stream);
+      if (error != cudaSuccess) return error;
+    }
+  }
+  return cudaGetLastError();
 }
 
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
