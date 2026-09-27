@@ -627,9 +627,7 @@ def _legacy_profile(functional: int, spin: str) -> StationaryAotProfile:
     if spin not in QUALIFIED_SPINS:
         raise ValueError("AOT stationary spin must be unpolarized or polarized")
     name = ("lda", "pbe", "r2scan")[functional]
-    return _qualified_aot_profile(
-        f"{name}_{'rks' if spin == 'unpolarized' else 'uks'}"
-    )
+    return _qualified_aot_profile(f"{name}_{'rks' if spin == 'unpolarized' else 'uks'}")
 
 
 def _qualified_aot_plan(functional: int, spin: str) -> StationaryGradientPlan:
@@ -879,9 +877,7 @@ def load_stationary_aot_artifact(
         raise NotImplementedError(
             "packaged stationary CUDA currently qualifies partition_iterations=3 only"
         )
-    name = _stationary_aot_name(
-        functional, spin, component_domain=domain, plan=plan
-    )
+    name = _stationary_aot_name(functional, spin, component_domain=domain, plan=plan)
     directory = Path(directory).resolve()
     manifest_path = directory / f"vibeqc_stationary_{name}.json"
     candidates = (

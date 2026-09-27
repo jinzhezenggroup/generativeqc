@@ -85,7 +85,9 @@ def main() -> None:
         if args.shard_index is not None:
             parser.error("--shard-index requires --component-domain spd")
         if args.profile is None and (args.functional is None or args.spin is None):
-            parser.error("--profile or --functional/--spin is required for stationary wrappers")
+            parser.error(
+                "--profile or --functional/--spin is required for stationary wrappers"
+            )
         if args.profile is not None and (
             args.functional is not None or args.spin is not None
         ):
@@ -120,7 +122,9 @@ def main() -> None:
         source = sources[args.shard_index]
     else:
         if args.profile is None and (args.functional is None or args.spin is None):
-            parser.error("--profile or --functional/--spin is required for stationary wrappers")
+            parser.error(
+                "--profile or --functional/--spin is required for stationary wrappers"
+            )
         if args.profile is not None and (
             args.functional is not None or args.spin is not None
         ):
