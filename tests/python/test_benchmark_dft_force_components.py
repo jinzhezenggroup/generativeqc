@@ -236,6 +236,8 @@ def test_extract_readme_dft_endpoint_keeps_reference_boundary_coarse() -> None:
         "mode": "direct",
         "endpoint": "SCF energy",
         "native_prepare_seconds": 0.25,
+        "native_build": {"library_sha256": "native-sha"},
+        "environment": {"packages": {"gpu4pyscf": "2.0"}},
         "native_cold": {"seconds": 1.5},
         "reference_cold": {"seconds": 1.1},
         "priming": {
@@ -255,6 +257,8 @@ def test_extract_readme_dft_endpoint_keeps_reference_boundary_coarse() -> None:
     assert row["metadata"]["mode"] == "direct"
     assert row["comparison"]["boundary"] == "scf_energy"
     assert row["comparison"]["native"]["prepare_seconds"] == 0.25
+    assert row["comparison"]["native_build"]["library_sha256"] == "native-sha"
+    assert row["comparison"]["environment"]["packages"]["gpu4pyscf"] == "2.0"
     assert row["comparison"]["native"]["warm_seconds"] == [0.6, 0.5]
     assert row["comparison"]["reference"]["warm_seconds"] == [0.4, 0.45]
     assert "components" not in row
