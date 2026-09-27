@@ -1347,6 +1347,8 @@ def _complete_rks_cuda_gradient_diagnostic(
         + (na + 2) * primitive_sum**2
         + na * (na - 1) // 2
     )
+    if records > np.iinfo(np.uint64).max:
+        raise ValueError("primitive work count exceeds uint64 metric range")
     pair_visits = (1 + 2 * len(state.grid.points)) * na * (na - 1) // 2
     if len(state.grid.points) > max_grid_points:
         raise ValueError("grid point work budget exceeded")
