@@ -91,7 +91,8 @@ from .force_aware_scf import (
     ScfForceErrorEstimator,
 )
 from .ks import FunctionalSpec, KsOptions
-from .libxc import available_libxc_functionals, resolve_libxc_functional\nfrom .ks_diagnostics import (
+from .libxc import available_libxc_functionals, resolve_libxc_functional
+from .ks_diagnostics import (
     KsDiagnostic,
     KsEnergyComponents,
     KsIteration,
@@ -239,7 +240,8 @@ __all__ = [
     "TargetErrorBudget",
     "TargetProblem",
     "TransferOperation",
-    "assemble_fixed_density_exchange",\n    "available_libxc_functionals",
+    "assemble_fixed_density_exchange",
+    "available_libxc_functionals",
     "basis_capability",
     "compare_observables",
     "cross_overlap",
@@ -261,6 +263,7 @@ __all__ = [
     "project_density",
     "project_occupied",
     "projected_singlepoint",
-    "resolve_libxc_functional",\n    "run_progressive_hf",
+    "resolve_libxc_functional",
+    "run_progressive_hf",
 ]
 __version__ = "0.1.0"
