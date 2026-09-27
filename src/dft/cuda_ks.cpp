@@ -224,6 +224,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
+  bool fitted_coulomb{};
   bool mixed_j{}, strict_refinement{}, pending_mixed_j{}, mixed_j_executed{}, device_nonlocal{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
@@ -416,7 +417,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       scf::validate_resolved_fock_build(*range_correction);
       range_exchange_coefficient = range_correction->spec.exchange.coefficient;
     }
-    const bool fitted_coulomb =
+    fitted_coulomb =
         strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     fock_binding = scf::prepared_cuda_fock_binding(provider);
     if (!owner || strategy.backend != scf::FockBackend::Cuda ||
