@@ -90,6 +90,47 @@ vibeqc_status vibeqc_batch_get_correlation_diagnostic(const vibeqc_batch* batch,
   }
 }
 
+vibeqc_status vibeqc_batch_get_cc_performance_diagnostic(
+    const vibeqc_batch* batch, uint32_t index, vibeqc_cc_performance_diagnostic* out) {
+  if (!batch || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (out && !vibeqc::api::valid_descriptor(out)) return VIBEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto value = batch->plan->cc_performance_diagnostic(index);
+    if (!value) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (out)
+      *out = {sizeof(*out),
+              VIBEQC_ABI_VERSION,
+              value->reference_seconds,
+              value->problem_seconds,
+              value->provider_seconds,
+              value->source_seconds,
+              value->solver_seconds,
+              value->iteration_seconds,
+              value->replay_seconds,
+              value->update_seconds,
+              value->diis_seconds,
+              value->triples_seconds,
+              value->source_scans,
+              value->source_reads,
+              value->source_values,
+              value->transform_fmas,
+              value->mo_blocks,
+              value->cuda_transform_calls,
+              value->cuda_batch_calls,
+              value->iteration_graph_calls,
+              value->replay_graph_calls,
+              value->update_calls,
+              value->generated_error_checks,
+              value->diis_gram_calls,
+              value->diis_coefficient_calls,
+              value->diis_combine_calls};
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return vibeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 vibeqc_status vibeqc_batch_get_ks_diagnostic(const vibeqc_batch* batch, uint32_t index,
                                              vibeqc_ks_diagnostic* out,
                                              vibeqc_ks_iteration* history,

@@ -828,32 +828,41 @@ typedef struct vibeqc_correlation_diagnostic {
   uint64_t ccsd_t_workspace_bytes;
   /** Audited standard-(T) inventory identity; empty for non-RCCSD(T) methods. */
   char ccsd_t_equation_hash[65];
-  /** #1501 phase/work diagnostics. Times are observed seconds for this completed call. */
-  double ccsd_reference_seconds;
-  double ccsd_problem_seconds;
-  double ccsd_provider_seconds;
-  double ccsd_source_seconds;
-  double ccsd_solver_seconds;
-  double ccsd_iteration_seconds;
-  double ccsd_replay_seconds;
-  double ccsd_update_seconds;
-  double ccsd_diis_seconds;
-  double ccsd_t_seconds;
-  uint64_t ccsd_source_scans;
-  uint64_t ccsd_source_reads;
-  uint64_t ccsd_source_values;
-  uint64_t ccsd_transform_fmas;
-  uint64_t ccsd_mo_blocks;
-  uint64_t ccsd_cuda_transform_calls;
-  uint64_t ccsd_cuda_batch_calls;
-  uint64_t ccsd_iteration_graph_calls;
-  uint64_t ccsd_replay_graph_calls;
-  uint64_t ccsd_update_calls;
-  uint64_t ccsd_generated_error_checks;
-  uint64_t ccsd_diis_gram_calls;
-  uint64_t ccsd_diis_coefficient_calls;
-  uint64_t ccsd_diis_combine_calls;
 } vibeqc_correlation_diagnostic;
+
+/** Additive observational RCCSD/RCCSD(T) phase/work record.
+ * This descriptor does not alter correlation science or convergence contracts.
+ * Nested phases are intentionally not additive: source is contained by provider,
+ * while iteration/replay/update/DIIS are contained by solver.
+ */
+typedef struct vibeqc_cc_performance_diagnostic {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  double reference_seconds;
+  double problem_seconds;
+  double provider_seconds;
+  double source_seconds;
+  double solver_seconds;
+  double iteration_seconds;
+  double replay_seconds;
+  double update_seconds;
+  double diis_seconds;
+  double triples_seconds;
+  uint64_t source_scans;
+  uint64_t source_reads;
+  uint64_t source_values;
+  uint64_t transform_fmas;
+  uint64_t mo_blocks;
+  uint64_t cuda_transform_calls;
+  uint64_t cuda_batch_calls;
+  uint64_t iteration_graph_calls;
+  uint64_t replay_graph_calls;
+  uint64_t update_calls;
+  uint64_t generated_error_checks;
+  uint64_t diis_gram_calls;
+  uint64_t diis_coefficient_calls;
+  uint64_t diis_combine_calls;
+} vibeqc_cc_performance_diagnostic;
 
 /** Executable capabilities for one method identifier. */
 typedef struct vibeqc_method_capabilities_descriptor {
@@ -1196,6 +1205,9 @@ VIBEQC_API vibeqc_status vibeqc_calculation_get_precision_provenance(
 /** Most recent successful correlated execution; failure/absence is explicit. */
 VIBEQC_API vibeqc_status vibeqc_calculation_get_correlation_diagnostic(
     const vibeqc_calculation* calculation, vibeqc_correlation_diagnostic* diagnostic);
+/** Most recent RCCSD/RCCSD(T) phase/work record; NULL out probes availability. */
+VIBEQC_API vibeqc_status vibeqc_calculation_get_cc_performance_diagnostic(
+    const vibeqc_calculation* calculation, vibeqc_cc_performance_diagnostic* out);
 
 /**
  * Read one batch item's precision record by its original input index.
@@ -1325,6 +1337,9 @@ VIBEQC_API vibeqc_status vibeqc_batch_get_scf_diagnostic(const vibeqc_batch* bat
  * its last finite correlation state and physical residual diagnostics. */
 VIBEQC_API vibeqc_status vibeqc_batch_get_correlation_diagnostic(
     const vibeqc_batch* batch, uint32_t index, vibeqc_correlation_diagnostic* diagnostic);
+/** Input-ordered counterpart of vibeqc_calculation_get_cc_performance_diagnostic. */
+VIBEQC_API vibeqc_status vibeqc_batch_get_cc_performance_diagnostic(
+    const vibeqc_batch* batch, uint32_t index, vibeqc_cc_performance_diagnostic* out);
 
 /** Input-ordered counterpart of vibeqc_calculation_get_ks_diagnostic. Invalid
  * or numerically failed items have no record; valid nonconverged items retain

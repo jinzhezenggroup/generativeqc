@@ -179,4 +179,45 @@ vibeqc_status vibeqc_calculation_get_correlation_diagnostic(
   return VIBEQC_STATUS_SUCCESS;
 }
 
+vibeqc_status vibeqc_calculation_get_cc_performance_diagnostic(
+    const vibeqc_calculation* calculation, vibeqc_cc_performance_diagnostic* out) {
+  if (!calculation) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (out && !vibeqc::api::valid_descriptor(out)) return VIBEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  try {
+    const auto value = calculation->plan->cc_performance_diagnostic();
+    if (!value) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (out)
+      *out = {sizeof(*out),
+              VIBEQC_ABI_VERSION,
+              value->reference_seconds,
+              value->problem_seconds,
+              value->provider_seconds,
+              value->source_seconds,
+              value->solver_seconds,
+              value->iteration_seconds,
+              value->replay_seconds,
+              value->update_seconds,
+              value->diis_seconds,
+              value->triples_seconds,
+              value->source_scans,
+              value->source_reads,
+              value->source_values,
+              value->transform_fmas,
+              value->mo_blocks,
+              value->cuda_transform_calls,
+              value->cuda_batch_calls,
+              value->iteration_graph_calls,
+              value->replay_graph_calls,
+              value->update_calls,
+              value->generated_error_checks,
+              value->diis_gram_calls,
+              value->diis_coefficient_calls,
+              value->diis_combine_calls};
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return vibeqc::api::map_exception(&calculation->context->last_detail);
+  }
+}
+
 }  // extern "C"
