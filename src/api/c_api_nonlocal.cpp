@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 #include <mutex>
@@ -319,8 +320,8 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_execute_v1(
         owner->seeds + owner->point_count, owner->point_derivative,
         owner->seeds + 5 * owner->point_count, errors + 2);
     vibeqc::dft::nlc::enqueue_vv10_pack_force_seeds_cuda(
-        owner->stream, owner->point_count, owner->point_derivative, owner->seeds, errors,
-        errors + 1, errors + 2);
+        owner->stream, owner->point_count, owner->effective_weights, owner->point_derivative,
+        owner->seeds, errors, errors + 1, errors + 2);
     owner->executed = true;
     ++owner->generation;
     return VIBEQC_STATUS_SUCCESS;
