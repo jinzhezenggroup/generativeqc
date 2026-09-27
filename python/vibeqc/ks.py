@@ -34,7 +34,7 @@ from vibeqc_compiler.method import (
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
 
-from ._generated_semilocal_families import SCF_DOMAIN_BY_VERSION, SEMILOCAL_FAMILIES
+from vibeqc_compiler.xc._generated_native_semilocal import (\n    SCF_DOMAIN_BY_VERSION,\n    SEMILOCAL_FAMILIES,\n)
 
 SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
 B3LYP_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[2]
