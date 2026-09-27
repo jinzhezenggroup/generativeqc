@@ -728,11 +728,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return 1;
   }
 
+  bool configured_replay_enabled() const noexcept {
+    const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
+    if (selection == nullptr) return false;
+    return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "on") == 0 ||
+           std::strcmp(selection, "true") == 0 ||
+           std::strcmp(selection, "small-native") == 0;
+  }
+
   runtime::SolverRegionCudaBinding solver_region_binding() const {
+    const bool replay =
+        configured_replay_enabled() &&
+        n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     return {{"cuda-ks-rks-solver-region-v1", device, stream, arena, fock_binding.source_identity},
             kCudaKsChunkCapacity,
             runtime::SolverRegionCompletionMode::Scalar,
-            false};
+            replay};
   }
 
   unsigned submission_width() const noexcept {
@@ -765,7 +776,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
             detail);
     xc->enqueue(density, elements, ++generation);
     pending_generations[slot] = generation;
-    ++movement.submitted_iterations;
     const auto potential = xc->view(generation);
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
@@ -820,9 +830,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       const unsigned width = submission_width();
       const unsigned remaining = options.max_iterations - output.iterations;
+      if (generation > std::numeric_limits<std::uint64_t>::max() - width)
+        throw std::overflow_error("CUDA KS density generation exhausted");
       pending_iterations =
           solver_region_executor.submit(solver_region_binding(), width, remaining, false,
                                         [&](unsigned slot) { enqueue_one(slot); });
+      movement.submitted_iterations += pending_iterations;
+      if (solver_region_executor.replayed_last_submission()) {
+        // Cached graph replay bypasses the host submission callback. Advance
+        // only the host-side logical generation ledger; the graph itself
+        // rewrites the same stable XC/control buffers captured for this width.
+        for (unsigned slot = 0; slot < pending_iterations; ++slot)
+          pending_generations[slot] = ++generation;
+      }
     } catch (...) {
       cudaStreamSynchronize(stream);
       ++movement.synchronizations;
@@ -1547,6 +1567,10 @@ CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   out.execution_region_executions = region.executions;
   out.execution_region_failures = region.failures;
   out.execution_region_recoveries = region.recoveries;
+  const auto& replay = impl_->solver_region_executor.replay_metrics();
+  out.execution_region_captures = replay.captures;
+  out.execution_region_replays = replay.replays;
+  out.execution_region_fallbacks = replay.fallbacks;
   if (impl_->xc) {
     const auto& xc = impl_->xc->transfers();
     out.setup_h2d_bytes += xc.setup_h2d_bytes;
