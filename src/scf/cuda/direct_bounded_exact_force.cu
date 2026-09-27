@@ -32,7 +32,8 @@ __global__ void contract_bounded_exact_low_order_force_page_kernel(
     unsigned high_pair_class, unsigned low_pair_class, double screening_tolerance,
     std::uint64_t page_begin, std::uint32_t page_capacity, std::uint32_t bra_ordinal_begin,
     std::uint32_t bra_ordinal_end, bool same_pair_class, const double* schwarz_bounds,
-    const double* density, double* forces, std::uint32_t* bra_head,
+    const double* density, double coulomb_coefficient, double exchange_coefficient,
+    double* forces, std::uint32_t* bra_head,
     DeviceShellClassProfileEntry* profile) {
   __shared__ std::uint32_t bra_ordinal;
   if (shell_class != kSsssShellClass && shell_class != kPsssShellClass) {
@@ -128,10 +129,12 @@ __global__ void contract_bounded_exact_low_order_force_page_kernel(
       profile_bounded_direct_shell_quartet(batch, task, profile);
       if (shell_class == kSsssShellClass) {
         contract_two_electron_force_ssss_task<Unrestricted>(
-            batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces);
+            batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+            exchange_coefficient, topology.active, forces);
       } else {
         contract_two_electron_force_psss_task<Unrestricted>(
-            batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces, 0U);
+            batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+            exchange_coefficient, topology.active, forces, 0U);
       }
     }
     __syncthreads();
@@ -145,7 +148,8 @@ void launch_contract_bounded_exact_low_order_force_page_kernel(
     unsigned high_pair_class, unsigned low_pair_class, double screening_tolerance,
     std::uint64_t page_begin, std::uint32_t page_capacity, std::uint32_t bra_ordinal_begin,
     std::uint32_t bra_ordinal_end, bool same_pair_class, const double* schwarz_bounds,
-    const double* density, double* forces, std::uint32_t* bra_head,
+    const double* density, double coulomb_coefficient, double exchange_coefficient,
+    double* forces, std::uint32_t* bra_head,
     DeviceShellClassProfileEntry* profile) {
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -153,13 +157,15 @@ void launch_contract_bounded_exact_low_order_force_page_kernel(
           <<<grid, block, shared_bytes, stream>>>(
               batch, topology_pointer, shell_class, high_pair_class, low_pair_class,
               screening_tolerance, page_begin, page_capacity, bra_ordinal_begin, bra_ordinal_end,
-              same_pair_class, schwarz_bounds, density, forces, bra_head, profile);
+              same_pair_class, schwarz_bounds, density, coulomb_coefficient,
+              exchange_coefficient, forces, bra_head, profile);
     } else {
       contract_bounded_exact_low_order_force_page_kernel<true, DirectScreeningPurpose::Force>
           <<<grid, block, shared_bytes, stream>>>(
               batch, topology_pointer, shell_class, high_pair_class, low_pair_class,
               screening_tolerance, page_begin, page_capacity, bra_ordinal_begin, bra_ordinal_end,
-              same_pair_class, schwarz_bounds, density, forces, bra_head, profile);
+              same_pair_class, schwarz_bounds, density, coulomb_coefficient,
+              exchange_coefficient, forces, bra_head, profile);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -167,13 +173,15 @@ void launch_contract_bounded_exact_low_order_force_page_kernel(
           <<<grid, block, shared_bytes, stream>>>(
               batch, topology_pointer, shell_class, high_pair_class, low_pair_class,
               screening_tolerance, page_begin, page_capacity, bra_ordinal_begin, bra_ordinal_end,
-              same_pair_class, schwarz_bounds, density, forces, bra_head, profile);
+              same_pair_class, schwarz_bounds, density, coulomb_coefficient,
+              exchange_coefficient, forces, bra_head, profile);
     } else {
       contract_bounded_exact_low_order_force_page_kernel<false, DirectScreeningPurpose::Force>
           <<<grid, block, shared_bytes, stream>>>(
               batch, topology_pointer, shell_class, high_pair_class, low_pair_class,
               screening_tolerance, page_begin, page_capacity, bra_ordinal_begin, bra_ordinal_end,
-              same_pair_class, schwarz_bounds, density, forces, bra_head, profile);
+              same_pair_class, schwarz_bounds, density, coulomb_coefficient,
+              exchange_coefficient, forces, bra_head, profile);
     }
   }
 }
