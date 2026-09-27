@@ -37,9 +37,7 @@
       "supports_batch": true,
       "aliases": [
         "wb97m-v-rks"
-      ],
-      "compiler_method": "WB97M-V",
-      "spin": "unpolarized"
+      ]
     },
     {
       "name": "rccsd(t)",
@@ -77,9 +75,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "LDA_XC_PW",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "pbe-rks",
@@ -90,9 +86,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "lda-uks",
@@ -103,9 +97,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "LDA_XC_PW",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "pbe-uks",
@@ -116,9 +108,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "r2scan-rks",
@@ -129,9 +119,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "R2SCAN",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "r2scan-uks",
@@ -142,9 +130,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "R2SCAN",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "rccsd",
@@ -167,9 +153,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE0",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "pbe0-uks",
@@ -180,9 +164,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE0",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "gfn2-xtb",
@@ -208,9 +190,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "B3LYP",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "b3lyp-uks",
@@ -221,9 +201,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "B3LYP",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "pbe-d4-rks",
@@ -234,9 +212,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE-D4(BJ-EEQ-ATM)",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "wb97m-v-uks",
@@ -247,9 +223,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "WB97M-V",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "m06-2x-rks",
@@ -260,9 +234,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "M06-2X",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "m06-2x-uks",
@@ -273,9 +245,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "M06-2X",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "mn15-rks",
@@ -286,9 +256,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "MN15",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "mn15-uks",
@@ -299,9 +267,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "MN15",
-      "spin": "polarized"
+      "supports_batch": true
     }
   ],
   "composite_methods": [
