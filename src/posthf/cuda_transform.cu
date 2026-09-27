@@ -70,7 +70,7 @@ void validate(Transform& p) {
 
 struct BatchState {
   size_t stage{}, output{}, coefficients{};
-  std::array<size_t, 4> m{}, c_offset{};
+  std::array<size_t, 4> m{}, c_offset{}, prefix_leader{};
   double *c{}, *first{}, *second{}, *result{};
 };
 struct BatchTransform {
@@ -268,13 +268,14 @@ int posthf_cuda_versions_v1(void* pointer, int* values, char* error, size_t size
 }
 
 int posthf_cuda_batch_create_v1(int device, size_t nbf, size_t request_count, const size_t* shapes,
-                                const size_t* tile, const double* coefficients,
-                                size_t maximum_bytes, void** out, char* error, size_t size) {
+                                const size_t* prefix_leaders, const size_t* tile,
+                                const double* coefficients, size_t maximum_bytes, void** out,
+                                char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!out) throw std::invalid_argument("null batch output handle");
     *out = nullptr;
     if (!nbf || !request_count || request_count > static_cast<size_t>(INT_MAX) || !shapes ||
-        !tile || !coefficients || !maximum_bytes)
+        !prefix_leaders || !tile || !coefficients || !maximum_bytes)
       throw std::invalid_argument("invalid MO batch plan");
     auto p = std::make_unique<BatchTransform>();
     p->nbf = nbf;
@@ -298,6 +299,18 @@ int posthf_cuda_batch_create_v1(int device, size_t nbf, size_t request_count, co
         const auto m = shapes[4 * request + axis];
         if (!m || m > nbf) throw std::invalid_argument("invalid MO batch block dimensions");
         state.m[axis] = m;
+        const auto leader = prefix_leaders[4 * request + axis];
+        if (leader > request)
+          throw std::invalid_argument("MO batch prefix leader is not ordered");
+        state.prefix_leader[axis] = leader;
+        if (leader < request) {
+          const auto& leader_state = p->states[leader];
+          if (leader_state.prefix_leader[axis] != leader)
+            throw std::invalid_argument("MO batch prefix leader is not canonical");
+          for (unsigned prefix = 0; prefix <= axis; ++prefix)
+            if (leader_state.m[prefix] != state.m[prefix])
+              throw std::invalid_argument("MO batch prefix leader shape mismatch");
+        }
         state.c_offset[axis] = state.coefficients;
         state.coefficients = size_add(state.coefficients, size_mul(nbf, m));
         state.output = size_mul(state.output, m);
@@ -375,40 +388,43 @@ int posthf_cuda_batch_add_v1(void* pointer, const double* values, const size_t* 
       cuda_check(cudaMemcpyAsync(p.raw, values, elements * 8, cudaMemcpyHostToDevice, ctx.stream));
     });
     ctx.section(true, ctx.metrics.library_ms, [&] {
-      for (auto& state : p.states) {
-        const int dim = static_cast<int>(shape[0]);
-        const int rest = static_cast<int>(elements / shape[0]);
-        const int columns = static_cast<int>(state.m[0]);
-        const double alpha = 1, beta = 0;
-        blas_check(cublasDgemm(ctx.handle, CUBLAS_OP_N, CUBLAS_OP_T, columns, rest, dim, &alpha,
-                               state.c + state.c_offset[0] + begin[0] * state.m[0], columns, p.raw,
-                               rest, &beta, state.first, columns));
-      }
-      for (auto& state : p.states) {
-        auto transformed_shape = shape;
-        auto transformed_elements = size_mul(elements / shape[0], state.m[0]);
-        for (unsigned axis = 0; axis < 3; ++axis)
-          transformed_shape[axis] = transformed_shape[axis + 1];
-        transformed_shape[3] = state.m[0];
-        double* in = state.first;
-        double* out_state = state.second;
-        for (unsigned k = 1; k < 4; ++k) {
+      // Execute the transform trie one depth at a time. Existing per-request
+      // scratch buffers ping-pong by depth; all parents are dead before reuse.
+      for (unsigned k = 0; k < 4; ++k) {
+        for (size_t request = 0; request < p.states.size(); ++request) {
+          auto& state = p.states[request];
+          if (state.prefix_leader[k] != request) continue;
+
+          auto transformed_shape = shape;
+          auto transformed_elements = elements;
+          for (unsigned prefix = 0; prefix < k; ++prefix) {
+            const auto rest = transformed_elements / transformed_shape[0];
+            transformed_elements = size_mul(rest, state.m[prefix]);
+            for (unsigned axis = 0; axis < 3; ++axis)
+              transformed_shape[axis] = transformed_shape[axis + 1];
+            transformed_shape[3] = state.m[prefix];
+          }
+
           const int dim = static_cast<int>(transformed_shape[0]);
           const int rest = static_cast<int>(transformed_elements / transformed_shape[0]);
           const int columns = static_cast<int>(state.m[k]);
           const double alpha = 1, beta = 0;
+          const double* in = p.raw;
+          if (k) {
+            const auto& parent = p.states[state.prefix_leader[k - 1]];
+            in = (k & 1U) ? parent.first : parent.second;
+          }
+          double* out_state = (k & 1U) ? state.second : state.first;
           blas_check(cublasDgemm(ctx.handle, CUBLAS_OP_N, CUBLAS_OP_T, columns, rest, dim, &alpha,
                                  state.c + state.c_offset[k] + begin[k] * state.m[k], columns, in,
                                  rest, &beta, out_state, columns));
-          transformed_elements = size_mul(rest, state.m[k]);
-          for (unsigned axis = 0; axis < 3; ++axis)
-            transformed_shape[axis] = transformed_shape[axis + 1];
-          transformed_shape[3] = state.m[k];
-          std::swap(in, out_state);
         }
-        const double one = 1;
-        blas_check(
-            cublasDaxpy(ctx.handle, static_cast<int>(state.output), &one, in, 1, state.result, 1));
+      }
+      const double one = 1;
+      for (auto& state : p.states) {
+        const auto& leaf = p.states[state.prefix_leader[3]];
+        blas_check(cublasDaxpy(ctx.handle, static_cast<int>(state.output), &one, leaf.second, 1,
+                               state.result, 1));
       }
     });
     p.failed = false;

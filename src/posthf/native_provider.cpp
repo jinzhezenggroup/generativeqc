@@ -8,6 +8,7 @@
 #include "integrals/density_fitting_metric.hpp"
 #include "integrals/s_integrals.hpp"
 #include "posthf/cuda_transform.hpp"
+#include "posthf/source_reuse_schedule_generated.hpp"
 
 namespace vibeqc::posthf {
 NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
@@ -124,6 +125,18 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
   }
   if (batch_memory > budget_) throw std::length_error("native MO batch exceeds memory budget");
 
+  std::vector<std::array<std::size_t, 4>> prefix_keys(requests.size());
+  std::vector<std::vector<std::size_t>> slot_keys;
+  for (std::size_t request = 0; request < requests.size(); ++request) {
+    for (unsigned axis = 0; axis < 4; ++axis) {
+      std::size_t key = 0;
+      while (key < slot_keys.size() && slot_keys[key] != requests[request][axis]) ++key;
+      if (key == slot_keys.size()) slot_keys.push_back(requests[request][axis]);
+      prefix_keys[request][axis] = key;
+    }
+  }
+  const auto prefix_reuse = generated::ordered_prefix_reuse_plan(prefix_keys);
+
   struct State {
     std::array<std::size_t, 4> shape{};
     NumericBlockPlan plan{};
@@ -182,8 +195,10 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
   if (cuda) {
 #if VIBEQC_HAS_CUDA
     std::vector<std::size_t> batch_shapes;
+    std::vector<std::size_t> prefix_leaders;
     std::vector<double> panels;
     batch_shapes.reserve(4 * states.size());
+    prefix_leaders.reserve(4 * states.size());
     std::size_t coefficient_elements = 0;
     std::size_t maximum_allocation_bytes = 0;
     for (const auto& state : states) {
@@ -191,6 +206,8 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
       coefficient_elements = checked_add(coefficient_elements, state.plan.coefficient_elements);
       maximum_allocation_bytes = checked_add(maximum_allocation_bytes, state.plan.allocation_bytes);
     }
+    for (const auto& leaders : prefix_reuse.leaders)
+      prefix_leaders.insert(prefix_leaders.end(), leaders.begin(), leaders.end());
     panels.reserve(coefficient_elements);
     for (const auto& state : states)
       for (const auto& panel : state.coefficients)
@@ -198,8 +215,9 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
     if (panels.size() != coefficient_elements)
       throw std::logic_error("native MO batch coefficient accounting mismatch");
     check(posthf_cuda_batch_create_v1(device, ref_.nbf, states.size(), batch_shapes.data(),
-                                      tile_.data(), panels.data(), maximum_allocation_bytes,
-                                      &device_batch.pointer, error, sizeof(error)));
+                                      prefix_leaders.data(), tile_.data(), panels.data(),
+                                      maximum_allocation_bytes, &device_batch.pointer, error,
+                                      sizeof(error)));
     if (work)
       work->h2d_bytes =
           checked_add(work->h2d_bytes, checked_mul(coefficient_elements, sizeof(double)));
@@ -232,15 +250,17 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
           if (work) {
             work->source_reads = checked_add(work->source_reads, 1);
             work->source_values = checked_add(work->source_values, elements);
-            for (const auto& state : states) {
+            for (std::size_t request = 0; request < states.size(); ++request) {
+              const auto& state = states[request];
               auto work_shape = current;
               auto work_elements = elements;
               for (unsigned k = 0; k < 4; ++k) {
                 const auto ao = work_shape[0];
                 const auto rest = work_elements / ao;
                 const auto columns = state.shape[k];
-                work->transform_fmas =
-                    checked_add(work->transform_fmas, checked_mul(checked_mul(rest, ao), columns));
+                if (!cuda || prefix_reuse.leaders[request][k] == request)
+                  work->transform_fmas = checked_add(
+                      work->transform_fmas, checked_mul(checked_mul(rest, ao), columns));
                 work_elements = checked_mul(rest, columns);
                 for (unsigned j = 0; j < 3; ++j) work_shape[j] = work_shape[j + 1];
                 work_shape[3] = columns;

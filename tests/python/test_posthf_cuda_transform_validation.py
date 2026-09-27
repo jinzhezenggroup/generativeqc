@@ -93,6 +93,8 @@ def test_native_multi_request_cuda_reuses_one_raw_upload_and_context() -> None:
 
     assert batch_add.count("cudaMemcpyAsync(p.raw, values") == 1
     assert "for (auto& state : p.states)" in batch_add
+    assert "state.prefix_leader[k] != request" in batch_add
+    assert "state.prefix_leader[k - 1]" in batch_add
     assert batch_add.count("ctx.section(true, ctx.metrics.input_ms") == 1
     assert batch_add.count("ctx.section(true, ctx.metrics.library_ms") == 1
     assert batch_download.count("ctx.section(true, ctx.metrics.output_ms") == 1
