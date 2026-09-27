@@ -252,6 +252,13 @@ void CudaXcPlan::enqueue_response(const double* density, const double* direction
   enqueue_impl(density, direction, elements, generation, CudaXcDensityPrecision::Fp64);
 }
 
+void CudaXcPlan::publish_replayed_generation(std::uint64_t generation) {
+  check_device();
+  generations_.begin(generation);
+  generations_.commit(generation);
+  ++transfers_.evaluations;
+}
+
 void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
                                             const double* effective_weights,
                                             const double* total_gradient, const double* vrho,
