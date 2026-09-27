@@ -12,6 +12,7 @@ from vibeqc_compiler.dft.xc_program import (
     host_unfused_grid_xc_region,
     select_grid_xc_region_program,
 )
+
 if typing.TYPE_CHECKING:
     from vibeqc_compiler.common.program import ProgramIR
 
