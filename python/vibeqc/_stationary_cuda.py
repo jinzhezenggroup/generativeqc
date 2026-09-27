@@ -93,7 +93,7 @@ class _StationaryTaskExecution:
     fixed_capacity: int
     resident_capacity: int
     page_capacity: int
-    pages: int
+    producer_pages: int
 
 
 class _BoundedStationaryTaskExecutor:
@@ -1679,11 +1679,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                             charges[atom],
                         )
 
-            execution = task_executor.execute(
-                domain,
-                submit,
-                finish_page=sources.flush,
-            )
+            execution = task_executor.execute(domain, submit)
             task_executions.append(
                 {
                     "source": source,
