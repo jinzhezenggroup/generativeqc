@@ -6,6 +6,7 @@ Use this guide to install VibeQC and run calculations. If the terminology is unf
 
 - [Installation](installation.md)
 - [Quick start](quickstart.md)
+- [Native CLI without Python](native_cli.md)
 - [Methods and scope](methods.md)
 - [Generated public method table](../public_methods.md)
 
@@ -38,6 +39,7 @@ Exact lookup information belongs in [Reference](../reference/index.md); internal
 
 installation
 quickstart
+native_cli
 methods
 batched_hf
 checkpoint
