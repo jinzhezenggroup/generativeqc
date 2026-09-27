@@ -6,9 +6,11 @@ from pathlib import Path
 import numpy as np
 from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from vibeqc_compiler.integral.derivative_aot_registry import (
+    select_packaged_derivative_aot,
+)
 from vibeqc_compiler.integral.ir import four_center_eri_operator
 from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.rsh_cpu_aot import component_group, entry_prefix
 from vibeqc_compiler.integral.shell_spec import cartesian_components
 from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 from vibeqc_compiler.integral.weighted_eri_execute import (
@@ -24,10 +26,11 @@ class RangeExchangeExecutor:
 
     The mathematical path is backend-neutral: the selected explicit compiler
     adapter determines whether the generated weighted-ERI provider executes on
-    CPU or CUDA. This stationary-consumer binding currently admits only s/p
-    public AOs. For l < 2 Cartesian and real-spherical public functions are
-    identical, so each packed NativeAO record maps one-to-one to a normalized
-    Cartesian component.
+    CPU or CUDA. Packaged AOT selection is also backend/operator based and does
+    not inspect a functional or method name. This stationary-consumer binding
+    currently admits only s/p public AOs. For l < 2 Cartesian and
+    real-spherical public functions are identical, so each packed NativeAO
+    record maps one-to-one to a normalized Cartesian component.
     """
 
     def __init__(
@@ -121,18 +124,21 @@ class RangeExchangeExecutor:
             )
         )
         radial = self._kernel(primitive)
-        aot_selection = None
-        if self.backend == "cpu" and self.aot_library is not None:
-            group_index, selected = component_group(angular, component)
-            prefix = entry_prefix(radial, angular, group_index)
-            try:
-                getattr(self.aot_library, f"{prefix}_identity_v2")
-            except AttributeError:
-                pass
-            else:
-                aot_selection = (group_index, selected, prefix)
+        aot_selection = select_packaged_derivative_aot(
+            self.aot_library,
+            backend=self.backend,
+            radial=radial,
+            angular=angular,
+            component=component,
+        )
         key = (
-            (radial.family.value, radial.omega, angular, "aot", aot_selection[0])
+            (
+                radial.family.value,
+                radial.omega,
+                angular,
+                "aot",
+                aot_selection.key.group_index,
+            )
             if aot_selection is not None
             else (radial.family.value, radial.omega, angular, "jit", component)
         )
@@ -142,12 +148,11 @@ class RangeExchangeExecutor:
                 angular, operator=four_center_eri_operator(radial)
             )
             if aot_selection is not None:
-                _, selected, prefix = aot_selection
                 artifact = packaged_weighted_eri(
                     integral,
                     self.aot_library,
-                    component_indices=selected,
-                    entry_prefix=prefix,
+                    component_indices=aot_selection.component_indices,
+                    entry_prefix=aot_selection.entry_prefix,
                 )
                 self.packaged_aot_plans += 1
             else:
