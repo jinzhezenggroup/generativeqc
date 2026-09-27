@@ -278,6 +278,17 @@ __global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view, st
   }
   const auto np = view.npoint;
   const auto out = offset + i;
+  // A finite feature buffer may still belong to a failed producer generation.
+  // Carry its sticky status before reading features, and initialize safe padding
+  // for the downstream domain kernel. Seed publication will poison every row.
+  if (view.error && *view.error) {
+    atomicExch(failed, 1);
+    density[out] = 0.0;
+    gradient[3 * out] = 0.0;
+    gradient[3 * out + 1] = 0.0;
+    gradient[3 * out + 2] = 0.0;
+    return;
+  }
   const double rho = view.features[i] + view.features[5 * np + i];
   const double gx = view.features[np + i] + view.features[6 * np + i];
   const double gy = view.features[2 * np + i] + view.features[7 * np + i];
