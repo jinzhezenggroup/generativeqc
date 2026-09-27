@@ -300,8 +300,7 @@ int posthf_cuda_batch_create_v1(int device, size_t nbf, size_t request_count, co
         if (!m || m > nbf) throw std::invalid_argument("invalid MO batch block dimensions");
         state.m[axis] = m;
         const auto leader = prefix_leaders[4 * request + axis];
-        if (leader > request)
-          throw std::invalid_argument("MO batch prefix leader is not ordered");
+        if (leader > request) throw std::invalid_argument("MO batch prefix leader is not ordered");
         state.prefix_leader[axis] = leader;
         if (leader < request) {
           const auto& leader_state = p->states[leader];

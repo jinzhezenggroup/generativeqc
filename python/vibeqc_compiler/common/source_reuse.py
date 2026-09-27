@@ -226,8 +226,7 @@ class OrderedPrefixReusePlan:
 
 
 def ordered_prefix_reuse_plan(
-    requests: tuple[tuple[int, int, int, int], ...]
-    | list[tuple[int, int, int, int]],
+    requests: tuple[tuple[int, int, int, int], ...] | list[tuple[int, int, int, int]],
 ) -> OrderedPrefixReusePlan:
     """Choose the first request that owns each equal transform prefix."""
 
@@ -237,9 +236,7 @@ def ordered_prefix_reuse_plan(
     if any(len(request) != 4 for request in normalized):
         raise ValueError("prefix-reuse schedule requires rank-4 requests")
     if any(
-        not isinstance(key, int) or key < 0
-        for request in normalized
-        for key in request
+        not isinstance(key, int) or key < 0 for request in normalized for key in request
     ):
         raise ValueError("prefix-reuse keys must be nonnegative integers")
 
@@ -260,9 +257,7 @@ def ordered_prefix_reuse_plan(
         leaders.append((row[0], row[1], row[2], row[3]))
 
     unique_tuple = (unique[0], unique[1], unique[2], unique[3])
-    return OrderedPrefixReusePlan(
-        tuple(leaders), unique_tuple, sum(unique_tuple)
-    )
+    return OrderedPrefixReusePlan(tuple(leaders), unique_tuple, sum(unique_tuple))
 
 
 def native_header() -> str:

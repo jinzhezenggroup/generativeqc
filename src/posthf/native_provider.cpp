@@ -214,10 +214,9 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
         panels.insert(panels.end(), panel.begin(), panel.end());
     if (panels.size() != coefficient_elements)
       throw std::logic_error("native MO batch coefficient accounting mismatch");
-    check(posthf_cuda_batch_create_v1(device, ref_.nbf, states.size(), batch_shapes.data(),
-                                      prefix_leaders.data(), tile_.data(), panels.data(),
-                                      maximum_allocation_bytes, &device_batch.pointer, error,
-                                      sizeof(error)));
+    check(posthf_cuda_batch_create_v1(
+        device, ref_.nbf, states.size(), batch_shapes.data(), prefix_leaders.data(), tile_.data(),
+        panels.data(), maximum_allocation_bytes, &device_batch.pointer, error, sizeof(error)));
     if (work)
       work->h2d_bytes =
           checked_add(work->h2d_bytes, checked_mul(coefficient_elements, sizeof(double)));
@@ -259,8 +258,8 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
                 const auto rest = work_elements / ao;
                 const auto columns = state.shape[k];
                 if (!cuda || prefix_reuse.leaders[request][k] == request)
-                  work->transform_fmas = checked_add(
-                      work->transform_fmas, checked_mul(checked_mul(rest, ao), columns));
+                  work->transform_fmas = checked_add(work->transform_fmas,
+                                                     checked_mul(checked_mul(rest, ao), columns));
                 work_elements = checked_mul(rest, columns);
                 for (unsigned j = 0; j < 3; ++j) work_shape[j] = work_shape[j + 1];
                 work_shape[3] = columns;
