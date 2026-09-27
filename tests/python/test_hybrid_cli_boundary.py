@@ -23,14 +23,29 @@ def test_resource_cli_preserves_qualified_method_choices(method: str) -> None:
     assert arguments.method == method
 
 
-def test_method_catalog_is_generated_from_public_manifest() -> None:
+def test_method_catalog_combines_native_abi_and_methodir_dft_discovery() -> None:
     rows = _public_method_rows()
-    assert [row["name"] for row in rows] == list(_generated_methods.METHOD_METADATA)
     by_name = {row["name"]: row for row in rows}
+
+    # Non-DFT methods still come directly from the stable ABI/provider registry.
+    for name, metadata in _generated_methods.METHOD_METADATA.items():
+        if metadata["provider"] != "dft":
+            assert name in by_name
+
+    # PBE50 is compiler-owned and intentionally has no native ABI manifest row.
+    assert "pbe50-rks" not in _generated_methods.METHOD_NAME_TO_ID
+    assert by_name["pbe50-rks"]["properties"] == ("energy",)
+    assert by_name["pbe50-uks"]["family"] == "density_functional"
+
+    # Existing compatibility selectors remain discoverable without owning the
+    # scientific composition.
     assert by_name["pbe0-rks"]["properties"] == ("energy",)
     assert by_name["b3lyp-uks"]["status"] == "available"
     assert by_name["wb97m-v"]["status"] == "available"
     assert by_name["wb97m-v"]["properties"] == ("energy",)
+
+    # Representation alone never bypasses the native lowerer gate.
+    assert "scan-rks" not in by_name
 
 
 def test_methods_command_is_publicly_parseable() -> None:
