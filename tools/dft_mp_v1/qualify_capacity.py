@@ -20,8 +20,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
+
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+    sys.path.insert(0, str(SOURCE_REPOSITORY / "python"))
 
 import numpy as np
 from vibeqc import Atom
@@ -80,9 +82,19 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         r'raise ValueError\("CUDA diagnostic primitive-topology cap exceeded"\)',
         source,
     )
+    whole_force_primitive_budget = re.search(
+        r"if records > max_primitive_records:\s+"
+        r'raise ValueError\("primitive work budget exceeded"\)',
+        source,
+    )
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"
+        )
+    if whole_force_primitive_budget is None:
+        raise RuntimeError(
+            "capacity qualifier requires a source-verified whole-force cumulative "
+            "primitive-record admission gate"
         )
 
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
@@ -114,6 +126,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         },
         "basis_primitive_count": int(primitives.group("primitives")),
         "primitive_records": default("max_primitive_records"),
+        "primitive_records_scope": "whole_force_cumulative",
         "grid_points": default("max_grid_points"),
         "grid_pair_visits": default("max_grid_pair_visits"),
         "additional_device_bytes": default("max_device_bytes"),
@@ -435,6 +448,10 @@ def build_report(
     aot_directory: Path | None = None,
 ) -> dict[str, Any]:
     repository = Path(repository).resolve()
+    if repository != SOURCE_REPOSITORY:
+        raise ValueError(
+            "capacity report must run against the checkout containing this tool"
+        )
     if re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
         raise ValueError("source_sha must be a full lowercase Git commit SHA")
     root = repository / "tools/dft_mp_v1"
@@ -742,7 +759,8 @@ def main() -> None:
     parser.add_argument(
         "--repository",
         type=Path,
-        default=Path(__file__).resolve().parents[2],
+        default=SOURCE_REPOSITORY,
+        help="checkout containing this tool; other repositories are rejected",
     )
     parser.add_argument(
         "--aot-directory",

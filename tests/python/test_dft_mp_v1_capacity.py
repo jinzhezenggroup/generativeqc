@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from tools.dft_mp_v1 import qualify_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -75,6 +77,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     }
     assert result["admission_limits"]["basis_primitive_count"] == 4096
     assert result["admission_limits"]["primitive_records"] == 16_000_000
+    assert result["admission_limits"]["primitive_records_scope"] == (
+        "whole_force_cumulative"
+    )
     assert result["admission_limits"]["grid_points"] == 1_000_000
     assert result["admission_limits"]["grid_pair_visits"] == 100_000_000
 
@@ -185,3 +190,27 @@ def test_machine_readable_report_round_trips_without_nonfinite_values() -> None:
     result = report()
     encoded = json.dumps(result, allow_nan=False, sort_keys=True)
     assert json.loads(encoded) == result
+
+
+def test_report_rejects_a_repository_other_than_its_import_checkout(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="checkout containing this tool"):
+        qualify_capacity.build_report(tmp_path, source_sha=SOURCE_SHA)
+
+
+def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    whole_force_gate = (
+        "    if records > max_primitive_records:\n"
+        '        raise ValueError("primitive work budget exceeded")\n'
+    )
+    assert whole_force_gate in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(whole_force_gate, ""), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="whole-force cumulative"):
+        qualify_capacity._source_limits(tmp_path)
