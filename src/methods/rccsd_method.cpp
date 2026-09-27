@@ -376,6 +376,13 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     }
     state.problem = build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
                                   provider_work, provider_metrics);
+    // Provider planning already charged this source. Subsequent CC/(T)/force
+    // stages must additionally retain the prepared owner beside the reference.
+    if (prepared_exact)
+      state.problem.reference_retained_bytes = posthf::checked_add(
+          state.problem.reference_retained_bytes, prepared_source->retained_numeric_bytes());
+    prepared_source.reset();
+    raw_source.reset();
     allocation_stage = "CC resident solve";
     state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
                         : cc::solve_cpu(state.problem, solver_options);

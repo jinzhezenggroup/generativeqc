@@ -106,7 +106,7 @@ class Mp2Prepared final : public PreparedCalculation {
       hf.density.clear();
       hf.density.shrink_to_fit();
       std::unique_ptr<posthf::RawSource> raw_source;
-      if (!prepared_exact || density_fitted_ || compute_forces)
+      if (!prepared_exact || density_fitted_)
         raw_source =
             std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
       std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
@@ -126,6 +126,13 @@ class Mp2Prepared final : public PreparedCalculation {
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
       if (compute_forces) {
+        // The compatibility force planner does not borrow the prepared ERIs.
+        // Retire its view before its owner and create RawSource only afterward.
+        prepared_source.reset();
+        cpu_exact_plan_.reset();
+        if (!raw_source)
+          raw_source =
+              std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
         response::GmresOptions response_options;
         response_options.relative_tolerance = 1e-10;
         response_options.absolute_tolerance = 1e-12;
