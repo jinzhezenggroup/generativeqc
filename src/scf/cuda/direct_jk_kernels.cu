@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include "generated_direct_contraction.cuh"
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_jk_kernels.hpp"
-#include "generated_direct_contraction.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
 
 namespace vibeqc::scf {
