@@ -187,10 +187,7 @@ def test_device_executable_identity_invalidates_replacement_program() -> None:
         **kwargs,
     )
     assert first.program.identity != second.program.identity
-    assert (
-        first.candidate.replacement_identity
-        != second.candidate.replacement_identity
-    )
+    assert first.candidate.replacement_identity != second.candidate.replacement_identity
 
 
 @pytest.mark.parametrize(

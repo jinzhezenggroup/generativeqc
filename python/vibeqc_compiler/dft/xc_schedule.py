@@ -352,19 +352,10 @@ def grid_xc_tile_capacities(shape: GridXcCandidateShape) -> dict[str, int]:
     points = min(shape.npoint, shape.tile_points)
     scalar_bytes = 8
     return {
-        "ao_jets": scalar_bytes
-        * points
-        * shape.max_active_ao
-        * shape.jet_components,
-        "density_panel": scalar_bytes
-        * shape.spins
-        * points
-        * shape.max_active_ao,
+        "ao_jets": scalar_bytes * points * shape.max_active_ao * shape.jet_components,
+        "density_panel": scalar_bytes * shape.spins * points * shape.max_active_ao,
         "features": scalar_bytes * shape.spins * points * (1 + 3 + 3 + 1),
-        "vxc": scalar_bytes
-        * shape.spins
-        * shape.max_active_ao
-        * shape.max_active_ao,
+        "vxc": scalar_bytes * shape.spins * shape.max_active_ao * shape.max_active_ao,
     }
 
 
