@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from pathlib import Path
 import subprocess
 import sys
+from collections import Counter
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
