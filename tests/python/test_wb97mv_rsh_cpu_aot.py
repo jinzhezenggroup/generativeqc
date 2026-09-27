@@ -180,6 +180,112 @@ def test_range_exchange_prefers_packaged_cpu_aot(
     assert executor.runtime_compilations == 0
 
 
+def test_grouped_aot_reuses_one_prepared_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    compiler_path = shutil.which("c++")
+    if compiler_path is None:
+        pytest.skip("native C++ compiler unavailable")
+    compiler = CppCompilerAdapter(Path(compiler_path))
+    primitive = next(
+        item for item in _wb97mv_ranges() if item.operator == "short-range"
+    )
+    radial = _radial(primitive)
+    angular = (1, 1, 1, 1)
+    prefix = entry_prefix(radial, angular, 0)
+    library = type("Library", (), {})()
+    setattr(library, f"{prefix}_identity_v2", object())
+
+    centers = np.asarray(
+        [
+            [0.13, -0.31, 0.24],
+            [-0.43, 0.27, 0.51],
+            [0.68, -0.14, -0.22],
+            [-0.21, 0.48, -0.63],
+        ]
+    )
+    primitives = []
+    aos = []
+    for atom in range(4):
+        for axis in range(2):
+            primitive_index = len(primitives)
+            primitives.append((0.57 + 0.07 * primitive_index, 1.0))
+            row = [0.0] * 16
+            row[:4] = [atom, primitive_index, 1, 1]
+            row[4 + axis] = 1
+            row[7] = 1.0
+            aos.append(row)
+    basis = SimpleNamespace(
+        natom=4,
+        nao=len(aos),
+        nprimitive=len(primitives),
+        shells=tuple(SimpleNamespace(angular_momentum=1) for _ in range(4)),
+        packed=np.concatenate(
+            (
+                centers.ravel(),
+                np.asarray(primitives).ravel(),
+                np.asarray(aos).ravel(),
+            )
+        ),
+    )
+
+    packaged_calls = []
+    plans = []
+
+    def packaged(
+        integral: typing.Any,
+        candidate_library: typing.Any,
+        *,
+        component_indices: typing.Any,
+        entry_prefix: str,
+    ) -> typing.Any:
+        packaged_calls.append((tuple(component_indices), entry_prefix))
+        return SimpleNamespace(backend="cpu")
+
+    def forbidden_compile(*args: typing.Any, **kwargs: typing.Any) -> None:
+        pytest.fail("grouped AOT reuse reached runtime compilation")
+
+    class FakePlan:
+        def __init__(self, artifact: typing.Any, **kwargs: typing.Any) -> None:
+            plans.append(self)
+
+        def raw(
+            self,
+            primitives: typing.Any,
+            centers: typing.Any,
+            component_indices: typing.Any,
+        ) -> typing.Any:
+            return SimpleNamespace(
+                values=np.zeros((1, 13)),
+                diagnostics={"records": 1},
+            )
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(runtime, "packaged_weighted_eri", packaged)
+    monkeypatch.setattr(runtime, "compile_weighted_eri", forbidden_compile)
+    monkeypatch.setattr(runtime, "PreparedWeightedEri", FakePlan)
+
+    executor = runtime.RangeExchangeExecutor(
+        basis,
+        tmp_path,
+        8,
+        compiler,
+        aot_library=library,
+    )
+    try:
+        executor.integral(primitive, (0, 2, 4, 6), 1.0)
+        executor.integral(primitive, (1, 3, 5, 7), 1.0)
+    finally:
+        executor.close()
+    assert len(plans) == 1
+    assert len(packaged_calls) == 1
+    assert executor.packaged_aot_plans == 1
+    assert executor.runtime_compilations == 0
+
+
 def test_native_library_exports_wb97mv_rsh_aot() -> None:
     path = os.environ.get("VIBEQC_LIBRARY")
     if not path:
