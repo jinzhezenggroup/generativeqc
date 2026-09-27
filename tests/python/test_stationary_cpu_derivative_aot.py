@@ -31,12 +31,9 @@ def test_cpu_aot_inventory_is_complete_and_link_safe(
     assert len(sources) == schedule.CPU_AOT_SHARDS == 46
     assert sum(len(requests) for requests, _ in sources) == 362
     assert [symbol for _, symbol in calls] == [
-        schedule.cpu_aot_symbol(shard)
-        for shard in range(schedule.CPU_AOT_SHARDS)
+        schedule.cpu_aot_symbol(shard) for shard in range(schedule.CPU_AOT_SHARDS)
     ]
-    assert all(
-        len(requests) <= schedule.REQUESTS_PER_UNIT for requests, _ in sources
-    )
+    assert all(len(requests) <= schedule.REQUESTS_PER_UNIT for requests, _ in sources)
 
 
 def test_packaged_dispatch_loader_is_all_or_nothing() -> None:
@@ -167,7 +164,5 @@ def test_cmake_registers_the_fixed_cpu_aot_inventory() -> None:
     assert "generate_stationary_cpu_derivative_aot.py" in generated
     assert "ADD_TO_TARGET" in generated
     assert "-ffp-contract=off" in generated
-    identity = (root / "cmake/VibeQCSourceIdentity.json").read_text(
-        encoding="utf-8"
-    )
+    identity = (root / "cmake/VibeQCSourceIdentity.json").read_text(encoding="utf-8")
     assert "tools/generate_stationary_cpu_derivative_aot.py" in identity

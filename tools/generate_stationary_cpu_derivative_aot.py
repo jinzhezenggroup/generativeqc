@@ -29,8 +29,7 @@ def main() -> None:
         raise RuntimeError("stationary CPU derivative AOT shard contract drift")
     for shard, (_, source) in enumerate(sources):
         _write_if_changed(
-            args.output_directory
-            / f"vibeqc_stationary_cpu_derivative_{shard}.cpp",
+            args.output_directory / f"vibeqc_stationary_cpu_derivative_{shard}.cpp",
             source,
         )
 

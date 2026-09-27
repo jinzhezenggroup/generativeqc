@@ -91,9 +91,7 @@ class ComponentPrimitiveExecutor:
             for begin in range(0, len(requests), REQUESTS_PER_UNIT)
         )
         packaged = (
-            _packaged_aot_dispatchers(aot_library)
-            if domain == COMPONENT_LABELS
-            else ()
+            _packaged_aot_dispatchers(aot_library) if domain == COMPONENT_LABELS else ()
         )
         if packaged:
             if len(packaged) != len(groups):
@@ -113,12 +111,8 @@ class ComponentPrimitiveExecutor:
                 self.dispatchers.append(call)
                 for kind, request in enumerate(selected):
                     self.calls[request] = (call, kind)
-            source_bytes = sum(
-                len(source.encode("utf-8")) for _, source in sources
-            )
-            largest_source = max(
-                len(source.encode("utf-8")) for _, source in sources
-            )
+            source_bytes = sum(len(source.encode("utf-8")) for _, source in sources)
+            largest_source = max(len(source.encode("utf-8")) for _, source in sources)
             runtime_compilations = len(sources)
         self.compilation_work = {
             "primitive_compiled_kernels": len(self.calls),
