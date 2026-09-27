@@ -6,6 +6,7 @@ from pathlib import Path
 
 from vibeqc_compiler.integral.cuda_schedule import ScheduleIR, ScheduleKind
 from vibeqc_compiler.integral.production import (
+    _streaming_fock_source,
     emit_multi_registry_source,
     emit_registry_header,
     emit_registry_source,
