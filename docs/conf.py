@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import typing
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -43,11 +44,13 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 
 
-def _render_public_methods(app, docname, source):
+def _render_public_methods(
+    app: typing.Any, docname: str, source: list[str]
+) -> None:
     if docname == "public_methods":
         source[0] = render_public_methods_markdown()
 
 
-def setup(app):
+def setup(app: typing.Any) -> dict[str, bool]:
     app.connect("source-read", _render_public_methods)
     return {"parallel_read_safe": True, "parallel_write_safe": True}
