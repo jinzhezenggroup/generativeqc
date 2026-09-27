@@ -12,8 +12,8 @@
 
 namespace vibeqc::posthf {
 NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
-                                         const hf::PhysicalReference& reference,
-                                         std::size_t budget, unsigned axis_tile)
+                                         const hf::PhysicalReference& reference, std::size_t budget,
+                                         unsigned axis_tile)
     : source_(source),
       ref_(reference),
       budget_(budget),
