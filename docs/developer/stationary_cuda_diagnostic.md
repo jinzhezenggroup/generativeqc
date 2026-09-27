@@ -119,7 +119,9 @@ used. A native failure poisons the source transaction; reads fail until reset.
 The public diagnostic discards the owner and publishes no partial result.
 
 `result.work` records exact source launches, cumulative primitive/point/pair counts,
-bounded primitive-page count and peak page work,
+actual native primitive-page count and peak page work; the bounded task-executor
+metadata separately records producer-page counts so logical enumeration pages are not
+confused with descriptor-reservoir flushes,
 source H2D/D2H bytes and call counts, explicit source-stream synchronization
 counts, snapshot export counters, streams, grid allocation/timing metrics,
 TensorIR execution/transfer totals, declared numeric bounds, endpoint time and
