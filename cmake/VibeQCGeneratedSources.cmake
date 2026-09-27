@@ -4,6 +4,28 @@ include_guard(GLOBAL)
 # live in VibeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(vibeqc_register_host_generated_sources target)
+  if(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(VIBEQC_STATIONARY_CPU_AOT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_derivatives")
+    set(VIBEQC_STATIONARY_CPU_AOT_SOURCES)
+    foreach(_vibeqc_stationary_cpu_shard RANGE 0 45)
+      list(APPEND VIBEQC_STATIONARY_CPU_AOT_SOURCES
+           "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}/vibeqc_stationary_cpu_derivative_${_vibeqc_stationary_cpu_shard}.cpp")
+    endforeach()
+    vibeqc_register_generated_sources(
+      NAME vibeqc_stationary_cpu_derivatives_codegen
+      TARGET ${target}
+      ADD_TO_TARGET
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_derivative_aot.py"
+      OUTPUTS ${VIBEQC_STATIONARY_CPU_AOT_SOURCES}
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_schedule.py"
+      ARGS --output-directory "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}"
+      COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+      COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
+  endif()
+
   set(VIBEQC_QUADRATURE_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_quadrature.cuh")
   vibeqc_register_generated_sources(
