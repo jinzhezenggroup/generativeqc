@@ -8,9 +8,38 @@ from pathlib import Path
 import numpy as np
 from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from vibeqc_compiler.integral.first_derivative_schedule import (
+    COMPONENT_LABELS,
+    CPU_AOT_SHARDS,
+    REQUESTS_PER_UNIT,
+    cpu_aot_symbol,
     derivative_binding,
+    derivative_requests,
     derivative_sources,
 )
+
+
+def _configure_dispatch(call: typing.Any) -> typing.Any:
+    call.argtypes = [
+        ct.c_uint,
+        ct.POINTER(ct.c_double),
+        ct.c_size_t,
+        ct.POINTER(ct.c_double),
+    ]
+    call.restype = ct.c_int
+    return call
+
+
+def _packaged_aot_dispatchers(library: typing.Any) -> tuple[typing.Any, ...]:
+    if library is None:
+        return ()
+    dispatchers = []
+    for shard in range(CPU_AOT_SHARDS):
+        try:
+            call = getattr(library, cpu_aot_symbol(shard))
+        except AttributeError:
+            return ()
+        dispatchers.append(_configure_dispatch(call))
+    return tuple(dispatchers)
 
 
 class ComponentPrimitiveExecutor:
@@ -22,6 +51,8 @@ class ComponentPrimitiveExecutor:
         cache: str | Path,
         primitive_tile: int,
         compiler: CppCompilerAdapter,
+        *,
+        aot_library: typing.Any = None,
     ) -> None:
         from ._stationary_cpu import _compile_primitive_library
 
@@ -53,22 +84,49 @@ class ComponentPrimitiveExecutor:
         domain = tuple(
             sorted({c for expansion in self.expansions for c, _ in expansion})
         )
-        self.libraries, self.calls = [], {}
-        sources = derivative_sources(domain)
-        for requests, source in sources:
-            library, call = _compile_primitive_library(source, cache, compiler)
-            self.libraries.append(library)
-            for kind, request in enumerate(requests):
-                self.calls[request] = (call, kind)
+        self.libraries, self.dispatchers, self.calls = [], [], {}
+        requests = derivative_requests(domain)
+        groups = tuple(
+            requests[begin : begin + REQUESTS_PER_UNIT]
+            for begin in range(0, len(requests), REQUESTS_PER_UNIT)
+        )
+        packaged = (
+            _packaged_aot_dispatchers(aot_library)
+            if domain == COMPONENT_LABELS
+            else ()
+        )
+        if packaged:
+            if len(packaged) != len(groups):
+                raise RuntimeError("packaged CPU derivative shard inventory mismatch")
+            self.libraries.append(aot_library)
+            self.dispatchers.extend(packaged)
+            for shard, selected in enumerate(groups):
+                for kind, request in enumerate(selected):
+                    self.calls[request] = (packaged[shard], kind)
+            source_bytes = largest_source = 0
+            runtime_compilations = 0
+        else:
+            sources = derivative_sources(domain)
+            for selected, source in sources:
+                library, call = _compile_primitive_library(source, cache, compiler)
+                self.libraries.append(library)
+                self.dispatchers.append(call)
+                for kind, request in enumerate(selected):
+                    self.calls[request] = (call, kind)
+            source_bytes = sum(
+                len(source.encode("utf-8")) for _, source in sources
+            )
+            largest_source = max(
+                len(source.encode("utf-8")) for _, source in sources
+            )
+            runtime_compilations = len(sources)
         self.compilation_work = {
             "primitive_compiled_kernels": len(self.calls),
-            "primitive_translation_units": len(sources),
-            "primitive_generated_source_bytes": sum(
-                len(s.encode("utf-8")) for _, s in sources
-            ),
-            "primitive_largest_source_bytes": max(
-                len(s.encode("utf-8")) for _, s in sources
-            ),
+            "primitive_translation_units": len(groups),
+            "primitive_generated_source_bytes": source_bytes,
+            "primitive_largest_source_bytes": largest_source,
+            "primitive_runtime_compilations": runtime_compilations,
+            "primitive_packaged_aot": int(bool(packaged)),
         }
         self.buffer = np.zeros((primitive_tile, 17))
         self.records = 0
