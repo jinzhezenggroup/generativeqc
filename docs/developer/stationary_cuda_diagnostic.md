@@ -53,9 +53,11 @@ The complete route retains these explicit host boundaries:
 - Native CUDA SCF constructs its grid and has existing provider setup boundaries.
   The final D/F/C/epsilon export, validation and W construction are explicit host
   operations. The derivative function consumes that exported snapshot.
-- Python enumerates ordered AO pairs/quartets and primitive records, gathers
-  density entries, and packs exponents, centers and normalization coefficients.
-  It does not evaluate a derivative or reduce scientific contributions.
+- Python enumerates ordered AO pairs/quartets only through bounded runtime-domain
+  pages. Non-component-expanded s/p paths fill each page of task descriptors in
+  one vectorized operation rather than one Python call per AO tuple; spherical
+  component expansion retains the scalar fallback. Primitive expansion remains
+  native. Python does not evaluate a derivative or reduce scientific contributions.
 - `plan_cuda`/`compile_cuda`/`PreparedCuda` execute source weights and the final
   complete-source reduction. Their inputs and small outputs stage through the host.
 - Existing `CudaGrid` evaluates AO jets and density features. The geometry
