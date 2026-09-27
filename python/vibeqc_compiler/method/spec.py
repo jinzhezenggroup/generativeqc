@@ -28,8 +28,8 @@ from ._generated_libxc_methods import (
 )
 from .basis_binding import BasisBinding, r2scan3c_def2_mtzvpp_h_ar
 from .dispersion import (
-    D3Spec,
     D4_METHOD_SUFFIX,
+    D3Spec,
     D4Spec,
     DispersionCorrectionPrimitive,
     d4_eeq_spec_for_method,
@@ -847,7 +847,11 @@ def d4_composite_method_identifiers() -> tuple[str, ...]:
     """Return D4 composites derivable from both MethodIR and the pinned D4 catalog."""
     identifiers: list[str] = []
     for identifier, base in METHOD_CATALOG.items():
-        if base.dispersion is not None or base.basis is not None or base.gcp is not None:
+        if (
+            base.dispersion is not None
+            or base.basis is not None
+            or base.gcp is not None
+        ):
             continue
         try:
             d4_eeq_spec_for_method(identifier)

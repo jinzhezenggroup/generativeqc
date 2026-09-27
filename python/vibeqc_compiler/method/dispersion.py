@@ -226,9 +226,7 @@ def d4_eeq_spec_for_method(method: str) -> D4Spec:
     try:
         parameters = _parameters.d4_parameters(parameter_name)
     except KeyError as error:
-        raise KeyError(
-            f"no pinned D4(BJ-EEQ-ATM) parameters for {method!r}"
-        ) from error
+        raise KeyError(f"no pinned D4(BJ-EEQ-ATM) parameters for {method!r}") from error
     return D4Spec(**parameters)
 
 

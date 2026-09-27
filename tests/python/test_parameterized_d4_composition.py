@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from vibeqc import Calculator, GridSpec, KsOptions, evaluate_d4_correction
 from vibeqc.ks import public_dft_selectors
 from vibeqc_compiler.method import (
@@ -29,11 +28,14 @@ def test_parameterized_d4_reuses_electronic_method_ir(base: str) -> None:
     assert len(corrections) == 1
     assert isinstance(corrections[0].specification, D4Spec)
     assert corrections[0].specification == d4_eeq_spec_for_method(base)
-    assert tuple(
-        primitive
-        for primitive in combined.primitives
-        if not isinstance(primitive, DispersionCorrectionPrimitive)
-    ) == electronic.primitives
+    assert (
+        tuple(
+            primitive
+            for primitive in combined.primitives
+            if not isinstance(primitive, DispersionCorrectionPrimitive)
+        )
+        == electronic.primitives
+    )
 
 
 def test_parameterized_d4_inventory_is_intersection_not_cartesian_product() -> None:
@@ -67,9 +69,7 @@ def test_parameterized_d4_public_energy_is_exact_once(
 ) -> None:
     atoms = (("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7)))
     numbers = np.array([1, 1], dtype=np.int32)
-    positions = np.array(
-        [[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]], dtype=np.float64
-    )
+    positions = np.array([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]], dtype=np.float64)
     grid = GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
 
     electronic = Calculator(

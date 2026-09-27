@@ -23,9 +23,9 @@ from vibeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
 from vibeqc_compiler.method import (
+    D4_METHOD_SUFFIX,
     METHOD_ALIASES,
     METHOD_CATALOG,
-    D4_METHOD_SUFFIX,
     D4Spec,
     DispersionCorrectionPrimitive,
     MethodIR,
