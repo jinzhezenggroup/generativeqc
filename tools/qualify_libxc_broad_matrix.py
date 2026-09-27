@@ -64,7 +64,9 @@ def _eligible(capability: BulkFunctionalCapability) -> bool:
     return False
 
 
-def _spread(values: list[BulkFunctionalCapability], count: int) -> tuple[BulkFunctionalCapability, ...]:
+def _spread(
+    values: list[BulkFunctionalCapability], count: int
+) -> tuple[BulkFunctionalCapability, ...]:
     if len(values) < count:
         raise ValueError(
             f"broad matrix needs {count} candidates but only {len(values)} are eligible"
@@ -254,7 +256,9 @@ def main() -> int:
         timeout=args.timeout,
     )
     counts = summary["public_pass_counts"]
-    passed = all(counts.get(family, 0) >= count for family, count in DEFAULT_QUOTAS.items())
+    passed = all(
+        counts.get(family, 0) >= count for family, count in DEFAULT_QUOTAS.items()
+    )
     print(
         "bulk Libxc broad matrix: "
         + ", ".join(
