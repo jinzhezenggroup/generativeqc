@@ -223,7 +223,11 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             generated = item["work"]
             assert generated["primitive_packaged_aot"] == 1
             assert generated["primitive_runtime_compilations"] == 0
-            assert generated["component_contract_runtime_compilations"] == 0
+            if generated["component_execution"] == "native":
+                assert generated["component_contract_runtime_compilations"] == 0
+            else:
+                assert generated["component_execution"] == "python"
+                assert "component_contract_runtime_compilations" not in generated
         if d_shell:
             schedule = work[0]["work"]
             assert schedule["primitive_compiled_kernels"] == 362
