@@ -116,6 +116,7 @@ def run_case(name: str, device: str, budget: int) -> dict:
         "source_reads": performance.source_reads,
         "source_values": performance.source_values,
         "transform_fmas": performance.transform_fmas,
+        "transform_stages": performance.transform_stages,
         "mo_blocks": performance.mo_blocks,
         "cuda_transform_calls": performance.cuda_transform_calls,
         "cuda_batch_calls": performance.cuda_batch_calls,

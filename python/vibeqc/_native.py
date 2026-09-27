@@ -349,6 +349,7 @@ class CcPerformanceDiagnostic(ctypes.Structure):
         ("source_reads", ctypes.c_uint64),
         ("source_values", ctypes.c_uint64),
         ("transform_fmas", ctypes.c_uint64),
+        ("transform_stages", ctypes.c_uint64),
         ("mo_blocks", ctypes.c_uint64),
         ("cuda_transform_calls", ctypes.c_uint64),
         ("cuda_batch_calls", ctypes.c_uint64),

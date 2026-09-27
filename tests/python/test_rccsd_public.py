@@ -90,6 +90,8 @@ def test_public_native_rccsd_matches_pinned_pyscf_endpoint(
     assert perf.source_scans > 0
     assert perf.source_reads > 0
     assert perf.source_values > 0
+    assert perf.transform_fmas > 0
+    assert perf.transform_stages > 0
     assert perf.mo_blocks == 7
     assert perf.iteration_graph_calls >= diag.ccsd_iterations
     assert perf.replay_graph_calls == 1

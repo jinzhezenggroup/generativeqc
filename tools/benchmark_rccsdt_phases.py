@@ -64,6 +64,7 @@ def _sample(atom_count: int, device: str, budget: int) -> dict[str, object]:
         "source_reads": perf.source_reads,
         "source_values": perf.source_values,
         "transform_fmas": perf.transform_fmas,
+        "transform_stages": perf.transform_stages,
         "mo_blocks": perf.mo_blocks,
         "cuda_transform_calls": perf.cuda_transform_calls,
         "cuda_batch_calls": perf.cuda_batch_calls,

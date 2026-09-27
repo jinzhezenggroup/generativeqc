@@ -132,6 +132,7 @@ class CcPerformanceResult:
     source_reads: int
     source_values: int
     transform_fmas: int
+    transform_stages: int
     mo_blocks: int
     cuda_transform_calls: int
     cuda_batch_calls: int
