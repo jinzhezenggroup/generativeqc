@@ -21,6 +21,7 @@ PUBLIC_ROUTE_FILES = (
     "python/vibeqc/batch.py",
 )
 GRID_CONTRACT_FILES = (
+    "python/vibeqc/ks.py",
     "python/vibeqc_compiler/dft/grid.py",
     "python/vibeqc_compiler/xc/quadrature_cuda.py",
     "src/dft/cuda_quadrature.cu",
@@ -100,6 +101,12 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["grid"] == {
         "source_only_molecular_grid_sha256": (
             "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
+        ),
+        "public_grid_abi_sha256": (
+            "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
+        ),
+        "native_grid_abi_sha256": (
+            "0fa29ffe02ff05df801d8986d06ba03cd492f73d6f621543a96c3f8fc79700af"
         ),
         "generated_quadrature_layout_sha256": (
             "7ad4c84286cce70329233f7aa2dcaf2b934e2e7cf46137cc3ed32cc6076754c3"
@@ -669,6 +676,40 @@ def test_grid_count_fails_closed_when_native_backend_route_moves(
     assert old in source
     target.write_text(
         source.replace(old, "return dft::MolecularGrid(system, spec);", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
+        qualify_capacity._grid_count_contract(tmp_path)
+
+
+def test_grid_count_fails_closed_when_public_abi_lowering_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "python/vibeqc/ks.py"
+    source = target.read_text(encoding="utf-8")
+    old = "        grid.radial_points,"
+    assert old in source
+    target.write_text(
+        source.replace(old, "        grid.radial_points + 1,", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
+        qualify_capacity._grid_count_contract(tmp_path)
+
+
+def test_grid_count_fails_closed_when_native_abi_lowering_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "src/methods/dft_method.cpp"
+    source = target.read_text(encoding="utf-8")
+    old = "grid.radial_points = input.radial_points;"
+    assert old in source
+    target.write_text(
+        source.replace(old, "grid.radial_points = input.radial_points + 1;", 1),
         encoding="utf-8",
     )
 

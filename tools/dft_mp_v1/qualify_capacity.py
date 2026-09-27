@@ -92,6 +92,12 @@ NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
+PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
+    "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
+)
+NATIVE_GRID_ABI_CONTRACT_SHA256 = (
+    "0fa29ffe02ff05df801d8986d06ba03cd492f73d6f621543a96c3f8fc79700af"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -813,6 +819,17 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
         )
     python_digest = _source_node_sha256(python_grid, post_init[0])
 
+    public_ks = (repository / "python/vibeqc/ks.py").read_text(encoding="utf-8")
+    public_ks_tree = ast.parse(public_ks)
+    public_lowerers = [
+        node
+        for node in public_ks_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "native_ks_options"
+    ]
+    if len(public_lowerers) != 1:
+        raise RuntimeError("public GridSpec ABI lowerer is missing or ambiguous")
+    public_abi_digest = _source_node_sha256(public_ks, public_lowerers[0])
+
     quadrature_source = (
         repository / "python/vibeqc_compiler/xc/quadrature_cuda.py"
     ).read_text(encoding="utf-8")
@@ -848,6 +865,12 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
         end="class KsPreparedCalculation",
         label="native CUDA grid route",
     )
+    native_abi_digest = _source_span_sha256(
+        route_source,
+        begin="dft::GridSpec ks_grid_options(",
+        end="Result adapt_result(",
+        label="native GridSpec ABI lowerer",
+    )
     header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
     point_count_digest = _source_span_sha256(
         header_source,
@@ -857,6 +880,8 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     )
     contracts = {
         "source_only_molecular_grid_sha256": python_digest,
+        "public_grid_abi_sha256": public_abi_digest,
+        "native_grid_abi_sha256": native_abi_digest,
         "generated_quadrature_layout_sha256": layout_digest,
         "native_cuda_grid_sha256": cuda_digest,
         "native_cuda_grid_route_sha256": route_digest,
@@ -864,6 +889,8 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     }
     expected = {
         "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
+        "public_grid_abi_sha256": PUBLIC_GRID_ABI_CONTRACT_SHA256,
+        "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
         "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
         "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
@@ -1191,6 +1218,7 @@ def _build_report(
         "python/vibeqc/_stationary_cuda.py",
         "python/vibeqc/calculator.py",
         "python/vibeqc/batch.py",
+        "python/vibeqc/ks.py",
         "python/vibeqc_compiler/method/stationary_cuda.py",
         "python/vibeqc_compiler/dft/ao.py",
         "python/vibeqc_compiler/dft/grid.py",

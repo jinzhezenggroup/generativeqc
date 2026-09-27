@@ -21,8 +21,9 @@ exact production definitions and gate predicates.
 
 Bind the spherical AO term counts and AO count through the complete native
 packing chain. Bind grid point counts through the source-only grid constructor,
-generated quadrature layout, native CUDA materializer, backend selector, and
-native point-count publication. Bind the complete public semilocal capability
+public and native GridSpec ABI lowering, generated quadrature layout, native
+CUDA materializer, backend selector, and native point-count publication. Bind
+the complete public semilocal capability
 predicate/promotion and CUDA force method. Python owner functions use hashes of
 their exact source spans. Do not hash `ast.dump()` output: its serialization
 changes across supported Python versions even when the source does not. Every
