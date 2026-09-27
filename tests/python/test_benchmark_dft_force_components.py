@@ -92,6 +92,8 @@ def test_extract_wb97mv_uses_latest_cumulative_force_work() -> None:
     assert rows[0]["metadata"]["atoms"] == 3
     assert rows[0]["components"]["endpoint_seconds"] == 5.0
     assert rows[0]["components"]["wall_seconds"]["vv10_rvv10"] == 0.9
+    assert rows[0]["comparison"]["boundary"] == "scf_energy_plus_force"
+    assert "does not expose a compatible" in rows[0]["comparison"]["reference_component_attribution"]
 
 
 def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
@@ -216,3 +218,63 @@ def test_report_coverage_counts_negative_outcomes() -> None:
         "unavailable": 1,
         "unsupported": 1,
     }
+
+
+def test_extract_readme_dft_endpoint_keeps_reference_boundary_coarse() -> None:
+    payload = {
+        "schema": "vibeqc.readme-endpoint.v1",
+        "status": "measured",
+        "method": "pbe0-rks",
+        "atoms": 3,
+        "aos": 24,
+        "basis": "def2-SVP spherical",
+        "mode": "direct",
+        "endpoint": "SCF energy",
+        "native_prepare_seconds": 0.25,
+        "native_cold": {"seconds": 1.5},
+        "reference_cold": {"seconds": 1.1},
+        "priming": {
+            "native": {"seconds": 0.8},
+            "reference": {"seconds": 0.7},
+        },
+        "native_samples": [{"seconds": 0.6}, {"seconds": 0.5}],
+        "reference_samples": [{"seconds": 0.4}, {"seconds": 0.45}],
+        "accuracy": {"maximum_energy_error_hartree": 1.0e-10},
+    }
+
+    rows = extract_records(payload)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["metadata"]["method"] == "pbe0-rks"
+    assert row["metadata"]["mode"] == "direct"
+    assert row["comparison"]["boundary"] == "scf_energy"
+    assert row["comparison"]["native"]["prepare_seconds"] == 0.25
+    assert row["comparison"]["native"]["warm_seconds"] == [0.6, 0.5]
+    assert row["comparison"]["reference"]["warm_seconds"] == [0.4, 0.45]
+    assert "components" not in row
+
+
+def test_report_coverage_tracks_external_methods_without_fake_components() -> None:
+    coverage = _coverage(
+        [
+            {
+                "status": "measured",
+                "metadata": {"method": "pbe-rks"},
+                "comparison": {"boundary": "scf_energy"},
+            },
+            {
+                "status": "measured",
+                "metadata": {"method": "WB97M-V/RKS"},
+                "comparison": {"boundary": "scf_energy_plus_force"},
+            },
+        ]
+    )
+
+    assert coverage["external_comparison_records"] == 2
+    assert coverage["external_comparison_methods"] == ["WB97M-V/RKS", "pbe-rks"]
+    assert coverage["external_comparison_boundaries"] == [
+        "scf_energy",
+        "scf_energy_plus_force",
+    ]
+    assert coverage["wall_components_observed"] == []
