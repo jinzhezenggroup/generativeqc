@@ -658,6 +658,19 @@ macro(vibeqc_register_cuda_generated_sources target)
     ARGS --output "${VIBEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF high-order pair-gradient helper")
 
+  set(VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_source_contraction.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_source_contraction_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_source_contraction.py"
+    OUTPUTS "${VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_source_contraction_cuda.py"
+    ARGS --output "${VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
+    COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
+
   set(VIBEQC_B3LYP_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_b3lyp_device.cuh")
   vibeqc_register_generated_sources(

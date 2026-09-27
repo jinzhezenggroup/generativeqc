@@ -1,4 +1,14 @@
-#pragma once
+"""Compiler-owned emission of the retained Direct source-contraction helper.
+
+This is an ownership migration of the qualified contraction arithmetic. Queue,
+screening, selector and schedule policy remain native. The emitted CUDA keeps
+the existing arithmetic and reduction order while removing a maintained native
+scientific source owner.
+"""
+
+from __future__ import annotations
+
+_SOURCE = r"""#pragma once
 
 #include <cuda_runtime.h>
 
@@ -17,9 +27,10 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
-// Retained direct integral arithmetic for source contraction.
-// Shared definitions use ordinary inline linkage; host plans and queue policy
-// remain outside this numerical owner.
+// Generated from the compiler-owned Direct source-contraction lowering.
+// Do not edit this build artifact: change
+// python/vibeqc_compiler/integral/direct_source_contraction_cuda.py instead.
+// Arithmetic and reduction order are preserved; host plans and queue policy remain native.
 namespace vibeqc::scf::cuda_execution {
 
 /**
@@ -322,3 +333,10 @@ __device__ inline Scalar contracted_eri_cartesian_source(const DeviceBatch& batc
 }
 
 }  // namespace vibeqc::scf::cuda_execution
+"""
+
+
+def emit_direct_source_contraction_header() -> str:
+    """Emit the qualified Direct source-contraction CUDA header unchanged."""
+
+    return _SOURCE

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "scf/cuda/direct_native_source_contraction.cuh"
+#include "generated_direct_source_contraction.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/matrix_index.cuh"

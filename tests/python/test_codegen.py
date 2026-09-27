@@ -212,7 +212,6 @@ def _direct_cuda_source() -> typing.Any:
             "cuda/direct_native_psss.cuh",
             "cuda/direct_native_shell_class.cuh",
             "cuda/direct_native_shell_pair_hermite.cuh",
-            "cuda/direct_native_source_contraction.cuh",
             "cuda/eri_tensor_index.cuh",
             "cuda/direct_eri_symmetry.cuh",
             "cuda/direct_fock_accumulation.cuh",
