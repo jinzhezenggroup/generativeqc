@@ -31,6 +31,8 @@ def test_registry_identity_covers_backend_radial_shell_and_group() -> None:
     assert len({full.identity, short.identity, long.identity, cuda_short.identity}) == 4
     assert full.to_payload()["derivative_order"] == 1
     assert full.to_payload()["radial"]["family"] == "full_range"
+    assert full.to_payload()["spin_contract"] == "spin-neutral"
+    assert full.to_payload()["output_contract"] == "weighted-eri-value-center-gradient-v2"
     assert short.to_payload()["radial"]["omega"] == 0.3
     assert short.component_indices == component_groups(angular)[0]
 
@@ -65,6 +67,9 @@ def test_registry_selection_is_operator_based_not_method_named() -> None:
     assert resolved.key == key
     assert resolved.component_indices == selected
     assert resolved.entry_prefix == prefix
+    assert resolved.target == "native-host"
+    assert resolved.package_key.to_payload()["target"] == "native-host"
+    assert resolved.package_key.scientific_identity == resolved.key.identity
     assert "wb97" not in prefix.lower()
     assert "pbe" not in prefix.lower()
     assert "b3lyp" not in prefix.lower()
@@ -109,7 +114,10 @@ def test_shared_full_range_component_bundle_uses_same_registry() -> None:
     assert selected.key.radial == radial
     assert selected.key.component_domain == COMPONENT_LABELS
     assert len(selected.symbols) == CPU_AOT_SHARDS
+    assert selected.target == "native-host"
     assert selected.key.to_payload()["radial"]["family"] == "full_range"
+    assert selected.key.to_payload()["contraction_contract"] == "record-scalar-weight-v1"
+    assert selected.package_key.scientific_identity == selected.key.identity
 
     assert (
         select_packaged_component_derivative_aot(
@@ -193,3 +201,34 @@ def test_radial_inventory_rejects_undeclared_schema_or_entry_shape() -> None:
             },
             backend="cpu",
         )
+
+
+def test_cuda_packaged_selection_requires_explicit_target() -> None:
+    radial = CoulombKernel("short_range", 0.3)
+    angular = (0, 0, 0, 0)
+    key = make_key(radial, angular, 0, backend="cuda")
+    prefix = entry_prefix_for_key(key)
+    library = type("Library", (), {})()
+    setattr(library, f"{prefix}_identity_v2", object())
+
+    assert (
+        select_packaged_derivative_aot(
+            library,
+            backend="cuda",
+            radial=radial,
+            angular=angular,
+            component=0,
+        )
+        is None
+    )
+    selected = select_packaged_derivative_aot(
+        library,
+        backend="cuda",
+        radial=radial,
+        angular=angular,
+        component=0,
+        target="sm_120",
+    )
+    assert selected is not None
+    assert selected.target == "sm_120"
+    assert selected.package_key.to_payload()["target"] == "sm_120"
