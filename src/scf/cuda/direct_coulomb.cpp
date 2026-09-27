@@ -364,13 +364,13 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   auto& shared = *p.shared;
   const auto b = shared.batch;
   const std::size_t batch = static_cast<std::size_t>(b.batch_size);
-  const std::size_t public_matrix = static_cast<std::size_t>(b.nbf) * b.nbf;
-  const std::size_t direct_matrix = static_cast<std::size_t>(b.direct_nbf) * b.direct_nbf;
-  const std::size_t public_rectangular = static_cast<std::size_t>(b.nbf) * b.direct_nbf;
+  const std::size_t public_matrix = product(static_cast<std::size_t>(b.nbf), b.nbf);
+  const std::size_t direct_matrix = product(static_cast<std::size_t>(b.direct_nbf), b.direct_nbf);
+  const std::size_t public_rectangular = product(static_cast<std::size_t>(b.nbf), b.direct_nbf);
   const std::size_t spin_count = unrestricted ? 2U : 1U;
-  const std::size_t matrix = batch * public_matrix;
-  const std::size_t cartesian = batch * direct_matrix;
-  const std::size_t rectangular = batch * public_rectangular;
+  const std::size_t matrix = product(batch, public_matrix);
+  const std::size_t cartesian = product(batch, direct_matrix);
+  const std::size_t rectangular = product(batch, public_rectangular);
 
   for (std::size_t system = 0; system < batch; ++system) {
     auto error = cudaMemcpyAsync(p.public_spin + (system * spin_count) * public_matrix,
@@ -386,11 +386,11 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   }
 
   launch_transform_density_to_direct_right_kernel(
-      blocks(spin_count * rectangular), 128, 0, shared.stream, b.batch_size,
+      blocks(product(spin_count, rectangular)), 128, 0, shared.stream, b.batch_size,
       static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
       p.public_spin, shared.active, p.density_temporary);
   launch_transform_density_to_direct_left_kernel(
-      blocks(spin_count * cartesian), 128, 0, shared.stream, b.batch_size,
+      blocks(product(spin_count, cartesian)), 128, 0, shared.stream, b.batch_size,
       static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
       p.density_temporary, shared.active, p.direct_spin);
   auto error = cudaGetLastError();
@@ -409,7 +409,7 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   if (error != cudaSuccess) return error;
 
   error =
-      cudaMemsetAsync(p.direct_exchange, 0, spin_count * cartesian * sizeof(double), shared.stream);
+      cudaMemsetAsync(p.direct_exchange, 0, product(product(spin_count, cartesian), sizeof(double)), shared.stream);
   if (error != cudaSuccess) return error;
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
@@ -437,12 +437,12 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
     if (error != cudaSuccess) return error;
   }
 
-  launch_transform_direct_fock_left_kernel(blocks(spin_count * rectangular), 128, 0, shared.stream,
+  launch_transform_direct_fock_left_kernel(blocks(product(spin_count, rectangular)), 128, 0, shared.stream,
                                            b.batch_size, static_cast<std::int32_t>(spin_count),
                                            b.nbf, b.direct_nbf, b.ao_to_direct_transform,
                                            p.direct_exchange, shared.active, p.fock_temporary);
   launch_transform_direct_fock_right_kernel(
-      blocks(spin_count * matrix), 128, 0, shared.stream, b.batch_size,
+      blocks(product(spin_count, matrix)), 128, 0, shared.stream, b.batch_size,
       static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
       p.fock_temporary, shared.zero, shared.active, p.public_exchange);
   error = cudaGetLastError();
