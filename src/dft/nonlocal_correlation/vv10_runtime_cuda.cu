@@ -104,20 +104,18 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
-__global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_points,
-                                    std::size_t blocks_per_tile, std::size_t npoint,
-                                    double coefficient, const double* points, const double* density,
+__global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_count,
+                                    std::size_t npoint, double coefficient,
+                                    const double* points, const double* density,
                                     const double* omega, const double* kappa,
                                     const double* domega_drho, const double* domega_dsigma,
                                     const double* dkappa_drho, const double* weighted_density,
                                     double beta, double* energy_terms, double* vrho, double* vsigma,
                                     double* point_derivative, double* weight_derivative,
                                     int* failed) {
-  const auto tile = static_cast<std::size_t>(blockIdx.x) / blocks_per_tile;
-  const auto lane =
-      (static_cast<std::size_t>(blockIdx.x) % blocks_per_tile) * blockDim.x + threadIdx.x;
-  const auto i = row_offset + tile * tile_points + lane;
-  if (lane >= tile_points || i >= npoint) return;
+  const auto lane = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (lane >= row_count) return;
+  const auto i = row_offset + lane;
 
   const double xi = points[3 * i];
   const double yi = points[3 * i + 1];
@@ -187,18 +185,15 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
                       double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
                       double* weight_derivative, int* failed) {
   constexpr unsigned threads = 128;
-  const auto tile_blocks = launch_blocks(layout.tile_points, threads);
-  const auto tiles = 1 + (layout.point_count - 1) / layout.tile_points;
-  const auto tiles_per_launch =
-      static_cast<std::size_t>(std::numeric_limits<int>::max()) / tile_blocks;
-  for (std::size_t first = 0; first < tiles; first += tiles_per_launch) {
-    const auto count = std::min(tiles_per_launch, tiles - first);
-    pair_kernel_ordered<Variant, Features, Geometry>
-        <<<static_cast<unsigned>(count * tile_blocks), threads, 0, stream>>>(
-            first * layout.tile_points, layout.tile_points, tile_blocks, layout.point_count,
-            coefficient, points, density, omega, kappa, domega_drho, domega_dsigma, dkappa_drho,
-            weighted_density, beta, energy_terms, vrho, vsigma, point_derivative, weight_derivative,
-            failed);
+  const auto max_rows_per_launch =
+      static_cast<std::size_t>(std::numeric_limits<int>::max()) * threads;
+  for (std::size_t first = 0; first < layout.point_count; first += max_rows_per_launch) {
+    const auto count = std::min(max_rows_per_launch, layout.point_count - first);
+    const auto blocks = launch_blocks(count, threads);
+    pair_kernel_ordered<Variant, Features, Geometry><<<blocks, threads, 0, stream>>>(
+        first, count, layout.point_count, coefficient, points, density, omega, kappa,
+        domega_drho, domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho,
+        vsigma, point_derivative, weight_derivative, failed);
     runtime::cuda_resource_check(cudaGetLastError());
   }
 }
@@ -347,9 +342,9 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   const double beta = std::pow(3.0 / (parameters.b * parameters.b), 0.75) / 32.0;
 
   // Specialize the O(N^2) pair loop by scientific variant and requested
-  // outputs. This keeps ordered row arithmetic and the final energy reduction
-  // unchanged while removing uniform runtime branches and duplicate gi/zi
-  // reconstruction from every pair evaluation.
+  // outputs. Resident rows launch as one flat 1D domain (with a finite
+  // grid-limit fallback), avoiding logical-tile division/modulo and inactive
+  // lanes while preserving each row's ordered j traversal and final reduction.
   if (parameters.variant == Vv10Variant::rvv10) {
     if (layout.features) {
       if (layout.geometry)
