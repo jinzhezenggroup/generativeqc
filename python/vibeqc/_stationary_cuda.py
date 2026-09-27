@@ -94,12 +94,15 @@ class _StationaryTaskSource(typing.Protocol):
 
     def pages(self, capacity: int) -> typing.Iterator[RuntimeTaskPage]: ...
 
+    def to_payload(self) -> dict[str, typing.Any]: ...
+
 
 @dataclass(frozen=True, slots=True)
 class _StationaryTaskExecution:
     """Bounded producer evidence independent of the derivative task source."""
 
     mode: str
+    source_schema: str
     domain_identity: str
     logical_tasks: int
     fixed_capacity: int
@@ -155,9 +158,10 @@ class _BoundedStationaryTaskExecutor:
             identity = source.identity
             logical_tasks = source.logical_size
             page_source = source.pages
+            payload_source = source.to_payload
         except AttributeError as error:
             raise TypeError(
-                "stationary derivative producer requires an identity-bearing task source"
+                "stationary derivative producer requires a versioned identity-bearing task source"
             ) from error
         if (
             type(identity) is not str
@@ -167,8 +171,14 @@ class _BoundedStationaryTaskExecutor:
             raise ValueError("stationary derivative task source requires a SHA-256 identity")
         if type(logical_tasks) is not int or logical_tasks < 1:
             raise ValueError("stationary derivative task source requires positive logical size")
-        if not callable(page_source):
-            raise TypeError("stationary derivative task source requires bounded pages")
+        if not callable(page_source) or not callable(payload_source):
+            raise TypeError("stationary derivative task source requires bounded pages/payload")
+        payload = payload_source()
+        if not isinstance(payload, dict) or type(payload.get("schema")) is not str:
+            raise ValueError("stationary derivative task source requires a versioned schema")
+        source_schema = payload["schema"]
+        if not source_schema.startswith("vibeqc.") or not source_schema.endswith(".v1"):
+            raise ValueError("unsupported stationary derivative task-source schema")
         if not callable(submit_page):
             raise TypeError("stationary derivative producer requires a page callback")
         if finish_page is not None and not callable(finish_page):
@@ -206,6 +216,7 @@ class _BoundedStationaryTaskExecutor:
             raise RuntimeError("stationary task producer coverage mismatch")
         return _StationaryTaskExecution(
             mode,
+            source_schema,
             identity,
             logical_tasks,
             self.fixed_capacity,
