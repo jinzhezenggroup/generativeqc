@@ -270,7 +270,7 @@ void automatic_libxc_semilocal_plan() {
   vibeqc_ks_options options{};
   options.struct_size = sizeof(options);
   options.abi_version = VIBEQC_ABI_VERSION;
-  options.scf_domain = "libxc-bulk-production-candidate/v2";
+  options.scf_domain = "libxc-7.0/work-semilocal-v1";
   options.grid_version = 1;
   options.radial_points = 1;
   options.angular_polar = 2;
@@ -304,12 +304,18 @@ void automatic_libxc_semilocal_plan() {
               .c_str());
   vibeqc_calculation_destroy(calculation);
 
-  components[0] = {"GGA_C_AM05", 1.0};
-  calculation = nullptr;
-  require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
-              calculation == nullptr,
-          "blacklisted automatic Libxc functional reached native CPU preparation");
+  for (const char* boundary_name : {"GGA_C_AM05", "GGA_X_AK13"}) {
+    components[0] = {boundary_name, 1.0};
+    calculation = nullptr;
+    const auto boundary_prepare =
+        vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation);
+    const char* boundary_detail = vibeqc_context_get_last_detail(fixture.context);
+    require(boundary_prepare == VIBEQC_STATUS_SUCCESS && calculation != nullptr,
+            (std::string("shared-boundary automatic Libxc preparation failed for ") +
+             boundary_name + ": " + (boundary_detail ? boundary_detail : ""))
+                .c_str());
+    vibeqc_calculation_destroy(calculation);
+  }
 }
 
 void pbe0_composition_snapshot() {
