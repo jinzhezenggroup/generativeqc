@@ -7,6 +7,7 @@ from .libxc_bulk_capabilities import functional_capability
 from .spec import AUTO_BULK_COMPONENTS, UnsupportedXC
 
 AUTOMATIC_FUNCTIONAL_CODE_BASE = 0x30000
+AUTOMATIC_SCF_DOMAIN = "libxc-bulk-production-candidate/v2"
 _SUPPORTED_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
 
 
@@ -38,4 +39,8 @@ def automatic_functional_code(name: str) -> int:
     return AUTOMATIC_FUNCTIONAL_CODE_BASE | capability.libxc_id
 
 
-__all__ = ["AUTOMATIC_FUNCTIONAL_CODE_BASE", "automatic_functional_code"]
+__all__ = [
+    "AUTOMATIC_FUNCTIONAL_CODE_BASE",
+    "AUTOMATIC_SCF_DOMAIN",
+    "automatic_functional_code",
+]
