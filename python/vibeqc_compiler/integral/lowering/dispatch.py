@@ -586,6 +586,7 @@ struct GeneratedDpppShellTask {{
 }};
 
 constexpr std::uint32_t kGeneratedDpppCoulombConsumerBit = 1U << 2U;
+constexpr std::uint32_t kGeneratedDpppExchangeConsumerBit = 1U << 3U;
 
 struct GeneratedDpppPrimitiveGeometry {{
   double inverse_two_p;

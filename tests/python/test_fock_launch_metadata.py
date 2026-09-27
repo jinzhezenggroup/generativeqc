@@ -6,6 +6,7 @@ from pathlib import Path
 
 from vibeqc_compiler.integral.cuda_schedule import ScheduleIR, ScheduleKind
 from vibeqc_compiler.integral.production import (
+    _streaming_fock_source,
     emit_multi_registry_source,
     emit_registry_header,
     emit_registry_source,
@@ -96,3 +97,24 @@ def test_profiled_fock_materialization_reaches_generated_registry(
         "inline constexpr std::uint64_t kPreferredStreamingFockShellClassMask =\n"
         "    0ULL;"
     ) in baseline_header
+
+
+def test_streaming_fock_emits_exchange_only_consumer_identity() -> None:
+    """K-only lowering must reuse the generated shell recurrence and scatter."""
+
+    root = Path(__file__).resolve().parents[2]
+    profile = resolve_production_profile(
+        root / "python/vibeqc_compiler/integral/production_shell_classes.json",
+        "sm_120",
+    )
+    selection = next(
+        item
+        for item in profile.selections
+        if item.spec.name == "psss" and "streaming_fock" in item.capabilities
+    )
+    source = _streaming_fock_source(selection)
+    assert "GeneratedFockConsumer::Exchange" in source
+    assert "ExchangeConsumerBit" in source
+    assert "GeneratedFockConsumer::Coulomb" in source
+    assert "exchange_only ? exchange_bound" in source
+    assert "fmax(density_bound, 0.5 * exchange_bound)" in source
