@@ -5,6 +5,7 @@ from __future__ import annotations
 import typing
 
 from . import libxc_bulk
+from .libxc_blacklist import blacklist_reason
 from .rsh_expressions import energy_expression as rsh_energy_expression
 from .semilocal_family import energy_expression as semilocal_energy_expression
 from .spec import (
@@ -51,13 +52,21 @@ def build_energy_expression(
     if type(production) is not bool:
         raise TypeError("production must be bool")
     active = {name for name, coefficient in spec.components if coefficient}
-    # Representation alone cannot bypass domain qualification through either
-    # runtime programs or the shared native source lowerer.
-    if active & set(AUTO_BULK_COMPONENTS):
-        raise UnsupportedXC(
-            "bulk Libxc component is represented and pointwise-validated "
-            "but not production-domain admitted"
-        )
+    automatic = active & set(AUTO_BULK_COMPONENTS)
+    if automatic:
+        if automatic != active:
+            raise UnsupportedXC(
+                "automatic Libxc components cannot mix with a separately-owned XC family"
+            )
+        if len(automatic) != 1:
+            raise UnsupportedXC(
+                "automatic Libxc lowering currently requires one functional component"
+            )
+        name = next(iter(automatic))
+        reason = blacklist_reason(name)
+        if reason is not None:
+            raise UnsupportedXC(f"automatic Libxc functional {name} is blacklisted: {reason}")
+        return build_pointwise_energy_expression(spec)
     if active & set(WB97MV_COMPONENTS):
         if not active <= set(WB97MV_COMPONENTS):
             raise UnsupportedXC(
