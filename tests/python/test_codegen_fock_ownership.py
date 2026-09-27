@@ -31,12 +31,12 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
 
     assert "restricted_exchange_scale" in shared
     assert "unrestricted_exchange_scale" in shared
-    assert "j_scale * total_cd * integral" in shared
-    assert "k_scale * density_bd * integral" in shared
-    assert "j_scale * total_cd * integral" not in native
-    assert "k_scale * density_bd * integral" not in native
-    assert "j_scale * total_cd * integral" not in shell_lowering
-    assert "k_scale * density_bd * integral" not in shell_lowering
+    assert 'contribution_name = f"{function_name}_contribution"' in shared
+    assert "static_cast<float>(density_value) * static_cast<float>(integral)" in shared
+    assert "return scale * density_value * static_cast<double>(integral);" in shared
+    assert "static_cast<float>(density_value) * static_cast<float>(integral)" not in native
+    assert "return scale * density_value * static_cast<double>(integral);" not in native
+    assert "static_cast<float>(density_value) * static_cast<float>(integral)" not in shell_lowering
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
 
 
@@ -65,13 +65,23 @@ def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
     generated = emit_generated_shell_fock_accumulation()
     for equation in (
         "const double total_cd = alpha_cd + beta_cd;",
-        "j_scale * total_cd * integral",
-        "k_scale * alpha_bd * integral",
-        "k_scale * beta_bd * integral",
-        "k_scale * density_bd * integral",
+        "<MixedProduct>(j_scale, total_cd, integral)",
+        "<MixedProduct>(k_scale, alpha_bd, integral)",
+        "<MixedProduct>(k_scale, beta_bd, integral)",
+        "<MixedProduct>(k_scale, density_bd, integral)",
+        "static_cast<float>(density_value) * static_cast<float>(integral)",
+        "return scale * density_value * static_cast<double>(integral);",
     ):
         assert equation in native
         assert equation in generated
+    assert (
+        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>"
+        in native
+    )
+    assert (
+        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>"
+        in generated
+    )
     for coefficient in (
         "exchange_only ? 1.0 : -0.5",
         "exchange_only ? 1.0 : -1.0",
