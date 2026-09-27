@@ -101,6 +101,22 @@ def named(identifier: str, *, spin: str = "unpolarized") -> MethodIR:
     return _resolve_method(identifier, spin=spin)
 
 
+def libxc(identifier: str, *, spin: str = "unpolarized") -> MethodIR:
+    """Resolve one evidence-admitted automatic Libxc CPU-energy method.
+
+    The returned MethodIR is available only when installed evidence proves the
+    exact current compiler/source identity through public CPU RKS/UKS energy
+    admission. Representation or pointwise import alone never reaches this API.
+    """
+    from vibeqc_compiler.method.bulk_ks import resolve_public_bulk_ks
+
+    return resolve_public_bulk_ks(
+        identifier,
+        spin=spin,
+        backend="cpu",
+    ).method
+
+
 def inspect(value: str | MethodSpec | MethodIR, *, spin: str | None = None) -> dict:
     """Return semantic and manifest identities without lowering or execution."""
     ir = resolve(value, spin=spin)
