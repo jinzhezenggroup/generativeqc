@@ -44,8 +44,10 @@ def test_method_catalog_combines_native_abi_and_methodir_dft_discovery() -> None
     assert by_name["wb97m-v"]["status"] == "available"
     assert by_name["wb97m-v"]["properties"] == ("energy",)
 
-    # Representation alone never bypasses the native lowerer gate.
-    assert "scan-rks" not in by_name
+    # Discovery follows the current native lowerer set rather than a stale
+    # handwritten whitelist.
+    assert by_name["scan-rks"]["status"] == "available"
+    assert "cam-b3lyp-rks" not in by_name
 
 
 def test_methods_command_is_publicly_parseable() -> None:
