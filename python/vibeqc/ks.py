@@ -171,7 +171,7 @@ class KsOptions:
             "scf_domain": self.scf_domain,
             "grid": asdict(self.grid),
             "grid_provenance": grid_policy_provenance(self.grid),
-            "tile_points": self.tile_points,
+            "tile_points": options.tile_points,
             "xc_schedule": self.xc_schedule,
             "required_ao_order": self.ao_order,
             "required_ingredients": self.functional.ingredients,
@@ -355,7 +355,7 @@ def _native_semilocal_family(method_ir: typing.Any) -> int:
     # owner. Do not route that explicit composition through electronic-only
     # admission, or generalize its exception to arbitrary post-SCF corrections.
     if _is_pbe_d4_composition(method_ir):
-        return _NativeSemilocalFamily.PBE
+        return int(_NativeSemilocalFamily.PBE)
     plan = _native_execution_plan(method_ir)
     split = _split_hybrid_record(method_ir)
     if split is not None:
@@ -375,7 +375,7 @@ def _native_semilocal_family(method_ir: typing.Any) -> int:
             raise NotImplementedError(
                 "native B97M lowerer requires canonical WB97M-V composition"
             )
-    return family
+    return int(family)
 
 
 def ks_coefficients(method_ir: typing.Any) -> typing.Any:
