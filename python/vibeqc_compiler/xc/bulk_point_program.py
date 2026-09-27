@@ -207,13 +207,23 @@ class SemilocalPointBinding:
             "ingredient_mask": self.ingredient_mask,
         }
 
-    def emit_source(self) -> str:
+    def emit_source(
+        self, *, namespace_name: str = "bulk_generated", expose_accessor: bool = False
+    ) -> str:
         """Return one self-contained C++ point-program translation unit.
 
         The imported scalar artifact remains the mathematical owner.  This
         wrapper only maps Cartesian spin gradients to sigma coordinates and the
         raw tau derivative to the native vtau/2 weak-form coefficient.
         """
+        if (
+            not isinstance(namespace_name, str)
+            or not namespace_name.isascii()
+            or not namespace_name.isidentifier()
+        ):
+            raise ValueError("point-program namespace must be an ASCII C++ identifier")
+        if type(expose_accessor) is not bool:
+            raise TypeError("expose_accessor must be bool")
         feature_count = len(self.variant.features)
         outputs = feature_count + 1
         if self.ingredient_mask == 1:
@@ -280,7 +290,7 @@ class SemilocalPointBinding:
         # registrations collide or coalesce when linked into the same program.
         return (
             '#include <math.h>\n#include "dft/xc.hpp"\n'
-            + "\nnamespace vibeqc::dft::bulk_generated {\nnamespace {\n"
+            + f"\nnamespace vibeqc::dft::{namespace_name} {{\nnamespace {{\n"
             + self.variant.source
             + "\n"
             + f"inline constexpr const char* kBindingIdentity = {q(self.identity)};\n"
@@ -300,7 +310,14 @@ class SemilocalPointBinding:
             + "inline constexpr SemilocalPointProgram kPointProgram{\n"
             + f"    {q(self.variant.name)}, kPointExpressionIdentity, {self.ingredient_mask}U, "
             + f"{self.domain_version}U, evaluate_point}};\n"
-            + "}  // namespace\n}  // namespace vibeqc::dft::bulk_generated\n"
+            + "}  // namespace\n"
+            + (
+                "inline const SemilocalPointProgram& point_program() noexcept { "
+                "return kPointProgram; }\n"
+                if expose_accessor
+                else ""
+            )
+            + f"}}  // namespace vibeqc::dft::{namespace_name}\n"
         )
 
 
