@@ -29,7 +29,8 @@ template <bool Unrestricted, unsigned AngularOrder>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask, std::size_t active_subtile,
     unsigned ao_quartet_lane) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
@@ -101,8 +102,9 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
       return;
     }
 
-    const double coefficient = direct_force_density_coefficient<Unrestricted>(
-        n, physical_offset, spin_offset, density, i, j, k, l);
+    const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, i, j, k, l, coulomb_coefficient,
+        exchange_coefficient);
     if (coefficient == 0.0) return;
 
     // An ERI is invariant when all four basis centers translate together, so
