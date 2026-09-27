@@ -668,10 +668,10 @@ class RccsdPreparedBatch final : public PreparedBatch {
 
 }  // namespace
 
-RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext& execution,
-                                        const core::System& system,
-                                        const vibeqc_method_descriptor& descriptor,
-                                        std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache) {
+RccsdNativeState run_rccsd_native_state(
+    runtime::ExecutionContext& execution, const core::System& system,
+    const vibeqc_method_descriptor& descriptor,
+    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache) {
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
   auto solver_options = cc_options(descriptor, budget);
