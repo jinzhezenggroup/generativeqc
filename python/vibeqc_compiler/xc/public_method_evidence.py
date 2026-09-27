@@ -75,7 +75,7 @@ def build_result(
     )
     molecular = prerequisite_evidence.get("molecular-scf")
     if not isinstance(molecular, Mapping):
-        raise ValueError("public-method admission requires molecular-SCF evidence")
+        raise TypeError("public-method admission requires molecular-SCF evidence")
     validate_stage_qualification(
         molecular.get("qualification"),
         molecular.get("evidence"),
