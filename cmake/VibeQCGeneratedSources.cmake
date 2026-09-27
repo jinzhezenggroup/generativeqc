@@ -783,7 +783,6 @@ macro(vibeqc_register_cuda_generated_sources target)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/semilocal_codegen.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/b3lyp_production_policy.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/spec.py"
     ARGS --output "${VIBEQC_B3LYP_CUDA_HEADER}")
 
   set(VIBEQC_R2SCAN_CUDA_HEADER
@@ -938,8 +937,6 @@ macro(vibeqc_add_codegen_pilot)
       list(APPEND VIBEQC_CODEGEN_PILOT_OUTPUTS "${output}")
     endforeach()
 
-    set(output
-        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_placeholder.cuh")
     set(output
         "${VIBEQC_CODEGEN_PILOT_DIRECTORY}/eri_dppp_xy_xyz_factored_gradient.cuh")
     vibeqc_register_generated_sources(
