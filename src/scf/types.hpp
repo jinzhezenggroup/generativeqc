@@ -5,9 +5,9 @@
 #include <optional>
 #include <vector>
 
-#include "hf/reference.hpp"
 #include "dft/density_source.hpp"
 #include "dft/scf_diagnostic.hpp"
+#include "hf/reference.hpp"
 #include "scf/fock_build.hpp"
 #include "vibeqc/vibeqc.h"
 
