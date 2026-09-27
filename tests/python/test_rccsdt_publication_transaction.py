@@ -29,6 +29,7 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
     unit.write_text(
         r"""
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
