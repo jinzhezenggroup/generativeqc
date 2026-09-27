@@ -794,7 +794,9 @@ class CudaGrid:
             if not required.issubset(self.ingredients) or not published.issubset(
                 self.ingredients
             ):
-                raise ValueError("prepared CUDA features do not cover requested publication")
+                raise ValueError(
+                    "prepared CUDA features do not cover requested publication"
+                )
             evaluated = self.evaluate(points, ao_ids=ao_ids, stamp=stamp)
             features = {
                 name: evaluated[name] for name in self.ingredients if name in published
