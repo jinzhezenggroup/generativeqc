@@ -142,9 +142,15 @@ class KsOptions:
     @property
     def coefficients(self) -> typing.Any:
         """Resolved (semilocal X, semilocal C, raw Fock K) coefficients."""
-        if _is_pbe_d4_composition(self.method_ir):
+        if _is_pbe_d4_composition(self.method_ir) or _bulk_libxc_component(self.method_ir):
             return (1.0, 1.0, 0.0)
         return ks_coefficients(self.method_ir)
+
+    @property
+    def generic_libxc_registration(self) -> str | None:
+        """Return the automatic Libxc registration carried by this resolved KS plan."""
+
+        return _bulk_libxc_component(self.method_ir)
 
     @property
     def has_nondefault_composition(self) -> bool:
@@ -629,7 +635,7 @@ def resolve_public_libxc_ks_options(
     spin: str,
     grid: GridSpec,
     tile_points: int = 256,
-    xc_schedule: str = "device_fused",
+    xc_schedule: str = "host_unfused",
 ) -> KsOptions:
     """Resolve one evidence-admitted automatic Libxc CPU-energy KS plan.
 
