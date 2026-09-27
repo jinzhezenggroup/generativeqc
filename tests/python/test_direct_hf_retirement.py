@@ -161,7 +161,9 @@ def test_low_order_force_recovery_and_scatter_have_one_shared_owner(name: str) -
     assert "double derivative_sum[3]{};" not in source
     assert "fourth_derivative" not in source
 
-    shared = (ROOT / "src/scf/cuda/direct_force_scatter.cuh").read_text(encoding="utf-8")
+    shared = (ROOT / "src/scf/cuda/direct_force_scatter.cuh").read_text(
+        encoding="utf-8"
+    )
     assert "fourth_derivative -= value" in shared
     assert "atomicAdd(forces + final_coordinate + axis, derivative_sum[axis])" in shared
 

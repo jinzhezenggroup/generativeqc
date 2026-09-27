@@ -11,8 +11,8 @@
 
 #include "generated_direct_high_order_pair_gradient.cuh"
 #include "scf/cuda/direct_force_density.cuh"
-#include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
+#include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_native_gradient_types.cuh"
 #include "scf/cuda/direct_native_source_contraction.cuh"
