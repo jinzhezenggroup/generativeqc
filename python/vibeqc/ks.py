@@ -31,16 +31,23 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
-from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
+from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, CATALOG, FunctionalSpec, functional
 
 from ._generated_methods import METHOD_METADATA
 
 SCF_DOMAIN = "semilocal-scaled-v1/pbe-spin-c2-1e-18"
 B3LYP_SCF_DOMAIN = "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18"
+BULK_LIBXC_SCF_DOMAIN = "libxc-bulk-production-candidate/v2"
 WB97MV_SCF_DOMAIN = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
 SPLIT_HYBRID_SCF_DOMAIN = "libxc-7.0/split-global-hybrid-v1"
 _NATIVE_SCF_DOMAINS = frozenset(
-    (SCF_DOMAIN, B3LYP_SCF_DOMAIN, WB97MV_SCF_DOMAIN, SPLIT_HYBRID_SCF_DOMAIN)
+    (
+        SCF_DOMAIN,
+        B3LYP_SCF_DOMAIN,
+        BULK_LIBXC_SCF_DOMAIN,
+        WB97MV_SCF_DOMAIN,
+        SPLIT_HYBRID_SCF_DOMAIN,
+    )
 )
 
 
@@ -279,6 +286,26 @@ def _native_pbe_d4_semilocal(method_ir: typing.Any) -> typing.Any:
 
 def _native_semilocal(method_ir: typing.Any) -> typing.Any:
     return _native_execution_plan(method_ir).semilocal.functional
+
+
+def _bulk_libxc_component(method_ir: typing.Any) -> str | None:
+    """Return the single automatic Libxc component for a pure semilocal graph."""
+
+    if not isinstance(method_ir, MethodIR):
+        return None
+    plan = compile_ks_execution_plan(method_ir)
+    if (
+        plan.semilocal is None
+        or plan.exchange
+        or plan.nonlocal_correlation is not None
+        or plan.post_scf
+    ):
+        return None
+    components = tuple(plan.semilocal.functional.components)
+    if len(components) != 1 or components[0][1] != Fraction(1):
+        return None
+    name = components[0][0]
+    return name if name in AUTO_BULK_COMPONENTS else None
 
 
 def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
@@ -591,6 +618,38 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
     return result
 
 
+def resolve_public_libxc_ks_options(
+    name: str,
+    *,
+    spin: str,
+    grid: GridSpec,
+    tile_points: int = 256,
+    xc_schedule: str = "device_fused",
+) -> KsOptions:
+    """Resolve one evidence-admitted automatic Libxc CPU-energy KS plan.
+
+    Public automatic promotion currently proves CPU energy only.  An explicit
+    GridSpec is required so this adapter does not silently broaden the retained
+    molecular-SCF evidence into an unqualified grid-policy claim.
+    """
+
+    if not isinstance(grid, GridSpec):
+        raise TypeError("public automatic Libxc KS execution requires an explicit GridSpec")
+    from vibeqc_compiler.method.bulk_ks import resolve_public_bulk_ks
+
+    resolution = resolve_public_bulk_ks(name, spin=spin, backend="cpu")
+    functional_spec = resolution.plan.semilocal.functional
+    options = KsOptions(
+        functional=functional_spec,
+        grid=grid,
+        tile_points=tile_points,
+        xc_schedule=xc_schedule,
+        scf_domain=BULK_LIBXC_SCF_DOMAIN,
+    )
+    object.__setattr__(options, "_method_ir", resolution.method)
+    return options
+
+
 def profiled_ks_selection(
     options: KsOptions | None,
     diagnostics: dict[str, typing.Any],
@@ -684,7 +743,7 @@ def profiled_ks_options(
     ).options
 
 
-def native_ks_options(options: typing.Any) -> typing.Any:
+def native_ks_options(options: typing.Any, *, library: typing.Any = None) -> typing.Any:
     """Lower one compiler KS execution plan into the current semantic C ABI.
 
     The ABI carries MethodIR primitives directly.  No named-method/family code
@@ -760,6 +819,35 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         nonlocal_variant = 0
         nonlocal_b = nonlocal_c = nonlocal_coefficient = 0.0
 
+    semilocal_program = None
+    bulk_component = _bulk_libxc_component(options.method_ir)
+    if bulk_component is not None:
+        if options.scf_domain != BULK_LIBXC_SCF_DOMAIN:
+            raise ValueError(
+                "automatic Libxc point programs require the exact bulk production SCF domain"
+            )
+        if library is None:
+            library = _native.load_library(device="cpu")
+        semilocal_program = _native.KsSemilocalProgramDescriptor()
+        _native.check(
+            library,
+            library.vibeqc_libxc_semilocal_program_get(
+                bulk_component.encode("ascii"), ctypes.byref(semilocal_program)
+            ),
+        )
+        if (
+            not semilocal_program.identifier
+            or semilocal_program.identifier.decode("ascii") != bulk_component
+        ):
+            raise RuntimeError("installed Libxc point-program identifier mismatch")
+        expected_mask = {
+            ("rho",): 1,
+            ("rho", "sigma"): 7,
+            ("rho", "sigma", "tau"): 15,
+        }.get(tuple(semilocal.functional.ingredients))
+        if expected_mask is None or semilocal_program.ingredient_mask != expected_mask:
+            raise RuntimeError("installed Libxc point-program ingredient contract mismatch")
+
     domain = options.scf_domain.encode("ascii")
     descriptor = _native.KsOptionsDescriptor(
         ctypes.sizeof(_native.KsOptionsDescriptor),
@@ -781,7 +869,7 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         components,
         len(components),
         float(semilocal.functional.range_omega),
-        None,
+        ctypes.pointer(semilocal_program) if semilocal_program is not None else None,
         exchange_terms if exchange_terms else None,
         len(exchange_terms),
         1 if nonlocal_primitive is not None else 0,
@@ -797,5 +885,6 @@ def native_ks_options(options: typing.Any) -> typing.Any:
     descriptor._component_ids_owner = component_ids
     descriptor._components_owner = components
     descriptor._exchange_owner = exchange_terms
+    descriptor._semilocal_program_owner = semilocal_program
     descriptor._radii_owner = radii
     return descriptor
