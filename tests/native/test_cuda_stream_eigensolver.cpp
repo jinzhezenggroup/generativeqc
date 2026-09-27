@@ -146,7 +146,7 @@ void verify(int n) {
   check(cudaStreamEndCapture(owner.stream, &graph));
   if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     cudaGraphExec_t executable{};
-    check(cudaGraphInstantiate(&executable, graph, nullptr, nullptr, 0));
+    check(cudaGraphInstantiate(&executable, graph, 0));
     for (int replay = 0; replay < 2; ++replay) {
       for (int spin = 0; spin < 2; ++spin)
         check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
