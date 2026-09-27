@@ -1,3 +1,7 @@
+# Copyright (C) 2017 M.A.L. Marques
+# Copyright (C) 2026 VibeQC contributors
+# This Source Code Form is subject to the terms of the Mozilla Public License,
+# v. 2.0. See upstream/libxc/7.0.0/COPYING or https://mozilla.org/MPL/2.0/.
 """Lightweight XC family dispatch shared by runtime and code generation."""
 
 from __future__ import annotations
