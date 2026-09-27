@@ -67,6 +67,28 @@ class NonlocalBatchResult:
     peak_owned_workspace_bytes: int
 
 
+@dataclass(frozen=True)
+class NonlocalResidentSeedView:
+    """Borrowed device-resident [6,stride] force seeds and stream identity."""
+
+    pointer: int
+    stride: int
+    stream: int
+    generation: int
+
+
+@dataclass(frozen=True)
+class NonlocalResidentForceDiagnostic:
+    """Bounded native resident-force owner state without forcing a CUDA fence."""
+
+    device_bytes: int
+    point_count: int
+    collected_points: int
+    generation: int
+    executed: bool
+    stream_bound: bool
+
+
 def _positive_uint32(value: typing.Any, label: str) -> int:
     if type(value) is not int or not 0 < value < 2**32:
         raise ValueError(f"{label} must be a positive uint32 integer")
@@ -352,6 +374,264 @@ class NonlocalFixedGridPlan:
             pair_evaluations=diagnostic.pair_evaluations,
             tiles=diagnostic.tiles,
             tile_points=diagnostic.tile_points,
+        )
+
+
+class _ResidentNonlocalForceOwner:
+    """Internal full-grid CUDA VV10/rVV10 force composition owner.
+
+    Grid features are collected D2D from borrowed task leases, pair/geometry
+    seeds stay resident, and publication returns only a borrowed pointer/stride
+    identity. The caller must keep this owner alive through the stationary
+    geometry drain that consumes the returned seed view.
+    """
+
+    _CREATE = "vibeqc_internal_nonlocal_cuda_force_create_v1"
+    _DESTROY = "vibeqc_internal_nonlocal_cuda_force_destroy_v1"
+    _COLLECT = "vibeqc_internal_nonlocal_cuda_force_collect_v1"
+    _EXECUTE = "vibeqc_internal_nonlocal_cuda_force_execute_v1"
+    _SEED_VIEW = "vibeqc_internal_nonlocal_cuda_force_seed_view_v1"
+    _RESET = "vibeqc_internal_nonlocal_cuda_force_reset_v1"
+    _METRICS = "vibeqc_internal_nonlocal_cuda_force_metrics_v1"
+
+    def __init__(
+        self,
+        spec: NonlocalCorrelationSpec,
+        coordinates: typing.Any,
+        weights: typing.Any,
+        *,
+        coefficient: Fraction,
+        tile_points: int,
+        maximum_bytes: int,
+        density_threshold: float,
+        device_id: int,
+        context: typing.Any,
+        library: typing.Any,
+    ) -> None:
+        if not isinstance(spec, NonlocalCorrelationSpec):
+            raise TypeError("spec must be NonlocalCorrelationSpec")
+        if not isinstance(coefficient, Fraction) or coefficient <= 0:
+            raise ValueError("coefficient must be a positive Fraction")
+        if type(tile_points) is not int or tile_points <= 0:
+            raise ValueError("tile_points must be a positive integer")
+        if type(maximum_bytes) is not int or not 0 < maximum_bytes < 2**64:
+            raise ValueError("maximum_bytes must be a positive uint64 integer")
+        if type(device_id) is not int or device_id < 0:
+            raise ValueError("device_id must be a nonnegative integer")
+        if not isinstance(density_threshold, (int, float)) or not np.isfinite(
+            density_threshold
+        ) or density_threshold <= 0:
+            raise ValueError("density_threshold must be finite and positive")
+        points = np.ascontiguousarray(coordinates, dtype=np.float64)
+        if points.ndim != 2 or points.shape[1:] != (3,) or not len(points):
+            raise ValueError("resident nonlocal coordinates require shape [N,3]")
+        quadrature = _array(weights, (len(points),), "weights")
+        if not np.isfinite(points).all():
+            raise ValueError("resident nonlocal coordinates must be finite")
+        point_count = _positive_uint32(len(points), "point_count")
+        if point_count > (2**32 - 1) // 3:
+            raise ValueError(
+                "point_count exceeds the flattened-coordinate uint32 domain"
+            )
+        context_pointer = (
+            context
+            if isinstance(context, ctypes.c_void_p)
+            else ctypes.cast(context, ctypes.c_void_p)
+        )
+        if not context_pointer.value:
+            raise ValueError("resident nonlocal force requires a live native context")
+        required = (
+            self._CREATE,
+            self._DESTROY,
+            self._COLLECT,
+            self._EXECUTE,
+            self._SEED_VIEW,
+            self._RESET,
+            self._METRICS,
+        )
+        missing = tuple(name for name in required if not hasattr(library, name))
+        if missing:
+            raise RuntimeError(
+                "loaded VIBEQC library lacks resident nonlocal force ABI: "
+                + ", ".join(missing)
+            )
+        variant = {
+            "vv10": _native.NONLOCAL_VV10,
+            "rvv10": _native.NONLOCAL_RVV10,
+        }.get(spec.variant)
+        if variant is None:
+            raise NotImplementedError(f"unsupported nonlocal variant {spec.variant!r}")
+        model = _native.NonlocalDescriptor(
+            ctypes.sizeof(_native.NonlocalDescriptor),
+            _native.ABI_VERSION,
+            variant,
+            float(spec.b),
+            float(spec.c),
+            float(coefficient),
+            point_count,
+            tile_points,
+            maximum_bytes,
+        )
+        double = ctypes.POINTER(ctypes.c_double)
+        getattr(library, self._CREATE).argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(_native.NonlocalDescriptor),
+            double,
+            ctypes.c_size_t,
+            double,
+            ctypes.c_size_t,
+            ctypes.c_double,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        getattr(library, self._DESTROY).argtypes = [ctypes.c_void_p]
+        getattr(library, self._DESTROY).restype = None
+        getattr(library, self._COLLECT).argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_size_t,
+        ]
+        getattr(library, self._EXECUTE).argtypes = [ctypes.c_void_p]
+        getattr(library, self._SEED_VIEW).argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(ctypes.c_size_t),
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(ctypes.c_uint64),
+        ]
+        getattr(library, self._RESET).argtypes = [ctypes.c_void_p]
+        getattr(library, self._METRICS).argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        for name in (
+            self._CREATE,
+            self._COLLECT,
+            self._EXECUTE,
+            self._SEED_VIEW,
+            self._RESET,
+            self._METRICS,
+        ):
+            getattr(library, name).restype = ctypes.c_int
+
+        self.spec = spec
+        self.coefficient = coefficient
+        self.point_count = point_count
+        self.device_id = device_id
+        self.maximum_bytes = maximum_bytes
+        self._library = library
+        self._context = context_pointer
+        self._owner = ctypes.c_void_p()
+        self._executions = 0
+        pointer = lambda array: array.ctypes.data_as(double)
+        _native.check(
+            library,
+            getattr(library, self._CREATE)(
+                context_pointer,
+                ctypes.byref(model),
+                pointer(points),
+                points.size,
+                pointer(quadrature),
+                quadrature.size,
+                float(density_threshold),
+                ctypes.byref(self._owner),
+            ),
+            context=context_pointer,
+        )
+
+    def _require_open(self) -> None:
+        if not self._owner.value:
+            raise RuntimeError("resident nonlocal force owner is closed")
+
+    def close(self) -> None:
+        if self._owner.value:
+            getattr(self._library, self._DESTROY)(self._owner)
+            self._owner.value = None
+
+    def __enter__(self) -> Self:
+        self._require_open()
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
+
+    def collect(self, task: typing.Any, offset: int) -> None:
+        """Enqueue one ordered resident feature tile without a host fence."""
+        self._require_open()
+        if type(offset) is not int or offset < 0:
+            raise ValueError("resident nonlocal tile offset must be nonnegative")
+        if task._owner.device_id != self.device_id:
+            raise ValueError("resident nonlocal/grid current owner device mismatch")
+        _native.check(
+            self._library,
+            getattr(self._library, self._COLLECT)(
+                self._owner, ctypes.byref(task.view), offset
+            ),
+            context=self._context,
+        )
+
+    def execute(self) -> NonlocalResidentSeedView:
+        """Enqueue MolecularV1 + VV10/rVV10 force work and borrow its seed view."""
+        self._require_open()
+        _native.check(
+            self._library,
+            getattr(self._library, self._EXECUTE)(self._owner),
+            context=self._context,
+        )
+        pointer = ctypes.c_void_p()
+        stride = ctypes.c_size_t()
+        stream = ctypes.c_void_p()
+        generation = ctypes.c_uint64()
+        _native.check(
+            self._library,
+            getattr(self._library, self._SEED_VIEW)(
+                self._owner,
+                ctypes.byref(pointer),
+                ctypes.byref(stride),
+                ctypes.byref(stream),
+                ctypes.byref(generation),
+            ),
+            context=self._context,
+        )
+        if (
+            not pointer.value
+            or not stream.value
+            or stride.value != self.point_count
+            or generation.value == 0
+        ):
+            raise RuntimeError("resident nonlocal force owner returned an invalid seed view")
+        self._executions += 1
+        return NonlocalResidentSeedView(
+            int(pointer.value),
+            int(stride.value),
+            int(stream.value),
+            int(generation.value),
+        )
+
+    def reset(self) -> None:
+        """Reuse the same bounded owner for the next full-grid feature sequence."""
+        self._require_open()
+        _native.check(
+            self._library,
+            getattr(self._library, self._RESET)(self._owner),
+            context=self._context,
+        )
+
+    def diagnostic(self) -> NonlocalResidentForceDiagnostic:
+        self._require_open()
+        values = (ctypes.c_uint64 * 6)()
+        _native.check(
+            self._library,
+            getattr(self._library, self._METRICS)(self._owner, values, len(values)),
+            context=self._context,
+        )
+        return NonlocalResidentForceDiagnostic(
+            device_bytes=int(values[0]),
+            point_count=int(values[1]),
+            collected_points=int(values[2]),
+            generation=int(values[3]),
+            executed=bool(values[4]),
+            stream_bound=bool(values[5]),
         )
 
 
