@@ -59,6 +59,15 @@ def test_expected_scf_components_follow_method_graph_operators() -> None:
         "scf_short_range_k",
         "scf_long_range_k",
     )
+    assert expected_scf_components(
+        ("short-range", "long-range"), nonlocal_correlation=True
+    ) == (
+        "scf_fock_j",
+        "semilocal_ao_grid_xc",
+        "vv10_rvv10",
+        "scf_short_range_k",
+        "scf_long_range_k",
+    )
     with pytest.raises(ValueError, match="unsupported exchange operator"):
         expected_scf_components(("made-up-range",))
 
