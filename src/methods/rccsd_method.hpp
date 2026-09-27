@@ -3,11 +3,11 @@
 
 #include "cc/solver.hpp"
 #include "methods/method.hpp"
-#include "scf/types.hpp"
+#include "hf/reference.hpp"
 
 namespace vibeqc::methods::detail {
 struct RccsdNativeState {
-  std::shared_ptr<const scf::PhysicalReference> reference;
+  std::shared_ptr<const hf::PhysicalReference> reference;
   cc::Problem problem;
   cc::SolverResult solved;
   std::vector<double> eps_o, eps_v;
