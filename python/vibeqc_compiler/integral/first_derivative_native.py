@@ -9,6 +9,8 @@ import typing
 from functools import lru_cache
 
 from .expr import Graph
+from .ir import four_center_eri_operator
+from .range_separation import CoulombKernel
 from .one_electron_derivatives import (
     build_one_electron_derivative_ir,
     build_one_electron_derivative_kernel,
@@ -45,7 +47,10 @@ def _scalar_function(
 
 @lru_cache(maxsize=64)
 def emit_first_derivative_cpu(
-    requests: typing.Any, *, symbol: str = "vibeqc_first_derivative_cpu"
+    requests: typing.Any,
+    *,
+    symbol: str = "vibeqc_first_derivative_cpu",
+    coulomb_kernel: CoulombKernel | None = None,
 ) -> typing.Any:
     """Emit ordered ``(operator, components)`` kernels and a checked dispatcher.
 
@@ -54,7 +59,12 @@ def emit_first_derivative_cpu(
     repulsion uses e[0:2] as charges. ERIs use full-range Coulomb and unit graph
     weights. The runtime record weight is the sole external multiplicity.
     """
-    return _emit_first_derivative(requests, backend="cpu", symbol=symbol)
+    return _emit_first_derivative(
+        requests,
+        backend="cpu",
+        symbol=symbol,
+        coulomb_kernel=coulomb_kernel,
+    )
 
 
 @lru_cache(maxsize=64)
@@ -70,9 +80,15 @@ def emit_first_derivative_cuda(
 
 
 def _emit_first_derivative(
-    requests: typing.Any, *, backend: typing.Any, symbol: str = "first_derivative"
+    requests: typing.Any,
+    *,
+    backend: typing.Any,
+    symbol: str = "first_derivative",
+    coulomb_kernel: CoulombKernel | None = None,
 ) -> typing.Any:
     requests = tuple(requests)
+    if coulomb_kernel is not None and not isinstance(coulomb_kernel, CoulombKernel):
+        raise TypeError("first derivative Coulomb kernel must be explicit")
     if not requests or len(requests) != len(set(requests)):
         raise ValueError("first derivative kernels require unique nonempty requests")
     if (
@@ -111,7 +127,14 @@ def _emit_first_derivative(
                 len(components[2]),
                 len(components[3]),
             )
-            ir = build_weighted_eri_ir(angular)
+            ir = build_weighted_eri_ir(
+                angular,
+                operator=(
+                    four_center_eri_operator(coulomb_kernel)
+                    if coulomb_kernel is not None
+                    else four_center_eri_operator()
+                ),
+            )
             from .shell_spec import ShellClassSpec
 
             spec = ShellClassSpec("".join("spdf"[l] for l in angular), angular)
