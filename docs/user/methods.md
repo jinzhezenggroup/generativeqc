@@ -1,7 +1,7 @@
 # Methods and long-term scope
 
 VibeQC's long-term mission is to cover **all quantum-chemistry methods** in one
-accelerator-native system. Stable native ABI IDs, providers, declared properties,
+accelerator-native system. Native provider carrier IDs, declared properties,
 batch capability and compatibility aliases are generated from
 `manifests/public_methods.json` into the
 [native ABI registry](../public_methods.md).
@@ -18,7 +18,7 @@ spin, derivative or production-domain gates.
 Run the Python frontend (`python -m vibeqc methods`) for the current public\ndiscovery set. Non-DFT methods
 come from the native ABI/provider registry; DFT rows are derived from MethodIR
 and the current native lowerer gates. The generated
-[native ABI registry](../public_methods.md) remains authoritative for stable ABI
+[native carrier registry](../public_methods.md) remains authoritative for stable ABI
 IDs and compatibility selectors, but its DFT rows are not a functional
 whitelist.
 
