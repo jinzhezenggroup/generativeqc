@@ -62,4 +62,8 @@ def installed_public_evidence_provenance() -> dict[str, Any]:
     return deepcopy(dict(PUBLIC_EVIDENCE_PROVENANCE))
 
 
-__all__ = [\n    "installed_public_evidence",\n    "installed_public_evidence_provenance",\n    "installed_public_functionals",\n]
+__all__ = [
+    "installed_public_evidence",
+    "installed_public_evidence_provenance",
+    "installed_public_functionals",
+]
