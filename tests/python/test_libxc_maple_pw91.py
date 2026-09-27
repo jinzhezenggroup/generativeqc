@@ -12,6 +12,9 @@ from vibeqc_compiler.integral.cuda import CudaEmitter
 from vibeqc_compiler.integral.expr import Expr, Graph
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
 from vibeqc_compiler.xc import expression_dispatch
+from vibeqc_compiler.xc.expression_dispatch import (
+    build_energy_expression as energy_expression,
+)
 from vibeqc_compiler.xc.libxc_maple import (
     IMPORTER_SEMANTICS,
     MapleModule,
@@ -19,9 +22,6 @@ from vibeqc_compiler.xc.libxc_maple import (
 )
 from vibeqc_compiler.xc.program import build_program
 from vibeqc_compiler.xc.pw91_maple import pw91_component, pw91_maple_provenance
-from vibeqc_compiler.xc.expression_dispatch import (
-    build_energy_expression as energy_expression,
-)
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]

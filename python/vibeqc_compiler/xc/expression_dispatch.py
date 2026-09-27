@@ -64,9 +64,7 @@ def _build_special_energy_expression(
         "GGA_C_PW91": lambda: imported_pw91_correlation(graph, spec, variables),
         "LDA_C_PZ": lambda: pz_correlation(graph, spec, variables),
         "GGA_C_P86": lambda: p86_correlation(graph, spec, variables),
-        "LDA_C_VWN": lambda: maple_vwn_correlation(
-            graph, spec, variables, "LDA_C_VWN"
-        ),
+        "LDA_C_VWN": lambda: maple_vwn_correlation(graph, spec, variables, "LDA_C_VWN"),
         "LDA_C_VWN_RPA": lambda: maple_vwn_correlation(
             graph, spec, variables, "LDA_C_VWN_RPA"
         ),
