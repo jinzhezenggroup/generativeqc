@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import typing
 
-from . import libxc_bulk
 from .rsh_expressions import energy_expression as rsh_energy_expression
 from .semilocal_family import energy_expression as semilocal_energy_expression
 from .spec import (
@@ -35,14 +34,23 @@ def build_pointwise_energy_expression(spec: typing.Any) -> typing.Any:
         raise UnsupportedXC(
             "bulk pointwise native bridge currently requires one unit-weight component"
         )
-    program = libxc_bulk.build_bulk_program(active[0][0], spin=spec.spin)
-    expected_features = tuple(spec.features[: len(program.features)])
-    if program.features != expected_features:
+    # Keep the lightweight compiler import graph free of NumPy/runtime dependencies.
+    # The generic runtime projection is needed only when this automatic path is
+    # actually lowered.
+    from .bulk_runtime import build_bulk_runtime_program
+
+    program = build_bulk_runtime_program(active[0][0], spin=spec.spin, order=0)
+    expected_features = tuple(spec.features[: len(program.spec.features)])
+    if program.spec.features != expected_features:
         raise UnsupportedXC(
-            "bulk pointwise native bridge requires a rho/sigma prefix feature layout; "
-            "tau/laplacian projection is not implemented"
+            "bulk pointwise native bridge requires a rho/sigma/tau prefix feature layout"
         )
-    return program.graph, program.energy, program.variables
+    # Keep the common FunctionalSpec ABI width even when the imported expression
+    # does not consume every trailing feature. Graph.variable() interns missing
+    # ABI variables, so differentiation produces exact zeros instead of indexing
+    # past the compact Libxc runtime projection.
+    variables = tuple(program.graph.variable(name) for name in spec.features)
+    return program.graph, program.roots[0], variables
 
 
 def build_energy_expression(

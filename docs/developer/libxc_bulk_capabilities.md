@@ -241,7 +241,7 @@ different from the automatic native work domain: the diagnostic candidate
 exposes raw endpoint failures, while production execution applies the generic
 compiler-owned work transformation before the interior Graph.
 
-The v2 diagnostic domain It keeps the v1
+The v2 diagnostic domain keeps the v1
 zero-gradient expansion and additionally admits nonnegative rho/tau for
 qualification. Exact total-density rows below the pinned registration's Libxc
 `p_a_dens_threshold` are screened to zero before Graph evaluation, matching the
@@ -256,8 +256,8 @@ near-boundary rows must produce finite E/vxc and match the independent Libxc
 oracle for that exact functional. Functionals with a true or unresolved endpoint
 singularity remain blocked by their numerical matrix row.
 
-Ordinary bulk runtime consumers continue to default to the original interior
-domain; both qualification-candidate versions are explicit opt-ins and their
+The standalone bulk-runtime diagnostic API continues to default to the original
+interior domain; both qualification-candidate versions are explicit opt-ins and their
 domain/threshold semantics are part of the retained execution identity.
 
 `vibeqc_compiler.xc.production_domain_cases` instantiates every numerical

@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -59,17 +60,23 @@ class LibxcWorkPolicy:
         }
 
 
+@cache
+def _catalog_index() -> dict[str, dict[str, Any]]:
+    catalog = libxc_bulk.read_catalog()
+    return {item["name"]: item for item in catalog["registrations"]}
+
+
 def _record(name: str) -> dict[str, Any]:
     if not isinstance(name, str) or not name.strip():
         raise ValueError("Libxc work policy requires a nonempty functional name")
     key = name.upper()
-    catalog = libxc_bulk.read_catalog()
     try:
-        return next(item for item in catalog["registrations"] if item["name"] == key)
-    except StopIteration as exc:
+        return _catalog_index()[key]
+    except KeyError as exc:
         raise MapleImportError(f"unknown bulk Libxc registration: {name!r}") from exc
 
 
+@cache
 def automatic_work_policy(name: str) -> LibxcWorkPolicy:
     """Return the worker policy for one imported LDA/GGA/MGGA registration."""
 
@@ -87,17 +94,22 @@ def automatic_work_policy(name: str) -> LibxcWorkPolicy:
 
     sigma_floor = density ** (8.0 / 3.0) if family != "lda" else None
     tau_floor = 1.0e-20 if family == "mgga" else None
-    flags = set(re.split(r"\s*\|\s*", str(record.get("flags", ""))))
+    raw_flags = record.get("flags", "")
+    if not isinstance(raw_flags, str):
+        raise MapleImportError("bulk Libxc work policy found malformed flags")
+    flags = set(re.split(r"\s*\|\s*", raw_flags))
     enforce_fhc = family == "mgga" and (
         "XC_FLAGS_ENFORCE_FHC" in flags or _PINNED_LIBXC_GLOBAL_FHC
     )
 
     root = asset_path("upstream/libxc/7.0.0")
     functionals = root / "functionals.c"
-    required = (
+    required = [
         "func->sigma_threshold = pow(func->info->dens_threshold, 4.0/3.0);",
         "func->tau_threshold   = 1e-20;",
-    )
+    ]
+    if family == "mgga":
+        required.append("func->info->flags = func->info->flags | XC_FLAGS_ENFORCE_FHC;")
     source = functionals.read_text(encoding="utf-8")
     if any(snippet not in source for snippet in required):
         raise MapleImportError("pinned Libxc threshold policy changed")
