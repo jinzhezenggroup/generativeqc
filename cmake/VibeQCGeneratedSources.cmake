@@ -715,6 +715,20 @@ macro(vibeqc_register_cuda_generated_sources target)
     ARGS --output "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF order-two shell contraction")
 
+  set(VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_cartesian.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_contraction.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_cartesian_contraction_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_cartesian_contraction.py"
+    OUTPUTS ${VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMENT "Generating compiler-owned Direct-HF Cartesian/contraction support")
+
   set(VIBEQC_B3LYP_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_b3lyp_device.cuh")
   vibeqc_register_generated_sources(

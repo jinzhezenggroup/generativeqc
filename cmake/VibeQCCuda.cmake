@@ -42,6 +42,7 @@ macro(vibeqc_configure_cuda_backend target)
     ${VIBEQC_DIRECT_RECURRENCE_HEADERS}
     ${VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    ${VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS}
     "${VIBEQC_DIRECT_FOCK_ACCUMULATION_HEADER}")
   target_include_directories(vibeqc_direct_angular_force PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -72,6 +73,7 @@ macro(vibeqc_configure_cuda_backend target)
     ${VIBEQC_DIRECT_RECURRENCE_HEADERS}
     ${VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    ${VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS}
     "${VIBEQC_DIRECT_FOCK_ACCUMULATION_HEADER}")
     target_include_directories(vibeqc_direct_native PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include"
