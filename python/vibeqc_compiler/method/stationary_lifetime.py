@@ -80,7 +80,9 @@ def plan_stationary_lifetimes(
     """
 
     if not isinstance(graph, StationaryExecutionGraph):
-        raise TypeError("stationary lifetime planning requires StationaryExecutionGraph")
+        raise TypeError(
+            "stationary lifetime planning requires StationaryExecutionGraph"
+        )
 
     values: list[StationaryValueLifetime] = []
     for value in graph.values:
