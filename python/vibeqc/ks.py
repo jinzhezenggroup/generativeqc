@@ -781,6 +781,7 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         components,
         len(components),
         float(semilocal.functional.range_omega),
+        None,
         exchange_terms if exchange_terms else None,
         len(exchange_terms),
         1 if nonlocal_primitive is not None else 0,
