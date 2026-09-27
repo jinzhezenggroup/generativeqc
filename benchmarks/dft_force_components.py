@@ -215,10 +215,21 @@ def _normalize_stationary(
         "primitive_derivative_reduction_sync",
         field="timeline.primitive_derivative_reduction_sync",
     )
-    wall["semilocal_geometry_response"] = _value(
+    legacy_geometry = _value(
         phases,
         "xc_geometry_and_sync",
         field="timeline.xc_geometry_and_sync",
+    )
+    wall["semilocal_geometry_response"] = (
+        legacy_geometry
+        if legacy_geometry is not None
+        else _sum_present(
+            (
+                phases.get("xc_geometry_enqueue"),
+                phases.get("xc_geometry_drain"),
+            ),
+            field="timeline.xc_geometry_enqueue_drain",
+        )
     )
     wall["host_packing"] = _sum_present(
         tuple(

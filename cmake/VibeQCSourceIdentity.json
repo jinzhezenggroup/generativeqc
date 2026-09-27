@@ -84,6 +84,9 @@
     "tools/generate_stationary_force_aot.py",
     "tools/generate_stationary_cpu_derivative_aot.py",
     "tools/generate_wb97mv_rsh_cpu_aot.py",
-    "tools/write_stationary_aot_manifest.py"
+    "tools/write_stationary_aot_manifest.py",
+    "manifests/derivative_aot_radials.json",
+    "tools/generate_derivative_range_aot.py",
+    "tools/audit_derivative_aot_registry.py"
   ]
 }

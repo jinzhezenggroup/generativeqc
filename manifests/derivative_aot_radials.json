@@ -1,0 +1,15 @@
+{
+  "schema": "vibeqc.derivative-aot.radials.v1",
+  "entries": [
+    {
+      "backend": "cpu",
+      "family": "short_range",
+      "omega": 0.3
+    },
+    {
+      "backend": "cpu",
+      "family": "long_range",
+      "omega": 0.3
+    }
+  ]
+}

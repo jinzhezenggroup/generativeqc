@@ -147,3 +147,63 @@ def test_cmake_build_lowers_each_primitive_request_once(
     build_sources()
     assert missing.exists()
     assert calls.read_text().splitlines() == expected * 2
+
+
+@pytest.mark.parametrize("profile", ["pbe0_rks", "b3lyp_uks"])
+@pytest.mark.parametrize("component_domain", ["sp", "spd"])
+def test_profile_wrapper_generation_uses_exact_profile_emitter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    profile: str,
+    component_domain: str,
+) -> None:
+    output = tmp_path / f"{profile}-{component_domain}.cu"
+    monkeypatch.setattr(
+        generator,
+        "emit_first_derivative_cuda",
+        Mock(return_value="// primitives\n"),
+    )
+    sp = Mock(return_value=f"// profile-sp {profile}\n")
+    spd = Mock(return_value=f"// profile-spd {profile}\n")
+    legacy_sp = Mock(
+        side_effect=AssertionError("profile generation used legacy emitter")
+    )
+    legacy_spd = Mock(
+        side_effect=AssertionError("profile generation used legacy component emitter")
+    )
+    monkeypatch.setattr(generator, "emit_stationary_profile_aot_cuda", sp)
+    monkeypatch.setattr(
+        generator, "emit_stationary_profile_component_aot_wrapper_cuda", spd
+    )
+    monkeypatch.setattr(generator, "emit_stationary_aot_cuda", legacy_sp)
+    monkeypatch.setattr(
+        generator, "emit_stationary_component_aot_wrapper_cuda", legacy_spd
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate",
+            "--output",
+            str(output),
+            "--profile",
+            profile,
+            "--component-domain",
+            component_domain,
+        ],
+    )
+
+    generator.main()
+
+    if component_domain == "sp":
+        sp.assert_called_once_with(
+            profile, primitive_source="// primitives\n", iterations=3
+        )
+        spd.assert_not_called()
+        assert output.read_text() == f"// profile-sp {profile}\n"
+    else:
+        sp.assert_not_called()
+        spd.assert_called_once_with(profile, iterations=3)
+        assert output.read_text() == f"// profile-spd {profile}\n"
+    legacy_sp.assert_not_called()
+    legacy_spd.assert_not_called()

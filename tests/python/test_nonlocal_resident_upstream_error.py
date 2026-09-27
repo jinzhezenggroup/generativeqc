@@ -178,8 +178,8 @@ def test_resident_collection_preserves_producer_error(
 def test_zero_weight_row_mask_distinguishes_active_from_density_inactive() -> None:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     assert "effective_weights[i] = inactive ? -0.0" in source
-    assert "if (signbit(weighted_i))" in source
-    assert "if (signbit(effective_weights[i]))" in source
+    assert "if (weighted_i == 0.0 && signbit(weighted_i))" in source
+    assert "if (effective_weights[i] == 0.0 && signbit(effective_weights[i]))" in source
 
 
 def _two_point_vv10_energy(weight0: float) -> float:
