@@ -17,7 +17,7 @@ from vibeqc import (
     ResourceBudget,
     estimate_ks_resources,
 )
-from vibeqc.ks import BULK_LIBXC_SCF_DOMAIN, native_ks_options, resolve_ks_options
+from vibeqc.ks import (\n    BULK_LIBXC_SCF_DOMAIN,\n    native_ks_options,\n    resolve_ks_options,\n    resolve_public_libxc_ks_options,\n)
 from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.dft.grid import (
     GRID_POLICY_RADII_SOURCE,
@@ -719,3 +719,66 @@ def test_bulk_libxc_native_plan_requires_exact_production_domain() -> None:
     object.__setattr__(options, "_method_ir", ir)
     with pytest.raises(ValueError, match="bulk production SCF domain"):
         native_ks_options(options, library=object())
+
+
+
+def test_public_bulk_libxc_options_preserve_exact_resolved_method(
+    monkeypatch: typing.Any,
+) -> None:
+    import vibeqc_compiler.method.bulk_ks as bulk_ks
+
+    name = "GGA_X_PBE_SOL"
+    spec = functional(name, spin="polarized")
+    ir = MethodIR(
+        identifier=f"LIBXC:{name}",
+        spin="polarized",
+        primitives=(SemilocalXCPrimitive(spec),),
+    )
+    resolution = typing.cast(
+        typing.Any,
+        type(
+            "Resolution",
+            (),
+            {"method": ir, "plan": compile_ks_execution_plan(ir)},
+        )(),
+    )
+    monkeypatch.setattr(
+        bulk_ks,
+        "resolve_public_bulk_ks",
+        lambda *args, **kwargs: resolution,
+    )
+
+    options = resolve_public_libxc_ks_options(
+        name,
+        spin="polarized",
+        grid=CUSTOM,
+        tile_points=31,
+        xc_schedule="host_unfused",
+    )
+    assert options.method_ir.identity == ir.identity
+    assert options.functional.identity == spec.identity
+    assert options.grid == CUSTOM
+    assert options.tile_points == 31
+    assert options.xc_schedule == "host_unfused"
+    assert options.scf_domain == BULK_LIBXC_SCF_DOMAIN
+
+
+def test_bulk_libxc_calculator_fails_before_native_without_explicit_grid(
+    monkeypatch: typing.Any,
+) -> None:
+    from vibeqc import _native
+
+    name = "GGA_X_PBE_SOL"
+    spec = functional(name, spin="unpolarized")
+    ir = MethodIR(
+        identifier=f"LIBXC:{name}",
+        spin="unpolarized",
+        primitives=(SemilocalXCPrimitive(spec),),
+    )
+    monkeypatch.setattr(
+        _native,
+        "load_library",
+        lambda *args, **kwargs: pytest.fail("unqualified bulk route reached native load"),
+    )
+    with pytest.raises(NotImplementedError, match="explicit GridSpec"):
+        Calculator(method=ir)
