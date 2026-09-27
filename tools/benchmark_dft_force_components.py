@@ -117,7 +117,7 @@ def _wb97mv_records(
     return [
         {
             "metadata": metadata,
-            "status": "measured" if status in {"measured", "complete", "unknown"} else status,
+            "status": (\n                "measured"\n                if status in {"measured", "complete", "unknown"}\n                else status\n            ),
             "components": dict(component),
         }
     ]
@@ -228,7 +228,9 @@ def extract_records(
         return _stationary_records(payload)
     if schema.startswith("vibeqc.readme-wb97mv."):
         return _wb97mv_records(payload)
-    if schema.startswith("vibeqc.dft-force-matrix."):\n        return _matrix_records(payload)\n    if "component_seconds" in payload or "timeline" in payload:
+    if schema.startswith("vibeqc.dft-force-matrix."):
+        return _matrix_records(payload)
+    if "component_seconds" in payload or "timeline" in payload:
         return [
             {
                 "metadata": _metadata(payload),
