@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tools.benchmark_dft_force_components import _coverage, extract_records
 
 
@@ -278,3 +280,17 @@ def test_report_coverage_tracks_external_methods_without_fake_components() -> No
         "scf_energy_plus_force",
     ]
     assert coverage["wall_components_observed"] == []
+
+
+@pytest.mark.parametrize("seconds", [-1.0, float("nan"), float("inf")])
+def test_external_comparison_rejects_invalid_duration(seconds: float) -> None:
+    payload = {
+        "schema": "vibeqc.readme-endpoint.v1",
+        "status": "measured",
+        "method": "pbe-rks",
+        "endpoint": "SCF energy",
+        "native_cold": {"seconds": seconds},
+    }
+
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        extract_records(payload)
