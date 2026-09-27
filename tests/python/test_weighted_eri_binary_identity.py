@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import typing
 from types import SimpleNamespace
 
 import pytest
 from vibeqc_compiler.integral import weighted_eri_execute as runtime
+
+if typing.TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _artifact(path: Path, *, packaged: bool = True) -> SimpleNamespace:
