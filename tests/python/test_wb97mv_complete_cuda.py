@@ -24,8 +24,6 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
     assert "execute_cuda_one_electron_gradient(" not in bridge
 
 
-
-
 @pytest.mark.parametrize(
     "method,spin,atoms,basis",
     [

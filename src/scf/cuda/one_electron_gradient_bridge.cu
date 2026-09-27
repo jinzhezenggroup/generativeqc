@@ -261,7 +261,6 @@ vibeqc_status execute_cuda_one_electron_gradient(
   }
 }
 
-
 vibeqc_status execute_cuda_stationary_one_electron_pair(
     int device_id, const core::System& system, std::span<const double> density,
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
@@ -277,9 +276,9 @@ vibeqc_status execute_cuda_stationary_one_electron_pair(
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
   for (auto weights : {density, weighted_density})
-    if (weights.size() != n * n ||
-        !std::all_of(weights.begin(), weights.end(),
-                     [](double value) { return std::isfinite(value); })) {
+    if (weights.size() != n * n || !std::all_of(weights.begin(), weights.end(), [](double value) {
+          return std::isfinite(value);
+        })) {
       detail = "paired stationary D/W must be finite full public-AO matrices";
       return VIBEQC_STATUS_INVALID_ARGUMENT;
     }

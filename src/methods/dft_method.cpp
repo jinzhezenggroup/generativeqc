@@ -931,8 +931,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     std::vector<double> candidate;
     candidate.reserve(5 * nc);
     std::vector<double> hcore, pulay, value;
-    status = scf::execute_cuda_stationary_one_electron_pair(
-        device, system_, density, weighted, 0, bytes, hcore, pulay, detail, &one);
+    status = scf::execute_cuda_stationary_one_electron_pair(device, system_, density, weighted, 0,
+                                                            bytes, hcore, pulay, detail, &one);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
     work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
     work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
