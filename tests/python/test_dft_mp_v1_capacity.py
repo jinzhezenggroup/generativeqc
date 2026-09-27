@@ -10,6 +10,12 @@ from tools.dft_mp_v1 import qualify_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SHA = "f" * 40
+SPD_CONTRACT_FILES = (
+    "src/molecule/basis.cpp",
+    "src/dft/ao_grid.cpp",
+    "src/dft/bridge.cpp",
+    "python/vibeqc/_stationary_cuda.py",
+)
 
 
 def report(*, aot_directory: Path | None = None) -> dict:
@@ -18,6 +24,15 @@ def report(*, aot_directory: Path | None = None) -> dict:
         source_sha=SOURCE_SHA,
         aot_directory=aot_directory,
     )
+
+
+def spd_contract_tree(tmp_path: Path) -> None:
+    for relative in SPD_CONTRACT_FILES:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            (ROOT / relative).read_text(encoding="utf-8"), encoding="utf-8"
+        )
 
 
 def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
@@ -47,6 +62,15 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "p": 3,
         "d": 8,
     }
+    assert result["basis"]["ao_packer_contract_sha256"] == (
+        "07858ba7f9a78fe6348bbcb9430eb4f8321db8774ea3ce1ecef495629abe2a1c"
+    )
+    assert result["basis"]["ao_pack_bridge_contract_sha256"] == (
+        "bce84835947d80f85a61a520deca3d763a4627266259b14e9b8835fc3a1c835b"
+    )
+    assert result["basis"]["stationary_layout_contract_sha256"] == (
+        "89568c04b3b5f91bec27a391ca5e819f279f3f0385e1712f33f522f7265fdb62"
+    )
 
     cases = {item["id"]: item for item in result["cases"]}
     assert set(cases) == {
@@ -333,11 +357,11 @@ def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
 def test_spherical_component_count_fails_closed_when_d_expansion_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "src/molecule/basis.cpp").read_text(encoding="utf-8")
+    spd_contract_tree(tmp_path)
+    target = tmp_path / "src/molecule/basis.cpp"
+    source = target.read_text(encoding="utf-8")
     old = ", {{0, 2, 0}, -root_three_over_two}"
     assert old in source
-    target = tmp_path / "src/molecule/basis.cpp"
-    target.parent.mkdir(parents=True)
     target.write_text(source.replace(old, "", 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
@@ -347,14 +371,42 @@ def test_spherical_component_count_fails_closed_when_d_expansion_moves(
 def test_spherical_component_count_fails_closed_when_cartesian_generator_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "src/molecule/basis.cpp").read_text(encoding="utf-8")
+    spd_contract_tree(tmp_path)
+    target = tmp_path / "src/molecule/basis.cpp"
+    source = target.read_text(encoding="utf-8")
     old = "components.push_back({static_cast<unsigned>(lx), ly, lz});"
     assert old in source
-    target = tmp_path / "src/molecule/basis.cpp"
-    target.parent.mkdir(parents=True)
     target.write_text(source.replace(old, "components.push_back({0, ly, lz});", 1))
 
     with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+def test_spherical_component_count_fails_closed_when_ao_packer_moves(
+    tmp_path: Path,
+) -> None:
+    spd_contract_tree(tmp_path)
+    target = tmp_path / "src/dft/ao_grid.cpp"
+    source = target.read_text(encoding="utf-8")
+    old = "record[3] = expansion.size();"
+    assert old in source
+    target.write_text(source.replace(old, "record[3] = 1;", 1))
+
+    with pytest.raises(RuntimeError, match="packed-AO contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+def test_spherical_component_count_fails_closed_when_layout_parser_moves(
+    tmp_path: Path,
+) -> None:
+    spd_contract_tree(tmp_path)
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    source = target.read_text(encoding="utf-8")
+    old = "for term in range(int(row[3]))"
+    assert old in source
+    target.write_text(source.replace(old, "for term in range(1)", 1))
+
+    with pytest.raises(RuntimeError, match="stationary layout contract changed"):
         qualify_capacity._spd_expansion_contract(tmp_path)
 
 

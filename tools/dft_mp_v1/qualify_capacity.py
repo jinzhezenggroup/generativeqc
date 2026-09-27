@@ -53,6 +53,15 @@ SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
 SPD_EXPANSION_CONTRACT_SHA256 = (
     "f0d9be746f30067f6dba8293bcc35a9dc06db74037a6c76d322d21051bc61334"
 )
+AO_PACKER_CONTRACT_SHA256 = (
+    "07858ba7f9a78fe6348bbcb9430eb4f8321db8774ea3ce1ecef495629abe2a1c"
+)
+AO_PACK_BRIDGE_CONTRACT_SHA256 = (
+    "bce84835947d80f85a61a520deca3d763a4627266259b14e9b8835fc3a1c835b"
+)
+STATIONARY_LAYOUT_CONTRACT_SHA256 = (
+    "89568c04b3b5f91bec27a391ca5e819f279f3f0385e1712f33f522f7265fdb62"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -353,15 +362,60 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     digest = _lf_sha256(source[begin:end].encode())
     if digest != SPD_EXPANSION_CONTRACT_SHA256:
         raise RuntimeError("native s/p/d expansion contract changed")
+
+    packer_source = (repository / "src/dft/ao_grid.cpp").read_text(encoding="utf-8")
+    try:
+        packer_begin = packer_source.index("AoBasis::AoBasis(")
+        packer_end = packer_source.index("void AoBasis::evaluate(", packer_begin)
+    except ValueError as error:
+        raise RuntimeError("native packed-AO owner is missing") from error
+    packer_digest = _lf_sha256(packer_source[packer_begin:packer_end].encode())
+    if packer_digest != AO_PACKER_CONTRACT_SHA256:
+        raise RuntimeError("native packed-AO contract changed")
+
+    bridge_source = (repository / "src/dft/bridge.cpp").read_text(encoding="utf-8")
+    try:
+        bridge_begin = bridge_source.index("VIBEQC_API int vibeqc_grid_basis_pack_v1")
+        bridge_end = bridge_source.index(
+            "VIBEQC_API int vibeqc_grid_ao_v1", bridge_begin
+        )
+    except ValueError as error:
+        raise RuntimeError("native AO pack bridge is missing") from error
+    bridge_digest = _lf_sha256(bridge_source[bridge_begin:bridge_end].encode())
+    if bridge_digest != AO_PACK_BRIDGE_CONTRACT_SHA256:
+        raise RuntimeError("native packed-AO contract changed")
+
+    stationary_source = (repository / "python/vibeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
+    stationary_tree = ast.parse(stationary_source)
+    layouts = [
+        node
+        for node in stationary_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_layout"
+    ]
+    if len(layouts) != 1:
+        raise RuntimeError("stationary layout owner is missing or ambiguous")
+    layout_digest = hashlib.sha256(
+        ast.dump(layouts[0], annotate_fields=True, include_attributes=False).encode()
+    ).hexdigest()
+    if layout_digest != STATIONARY_LAYOUT_CONTRACT_SHA256:
+        raise RuntimeError("stationary layout contract changed")
+
     return {
         "spd_expansion_contract_sha256": digest,
+        "ao_packer_contract_sha256": packer_digest,
+        "ao_pack_bridge_contract_sha256": bridge_digest,
+        "stationary_layout_contract_sha256": layout_digest,
         "sparse_spherical_component_terms": {
             "s": SPARSE_SPHERICAL_COMPONENT_TERMS[0],
             "p": SPARSE_SPHERICAL_COMPONENT_TERMS[1],
             "d": SPARSE_SPHERICAL_COMPONENT_TERMS[2],
         },
         "spd_expansion_owner": (
-            "src/molecule/basis.cpp::cartesian_components+ao_expansions"
+            "basis.cpp::cartesian_components+ao_expansions -> "
+            "ao_grid.cpp::AoBasis -> bridge.cpp::vibeqc_grid_basis_pack_v1 -> "
+            "_stationary_cuda.py::_layout"
         ),
     }
 
@@ -924,6 +978,8 @@ def _build_report(
         "python/vibeqc_compiler/method/stationary_cuda.py",
         "python/vibeqc_compiler/dft/ao.py",
         "src/molecule/basis.cpp",
+        "src/dft/ao_grid.cpp",
+        "src/dft/bridge.cpp",
         "cmake/VibeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)
