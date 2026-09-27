@@ -380,9 +380,9 @@ class _CudaSources:
         self.pending_primitive_records = 0
         self.primitive_pages = 0
         self.primitive_page_peak_records = 0
-        self.bulk_task_pages = 0
-        self.bulk_task_descriptors = 0
-        self.scalar_task_descriptors = 0
+        self.bulk_pack_chunks = 0
+        self.bulk_packed_descriptors = 0
+        self.scalar_packed_descriptors = 0
         self.device = device
         self.borrowed_streams = set()
         self.centers = np.ascontiguousarray(
@@ -529,9 +529,9 @@ class _CudaSources:
         self.pending_primitive_records = 0
         self.primitive_pages = 0
         self.primitive_page_peak_records = 0
-        self.bulk_task_pages = 0
-        self.bulk_task_descriptors = 0
-        self.scalar_task_descriptors = 0
+        self.bulk_pack_chunks = 0
+        self.bulk_packed_descriptors = 0
+        self.scalar_packed_descriptors = 0
         self.borrowed_streams.clear()
         shape = (self.spin_blocks, self.nao, self.nao)
         density = _checked(density, shape)
@@ -709,8 +709,8 @@ class _CudaSources:
             self.charges[begin:end] = float(charge)
             self.used = end
             self.pending_primitive_records += int(np.sum(selected_work, dtype=np.int64))
-            self.bulk_task_pages += 1
-            self.bulk_task_descriptors += count
+            self.bulk_pack_chunks += 1
+            self.bulk_packed_descriptors += count
             offset = source_end
 
     def _append_task(
@@ -745,7 +745,7 @@ class _CudaSources:
         self.charges[self.used] = charge
         self.used += 1
         self.pending_primitive_records += primitive_work
-        self.scalar_task_descriptors += 1
+        self.scalar_packed_descriptors += 1
 
     def nuclear(self, a: typing.Any, b: typing.Any, charges: typing.Any) -> None:
         self.flush()
@@ -1909,9 +1909,9 @@ def _complete_rks_cuda_gradient_diagnostic(
             work["primitive_pages"] = sources.primitive_pages
             work["primitive_page_peak_records"] = sources.primitive_page_peak_records
             work["primitive_record_page_budget"] = max_primitive_records
-            work["bulk_task_pages"] = sources.bulk_task_pages
-            work["bulk_task_descriptors"] = sources.bulk_task_descriptors
-            work["scalar_task_descriptors"] = sources.scalar_task_descriptors
+            work["bulk_pack_chunks"] = sources.bulk_pack_chunks
+            work["bulk_packed_descriptors"] = sources.bulk_packed_descriptors
+            work["scalar_packed_descriptors"] = sources.scalar_packed_descriptors
         if work["owned_device_bytes"] != source_bytes:
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
