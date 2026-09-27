@@ -1,0 +1,7 @@
+{
+  "name": "direct_order2_shell",
+  "outputs": [
+    "generated/generated_direct_order2_shell.cuh"
+  ],
+  "owner": "python/vibeqc_compiler/integral/direct_order2_shell_cuda.py"
+}

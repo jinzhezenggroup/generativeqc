@@ -345,7 +345,7 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
-        lib.grid_cuda_run_selected_v1.argtypes = [
+        selected_run_args = [
             ct.c_void_p,
             DOUBLE,
             ct.c_size_t,
@@ -357,6 +357,8 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        lib.grid_cuda_run_selected_v1.argtypes = selected_run_args
+        lib.grid_cuda_run_selected_deferred_v1.argtypes = selected_run_args
         lib.grid_cuda_view_v1.argtypes = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -566,6 +568,7 @@ class CudaGrid:
         ao_ids: typing.Any = None,
         download_features: typing.Any = True,
         stamp: typing.Any = None,
+        _defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
         """Return one detached result tile; no downstream CPU arithmetic fallback."""
         raw = np.asarray(points)
@@ -575,9 +578,16 @@ class CudaGrid:
             type(features) is not bool
             or type(download_jets) is not bool
             or type(download_features) is not bool
+            or type(_defer_error_to_consumer) is not bool
             or not (features or download_jets)
         ):
             raise ValueError("request features and/or AO jets")
+        if _defer_error_to_consumer and (
+            not features or download_features or download_jets
+        ):
+            raise ValueError(
+                "deferred CUDA grid errors require device-only feature publication"
+            )
         with self._lock:
             self._check_open()
             need_first = any(k != "rho" for k in self.ingredients)
@@ -626,7 +636,11 @@ class CudaGrid:
                 else None
             )
             self._call(
-                "grid_cuda_run_selected_v1",
+                (
+                    "grid_cuda_run_selected_deferred_v1"
+                    if _defer_error_to_consumer
+                    else "grid_cuda_run_selected_v1"
+                ),
                 self._handle,
                 pointer(points),
                 len(points),
@@ -671,10 +685,27 @@ class CudaGrid:
 
     @contextmanager
     def _task(
-        self, points: typing.Any, ao_ids: typing.Any, *, stamp: typing.Any = None
+        self,
+        points: typing.Any,
+        ao_ids: typing.Any,
+        *,
+        stamp: typing.Any = None,
+        defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
-        """Evaluate local features and lend their current private device view."""
-        self.evaluate(points, ao_ids=ao_ids, download_features=False, stamp=stamp)
+        """Evaluate local features and lend their current private device view.
+
+        A deferred error lease is valid only for a same-stream consumer that
+        inspects or propagates view.error before reading AO/features.
+        """
+        if type(defer_error_to_consumer) is not bool:
+            raise ValueError("deferred grid error flag must be boolean")
+        self.evaluate(
+            points,
+            ao_ids=ao_ids,
+            download_features=False,
+            stamp=stamp,
+            _defer_error_to_consumer=defer_error_to_consumer,
+        )
         with self._borrow_current_task() as lease:
             yield lease
 
@@ -723,6 +754,29 @@ class CudaGrid:
         with self.feature_task(points, ao_ids, tuple(required), stamp=stamp) as lease:
             yield lease
 
+    @staticmethod
+    def _normalize_task_ingredients(
+        ingredients: typing.Iterable[str],
+    ) -> tuple[set[str], set[str]]:
+        """Return published and device-required feature contracts.
+
+        FunctionalSpec sigma is represented by Cartesian gradients in the
+        resident task ABI. Keep the requested host publication contract
+        separate so composed consumers never need a functional-name alias.
+        """
+        published = set(ingredients)
+        if (
+            not published
+            or not published <= {"rho", "sigma", "gradient", "tau"}
+            or "rho" not in published
+        ):
+            raise ValueError("unsupported CUDA task ingredient contract")
+        required = set(published)
+        if "sigma" in required:
+            required.remove("sigma")
+            required.add("gradient")
+        return published, required
+
     @contextmanager
     def feature_task(
         self,
@@ -731,30 +785,63 @@ class CudaGrid:
         ingredients: typing.Iterable[str],
         *,
         stamp: typing.Any = None,
+        defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
         """Lend AO/features for a composed consumer without a functional alias.
 
         FunctionalSpec sigma requires Cartesian gradients. The consumer builds
         sigma locally while preserving the native fixed feature-buffer layout.
+        defer_error_to_consumer is reserved for same-stream consumers that
+        consume GridTaskView.error before reading the borrowed buffers.
         """
-        required = set(ingredients)
-        if (
-            not required
-            or not required <= {"rho", "sigma", "gradient", "tau"}
-            or "rho" not in required
-        ):
-            raise ValueError("unsupported CUDA task ingredient contract")
-        if "sigma" in required:
-            required.remove("sigma")
-            required.add("gradient")
+        _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
             if self.plan.active_ao_capacity is None:
                 raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
-            with self._task(points, ao_ids, stamp=stamp) as lease:
+            with self._task(
+                points,
+                ao_ids,
+                stamp=stamp,
+                defer_error_to_consumer=defer_error_to_consumer,
+            ) as lease:
                 yield lease
+
+    @contextmanager
+    def feature_task_with_features(
+        self,
+        points: typing.Any,
+        ao_ids: typing.Any,
+        ingredients: typing.Iterable[str],
+        *,
+        stamp: typing.Any = None,
+    ) -> typing.Any:
+        """Evaluate one tile once, publish requested features, and lend its device view.
+
+        The host publication and the borrowed GridTaskView refer to the same
+        physical tile evaluation. This is an ingredient-driven composition
+        boundary for semilocal geometry and nonlocal consumers; no functional
+        identifier participates in dispatch.
+        """
+        published, required = self._normalize_task_ingredients(ingredients)
+        with self._lock:
+            self._check_open()
+            if self.plan.active_ao_capacity is None:
+                raise ValueError("native CUDA XC requires a local CUDA plan")
+            if not required.issubset(self.ingredients) or not published.issubset(
+                self.ingredients
+            ):
+                raise ValueError(
+                    "prepared CUDA features do not cover requested publication"
+                )
+            evaluated = self.evaluate(points, ao_ids=ao_ids, stamp=stamp)
+            features = {
+                name: evaluated[name] for name in self.ingredients if name in published
+            }
+            with self._borrow_current_task() as lease:
+                yield features, lease
 
     @contextmanager
     def xc_task_with_features(
@@ -765,7 +852,7 @@ class CudaGrid:
         *,
         stamp: typing.Any = None,
     ) -> typing.Any:
-        """Evaluate one XC tile once, return features, and lend the same device buffers."""
+        """Compatibility wrapper over the ingredient-driven resident feature lease."""
         if functional not in ("LDA_XC_PW", "PBE", "R2SCAN", "WB97M-V"):
             raise ValueError(
                 "native CUDA XC task supports LDA_XC_PW, PBE, R2SCAN, or WB97M-V"
@@ -777,15 +864,10 @@ class CudaGrid:
             if functional == "PBE"
             else {"rho", "gradient", "tau"}
         )
-        with self._lock:
-            self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
-            if not required.issubset(self.ingredients):
-                raise ValueError("prepared CUDA features do not cover native XC")
-            features = self.evaluate(points, ao_ids=ao_ids, stamp=stamp)
-            with self._borrow_current_task() as lease:
-                yield features, lease
+        with self.feature_task_with_features(
+            points, ao_ids, required, stamp=stamp
+        ) as borrowed:
+            yield borrowed
 
     def metrics(self) -> typing.Any:
         """Synchronized cumulative timings, owned allocations and loaded versions."""

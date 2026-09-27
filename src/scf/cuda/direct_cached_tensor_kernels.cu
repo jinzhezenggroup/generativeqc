@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_contraction.cuh"
 #include "scf/cuda/direct_cached_tensor_kernels.hpp"
-#include "scf/cuda/direct_native_contraction.cuh"
 #include "scf/cuda/eri_tensor_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"

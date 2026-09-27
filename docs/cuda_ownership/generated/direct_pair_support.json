@@ -1,0 +1,9 @@
+{
+  "name": "direct_pair_support",
+  "outputs": [
+    "generated/generated_direct_pair_order2.cuh",
+    "generated/generated_direct_pair_order3.cuh",
+    "generated/generated_direct_shell_pair_hermite.cuh"
+  ],
+  "owner": "python/vibeqc_compiler/integral/direct_pair_support_cuda.py"
+}

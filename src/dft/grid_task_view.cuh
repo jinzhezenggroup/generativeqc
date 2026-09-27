@@ -13,7 +13,10 @@ namespace vibeqc::dft {
  * slots selected by the owner's immutable feature mask are meaningful. ao_ids
  * maps local columns into the global density/potential domain. Consumers enqueue on stream,
  * write both spin local_potential matrices [2,active_ao,active_ao], then use
- * the owner's scatter call. No feature/jet download is needed.
+ * the owner's scatter call. No feature/jet download is needed. The error
+ * pointer is the producer's sticky device status for this generation; a
+ * same-stream consumer may propagate it into its own device error state before
+ * reading the borrowed AO/features, while host publication remains owner-defined.
  *
  * The owner must remain locked and alive throughout consumption. Density
  * replacement, another task or closure invalidates this view. generation is

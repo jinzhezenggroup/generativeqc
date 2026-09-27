@@ -55,6 +55,8 @@ for functional in (0,1,2):
     assert 'stationary-weight-program-coulomb:' in s
     assert '__device__ inline bool stationary_source_weight' in s
     assert '__global__ void source_reduce' in s
+    assert 'if (view.error && *view.error)' in s
+    assert 'atomicExch(error, 1)' in s
     include = s.index('#include "dft/stationary_gradient_cuda.cuh"')
     for scientific in ('__global__ void task_kernel', '__global__ void geometry_kernel'):
         assert scientific in s
@@ -67,6 +69,19 @@ assert '__global__ void primitive_kernel' not in template
 assert '__global__ void task_kernel' in template
 assert 'stationary_tasks' in template
 assert 'stationary_topology' in template
+assert 'stationary_geometry_enqueue' in template
+assert 'stationary_geometry_external_device' in template
+assert 'stationary_geometry_external_device_enqueue' in template
+assert 'stationary_geometry_drain' in template
+assert 'external_stride' in template and 'external_offset' in template
+deferred=template.split('int stationary_geometry_enqueue',1)[1].split('int stationary_geometry(',1)[0]
+assert 'finished(*p, stream)' not in deferred
+assert 'p->geometry_pending = true' in deferred
+for name in ('stationary_finish(', 'stationary_finish_reduced('):
+    section=template.split('int '+name,1)[1].split('\\n}',1)[0]
+    assert 'drain_geometry(*p);' in section
+destroy=template.split('void stationary_destroy',1)[1]
+assert 'cudaStreamSynchronize(p->geometry_stream)' in destroy
 assert 'stationary_records' not in template
 assert 'for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < count' not in template
 assert 'for (size_t linear = 0; linear < primitive_work; ++linear)' not in template
@@ -80,6 +95,11 @@ driver=open('python/vibeqc/_stationary_cuda.py').read()
 assert 'stationary_records' not in driver
 assert 'for ids in product(*ranges)' not in driver
 assert '"stationary_tasks"' in driver
+assert '"stationary_geometry_enqueue"' in driver
+assert '"stationary_geometry_external_device"' in driver
+assert '"stationary_geometry_external_device_enqueue"' in driver
+assert '"stationary_geometry_drain"' in driver
+assert '"xc_geometry_drain"' in driver
 assert 'np.lexsort' in driver
 """
     subprocess.run(
@@ -361,3 +381,119 @@ def test_stationary_split_compile_options_fail_closed(value: str) -> None:
         ValueError, match="VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS"
     ):
         _split_compile_options({"VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": value})
+
+
+@pytest.mark.parametrize(
+    ("profile_name", "functional"),
+    [
+        ("pbe0_rks", 1),
+        ("pbe0_uks", 1),
+        ("b3lyp_rks", 3),
+        ("b3lyp_uks", 3),
+    ],
+)
+def test_global_hybrid_stationary_aot_profiles_bind_exact_plan(
+    profile_name: str, functional: int
+) -> None:
+    from vibeqc_compiler.method.stationary_cuda import (
+        _profile_stem,
+        _qualified_aot_profile,
+        _qualified_aot_profile_for_plan,
+        emit_stationary_profile_aot_cuda,
+        stationary_aot_profile_contract_identity,
+    )
+
+    profile = _qualified_aot_profile(profile_name)
+    plan = profile.plan
+    assert profile.functional == functional
+    assert (
+        _profile_stem(_qualified_aot_profile_for_plan(functional, profile.spin, plan))
+        == profile_name
+    )
+
+    source = emit_stationary_profile_aot_cuda(
+        profile_name, primitive_source="// shared primitive inventory\n"
+    )
+    assert f"stationary_functional = {functional}" in source
+    assert f"stationary-plan: {plan.identity}" in source
+    assert "stationary_weight_exact_exchange" in source
+    assert stationary_aot_profile_contract_identity(profile_name)
+
+
+def test_pbe_and_pbe0_share_point_code_but_never_package_identity() -> None:
+    from vibeqc_compiler.method.stationary_cuda import (
+        _profile_stem,
+        _qualified_aot_profile,
+        _qualified_aot_profile_for_plan,
+        stationary_aot_profile_contract_identity,
+    )
+
+    pbe = _qualified_aot_profile("pbe_rks")
+    pbe0 = _qualified_aot_profile("pbe0_rks")
+    assert pbe.functional == pbe0.functional == 1
+    assert pbe.plan.identity != pbe0.plan.identity
+    assert stationary_aot_profile_contract_identity(
+        "pbe_rks"
+    ) != stationary_aot_profile_contract_identity("pbe0_rks")
+    assert (
+        _profile_stem(_qualified_aot_profile_for_plan(1, "unpolarized", pbe.plan))
+        == "pbe_rks"
+    )
+    assert (
+        _profile_stem(_qualified_aot_profile_for_plan(1, "unpolarized", pbe0.plan))
+        == "pbe0_rks"
+    )
+
+
+@pytest.mark.parametrize("profile_name", ["pbe0_rks", "b3lyp_uks"])
+def test_global_hybrid_stationary_aot_loader_uses_profile_plan_identity(
+    tmp_path: typing.Any, profile_name: str
+) -> None:
+    import json
+
+    from vibeqc_compiler.common.provenance import file_hash
+    from vibeqc_compiler.method.stationary_cuda import (
+        _qualified_aot_profile,
+        load_stationary_aot_artifact,
+        stationary_aot_profile_contract_identity,
+    )
+
+    profile = _qualified_aot_profile(profile_name)
+    plan = profile.plan
+    library = tmp_path / f"libvibeqc_stationary_{profile_name}.so"
+    library.write_bytes(b"hybrid-aot-binary")
+    manifest = tmp_path / f"vibeqc_stationary_{profile_name}.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "vibeqc.stationary-cuda-aot.v2",
+                "functional": profile.functional,
+                "spin": profile.spin,
+                "profile": profile_name,
+                "plan_identity": plan.identity,
+                "partition_iterations": 3,
+                "architectures": ["sm_120"],
+                "compile_architectures": ["120-real"],
+                "code_objects": [{"architecture": "sm_120", "kind": "cubin"}],
+                "source_identity": f"source-{profile_name}",
+                "contract_identity": stationary_aot_profile_contract_identity(
+                    profile_name
+                ),
+                "source_sha256": "fixture",
+                "binary_sha256": file_hash(library),
+                "binary_bytes": library.stat().st_size,
+                "compile_contract": {"fp64": True, "fmad": False},
+            }
+        )
+    )
+
+    artifact = load_stationary_aot_artifact(
+        tmp_path,
+        functional=profile.functional,
+        spin=profile.spin,
+        plan=plan,
+        architecture="sm_120",
+    )
+    assert artifact.library == library
+    assert artifact.metadata["identity"]["plan"] == plan.identity
+    assert artifact.metadata["driver_ptx_jit_required"] is False

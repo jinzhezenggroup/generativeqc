@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "scf/cuda/direct_native_contraction.cuh"
+#include "generated_direct_contraction.cuh"
 #include "scf/cuda/direct_packed_fock_kernels.hpp"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"

@@ -10,11 +10,12 @@
 #include <type_traits>
 
 #include "generated_direct_high_order_pair_gradient.cuh"
+#include "generated_direct_source_contraction.cuh"
 #include "scf/cuda/direct_force_density.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
+#include "scf/cuda/direct_force_scatter.cuh"
+#include "scf/cuda/direct_gradient_types.cuh"
 #include "scf/cuda/direct_metadata.hpp"
-#include "scf/cuda/direct_native_gradient_types.cuh"
-#include "scf/cuda/direct_native_source_contraction.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
@@ -110,17 +111,8 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
     // from the negative sum. This halves two-center work and removes one third
     // of three-center work without changing the analytic-gradient contract.
     std::int32_t unique_center_atoms[4];
-    unsigned unique_center_count = 0;
-    for (unsigned center = 0; center < 4; ++center) {
-      bool duplicate_center = false;
-      for (unsigned previous = 0; previous < unique_center_count; ++previous) {
-        duplicate_center =
-            duplicate_center || center_atoms[center] == unique_center_atoms[previous];
-      }
-      if (!duplicate_center) {
-        unique_center_atoms[unique_center_count++] = center_atoms[center];
-      }
-    }
+    const unsigned unique_center_count =
+        direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
     double explicit_unique_gradient[4][3]{};
     if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
       CartesianQuartetGradient explicit_gradient{};
