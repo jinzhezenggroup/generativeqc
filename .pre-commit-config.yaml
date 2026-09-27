@@ -27,7 +27,7 @@ repos:
         pass_filenames: false
         always_run: true
       - id: public-method-manifest
-        name: Check generated public method metadata
+        name: Check generated native method metadata
         entry: python3 tools/generate_method_manifest.py --check
         language: system
         pass_filenames: false
