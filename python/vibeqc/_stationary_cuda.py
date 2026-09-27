@@ -66,6 +66,8 @@ from vibeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from vibeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILY_CODES
+from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from vibeqc_compiler.tensor.cuda_plan import plan_cuda
 
@@ -75,7 +77,10 @@ from ._dft_gradient import (
     native_ao_geometry_identity,
 )
 from ._stationary_cpu import DiagnosticStationaryGradient
-from .ks import SPLIT_HYBRIDS, _native_semilocal_family
+
+_REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
+    record["functional_code"] for record in SPLIT_HYBRIDS.values()
+)
 
 _DOUBLE = ct.POINTER(ct.c_double)
 _INT = ct.POINTER(ct.c_int64)
@@ -583,14 +588,7 @@ class _CudaSources:
             functional = int(pbe)
         elif pbe is not None:
             raise ValueError("specify functional or pbe, not both")
-        if type(functional) is not int or functional not in (
-            0,
-            1,
-            2,
-            3,
-            4,
-            *(record["functional_code"] for record in SPLIT_HYBRIDS.values()),
-        ):
+        if type(functional) is not int or functional not in _REGISTERED_STATIONARY_CODES:
             raise ValueError("unsupported stationary semilocal functional")
         work = task.density_jets(4 if functional else 1)
         self._call(
@@ -1367,13 +1365,15 @@ def _complete_rks_cuda_gradient_diagnostic(
         raise ValueError(
             "CUDA runtime source coverage differs from StationaryGradientPlan"
         )
-    functional = _native_semilocal_family(method)
+    functional = int(state._source.metadata[6])
+    if functional not in _REGISTERED_STATIONARY_CODES:
+        raise ValueError("native snapshot reported an unknown semilocal functional")
     if functional == 2 and ecp:
         raise NotImplementedError(
             "r2SCAN CUDA stationary gradients do not inherit ECP support"
         )
-    needs_first = functional != 0
     ingredients = state._source.functional.ingredients
+    needs_first = "sigma" in ingredients
     device = int(state._source.metadata[12])
     grid_plan = plan_tiles(
         basis,
