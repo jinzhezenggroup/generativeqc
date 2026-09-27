@@ -67,6 +67,27 @@ def test_methods_command_can_discover_default_allow_libxc() -> None:
     assert all(row["properties"] == ("energy",) for row in rows)
 
 
+def test_methods_libxc_discovery_honors_public_blacklist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import vibeqc_compiler.method.bulk_ks as bulk_ks
+
+    original = bulk_ks.blacklist_reason
+
+    def blacklist_reason(name: str) -> str | None:
+        if name.upper() == "GGA_X_APBE":
+            return "test-only blocked registration"
+        return original(name)
+
+    monkeypatch.setattr(bulk_ks, "blacklist_reason", blacklist_reason)
+    names = {row["name"] for row in _automatic_libxc_method_rows()}
+
+    assert "libxc:GGA_X_APBE" not in names
+    assert "libxc-uks:GGA_X_APBE" not in names
+    assert "libxc:GGA_X_AK13" in names
+    assert "libxc-uks:GGA_X_AK13" in names
+
+
 def test_methods_libxc_flag_is_publicly_parseable() -> None:
     args = parser().parse_args(["methods", "--libxc", "--json"])
     assert args.command == "methods"
