@@ -57,4 +57,10 @@ def test_stationary_consumer_explicitly_owns_deferred_error_gate() -> None:
     stationary = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text()
     assert "grid_cuda_run_selected_deferred_v1" in grid
     assert "_defer_error_to_consumer=defer_error_to_consumer" in grid
+    task = grid.split("    def task(", 1)[1].split("    def xc_task(", 1)[0]
+    feature = grid.split("    def feature_task(", 1)[1].split(
+        "    def xc_task_with_features(", 1
+    )[0]
+    assert "defer_error_to_consumer=defer_error_to_consumer" not in task
+    assert "defer_error_to_consumer=defer_error_to_consumer" in feature
     assert "defer_error_to_consumer=True" in stationary
