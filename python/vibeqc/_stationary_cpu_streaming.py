@@ -49,7 +49,14 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
             labels.shape
         )
         domain = tuple(sorted({c for terms in self.expansions for c, _ in terms}))
-        bindings = np.asarray(derivative_dispatch_table(domain), dtype=np.int64)
+        binding_domain = (
+            COMPONENT_LABELS
+            if self.compilation_work["primitive_packaged_aot"]
+            else domain
+        )
+        bindings = np.asarray(
+            derivative_dispatch_table(binding_domain), dtype=np.int64
+        )
         self.bindings = np.frombuffer(bindings.tobytes(), dtype=np.int64).reshape(
             bindings.shape
         )
