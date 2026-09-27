@@ -871,7 +871,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
     const auto transfers_before = cuda_->transfers();
     dft::VerifiedKsFinalState exported_state;
-    auto status = VIBEQC_STATUS_SUCCESS;
+    vibeqc_status status = VIBEQC_STATUS_SUCCESS;
     if (!cached_density) {
       status = read_final_state(expected, true, exported_state, detail);
       if (status != VIBEQC_STATUS_SUCCESS) return status;
