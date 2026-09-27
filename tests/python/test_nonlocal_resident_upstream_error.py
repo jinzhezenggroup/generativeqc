@@ -6,6 +6,7 @@ scheduling or molecular-force qualification.
 
 from __future__ import annotations
 
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,6 +37,7 @@ PREFIX = r"""
 #include <cstdlib>
 #include <limits>
 using std::isfinite;
+using std::signbit;
 struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1};
 void atomicExch(int* out, int value) { *out = value; }
 double __longlong_as_double(unsigned long long value) {
@@ -101,7 +103,7 @@ int main(int argc, char** argv) {
   std::array<double, n> weights;
   std::array<double, 3 * n> point_derivative;
   std::array<double, 6 * n> seeds;
-  weights.fill(mode == 5 ? 0.0 : 1.0);
+  weights.fill(mode == 5 ? 0.0 : (mode == 7 ? -0.0 : 1.0));
   point_derivative.fill(3.0);
   seeds.fill(2.0);
   for (std::size_t lane = 0; lane < n; ++lane) {
@@ -115,8 +117,11 @@ int main(int argc, char** argv) {
       if (expected_failure) {
         if (!std::isnan(value)) return 10;
       } else if (mode == 5) {
-        if (value != 0.0) return 11;
-      } else if (value != (row >= 2 && row <= 4 ? 3.0 : 2.0)) return 12;
+        const double expected = row >= 2 && row <= 4 ? 3.0 : 2.0;
+        if (value != expected) return 11;
+      } else if (mode == 7) {
+        if (value != 0.0) return 12;
+      } else if (value != (row >= 2 && row <= 4 ? 3.0 : 2.0)) return 13;
     }
 }
 """
@@ -151,7 +156,7 @@ def error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("mode", range(7))
+@pytest.mark.parametrize("mode", range(8))
 def test_resident_collection_preserves_producer_error(
     error_probe: Path, mode: int
 ) -> None:
@@ -168,3 +173,52 @@ def test_resident_collection_preserves_producer_error(
         result.stdout,
         result.stderr,
     )
+
+
+def test_zero_weight_row_mask_distinguishes_active_from_density_inactive() -> None:
+    source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
+    assert "effective_weights[i] = inactive ? -0.0" in source
+    assert "if (weighted_i == 0.0 && signbit(weighted_i))" in source
+    assert "if (effective_weights[i] == 0.0 && signbit(effective_weights[i]))" in source
+
+
+def _two_point_vv10_energy(weight0: float) -> float:
+    b = 6.0
+    rho = (0.8, 1.1)
+    weights = (weight0, 1.0)
+    positions = (0.0, 1.0)
+    beta = (3.0 / (b * b)) ** 0.75 / 32.0
+    omega = tuple(math.sqrt((4.0 * math.pi / 3.0) * value) for value in rho)
+    kappa = tuple(
+        b * 1.5 * math.pi * (value / (9.0 * math.pi)) ** (1.0 / 6.0) for value in rho
+    )
+    total = 0.0
+    for i in range(2):
+        pair_sum = 0.0
+        for j in range(2):
+            r2 = (positions[j] - positions[i]) ** 2
+            gi = omega[i] * r2 + kappa[i]
+            gj = omega[j] * r2 + kappa[j]
+            phi = -1.5 / (gi * gj * (gi + gj))
+            pair_sum += weights[j] * rho[j] * phi
+        total += weights[i] * rho[i] * (beta + 0.5 * pair_sum)
+    return total
+
+
+def test_density_active_zero_weight_has_nonzero_weight_derivative() -> None:
+    b, rho0, rho1 = 6.0, 0.8, 1.1
+    beta = (3.0 / (b * b)) ** 0.75 / 32.0
+    omega0 = math.sqrt((4.0 * math.pi / 3.0) * rho0)
+    omega1 = math.sqrt((4.0 * math.pi / 3.0) * rho1)
+    kappa0 = b * 1.5 * math.pi * (rho0 / (9.0 * math.pi)) ** (1.0 / 6.0)
+    kappa1 = b * 1.5 * math.pi * (rho1 / (9.0 * math.pi)) ** (1.0 / 6.0)
+    phi01 = -1.5 / (
+        (omega0 + kappa0) * (omega1 + kappa1) * (omega0 + kappa0 + omega1 + kappa1)
+    )
+    expected = rho0 * (beta + rho1 * phi01)
+    assert expected != 0.0
+    for step in (1.0e-4, 1.0e-5, 1.0e-6):
+        finite_difference = (
+            _two_point_vv10_energy(step) - _two_point_vv10_energy(-step)
+        ) / (2.0 * step)
+        assert finite_difference == pytest.approx(expected, rel=2.0e-8, abs=2.0e-11)
