@@ -19,7 +19,8 @@ void launch_contract_bounded_exact_low_order_force_page_kernel(
     unsigned high_pair_class, unsigned low_pair_class, double screening_tolerance,
     std::uint64_t page_begin, std::uint32_t page_capacity, std::uint32_t bra_ordinal_begin,
     std::uint32_t bra_ordinal_end, bool same_pair_class, const double* schwarz_bounds,
-    const double* density, double* forces, std::uint32_t* bra_head,
+    const double* density, double coulomb_coefficient, double exchange_coefficient,
+    double* forces, std::uint32_t* bra_head,
     DeviceShellClassProfileEntry* profile);
 
 }  // namespace vibeqc::scf::cuda_execution
