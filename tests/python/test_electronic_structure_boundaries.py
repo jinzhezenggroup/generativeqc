@@ -22,6 +22,7 @@ def test_current_cross_method_boundaries_are_valid() -> None:
         "solver",
         "response",
         "scf",
+        "hf",
         "dft",
         "posthf",
         "cc",
@@ -55,13 +56,13 @@ def test_current_cross_method_boundaries_are_valid() -> None:
         for gate in report["regression_inventory"].values()
         for test in gate["tests"]
     )
-    assert {"shared", "hf_only", "dft_only", "cc_only"} <= set(
+    assert {"shared", "scf_transition", "hf_only", "dft_only", "cc_only"} <= set(
         report["ownership_groups"]
     )
 
 
 @pytest.mark.parametrize("owner", ["core", "runtime", "tensor", "solver", "response"])
-@pytest.mark.parametrize("method", ["scf", "dft", "posthf", "cc"])
+@pytest.mark.parametrize("method", ["scf", "hf", "dft", "posthf", "cc"])
 def test_shared_layer_cannot_depend_on_concrete_method(
     tmp_path: typing.Any, owner: str, method: str
 ) -> None:
@@ -141,7 +142,7 @@ def test_shared_layers_may_depend_on_other_shared_layers(tmp_path: typing.Any) -
     assert audit_electronic_structure_boundaries(tmp_path)["errors"] == []
 
 
-@pytest.mark.parametrize("method", ["scf", "dft", "posthf", "cc"])
+@pytest.mark.parametrize("method", ["scf", "hf", "dft", "posthf", "cc"])
 def test_provider_contract_cannot_depend_on_concrete_method(
     tmp_path: typing.Any, method: str
 ) -> None:
