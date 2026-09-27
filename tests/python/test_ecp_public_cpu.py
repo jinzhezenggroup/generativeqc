@@ -148,6 +148,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
     representation: typing.Any,
     record_property: typing.Any,
     d_shell: bool = False,
+    component_execution: str = "native",
 ) -> None:
     spin = int(method.endswith("uks"))
     atoms, record, mol = fixture(
@@ -219,6 +220,22 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         assert [item["index"] for item in work] == [0, 1]
         assert work[0]["work"]["ecp_quadrature_pair_samples"] > 0
         assert work[1]["work"]["ecp_quadrature_pair_samples"] == 0
+        for index, item in enumerate(work):
+            generated = item["work"]
+            if component_execution == "python" and index == 1:
+                # The s-only fragment deliberately uses the legacy primitive baseline.
+                assert "component_execution" not in generated
+                assert "primitive_packaged_aot" not in generated
+                assert "component_contract_runtime_compilations" not in generated
+                continue
+            assert generated["component_execution"] == component_execution
+            assert generated["primitive_packaged_aot"] == 1
+            assert generated["primitive_runtime_compilations"] == 0
+            if component_execution == "native":
+                assert generated["component_contract_runtime_compilations"] == 0
+            else:
+                assert component_execution == "python"
+                assert "component_contract_runtime_compilations" not in generated
         if d_shell:
             schedule = work[0]["work"]
             assert schedule["primitive_compiled_kernels"] == 362
@@ -311,20 +328,23 @@ def check_spd_arbitrary_ordered_weights_against_libcint_energy_differences(
     atoms, record, mol = fixture(representation=representation, d_shell=True)
     direction = np.array([[0.17, -0.11, 0.29], [-0.23, 0.31, -0.07]])
     with NativeAO(atoms, basis=record, representation=representation) as basis:
+        aot_library = _native.load_library()
+        cache = Path(os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu"))
+        compiler = CppCompilerAdapter(Path(os.environ.get("CXX", "c++")))
         executor = ComponentPrimitiveExecutor(
             basis,
-            Path(os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu")),
+            cache,
             2,
-            CppCompilerAdapter(Path(os.environ.get("CXX", "c++"))),
+            compiler,
+            aot_library=aot_library,
         )
         candidates = [
             CompiledComponentExecutor(
                 basis,
-                Path(
-                    os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu")
-                ),
+                cache,
                 tile,
-                CppCompilerAdapter(Path(os.environ.get("CXX", "c++"))),
+                compiler,
+                aot_library=aot_library,
             )
             for tile in (1, 2, 128)
         ]
@@ -463,6 +483,7 @@ def check_spd_paired_endpoint(
                 representation,
                 measurements.__setitem__,
                 d_shell=True,
+                component_execution=strategy,
             )
         record_property(strategy, measurements)
         results[strategy] = (measurements, gradients)

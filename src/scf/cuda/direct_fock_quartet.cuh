@@ -9,11 +9,11 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_source_contraction.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_metadata.hpp"
-#include "scf/cuda/direct_native_source_contraction.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
-#include "scf/cuda/matrix_index.cuh"
+#include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
 // Retained direct fock quartet contraction helpers.
@@ -81,19 +81,25 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
                                        second_ao_pair_count, system_ao_begin, n, i, j, k, l)) {
       return;
     }
-    if (schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
-            schwarz_bounds[physical_offset + matrix_index(k, l, n)] <
-        screening_tolerance) {
+    if (!direct_ao_quartet_survives_schwarz(schwarz_bounds, physical_offset, n, i, j, k, l,
+                                            screening_tolerance)) {
       return;
     }
     const EvalScalar evaluated_integral =
         dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, EvalScalar>(
             shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), -1);
-    const double integral = scalar_value(evaluated_integral);
-    if (integral == 0.0) return;
-    accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock, i,
-                                                  j, k, l, integral, coulomb_only);
+    if constexpr (std::is_same_v<EvalScalar, MixedPrecisionFloat>) {
+      const float integral = evaluated_integral.value;
+      if (integral == 0.0F) return;
+      accumulate_direct_fock_integral<Unrestricted, true>(n, physical_offset, spin_offset, density,
+                                                          fock, i, j, k, l, integral, coulomb_only);
+    } else {
+      const double integral = scalar_value(evaluated_integral);
+      if (integral == 0.0) return;
+      accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock,
+                                                    i, j, k, l, integral, coulomb_only);
+    }
   }
 }
 

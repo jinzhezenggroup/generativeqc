@@ -142,14 +142,22 @@ route. \`VIBEQC_CUDA_KS_CHUNK=1\` (also \`0\`, \`off\` or \`none\`) selects that
 baseline explicitly. \`VIBEQC_CUDA_KS_CHUNK=2\` is an opt-in qualification
 selector for direct all-electron RKS only. UKS keeps its occupation
 stabilization and bounded final-closure host policy; ECP RKS keeps the strict
-physical final closure required by #586. CUDA Graphs are not required.
+physical final closure required by #586.
 
-When the two-slot path is selected, its device-control chunk is bound to the
-shared compiled-execution lifecycle also used by TensorIR graph replay. The KS
-transfer diagnostic reports region bindings, invalidations, successful
-executions, failures and recoveries. These counters describe ownership and
-failure isolation only: KS does **not** capture direct-J/XC into a CUDA Graph,
-and ordinary host-controlled KS leaves the region counters zero. See the
+The two-slot path is bound to the shared compiled-execution lifecycle also used
+by TensorIR graph replay. \`VIBEQC_CUDA_KS_REPLAY=1\` (also \`on\`, \`true\` or
+\`small-native\`) additionally requests shared CUDA-Graph capture/replay for
+this qualification route. Replay is admitted only for LDA/PBE when the KS
+eigensolver is the capture-safe small-native implementation (currently at most
+16 AOs).
+Provider-backed ordinary \`Xsyevd\` remains outside capture, so larger systems
+continue through the ordinary two-slot path even when replay is requested.
+
+The KS transfer diagnostic reports region bindings, invalidations, successful
+executions, failures and recoveries together with shared-Graph captures,
+replays and fallbacks. A replay count greater than the capture count proves at
+least one cached graph launch after the capture launch. Ordinary
+host-controlled KS leaves these counters zero. See the
 [shared execution-lifecycle decision](../../.agents/notes/implemented/architecture/2026-09-21-shared-compiled-execution-lifecycle.md).
 
 RTX 5090 / CUDA 12.9 cold, warm and changed-geometry A/B measurements preserved

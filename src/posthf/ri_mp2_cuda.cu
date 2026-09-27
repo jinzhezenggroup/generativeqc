@@ -200,7 +200,7 @@ RiMp2CudaBlockPlan plan_ri_mp2_cuda_blocks(std::size_t fixed, std::size_t budget
   return {plan.virtual_block, plan.j_batch, plan.peak_bytes, plan.full_resident};
 }
 
-RiMp2CudaEnergy density_fitted_energy_cuda(const scf::PhysicalReference& ref,
+RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
                                            const posthf::RawSource& source, std::size_t budget,
                                            double metric_relative_threshold, int device) {
   const std::size_t n = ref.nbf;

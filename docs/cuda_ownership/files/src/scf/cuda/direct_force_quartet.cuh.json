@@ -2,6 +2,6 @@
   "path": "src/scf/cuda/direct_force_quartet.cuh",
   "role": "scientific",
   "subsystem": "direct_integrals",
-  "reason": "Retained native direct Fock/force contraction on borrowed metadata and density/output views; original scientific equations and reduction order are preserved.",
+  "reason": "Generic Direct-force quartet consumer retains scientific fallback dispatch and explicit full-gradient composition for unretired angular orders. Unique-center collection is delegated to the shared direct_force_scatter.cuh owner.",
   "regions": []
 }

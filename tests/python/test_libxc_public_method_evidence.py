@@ -11,6 +11,12 @@ from vibeqc_compiler.xc.endpoint_capability import (
     ENDPOINT_COVERAGE_SCHEMA,
     resolve_endpoint_capability,
 )
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
+)
 from vibeqc_compiler.xc.public_method_evidence import (
     RESULT_SCHEMA,
     build_result,
@@ -53,14 +59,22 @@ def _stage(
 
 def _prerequisites(*, spins: tuple[str, ...] = ("polarized", "unpolarized")) -> dict:
     capability = libxc_bulk_capabilities.functional_capability(NAME)
+    result_identity = "c" * 64
+    molecular = _stage(
+        capability,
+        "molecular-scf",
+        qualification={
+            **_coverage(*spins),
+            "result_schema": MOLECULAR_SCF_RESULT_SCHEMA,
+            "result_identity": result_identity,
+            "qualification_schema": MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+        },
+    )
+    molecular["evidence"] += f"#sha256={result_identity}"
     return {
         "compiled-cpu": _stage(capability, "compiled-cpu"),
         "production-domain": _stage(capability, "production-domain"),
-        "molecular-scf": _stage(
-            capability,
-            "molecular-scf",
-            qualification=_coverage(*spins),
-        ),
+        "molecular-scf": molecular,
     }
 
 
@@ -201,3 +215,19 @@ def test_public_endpoint_rejects_forged_generic_coverage_without_exact_admission
     assert caught.value.blockers == (
         ("public-method", "missing exact public admission receipt"),
     )
+
+
+def test_public_admission_rejects_generic_molecular_coverage_without_exact_receipt() -> (
+    None
+):
+    prerequisites = _prerequisites()
+    molecular = prerequisites["molecular-scf"]
+    molecular["qualification"] = _coverage("polarized", "unpolarized")
+    molecular["evidence"] = "test://forged/molecular-scf"
+
+    with pytest.raises(ValueError, match="result schema mismatch"):
+        build_result(
+            NAME,
+            prerequisite_evidence=prerequisites,
+            evidence="test://forged/public-method",
+        )

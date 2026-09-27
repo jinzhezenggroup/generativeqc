@@ -43,6 +43,8 @@ def test_public_wb97mv_live_state_and_complete_gradient(
                 "nonlocal_grid",
                 "nonlocal_weight",
             }
+            assert grad.work["range_exchange_runtime_compilations"] == 0
+            assert grad.work["range_exchange_packaged_aot_plans"] > 0
             np.testing.assert_allclose(grad.gradient.sum(axis=0), 0, atol=2e-8)
         finally:
             state._source.close()

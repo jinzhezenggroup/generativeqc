@@ -1,0 +1,10 @@
+{
+  "name": "direct_recurrence",
+  "outputs": [
+    "generated/generated_direct_eri_order2.cuh",
+    "generated/generated_direct_eri_order3.cuh",
+    "generated/generated_direct_eri_order4.cuh",
+    "generated/generated_direct_shell_class.cuh"
+  ],
+  "owner": "python/vibeqc_compiler/integral/direct_recurrence_cuda.py"
+}

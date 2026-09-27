@@ -31,6 +31,8 @@ from vibeqc_compiler.common.cuda_target import cuda_target_info
 from vibeqc_compiler.common.provenance import atomic_json
 from vibeqc_compiler.dft import NativeAO
 
+from benchmarks.dft_force_components import normalize_force_work
+
 if typing.TYPE_CHECKING:
     from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 
@@ -232,6 +234,9 @@ def _successful_record(
         "timeline": timeline,
         "diagnostic_external_wall_seconds": observed_diagnostic_seconds,
         "work": _jsonable(work),
+        "component_breakdown": normalize_force_work(
+            work, state_export_seconds=state_export_seconds
+        ),
     }
 
 

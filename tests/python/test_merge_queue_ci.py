@@ -50,7 +50,6 @@ def test_pr_concurrency_preserves_running_and_replaces_only_pending_runs() -> No
         "cumetal-cuda.yml",
         "pre-commit.yml",
         "pr-overlap.yml",
-        "ccsdt-cpu-bundle-evidence.yml",
     ):
         source = (WORKFLOWS / filename).read_text(encoding="utf-8")
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]

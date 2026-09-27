@@ -14,7 +14,7 @@
     "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces.",
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
-    "src/backends/cuda/gfn2_d4.cu": "Consume shared VibeQC D4 coordination, charge interpolation, C6 coefficient, pair damping, ATM, and CN-adjoint mathematics while retaining CUDA topology, cutoff, pair-list traversal, reduction, error, and publication ownership."
+    "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -108,12 +108,12 @@
     "src/backends/cuda/gfn2_d4.cu": {
       "adapted": true,
       "upstream_sha256": "9e3982dbf865f64d9c7969a6dd4410bfa39fe6c532edb0124063a28d1be5fbb5",
-      "vendored_sha256": "5ccb55e7e1a0c63cdf4aca051fcd7c52daef4af49ed6d273b887792782947007"
+      "vendored_sha256": "def41d0c8b47423ac5bda87779cdc667ab2ac21a9753bb10c7b70531ef38a42c"
     },
     "src/backends/cuda/gfn2_d4.cuh": {
       "adapted": true,
       "upstream_sha256": "507ea4a8b3fb0619ed1951dad358a7548b7a395e5c5d0259f7a18937f7658701",
-      "vendored_sha256": "94f1474b48c2a7c48c09777276b16fb65af25cbe5941fef684bd8c782a2f244b"
+      "vendored_sha256": "0ffc07ff864d59cfa6bc9ae0c69cfe429f3fc4e305f2a4b1e11bf907a90e7b67"
     },
     "src/backends/cuda/gfn2_density.cu": {
       "adapted": true,

@@ -12,7 +12,7 @@
 
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_gradient_types.cuh"
+#include "scf/cuda/direct_gradient_types.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
@@ -25,8 +25,8 @@ namespace vibeqc::scf::cuda_execution {
 /**
  * Contract all three psss component gradients in one primitive traversal.
  *
- * `density_coefficient` already contains the exact eightfold RHF/UHF density
- * contraction for each p axis. Linearity lets the three component gradients
+ * `component_weight` already contains the exact RHF/UHF density contraction
+ * and Cartesian AO normalization for each p axis. Linearity lets the three component gradients
  * be combined before the primitive loops: PA, P-Q, and their coordinate
  * derivatives become short weighted dot products, while product centers,
  * decay, and Boys values are evaluated only once. The fourth-center gradient
@@ -37,23 +37,12 @@ __device__ inline __noinline__ PsssWeightedGradient
 contracted_eri_cartesian_source_psss_weighted_gradient(
     const DeviceBatch& batch, std::size_t first_shell_pair, std::size_t second_shell_pair,
     std::int32_t p_shell, std::int32_t paired_s_shell, std::int32_t third_shell,
-    std::int32_t fourth_shell, const double (&density_coefficient)[3],
+    std::int32_t fourth_shell, const double (&component_weight)[3],
     const PrimitivePairData* resident_first_pairs, std::int64_t resident_first_pair_count) {
   const Vec3<double> first = atom_position<double>(batch, batch.shell_atoms[p_shell], -1);
   const Vec3<double> second = atom_position<double>(batch, batch.shell_atoms[paired_s_shell], -1);
   const Vec3<double> third = atom_position<double>(batch, batch.shell_atoms[third_shell], -1);
   const Vec3<double> fourth = atom_position<double>(batch, batch.shell_atoms[fourth_shell], -1);
-
-  const std::int64_t p_ao_begin = batch.shell_direct_ao_offsets[p_shell];
-  const double s_angular_coefficient =
-      batch.direct_ao_coefficients[batch.shell_direct_ao_offsets[paired_s_shell]] *
-      batch.direct_ao_coefficients[batch.shell_direct_ao_offsets[third_shell]] *
-      batch.direct_ao_coefficients[batch.shell_direct_ao_offsets[fourth_shell]];
-  const double axis_weight[3] = {
-      density_coefficient[0] * s_angular_coefficient * batch.direct_ao_coefficients[p_ao_begin],
-      density_coefficient[1] * s_angular_coefficient * batch.direct_ao_coefficients[p_ao_begin + 1],
-      density_coefficient[2] * s_angular_coefficient * batch.direct_ao_coefficients[p_ao_begin + 2],
-  };
 
   PsssWeightedGradient result{};
   const bool first_pair_matches_canonical_order =
@@ -79,7 +68,7 @@ contracted_eri_cartesian_source_psss_weighted_gradient(
           first_pair, second_pair, !first_pair_matches_canonical_order,
           !second_pair_matches_canonical_order, first, second, third, fourth, geometry);
       boys_values<2>(boys_argument, geometry.boys);
-      const auto generated = generated_weighted_eri::psss_force(geometry, axis_weight);
+      const auto generated = generated_weighted_eri::psss_force(geometry, component_weight);
 #pragma unroll
       for (unsigned center = 0; center < 3; ++center) {
 #pragma unroll

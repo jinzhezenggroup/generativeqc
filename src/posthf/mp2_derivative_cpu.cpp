@@ -9,7 +9,7 @@
 namespace vibeqc::mp2 {
 
 std::vector<double> conventional_derivative_cpu(const core::System& system,
-                                                const scf::PhysicalReference& reference,
+                                                const hf::PhysicalReference& reference,
                                                 const LagrangianWeights& weights) {
   return detail::conventional_derivative(
       system, reference, weights,
