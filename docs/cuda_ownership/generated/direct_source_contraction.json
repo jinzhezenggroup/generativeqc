@@ -1,0 +1,7 @@
+{
+  "name": "direct_source_contraction",
+  "outputs": [
+    "generated/generated_direct_source_contraction.cuh"
+  ],
+  "owner": "python/vibeqc_compiler/integral/direct_source_contraction_cuda.py"
+}
