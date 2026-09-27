@@ -26,7 +26,7 @@ def test_mp2_documentation_states_exact_force_and_batch_boundary() -> None:
 
 def test_method_table_no_longer_calls_conventional_mp2_forces_planned() -> None:
     text = (ROOT / "docs/user/methods.md").read_text(encoding="utf-8")
-    assert "[public method table](../public_methods.md)" in text
+    assert "[public method catalog](../public_methods.md)" in text
     table = (ROOT / "docs/public_methods.md").read_text(encoding="utf-8")
     rows = [
         [cell.strip() for cell in line.strip().strip("|").split("|")]
