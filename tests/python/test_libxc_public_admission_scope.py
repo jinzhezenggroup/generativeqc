@@ -12,6 +12,12 @@ from vibeqc_compiler.xc.endpoint_capability import (
     EndpointCapabilityResolution,
     resolve_endpoint_capability,
 )
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
+)
 from vibeqc_compiler.xc.public_method_evidence import build_result, stage_evidence
 
 NAME = "GGA_X_PBE_SOL"
@@ -32,13 +38,18 @@ def _evidence() -> dict:
         if stage == "production-domain":
             payload["qualification"] = capability.production_domain_profile.to_payload()
         elif stage == "molecular-scf":
+            result_identity = "c" * 64
             payload["qualification"] = {
                 "schema": ENDPOINT_COVERAGE_SCHEMA,
                 "coverage": [
                     {"backend": "cpu", "spin": spin, "products": ["energy"]}
                     for spin in libxc_bulk_capabilities.SPIN_LAYOUTS
                 ],
+                "result_schema": MOLECULAR_SCF_RESULT_SCHEMA,
+                "result_identity": result_identity,
+                "qualification_schema": MOLECULAR_SCF_QUALIFICATION_SCHEMA,
             }
+            payload["evidence"] += f"#sha256={result_identity}"
         prerequisites[stage] = payload
     result = build_result(
         NAME,
