@@ -653,12 +653,15 @@ def test_dppp_fused_cuda_emits_one_shared_shell_class_schedule() -> None:
     assert "__noinline__" not in source
     assert "generated_dppp_orbit_" not in source
     density_helper = source[
-        source.index("double generated_dppp_density_coefficient(") : source.index(
+        source.index("double generated_dppp_density_coefficient_scaled(") : source.index(
             "/** Combine two reusable shell-pair records"
         )
     ]
     assert "orbit_scale" in density_helper
-    assert "4.0 * density[offset + ij] * density[offset + kl]" in density_helper
+    assert "4.0 * coulomb_coefficient *" in density_helper
+    assert "2.0 * exchange_coefficient *" in density_helper
+    assert "constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;" in density_helper
+    assert "generated_dppp_density_coefficient_scaled<Unrestricted>" in density_helper
     assert "for (unsigned permutation" not in density_helper
 
 
