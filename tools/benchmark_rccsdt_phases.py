@@ -19,6 +19,7 @@ EXPECTED = {
 
 def _sample(atom_count: int, device: str, budget: int) -> dict[str, object]:
     atoms = scaling_cases()[f"water-{atom_count}"].atoms
+    started = time.perf_counter()
     calc = Calculator(
         method="ccsd(t)",
         basis="sto-3g",
@@ -32,41 +33,47 @@ def _sample(atom_count: int, device: str, budget: int) -> dict[str, object]:
         ccsd_residual_tolerance=1e-10,
         correlation_memory_budget_bytes=budget,
     )
-    started = time.perf_counter()
     result = calc.singlepoint(atoms, properties=("energy",))
     wall = time.perf_counter() - started
     diag = result.correlation
-    assert diag is not None and result.converged
+    perf = result.cc_performance
+    assert diag is not None and perf is not None and result.converged
     expected_energy, expected_triples = EXPECTED[atom_count]
     assert abs(result.energy - expected_energy) <= 1e-8
     assert abs(diag.ccsd_t_triples_energy - expected_triples) <= 1e-10
     phases = {
-        "reference": diag.ccsd_reference_seconds,
-        "problem": diag.ccsd_problem_seconds,
-        "provider": diag.ccsd_provider_seconds,
-        "source": diag.ccsd_source_seconds,
-        "solver": diag.ccsd_solver_seconds,
-        "iteration": diag.ccsd_iteration_seconds,
-        "replay": diag.ccsd_replay_seconds,
-        "update": diag.ccsd_update_seconds,
-        "diis": diag.ccsd_diis_seconds,
-        "triples": diag.ccsd_t_seconds,
+        "reference": perf.reference_seconds,
+        "problem": perf.problem_seconds,
+        "provider": perf.provider_seconds,
+        "source": perf.source_seconds,
+        "solver": perf.solver_seconds,
+        "iteration": perf.iteration_seconds,
+        "replay": perf.replay_seconds,
+        "update": perf.update_seconds,
+        "diis": perf.diis_seconds,
+        "triples": perf.triples_seconds,
     }
-    work = {
-        "source_scans": diag.ccsd_source_scans,
-        "source_reads": diag.ccsd_source_reads,
-        "source_values": diag.ccsd_source_values,
-        "transform_fmas": diag.ccsd_transform_fmas,
-        "mo_blocks": diag.ccsd_mo_blocks,
-        "cuda_transform_calls": diag.ccsd_cuda_transform_calls,
-        "cuda_batch_calls": diag.ccsd_cuda_batch_calls,
-        "iteration_graph_calls": diag.ccsd_iteration_graph_calls,
-        "replay_graph_calls": diag.ccsd_replay_graph_calls,
-        "update_calls": diag.ccsd_update_calls,
-        "generated_error_checks": diag.ccsd_generated_error_checks,
-        "diis_gram_calls": diag.ccsd_diis_gram_calls,
-        "diis_coefficient_calls": diag.ccsd_diis_coefficient_calls,
-        "diis_combine_calls": diag.ccsd_diis_combine_calls,
+    attributed = (
+        perf.reference_seconds
+        + perf.problem_seconds
+        + perf.solver_seconds
+        + perf.triples_seconds
+    )
+    phases["unattributed_endpoint"] = max(0.0, wall - attributed)
+    work = {        "source_scans": perf.source_scans,
+        "source_reads": perf.source_reads,
+        "source_values": perf.source_values,
+        "transform_fmas": perf.transform_fmas,
+        "mo_blocks": perf.mo_blocks,
+        "cuda_transform_calls": perf.cuda_transform_calls,
+        "cuda_batch_calls": perf.cuda_batch_calls,
+        "iteration_graph_calls": perf.iteration_graph_calls,
+        "replay_graph_calls": perf.replay_graph_calls,
+        "update_calls": perf.update_calls,
+        "generated_error_checks": perf.generated_error_checks,
+        "diis_gram_calls": perf.diis_gram_calls,
+        "diis_coefficient_calls": perf.diis_coefficient_calls,
+        "diis_combine_calls": perf.diis_combine_calls,
         "synchronizations": diag.ccsd_synchronizations,
         "setup_h2d_bytes": diag.ccsd_setup_h2d_bytes,
         "scalar_d2h_bytes": diag.ccsd_scalar_d2h_bytes,
