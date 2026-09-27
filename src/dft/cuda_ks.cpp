@@ -1535,8 +1535,8 @@ vibeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
   }
 }
 vibeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateToken& expected,
-                                                  CudaKsResidentDensityBinding& binding,
-                                                  std::string& detail) const {
+                                                 CudaKsResidentDensityBinding& binding,
+                                                 std::string& detail) const {
   binding = {};
   detail.clear();
   try {

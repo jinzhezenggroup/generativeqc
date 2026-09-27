@@ -653,9 +653,8 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
         long_exchange_coefficient != 0.0) {
       DirectJkDownloadFence fence{plan->stream};
       for (unsigned source = 0; source < 3; ++source)
-        direct_jk_check(cudaMemsetAsync(
-            plan->derivative + source * plan->coordinate_elements, 0,
-            coordinates * sizeof(double), plan->stream));
+        direct_jk_check(cudaMemsetAsync(plan->derivative + source * plan->coordinate_elements, 0,
+                                        coordinates * sizeof(double), plan->stream));
       launch_independent_rsh_derivative_kernel(
           static_cast<unsigned>(coordinates), kIndependentJkThreads, 0, plan->stream, plan->batch,
           coordinates, 0, plan->coordinate_elements, coulomb_coefficient,
@@ -663,10 +662,10 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
           plan->screening_tolerance, plan->bounds, density, beta, plan->derivative);
       direct_jk_check(cudaGetLastError());
       for (unsigned source = 0; source < 3; ++source)
-        direct_jk_check(cudaMemcpyAsync(
-            result.data() + source * coordinates,
-            plan->derivative + source * plan->coordinate_elements, coordinates * sizeof(double),
-            cudaMemcpyDeviceToHost, plan->stream));
+        direct_jk_check(cudaMemcpyAsync(result.data() + source * coordinates,
+                                        plan->derivative + source * plan->coordinate_elements,
+                                        coordinates * sizeof(double), cudaMemcpyDeviceToHost,
+                                        plan->stream));
       fence.complete();
       direct_jk_finite_result(result);
     }
