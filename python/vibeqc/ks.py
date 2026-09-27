@@ -374,7 +374,9 @@ def _curated_semilocal_record(
         if plan is not None:
             policy = record["exchange_policy"]
             if policy == "none" and plan.exchange:
-                continue
+                raise NotImplementedError(
+                    "unsupported native KS semilocal composition"
+                )
             if policy == "canonical":
                 if method_ir is None:
                     continue
@@ -387,7 +389,10 @@ def _curated_semilocal_record(
                     or plan.exchange != canonical.exchange
                     or plan.nonlocal_correlation != canonical.nonlocal_correlation
                 ):
-                    continue
+                    raise NotImplementedError(
+                        f"native {record['name']} lowerer requires canonical "
+                        f"{record['canonical_method']} composition"
+                    )
         return record
     raise NotImplementedError(
         "native KS semilocal primitive graph has no qualified lowerer"
