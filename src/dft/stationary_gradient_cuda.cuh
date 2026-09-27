@@ -329,6 +329,7 @@ int stationary_nuclear(void* pointer, unsigned kind, int64_t a, int64_t b, doubl
   return guarded(p, error, size, [&] {
     if (!p) throw std::invalid_argument("invalid stationary owner");
     check(*p);
+    drain_geometry(*p);
     p->check_primitive_work(1);
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
@@ -353,6 +354,7 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
         !view->ao_ids || !view->ao || !view->points)
       throw std::invalid_argument("invalid geometry task lease");
     check(*p);
+    drain_geometry(*p);
     auto stream = view->stream;
     // This optional bounded tile is accounted separately by the nonlocal
     // caller (6*npoint FP64 values). It lives through the borrowed stream.
