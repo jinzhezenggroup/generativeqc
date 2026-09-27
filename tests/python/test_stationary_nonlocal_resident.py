@@ -6,6 +6,7 @@ import importlib.util
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+import typing
 
 import numpy as np
 import pytest
@@ -21,14 +22,16 @@ SPEC.loader.exec_module(MODULE)
 
 
 class Grid:
-    def __init__(self, events):
+    def __init__(self, events: list[tuple[typing.Any, ...]]) -> None:
         self.events = events
         self.stream = 19
         self.live = False
         self.visits = 0
 
     @contextmanager
-    def feature_task(self, points, ao_ids, ingredients):
+    def feature_task(
+        self, points: np.ndarray, ao_ids: np.ndarray, ingredients: tuple[str, ...]
+    ) -> typing.Iterator[SimpleNamespace]:
         assert not self.live
         assert ingredients == ("rho", "gradient", "tau")
         self.live = True
@@ -45,12 +48,14 @@ class Grid:
 
 
 class Nonlocal:
-    def __init__(self, events, grid, count):
+    def __init__(
+        self, events: list[tuple[typing.Any, ...]], grid: Grid, count: int
+    ) -> None:
         self.events, self.grid, self.point_count = events, grid, count
         self.executed, self.collected_points, self.generation = False, 0, 0
         self.seed_stream = 19
 
-    def diagnostic(self):
+    def diagnostic(self) -> SimpleNamespace:
         return SimpleNamespace(
             executed=self.executed,
             collected_points=self.collected_points,
@@ -58,18 +63,18 @@ class Nonlocal:
             device_bytes=29 * 8 * self.point_count + 12,
         )
 
-    def reset(self):
+    def reset(self) -> None:
         assert self.executed
         self.events.append(("nonlocal_reset",))
         self.executed, self.collected_points = False, 0
 
-    def collect(self, task, begin):
+    def collect(self, task: SimpleNamespace, begin: int) -> None:
         assert self.grid.live and not self.executed
         assert begin == self.collected_points
         self.events.append(("collect", begin))
         self.collected_points += task.view.npoint
 
-    def execute(self):
+    def execute(self) -> SimpleNamespace:
         assert self.collected_points == self.point_count and not self.executed
         self.executed = True
         self.generation += 1
@@ -83,16 +88,26 @@ class Nonlocal:
 
 
 class Sources:
-    def __init__(self, events, grid):
+    def __init__(
+        self, events: list[tuple[typing.Any, ...]], grid: Grid
+    ) -> None:
         self.events, self.grid = events, grid
         self.finishes = 0
         self.external_weights = []
 
-    def geometry(self, task, owners, weights, raw, *, functional):
+    def geometry(
+        self,
+        task: SimpleNamespace,
+        owners: np.ndarray,
+        weights: np.ndarray,
+        raw: np.ndarray,
+        *,
+        functional: int,
+    ) -> None:
         assert self.grid.live and functional == 4
         self.events.append(("local", len(weights)))
 
-    def finish(self):
+    def finish(self) -> dict[str, np.ndarray]:
         self.finishes += 1
         self.events.append(("drain", self.finishes))
         return {
@@ -100,19 +115,30 @@ class Sources:
             for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
         }
 
-    def reset(self, tolerance, density, weighted):
+    def reset(
+        self, tolerance: float, density: np.ndarray, weighted: np.ndarray
+    ) -> None:
         assert self.finishes >= 1
         self.events.append(("source_reset",))
 
     def geometry_external_device(
-        self, task, owners, weights, raw, pointer, stride, begin
-    ):
+        self,
+        task: SimpleNamespace,
+        owners: np.ndarray,
+        weights: np.ndarray,
+        raw: np.ndarray,
+        pointer: int,
+        stride: int,
+        begin: int,
+    ) -> None:
         assert self.grid.live and pointer == 0x1234 and stride == 5
         self.events.append(("external", begin))
         self.external_weights.extend(weights)
 
 
-def fixture():
+def fixture() -> tuple[
+    list[tuple[typing.Any, ...]], Grid, Sources, Nonlocal, dict[str, typing.Any]
+]:
     events = []
     grid = Grid(events)
     owner = Nonlocal(events, grid, 5)
@@ -132,7 +158,7 @@ def fixture():
     return events, grid, sources, owner, args
 
 
-def test_production_join_uses_one_owner_and_only_resident_leases():
+def test_production_join_uses_one_owner_and_only_resident_leases() -> None:
     events, grid, sources, owner, args = fixture()
     parts, seconds, work = MODULE.resident_nonlocal_geometry(
         grid, sources, owner, **args
@@ -161,7 +187,7 @@ def test_production_join_uses_one_owner_and_only_resident_leases():
     assert owner.generation == 2 and ("nonlocal_reset",) in events
 
 
-def test_wrong_stream_fails_before_any_external_seed_use():
+def test_wrong_stream_fails_before_any_external_seed_use() -> None:
     events, grid, sources, owner, args = fixture()
     owner.seed_stream = 20
     with pytest.raises(ValueError, match="stream"):
@@ -169,7 +195,7 @@ def test_wrong_stream_fails_before_any_external_seed_use():
     assert not any(x[0] == "external" for x in events)
 
 
-def test_partial_previous_owner_is_not_silently_reused():
+def test_partial_previous_owner_is_not_silently_reused() -> None:
     _, grid, sources, owner, args = fixture()
     owner.collected_points = 2
     with pytest.raises(ValueError, match="incomplete"):
@@ -177,7 +203,7 @@ def test_partial_previous_owner_is_not_silently_reused():
 
 
 @pytest.mark.parametrize("tile", [0, -1, True, 1.5])
-def test_invalid_tile_rejected_before_work(tile):
+def test_invalid_tile_rejected_before_work(tile: typing.Any) -> None:
     events, grid, sources, owner, args = fixture()
     args["tile_points"] = tile
     with pytest.raises(ValueError, match="tile_points"):
@@ -185,7 +211,7 @@ def test_invalid_tile_rejected_before_work(tile):
     assert not events
 
 
-def test_missing_consumer_is_explicit():
+def test_missing_consumer_is_explicit() -> None:
     _, grid, _, owner, args = fixture()
-    with pytest.raises(RuntimeError, match="device-seed consumer"):
+    with pytest.raises(TypeError, match="device-seed consumer"):
         MODULE.resident_nonlocal_geometry(grid, object(), owner, **args)
