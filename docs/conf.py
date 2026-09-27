@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 import typing
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -44,9 +44,7 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 
 
-def _render_public_methods(
-    app: typing.Any, docname: str, source: list[str]
-) -> None:
+def _render_public_methods(app: typing.Any, docname: str, source: list[str]) -> None:
     if docname == "public_methods":
         source[0] = render_public_methods_markdown()
 
