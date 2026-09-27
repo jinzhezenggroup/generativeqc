@@ -76,7 +76,7 @@ deferred=template.split('int stationary_geometry_enqueue',1)[1].split('int stati
 assert 'finished(*p, stream)' not in deferred
 assert 'p->geometry_pending = true' in deferred
 for name in ('stationary_finish(', 'stationary_finish_reduced('):
-    section=template.split('int '+name,1)[1].split('\n}',1)[0]
+    section=template.split('int '+name,1)[1].split('\\n}',1)[0]
     assert 'drain_geometry(*p);' in section
 destroy=template.split('void stationary_destroy',1)[1]
 assert 'cudaStreamSynchronize(p->geometry_stream)' in destroy
