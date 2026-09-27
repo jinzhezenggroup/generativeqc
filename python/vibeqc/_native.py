@@ -197,22 +197,13 @@ class KsSemilocalComponentDescriptor(ctypes.Structure):
     ]
 
 
-class KsSemilocalPointValueDescriptor(ctypes.Structure):
-    _fields_ = [
-        ("energy", ctypes.c_double),
-        ("rho", ctypes.c_double * 2),
-        ("gradient", (ctypes.c_double * 3) * 2),
-        ("kinetic", ctypes.c_double * 2),
-    ]
-
-
 class KsSemilocalProgramDescriptor(ctypes.Structure):
     _fields_ = [
         ("identifier", ctypes.c_char_p),
         ("expression_identity", ctypes.c_char_p),
         ("ingredient_mask", ctypes.c_uint32),
         ("domain_version", ctypes.c_uint32),
-        ("evaluate", ctypes.c_void_p),
+        ("native_program", ctypes.c_void_p),
     ]
 
 
