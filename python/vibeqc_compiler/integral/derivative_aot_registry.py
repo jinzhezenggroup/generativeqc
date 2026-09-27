@@ -184,7 +184,7 @@ def entry_prefix_for_key(key: DerivativeAotKey) -> str:
 
     radial_key = canonical_hash(key.radial.to_payload())[:12]
     shell = "".join(str(value) for value in key.angular)
-    family = _family_tag(key.radial.family)
+    family = _family_tag(CoulombKernelFamily(key.radial.family))
     if key.backend == "cpu" and key.radial.family in (
         CoulombKernelFamily.SHORT_RANGE,
         CoulombKernelFamily.LONG_RANGE,
