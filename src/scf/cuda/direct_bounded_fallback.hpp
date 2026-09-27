@@ -19,7 +19,8 @@ void launch_bounded_direct_shell_quartet_kernel(
     const std::uint32_t* shell_pair_order, const double* shell_pair_block_bounds,
     const double* system_density_bounds, const std::uint64_t* enabled_mask_pointer,
     std::uint64_t enabled_mask, const std::uint32_t* bounded_generated_overflow,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile);
 
 /** Consume only Fock registry gaps through the bounded hierarchical dispatcher. */
