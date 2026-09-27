@@ -305,8 +305,8 @@ void run_diis(Owner& s, const SolverOptions& options,
     int host_status = 1, arithmetic = 0;
     cuda_check(
         cudaMemcpyAsync(&host_status, s.status, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
-    cuda_check(cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost,
-                               s.stream));
+    cuda_check(
+        cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
     cuda_check(cudaStreamSynchronize(s.stream));
     s.diagnostic.scalar_d2h_bytes += 2 * sizeof(int);
     ++s.diagnostic.synchronizations;
