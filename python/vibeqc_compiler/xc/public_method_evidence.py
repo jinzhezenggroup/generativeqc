@@ -23,6 +23,7 @@ from .libxc_bulk_capabilities import (
     STAGE_EVIDENCE_SCHEMA,
     functional_capability,
 )
+from .molecular_scf_evidence import validate_stage_qualification
 
 RESULT_SCHEMA = "vibeqc.libxc-public-method-result/v1"
 QUALIFICATION_SCHEMA = "vibeqc.libxc-public-method-qualification/v1"
@@ -68,6 +69,13 @@ def build_result(
         raise ValueError("public-method result requires an evidence reference")
 
     capability = functional_capability(name, evidence=prerequisite_evidence)
+    molecular = prerequisite_evidence.get("molecular-scf")
+    if not isinstance(molecular, Mapping):
+        raise ValueError("public-method admission requires molecular-SCF evidence")
+    validate_stage_qualification(
+        molecular.get("qualification"),
+        molecular.get("evidence"),
+    )
     endpoints = _resolved_cpu_energy_endpoints(
         capability.name,
         prerequisite_evidence=prerequisite_evidence,
