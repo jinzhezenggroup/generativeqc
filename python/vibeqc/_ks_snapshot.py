@@ -256,7 +256,14 @@ class NativeKsSnapshot:
                     ),
                     context=batch._context,
                 )
-                self.generic_semilocal_program = program
+                if not program.identifier or not program.expression_identity:
+                    raise RuntimeError("installed generic Libxc program lost provenance")
+                self.generic_semilocal_program = (
+                    program.identifier.decode("ascii"),
+                    program.expression_identity.decode("ascii"),
+                    int(program.ingredient_mask),
+                    int(program.domain_version),
+                )
                 functional_code = 2**32 - 1
                 expected_domain_version = program.domain_version
             else:
@@ -662,9 +669,29 @@ class NativeKsSnapshot:
         if functional.identity != self.functional.identity:
             raise ValueError("XC point functional disagrees with native composition")
         if self.generic_semilocal_program is not None:
+            program = _native.KsSemilocalProgramDescriptor()
+            _native.check(
+                self._library,
+                self._library.vibeqc_libxc_semilocal_program_get(
+                    self.generic_semilocal_program[0].encode("ascii"),
+                    ct.byref(program),
+                ),
+            )
+            actual = (
+                program.identifier.decode("ascii") if program.identifier else "",
+                (
+                    program.expression_identity.decode("ascii")
+                    if program.expression_identity
+                    else ""
+                ),
+                int(program.ingredient_mask),
+                int(program.domain_version),
+            )
+            if actual != self.generic_semilocal_program:
+                raise RuntimeError("installed generic Libxc point program changed")
             values = _generic_scf_xc_points(
                 self._library,
-                self.generic_semilocal_program,
+                program,
                 rho,
                 gradient,
                 tau,
