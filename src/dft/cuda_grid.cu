@@ -326,11 +326,13 @@ int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, c
   });
 }
 
-int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint, int features,
-                              const size_t* ao_ids, size_t active, double* feature_output,
-                              double* jet_output, char* error, size_t size) {
+static int grid_cuda_run_selected_impl(
+    void* pointer, const double* points, size_t npoint, int features, const size_t* ao_ids,
+    size_t active, double* feature_output, double* jet_output, int defer_error_to_consumer,
+    char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || (features != 0 && features != 1))
+    if (!pointer || (features != 0 && features != 1) ||
+        (defer_error_to_consumer != 0 && defer_error_to_consumer != 1))
       throw std::invalid_argument("invalid CUDA grid execution");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
@@ -352,6 +354,10 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
         (features && (((p.feature_mask & 14) && p.jets < 4) || !p.density_ready ||
                       (p.use_orbitals && !p.orbital_ready))))
       throw std::invalid_argument("invalid grid tile/output");
+    if (defer_error_to_consumer &&
+        (!p.local || !features || feature_output || jet_output))
+      throw std::invalid_argument(
+          "deferred CUDA grid errors require a device-only local feature lease");
     p.last_points = npoint;
     p.last_active = active;
     p.features_ready = features != 0;
@@ -361,7 +367,9 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
     // the single correctness synchronization for this tile. Explicit host
     // outputs, empty publication, and non-feature consumers retain detailed
     // section timing.
-    const bool detailed_profile = !(npoint && features && !feature_output && !jet_output);
+    const bool detailed_profile =
+        !defer_error_to_consumer &&
+        !(npoint && features && !feature_output && !jet_output);
     for (size_t i = 0; i < 3 * npoint; ++i)
       if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
     ctx.section(detailed_profile, ctx.metrics.input_ms, [&] {
@@ -441,6 +449,14 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
         cuda_check(cudaGetLastError());
       });
     }
+    p.density_jets_ready = features && !p.use_orbitals;
+    p.view_ready = true;
+    if (defer_error_to_consumer) {
+      // AO/features and the sticky device error remain ordered on this stream.
+      // A qualified consumer must inspect/propagate GridTaskView.error before
+      // reading the borrowed buffers; no host correctness gate runs here.
+      return;
+    }
     int failure = 0;
     ctx.section(true, ctx.metrics.output_ms, [&] {
       cuda_check(
@@ -453,9 +469,21 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
                                    cudaMemcpyDeviceToHost, ctx.stream));
     });
     if (failure) throw std::runtime_error("nonfinite CUDA AO/density output");
-    p.density_jets_ready = features && !p.use_orbitals;
-    p.view_ready = true;
   });
+}
+
+int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint, int features,
+                              const size_t* ao_ids, size_t active, double* feature_output,
+                              double* jet_output, char* error, size_t size) {
+  return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
+                                     feature_output, jet_output, 0, error, size);
+}
+
+int grid_cuda_run_selected_deferred_v1(
+    void* pointer, const double* points, size_t npoint, int features, const size_t* ao_ids,
+    size_t active, double* feature_output, double* jet_output, char* error, size_t size) {
+  return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
+                                     feature_output, jet_output, 1, error, size);
 }
 int grid_cuda_run_v1(void* pointer, const double* points, size_t npoint, int features,
                      double* feature_output, double* jet_output, char* error, size_t size) {
