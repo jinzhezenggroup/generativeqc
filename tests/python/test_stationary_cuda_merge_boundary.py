@@ -98,6 +98,23 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     assert owner.charges[0] == pytest.approx(2.5)
     np.testing.assert_array_equal(owner.tasks[0, :9], [0, 0, 4, -1, 0, 1, 0, 1, 1])
 
+    owner.used = 0
+    owner.integral_page(
+        0,
+        "four_center_eri",
+        ((0, 1, 0, 1), (1, 0, 1, 0)),
+        charge=2.5,
+    )
+    assert owner.used == 2
+    np.testing.assert_array_equal(
+        owner.tasks[:2, :9],
+        [
+            [0, 0, 4, -1, 0, 1, 0, 1, 1],
+            [0, 0, 4, -1, 1, 0, 1, 0, 1],
+        ],
+    )
+    np.testing.assert_allclose(owner.charges[:2], 2.5)
+
 
 @pytest.mark.parametrize("aot", (False, True))
 def test_weight_fusion_orchestration_runs_without_a_device(
