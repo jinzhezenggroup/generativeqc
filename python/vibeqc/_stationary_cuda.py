@@ -179,6 +179,8 @@ class _BoundedStationaryTaskExecutor:
         source_schema = payload["schema"]
         if not source_schema.startswith("vibeqc.") or not source_schema.endswith(".v1"):
             raise ValueError("unsupported stationary derivative task-source schema")
+        if canonical_hash(payload) != identity:
+            raise ValueError("stationary derivative task-source identity/payload mismatch")
         if not callable(submit_page):
             raise TypeError("stationary derivative producer requires a page callback")
         if finish_page is not None and not callable(finish_page):
