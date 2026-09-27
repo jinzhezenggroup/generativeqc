@@ -26,12 +26,12 @@
 namespace vibeqc::scf::cuda_execution {
 
 template <bool Unrestricted, unsigned AngularOrder>
-__device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
+__device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scaled(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
-    std::uint64_t generated_shell_class_mask, std::size_t active_subtile,
-    unsigned ao_quartet_lane) {
+    std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
+    double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
   static_assert(AngularOrder >= 2U, "order-0/1 Direct force uses generated exact shell tasks");
   static_assert(AngularOrder != 3U,
@@ -101,8 +101,9 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
       return;
     }
 
-    const double coefficient = direct_force_density_coefficient<Unrestricted>(
-        n, physical_offset, spin_offset, density, i, j, k, l);
+    const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, i, j, k, l, coulomb_coefficient,
+        exchange_coefficient);
     if (coefficient == 0.0) return;
 
     // An ERI is invariant when all four basis centers translate together, so
@@ -193,6 +194,20 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
       }
     }
   }
+}
+
+template <bool Unrestricted, unsigned AngularOrder>
+__device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
+    DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
+    const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    std::uint64_t generated_shell_class_mask, std::size_t active_subtile,
+    unsigned ao_quartet_lane) {
+  constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;
+  contract_two_electron_force_quartet_subtile_scaled<Unrestricted, AngularOrder>(
+      batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
+      schwarz_bounds, density, active, forces, generated_shell_class_mask, 1.0,
+      exchange_coefficient, active_subtile, ao_quartet_lane);
 }
 
 }  // namespace vibeqc::scf::cuda_execution
