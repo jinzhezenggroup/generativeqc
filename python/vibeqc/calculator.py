@@ -723,7 +723,12 @@ class Calculator:
         if (
             self._capabilities.family == "density_functional"
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
-            and (semilocal_force or named_cpu_all_electron_force or cuda_hybrid_force or cuda_wb97mv_force)
+            and (
+                semilocal_force
+                or named_cpu_all_electron_force
+                or cuda_hybrid_force
+                or cuda_wb97mv_force
+            )
             and not (
                 self._device_name == "cuda"
                 and basis_has_ecp
