@@ -34,6 +34,45 @@ macro(vibeqc_register_host_generated_sources target)
       COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
   endif()
 
+  if(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/wb97mv_rsh_cpu")
+    set(VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES)
+    foreach(_vibeqc_rsh_family IN ITEMS sr lr)
+      foreach(_a RANGE 0 1)
+        foreach(_b RANGE 0 1)
+          foreach(_c RANGE 0 1)
+            foreach(_d RANGE 0 1)
+              set(_vibeqc_rsh_shell "${_a}${_b}${_c}${_d}")
+              list(APPEND VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES
+                   "${VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY}/vibeqc_wb97mv_rsh_${_vibeqc_rsh_family}_${_vibeqc_rsh_shell}_0.cpp")
+              if(_vibeqc_rsh_shell STREQUAL "1111")
+                list(APPEND VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES
+                     "${VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY}/vibeqc_wb97mv_rsh_${_vibeqc_rsh_family}_1111_1.cpp")
+              endif()
+            endforeach()
+          endforeach()
+        endforeach()
+      endforeach()
+    endforeach()
+    vibeqc_register_generated_sources(
+      NAME vibeqc_wb97mv_rsh_cpu_aot_codegen
+      TARGET ${target}
+      ADD_TO_TARGET
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_wb97mv_rsh_cpu_aot.py"
+      OUTPUTS ${VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES}
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/rsh_cpu_aot.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/spec.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/_generated_libxc_methods.py"
+      ARGS --output-directory "${VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY}"
+      COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+      COMMENT "Generating packaged WB97M-V CPU SR/LR derivative programs")
+  endif()
+
   set(VIBEQC_QUADRATURE_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_quadrature.cuh")
   vibeqc_register_generated_sources(
