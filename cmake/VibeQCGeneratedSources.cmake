@@ -63,6 +63,7 @@ macro(vibeqc_register_host_generated_sources target)
       OUTPUTS ${VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES}
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/rsh_cpu_aot.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/derivative_aot_registry.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_native.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_cuda.py"
