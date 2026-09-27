@@ -32,9 +32,9 @@ def _load_manifest() -> dict[str, Any]:
     if payload.get("schema_version") != 2:
         raise RuntimeError("unsupported public method manifest schema")
     if not isinstance(payload.get("methods"), list):
-        raise RuntimeError("public method manifest requires methods")
+        raise TypeError("public method manifest requires methods")
     if not isinstance(payload.get("composite_methods", []), list):
-        raise RuntimeError("public method manifest composite_methods must be a list")
+        raise TypeError("public method manifest composite_methods must be a list")
     return payload
 
 
