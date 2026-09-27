@@ -152,13 +152,17 @@ def executed_cases(
     ]
 
 
-def test_emitted_slots_match_independent_eightfold_oracle(executed_cases: ExecutedCases) -> None:
+def test_emitted_slots_match_independent_eightfold_oracle(
+    executed_cases: ExecutedCases,
+) -> None:
     for shells, angular, slots in executed_cases:
         assert slots == _expected(angular), (shells, angular, slots)
         assert slots in _orbit()
 
 
-def test_order2_preserves_historical_specialized_permutations(executed_cases: ExecutedCases) -> None:
+def test_order2_preserves_historical_specialized_permutations(
+    executed_cases: ExecutedCases,
+) -> None:
     for _, angular, slots in executed_cases:
         if sum(angular) != 2:
             continue
@@ -177,7 +181,9 @@ def test_order2_preserves_historical_specialized_permutations(executed_cases: Ex
         assert slots == expected, (angular, slots)
 
 
-def test_equal_pair_classes_preserve_primitive_pair_ownership(executed_cases: ExecutedCases) -> None:
+def test_equal_pair_classes_preserve_primitive_pair_ownership(
+    executed_cases: ExecutedCases,
+) -> None:
     for _, angular, slots in executed_cases:
         if sorted(angular[:2]) == sorted(angular[2:]):
             assert set(slots[:2]) == {0, 1}
@@ -186,7 +192,9 @@ def test_equal_pair_classes_preserve_primitive_pair_ownership(executed_cases: Ex
             assert slots == (0, 1, 2, 3)
 
 
-def test_component_and_recovered_center_mapping_is_preserved(executed_cases: ExecutedCases) -> None:
+def test_component_and_recovered_center_mapping_is_preserved(
+    executed_cases: ExecutedCases,
+) -> None:
     for shells, angular, slots in executed_cases:
         if sum(angular) not in (2, 3):
             continue
