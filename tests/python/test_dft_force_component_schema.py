@@ -157,4 +157,3 @@ def test_stationary_split_geometry_phases_preserve_component_attribution() -> No
     record = normalize_force_work(work)
     assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.20)
     assert "semilocal_geometry_response" in record["coverage"]["wall_seconds"]
-
