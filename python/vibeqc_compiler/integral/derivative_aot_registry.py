@@ -133,8 +133,13 @@ class DerivativeAotBundleKey:
             raise ValueError("derivative AOT backend must be cpu or cuda")
         if not isinstance(self.radial, CoulombKernel):
             raise TypeError("derivative AOT requires an explicit CoulombKernel")
-        if not self.component_domain or tuple(sorted(set(self.component_domain))) != self.component_domain:
-            raise ValueError("derivative AOT component domain must be sorted and unique")
+        if (
+            not self.component_domain
+            or tuple(sorted(set(self.component_domain))) != self.component_domain
+        ):
+            raise ValueError(
+                "derivative AOT component domain must be sorted and unique"
+            )
         if self.derivative_order != AOT_DERIVATIVE_ORDER:
             raise ValueError("derivative AOT currently packages first derivatives only")
 
