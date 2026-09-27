@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from tools import generate_libxc_semilocal_cpu_registry as registry
 from vibeqc_compiler.xc.libxc_blacklist import blacklist_reason
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+
+from tools import generate_libxc_semilocal_cpu_registry as registry
 
 
 def test_registry_is_default_allow_minus_blacklist() -> None:

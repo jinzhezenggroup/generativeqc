@@ -187,8 +187,8 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
       const auto automatic =
           dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
       if (automatic)
-        return {dft::SemilocalFamily::Lda, 1.0, 1.0, automatic.functional_code, false,
-                automatic.program};
+        return {dft::SemilocalFamily::Lda, 1.0,   1.0,
+                automatic.functional_code, false, automatic.program};
     }
   }
 
@@ -250,9 +250,8 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
     if (execution_plan.automatic_program &&
         (backend != VIBEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
          ks_input->has_nonlocal_correlation != 0))
-      throw MethodError(
-          VIBEQC_STATUS_NOT_IMPLEMENTED,
-          "automatic Libxc semilocal KS currently requires pure CPU execution");
+      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+                        "automatic Libxc semilocal KS currently requires pure CPU execution");
     if (execution_plan.generated_split_hybrid && backend != VIBEQC_BACKEND_CUDA)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -927,7 +926,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
           execution_plan_.automatic_program
               ? "#1122"
               : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
-                                                                                   : "#163");
+                                                                                  : "#163");
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);

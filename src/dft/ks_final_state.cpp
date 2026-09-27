@@ -33,10 +33,9 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
   SemilocalFamily family;
   try {
-    family = split_hybrid
-                 ? SemilocalFamily::R2scan
-                 : (automatic_libxc ? SemilocalFamily::Lda
-                                    : semilocal_family_from_code(model.functional));
+    family = split_hybrid ? SemilocalFamily::R2scan
+                          : (automatic_libxc ? SemilocalFamily::Lda
+                                             : semilocal_family_from_code(model.functional));
   } catch (const std::invalid_argument&) {
     return false;
   }

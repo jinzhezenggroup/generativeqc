@@ -85,7 +85,9 @@ def _point_program_source(entry: RegistryEntry) -> str:
             f"unsupported automatic Libxc point layout for {entry.name}: {features!r}"
         ) from exc
     if program.spec.density_threshold is None:
-        raise ValueError(f"automatic Libxc program omitted density threshold: {entry.name}")
+        raise ValueError(
+            f"automatic Libxc program omitted density threshold: {entry.name}"
+        )
 
     expected_outputs = ((), *((i,) for i in range(len(features))))
     if program.outputs != expected_outputs:

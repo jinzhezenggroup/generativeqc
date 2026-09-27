@@ -300,8 +300,7 @@ void automatic_libxc_semilocal_plan() {
   require(execute == VIBEQC_STATUS_SUCCESS && result.converged &&
               result.executed_backend == VIBEQC_BACKEND_CPU_REFERENCE &&
               std::isfinite(result.energy),
-          (std::string("automatic APBE CPU SCF failed: ") +
-           (execute_detail ? execute_detail : ""))
+          (std::string("automatic APBE CPU SCF failed: ") + (execute_detail ? execute_detail : ""))
               .c_str());
   vibeqc_calculation_destroy(calculation);
 
