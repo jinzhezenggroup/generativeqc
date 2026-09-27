@@ -139,12 +139,24 @@ def _normalize_wb97mv(
         "semilocal_geometry_and_features",
         field="component_seconds.semilocal_geometry_and_features",
     )
-    wall["vv10_rvv10"] = _sum_present(
+    legacy_vv10 = _sum_present(
         (
             component.get("vv10_pairs"),
             component.get("nonlocal_geometry"),
         ),
         field="component_seconds.vv10_rvv10",
+    )
+    wall["vv10_rvv10"] = (
+        legacy_vv10
+        if legacy_vv10 is not None
+        else _sum_present(
+            (
+                component.get("nonlocal_reset"),
+                component.get("vv10_pair_enqueue"),
+                component.get("nonlocal_geometry_and_pair_drain"),
+            ),
+            field="component_seconds.resident_vv10_rvv10",
+        )
     )
     wall["compile_aot_cache_setup"] = _value(
         component, "prepare", field="component_seconds.prepare"
@@ -185,6 +197,7 @@ def _normalize_wb97mv(
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
+        "source_component_seconds": dict(component),
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
         "unattributed_wall_seconds": _unattributed(endpoint, attributed),
