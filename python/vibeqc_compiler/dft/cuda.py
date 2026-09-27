@@ -610,23 +610,30 @@ class CudaGrid:
                 if ao_ids is not None:
                     raise ValueError("active AO maps require a local CUDA plan")
             else:
-                raw_ids = np.asarray(ao_ids)
-                if raw_ids.ndim != 1 or (
-                    raw_ids.size
-                    and (
-                        raw_ids.dtype.kind not in "iu"
-                        or np.any(raw_ids < 0)
-                        or np.any(raw_ids >= self.plan.nao)
-                        or np.any(raw_ids[1:] <= raw_ids[:-1])
-                    )
-                ):
-                    raise ValueError(
-                        "active AO IDs must be sorted unique in-range integers"
-                    )
-                active = len(raw_ids)
-                if active > self.plan.active_ao_capacity:
-                    raise ValueError("active AO map exceeds the prepared capacity")
-                selected = np.array(raw_ids, dtype=np.uintp, copy=True)
+                if ao_ids is None:
+                    if self.plan.active_ao_capacity < self.plan.nao:
+                        raise ValueError(
+                            "identity AO map exceeds the prepared local capacity"
+                        )
+                    active = self.plan.nao
+                else:
+                    raw_ids = np.asarray(ao_ids)
+                    if raw_ids.ndim != 1 or (
+                        raw_ids.size
+                        and (
+                            raw_ids.dtype.kind not in "iu"
+                            or np.any(raw_ids < 0)
+                            or np.any(raw_ids >= self.plan.nao)
+                            or np.any(raw_ids[1:] <= raw_ids[:-1])
+                        )
+                    ):
+                        raise ValueError(
+                            "active AO IDs must be sorted unique in-range integers"
+                        )
+                    active = len(raw_ids)
+                    if active > self.plan.active_ao_capacity:
+                        raise ValueError("active AO map exceeds the prepared capacity")
+                    selected = np.array(raw_ids, dtype=np.uintp, copy=True)
             values = (
                 np.empty((13, len(points))) if features and download_features else None
             )
