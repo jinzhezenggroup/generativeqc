@@ -883,6 +883,16 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         ctypes.POINTER(KsSemilocalProgramDescriptor),
     ]
     library.vibeqc_libxc_semilocal_program_get.restype = ctypes.c_int
+    library.vibeqc_libxc_semilocal_program_evaluate_v1.argtypes = [
+        ctypes.POINTER(KsSemilocalProgramDescriptor),
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_size_t,
+    ]
+    library.vibeqc_libxc_semilocal_program_evaluate_v1.restype = ctypes.c_int
     library.vibeqc_method_available.argtypes = [
         ctypes.c_int,
         ctypes.POINTER(ctypes.c_int32),
