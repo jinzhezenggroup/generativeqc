@@ -14,7 +14,7 @@ import ctypes as ct
 import threading
 import typing
 from contextlib import ExitStack, contextmanager, nullcontext
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
@@ -81,6 +81,81 @@ _DOUBLE = ct.POINTER(ct.c_double)
 _INT = ct.POINTER(ct.c_int64)
 _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
 _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class _StationaryTaskExecution:
+    """Bounded producer evidence independent of the derivative task source."""
+
+    mode: str
+    domain_identity: str
+    logical_tasks: int
+    page_capacity: int
+    resident_capacity: int
+    pages: int
+
+
+class _BoundedStationaryTaskExecutor:
+    """Run a finite derivative-task producer without retaining its full domain.
+
+    The current AO producer is only one client of this boundary. #1477 can
+    replace it with compact shell tasks without changing the execution policy.
+    resident_capacity classifies when one logical producer fits the current
+    descriptor reservoir; native task-batch metrics remain authoritative when
+    Cartesian component expansion causes an earlier flush.
+    """
+
+    def __init__(self, *, page_capacity: int, resident_capacity: int) -> None:
+        for value, label in (
+            (page_capacity, "stationary task page capacity"),
+            (resident_capacity, "stationary resident task capacity"),
+        ):
+            if type(value) is not int or value < 1:
+                raise ValueError(f"{label} must be a positive integer")
+        if page_capacity > resident_capacity:
+            raise ValueError(
+                "stationary task page capacity exceeds resident task capacity"
+            )
+        self.page_capacity = page_capacity
+        self.resident_capacity = resident_capacity
+
+    def execute(
+        self,
+        domain: RuntimeTaskDomain,
+        submit: typing.Callable[[tuple[int, ...]], None],
+    ) -> _StationaryTaskExecution:
+        if not isinstance(domain, RuntimeTaskDomain):
+            raise TypeError("stationary derivative producer requires RuntimeTaskDomain")
+        if not callable(submit):
+            raise TypeError("stationary derivative producer requires a submit callback")
+        logical_tasks = domain.logical_size
+        mode = (
+            "fixed"
+            if logical_tasks <= self.page_capacity
+            else (
+                "resident"
+                if logical_tasks <= self.resident_capacity
+                else "paged"
+            )
+        )
+        submitted = pages = 0
+        for page in domain.pages(self.page_capacity):
+            if page.count > self.page_capacity:
+                raise RuntimeError("stationary task producer exceeded page capacity")
+            for coordinate in page.coordinates:
+                submit(coordinate)
+            submitted += page.count
+            pages += 1
+        if submitted != logical_tasks:
+            raise RuntimeError("stationary task producer coverage mismatch")
+        return _StationaryTaskExecution(
+            mode,
+            domain.identity,
+            logical_tasks,
+            self.page_capacity,
+            self.resident_capacity,
+            pages,
+        )
 
 
 class _ExclusiveWallTimeline:
@@ -1546,6 +1621,11 @@ def _complete_rks_cuda_gradient_diagnostic(
             )
             ao.set_density(density)
         timeline.switch("python_packing")
+        task_executor = _BoundedStationaryTaskExecutor(
+            page_capacity=integral_terms,
+            resident_capacity=primitive_tile,
+        )
+        task_executions: list[dict[str, typing.Any]] = []
         for source, rank, operator in (
             ("one_electron", 2, "kinetic"),
             ("overlap_pulay", 2, "overlap"),
@@ -1553,18 +1633,28 @@ def _complete_rks_cuda_gradient_diagnostic(
             *((("exact_exchange", 4, "four_center_eri"),) if has_exchange else ()),
         ):
             domain = RuntimeTaskDomain.rectangular((n,) * rank)
-            for page in domain.pages(integral_terms):
-                for indices in page.coordinates:
-                    sources.integral(source_names.index(source), operator, indices)
-                    if source == "one_electron":
-                        for atom in range(na):
-                            sources.integral(
-                                0,
-                                "nuclear_attraction",
-                                indices,
-                                atom,
-                                charges[atom],
-                            )
+            source_index = source_names.index(source)
+
+            def submit(indices: tuple[int, ...]) -> None:
+                sources.integral(source_index, operator, indices)
+                if source == "one_electron":
+                    for atom in range(na):
+                        sources.integral(
+                            0,
+                            "nuclear_attraction",
+                            indices,
+                            atom,
+                            charges[atom],
+                        )
+
+            execution = task_executor.execute(domain, submit)
+            task_executions.append(
+                {
+                    "source": source,
+                    "rank": rank,
+                    **asdict(execution),
+                }
+            )
             sources.flush()
         for atom in range(na):
             for other in range(atom):
@@ -1709,6 +1799,12 @@ def _complete_rks_cuda_gradient_diagnostic(
         stationary_state_dw_upload_bytes=(
             state.density.nbytes + state.weighted_density.nbytes
         ),
+        stationary_task_executor={
+            "schema": "vibeqc.stationary-bounded-task-executor.v1",
+            "page_capacity": integral_terms,
+            "resident_capacity": primitive_tile,
+            "sources": tuple(task_executions),
+        },
         additional_host_numeric_bound=(
             host_bound if prepared is None else prepared.host_bound
         ),
