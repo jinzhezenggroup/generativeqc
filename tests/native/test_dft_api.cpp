@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 
+#include "dft/xc.hpp"
 #include "vibeqc/vibeqc.h"
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -99,6 +100,29 @@ struct Fixture {
     vibeqc_system_destroy(system);
     vibeqc_context_destroy(context);
   }
+};
+
+vibeqc::dft::SemilocalPointValue test_generic_lda_exchange(
+    const double rho[2], const double (&)[2][3], const double[2]) {
+  constexpr double pi = 3.141592653589793238462643383279502884;
+  const double cx = 0.375 * std::cbrt(3.0 / pi) * std::pow(4.0, 2.0 / 3.0);
+  vibeqc::dft::SemilocalPointValue value;
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    if (rho[spin] < 0.0 || !std::isfinite(rho[spin]))
+      throw std::invalid_argument("test generic LDA density is invalid");
+    if (rho[spin] == 0.0) continue;
+    value.energy -= cx * std::pow(rho[spin], 4.0 / 3.0);
+    value.rho[spin] = -(4.0 / 3.0) * cx * std::cbrt(rho[spin]);
+  }
+  return value;
+}
+
+const vibeqc::dft::SemilocalPointProgram kTestGenericLdaProgram{
+    "LDA_X_TEST_GENERIC",
+    "test-generic-lda-exchange/v1",
+    1U,
+    2U,
+    &test_generic_lda_exchange,
 };
 
 vibeqc_method_descriptor lda_method() {
@@ -212,6 +236,72 @@ void ks_option_snapshot() {
   require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
               VIBEQC_STATUS_INVALID_ARGUMENT,
           "HF ignored a KS model option");
+}
+
+void generic_semilocal_point_program_cpu() {
+  Fixture fixture;
+  auto method = lda_method();
+  const std::array<vibeqc_ks_semilocal_component, 1> components{{
+      {"LDA_X_TEST_GENERIC", 1.0},
+  }};
+  vibeqc_ks_semilocal_program program{
+      kTestGenericLdaProgram.identifier,
+      kTestGenericLdaProgram.expression_identity,
+      kTestGenericLdaProgram.ingredient_mask,
+      kTestGenericLdaProgram.domain_version,
+      &kTestGenericLdaProgram,
+  };
+  vibeqc_ks_options options{};
+  options.struct_size = sizeof(options);
+  options.abi_version = VIBEQC_ABI_VERSION;
+  options.scf_domain = "libxc-bulk-production-candidate/v2";
+  options.grid_version = 1;
+  options.radial_points = 32;
+  options.angular_polar = 10;
+  options.angular_azimuth = 20;
+  options.partition_iterations = 2;
+  options.coincident_tolerance = 1e-12;
+  options.tile_points = 31;
+  options.xc_execution_schedule = VIBEQC_XC_EXECUTION_HOST_UNFUSED;
+  options.spin_channels = 1;
+  options.semilocal_components = components.data();
+  options.semilocal_component_count = components.size();
+  options.semilocal_program = &program;
+  method.ks_options = &options;
+
+  vibeqc_calculation* calculation = nullptr;
+  require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
+              VIBEQC_STATUS_SUCCESS &&
+              calculation != nullptr,
+          "generic semilocal point-program CPU preparation failed");
+  vibeqc_result_descriptor result{
+      sizeof(vibeqc_result_descriptor), VIBEQC_ABI_VERSION, 0.0, nullptr, 0, 0, 0.0, 0.0, 0,
+      VIBEQC_BACKEND_CPU_REFERENCE};
+  require(vibeqc_calculation_execute(calculation, &result) == VIBEQC_STATUS_SUCCESS &&
+              result.converged == 1 && std::isfinite(result.energy),
+          "generic semilocal point-program CPU execution failed");
+  const double energy = result.energy;
+  require(vibeqc_calculation_execute(calculation, &result) == VIBEQC_STATUS_SUCCESS &&
+              result.converged == 1 && std::abs(result.energy - energy) < 1e-11,
+          "generic semilocal point-program replay changed the endpoint");
+  std::array<double, 6> forces{};
+  result.forces = forces.data();
+  result.force_count = forces.size();
+  require(vibeqc_calculation_execute(calculation, &result) == VIBEQC_STATUS_NOT_IMPLEMENTED,
+          "generic semilocal point-program silently widened force capability");
+  const char* detail = vibeqc_context_get_last_detail(fixture.context);
+  require(detail != nullptr && std::string(detail).find("#1122") != std::string::npos,
+          "generic semilocal force rejection omitted the #1122 boundary");
+  vibeqc_calculation_destroy(calculation);
+
+  auto mismatched = program;
+  mismatched.identifier = "DIFFERENT_COMPONENT";
+  options.semilocal_program = &mismatched;
+  calculation = nullptr;
+  require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
+              VIBEQC_STATUS_INVALID_ARGUMENT &&
+              calculation == nullptr,
+          "generic semilocal point-program accepted component identity drift");
 }
 
 void ks_option_semantic_plan() {
@@ -425,6 +515,7 @@ int main() {
   try {
     ks_short_method_descriptor_rejected();
     ks_option_snapshot();
+    generic_semilocal_point_program_cpu();
     ks_option_semantic_plan();
     pbe0_composition_snapshot();
     warm_preparation_failure(false);
