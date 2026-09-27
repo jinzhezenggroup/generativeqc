@@ -7,15 +7,18 @@ from pathlib import Path
 
 import numpy as np
 from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from vibeqc_compiler.integral.derivative_aot_registry import (
+    select_packaged_component_derivative_aot,
+)
 from vibeqc_compiler.integral.first_derivative_schedule import (
     COMPONENT_LABELS,
     CPU_AOT_SHARDS,
     REQUESTS_PER_UNIT,
-    cpu_aot_symbol,
     derivative_binding,
     derivative_requests,
     derivative_sources,
 )
+from vibeqc_compiler.integral.range_separation import CoulombKernel
 
 
 def _configure_dispatch(call: typing.Any) -> typing.Any:
@@ -30,16 +33,14 @@ def _configure_dispatch(call: typing.Any) -> typing.Any:
 
 
 def _packaged_aot_dispatchers(library: typing.Any) -> tuple[typing.Any, ...]:
-    if library is None:
+    selected = select_packaged_component_derivative_aot(
+        library,
+        backend="cpu",
+        radial=CoulombKernel("full_range", 0.0),
+    )
+    if selected is None:
         return ()
-    dispatchers = []
-    for shard in range(CPU_AOT_SHARDS):
-        try:
-            call = getattr(library, cpu_aot_symbol(shard))
-        except AttributeError:
-            return ()
-        dispatchers.append(_configure_dispatch(call))
-    return tuple(dispatchers)
+    return tuple(_configure_dispatch(call) for call in selected.symbols)
 
 
 class ComponentPrimitiveExecutor:
