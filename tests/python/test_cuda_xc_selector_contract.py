@@ -146,11 +146,8 @@ def test_resident_nonlocal_seed_handoff_uses_device_pointer_and_stride() -> None
         )
 
 
-def test_pbe_d4_selector_also_returns_builtin_integer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(ks, "_is_pbe_d4_composition", lambda _: True)
-    code = ks._native_semilocal_code(object())
+def test_pbe_d4_selector_also_returns_builtin_integer() -> None:
+    code = ks._native_semilocal_code(resolve_method("PBE-D4(BJ-EEQ-ATM)"))
     assert type(code) is int and code == 1
     assert _functional_code(code, None) == 1
 
