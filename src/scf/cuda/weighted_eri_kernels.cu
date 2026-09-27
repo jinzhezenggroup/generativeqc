@@ -1,8 +1,8 @@
 #include <cmath>
 #include <weighted_eri.cuh>
 
+#include "generated_direct_cartesian.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_cartesian.cuh"
 #include "scf/cuda/scalar_math.cuh"
 #include "scf/cuda/weighted_eri_kernels.hpp"
 
