@@ -14,6 +14,7 @@ from .first_derivative_native import (
     emit_first_derivative_cpu,
     emit_first_derivative_cuda,
 )
+from .range_separation import CoulombKernel
 
 AXES = tuple(permutations(range(3)))
 ERI_CENTERS = eri_weight_orbit((0, 1, 2, 3))
@@ -29,6 +30,11 @@ DISPATCH_WIDTH = 9
 CPU_AOT_COMPONENTS = COMPONENT_LABELS
 CPU_AOT_SHARDS = 46
 CPU_AOT_SYMBOL_PREFIX = "vibeqc_first_derivative_cpu_shard_"
+CPU_RSH_AOT_COMPONENTS = ("", "x", "y", "z")
+CPU_RSH_AOT_OMEGA = 0.3
+CPU_RSH_AOT_SHARDS = 4
+CPU_RSH_AOT_FAMILIES = ("short_range", "long_range")
+CPU_RSH_AOT_SYMBOL_PREFIX = "vibeqc_wb97mv_"
 
 
 @dataclass(frozen=True)
@@ -143,6 +149,42 @@ def derivative_cpu_aot_sources() -> tuple[
         units.append((selected, source))
     if len(units) != CPU_AOT_SHARDS:
         raise RuntimeError("stationary CPU derivative AOT shard contract drift")
+    return tuple(units)
+
+
+def cpu_rsh_aot_symbol(family: str, shard: int) -> str:
+    if family not in CPU_RSH_AOT_FAMILIES:
+        raise ValueError("CPU RSH derivative AOT family is unsupported")
+    if type(shard) is not int or not 0 <= shard < CPU_RSH_AOT_SHARDS:
+        raise ValueError("CPU RSH derivative AOT shard is out of range")
+    return f"{CPU_RSH_AOT_SYMBOL_PREFIX}{family}_cpu_shard_{shard}"
+
+
+@lru_cache(maxsize=2)
+def derivative_cpu_rsh_aot_sources(
+    family: str,
+) -> tuple[tuple[tuple[DerivativeRequest, ...], str], ...]:
+    """Emit the fixed WB97M-V s/p SR/LR CPU derivative inventories."""
+
+    if family not in CPU_RSH_AOT_FAMILIES:
+        raise ValueError("CPU RSH derivative AOT family is unsupported")
+    kernel = CoulombKernel(family, CPU_RSH_AOT_OMEGA)
+    requests = derivative_requests(CPU_RSH_AOT_COMPONENTS)
+    units, total = [], 0
+    for shard, begin in enumerate(range(0, len(requests), REQUESTS_PER_UNIT)):
+        selected = requests[begin : begin + REQUESTS_PER_UNIT]
+        source = emit_first_derivative_cpu(
+            selected,
+            symbol=cpu_rsh_aot_symbol(family, shard),
+            coulomb_kernel=kernel,
+        )
+        size = len(source.encode("utf-8"))
+        total += size
+        if size > MAX_UNIT_BYTES or total > MAX_PROGRAM_BYTES:
+            raise ValueError("range-separated first derivative source budget exceeded")
+        units.append((selected, source))
+    if len(units) != CPU_RSH_AOT_SHARDS:
+        raise RuntimeError("stationary CPU RSH derivative AOT shard contract drift")
     return tuple(units)
 
 
