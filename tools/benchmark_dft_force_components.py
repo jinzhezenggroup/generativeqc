@@ -38,7 +38,14 @@ def _metadata(record: Mapping[str, typing.Any]) -> dict[str, typing.Any]:
         "primitive_count",
         "basis",
         "grid",
+        "grid_identity",
         "endpoint",
+        "selector",
+        "mode",
+        "density_fitting",
+        "method_identity",
+        "ks_options_identity",
+        "library_sha256",
     )
     return {key: record[key] for key in keys if key in record}
 
@@ -145,6 +152,9 @@ def _matrix_records(
                 "atoms",
                 "basis",
                 "density_fitting",
+                "method_identity",
+                "ks_options_identity",
+                "library_sha256",
             )
             if key in case
         }
