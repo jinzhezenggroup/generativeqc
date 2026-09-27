@@ -141,6 +141,42 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
     assert executor.compilation_work["component_contract_runtime_compilations"] == 0
     assert len(executor.dispatchers) == schedule.CPU_AOT_SHARDS
 
+    # The packaged inventory is the full qualified domain, so an s/p-only
+    # basis must select the corresponding full-domain kinds rather than
+    # regenerating a smaller runtime program.
+    subset_labels = ("", "x", "y", "z")
+    subset_aos = []
+    subset_primitives = []
+    for index, label in enumerate(subset_labels):
+        powers = [label.count(axis) for axis in "xyz"]
+        row = [0.0] * 16
+        row[:4] = [0, index, 1, 1]
+        row[4:7] = powers
+        row[7] = 1.0
+        subset_aos.extend(row)
+        subset_primitives.extend((0.7 + 0.01 * index, 1.0))
+    subset_basis = SimpleNamespace(
+        natom=1,
+        nprimitive=len(subset_labels),
+        shells=(
+            SimpleNamespace(angular_momentum=0),
+            SimpleNamespace(angular_momentum=1),
+        ),
+        packed=np.asarray(
+            [0.0, 0.0, 0.0, *subset_primitives, *subset_aos], dtype=float
+        ),
+    )
+    subset = streaming_module.CompiledComponentExecutor(
+        subset_basis,
+        tmp_path,
+        1,
+        None,  # type: ignore[arg-type]
+        aot_library=library,
+    )
+    assert subset.compilation_work["primitive_packaged_aot"] == 1
+    assert subset.compilation_work["primitive_runtime_compilations"] == 0
+    assert subset.compilation_work["component_contract_runtime_compilations"] == 0
+
 
 def test_native_library_exports_stationary_cpu_aot() -> None:
     path = os.environ.get("VIBEQC_LIBRARY")
