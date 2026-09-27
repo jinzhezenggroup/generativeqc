@@ -28,10 +28,6 @@ LEGACY_MODULE_FILES = {
 # always allowed. Adding a new edge fails CI and therefore cannot silently turn
 # a qualification oracle back into a production compatibility backend.
 LEGACY_CONSUMER_CEILING = {
-    (
-        "python/vibeqc_compiler/xc/expression_dispatch.py",
-        "vibeqc_compiler.xc.rsh_expressions",
-    ),
     ("tests/python/test_libxc_maple_pw91.py", "vibeqc_compiler.xc.rsh_expressions"),
     ("tests/python/test_libxc_maple_lyp.py", "vibeqc_compiler.xc.rsh_expressions"),
     # Qualification oracles already present in the integration base (6b965bd7).
