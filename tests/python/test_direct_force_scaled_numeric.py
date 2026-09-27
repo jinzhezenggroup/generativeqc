@@ -61,7 +61,7 @@ def coefficient_library(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         "#include <cstddef>\n#include <cstdint>\n"
         "#define __device__\n#define __forceinline__ inline\n"
         + _emitted_scalar_source()
-        + '''
+        + """
 extern "C" double scaled(int unrestricted, const double* density,
     std::size_t n, std::size_t i, std::size_t j, std::size_t k, std::size_t l,
     double coulomb, double exchange) {
@@ -75,7 +75,7 @@ extern "C" double scaled(int unrestricted, const double* density,
       : generated_dppp_density_coefficient_scaled<false>(
           task, i, j, k, l, density, coulomb, exchange);
 }
-''',
+""",
         encoding="utf-8",
     )
     subprocess.run(
