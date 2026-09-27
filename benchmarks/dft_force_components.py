@@ -33,7 +33,7 @@ def _finite_nonnegative(value: typing.Any, *, field: str) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool):
-        raise ValueError(f"{field} must be a duration/count, not bool")
+        raise TypeError(f"{field} must be a duration/count, not bool")
     result = float(value)
     if not math.isfinite(result) or result < 0.0:
         raise ValueError(f"{field} must be finite and nonnegative")
@@ -61,7 +61,7 @@ def _int_or_none(value: typing.Any) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool):
-        raise ValueError("work counter must not be bool")
+        raise TypeError("work counter must not be bool")
     result = int(value)
     if result < 0:
         raise ValueError("work counter must be nonnegative")
