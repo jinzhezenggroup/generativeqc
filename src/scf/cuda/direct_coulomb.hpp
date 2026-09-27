@@ -50,9 +50,9 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
                                       const double* beta, double* coulomb);
 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
- * It is prepared only for callers that explicitly request generated full-range
- * exchange. Density screening uses the same shell-pair reductions as Direct HF;
- * no range-separated operator is represented here.
+ * Value-only direct CUDA plans prefer this owner when the supported shell
+ * classes and optional device budget admit it. Density screening uses the same
+ * shell-pair reductions as Direct HF; no range-separated operator is represented here.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
