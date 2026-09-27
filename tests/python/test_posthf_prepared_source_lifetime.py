@@ -15,6 +15,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
+#include <chrono>
 #include <cstddef>
 #include <cstdlib>
 #include <limits>
@@ -151,15 +152,13 @@ int main(int argc,char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("mode", range(7))
-def test_posthf_source_lifetime_matches_retained_budget(
-    source_probe: Path, mode: int
-) -> None:
-    process = subprocess.run(
-        [str(source_probe), str(mode)],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    assert process.returncode == 0, (mode, process.returncode, process.stderr)
+def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
+    for mode in range(7):
+        process = subprocess.run(
+            [str(source_probe), str(mode)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert process.returncode == 0, (mode, process.returncode, process.stderr)
