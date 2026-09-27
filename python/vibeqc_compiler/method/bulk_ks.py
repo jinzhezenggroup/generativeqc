@@ -30,7 +30,7 @@ from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 from .ks_execution import KsExecutionPlan, compile_ks_execution_plan
 from .spec import MethodIR, SemilocalXCPrimitive, UnsupportedMethod
 
-BULK_KS_RESOLUTION_SCHEMA = "vibeqc.bulk-libxc-ks-resolution.v3"
+BULK_KS_RESOLUTION_SCHEMA = "vibeqc.bulk-libxc-ks-resolution.v2"
 _CPU_EXECUTION_STAGES = ("compiled-cpu", "production-domain")
 _SUPPORTED_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
 
