@@ -812,10 +812,11 @@ __device__ __forceinline__ bool generated_dppp_unique_permutation(
 }}
 
 template <bool Unrestricted>
-__device__ __forceinline__ double generated_dppp_density_coefficient(
+__device__ __forceinline__ double generated_dppp_density_coefficient_scaled(
     const GeneratedDpppShellTask& task,
     std::size_t i, std::size_t j, std::size_t k, std::size_t l,
-    const double* density) {{
+    const double* density, double coulomb_coefficient,
+    double exchange_coefficient) {{
   const std::size_t n = static_cast<std::size_t>(task.matrix_order);
   const std::size_t matrix_size = n * n;
   const std::size_t ij = generated_dppp_matrix_index(i, j, n);
@@ -825,12 +826,10 @@ __device__ __forceinline__ double generated_dppp_density_coefficient(
   const std::size_t il = generated_dppp_matrix_index(i, l, n);
   const std::size_t jk = generated_dppp_matrix_index(j, k, n);
 
-  // SCF densities are symmetrized before entering direct J/K.  Under that
+  // SCF densities are symmetrized before entering direct J/K. Under that
   // invariant the eight ERI permutations collapse exactly to two exchange
-  // products and one Coulomb product.  Degenerate AO pairs reduce the orbit
-  // by one half each; retaining these factors preserves the old unique-
-  // permutation semantics without executing its nested comparison loop for
-  // every Cartesian component.
+  // products and one Coulomb product. Keep the J/K coefficients explicit so
+  // composed mean-field methods can reuse this exact-class force schedule.
   double orbit_scale = i == j ? 0.5 : 1.0;
   if (k == l) orbit_scale *= 0.5;
   if ((i == k && j == l) || (i == l && j == k)) orbit_scale *= 0.5;
@@ -842,22 +841,35 @@ __device__ __forceinline__ double generated_dppp_density_coefficient(
     const double beta_kl =
         density[task.spin_offset + matrix_size + kl];
     const double coulomb =
-        4.0 * (alpha_ij + beta_ij) * (alpha_kl + beta_kl);
-    const double exchange = 2.0 * (
+        4.0 * coulomb_coefficient *
+        (alpha_ij + beta_ij) * (alpha_kl + beta_kl);
+    const double exchange = 2.0 * exchange_coefficient * (
         density[task.spin_offset + ik] * density[task.spin_offset + jl] +
         density[task.spin_offset + il] * density[task.spin_offset + jk] +
         density[task.spin_offset + matrix_size + ik] *
             density[task.spin_offset + matrix_size + jl] +
         density[task.spin_offset + matrix_size + il] *
             density[task.spin_offset + matrix_size + jk]);
-    return orbit_scale * (coulomb - exchange);
+    return orbit_scale * (coulomb + exchange);
   }} else {{
     const std::size_t offset = task.density_offset;
     return orbit_scale * (
-        4.0 * density[offset + ij] * density[offset + kl] -
-        density[offset + ik] * density[offset + jl] -
-        density[offset + il] * density[offset + jk]);
+        4.0 * coulomb_coefficient *
+            density[offset + ij] * density[offset + kl] +
+        2.0 * exchange_coefficient * (
+            density[offset + ik] * density[offset + jl] +
+            density[offset + il] * density[offset + jk]));
   }}
+}}
+
+template <bool Unrestricted>
+__device__ __forceinline__ double generated_dppp_density_coefficient(
+    const GeneratedDpppShellTask& task,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    const double* density) {{
+  constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;
+  return generated_dppp_density_coefficient_scaled<Unrestricted>(
+      task, i, j, k, l, density, 1.0, exchange_coefficient);
 }}
 
 /** Combine two reusable shell-pair records into one primitive quartet. */
