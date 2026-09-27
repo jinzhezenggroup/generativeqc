@@ -5,7 +5,6 @@ from __future__ import annotations
 import typing
 
 from . import libxc_bulk
-from .libxc_blacklist import blacklist_reason
 from .rsh_expressions import energy_expression as rsh_energy_expression
 from .semilocal_family import energy_expression as semilocal_energy_expression
 from .spec import (
@@ -20,9 +19,10 @@ from .wb97mv_maple import energy_expression as wb97mv_energy_expression
 def build_pointwise_energy_expression(spec: typing.Any) -> typing.Any:
     """Bridge one automatic Libxc Graph into shared native pointwise lowering.
 
-    This is deliberately representation-only.  It does not grant production-domain,
-    molecular-SCF, force, or public-method capability; the ordinary runtime builder
-    remains fail-closed until separate admission evidence exists.
+    This is deliberately the interior mathematical kernel. Physical zero-spin,
+    zero-gradient, density-tail, and tau boundaries belong to libxc_work.
+    Native/public execution must evaluate derivatives at work coordinates rather
+    than differentiating through the work transformation.
     """
     active = tuple(
         (name, coefficient) for name, coefficient in spec.components if coefficient
@@ -61,12 +61,6 @@ def build_energy_expression(
         if len(automatic) != 1:
             raise UnsupportedXC(
                 "automatic Libxc lowering currently requires one functional component"
-            )
-        name = next(iter(automatic))
-        reason = blacklist_reason(name)
-        if reason is not None:
-            raise UnsupportedXC(
-                f"automatic Libxc functional {name} is blacklisted: {reason}"
             )
         return build_pointwise_energy_expression(spec)
     if active & set(WB97MV_COMPONENTS):

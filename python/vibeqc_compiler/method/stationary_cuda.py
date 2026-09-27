@@ -353,6 +353,14 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
                                 const double* raw, const double* external,
                                 double* partial, double* scratch, int* error) {
   const size_t lane = threadIdx.x;
+  // Same-stream consumers may receive a resident grid tile before a host
+  // error publication gate. Propagate the producer's sticky device status into
+  // the stationary owner before reading AO/features so one later drain can
+  // validate both stages without duplicating scientific arithmetic.
+  if (view.error && *view.error) {
+    if (lane == 0) atomicExch(error, 1);
+    return;
+  }
   const size_t np = view.npoint, n = view.nactive, stride = np * n;
   double* grad = partial + lane * 9 * na;
   for (size_t k = 0; k < 9 * na; ++k) grad[k] = 0;

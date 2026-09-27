@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "scf/cuda/direct_native_contraction.cuh"
+#include "generated_direct_contraction.cuh"
 #include "scf/cuda/direct_reference_force.hpp"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"

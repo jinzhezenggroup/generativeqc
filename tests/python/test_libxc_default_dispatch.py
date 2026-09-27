@@ -17,11 +17,14 @@ def test_automatic_libxc_uses_generic_lowering_without_opt_in() -> None:
     assert isinstance(identity, str) and len(identity) == 64
 
 
-def test_blacklisted_automatic_libxc_is_rejected_by_default_dispatch() -> None:
-    spec = functional("GGA_C_AM05", spin="polarized")
+@pytest.mark.parametrize("name", ("GGA_C_AM05", "GGA_X_AK13"))
+def test_shared_boundary_cases_still_lower_to_interior_graph(name: str) -> None:
+    spec = functional(name, spin="polarized")
+    graph, energy, variables = build_energy_expression(spec)
 
-    with pytest.raises(UnsupportedXC, match="blacklisted"):
-        build_energy_expression(spec)
+    assert graph is not None
+    assert energy is not None
+    assert len(variables) == len(spec.features)
 
 
 def test_automatic_libxc_cannot_mix_with_curated_family() -> None:
@@ -38,7 +41,7 @@ def test_automatic_libxc_cannot_mix_with_curated_family() -> None:
         build_energy_expression(spec)
 
 
-def test_explicit_pointwise_path_can_retest_blacklisted_functional() -> None:
+def test_explicit_pointwise_path_remains_representation_only() -> None:
     spec = functional("GGA_C_AM05", spin="polarized")
     graph, roots, identity = build_roots(
         spec,
