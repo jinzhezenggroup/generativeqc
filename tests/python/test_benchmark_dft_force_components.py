@@ -90,3 +90,56 @@ def test_extract_wb97mv_uses_latest_cumulative_force_work() -> None:
     assert rows[0]["metadata"]["atoms"] == 3
     assert rows[0]["components"]["endpoint_seconds"] == 5.0
     assert rows[0]["components"]["wall_seconds"]["vv10_rvv10"] == 0.9
+
+
+def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
+    force_components = {
+        "schema": "vibeqc.dft-force-components.v1",
+        "source_route": "stationary-exclusive-wall",
+        "wall_seconds": {"stationary_integral_derivatives": 0.4},
+        "profiled_ms": {},
+        "coverage": {
+            "wall_seconds": ["stationary_integral_derivatives"],
+            "profiled_ms": [],
+            "missing_wall_seconds": ["scf_fock_j"],
+        },
+    }
+    scf_profile = {
+        "schema": "vibeqc.dft-scf-components.v1",
+        "profiled_ms": {"scf_fock_j": 2.0},
+        "expected_components": ["scf_fock_j", "semilocal_ao_grid_xc"],
+        "missing_expected_components": ["semilocal_ao_grid_xc"],
+    }
+    payload = {
+        "schema": "vibeqc.dft-force-matrix.v1",
+        "records": [
+            {
+                "status": "measured",
+                "method": "pbe-rks",
+                "selector": "pbe-rks",
+                "system": "water-3",
+                "atoms": 3,
+                "basis": "def2-svp",
+                "density_fitting": "none",
+                "cold": {
+                    "scenario": "cold",
+                    "force_components": force_components,
+                },
+                "warm": [],
+                "scf_profile": {
+                    "status": "measured",
+                    "profile": scf_profile,
+                    "trace": {"path": "trace.jsonl", "sha256": "abc"},
+                },
+            }
+        ],
+    }
+
+    rows = extract_records(payload)
+
+    assert len(rows) == 2
+    assert rows[0]["metadata"]["scenario"] == "cold"
+    assert rows[0]["components"]["schema"] == "vibeqc.dft-force-components.v1"
+    assert rows[1]["metadata"]["scenario"] == "diagnostic_scf_profile"
+    assert rows[1]["scf_profile"]["profiled_ms"]["scf_fock_j"] == 2.0
+    assert "components" not in rows[1]
