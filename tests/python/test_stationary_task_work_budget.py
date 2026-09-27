@@ -25,7 +25,7 @@ def _block(source: str, marker: str) -> str:
 
 
 @pytest.mark.parametrize("method", ("PBE", "PBE0"))
-def test_native_task_budget_is_per_reset_not_cumulative(
+def test_native_task_budget_is_per_page_not_cumulative(
     tmp_path: Path, method: str
 ) -> None:
     compiler = shutil.which("c++")
@@ -138,39 +138,39 @@ template<class T> void finished(T&,void*) {
 
 MAIN = r"""
 int main() {
-  Owner p; p.atoms=2; p.aos=2; p.spin_blocks=1; p.task_capacity=1; p.max_primitive_work=7;
+  Owner p; p.atoms=2; p.aos=2; p.spin_blocks=1; p.task_capacity=1; p.max_page_primitive_work=7;
   p.topology_ready=true;
   double xyz[6]{0,0,0,1,0,0}, density[4]{}, weighted[4]{}, charges[1]{1}; char error[256]{};
   int64_t task[9]{0,0,2,-1,0,1,-1,-1,7};
   auto reset=[&](){return stationary_reset(&p,xyz,density,weighted,0,error,sizeof(error));};
   auto page=[&](){return stationary_tasks(&p,task,charges,1,error,sizeof(error));};
-  for(int epoch=0; epoch<2; ++epoch) {
-    if(reset() || page()) {std::fprintf(stderr,"legal replay rejected: %s\n",error); return 1;}
-    if(p.primitive_count!=uint64_t((epoch+1)*7)) return 2;
-    if(page()==0) return 3;
+  if(reset() || page() || page()) {
+    std::fprintf(stderr,"legal bounded pages rejected: %s\n",error); return 1;
   }
-  if(reset()) return 4;
+  if(p.primitive_count!=14) return 2;
+  task[8]=8;
+  if(page()==0 || !p.failed || p.primitive_count!=14) return 3;
   task[8]=3; fail_finish=true;
-  if(page()==0 || !p.failed || p.primitive_count!=17) return 5;
+  if(reset()) return 4;
+  if(page()==0 || !p.failed || p.primitive_count!=14) return 5;
   task[8]=7;
-  if(reset() || page() || p.primitive_count!=24) return 6;
+  if(reset() || page() || p.primitive_count!=21) return 6;
   if(reset()) return 7;
-  for(int i=0;i<7;++i)
+  for(int i=0;i<8;++i)
     if(stationary_nuclear(&p,0,0,1,1,1,error,sizeof(error))) return 8;
-  if(stationary_nuclear(&p,0,0,1,1,1,error,sizeof(error))==0) return 9;
-  if(p.primitive_count!=31) return 10;
+  if(p.primitive_count!=29) return 9;
   p.primitive_count=std::numeric_limits<uint64_t>::max()-1;
-  if(reset()) return 11;
+  if(reset()) return 10;
   task[8]=2;
-  if(page()==0 || p.primitive_count!=std::numeric_limits<uint64_t>::max()-1) return 12;
+  if(page()==0 || p.primitive_count!=std::numeric_limits<uint64_t>::max()-1) return 11;
   // Descriptor source IDs are signed 64-bit values. Narrowing before admission
   // would alias these invalid values to the valid one-electron source.
   p.primitive_count=0;
   task[8]=1;
   for(int64_t source : {int64_t(1)<<32, -(int64_t(1)<<32), int64_t(-1)}) {
-    if(reset()) return 13;
+    if(reset()) return 12;
     task[1]=source;
-    if(page()==0 || !p.failed || p.primitive_count!=0) return 14;
+    if(page()==0 || !p.failed || p.primitive_count!=0) return 13;
   }
 }
 """
