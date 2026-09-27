@@ -105,19 +105,23 @@ class Mp2Prepared final : public PreparedCalculation {
       // alive when present so correlation can borrow its already-built ERIs.
       hf.density.clear();
       hf.density.shrink_to_fit();
-      posthf::RawSource source(system_, auxiliary_ ? &*auxiliary_ : nullptr);
+      std::unique_ptr<posthf::RawSource> raw_source;
+      if (!prepared_exact || density_fitted_ || compute_forces)
+        raw_source =
+            std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
       std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
-      const integrals::ElectronInteractionSource* conventional_source = &source;
+      const integrals::ElectronInteractionSource* conventional_source = raw_source.get();
       if (prepared_exact) {
         prepared_source.emplace(*prepared_exact);
         conventional_source = &*prepared_source;
       }
       const auto corr =
-          density_fitted_ ? mp2::density_fitted_energy(ref, source, budget_, threshold_,
-                                                       options_.density_fitting_relative_threshold,
-                                                       8, fitted_cuda_, context_.device_id)
-                          : mp2::conventional_energy(ref, *conventional_source, budget_, threshold_,
-                                                     8, cuda, context_.device_id);
+          density_fitted_
+              ? mp2::density_fitted_energy(ref, *raw_source, budget_, threshold_,
+                                           options_.density_fitting_relative_threshold, 8,
+                                           fitted_cuda_, context_.device_id)
+              : mp2::conventional_energy(ref, *conventional_source, budget_, threshold_, 8, cuda,
+                                         context_.device_id);
       Result result;
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
@@ -131,12 +135,12 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.max_workspace_bytes = budget_;
         force_diagnostic =
             density_fitted_
-                ? mp2::density_fitted_force_cpu(ref, source, budget_, threshold_,
+                ? mp2::density_fitted_force_cpu(ref, *raw_source, budget_, threshold_,
                                                 options_.density_fitting_relative_threshold, 1e-10,
                                                 response_options)
-                : (cuda ? mp2::conventional_force_cuda(ref, source, budget_, threshold_, 1e-10,
-                                                       response_options, context_.device_id)
-                        : mp2::conventional_force_cpu(ref, source, budget_, threshold_, 1e-10,
+                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, budget_, threshold_,
+                                                       1e-10, response_options, context_.device_id)
+                        : mp2::conventional_force_cpu(ref, *raw_source, budget_, threshold_, 1e-10,
                                                       response_options));
         result.forces = force_diagnostic->forces;
       }
