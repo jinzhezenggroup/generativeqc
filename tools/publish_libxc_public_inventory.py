@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.xc.public_inventory import INVENTORY_SCHEMA, REQUIRED_STAGES
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from vibeqc_compiler.xc.public_inventory import INVENTORY_SCHEMA, REQUIRED_STAGES
 
 
 def publish(campaign: Path, revision: str, output: Path) -> dict:
@@ -23,7 +23,10 @@ def publish(campaign: Path, revision: str, output: Path) -> dict:
         raise ValueError("unsupported broad Libxc campaign schema")
     records = {}
     for row in summary.get("functionals", ()):
-        if row.get("status") != "pass" or row.get("stages", {}).get("public-method") != "pass":
+        if (
+            row.get("status") != "pass"
+            or row.get("stages", {}).get("public-method") != "pass"
+        ):
             continue
         name = row["name"]
         stages = {}
@@ -35,8 +38,13 @@ def publish(campaign: Path, revision: str, output: Path) -> dict:
                 raise ValueError(f"{name} {stage} omitted stage_evidence")
             stages[stage] = envelope
         capability = functional_capability(name, evidence=stages)
-        if capability.identity != row.get("capability_identity") or not capability.public_dft:
-            raise ValueError(f"{name} campaign evidence does not revalidate on this tree")
+        if (
+            capability.identity != row.get("capability_identity")
+            or not capability.public_dft
+        ):
+            raise ValueError(
+                f"{name} campaign evidence does not revalidate on this tree"
+            )
         records[name] = {
             "capability_identity": capability.identity,
             "family": capability.family,
@@ -59,7 +67,9 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     payload = publish(args.campaign, args.revision, args.output)
-    print(f"retained {len(payload['functionals'])} public Libxc CPU functionals -> {args.output}")
+    print(
+        f"retained {len(payload['functionals'])} public Libxc CPU functionals -> {args.output}"
+    )
     return 0
 
 
