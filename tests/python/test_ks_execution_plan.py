@@ -120,10 +120,15 @@ def test_public_dft_aliases_resolve_without_becoming_duplicate_catalog_rows() ->
     assert selector not in public_dft_selectors()
 
 
-def test_public_dft_discovery_remains_fail_closed_on_missing_native_lowerer() -> None:
-    assert "scan-rks" not in public_dft_selectors()
+def test_public_dft_discovery_tracks_current_native_lowerers() -> None:
+    assert "scan-rks" in public_dft_selectors()
+    scan, functional = resolve_ks_method("scan-rks")
+    assert scan.identifier == "SCAN"
+    assert functional.spin == "unpolarized"
+
+    assert "cam-b3lyp-rks" not in public_dft_selectors()
     with pytest.raises(NotImplementedError, match="qualified lowerer"):
-        resolve_ks_method("scan-rks")
+        resolve_ks_method("cam-b3lyp-rks")
 
 
 def test_execution_plan_rejects_cross_primitive_omega_drift() -> None:
