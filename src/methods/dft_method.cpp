@@ -18,6 +18,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_method_parameters.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
@@ -62,6 +63,7 @@ struct NativeKsExecutionPlan {
   double range_omega{};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
+  const dft::SemilocalPointProgram* automatic_program{};
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method method) noexcept {
@@ -98,6 +100,7 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method meth
 bool unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
 
 std::uint32_t scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.automatic_program) return plan.automatic_program->domain_version;
   return plan.generated_split_hybrid ? 4U
                                      : dft::semilocal_family_domain_version(plan.semilocal_family);
 }
@@ -107,6 +110,7 @@ std::uint32_t xc_functional_code(const NativeKsExecutionPlan& plan) noexcept {
 }
 
 const char* semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.automatic_program) return plan.automatic_program->identifier;
   return plan.generated_split_hybrid ? "generated split global hybrid"
                                      : dft::semilocal_family_name(plan.semilocal_family);
 }
@@ -134,6 +138,7 @@ struct SemilocalAdmission {
   double correlation_scale{1.0};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
+  const dft::SemilocalPointProgram* automatic_program{};
 };
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const vibeqc_ks_options& input) {
@@ -174,6 +179,20 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
 
   if (auto curated = admit_curated_semilocal(input)) return *curated;
 
+  if (input.semilocal_component_count == 1 && input.semilocal_range_omega == 0.0) {
+    const auto& component = input.semilocal_components[0];
+    if (!component.component_id || !*component.component_id ||
+        !std::isfinite(component.coefficient) || component.coefficient < 0.0)
+      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid KS semilocal component");
+    if (component.coefficient == 1.0) {
+      const auto automatic =
+          dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
+      if (automatic)
+        return {dft::SemilocalFamily::Lda, 1.0,   1.0,
+                automatic.functional_code, false, automatic.program};
+    }
+  }
+
 #if VIBEQC_HAS_CUDA
   if (input.semilocal_component_count == 2 && input.semilocal_range_omega == 0.0) {
     const auto& first = input.semilocal_components[0];
@@ -192,6 +211,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
@@ -227,6 +247,12 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
                       descriptor.method == VIBEQC_METHOD_PBE_D4_RKS};
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
+    execution_plan.automatic_program = semilocal.automatic_program;
+    if (execution_plan.automatic_program &&
+        (backend != VIBEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
+         ks_input->has_nonlocal_correlation != 0))
+      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+                        "automatic Libxc semilocal KS currently requires pure CPU execution");
     if (execution_plan.generated_split_hybrid && backend != VIBEQC_BACKEND_CUDA)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -912,7 +938,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const char* method_name = semilocal_family_name(execution_plan_);
     if (compute_forces) {
       const char* issue =
-          execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164" : "#163";
+          execution_plan_.automatic_program
+              ? "#1122"
+              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
+                                                                                  : "#163");
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
@@ -967,10 +996,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // last-good density, which coexists with its current/proposed densities.
     runtime::CpuRetainedCapacity retained_warm(runtime::vector_bytes(warm_));
     scf::ScfResult native;
-    if (execution_plan_.generated_split_hybrid)
+    if (execution_plan_.automatic_program) {
+      native = unrestricted(execution_plan_)
+                   ? scf::run_semilocal_uks(fock_, basis_, grid_, options_,
+                                            *execution_plan_.automatic_program, seed)
+                   : scf::run_semilocal_rks(fock_, basis_, grid_, options_,
+                                            *execution_plan_.automatic_program, seed);
+    } else if (execution_plan_.generated_split_hybrid)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
-    if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+    else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
       if (!range_correction_ || !nonlocal_)
         throw std::runtime_error("WB97M-V requires both range-exchange and nonlocal owners");
       native = unrestricted(execution_plan_)

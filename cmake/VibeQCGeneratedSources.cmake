@@ -205,6 +205,37 @@ macro(vibeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/semilocal_codegen.py"
     ARGS --output "${VIBEQC_XC_CPU_HEADER}")
 
+  set(VIBEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/libxc_semilocal_cpu")
+  set(VIBEQC_LIBXC_SEMILOCAL_CPU_SOURCES
+      "${VIBEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}/generated_libxc_semilocal_registry.hpp"
+      "${VIBEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}/generated_libxc_semilocal_registry.cpp")
+  foreach(_vibeqc_libxc_semilocal_shard RANGE 0 7)
+    list(APPEND VIBEQC_LIBXC_SEMILOCAL_CPU_SOURCES
+         "${VIBEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}/generated_libxc_semilocal_${_vibeqc_libxc_semilocal_shard}.cpp")
+  endforeach()
+  vibeqc_register_generated_sources(
+    NAME vibeqc_libxc_semilocal_cpu_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
+    OUTPUTS ${VIBEQC_LIBXC_SEMILOCAL_CPU_SOURCES}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/expr.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/scalar_c.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/automatic_semilocal.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/bulk_runtime.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_blacklist.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_bulk.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_bulk_capabilities.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_bulk_catalog.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_maple.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/spec.py"
+    ARGS --output-directory "${VIBEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}"
+    COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+    COMMENT "Generating automatic Libxc CPU semilocal registry")
+
   set(VIBEQC_SCF_ARRAY_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_array_native.hpp")
   vibeqc_register_generated_sources(
