@@ -140,8 +140,7 @@ struct PreparedFockPlan::Impl {
     const bool has_exact = needs(strategy.spec, FockApproximation::Exact);
     if (retained_direct_derivative_order > 1)
       throw std::invalid_argument("prepared Direct Fock derivative capability exceeds first order");
-    if (retained_direct_derivative_order &&
-        (strategy.backend != FockBackend::Cuda || !has_exact))
+    if (retained_direct_derivative_order && (strategy.backend != FockBackend::Cuda || !has_exact))
       throw std::invalid_argument(
           "retained Direct derivative capability requires an exact CUDA provider");
     const auto direct_derivative_order =
@@ -321,7 +320,7 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
                                    ResolvedFockBuild strategy, int device, std::size_t budget,
                                    unsigned retained_direct_derivative_order)
     : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget,
-                                  retained_direct_derivative_order)) {}
+                                   retained_direct_derivative_order)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;

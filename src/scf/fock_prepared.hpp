@@ -100,8 +100,7 @@ class PreparedFockPlan {
    * Convergence thresholds, DIIS history and warm density are deliberately
    * excluded: they do not alter the prepared mathematical operator. */
   bool matches(const core::System& orbital, const core::System* auxiliary,
-               const ResolvedFockBuild& strategy, int device_id,
-               std::size_t device_budget_bytes,
+               const ResolvedFockBuild& strategy, int device_id, std::size_t device_budget_bytes,
                unsigned minimum_direct_derivative_order = 0) const noexcept;
 
  private:

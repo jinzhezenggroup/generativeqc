@@ -81,12 +81,12 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
     detail = "prepared CUDA Fock owner did not retain Direct first-derivative capability";
     return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
-  const bool valid_primary =
-      primary.backend == FockBackend::Cuda && p.derivative_order == 0 && p.coulomb.present &&
-      p.coulomb.approximation == FockApproximation::Exact &&
-      p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
-      p.exchange.approximation == FockApproximation::Exact &&
-      p.exchange.op == FockOperator::FullRange;
+  const bool valid_primary = primary.backend == FockBackend::Cuda && p.derivative_order == 0 &&
+                             p.coulomb.present &&
+                             p.coulomb.approximation == FockApproximation::Exact &&
+                             p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
+                             p.exchange.approximation == FockApproximation::Exact &&
+                             p.exchange.op == FockOperator::FullRange;
   const bool valid_correction =
       long_range_correction.backend == FockBackend::Cuda && c.derivative_order == 0 &&
       c.spin == p.spin && !c.coulomb.present && c.exchange.present &&
@@ -99,8 +99,8 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
   }
   return execute_cuda_direct_rsh_energy_derivatives_item(
       source, 0, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
-      p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
-      derivatives, detail);
+      p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta, derivatives,
+      detail);
 }
 
 vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,

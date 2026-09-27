@@ -312,17 +312,15 @@ void prepared_replay() {
 
 void retained_direct_derivative_reuse() {
   const auto system = fixture(true);
-  const auto strategy =
-      resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
-                         FockBackend::Cuda, 0.0);
-  const auto correction =
-      resolve_fock_build(make_rsh_correction_fock_spec(FockSpin::Restricted, 0.2, 0.5, 0.4),
-                         FockBackend::Cuda, 0.0);
+  const auto strategy = resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
+                                           FockBackend::Cuda, 0.0);
+  const auto correction = resolve_fock_build(
+      make_rsh_correction_fock_spec(FockSpin::Restricted, 0.2, 0.5, 0.4), FockBackend::Cuda, 0.0);
   std::size_t primitives = 0;
   for (const auto& shell : system.shells) primitives += shell.primitives.size();
-  const auto budget = cuda_direct_coulomb_device_bytes(
-      1, vibeqc::molecule::ao_count(system), system.atoms.size(), system.shells.size(), primitives,
-      1);
+  const auto budget =
+      cuda_direct_coulomb_device_bytes(1, vibeqc::molecule::ao_count(system), system.atoms.size(),
+                                       system.shells.size(), primitives, 1);
   PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
   require(plan.strategy().spec.derivative_order == 0,
           "retained derivative capability changed value-side Fock identity");

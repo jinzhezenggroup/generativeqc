@@ -172,11 +172,7 @@ class PreparedWb97mvCudaGradient:
             na + n + basis.nprimitive + len(basis.shells)
         )
         device_bound = (
-            gp.peak_bytes
-            + source_bytes
-            + 48 * tile_points
-            + nlc_budget
-            + native_budget
+            gp.peak_bytes + source_bytes + 48 * tile_points + nlc_budget + native_budget
         )
         host_bound = (
             gp.host_bytes
