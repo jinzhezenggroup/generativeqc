@@ -196,9 +196,8 @@ def _matrix_records(
         if not isinstance(scf_profile, Mapping):
             continue
         profile_status = str(scf_profile.get("status", "unknown"))
-        if (
-            profile_status == "measured"
-            and isinstance(scf_profile.get("profile"), Mapping)
+        if profile_status == "measured" and isinstance(
+            scf_profile.get("profile"), Mapping
         ):
             result.append(
                 {
