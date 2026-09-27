@@ -222,6 +222,7 @@ macro(vibeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/expr.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/scalar_c.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/automatic_semilocal.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/bulk_runtime.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_blacklist.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/libxc_bulk.py"
