@@ -1,0 +1,117 @@
+name: Python free-threaded experiment
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/python-freethreaded.yml"
+      - "tools/benchmark_free_threaded_compiler.py"
+      - "python/vibeqc_compiler/**"
+      - "tests/python/test_compiler_work_budget.py"
+      - "tests/python/test_codegen_ir.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compiler:
+    name: compiler (CPython 3.14 vs 3.14t)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          enable-cache: true
+
+      - name: Create matched CPython 3.14 environments
+        run: |
+          uv python install 3.14
+          uv python install 3.14t
+          uv venv --python 3.14 .venv-gil
+          uv venv --python 3.14t .venv-ft
+          uv pip install --python .venv-gil/bin/python pytest
+          uv pip install --python .venv-ft/bin/python pytest
+
+      - name: Verify GIL variants after compiler import
+        env:
+          PYTHONPATH: python
+        run: |
+          .venv-gil/bin/python - <<'PY'
+          import sys
+          import sysconfig
+          import vibeqc_compiler.integral
+
+          assert sysconfig.get_config_var("Py_GIL_DISABLED") != 1
+          assert sys._is_gil_enabled()
+          print(sys.version)
+          print("GIL enabled:", sys._is_gil_enabled())
+          PY
+          .venv-ft/bin/python - <<'PY'
+          import sys
+          import sysconfig
+          import vibeqc_compiler.integral
+
+          assert sysconfig.get_config_var("Py_GIL_DISABLED") == 1
+          assert not sys._is_gil_enabled()
+          print(sys.version)
+          print("GIL enabled:", sys._is_gil_enabled())
+          PY
+
+      - name: Run free-threaded compiler smoke tests
+        env:
+          PYTHONPATH: python
+        run: |
+          .venv-ft/bin/python -m pytest -q \
+            tests/python/test_compiler_work_budget.py \
+            tests/python/test_codegen_ir.py::test_integral_ir_retains_higher_derivative_intent_until_cuda_boundary \
+            tests/python/test_codegen_ir.py::test_operator_invariant_selects_derivative_recovery_without_force_magic
+
+      - name: Benchmark serial and threaded compiler work
+        env:
+          PYTHONPATH: python
+        run: |
+          mkdir -p .artifacts
+          .venv-gil/bin/python tools/benchmark_free_threaded_compiler.py \
+            --samples 3 --workers 1 2 4 \
+            --output .artifacts/compiler-python314-gil.json
+          .venv-ft/bin/python tools/benchmark_free_threaded_compiler.py \
+            --samples 3 --workers 1 2 4 \
+            --output .artifacts/compiler-python314t.json
+
+      - name: Compare interpreter results
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          gil = json.loads(Path(".artifacts/compiler-python314-gil.json").read_text())
+          free = json.loads(Path(".artifacts/compiler-python314t.json").read_text())
+          if gil["fingerprint"] != free["fingerprint"]:
+              raise SystemExit("compiler fingerprints differ between interpreters")
+
+          print("workers | CPython 3.14 | CPython 3.14t | 3.14t / GIL")
+          print("--------|--------------|---------------|------------")
+          for workers in ("1", "2", "4"):
+              gil_s = gil["workers"][workers]["median_seconds"]
+              free_s = free["workers"][workers]["median_seconds"]
+              print(f"{workers:>7} | {gil_s:>12.4f} | {free_s:>13.4f} | {gil_s / free_s:>10.3f}x")
+          print()
+          print("Thread scaling:")
+          print("CPython 3.14 :", gil["workers"]["4"]["speedup_vs_serial"])
+          print("CPython 3.14t:", free["workers"]["4"]["speedup_vs_serial"])
+          PY
+
+      - name: Preserve benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: free-threaded-python-compiler-${{ github.run_id }}
+          path: .artifacts/
+          if-no-files-found: error
+          retention-days: 14
