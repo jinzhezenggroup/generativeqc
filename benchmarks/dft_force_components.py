@@ -337,13 +337,18 @@ def _accumulate_component(
 
 
 def expected_scf_components(
-    exchange_operators: Sequence[str], *, semilocal: bool = True
+    exchange_operators: Sequence[str],
+    *,
+    semilocal: bool = True,
+    nonlocal_correlation: bool = False,
 ) -> tuple[str, ...]:
     """Return method-graph component names without using a named functional."""
 
     expected = ["scf_fock_j"]
     if semilocal:
         expected.append("semilocal_ao_grid_xc")
+    if nonlocal_correlation:
+        expected.append("vv10_rvv10")
     for operator in exchange_operators:
         try:
             component = _EXCHANGE_COMPONENT[operator]
@@ -359,6 +364,7 @@ def normalize_scf_trace(
     *,
     exchange_operators: Sequence[str] = (),
     semilocal: bool = True,
+    nonlocal_correlation: bool = False,
 ) -> dict[str, typing.Any]:
     """Normalize opt-in CUDA SCF traces without splitting fused J/K evidence.
 
@@ -403,6 +409,7 @@ def normalize_scf_trace(
     expected = expected_scf_components(
         exchange_operators,
         semilocal=semilocal,
+        nonlocal_correlation=nonlocal_correlation,
     )
     missing = [name for name in expected if profiled[name] is None]
     return {
