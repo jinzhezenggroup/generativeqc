@@ -25,6 +25,7 @@ from vibeqc_compiler.integral.first_derivative_schedule import (
     cpu_aot_symbol,
     derivative_cpu_aot_sources,
 )
+from vibeqc_compiler.integral.range_separation import CoulombKernel
 from vibeqc_compiler.integral.rsh_cpu_aot import program_source
 
 
@@ -37,7 +38,9 @@ def _source_statistics(sources: tuple[str, ...]) -> dict[str, int]:
     }
 
 
-def _range_programs(radials: tuple[object, ...]) -> tuple[list[dict[str, object]], tuple[str, ...]]:
+def _range_programs(
+    radials: tuple[CoulombKernel, ...],
+) -> tuple[list[dict[str, object]], tuple[str, ...]]:
     records: list[dict[str, object]] = []
     sources: list[str] = []
     for radial in radials:
