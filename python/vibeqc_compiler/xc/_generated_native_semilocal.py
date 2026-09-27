@@ -84,9 +84,7 @@ SEMILOCAL_FAMILIES = (
     },
 )
 
-SEMILOCAL_FAMILY_CODES = frozenset(
-    item["code"] for item in SEMILOCAL_FAMILIES
-)
+SEMILOCAL_FAMILY_CODES = frozenset(item["code"] for item in SEMILOCAL_FAMILIES)
 SCF_DOMAIN_BY_VERSION = {
     1: "semilocal-scaled-v1/pbe-spin-c2-1e-18",
     2: "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18",
