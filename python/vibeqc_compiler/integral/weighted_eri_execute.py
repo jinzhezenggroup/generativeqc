@@ -229,9 +229,45 @@ def compile_weighted_eri(
     )
 
 
+def _library_stamp(path: Path) -> tuple[int, int, int, int, int]:
+    status = path.stat()
+    return (
+        status.st_dev,
+        status.st_ino,
+        status.st_size,
+        status.st_mtime_ns,
+        status.st_ctime_ns,
+    )
+
+
 @lru_cache(maxsize=8)
+def _packaged_library_hash_at(
+    path: Path, stamp: tuple[int, int, int, int, int]
+) -> str:
+    if _library_stamp(path) != stamp:
+        raise ValueError("packaged weighted ERI library changed during verification")
+    digest = file_hash(path)
+    if _library_stamp(path) != stamp:
+        raise ValueError("packaged weighted ERI library changed during verification")
+    return digest
+
+
 def _packaged_library_hash(path: Path) -> str:
-    return file_hash(path)
+    """Reuse a large-library digest only while its filesystem generation is stable."""
+    path = path.resolve()
+    stamp = _library_stamp(path)
+    digest = _packaged_library_hash_at(path, stamp)
+    if _library_stamp(path) != stamp:
+        raise ValueError("packaged weighted ERI library changed during verification")
+    return digest
+
+
+def _artifact_binary_hash(artifact: CompiledWeightedEri) -> str:
+    identity = artifact.native.metadata["identity"]
+    if artifact.backend == "cpu" and identity.get("schema") == "vibeqc.weighted-packaged.v1":
+        return _packaged_library_hash(Path(artifact.native.library))
+    # Standalone JIT cache artifacts keep their original per-preparation check.
+    return file_hash(artifact.native.library)
 
 
 def packaged_weighted_eri(
@@ -413,10 +449,7 @@ class PreparedWeightedEri:
             raise ValueError(
                 self.resource_plan.diagnostic or "weighted ERI resource budget exceeded"
             )
-        if (
-            _packaged_library_hash(Path(artifact.native.library).resolve())
-            != artifact.native.metadata["binary_sha256"]
-        ):
+        if _artifact_binary_hash(artifact) != artifact.native.metadata["binary_sha256"]:
             raise ValueError("weighted ERI binary hash mismatch")
         lib = self._library = ct.CDLL(str(artifact.native.library))
 
