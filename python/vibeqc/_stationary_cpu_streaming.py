@@ -31,12 +31,16 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
         cache: str | Path,
         primitive_tile: int,
         compiler: CppCompilerAdapter,
+        *,
+        aot_library: typing.Any = None,
     ) -> None:
         from ._stationary_cpu import _publish_source
 
         if type(primitive_tile) is not int or not 1 <= primitive_tile <= 4096:
             raise ValueError("primitive tile must be an integer in [1,4096]")
-        super().__init__(basis, cache, primitive_tile, compiler)
+        super().__init__(
+            basis, cache, primitive_tile, compiler, aot_library=aot_library
+        )
         labels = np.full((len(self.aos), 3), -1, dtype=np.int64)
         for i, expansion in enumerate(self.expansions):
             for j, (label, _) in enumerate(expansion):
@@ -49,25 +53,34 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
         self.bindings = np.frombuffer(bindings.tobytes(), dtype=np.int64).reshape(
             bindings.shape
         )
-        self.dispatch = (Dispatch * len(self.libraries))(
-            *(
-                ct.cast(lib.vibeqc_first_derivative_cpu, Dispatch)
-                for lib in self.libraries
+        self.dispatch = (Dispatch * len(self.dispatchers))(
+            *(ct.cast(call, Dispatch) for call in self.dispatchers)
+        )
+        contract = None
+        if aot_library is not None:
+            try:
+                contract = aot_library.vibeqc_component_contract_cpu
+            except AttributeError:
+                contract = None
+        if contract is None:
+            header = asset_path("src/integrals/first_derivative_component_runtime.hpp")
+            source = '#include "integrals/first_derivative_component_runtime.hpp"\n'
+            path = Path(cache) / (canonical_hash(source) + ".cpp")
+            _publish_source(path, source)
+            artifact = compile_runtime(
+                compiler,
+                cache,
+                path,
+                headers=(header,),
+                options=("-ffp-contract=off", f"-I{header.parents[1]}"),
             )
-        )
-        header = asset_path("src/integrals/first_derivative_component_runtime.hpp")
-        source = '#include "integrals/first_derivative_component_runtime.hpp"\n'
-        path = Path(cache) / (canonical_hash(source) + ".cpp")
-        _publish_source(path, source)
-        artifact = compile_runtime(
-            compiler,
-            cache,
-            path,
-            headers=(header,),
-            options=("-ffp-contract=off", f"-I{header.parents[1]}"),
-        )
-        self.runtime = ct.CDLL(str(artifact.library))
-        self.contract = self.runtime.vibeqc_component_contract_cpu
+            self.runtime = ct.CDLL(str(artifact.library))
+            contract = self.runtime.vibeqc_component_contract_cpu
+            self.compilation_work["component_contract_runtime_compilations"] = 1
+        else:
+            self.runtime = aot_library
+            self.compilation_work["component_contract_runtime_compilations"] = 0
+        self.contract = contract
         self.contract.argtypes = [
             DoublePointer,
             ct.c_size_t,
@@ -103,7 +116,7 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
             len(self.bindings),
             len(COMPONENT_LABELS),
             self.dispatch,
-            len(self.libraries),
+            len(self.dispatchers),
         )
         self.compilation_work["component_dispatch_bytes"] = (
             self.labels.nbytes + self.bindings.nbytes + ct.sizeof(self.dispatch)
