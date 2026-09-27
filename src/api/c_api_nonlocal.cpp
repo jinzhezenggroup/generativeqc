@@ -206,7 +206,8 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
         !std::isfinite(result->parameters.c) || result->parameters.c <= 0.0 ||
         !std::isfinite(result->parameters.coefficient) || result->parameters.coefficient <= 0.0)
       throw std::invalid_argument("resident nonlocal CUDA parameters must be finite and positive");
-    result->layout = vibeqc::dft::nlc::vv10_cuda_device_layout(n, model->tile_points, true, true);
+    result->layout =
+        vibeqc::dft::nlc::vv10_cuda_device_layout(n, model->tile_points, true, true, true);
 
     using vibeqc::runtime::size_add;
     using vibeqc::runtime::size_mul;
