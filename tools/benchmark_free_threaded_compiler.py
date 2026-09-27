@@ -26,7 +26,6 @@ from vibeqc_compiler.integral import (
     build_shell_class_component_kernel,
 )
 
-
 _CASE_LIMITS = {
     "ppps": 27,
     "dpss": 18,
@@ -46,7 +45,9 @@ def _work_items(repeats: int) -> tuple[tuple[str, tuple[str, ...]], ...]:
     for _ in range(repeats):
         for name, limit in _CASE_LIMITS.items():
             spec = FUSED_SHELL_SPEC_BY_NAME[name]
-            items.extend((name, tuple(component)) for component in spec.components[:limit])
+            items.extend(
+                (name, tuple(component)) for component in spec.components[:limit]
+            )
     return tuple(items)
 
 
@@ -138,7 +139,11 @@ def main() -> None:
     if arguments.repeats < 1 or arguments.samples < 1:
         raise SystemExit("repeats and samples must be positive")
     worker_counts = tuple(arguments.workers)
-    if not worker_counts or worker_counts[0] != 1 or any(value < 1 for value in worker_counts):
+    if (
+        not worker_counts
+        or worker_counts[0] != 1
+        or any(value < 1 for value in worker_counts)
+    ):
         raise SystemExit("workers must start with serial worker count 1")
 
     items = _work_items(arguments.repeats)
