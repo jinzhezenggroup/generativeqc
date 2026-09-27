@@ -55,6 +55,9 @@ def test_gfn2_cuda_d4_reuses_shared_scalar_math() -> None:
         "d4_math::coordination_pair",
         "d4_math::pair_damping",
         "d4_math::damping_radius",
+        "d4_math::atm_terms",
+        "d4_math::atm_cn_adjoint",
+        "d4_math::atm_radial",
     ):
         assert helper in source
     for retired in (
@@ -65,8 +68,21 @@ def test_gfn2_cuda_d4_reuses_shared_scalar_math() -> None:
         "kEnK4",
         "kEnK5",
         "kEnK6",
+        "const double angle_derivative =",
+        "ratio_power = pow",
+        "const double r2_product =",
     ):
         assert retired not in source
+
+
+def test_shared_d4_cpu_and_cuda_use_one_scalar_owner() -> None:
+    reference = (ROOT / "src/dft/dispersion/d4_reference.hpp").read_text(encoding="utf-8")
+    cuda = (ROOT / "src/dft/dispersion/d4_cuda.cu").read_text(encoding="utf-8")
+
+    for source in (reference, cuda):
+        assert "math::pair_damping" in source
+        assert "math::atm_terms" in source
+        assert "math::atm_cn_adjoint" in source
 
 
 def test_gfn2_cuda_kernels_do_not_take_reference_parameters() -> None:

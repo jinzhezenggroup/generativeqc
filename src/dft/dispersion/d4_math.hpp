@@ -265,6 +265,47 @@ VIBEQC_D4_MATH_HD inline Coefficient coefficient(
       first_charge_derivatives, second_weights, second_cn_derivatives, second_charge_derivatives);
 }
 
+struct AtmTerms {
+  double r5_product;
+  double damping;
+  double angle;
+  double c9;
+  double energy;
+  double damping_derivative;
+};
+
+template <bool AbsoluteC6Product = false>
+VIBEQC_D4_MATH_HD inline AtmTerms atm_terms(
+    double first_second_r2, double first_third_r2, double second_third_r2,
+    double first_second_r0, double first_third_r0, double second_third_r0,
+    double first_second_c6, double first_third_c6, double second_third_c6, double s9,
+    double exponent = 16.0) {
+  const double r2_product = first_second_r2 * first_third_r2 * second_third_r2;
+  const double r1_product = sqrt(r2_product);
+  const double r3_product = r2_product * r1_product;
+  const double r5_product = r3_product * r2_product;
+  const double ratio =
+      (first_second_r0 * first_third_r0 * second_third_r0) / r1_product;
+  const double ratio_power = pow(ratio, exponent / 3.0);
+  const double damping = 1.0 / (1.0 + 6.0 * ratio_power);
+  const double angle =
+      0.375 * (first_second_r2 + second_third_r2 - first_third_r2) *
+          (first_second_r2 - second_third_r2 + first_third_r2) *
+          (-first_second_r2 + second_third_r2 + first_third_r2) /
+          r5_product +
+      1.0 / r3_product;
+  double c6_product = first_second_c6 * first_third_c6 * second_third_c6;
+  if constexpr (AbsoluteC6Product) c6_product = fabs(c6_product);
+  const double c9 = -s9 * sqrt(c6_product);
+  return {r5_product, damping, angle, c9, angle * damping * c9,
+          -2.0 * exponent * ratio_power * damping * damping};
+}
+
+VIBEQC_D4_MATH_HD inline double atm_cn_adjoint(double energy, double first_c6, double second_c6,
+                                               double first_cn, double second_cn) {
+  return -0.5 * energy * (first_cn / first_c6 + second_cn / second_c6);
+}
+
 VIBEQC_D4_MATH_HD inline double atm_radial(double target, double other_first, double other_second,
                                            double r5_product, double damping, double angle,
                                            double damping_derivative, double c9) {

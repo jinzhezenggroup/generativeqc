@@ -278,18 +278,15 @@ VIBEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
       const double r2 = distance2(xyz, i, j, v);
       if (sqrt(r2) > p.pair_cutoff) continue;
       const auto c = coefficient(i, j, z, t, w, wc, wq);
-      const double rr = 3.0 * t.elements[z[i] - 1].r4r2 * t.elements[z[j] - 1].r4r2;
-      const double r0 = radius(i, j, z, t, p), u = r0 * r0;
-      const double t6 = 1.0 / (r2 * r2 * r2 + u * u * u);
-      const double t8 = 1.0 / (r2 * r2 * r2 * r2 + u * u * u * u);
-      const double damp = p.s6 * t6 + p.s8 * rr * t8;
-      const double ddamp = -6 * p.s6 * r2 * r2 * t6 * t6 - 8 * p.s8 * rr * r2 * r2 * r2 * t8 * t8;
-      e2 -= c.c6 * damp;
-      d[i] -= c.qi * damp;
-      d[j] -= c.qj * damp;
-      adj[i] -= c.ci * damp;
-      adj[j] -= c.cj * damp;
-      add_pair_gradient(i, j, v, -c.c6 * ddamp, g);
+      const auto damping =
+          math::pair_damping(t.elements[z[i] - 1], t.elements[z[j] - 1], r2, p.s6, p.s8, p.a1,
+                             p.a2);
+      e2 -= c.c6 * damping.value;
+      d[i] -= c.qi * damping.value;
+      d[j] -= c.qj * damping.value;
+      adj[i] -= c.ci * damping.value;
+      adj[j] -= c.cj * damping.value;
+      add_pair_gradient(i, j, v, -c.c6 * damping.derivative, g);
     }
   // ATM uses zero-charge reference weights, independently of input charges.
   if (p.s9 != 0.0) {
@@ -307,21 +304,28 @@ VIBEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
           const auto cik = coefficient(i, k, z, t, w, wc, wq);
           const auto cjk = coefficient(j, k, z, t, w, wc, wq);
           if (!(cij.c6 > 0.0 && cik.c6 > 0.0 && cjk.c6 > 0.0)) return D4Status::numerical_failure;
-          const double r2p = a * b * c, r1p = sqrt(r2p), r3p = r2p * r1p, r5p = r3p * r2p;
-          const double ratio =
-              radius(i, j, z, t, p) * radius(i, k, z, t, p) * radius(j, k, z, t, p) / r1p;
-          const double rp = pow(ratio, 16.0 / 3.0);
-          const double damp = 1.0 / (1.0 + 6.0 * rp);
-          const double angle = 0.375 * (a + c - b) * (a - c + b) * (-a + c + b) / r5p + 1.0 / r3p;
-          const double c9 = -p.s9 * sqrt(cij.c6 * cik.c6 * cjk.c6);
-          const double de = angle * damp * c9, ddamp = -32.0 * rp * damp * damp;
-          e3 -= de;
-          add_pair_gradient(i, j, vij, atm_radial(a, c, b, r5p, damp, angle, ddamp, c9), g);
-          add_pair_gradient(i, k, vik, atm_radial(b, c, a, r5p, damp, angle, ddamp, c9), g);
-          add_pair_gradient(j, k, vjk, atm_radial(c, b, a, r5p, damp, angle, ddamp, c9), g);
-          adj[i] -= 0.5 * de * (cij.ci / cij.c6 + cik.ci / cik.c6);
-          adj[j] -= 0.5 * de * (cij.cj / cij.c6 + cjk.ci / cjk.c6);
-          adj[k] -= 0.5 * de * (cik.cj / cik.c6 + cjk.cj / cjk.c6);
+          const auto atm = math::atm_terms(
+              a, b, c, radius(i, j, z, t, p), radius(i, k, z, t, p), radius(j, k, z, t, p),
+              cij.c6, cik.c6, cjk.c6, p.s9);
+          e3 -= atm.energy;
+          add_pair_gradient(
+              i, j, vij,
+              atm_radial(a, c, b, atm.r5_product, atm.damping, atm.angle,
+                         atm.damping_derivative, atm.c9),
+              g);
+          add_pair_gradient(
+              i, k, vik,
+              atm_radial(b, c, a, atm.r5_product, atm.damping, atm.angle,
+                         atm.damping_derivative, atm.c9),
+              g);
+          add_pair_gradient(
+              j, k, vjk,
+              atm_radial(c, b, a, atm.r5_product, atm.damping, atm.angle,
+                         atm.damping_derivative, atm.c9),
+              g);
+          adj[i] += math::atm_cn_adjoint(atm.energy, cij.c6, cik.c6, cij.ci, cik.ci);
+          adj[j] += math::atm_cn_adjoint(atm.energy, cij.c6, cjk.c6, cij.cj, cjk.ci);
+          adj[k] += math::atm_cn_adjoint(atm.energy, cik.c6, cjk.c6, cik.cj, cjk.cj);
         }
       }
   }
