@@ -90,10 +90,17 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
         dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, EvalScalar>(
             shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), -1);
-    const double integral = scalar_value(evaluated_integral);
-    if (integral == 0.0) return;
-    accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock, i,
-                                                  j, k, l, integral, coulomb_only);
+    if constexpr (std::is_same_v<EvalScalar, MixedPrecisionFloat>) {
+      const float integral = evaluated_integral.value;
+      if (integral == 0.0F) return;
+      accumulate_direct_fock_integral<Unrestricted, true>(n, physical_offset, spin_offset, density,
+                                                          fock, i, j, k, l, integral, coulomb_only);
+    } else {
+      const double integral = scalar_value(evaluated_integral);
+      if (integral == 0.0) return;
+      accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock,
+                                                    i, j, k, l, integral, coulomb_only);
+    }
   }
 }
 
