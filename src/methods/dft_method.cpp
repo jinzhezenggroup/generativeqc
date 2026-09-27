@@ -62,7 +62,7 @@ struct NativeKsExecutionPlan {
   double range_omega{};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
-  const dft::SemilocalPointProgram* generic_semilocal_program{};
+  std::optional<dft::SemilocalPointProgram> generic_semilocal_program;
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method method) noexcept {
@@ -254,7 +254,8 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
                       descriptor.method == VIBEQC_METHOD_PBE_D4_RKS};
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
-    execution_plan.generic_semilocal_program = semilocal.generic_semilocal_program;
+    if (semilocal.generic_semilocal_program)
+      execution_plan.generic_semilocal_program = *semilocal.generic_semilocal_program;
     if (execution_plan.generic_semilocal_program && backend != VIBEQC_BACKEND_CPU_REFERENCE)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generic semilocal point-program KS currently requires CPU");
