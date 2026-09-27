@@ -52,9 +52,9 @@
     {
       "id": "native-fock-and-jk",
       "status": "performance-exception",
-      "capability": "Native Direct J/K and Fock contraction families retained where generated consumers are not yet promoted; order-2/3/4 primitive recurrence and shell-class dispatch are compiler-generated.",
-      "current_selector": "Generated shell classes are used where promoted; retained native Fock families remain selected for unpromoted or measured faster domains. The psss force geometry adapter is tracked under native-low-order-force; any retained psss Fock path is tracked separately by its actual Fock owner.",
-      "generated_alternative": "Compiler-generated primitive recurrence/shell dispatch plus the existing IntegralIR/AOT class registry represent the underlying ERI mathematics; retained Fock/J-K consumers still require matched default-path promotion or explicit exception evidence.",
+      "capability": "Retained scientific Direct J/K and materialized/packed Fock consumers for public-AO/reference domains. Order-two and generic quartet production adapters are runtime-only over compiler-owned recurrence, shell canonicalization and Fock scatter.",
+      "current_selector": "Generated shell classes are used where promoted. Remaining scientific files are the independent J/K path plus cached-tensor and packed-Fock consumers; order-two/quartet task adapters no longer own scientific formulas or screening criteria.",
+      "generated_alternative": "Compiler-generated recurrence/source contraction and Fock accumulation cover the order-two/quartet adapters. Remaining cached/public-AO Fock/J-K consumers require explicit compiler/TensorIR replacement or measured exception evidence.",
       "schedule_requirements": "Share primitive/Boys work across Fock outputs, preserve symmetry/scatter semantics, and choose materialization/rematerialization from measured register and occupancy evidence rather than Direct-only shape tests.",
       "resource_profile": "Register/shared-memory pressure and repeated primitive work are the primary retirement constraints; endpoint selection must consume generic target/resource evidence.",
       "evidence": [
@@ -70,8 +70,6 @@
       "retirement_condition": "For each retained Fock family, demonstrate generated mathematical parity plus matched complete-endpoint non-regression; then delete the duplicate native scientific body unless an independently measured exception remains.",
       "files": [
         "src/scf/cuda/direct_cached_tensor_kernels.cu",
-        "src/scf/cuda/direct_fock_order2.cuh",
-        "src/scf/cuda/direct_fock_quartet.cuh",
         "src/scf/cuda/direct_jk_kernels.cu",
         "src/scf/cuda/direct_packed_fock_kernels.cu"
       ]
@@ -101,31 +99,6 @@
         "src/scf/cuda/direct_force_quartet.cuh",
         "src/scf/cuda/direct_force_scatter.cuh",
         "src/scf/cuda/direct_native_psss.cuh"
-      ]
-    },
-    {
-      "id": "shared-native-recurrence-support",
-      "status": "unsupported-fallback",
-      "capability": "Shared native Cartesian/contraction helpers, gradient result type and primitive-pair cache still needed by retained Direct scientific consumers. Primitive recurrence, shell dispatch, pair/Hermite support and the exact order-two shell contraction are compiler-generated.",
-      "current_selector": "These helpers are reached through retained native Direct families; they are not independently selected as a second public method path.",
-      "generated_alternative": "Compiler ownership now covers primitive order-2/3/4 recurrence, shell-class dispatch, low-order pair/Hermite support and the exact order-two shell contraction. Remaining native helpers retire only when dependent production consumers have equivalent qualified lowering.",
-      "schedule_requirements": "Keep recurrence mathematics separate from queue/runtime plumbing, preserve shell symmetry and pair reuse, and avoid deleting shared helpers while any qualified fallback still depends on them.",
-      "resource_profile": "Compact pair geometry and bounded local intermediates are part of the existing performance envelope; a generated replacement must not multiply recurrence work or unbound local storage.",
-      "evidence": [
-        "docs/developer/shell_codegen.md",
-        "docs/maintainer/cuda_ownership.md"
-      ],
-      "required_compiler_capabilities": [
-        "#351 shared recurrence/spec ownership",
-        "#832 resource-aware lowering",
-        "#833 reusable schedules"
-      ],
-      "retirement_condition": "Delete a shared native helper only after all production consumers that depend on its scientific mathematics have qualified generated replacements; runtime-only traversal may remain native.",
-      "files": [
-        "src/scf/cuda/direct_native_cartesian.cuh",
-        "src/scf/cuda/direct_native_contraction.cuh",
-        "src/scf/cuda/direct_native_gradient_types.cuh",
-        "src/scf/cuda/direct_pair_cache.cu"
       ]
     },
     {

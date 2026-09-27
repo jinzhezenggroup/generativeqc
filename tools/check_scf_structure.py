@@ -338,8 +338,8 @@ CUDA_ALLOWED["cuda_nuclear_kernels"] = (
 CUDA_MODULES["cuda_direct_pair_cache"] = ("direct_pair_cache",)
 CUDA_ALLOWED["cuda_direct_pair_cache"] = (
     "scf/cuda/direct_pair_cache.",
-    "scf/cuda/gaussian_geometry.",
     "scf/cuda/packed_basis.",
+    "generated_direct_pair_cache.cuh",
 )
 # Retained direct numerics and fused consumers have separate dependency/rebuild
 # boundaries. Exact .hpp entries keep host launch contracts independent of the
@@ -350,7 +350,6 @@ CUDA_MODULES["cuda_direct_numerics"] = (
     "direct_native_eri_order2",
     "direct_native_eri_order3",
     "direct_native_eri_order4",
-    "direct_native_gradient_types",
     "direct_native_order2_gradient",
     "direct_native_order2_shell",
     "direct_native_order456_gradient",
@@ -365,7 +364,11 @@ CUDA_MODULES["cuda_direct_numerics"] = (
 CUDA_ALLOWED["cuda_direct_numerics"] = (
     tuple("scf/cuda/" + stem + ".cuh" for stem in CUDA_MODULES["cuda_direct_numerics"])
     + tuple("scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_integral_numerics"])
-    + ("scf/cuda/packed_basis.hpp", "scf/cuda/direct_queue_index.cuh")
+    + (
+        "scf/cuda/packed_basis.hpp",
+        "scf/cuda/direct_queue_index.cuh",
+        "scf/cuda/direct_gradient_types.cuh",
+    )
 )
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",

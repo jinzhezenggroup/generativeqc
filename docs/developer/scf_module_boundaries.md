@@ -646,10 +646,11 @@ CUDA compilation. Each probe restores and rebuilds the exact validated source.
 The native Dual response kernel and scalar/cooperative one-electron force
 kernels now compile in `one_electron_reference.cu` and
 `one_electron_force_reference.cu`. Their former included fragments are removed.
-`nuclear_kernels.cu` owns the existing nuclear energy/response/force equations;
-`direct_pair_cache.cu` owns primitive-pair Gaussian geometry preparation.
-Host callers retain the same launch geometry, stream and dynamic shared memory
-through narrow forwarding interfaces.
+`nuclear_kernels.cu` owns the existing nuclear energy/response/force equations.
+Primitive-pair Gaussian geometry preparation is compiler-owned and emitted as
+`generated_direct_pair_cache.cuh`; `direct_pair_cache.cu` retains only the CUDA
+launch forwarding boundary. Host callers retain the same launch geometry, stream
+and dynamic shared memory through narrow forwarding interfaces.
 
 Five private headers separate retained overlap/kinetic primitives, attraction,
 attraction gradients, normalized AO contraction, and density-weighted force

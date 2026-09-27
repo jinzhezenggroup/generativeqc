@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_automatic_df_does_not_promote_materialized_resident_owner() -> None:
+def test_automatic_df_uses_bounded_source_backed_storage_selection() -> None:
     source = (ROOT / "src/scf/rhf.cpp").read_text()
     assert "automatic_dense_resident_df_owner" not in source
     assert "preferred_automatic_resident_df_value_peak" not in source
@@ -22,6 +22,8 @@ def test_automatic_df_does_not_promote_materialized_resident_owner() -> None:
     end = source.index("ScfResult run_cuda_independent_fock_strategy(", start)
     planner = source[start:end]
     assert "const auto planning_budget = data.resolved_budget.value_bytes;" in planner
+    assert "plan_requested_density_fitting_tiles(" in source
+    assert "requested_df_pair_storage_request()" in source
     assert (
         "set_cuda_density_fitting_scf_value_budget(owned_plan.get(), planning_budget)"
         in planner
