@@ -31,17 +31,20 @@ struct PreparedCudaFockBinding {
 
 /** Return the ordinary-stream device binding when the prepared plan can
  * execute its complete requested value-side Fock model through one resident
- * provider. The value seam covers full-range Coulomb plus exact full-/short-/
- * long-range exchange. Qualified SR/LR value execution may reuse the owner's
- * conservative full-range Schwarz screening; derivatives remain a separate
- * capability. DF/mixed-provider compositions remain explicit follow-ups.
+ * provider. The value seam covers exact full-range Coulomb plus exact full-/
+ * short-/long-range exchange, and full-range density-fitted J/K when every
+ * requested term shares the fitted owner. Qualified exact SR/LR value
+ * execution may reuse the owner's conservative full-range Schwarz screening;
+ * derivatives remain a separate capability. Mixed-provider compositions fail
+ * closed rather than selecting or staging a different source.
  */
 PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan) noexcept;
 
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.
- * mixed_coulomb changes only the qualified Coulomb recurrence precision; it
- * never changes K, scientific coefficients, screening, or provider selection.
+ * mixed_coulomb changes only the qualified exact-Coulomb recurrence precision;
+ * fitted execution remains strict FP64. It never changes K, scientific
+ * coefficients, screening, or provider selection.
  */
 vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
                                          const double* beta, std::size_t matrix_elements,
