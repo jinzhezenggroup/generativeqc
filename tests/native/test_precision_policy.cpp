@@ -1,6 +1,9 @@
+#include <array>
 #include <cerrno>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -8,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "api/precision.hpp"
 #include "molecule/basis.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/direct_task_layout.hpp"
@@ -627,6 +631,96 @@ void verify_cpu_provenance() {
           "absent precision mode keeps the FP64 requested-mode default");
 }
 
+template <typename T>
+T descriptor() {
+  T value{};
+  value.struct_size = sizeof(T);
+  value.abi_version = VIBEQC_ABI_VERSION;
+  return value;
+}
+
+void verify_precision_work_query_contract() {
+  using namespace vibeqc::scf;
+
+  // Serialization fixtures only: no execution evidence is claimed here.
+  PrecisionWork source;
+  source.complete = source.operator_inventory_complete = true;
+  source.owner_id = 17;
+  source.returned_solve_epoch = 3;
+  source.returned_state_generation = 6;
+  source.events = {
+      {PrecisionWorkEventKind::StrictFock, PrecisionWorkPhase::Scf, 0, 1, 17, 3, 6},
+      {PrecisionWorkEventKind::FinalAudit, PrecisionWorkPhase::Finalization, 1, 1, 17, 3, 6},
+  };
+  source.operators = {{PrecisionOperatorKind::ExchangeK, PrecisionDtype::Fp64, PrecisionDtype::Fp64,
+                       PrecisionDtype::Fp64, PrecisionDtype::Fp64, PrecisionArithmeticMode::Strict,
+                       1}};
+
+  auto summary = descriptor<vibeqc_precision_work_detail>();
+  std::array<vibeqc_precision_work_event, 2> events{descriptor<vibeqc_precision_work_event>(),
+                                                    descriptor<vibeqc_precision_work_event>()};
+  std::array<vibeqc_precision_operator_record, 1> operators{
+      descriptor<vibeqc_precision_operator_record>()};
+  const auto copy = [&](std::uint32_t version, std::uint32_t event_capacity) {
+    return vibeqc::api::copy_precision_work(source, version, &summary, events.data(),
+                                            event_capacity, operators.data(), operators.size());
+  };
+  const auto untouched_summary = summary;
+  const auto untouched_events = events;
+  const auto untouched_operators = operators;
+
+  require(copy(2, events.size()) == VIBEQC_STATUS_NOT_IMPLEMENTED,
+          "unknown precision-work version accepted");
+  require(copy(1, 1) == VIBEQC_STATUS_INVALID_ARGUMENT,
+          "short precision-work event buffer accepted");
+  events.back().abi_version++;
+  require(copy(1, events.size()) == VIBEQC_STATUS_ABI_MISMATCH,
+          "malformed precision-work event descriptor accepted");
+  events = untouched_events;
+  operators.back().abi_version++;
+  const auto malformed_operators = operators;
+  require(copy(1, events.size()) == VIBEQC_STATUS_ABI_MISMATCH,
+          "malformed precision-work operator descriptor accepted");
+  require(std::memcmp(&summary, &untouched_summary, sizeof(summary)) == 0 &&
+              std::memcmp(events.data(), untouched_events.data(), sizeof(events)) == 0 &&
+              std::memcmp(operators.data(), malformed_operators.data(), sizeof(operators)) == 0,
+          "rejected precision-work query modified an earlier output");
+  operators = untouched_operators;
+  require(vibeqc::api::copy_precision_work(source, 1, &summary, nullptr, 1, nullptr, 0) ==
+              VIBEQC_STATUS_INVALID_ARGUMENT,
+          "nonzero precision-work capacity accepted with a null buffer");
+  require(copy(1, events.size()) == VIBEQC_STATUS_SUCCESS, "valid precision-work copy failed");
+  require(summary.complete && summary.operator_inventory_complete && summary.event_count == 2 &&
+              summary.operator_count == 1 && summary.owner_id == 17 &&
+              summary.returned_solve_epoch == 3 && summary.returned_state_generation == 6,
+          "precision-work summary changed native identity or completeness");
+  require(events[1].sequence == 1 && events[1].owner_id == 17 && events[1].solve_epoch == 3 &&
+              events[1].kind == VIBEQC_PRECISION_EVENT_FINAL_AUDIT &&
+              operators[0].kind == VIBEQC_PRECISION_OPERATOR_EXCHANGE_K && operators[0].count == 1,
+          "precision-work rows changed execution-owned values");
+
+  PrecisionProvenance aggregate_source;
+  aggregate_source.strict_stage_fock_builds = 1;
+  aggregate_source.final_residual_audits = 1;
+  auto aggregate = descriptor<vibeqc_precision_provenance>();
+  require(vibeqc::api::copy_precision_provenance(aggregate_source, &aggregate) ==
+                  VIBEQC_STATUS_SUCCESS &&
+              aggregate.strict_stage_fock_builds == 1 && aggregate.final_residual_audits == 1,
+          "legacy aggregate precision ABI changed");
+  if constexpr (sizeof(void*) == 8) {
+    require(sizeof(aggregate) == 120 &&
+                offsetof(vibeqc_precision_provenance, mixed_stage_fock_builds) == 56,
+            "64-bit aggregate precision layout changed");
+  }
+
+  source = {};
+  require(vibeqc::api::copy_precision_work(source, 1, &summary, nullptr, 0, nullptr, 0) ==
+                  VIBEQC_STATUS_SUCCESS &&
+              !summary.complete && !summary.operator_inventory_complete &&
+              summary.event_count == 0 && summary.operator_count == 0 && summary.owner_id == 0,
+          "uninstrumented execution manufactured complete precision work");
+}
+
 }  // namespace
 
 int main() {
@@ -642,7 +736,8 @@ int main() {
     verify_one_electron_provider_policy();
     verify_direct_tile_validation_policy();
     verify_cpu_provenance();
-    std::cout << "validated precision policy controller and CPU provenance\n";
+    verify_precision_work_query_contract();
+    std::cout << "validated precision policy, CPU provenance, and work-query contract\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << "test failure: " << error.what() << '\n';

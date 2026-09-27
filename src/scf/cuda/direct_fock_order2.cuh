@@ -8,12 +8,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <weighted_eri.cuh>
 
 #include "generated_direct_order2_shell.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
-#include "scf/cuda/matrix_index.cuh"
+#include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
 // Retained direct fock order2 contraction helpers.
@@ -58,46 +59,31 @@ __device__ inline __noinline__ void contract_fock_direct_order2_task(
   const std::int32_t system = batch.shell_pair_systems[first_pair];
   if (active != nullptr && active[system] == 0) return;
 
-  Order2SourceSlot slots[4] = {
-      {batch.shell_pair_first[first_pair], 0},
-      {batch.shell_pair_second[first_pair], 1},
-      {batch.shell_pair_first[second_pair], 2},
-      {batch.shell_pair_second[second_pair], 3},
+  const std::int32_t raw_shell[4] = {
+      batch.shell_pair_first[first_pair],
+      batch.shell_pair_second[first_pair],
+      batch.shell_pair_first[second_pair],
+      batch.shell_pair_second[second_pair],
   };
   const unsigned shell_class = direct_quartet_shell_class_device(
-      batch.shell_angular[slots[0].shell], batch.shell_angular[slots[1].shell],
-      batch.shell_angular[slots[2].shell], batch.shell_angular[slots[3].shell]);
+      batch.shell_angular[raw_shell[0]], batch.shell_angular[raw_shell[1]],
+      batch.shell_angular[raw_shell[2]], batch.shell_angular[raw_shell[3]]);
   if (shell_class != 2U && shell_class != 3U && shell_class != 6U) return;
-  // Generated order-two workers execute before this handwritten fallback.
-  // Honor the exact-class mask here as the generic subtile path does, or the
-  // same shell quartet is scattered into the Fock matrix twice.
+  // Generated order-two workers execute before this runtime fallback.
   if (generated_fock_shell_class_mask != nullptr &&
       ((*generated_fock_shell_class_mask & (std::uint64_t{1} << shell_class)) != 0U)) {
     return;
   }
 
-  if (batch.shell_angular[slots[0].shell] < batch.shell_angular[slots[1].shell]) {
-    const Order2SourceSlot swap = slots[0];
-    slots[0] = slots[1];
-    slots[1] = swap;
-  }
-  if (batch.shell_angular[slots[2].shell] < batch.shell_angular[slots[3].shell]) {
-    const Order2SourceSlot swap = slots[2];
-    slots[2] = slots[3];
-    slots[3] = swap;
-  }
-  const unsigned first_pair_class = direct_shell_pair_class_cuda(
-      batch.shell_angular[slots[0].shell], batch.shell_angular[slots[1].shell]);
-  const unsigned second_pair_class = direct_shell_pair_class_cuda(
-      batch.shell_angular[slots[2].shell], batch.shell_angular[slots[3].shell]);
-  if (first_pair_class < second_pair_class) {
-    const Order2SourceSlot first_swap = slots[0];
-    slots[0] = slots[2];
-    slots[2] = first_swap;
-    const Order2SourceSlot second_swap = slots[1];
-    slots[1] = slots[3];
-    slots[3] = second_swap;
-  }
+  unsigned canonical_raw_slot[4];
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
+  Order2SourceSlot slots[4] = {
+      {raw_shell[canonical_raw_slot[0]], canonical_raw_slot[0]},
+      {raw_shell[canonical_raw_slot[1]], canonical_raw_slot[1]},
+      {raw_shell[canonical_raw_slot[2]], canonical_raw_slot[2]},
+      {raw_shell[canonical_raw_slot[3]], canonical_raw_slot[3]},
+  };
 
   const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
   const std::size_t matrix_size = n * n;
@@ -112,9 +98,8 @@ __device__ inline __noinline__ void contract_fock_direct_order2_task(
     std::size_t raw_ao[4];
     decode_shell_ao_quartet(batch, first_pair, second_pair, ao_quartet_layout, ordinal,
                             system_ao_begin, raw_ao);
-    if (schwarz_bounds[physical_offset + matrix_index(raw_ao[0], raw_ao[1], n)] *
-            schwarz_bounds[physical_offset + matrix_index(raw_ao[2], raw_ao[3], n)] <
-        screening_tolerance) {
+    if (!direct_ao_quartet_survives_schwarz(schwarz_bounds, physical_offset, n, raw_ao[0],
+                                            raw_ao[1], raw_ao[2], raw_ao[3], screening_tolerance)) {
       continue;
     }
     active_component_mask |= 1U << order2_component_index(batch, slots, raw_ao, system_ao_begin);

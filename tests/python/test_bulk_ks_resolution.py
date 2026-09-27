@@ -9,40 +9,117 @@ from vibeqc_compiler.xc.capability_resolution import (
     CapabilityNotQualified,
     CapabilityResolution,
 )
-from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
+from vibeqc_compiler.xc.libxc_blacklist import (
+    LIBXC_SEMILOCAL_BLACKLIST,
+    blacklist_reason,
+)
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
-from vibeqc_compiler.xc.molecular_scf_evidence import (
-    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
-)
-from vibeqc_compiler.xc.molecular_scf_evidence import (
-    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
-)
 
 
-def _qualified_resolution(name: str) -> tuple[object, CapabilityResolution]:
-    capability = functional_capability(name)
-    qualified = CapabilityResolution(
-        name=capability.name,
-        identity=capability.identity,
-        required_stages=(
-            "compiled-cpu",
-            "production-domain",
-            "molecular-scf",
-        ),
-        qualified_stages=(
-            "graph-imported",
-            "pointwise-validated",
-            "compiled-cpu",
-            "production-domain",
-            "molecular-scf",
-        ),
-        public_dft=False,
+def _compiled_cpu() -> dict[str, str]:
+    return {
+        "binding_identity": "a" * 64,
+        "result_identity": "b" * 64,
+    }
+
+
+def test_bulk_ks_default_allows_supported_import_without_evidence() -> None:
+    result = bulk_ks.resolve_bulk_ks("GGA_X_APBE", spin="polarized")
+
+    assert result.method.identifier == "LIBXC:GGA_X_APBE"
+    assert result.method.reference == "unrestricted"
+    assert result.required_ingredients == ("rho", "sigma")
+    assert result.plan.required_lowerers == ("semilocal-xc",)
+    assert result.plan.exchange == ()
+    assert result.public_dft
+    assert result.compiled_cpu_binding_identity is None
+    assert result.compiled_cpu_result_identity is None
+    assert result.to_payload()["admission"] == "default-allow/explicit-blacklist"
+
+
+def test_public_bulk_ks_is_default_allow_compatibility_alias() -> None:
+    first = bulk_ks.resolve_bulk_ks("MGGA_X_LTA")
+    second = bulk_ks.resolve_public_bulk_ks("MGGA_X_LTA")
+
+    assert first.method.identity == second.method.identity
+    assert first.plan.identity == second.plan.identity
+    assert first.public_dft and second.public_dft
+
+
+def test_positive_evidence_is_not_a_public_admission_gate() -> None:
+    result = bulk_ks.resolve_bulk_ks(
+        "LDA_C_BR78",
+        evidence={"public-method": {"status": "fail", "sentinel": True}},
     )
-    return capability, qualified
+    assert result.public_dft
+    assert result.admission == "default-allow/explicit-blacklist"
 
 
-def _candidate_resolution(name: str) -> tuple[object, CapabilityResolution]:
-    capability = functional_capability(name)
+def test_shared_boundary_failures_are_not_function_blacklist_entries() -> None:
+    for name in ("GGA_C_AM05", "GGA_X_AK13"):
+        assert blacklist_reason(name) is None
+        result = bulk_ks.resolve_bulk_ks(name)
+        assert result.public_dft
+
+
+def test_blacklist_is_negative_only_empty_and_immutable() -> None:
+    assert dict(LIBXC_SEMILOCAL_BLACKLIST) == {}
+    with pytest.raises(TypeError):
+        LIBXC_SEMILOCAL_BLACKLIST["GGA_X_APBE"] = "do not allow"  # type: ignore[index]
+
+
+def test_bulk_ks_rejects_non_cpu_backend_before_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bulk_ks,
+        "functional_capability",
+        lambda *args, **kwargs: pytest.fail("capability lookup must stay inactive"),
+    )
+
+    with pytest.raises(UnsupportedMethod, match="supports CPU only"):
+        bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+
+
+def test_bulk_ks_rejects_unsupported_ingredient_structurally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = functional_capability("GGA_X_APBE")
+    capability = SimpleNamespace(
+        name=base.name,
+        identity=base.identity,
+        required_ingredients=("rho", "sigma", "laplacian"),
+    )
+    monkeypatch.setattr(
+        bulk_ks, "functional_capability", lambda *args, **kwargs: capability
+    )
+
+    with pytest.raises(UnsupportedMethod, match="laplacian"):
+        bulk_ks.resolve_bulk_ks(base.name)
+
+
+def test_bulk_ks_descriptive_identifier_does_not_change_semantics() -> None:
+    first = bulk_ks.resolve_bulk_ks("GGA_X_APBE", identifier="candidate-a")
+    second = bulk_ks.resolve_bulk_ks("GGA_X_APBE", identifier="candidate-b")
+
+    assert first.method.identifier != second.method.identifier
+    assert first.method.identity == second.method.identity
+    assert first.plan.identity == second.plan.identity
+    assert first.capability.identity == second.capability.identity
+
+
+def test_qualification_candidate_remains_evidence_gated() -> None:
+    with pytest.raises(CapabilityNotQualified) as exc:
+        bulk_ks.resolve_bulk_ks_candidate("GGA_X_APBE")
+
+    assert "compiled-cpu" in exc.value.missing_stages
+    assert "production-domain" in exc.value.missing_stages
+
+
+def test_qualification_candidate_ignores_public_exception_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capability = functional_capability("GGA_X_APBE")
     qualified = CapabilityResolution(
         name=capability.name,
         identity=capability.identity,
@@ -55,399 +132,40 @@ def _candidate_resolution(name: str) -> tuple[object, CapabilityResolution]:
         ),
         public_dft=False,
     )
-    return capability, qualified
-
-
-def _compiled_cpu() -> dict[str, str]:
-    return {
-        "binding_identity": "a" * 64,
-        "result_identity": "b" * 64,
-    }
-
-
-def test_bulk_ks_fails_closed_without_molecular_evidence() -> None:
-    with pytest.raises(CapabilityNotQualified) as exc:
-        bulk_ks.resolve_bulk_ks("GGA_X_PBE_SOL")
-
-    assert "compiled-cpu" in exc.value.missing_stages
-    assert "production-domain" in exc.value.missing_stages
-    assert "molecular-scf" in exc.value.missing_stages
-
-
-def test_bulk_ks_candidate_breaks_molecular_scf_evidence_cycle(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability, qualified = _candidate_resolution("GGA_X_PBE_SOL")
-    requests: list[tuple[str, ...]] = []
-
-    def fake_resolve(
-        name: str,
-        *,
-        required_stages: tuple[str, ...],
-        evidence: dict[str, object] | None = None,
-    ) -> CapabilityResolution:
-        assert name == capability.name
-        requests.append(tuple(required_stages))
-        return qualified
-
-    monkeypatch.setattr(bulk_ks, "resolve_capability", fake_resolve)
     monkeypatch.setattr(
-        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
-    )
-    result = bulk_ks.resolve_bulk_ks_candidate(capability.name)
-
-    assert requests == [("compiled-cpu", "production-domain")]
-    assert result.capability.required_stages == (
-        "compiled-cpu",
-        "production-domain",
-    )
-    assert "molecular-scf" not in result.capability.qualified_stages
-    assert result.plan.required_lowerers == ("semilocal-xc",)
-    assert not result.to_payload()["public_dft"]
-
-
-def test_bulk_ks_requires_exact_cpu_stages_and_builds_pure_plan(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability, qualified = _qualified_resolution("GGA_X_PBE_SOL")
-    requests: list[tuple[object, ...]] = []
-    evidence = {"compiled-cpu": {"sentinel": True}}
-
-    def fake_capability(
-        name: str,
-        *,
-        evidence: dict[str, object] | None = None,
-    ) -> object:
-        requests.append(("capability", name, evidence))
-        return capability
-
-    def fake_resolve(
-        name: str,
-        *,
-        required_stages: tuple[str, ...],
-        evidence: dict[str, object] | None = None,
-    ) -> CapabilityResolution:
-        requests.append(("resolve", name, tuple(required_stages), evidence))
-        return qualified
-
-    monkeypatch.setattr(bulk_ks, "functional_capability", fake_capability)
-    monkeypatch.setattr(bulk_ks, "resolve_capability", fake_resolve)
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
-    )
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
-    )
-
-    result = bulk_ks.resolve_bulk_ks(
-        capability.name,
-        spin="polarized",
-        evidence=evidence,
-    )
-
-    assert requests[0] == ("capability", capability.name, evidence)
-    assert requests[1] == (
-        "resolve",
-        capability.name,
-        (
-            "compiled-cpu",
-            "production-domain",
-            "molecular-scf",
+        bulk_ks,
+        "blacklist_reason",
+        lambda *args, **kwargs: pytest.fail(
+            "qualification candidates must not consult public exception policy"
         ),
-        evidence,
     )
-    assert result.capability is qualified
-    assert result.required_ingredients == ("rho", "sigma")
-    assert result.method.reference == "unrestricted"
-    assert result.plan.exchange == ()
-    assert result.plan.nonlocal_correlation is None
-    assert result.plan.post_scf == ()
-    assert result.plan.required_lowerers == ("semilocal-xc",)
-    assert not result.to_payload()["public_dft"]
-
-
-def test_bulk_ks_descriptive_identifier_does_not_change_semantic_plan(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability, qualified = _qualified_resolution("LDA_C_VWN_4")
     monkeypatch.setattr(
         bulk_ks, "resolve_capability", lambda *args, **kwargs: qualified
     )
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
     )
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
-    )
 
-    first = bulk_ks.resolve_bulk_ks(capability.name, identifier="candidate-a")
-    second = bulk_ks.resolve_bulk_ks(capability.name, identifier="candidate-b")
+    result = bulk_ks.resolve_bulk_ks_candidate(capability.name)
 
-    assert first.method.identifier != second.method.identifier
-    assert first.method.identity == second.method.identity
-    assert first.plan.identity == second.plan.identity
-    assert first.capability.identity == second.capability.identity
+    assert not result.public_dft
+    assert result.admission == "qualification-evidence"
+    assert result.compiled_cpu_binding_identity == "a" * 64
+    assert result.compiled_cpu_result_identity == "b" * 64
 
 
-def test_bulk_ks_rejects_non_cpu_backend_before_promotion(
+def test_candidate_detects_capability_identity_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        bulk_ks,
-        "functional_capability",
-        lambda *args, **kwargs: pytest.fail("capability lookup must stay inactive"),
-    )
-
-    with pytest.raises(UnsupportedMethod, match="currently qualified only for CPU"):
-        bulk_ks.resolve_bulk_ks("GGA_X_PBE_SOL", backend="cuda")
-
-
-def test_bulk_ks_rejects_unsupported_ingredient_before_stage_resolution(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    base = functional_capability("GGA_X_PBE_SOL")
-    capability = SimpleNamespace(
-        name=base.name,
-        identity=base.identity,
-        required_ingredients=("rho", "sigma", "laplacian"),
-    )
-    monkeypatch.setattr(
-        bulk_ks, "functional_capability", lambda *args, **kwargs: capability
-    )
-    monkeypatch.setattr(
-        bulk_ks,
-        "resolve_capability",
-        lambda *args, **kwargs: pytest.fail("stage resolution must stay inactive"),
-    )
-
-    with pytest.raises(UnsupportedMethod, match="laplacian"):
-        bulk_ks.resolve_bulk_ks(base.name)
-
-
-def test_bulk_ks_detects_capability_identity_drift(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability, qualified = _qualified_resolution("GGA_X_PBE_SOL")
+    capability = functional_capability("GGA_X_APBE")
     drifted = CapabilityResolution(
-        name=qualified.name,
+        name=capability.name,
         identity="0" * 64,
-        required_stages=qualified.required_stages,
-        qualified_stages=qualified.qualified_stages,
+        required_stages=("compiled-cpu", "production-domain"),
+        qualified_stages=("compiled-cpu", "production-domain"),
         public_dft=False,
     )
     monkeypatch.setattr(bulk_ks, "resolve_capability", lambda *args, **kwargs: drifted)
 
     with pytest.raises(RuntimeError, match="identity changed"):
-        bulk_ks.resolve_bulk_ks(capability.name)
-
-
-def test_bulk_ks_requires_canonical_compiled_cpu_qualification(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    stage = SimpleNamespace(
-        stage="compiled-cpu",
-        status="pass",
-        qualification={"sentinel": True},
-        evidence="test://compiled-cpu#sha256=" + "b" * 64,
-    )
-    capability = SimpleNamespace(
-        name="GGA_X_PBE_SOL",
-        stage_evidence=(stage,),
-    )
-    calls: list[tuple[str, object]] = []
-
-    def validate(name: str, qualification: object) -> dict[str, str]:
-        calls.append((name, qualification))
-        return _compiled_cpu()
-
-    monkeypatch.setattr(bulk_ks, "validate_qualification", validate)
-    result = bulk_ks._require_exact_compiled_cpu(capability)
-
-    assert result == _compiled_cpu()
-    assert calls == [("GGA_X_PBE_SOL", {"sentinel": True})]
-
-    monkeypatch.setattr(
-        bulk_ks,
-        "validate_qualification",
-        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("forged")),
-    )
-    with pytest.raises(UnsupportedMethod, match="exact compiled-CPU"):
-        bulk_ks._require_exact_compiled_cpu(capability)
-
-
-def test_bulk_ks_resolution_retains_compiled_cpu_identities(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability, qualified = _candidate_resolution("GGA_X_PBE_SOL")
-    monkeypatch.setattr(
-        bulk_ks, "resolve_capability", lambda *args, **kwargs: qualified
-    )
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
-    )
-
-    result = bulk_ks.resolve_bulk_ks_candidate(capability.name)
-    payload = result.to_payload()
-
-    assert payload["compiled_cpu_binding_identity"] == "a" * 64
-    assert payload["compiled_cpu_result_identity"] == "b" * 64
-
-
-def test_public_bulk_ks_requires_exact_public_endpoint_before_routing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability = functional_capability("GGA_X_PBE_SOL")
-    public = CapabilityResolution(
-        name=capability.name,
-        identity=capability.identity,
-        required_stages=(
-            "compiled-cpu",
-            "production-domain",
-            "molecular-scf",
-            "public-method",
-        ),
-        qualified_stages=(
-            "graph-imported",
-            "pointwise-validated",
-            "compiled-cpu",
-            "production-domain",
-            "molecular-scf",
-            "public-method",
-        ),
-        public_dft=True,
-    )
-    calls: list[tuple[object, ...]] = []
-
-    def fake_endpoint(name: str, **kwargs: object) -> object:
-        calls.append(("endpoint", name, kwargs))
-        return SimpleNamespace(
-            identity=capability.identity,
-            spin="polarized",
-            public_dft=True,
-        )
-
-    def fake_resolve(
-        name: str,
-        *,
-        required_stages: tuple[str, ...],
-        evidence: dict[str, object] | None = None,
-    ) -> CapabilityResolution:
-        calls.append(("stages", name, required_stages, evidence))
-        return public
-
-    evidence = {"public-method": {"sentinel": True}}
-    monkeypatch.setattr(
-        bulk_ks, "functional_capability", lambda *args, **kwargs: capability
-    )
-    monkeypatch.setattr(bulk_ks, "resolve_endpoint_capability", fake_endpoint)
-    monkeypatch.setattr(bulk_ks, "resolve_capability", fake_resolve)
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
-    )
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
-    )
-
-    result = bulk_ks.resolve_public_bulk_ks(
-        capability.name,
-        spin="polarized",
-        evidence=evidence,
-    )
-
-    assert calls[0] == (
-        "endpoint",
-        capability.name,
-        {
-            "backend": "cpu",
-            "product": "energy",
-            "spin": "polarized",
-            "require_public": True,
-            "evidence": evidence,
-        },
-    )
-    assert calls[1] == (
-        "stages",
-        capability.name,
-        (
-            "compiled-cpu",
-            "production-domain",
-            "molecular-scf",
-            "public-method",
-        ),
-        evidence,
-    )
-    assert result.method.reference == "unrestricted"
-    assert result.to_payload()["public_dft"] is True
-
-
-def test_public_bulk_ks_rejects_endpoint_identity_drift(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capability = functional_capability("GGA_X_PBE_SOL")
-    public = CapabilityResolution(
-        name=capability.name,
-        identity=capability.identity,
-        required_stages=("public-method",),
-        qualified_stages=("public-method",),
-        public_dft=True,
-    )
-    monkeypatch.setattr(
-        bulk_ks, "functional_capability", lambda *args, **kwargs: capability
-    )
-    monkeypatch.setattr(
-        bulk_ks,
-        "resolve_endpoint_capability",
-        lambda *args, **kwargs: SimpleNamespace(
-            identity="0" * 64,
-            spin="unpolarized",
-            public_dft=True,
-        ),
-    )
-    monkeypatch.setattr(bulk_ks, "resolve_capability", lambda *args, **kwargs: public)
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
-    )
-    monkeypatch.setattr(
-        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
-    )
-
-    with pytest.raises(RuntimeError, match="endpoint identity changed"):
-        bulk_ks.resolve_public_bulk_ks(capability.name)
-
-
-def test_bulk_ks_requires_exact_molecular_scf_qualification() -> None:
-    result_identity = "c" * 64
-    qualification = {
-        "schema": ENDPOINT_COVERAGE_SCHEMA,
-        "coverage": [
-            {"backend": "cpu", "spin": spin, "products": ["energy"]}
-            for spin in ("polarized", "unpolarized")
-        ],
-        "result_schema": MOLECULAR_SCF_RESULT_SCHEMA,
-        "result_identity": result_identity,
-        "qualification_schema": MOLECULAR_SCF_QUALIFICATION_SCHEMA,
-    }
-    stage = SimpleNamespace(
-        stage="molecular-scf",
-        status="pass",
-        qualification=qualification,
-        evidence="test://molecular-scf#sha256=" + result_identity,
-    )
-    capability = SimpleNamespace(stage_evidence=(stage,))
-
-    assert bulk_ks._require_exact_molecular_scf(capability) == result_identity
-
-    forged = dict(qualification)
-    forged["result_schema"] = "vibeqc.libxc-molecular-scf-result/forged"
-    bad = SimpleNamespace(
-        stage_evidence=(
-            SimpleNamespace(
-                stage="molecular-scf",
-                status="pass",
-                qualification=forged,
-                evidence="test://molecular-scf#sha256=" + result_identity,
-            ),
-        )
-    )
-    with pytest.raises(UnsupportedMethod, match="exact molecular-SCF"):
-        bulk_ks._require_exact_molecular_scf(bad)
+        bulk_ks.resolve_bulk_ks_candidate(capability.name)

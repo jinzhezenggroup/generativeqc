@@ -24,7 +24,8 @@ using namespace cuda_execution;
 CudaDirectJkPlan::~CudaDirectJkPlan() {
   if (device_id >= 0) (void)cudaSetDevice(device_id);
   if (stream) (void)cudaStreamSynchronize(stream);
-  generated_coulomb.reset();  // Release the borrower before its stream/metadata.
+  generated_exchange.reset();
+  generated_coulomb.reset();  // Release borrowers before their stream/metadata.
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
   if (stream) (void)cudaStreamDestroy(stream);
 }
@@ -340,12 +341,18 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
     direct_jk_check(cudaStreamSynchronize(plan->stream));
     if (numerical_failure)
       throw DirectJkFailure{VIBEQC_STATUS_NUMERICAL_FAILURE, "nonfinite direct J/K Schwarz bound"};
-    // Derivative capability is orthogonal to the value schedule. A prepared
-    // owner may retain first-derivative scratch and still use the generated
-    // shell-Coulomb fast path for ordinary SCF value builds.
-    if (budget > required)
-      plan->generated_coulomb = prepare_generated_coulomb(
-          host, plan->batch, plan->stream, device_id, screening_tolerance, budget - required);
+    // Derivative capability is orthogonal to the value schedule. Retained
+    // first-derivative owners may still use the generated shell-Coulomb path,
+    // while value-only owners continue to prefer generated full-range exchange.
+    if (budget > required) {
+      const auto optional_budget = budget - required;
+      if (derivative_order == 0)
+        plan->generated_exchange = prepare_generated_exchange(
+            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+      if (!plan->generated_exchange)
+        plan->generated_coulomb = prepare_generated_coulomb(
+            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+    }
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();
     info.nbf = host.nbf;
@@ -368,7 +375,15 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
             host.ao_term_coefficients, host.direct_ao_shells, host.direct_ao_angular,
             host.direct_ao_coefficients, host.ao_to_direct_transform, host.primitive_exponents,
             host.primitive_coefficients, host.occupied, host.warm_mask, host.warm_density);
-    if (plan->generated_coulomb) {
+    if (plan->generated_exchange) {
+      info.device_bytes += plan->generated_exchange->device_bytes;
+      info.host_bytes += sizeof(GeneratedExchangePlan) +
+                         runtime::vector_bytes(plan->generated_exchange->allocations) +
+                         sizeof(GeneratedCoulombPlan) +
+                         runtime::vector_bytes(plan->generated_exchange->shared->allocations);
+      info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
+      info.schedule = "generated-shell-coulomb+exchange/generic-jk-fallback";
+    } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
                          runtime::vector_bytes(plan->generated_coulomb->allocations);
@@ -381,6 +396,7 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
     *output = plan.release();
   });
 }
+
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept { delete plan; }
 
 cudaStream_t cuda_direct_jk_stream(const CudaDirectJkPlan* plan) {
@@ -449,11 +465,19 @@ static vibeqc_status enqueue_cuda_direct_jk_device_impl(CudaDirectJkPlan* plan, 
         direct_jk_check(cudaGetLastError());
       }
     if (spec.coulomb.present || spec.exchange.present) {
-      const auto dispatch = direct_jk_value_dispatch(
-          plan->generated_coulomb != nullptr, spec.coulomb.present, spec.exchange.present, mixed_j);
+      auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                                         : plan->generated_coulomb.get();
+      const bool generated_exchange_available = plan->generated_exchange != nullptr &&
+                                                spec.exchange.present &&
+                                                spec.exchange.op == FockOperator::FullRange;
+      const auto dispatch =
+          direct_jk_value_dispatch(generated_coulomb != nullptr, generated_exchange_available,
+                                   spec.coulomb.present, spec.exchange.present, mixed_j);
       if (dispatch.generated_coulomb)
-        direct_jk_check(
-            enqueue_generated_coulomb(*plan->generated_coulomb, density, beta, coulomb));
+        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+      if (dispatch.generated_exchange)
+        direct_jk_check(enqueue_generated_exchange(*plan->generated_exchange, unrestricted, density,
+                                                   beta, alpha_exchange, beta_exchange));
       if (dispatch.generic_coulomb || dispatch.generic_exchange) {
         launch_independent_jk_kernel(
             static_cast<unsigned>(elements), kIndependentJkThreads, 0, plan->stream, plan->batch, 0,

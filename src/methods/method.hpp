@@ -13,6 +13,7 @@
 #include "core/types.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/cuda_density_fitting.hpp"
+#include "scf/precision_work.hpp"
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
 #include "vibeqc/vibeqc.h"
@@ -46,6 +47,9 @@ struct Result {
   std::size_t fock_builds{};
   /** How the requested precision policy resolved in the executed backend. */
   scf::PrecisionProvenance precision{};
+  /** Ordered work remains explicitly incomplete until an execution owner
+   * instruments every event/operator for the returned attempt. */
+  scf::PrecisionWork precision_work{};
   /** Optional physical commutator at the returned density; zero is a valid
    * measured value, while absence means the method does not report it. */
   std::optional<double> physical_residual_rms;
