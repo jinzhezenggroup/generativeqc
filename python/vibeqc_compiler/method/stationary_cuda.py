@@ -11,6 +11,7 @@ Rationale: .agents/notes/implemented/architecture/2026-09-20-stationary-cuda-emi
 import json
 import os
 import typing
+from dataclasses import dataclass
 from functools import lru_cache
 from itertools import permutations
 from pathlib import Path
@@ -501,6 +502,40 @@ QUALIFIED_SPD_AOT_SHARDS = 23
 QUALIFIED_FUNCTIONALS = (0, 1, 2)
 QUALIFIED_SPINS = ("unpolarized", "polarized")
 QUALIFIED_PARTITION_ITERATIONS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class StationaryAotProfile:
+    """Build/package profile selected at runtime only by exact plan identity."""
+
+    name: str
+    functional: int
+    method: str
+    spin: str
+
+    @property
+    def plan(self) -> StationaryGradientPlan:
+        return StationaryGradientPlan(
+            resolve_method(self.method, spin=self.spin),
+            StationaryMeanField(SCF_POINT_MODEL),
+        )
+
+
+QUALIFIED_STATIONARY_AOT_PROFILES = tuple(
+    StationaryAotProfile(name, functional, method, spin)
+    for name, functional, method in (
+        ("lda", 0, "LDA_XC_PW"),
+        ("pbe", 1, "PBE"),
+        ("r2scan", 2, "R2SCAN"),
+        ("pbe0", 1, "PBE0"),
+        ("b3lyp", 3, "B3LYP"),
+    )
+    for spin in QUALIFIED_SPINS
+)
+QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
+    f"{profile.name}_{'rks' if profile.spin == 'unpolarized' else 'uks'}"
+    for profile in QUALIFIED_STATIONARY_AOT_PROFILES
+)
 STATIONARY_AOT_ASSETS = (
     "src/dft/stationary_gradient_cuda.cuh",
     "src/dft/grid_task_view.cuh",
@@ -547,16 +582,60 @@ def _qualified_component_aot_domain(
     return domain
 
 
-def _qualified_aot_plan(functional: int, spin: str) -> StationaryGradientPlan:
+def _profile_stem(profile: StationaryAotProfile) -> str:
+    return f"{profile.name}_{'rks' if profile.spin == 'unpolarized' else 'uks'}"
+
+
+@lru_cache(maxsize=16)
+def _qualified_aot_profile(name: str) -> StationaryAotProfile:
+    matches = tuple(
+        profile
+        for profile in QUALIFIED_STATIONARY_AOT_PROFILES
+        if _profile_stem(profile) == name
+    )
+    if len(matches) != 1:
+        raise ValueError(f"unknown stationary AOT profile {name!r}")
+    return matches[0]
+
+
+def _qualified_aot_profile_for_plan(
+    functional: int, spin: str, plan: StationaryGradientPlan
+) -> StationaryAotProfile:
+    """Select a package profile by point program and exact plan, never method name."""
+
+    if type(functional) is not int:
+        raise TypeError("AOT stationary functional code must be an integer")
+    if spin not in QUALIFIED_SPINS:
+        raise ValueError("AOT stationary spin must be unpolarized or polarized")
+    if not isinstance(plan, StationaryGradientPlan):
+        raise TypeError("stationary CUDA AOT requires StationaryGradientPlan")
+    matches = tuple(
+        profile
+        for profile in QUALIFIED_STATIONARY_AOT_PROFILES
+        if profile.functional == functional
+        and profile.spin == spin
+        and profile.plan.identity == plan.identity
+    )
+    if len(matches) != 1:
+        raise ValueError("stationary CUDA AOT plan identity is not packaged")
+    return matches[0]
+
+
+def _legacy_profile(functional: int, spin: str) -> StationaryAotProfile:
     if type(functional) is not int or functional not in QUALIFIED_FUNCTIONALS:
         raise ValueError("AOT stationary functional must be 0, 1, or 2")
     if spin not in QUALIFIED_SPINS:
         raise ValueError("AOT stationary spin must be unpolarized or polarized")
-    method_name = ("LDA_XC_PW", "PBE", "R2SCAN")[functional]
-    return StationaryGradientPlan(
-        resolve_method(method_name, spin=spin),
-        StationaryMeanField(SCF_POINT_MODEL),
+    name = ("lda", "pbe", "r2scan")[functional]
+    return _qualified_aot_profile(
+        f"{name}_{'rks' if spin == 'unpolarized' else 'uks'}"
     )
+
+
+def _qualified_aot_plan(functional: int, spin: str) -> StationaryGradientPlan:
+    """Legacy semilocal profile helper retained for existing package tooling."""
+
+    return _legacy_profile(functional, spin).plan
 
 
 def _stationary_aot_name(
@@ -564,16 +643,72 @@ def _stationary_aot_name(
     spin: str,
     *,
     component_domain: typing.Iterable[str] | None = None,
+    plan: StationaryGradientPlan | None = None,
 ) -> str:
-    _qualified_aot_plan(functional, spin)
     domain = _qualified_component_aot_domain(component_domain)
-    base = f"{('lda', 'pbe', 'r2scan')[functional]}_{'rks' if spin == 'unpolarized' else 'uks'}"
+    profile = (
+        _legacy_profile(functional, spin)
+        if plan is None
+        else _qualified_aot_profile_for_plan(functional, spin, plan)
+    )
+    base = _profile_stem(profile)
     return base if domain is None else f"{base}_spd"
 
 
+def stationary_aot_profile_plan_identity(profile: str) -> str:
+    """Return the exact plan identity of one named build/package profile."""
+
+    return _qualified_aot_profile(profile).plan.identity
+
+
 def stationary_aot_plan_identity(functional: int, *, spin: str) -> str:
-    """Return the exact generated-plan identity encoded by one AOT artifact."""
+    """Return the legacy semilocal generated-plan identity."""
+
     return _qualified_aot_plan(functional, spin).identity
+
+
+def emit_stationary_profile_aot_cuda(
+    profile: str,
+    *,
+    primitive_source: str,
+    iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+) -> str:
+    """Emit one qualified profile-bound all-electron stationary CUDA s/p artifact."""
+
+    if type(iterations) is not int or iterations != QUALIFIED_PARTITION_ITERATIONS:
+        raise ValueError(
+            "AOT stationary CUDA currently qualifies partition_iterations=3 only"
+        )
+    if not isinstance(primitive_source, str) or not primitive_source:
+        raise ValueError("AOT stationary CUDA requires generated primitive source")
+    selected = _qualified_aot_profile(profile)
+    return emit_stationary_cuda(
+        primitive_source,
+        functional=selected.functional,
+        plan=selected.plan,
+        iterations=iterations,
+    )
+
+
+def emit_stationary_profile_component_aot_wrapper_cuda(
+    profile: str,
+    *,
+    iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+) -> str:
+    """Emit a profile wrapper linked against the shared packaged s/p/d shards."""
+
+    if type(iterations) is not int or iterations != QUALIFIED_PARTITION_ITERATIONS:
+        raise ValueError(
+            "AOT stationary CUDA currently qualifies partition_iterations=3 only"
+        )
+    selected = _qualified_aot_profile(profile)
+    return emit_stationary_wrapper_cuda(
+        functional=selected.functional,
+        plan=selected.plan,
+        iterations=iterations,
+        primitive_shards=QUALIFIED_SPD_AOT_SHARDS,
+        primitive_shard_width=QUALIFIED_SPD_AOT_SHARD_WIDTH,
+    )
 
 
 def emit_stationary_aot_cuda(
@@ -590,11 +725,10 @@ def emit_stationary_aot_cuda(
         )
     if not isinstance(primitive_source, str) or not primitive_source:
         raise ValueError("AOT stationary CUDA requires generated primitive source")
-    plan = _qualified_aot_plan(functional, spin)
-    return emit_stationary_cuda(
-        primitive_source,
-        functional=functional,
-        plan=plan,
+    profile = _legacy_profile(functional, spin)
+    return emit_stationary_profile_aot_cuda(
+        _profile_stem(profile),
+        primitive_source=primitive_source,
         iterations=iterations,
     )
 
@@ -610,13 +744,9 @@ def emit_stationary_component_aot_wrapper_cuda(
         raise ValueError(
             "AOT stationary CUDA currently qualifies partition_iterations=3 only"
         )
-    plan = _qualified_aot_plan(functional, spin)
-    return emit_stationary_wrapper_cuda(
-        functional=functional,
-        plan=plan,
-        iterations=iterations,
-        primitive_shards=QUALIFIED_SPD_AOT_SHARDS,
-        primitive_shard_width=QUALIFIED_SPD_AOT_SHARD_WIDTH,
+    profile = _legacy_profile(functional, spin)
+    return emit_stationary_profile_component_aot_wrapper_cuda(
+        _profile_stem(profile), iterations=iterations
     )
 
 
@@ -638,21 +768,18 @@ def stationary_aot_source_identity(
     )
 
 
-@lru_cache(maxsize=12)
-def stationary_aot_contract_identity(
-    functional: int,
+def _stationary_aot_contract_identity(
+    profile: StationaryAotProfile,
     *,
-    spin: str = "unpolarized",
-    iterations: int = QUALIFIED_PARTITION_ITERATIONS,
-    component_domain: tuple[str, ...] | None = None,
+    iterations: int,
+    component_domain: tuple[str, ...] | None,
 ) -> str:
-    """Identity every non-numeric compiler input affecting a packaged artifact."""
     if iterations != QUALIFIED_PARTITION_ITERATIONS:
         raise ValueError(
             "AOT stationary CUDA currently qualifies partition_iterations=3 only"
         )
     domain = _qualified_component_aot_domain(component_domain)
-    plan = _qualified_aot_plan(functional, spin)
+    plan = profile.plan
     component = (
         {}
         if domain is None
@@ -663,6 +790,11 @@ def stationary_aot_contract_identity(
             "primitive_schedule": "first_derivative_schedule.s/p/d",
         }
     )
+    weight_sources = tuple(
+        source
+        for source in (*_FUSED_WEIGHT_SOURCES, "exact_exchange")
+        if source in stationary_runtime_sources(plan)
+    )
     return canonical_hash(
         {
             "schema": (
@@ -670,12 +802,12 @@ def stationary_aot_contract_identity(
                 if domain is None
                 else "vibeqc.stationary-cuda-aot.contract.v3"
             ),
-            "functional": functional,
-            "spin": spin,
+            "functional": profile.functional,
+            "spin": profile.spin,
             "plan_identity": plan.identity,
             "weight_programs": {
                 source: plan.integral_block(source, terms=1).weights.logical_hash
-                for source in _FUSED_WEIGHT_SOURCES
+                for source in weight_sources
             },
             "partition_iterations": iterations,
             "requests": (
@@ -695,6 +827,39 @@ def stationary_aot_contract_identity(
     )
 
 
+@lru_cache(maxsize=24)
+def stationary_aot_profile_contract_identity(
+    profile: str,
+    *,
+    iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    component_domain: tuple[str, ...] | None = None,
+) -> str:
+    """Identity compiler inputs for one exact package profile."""
+
+    return _stationary_aot_contract_identity(
+        _qualified_aot_profile(profile),
+        iterations=iterations,
+        component_domain=component_domain,
+    )
+
+
+@lru_cache(maxsize=12)
+def stationary_aot_contract_identity(
+    functional: int,
+    *,
+    spin: str = "unpolarized",
+    iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    component_domain: tuple[str, ...] | None = None,
+) -> str:
+    """Identity every non-numeric compiler input affecting a legacy package."""
+
+    return _stationary_aot_contract_identity(
+        _legacy_profile(functional, spin),
+        iterations=iterations,
+        component_domain=component_domain,
+    )
+
+
 def load_stationary_aot_artifact(
     directory: typing.Any,
     *,
@@ -707,19 +872,16 @@ def load_stationary_aot_artifact(
 ) -> CudaArtifact:
     """Load one packaged artifact after checking its plan, domain, and binary identity."""
     domain = _qualified_component_aot_domain(component_domain)
-    expected_plan = _qualified_aot_plan(functional, spin)
-    if (
-        not isinstance(plan, StationaryGradientPlan)
-        or plan.identity != expected_plan.identity
-    ):
-        raise ValueError("stationary CUDA AOT plan identity mismatch")
+    profile = _qualified_aot_profile_for_plan(functional, spin, plan)
     if type(architecture) is not str or not architecture.startswith("sm_"):
         raise ValueError("stationary AOT architecture must be an sm_XX identity")
     if iterations != QUALIFIED_PARTITION_ITERATIONS:
         raise NotImplementedError(
             "packaged stationary CUDA currently qualifies partition_iterations=3 only"
         )
-    name = _stationary_aot_name(functional, spin, component_domain=domain)
+    name = _stationary_aot_name(
+        functional, spin, component_domain=domain, plan=plan
+    )
     directory = Path(directory).resolve()
     manifest_path = directory / f"vibeqc_stationary_{name}.json"
     candidates = (
@@ -741,9 +903,8 @@ def load_stationary_aot_artifact(
         "spin": spin,
         "plan_identity": plan.identity,
         "partition_iterations": iterations,
-        "contract_identity": stationary_aot_contract_identity(
-            functional,
-            spin=spin,
+        "contract_identity": stationary_aot_profile_contract_identity(
+            _profile_stem(profile),
             iterations=iterations,
             component_domain=domain,
         ),
