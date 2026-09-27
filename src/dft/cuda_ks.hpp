@@ -61,6 +61,24 @@ struct CudaKsTransfers {
 std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
                                 bool exact_exchange = false, bool range_correction = false);
 
+/** Borrowed device density for a successful immutable final-state token.
+ * The allocation remains owned by CudaKsPlan and is valid only while that
+ * exact token remains current. No transfer or synchronization is performed. */
+struct CudaKsResidentDensityBinding {
+  int device_id{-1};
+  const double* alpha{};
+  const double* beta{};
+  std::size_t matrix_elements{};
+  unsigned spins{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && alpha != nullptr && matrix_elements != 0 &&
+           (spins == 1 || (spins == 2 && beta != nullptr)) && owner != 0 &&
+           solve_epoch != 0 && generation != 0;
+  }
+};
+
 /** Native ordinary-stream LDA/PBE RKS/UKS trajectory. The borrowed common
  * Fock plan must outlive it. Model/grid/functional identity is immutable;
  * changing it requires a new owner. Symmetric overlap and core initial density
@@ -115,6 +133,12 @@ class CudaKsPlan {
   void invalidate_final_state() noexcept;
   /** Read-only host eligibility query. It performs no CUDA call or transfer. */
   vibeqc_status final_state_token(CudaKsFinalStateToken& token, std::string& detail) const;
+  /** Borrow the current converged density in device memory under the same
+   * exact-token contract. This is a zero-transfer execution lease for native
+   * downstream consumers; callers must not retain pointers across invalidation. */
+  vibeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
+                                       CudaKsResidentDensityBinding& binding,
+                                       std::string& detail) const;
   /** Export a detached, strictly validated current physical state. Exact-token
    * comparison
    * precedes transfer; eligibility is rechecked before publication.
