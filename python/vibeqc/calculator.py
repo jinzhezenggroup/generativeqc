@@ -71,14 +71,8 @@ def method_capabilities(method: str) -> MethodCapabilities:
         return replace(method_capabilities(electronic), method=canonical)
     try:
         method_id = _METHODS[canonical]
-    except KeyError:
-        from .ks import native_dft_carrier
-
-        try:
-            carrier = native_dft_carrier(canonical)
-        except ValueError as error:
-            raise ValueError(f"unknown method {method!r}") from error
-        method_id = _METHODS[carrier]
+    except KeyError as error:
+        raise ValueError(f"unknown method {method!r}") from error
     library = _native.load_library()
     native = _native.MethodCapabilitiesDescriptor(
         ctypes.sizeof(_native.MethodCapabilitiesDescriptor),
@@ -173,11 +167,9 @@ class Calculator:
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
 
-        ``method`` may be a native selector string, any compiler MethodIR
-        name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
-        primitive lowerers are qualified, the public ``r2scan-3c[-rks|-uks]``
-        composite selectors, a spin-explicit PBE-family MethodIR with one
-        production D3(BJ) correction, or the canonical
+        ``method`` may be a native selector string, the public
+        ``r2scan-3c[-rks|-uks]`` composite selectors, a spin-explicit PBE-family
+        MethodIR with one production D3(BJ) correction, or the canonical
         r2SCAN-3c MethodIR. The latter forms bind the exact def2-mTZVPP basis and
         composes r2SCAN + D4 + gCP without a named native scientific driver.
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
@@ -218,37 +210,11 @@ class Calculator:
             validate_basis_snapshot,
         )
 
-        discovered_method_name = None
         if isinstance(method, str):
-            canonical_method = method.lower()
-            composite = _COMPOSITE_METHOD_ALIASES.get(canonical_method)
+            composite = _COMPOSITE_METHOD_ALIASES.get(method.lower())
             if composite is not None:
                 identifier, spin = composite
                 method = resolve_method(identifier, spin=spin)
-            elif canonical_method not in _METHODS:
-                from .ks import KsOptions, native_dft_carrier, resolve_ks_method
-
-                try:
-                    discovered_ir, _ = resolve_ks_method(canonical_method)
-                except ValueError as error:
-                    raise ValueError(f"unknown method {method!r}") from error
-                carrier = native_dft_carrier(canonical_method)
-                if ks_options is None:
-                    ks_options = KsOptions(composition=discovered_ir)
-                elif not isinstance(ks_options, KsOptions):
-                    raise TypeError("ks_options must be KsOptions")
-                elif (
-                    ks_options.functional is not None
-                    or ks_options.composition is not None
-                ):
-                    raise ValueError(
-                        "a discovered DFT method owns its KS composition; "
-                        "ks_options may only set execution controls"
-                    )
-                else:
-                    ks_options = replace(ks_options, composition=discovered_ir)
-                discovered_method_name = canonical_method
-                method = carrier
         supplied_method_ir = method if isinstance(method, MethodIR) else None
         if supplied_method_ir is not None:
             corrections = tuple(
@@ -453,8 +419,8 @@ class Calculator:
             )
         if int(density_fitting_memory_budget_bytes) < 0:
             raise ValueError("density_fitting_memory_budget_bytes must be non-negative")
-        self._method_name = discovered_method_name or method.lower()
-        self._method = method_id
+        self._method_name = method.lower()
+        self._method = _METHODS[self._method_name]
         precision_modes = {
             "fp64": _native.PRECISION_FP64,
             "auto": _native.PRECISION_AUTO,
