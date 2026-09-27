@@ -132,11 +132,7 @@ class _BoundedStationaryTaskExecutor:
         mode = (
             "fixed"
             if logical_tasks <= self.page_capacity
-            else (
-                "resident"
-                if logical_tasks <= self.resident_capacity
-                else "paged"
-            )
+            else ("resident" if logical_tasks <= self.resident_capacity else "paged")
         )
         submitted = pages = 0
         for page in domain.pages(self.page_capacity):

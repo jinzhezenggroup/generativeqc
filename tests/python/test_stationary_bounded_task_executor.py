@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from vibeqc._stationary_cuda import _BoundedStationaryTaskExecutor
 from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain
 
