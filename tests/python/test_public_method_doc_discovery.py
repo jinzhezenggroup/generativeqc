@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import sys
 import typing
 from pathlib import Path
@@ -11,8 +10,6 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from tools import render_public_methods_doc as renderer
-
-ROOT = Path(__file__).resolve().parents[2]
 
 
 def _catalog_modules(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,29 +118,17 @@ def test_sphinx_tracks_renderer_manifest_and_recursive_catalog_sources(
     assert python / "vibeqc/ks.py" in dependencies
     assert Path(renderer.__file__).resolve() in dependencies
 
-    source = ast.parse((ROOT / "docs/conf.py").read_text())
-    callback = next(
-        node
-        for node in source.body
-        if isinstance(node, ast.FunctionDef) and node.name == "_render_public_methods"
-    )
-    namespace = {
-        "typing": typing,
-        "public_method_doc_dependencies": renderer.public_method_doc_dependencies,
-        "render_public_methods_markdown": lambda: "updated catalog",
-    }
-    exec(
-        compile(ast.Module(body=[callback], type_ignores=[]), "docs/conf.py", "exec"),
-        namespace,
-    )
     registered: list[str] = []
     app = SimpleNamespace(env=SimpleNamespace(note_dependency=registered.append))
+    monkeypatch.setattr(renderer, "render_public_methods_markdown", lambda: "updated catalog")
+
     text = ["source shell"]
-    namespace["_render_public_methods"](app, "public_methods", text)
+    renderer.render_public_methods_source(app, "public_methods", text)
     assert text == ["updated catalog"]
     assert registered == [str(path) for path in dependencies]
+
     registered.clear()
     text = ["unrelated page"]
-    namespace["_render_public_methods"](app, "index", text)
+    renderer.render_public_methods_source(app, "index", text)
     assert not registered
     assert text == ["unrelated page"]
