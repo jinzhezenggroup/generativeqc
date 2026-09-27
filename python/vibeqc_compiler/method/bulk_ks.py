@@ -25,6 +25,7 @@ from vibeqc_compiler.xc.molecular_scf_evidence import validate_stage_qualificati
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 
 from .ks_execution import KsExecutionPlan, compile_ks_execution_plan
+from .libxc_public_evidence import installed_public_evidence
 from .spec import MethodIR, SemilocalXCPrimitive, UnsupportedMethod
 
 BULK_KS_RESOLUTION_SCHEMA = "vibeqc.bulk-libxc-ks-resolution.v2"
@@ -242,6 +243,8 @@ def resolve_public_bulk_ks(
     evidence: typing.Mapping[str, typing.Any] | None = None,
     identifier: str | None = None,
 ) -> BulkKsResolution:
+    if evidence is None:
+        evidence = installed_public_evidence(name)
     """Resolve one exact public CPU-energy bulk Libxc endpoint into a KS plan.
 
     Public routing is stricter than ordinary promoted execution: the retained
