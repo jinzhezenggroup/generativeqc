@@ -16,6 +16,7 @@ import math
 import os
 import subprocess
 import typing
+from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
 
@@ -37,7 +38,19 @@ FORMALDEHYDE = (
     ("O", (0.0, 0.0, 2.28)),
     ("H", (1.75, 0.0, -1.05)),
     ("H", (-1.75, 0.0, -1.05)),
-)
+) 
+
+
+def _jsonable(value: typing.Any) -> typing.Any:
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
 
 def _git(command: list[str]) -> str | None:
@@ -353,13 +366,15 @@ def benchmark_case(
     cupy_module: typing.Any,
 ) -> dict[str, typing.Any]:
     atoms = _atoms(system)
-    calculator = _calculator(method, grid, basis, density_fitting)
-    library = Path(str(calculator._library._name)).resolve()
-    exchange_operators = _exchange_operators(calculator)
-    started = perf_counter()
-    batch = calculator.prepare_batch([atoms], warm_start=True)
-    prepare_seconds = perf_counter() - started
+    batch = None
     try:
+        calculator = _calculator(method, grid, basis, density_fitting)
+        library = Path(str(calculator._library._name)).resolve()
+        exchange_operators = _exchange_operators(calculator)
+        started = perf_counter()
+        batch = calculator.prepare_batch([atoms], warm_start=True)
+        prepare_seconds = perf_counter() - started
+
         cold = _clean_sample(batch, atoms, cupy_module, scenario="cold")
         batch.set_warm_start_updates(False)
         priming = _clean_sample(batch, atoms, cupy_module, scenario="priming")
@@ -388,32 +403,34 @@ def benchmark_case(
             scenario="changed_geometry",
             coordinates=coordinates,
         )
+        return _jsonable(
+            {
+                "status": "measured",
+                "method": method,
+                "selector": calculator._method_name,
+                "method_identity": calculator.method_ir.identity,
+                "execution_plan": calculator.ks_options.execution_plan.to_payload(),
+                "exchange_operators": list(exchange_operators),
+                "system": system,
+                "atoms": len(atoms),
+                "basis": basis,
+                "density_fitting": density_fitting,
+                "prepare_seconds": prepare_seconds,
+                "cold": cold,
+                "priming": priming,
+                "warm": warm,
+                "changed_geometry": changed,
+                "scf_profile": scf_profile,
+                "library": str(library),
+                "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
+                "resource_diagnostics": batch.resource_diagnostics,
+            }
+        )
+    except (NotImplementedError, ValueError, RuntimeError, MemoryError, OSError) as error:
         return {
-            "status": "measured",
-            "method": method,
-            "selector": calculator._method_name,
-            "method_identity": calculator.method_ir.identity,
-            "execution_plan": calculator.ks_options.execution_plan.to_payload(),
-            "exchange_operators": list(exchange_operators),
-            "system": system,
-            "atoms": len(atoms),
-            "basis": basis,
-            "density_fitting": density_fitting,
-            "prepare_seconds": prepare_seconds,
-            "cold": cold,
-            "priming": priming,
-            "warm": warm,
-            "changed_geometry": changed,
-            "scf_profile": scf_profile,
-            "library": str(library),
-            "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
-            "resource_diagnostics": batch.resource_diagnostics,
-        }
-    except (NotImplementedError, ValueError, RuntimeError, MemoryError) as error:
-        return {
-            "status": "unsupported"
-            if isinstance(error, NotImplementedError)
-            else "failed",
+            "status": (
+                "unsupported" if isinstance(error, NotImplementedError) else "failed"
+            ),
             "method": method,
             "system": system,
             "basis": basis,
@@ -422,7 +439,8 @@ def benchmark_case(
             "error": str(error),
         }
     finally:
-        batch.close()
+        if batch is not None:
+            batch.close()
 
 
 def main() -> None:
