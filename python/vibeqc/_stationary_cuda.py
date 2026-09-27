@@ -339,6 +339,20 @@ class _CudaSources:
         ]
         lib.stationary_geometry.argtypes = geometry_args
         lib.stationary_geometry_enqueue.argtypes = geometry_args
+        resident_external_args = [
+            ct.c_void_p,
+            ct.POINTER(GridTaskView),
+            _DOUBLE,
+            _INT,
+            _DOUBLE,
+            _DOUBLE,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            *tail,
+        ]
+        lib.stationary_geometry_external_device.argtypes = resident_external_args
+        lib.stationary_geometry_external_device_enqueue.argtypes = resident_external_args
         lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
         lib.stationary_finish_reduced.argtypes = [
@@ -587,6 +601,66 @@ class _CudaSources:
             _ptr(owners),
             _ptr(weights),
             _ptr(raw),
+        )
+
+    def geometry_external_device(
+        self,
+        task: typing.Any,
+        owners: typing.Any,
+        weights: typing.Any,
+        raw: typing.Any,
+        external_device: typing.Any,
+        external_stride: typing.Any,
+        external_offset: typing.Any = 0,
+    ) -> None:
+        """Borrow one strided tile from a resident [6, stride] nonlocal seed owner.
+
+        The seed allocation must belong to the same CUDA device and remain alive
+        until drain_geometry() when production uses the deferred entry point.
+        No seed values cross the host boundary here; the device kernel validates
+        all six seed fields before consuming them.
+        """
+        view = task.view
+        if task._owner.device_id != self.device:
+            raise ValueError("stationary/grid current owner device mismatch")
+        self.borrowed_streams.add(view.stream)
+        owners = _checked(owners, (view.npoint,), np.int64)
+        weights = _checked(weights, (view.npoint,))
+        raw = _checked(raw, (view.npoint,))
+        if type(external_stride) is not int or type(external_offset) is not int:
+            raise TypeError("resident nonlocal seed stride/offset must be integers")
+        if (
+            external_stride <= 0
+            or external_offset < 0
+            or external_offset > external_stride
+            or view.npoint > external_stride - external_offset
+        ):
+            raise ValueError("resident nonlocal seed tile exceeds its strided owner")
+        if isinstance(external_device, int):
+            external_device = ct.c_void_p(external_device)
+        elif not isinstance(external_device, ct.c_void_p):
+            try:
+                external_device = ct.cast(external_device, ct.c_void_p)
+            except (TypeError, ValueError) as error:
+                raise TypeError("resident nonlocal seeds require a device pointer") from error
+        if not external_device.value:
+            raise ValueError("resident nonlocal seed device pointer is null")
+        work = task.density_jets(4)
+        self._call(
+            (
+                "stationary_geometry_external_device"
+                if self.profile_device
+                else "stationary_geometry_external_device_enqueue"
+            ),
+            self.handle,
+            ct.byref(view),
+            work,
+            _ptr(owners),
+            _ptr(weights),
+            _ptr(raw),
+            external_device,
+            external_stride,
+            external_offset,
         )
 
     def drain_geometry(self) -> None:
