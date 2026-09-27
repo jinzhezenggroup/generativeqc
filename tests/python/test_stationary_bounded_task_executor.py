@@ -51,6 +51,26 @@ def test_executor_classifies_and_covers_runtime_domain(
     assert seen == list(domain)
 
 
+def test_executor_preserves_complete_paging_at_effective_fixed_threshold() -> None:
+    domain = RuntimeTaskDomain.rectangular((5, 4))
+    executor = _BoundedStationaryTaskExecutor(
+        fixed_capacity=16,
+        resident_capacity=16,
+        page_capacity=16,
+    )
+    seen: list[tuple[int, ...]] = []
+
+    execution = executor.execute(domain, seen.append)
+
+    assert execution.mode == "paged"
+    assert execution.logical_tasks == 20
+    assert execution.fixed_capacity == 16
+    assert execution.resident_capacity == 16
+    assert execution.page_capacity == 16
+    assert execution.producer_pages == 2
+    assert seen == list(domain)
+
+
 @pytest.mark.parametrize(
     ("page_capacity", "resident_capacity"),
     ((0, 1), (1, 0), (4, 3), (True, 4)),

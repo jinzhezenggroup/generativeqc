@@ -328,8 +328,8 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         native_grid_library=tmp_path / "native.so" if aot else None,
         cache=tmp_path / "cache",
         tile_points=4,
-        integral_terms=2,
-        primitive_tile=4,
+        integral_terms=32,
+        primitive_tile=16,
     )
 
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
@@ -348,6 +348,16 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     assert result.work["stationary_weight_tensor_executions"] == 0
     assert result.work["stationary_weight_roundtrip_bytes"] == 0
     assert result.work["stationary_state_dw_upload_bytes"] == 16
+    task_schedule = result.work["stationary_task_executor"]
+    assert task_schedule["fixed_capacity"] == 16
+    assert task_schedule["resident_capacity"] == 16
+    assert task_schedule["page_capacity"] == 16
+    assert [source["mode"] for source in task_schedule["sources"]] == [
+        "fixed",
+        "fixed",
+        "fixed",
+    ]
+    assert [source["producer_pages"] for source in task_schedule["sources"]] == [1, 1, 1]
     assert result.execution.endswith("/generated-device-stationary-weights-v1")
 
 

@@ -1956,8 +1956,12 @@ def _complete_rks_cuda_gradient_diagnostic(
             )
             ao.set_density(density)
         timeline.switch("python_packing")
+        # integral_terms and primitive_tile are admitted independently. A fixed
+        # producer must fit both the logical fixed threshold and the resident
+        # native descriptor reservoir.
+        fixed_task_capacity = min(integral_terms, primitive_tile)
         task_executor = _BoundedStationaryTaskExecutor(
-            fixed_capacity=integral_terms,
+            fixed_capacity=fixed_task_capacity,
             resident_capacity=primitive_tile,
             page_capacity=primitive_tile,
         )
@@ -2156,7 +2160,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         ),
         stationary_task_executor={
             "schema": "vibeqc.stationary-bounded-task-executor.v2",
-            "fixed_capacity": integral_terms,
+            "fixed_capacity": fixed_task_capacity,
             "resident_capacity": primitive_tile,
             "page_capacity": primitive_tile,
             "primitive_record_page_budget": max_primitive_records,
