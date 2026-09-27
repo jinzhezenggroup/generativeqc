@@ -18,6 +18,7 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 from vibeqc_compiler.method.stationary_gradient import (
+    BULK_LIBXC_POINT_MODEL,
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -667,3 +668,15 @@ assert p.reduction_program(atoms=1).logical_hash
     subprocess.run(
         [sys.executable, "-c", script], env=environment, check=True, timeout=30
     )
+
+
+
+def test_generic_libxc_point_model_reuses_common_stationary_plan() -> None:
+    pbe = plan()
+    bulk = StationaryGradientPlan(
+        pbe.method,
+        StationaryMeanField(BULK_LIBXC_POINT_MODEL),
+    )
+    assert bulk.source_names == pbe.source_names
+    assert bulk.identity != pbe.identity
+    assert bulk.mean_field.point_model == BULK_LIBXC_POINT_MODEL
