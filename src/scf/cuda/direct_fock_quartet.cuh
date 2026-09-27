@@ -13,7 +13,7 @@
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
-#include "scf/cuda/matrix_index.cuh"
+#include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
 // Retained direct fock quartet contraction helpers.
@@ -81,9 +81,8 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
                                        second_ao_pair_count, system_ao_begin, n, i, j, k, l)) {
       return;
     }
-    if (schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
-            schwarz_bounds[physical_offset + matrix_index(k, l, n)] <
-        screening_tolerance) {
+    if (!direct_ao_quartet_survives_schwarz(schwarz_bounds, physical_offset, n, i, j, k, l,
+                                            screening_tolerance)) {
       return;
     }
     const EvalScalar evaluated_integral =
