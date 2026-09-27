@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import typing
-from pathlib import Path
 
 import numpy as np
 import pytest
 from vibeqc import GridSpec
+
+if typing.TYPE_CHECKING:
+    from pathlib import Path
 
 from benchmarks.dft_force_matrix import (
     QUALIFICATION_SYSTEMS,
@@ -95,7 +97,7 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
     )
 
     class Batch:
-        resource_diagnostics = {"ok": True}
+        resource_diagnostics: typing.ClassVar[dict[str, bool]] = {"ok": True}
 
         def set_warm_start_updates(self, _enabled: bool) -> None:
             pass
@@ -179,7 +181,7 @@ def test_partial_warm_failure_preserves_prior_warm_samples(
     )
 
     class Batch:
-        resource_diagnostics = {"ok": True}
+        resource_diagnostics: typing.ClassVar[dict[str, bool]] = {"ok": True}
 
         def set_warm_start_updates(self, _enabled: bool) -> None:
             pass
