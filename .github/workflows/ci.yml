@@ -636,6 +636,14 @@ jobs:
               'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape0-oh-doublet-uks]'
               --deselect
               'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-water-rks]'
+              # The remaining production-grid OH UKS replay is still a full
+              # seven-point reconverged finite-difference qualification. Hosted
+              # runners measured it at 355-508 s by itself, making one test the
+              # routine core critical path. Public WB97M-V live-state/analytic
+              # gradient, semilocal RKS/UKS, Maple/Libxc, and generated-code
+              # contracts remain on every PR; keep this full FD replay nightly.
+              --deselect
+              'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-oh-doublet-uks]'
               # The module-scoped analytic Hessian fixture computes a complete
               # water Hessian before the first parametrized check. On hosted
               # runners that setup alone is ~27 minutes, so keep the H2 path
