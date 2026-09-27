@@ -243,8 +243,6 @@ def resolve_public_bulk_ks(
     evidence: typing.Mapping[str, typing.Any] | None = None,
     identifier: str | None = None,
 ) -> BulkKsResolution:
-    if evidence is None:
-        evidence = installed_public_evidence(name)
     """Resolve one exact public CPU-energy bulk Libxc endpoint into a KS plan.
 
     Public routing is stricter than ordinary promoted execution: the retained
@@ -253,6 +251,8 @@ def resolve_public_bulk_ks(
     qualification, so public evidence cannot bypass the executable artifact
     identity owned by this module.
     """
+    if evidence is None:
+        evidence = installed_public_evidence(name)
     endpoint = resolve_endpoint_capability(
         name,
         backend=backend,
