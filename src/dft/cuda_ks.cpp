@@ -417,14 +417,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       scf::validate_resolved_fock_build(*range_correction);
       range_exchange_coefficient = range_correction->spec.exchange.coefficient;
     }
-    fitted_coulomb =
-        strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+    fitted_coulomb = strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     fock_binding = scf::prepared_cuda_fock_binding(provider);
     if (!owner || strategy.backend != scf::FockBackend::Cuda ||
         strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
         strategy.spec.coulomb.coefficient != 1.0 ||
-        (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact &&
-         !fitted_coulomb) ||
+        (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact && !fitted_coulomb) ||
         (has_exchange && (strategy.spec.exchange.approximation != scf::FockApproximation::Exact ||
                           strategy.spec.exchange.op != scf::FockOperator::FullRange)) ||
         (has_exchange && fitted_coulomb) || !fock_binding)
@@ -465,8 +463,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (device_nonlocal &&
           (!is_semilocal_family(functional, SemilocalFamily::Wb97mv) ||
            nonlocal_domain != nlc::Vv10DensityDomain::MolecularV1 ||
-           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 ||
-           fitted_coulomb))
+           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 || fitted_coulomb))
         throw std::invalid_argument(
             "device-resident CUDA nonlocal KS is qualified only for WB97M-V MolecularV1");
       if (!device_nonlocal &&
