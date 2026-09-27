@@ -357,7 +357,11 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         "fixed",
         "fixed",
     ]
-    assert [source["producer_pages"] for source in task_schedule["sources"]] == [1, 1, 1]
+    assert [source["producer_pages"] for source in task_schedule["sources"]] == [
+        1,
+        1,
+        1,
+    ]
     assert result.execution.endswith("/generated-device-stationary-weights-v1")
 
 
