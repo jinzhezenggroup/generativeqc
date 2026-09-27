@@ -5,6 +5,9 @@
 #include "hf/reference.hpp"
 #include "methods/method.hpp"
 
+namespace vibeqc::scf {
+class PreparedFockPlan;
+}
 namespace vibeqc::methods::detail {
 struct RccsdNativeState {
   std::shared_ptr<const hf::PhysicalReference> reference;
@@ -17,7 +20,8 @@ struct RccsdNativeState {
 };
 
 RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::System&,
-                                        const vibeqc_method_descriptor&);
+                                        const vibeqc_method_descriptor&,
+                                        scf::PreparedFockPlan* prepared_exact = nullptr);
 vibeqc_status validate_rccsd_system(vibeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(const Capabilities&,
                                                                core::ContextState&,
