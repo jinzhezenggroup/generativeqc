@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
+from vibeqc_compiler.xc.automatic_semilocal import automatic_functional_code
 from vibeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
@@ -21,7 +22,6 @@ from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 SHARD_COUNT = 8
-AUTOMATIC_CODE_BASE = 0x30000
 SUPPORTED_LAYOUTS = {
     ("rho_a", "rho_b"): 1,
     ("rho_a", "rho_b", "sigma_aa", "sigma_ab", "sigma_bb"): 7,
@@ -58,9 +58,7 @@ def registry_entries() -> tuple[RegistryEntry, ...]:
         capability = functional_capability(name)
         if set(capability.required_ingredients) - {"rho", "sigma", "tau"}:
             continue
-        if not 0 < capability.libxc_id < 0x10000:
-            raise ValueError(f"automatic Libxc ID is outside the encoded range: {name}")
-        code = AUTOMATIC_CODE_BASE | capability.libxc_id
+        code = automatic_functional_code(name)
         if code in codes:
             raise ValueError(f"duplicate automatic Libxc functional code: {code:#x}")
         codes.add(code)
