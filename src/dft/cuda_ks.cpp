@@ -838,8 +838,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // Cached graph replay bypasses the host submission callback. Advance
         // only the host-side logical generation ledger; the graph itself
         // rewrites the same stable XC/control buffers captured for this width.
-        for (unsigned slot = 0; slot < pending_iterations; ++slot)
-          pending_generations[slot] = ++generation;
+        for (unsigned slot = 0; slot < pending_iterations; ++slot) {
+          const auto replayed_generation = ++generation;
+          xc->publish_replayed_generation(replayed_generation);
+          pending_generations[slot] = replayed_generation;
+        }
       }
     } catch (...) {
       cudaStreamSynchronize(stream);
