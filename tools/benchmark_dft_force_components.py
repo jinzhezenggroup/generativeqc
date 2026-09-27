@@ -100,7 +100,7 @@ def _matrix_records(
         return []
     result: list[dict[str, typing.Any]] = []
     for case in rows:
-        if not isinstance(case, Mapping) or case.get("status") != "measured":
+        if not isinstance(case, Mapping):
             continue
         base = {
             key: case[key]
@@ -114,6 +114,18 @@ def _matrix_records(
             )
             if key in case
         }
+        case_status = str(case.get("status", "unknown"))
+        if case_status != "measured":
+            result.append(
+                {
+                    "metadata": {**base, "scenario": "case"},
+                    "status": case_status,
+                    "error_type": case.get("error_type"),
+                    "error": case.get("error"),
+                }
+            )
+            continue
+
         samples: list[Mapping[str, typing.Any]] = []
         for key in ("cold", "priming", "changed_geometry"):
             value = case.get(key)
@@ -122,31 +134,54 @@ def _matrix_records(
         warm = case.get("warm")
         if isinstance(warm, list):
             samples.extend(value for value in warm if isinstance(value, Mapping))
+
         for sample in samples:
-            components = sample.get("force_components")
-            if not isinstance(components, Mapping):
-                continue
             metadata = {**base, **_metadata(sample)}
             metadata["scenario"] = sample.get("scenario")
-            result.append(
-                {
-                    "metadata": metadata,
-                    "components": dict(components),
-                }
-            )
+            components = sample.get("force_components")
+            if isinstance(components, Mapping):
+                result.append(
+                    {
+                        "metadata": metadata,
+                        "status": "measured",
+                        "components": dict(components),
+                    }
+                )
+                continue
+            force_status = sample.get("force_status")
+            if force_status not in (None, "ok"):
+                result.append(
+                    {
+                        "metadata": metadata,
+                        "status": force_status,
+                        "error": sample.get("force_error"),
+                    }
+                )
+
         scf_profile = case.get("scf_profile")
+        if not isinstance(scf_profile, Mapping):
+            continue
+        profile_status = str(scf_profile.get("status", "unknown"))
         if (
-            isinstance(scf_profile, Mapping)
-            and scf_profile.get("status") == "measured"
+            profile_status == "measured"
             and isinstance(scf_profile.get("profile"), Mapping)
         ):
             result.append(
                 {
                     "metadata": {**base, "scenario": "diagnostic_scf_profile"},
+                    "status": "measured",
                     "scf_profile": dict(
                         typing.cast("Mapping[str, typing.Any]", scf_profile["profile"])
                     ),
                     "trace": scf_profile.get("trace"),
+                }
+            )
+        else:
+            result.append(
+                {
+                    "metadata": {**base, "scenario": "diagnostic_scf_profile"},
+                    "status": profile_status,
+                    "error": scf_profile.get("reason"),
                 }
             )
     return result
@@ -162,7 +197,7 @@ def extract_records(
         return _stationary_records(payload)
     if schema.startswith("vibeqc.readme-wb97mv."):
         return _wb97mv_records(payload)
-    if "component_seconds" in payload or "timeline" in payload:
+    if schema.startswith("vibeqc.dft-force-matrix."):\n        return _matrix_records(payload)\n    if "component_seconds" in payload or "timeline" in payload:
         return [
             {
                 "metadata": _metadata(payload),
@@ -232,7 +267,7 @@ def main() -> None:
             }
         )
     if not records:
-        parser.error("inputs contain no successful DFT force component records")
+        parser.error("inputs contain no DFT force evidence records")
 
     report = {
         "schema": "vibeqc.dft-force-component-report.v1",
