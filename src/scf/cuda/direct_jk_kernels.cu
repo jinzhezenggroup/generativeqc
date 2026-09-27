@@ -234,16 +234,23 @@ __global__ void independent_rsh_derivative_kernel(DeviceBatch batch, std::size_t
       if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) continue;
       std::size_t a = 0, b = 0, cc = 0, d = 0;
       eri_symmetry_permutation(permutation, i, j, k, l, a, b, cc, d);
-      const std::size_t ab = a * n + b, cd = cc * n + d;
-      const std::size_t ac = a * n + cc, bd = b * n + d;
-      const double total_ab = density[offset + ab] + (unrestricted ? beta[offset + ab] : 0.0);
-      const double total_cd = density[offset + cd] + (unrestricted ? beta[offset + cd] : 0.0);
-      j_weight += 0.5 * cj * total_ab * total_cd;
-      exchange_weight += 0.5 * (density[offset + ac] * density[offset + bd] +
-                                (unrestricted ? beta[offset + ac] * beta[offset + bd] : 0.0));
+      // Do not form unused total-density sums or spin quadratics: finite
+      // spin inputs can overflow those intermediates even when every
+      // requested source is finite (for example, cancellation in pure J).
+      if (cj != 0.0) {
+        const std::size_t ab = a * n + b, cd = cc * n + d;
+        const double total_ab = density[offset + ab] + (unrestricted ? beta[offset + ab] : 0.0);
+        const double total_cd = density[offset + cd] + (unrestricted ? beta[offset + cd] : 0.0);
+        j_weight += 0.5 * cj * total_ab * total_cd;
+      }
+      if (short_ck != 0.0 || long_ck != 0.0) {
+        const std::size_t ac = a * n + cc, bd = b * n + d;
+        exchange_weight += 0.5 * (density[offset + ac] * density[offset + bd] +
+                                  (unrestricted ? beta[offset + ac] * beta[offset + bd] : 0.0));
+      }
     }
-    const double short_weight = short_ck * exchange_weight;
-    const double long_weight = long_ck * exchange_weight;
+    const double short_weight = short_ck != 0.0 ? short_ck * exchange_weight : 0.0;
+    const double long_weight = long_ck != 0.0 ? long_ck * exchange_weight : 0.0;
     if (j_weight == 0.0 && short_weight == 0.0 && long_weight == 0.0) continue;
 
     const std::size_t base = static_cast<std::size_t>(system) * n;
