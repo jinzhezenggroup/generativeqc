@@ -4243,7 +4243,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       kBoundedDirectThreads, 0, resources.stream_, device_batch, bounded_stream_topology,         \
       shell_class, high_pair_class, low_pair_class, options.screening_tolerance, page_begin,      \
       page_capacity, page_range.bra_begin, page_range.bra_end, high_pair_class == low_pair_class, \
-      schwarz_bounds, quartet_density, forces, bounded_direct_generated_task_heads + shell_class, \
+      schwarz_bounds, quartet_density, 1.0,                                               \
+      unrestricted_value ? -1.0 : -0.5, forces, bounded_direct_generated_task_heads + shell_class, \
       shell_class_profiling ? shell_class_profile : nullptr)
         if (purpose == DirectScreeningPurpose::Force) {
           if (is_unrestricted) {
@@ -4276,7 +4277,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           plan.resident_psss_bra_primitive_pairs * sizeof(PrimitivePairData), resources.stream_,
           device_batch, psss_resident_tasks, psss_resident_ket_pairs, plan.resident_psss_task_count,
           options.screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-          use_force_screening, schwarz_bounds, quartet_density, active, forces,
+          use_force_screening, schwarz_bounds, quartet_density, 1.0, -1.0, active, forces,
           generated_shell_class_mask);
     } else {
       launch_two_electron_force_psss_resident_bra_kernel(
@@ -4284,7 +4285,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           plan.resident_psss_bra_primitive_pairs * sizeof(PrimitivePairData), resources.stream_,
           device_batch, psss_resident_tasks, psss_resident_ket_pairs, plan.resident_psss_task_count,
           options.screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-          use_force_screening, schwarz_bounds, quartet_density, active, forces,
+          use_force_screening, schwarz_bounds, quartet_density, 1.0, -0.5, active, forces,
           generated_shell_class_mask);
     }
     return cudaPeekAtLastError();
@@ -4386,7 +4387,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             psss_resident_ket_pairs, plan.resident_psss_task_count,
             plan.resident_psss_bra_primitive_pairs, options.screening_tolerance, shell_pair_bounds,
             shell_pair_density_bounds, force_density_product_screening, schwarz_bounds,
-            transformed_direct ? direct_density : final_density, active, forces,
+            transformed_direct ? direct_density : final_density, 1.0, -1.0, active, forces,
             generated_shell_class_mask);
         cuda_error = cudaPeekAtLastError();
       }
@@ -4433,7 +4434,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             psss_resident_ket_pairs, plan.resident_psss_task_count,
             plan.resident_psss_bra_primitive_pairs, options.screening_tolerance, shell_pair_bounds,
             shell_pair_density_bounds, force_density_product_screening, schwarz_bounds,
-            transformed_direct ? direct_density : final_density, active, forces,
+            transformed_direct ? direct_density : final_density, 1.0, -0.5, active, forces,
             generated_shell_class_mask);
         cuda_error = cudaPeekAtLastError();
       }
