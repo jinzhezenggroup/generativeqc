@@ -102,7 +102,10 @@ def weighted_eri_metadata_identity(
 
 
 def emit_weighted_eri_runtime(
-    kernel: WeightedEriKernel, *, backend: typing.Any = "cuda"
+    kernel: WeightedEriKernel,
+    *,
+    backend: typing.Any = "cuda",
+    entry_prefix: str = "vibeqc_weighted",
 ) -> str:
     """Bind tagged weighted records to the shared bounded native runtime.
 
@@ -112,6 +115,22 @@ def emit_weighted_eri_runtime(
     Compilation/preparation do not authorize a performance-profile promotion.
     """
     identity = weighted_eri_program_identity(kernel, backend)
+    if (
+        type(entry_prefix) is not str
+        or not entry_prefix
+        or not entry_prefix.isascii()
+        or not (entry_prefix[0].isalpha() or entry_prefix[0] == "_")
+        or any(
+            not (character.isalnum() or character == "_")
+            for character in entry_prefix
+        )
+    ):
+        raise ValueError("weighted ERI entry prefix requires a C identifier")
+    primitive_name = (
+        "weighted"
+        if entry_prefix == "vibeqc_weighted"
+        else f"{entry_prefix}_weighted"
+    )
     if not kernel.integral.operator.range_separated:
         raise ValueError("the v2 generated runtime requires an explicit range operator")
     consumer = kernel.integral.contractions[0]
@@ -138,8 +157,10 @@ def emit_weighted_eri_runtime(
         )
         codes[sum(power << (2 * i) for i, power in enumerate(powers))] = packed
     source = emit_weighted_eri_primitive_header(
-        ((kernel, "weighted"),), backend=backend
+        ((kernel, primitive_name),), backend=backend
     )
+    if backend == "cpu" and entry_prefix != "vibeqc_weighted":
+        source += '#include "vibeqc/vibeqc.h"\n'
     source += r"""
 #include <cstdio>
 #include <memory>
@@ -194,7 +215,7 @@ struct Program {
       weights[packed] = b.weights[0];
     }
     generated_weighted_eri::Gradient candidate{};
-    if (!generated_weighted_eri::weighted_primitive(b.exponents, &b.centers[0][0], weights, candidate))
+    if (!generated_weighted_eri::@PRIMITIVE@_primitive(b.exponents, &b.centers[0][0], weights, candidate))
       return false;
     output.value = candidate.value;
     for (unsigned c = 0; c < 4; ++c)
@@ -238,8 +259,8 @@ template <class F> int boundary(F operation, char* detail, std::size_t size) {
 }
 }  // namespace
 
-extern "C" const char* vibeqc_weighted_identity_v2() { return "@IDENTITY@"; }
-extern "C" int vibeqc_weighted_create_v2(int device, int major, int minor,
+extern "C" @API@const char* @PREFIX@_identity_v2() { return "@IDENTITY@"; }
+extern "C" @API@int @PREFIX@_create_v2(int device, int major, int minor,
     std::size_t capacity, std::size_t tiles, std::size_t budget, void** output,
     char* detail, std::size_t size) {
   if (output) *output = nullptr;
@@ -249,15 +270,15 @@ extern "C" int vibeqc_weighted_create_v2(int device, int major, int minor,
     *output = candidate.release();
   }, detail, size);
 }
-extern "C" void vibeqc_weighted_destroy_v2(void* handle) { delete static_cast<NativePlan*>(handle); }
-extern "C" int vibeqc_weighted_run_v2(void* handle, const Program::Record* records,
+extern "C" @API@void @PREFIX@_destroy_v2(void* handle) { delete static_cast<NativePlan*>(handle); }
+extern "C" @API@int @PREFIX@_run_v2(void* handle, const Program::Record* records,
     std::size_t count, std::size_t tiles, Result* output, int profile, char* detail, std::size_t size) {
   return boundary([&] {
     if (!handle || (profile != 0 && profile != 1)) throw std::invalid_argument("invalid weighted ERI handle/profile");
     static_cast<NativePlan*>(handle)->run(records, count, tiles, output, profile != 0);
   }, detail, size);
 }
-extern "C" int vibeqc_weighted_storage_v2(void* handle, std::uint64_t* output,
+extern "C" @API@int @PREFIX@_storage_v2(void* handle, std::uint64_t* output,
     char* detail, std::size_t size) {
   return boundary([&] {
     if (!handle || !output) throw std::invalid_argument("null weighted ERI storage argument");
@@ -266,7 +287,7 @@ extern "C" int vibeqc_weighted_storage_v2(void* handle, std::uint64_t* output,
   }, detail, size);
 }
 #ifdef __CUDACC__
-extern "C" int vibeqc_weighted_metrics_v2(void* handle, vibeqc_tensor::Metrics* output,
+extern "C" @API@int @PREFIX@_metrics_v2(void* handle, vibeqc_tensor::Metrics* output,
     char* detail, std::size_t size) {
   return boundary([&] {
     if (!handle || !output) throw std::invalid_argument("null weighted ERI metrics argument");
@@ -284,6 +305,13 @@ extern "C" int vibeqc_weighted_metrics_v2(void* handle, vibeqc_tensor::Metrics* 
         "@PSSS@": "true" if kernel.spec.angular == (1, 0, 0, 0) else "false",
         "@COUNT@": str(len(kernel.component_indices)),
         "@IDENTITY@": identity,
+        "@PREFIX@": entry_prefix,
+        "@PRIMITIVE@": primitive_name,
+        "@API@": (
+            "VIBEQC_API "
+            if backend == "cpu" and entry_prefix != "vibeqc_weighted"
+            else ""
+        ),
     }.items():
         source = source.replace(marker, replacement)
     return source
