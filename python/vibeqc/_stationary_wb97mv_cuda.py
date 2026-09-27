@@ -163,24 +163,22 @@ class PreparedWb97mvCudaGradient:
             max_host_bytes // 4,
             max_device_bytes // 4,
         )
-        # Separate upper allowances for the retained native direct source and
-        # its transient one-electron bridge. Both enforce this cap natively;
-        # the matrix term also covers final-state revalidation/export on host.
+        # The Direct derivative source is retained by the prepared SCF owner and
+        # is already charged to that owner's resource ledger. This allowance is
+        # only for force-time one-electron/transient native work; do not reserve
+        # a second Direct owner here. The matrix term also covers final-state
+        # revalidation/export on host.
         native_budget = 256 * n * n + 1024 * (
             na + n + basis.nprimitive + len(basis.shells)
         )
         device_bound = (
-            gp.peak_bytes
-            + source_bytes
-            + 48 * tile_points
-            + nlc_budget
-            + 2 * native_budget
+            gp.peak_bytes + source_bytes + 48 * tile_points + nlc_budget + native_budget
         )
         host_bound = (
             gp.host_bytes
             + 8 * (64 * npnt + 8 * n * n + 128 * na)
             + nlc_budget
-            + 2 * native_budget
+            + native_budget
         )
         if device_bound > max_device_bytes or host_bound > max_host_bytes:
             raise ValueError("WB97M-V stationary numeric capacity budget exceeded")
