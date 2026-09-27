@@ -51,6 +51,7 @@ from vibeqc import _generated_methods as generated_methods
 from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
 from vibeqc.basis_capabilities import resolved_basis_metadata
 from vibeqc.calculator import _basis_pack, _named_basis_record, _named_basis_shells
+from vibeqc.ks import resolve_ks_method, resolve_ks_options
 from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from vibeqc_compiler.dft.plan import plan_tiles
 from vibeqc_compiler.method.stationary_cuda import (
@@ -62,12 +63,19 @@ from vibeqc_compiler.method.stationary_cuda import (
     stationary_aot_contract_identity,
     stationary_runtime_sources,
 )
+from vibeqc_compiler.method.stationary_gradient import (
+    SCF_POINT_MODEL,
+    StationaryGradientPlan,
+    StationaryMeanField,
+)
 
 _LOCAL_HELPERS = {
     "Atom": Atom,
     "generated_methods": generated_methods,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
     "resolved_basis_metadata": resolved_basis_metadata,
+    "resolve_ks_method": resolve_ks_method,
+    "resolve_ks_options": resolve_ks_options,
     "_basis_pack": _basis_pack,
     "_named_basis_record": _named_basis_record,
     "_named_basis_shells": _named_basis_shells,
@@ -78,6 +86,8 @@ _LOCAL_HELPERS = {
     "load_stationary_aot_artifact": load_stationary_aot_artifact,
     "stationary_aot_contract_identity": stationary_aot_contract_identity,
     "stationary_runtime_sources": stationary_runtime_sources,
+    "StationaryGradientPlan": StationaryGradientPlan,
+    "StationaryMeanField": StationaryMeanField,
 }
 
 
@@ -98,6 +108,14 @@ _IMPORTED_HELPER_SOURCES = {
 
 SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
+SEMILOCAL_ABI_IDS = {
+    "lda-rks": 6,
+    "pbe-rks": 7,
+    "lda-uks": 8,
+    "pbe-uks": 9,
+    "r2scan-rks": 10,
+    "r2scan-uks": 11,
+}
 SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
 SPD_EXPANSION_CONTRACT_SHA256 = (
     "f0d9be746f30067f6dba8293bcc35a9dc06db74037a6c76d322d21051bc61334"
@@ -992,6 +1010,59 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     }
 
 
+def _public_selector_contract(
+    selector: str,
+    *,
+    expected_spin: str,
+    stationary_plan: Any,
+) -> dict[str, Any]:
+    """Prove that a public selector resolves to the audited packaged plan."""
+
+    try:
+        expected_abi = SEMILOCAL_ABI_IDS[selector]
+        metadata = generated_methods.METHOD_METADATA[selector]
+    except KeyError as error:
+        raise RuntimeError(f"unrecognized frozen public selector {selector}") from error
+    method_ir, functional = resolve_ks_method(selector)
+    options = resolve_ks_options(selector)
+    public_stationary = StationaryGradientPlan(
+        method_ir,
+        StationaryMeanField(SCF_POINT_MODEL),
+    )
+    failures = []
+    if metadata["family"] != "density_functional" or metadata["provider"] != "dft":
+        failures.append("family/provider")
+    if metadata["abi_id"] != expected_abi:
+        failures.append("native ABI ID")
+    if method_ir.spin != expected_spin or functional.spin != expected_spin:
+        failures.append("spin")
+    if options.coefficients != (1.0, 1.0, 0.0):
+        failures.append("semilocal coefficients")
+    if (
+        options.execution_plan.method.identity != method_ir.identity
+        or options.execution_plan.exchange
+        or options.execution_plan.nonlocal_correlation is not None
+        or options.execution_plan.post_scf
+    ):
+        failures.append("KS execution plan")
+    if public_stationary.identity != stationary_plan.identity:
+        failures.append("stationary plan identity")
+    if failures:
+        raise RuntimeError(
+            f"public selector {selector} disagrees with packaged semilocal plan: "
+            + ", ".join(failures)
+        )
+    return {
+        "selector": selector,
+        "native_abi_id": expected_abi,
+        "spin": expected_spin,
+        "coefficients": list(options.coefficients),
+        "method_ir_identity": method_ir.identity,
+        "ks_execution_plan_identity": options.execution_plan.identity,
+        "stationary_plan_identity": public_stationary.identity,
+    }
+
+
 def _artifact_verification(
     directory: Path | None,
     *,
@@ -1219,6 +1290,7 @@ def _build_report(
         }
 
     artifact_cache: dict[tuple[int, str], dict[str, Any]] = {}
+    selector_cache: dict[str, dict[str, Any]] = {}
     rows = []
     for frozen_row in sorted(required_rows, key=lambda item: item["id"]):
         method = frozen_row["method"]
@@ -1235,6 +1307,12 @@ def _build_report(
                 plan=plan,
             )
         selector = f"{method}-{'rks' if spin == 'unpolarized' else 'uks'}"
+        if selector not in selector_cache:
+            selector_cache[selector] = _public_selector_contract(
+                selector,
+                expected_spin=spin,
+                stationary_plan=plan,
+            )
         native_properties = list(
             generated_methods.METHOD_METADATA[selector]["properties"]
         )
@@ -1271,6 +1349,7 @@ def _build_report(
                     "promotion": "python semilocal direct-CUDA stationary-force predicate",
                     "owner": "python/vibeqc/calculator.py::Calculator.__init__",
                     "source_audited": True,
+                    "selector_contract": selector_cache[selector],
                 },
                 "public_route": {
                     "scientific_runtime_compilation_required": False,

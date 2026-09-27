@@ -44,6 +44,9 @@ checkout changes underneath already-imported helper objects.
 The tool also pins the checkout HEAD at module import and requires a fresh
 interpreter after any commit/checkout transition, covering transitive imported
 state that is not represented by a helper's defining file alone.
+Each frozen selector is additionally resolved through the public MethodIR/KS
+path and must reproduce the audited native ABI ID, spin, semilocal coefficients,
+execution domain, and packaged stationary plan identity.
 The bundled basis-pack and named-record caches are cleared before every report,
 so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 

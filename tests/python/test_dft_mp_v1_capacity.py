@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -283,6 +284,14 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
     assert {row["product"] for row in rows} == {"energy+analytic_forces"}
     assert all(row["required"] is True for row in rows)
     assert all(row["public_capability"]["forces"] is True for row in rows)
+    assert {
+        row["public_capability"]["selector_contract"]["selector"] for row in rows
+    } == set(qualify_capacity.SEMILOCAL_ABI_IDS)
+    assert all(
+        row["public_capability"]["selector_contract"]["stationary_plan_identity"]
+        == row["stationary_plan"]["identity"]
+        for row in rows
+    )
     assert all(
         row["public_route"]["scientific_runtime_compilation_required"] is False
         for row in rows
@@ -381,6 +390,29 @@ def test_each_row_uses_its_own_method_memory_admission(
     pbe = rows["pbe/rks/water/fp64_energy_forces"]["admission"]
     assert pbe["outcome"] == "blocked"
     assert pbe["first_blocker"]["gate"] == "additional_device_budget"
+
+
+def test_public_selector_contract_rejects_changed_semilocal_coefficients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = qualify_capacity.resolve_ks_options
+
+    def changed(selector: str) -> SimpleNamespace:
+        options = original(selector)
+        return SimpleNamespace(
+            coefficients=(0.5, 1.0, 0.0),
+            execution_plan=options.execution_plan,
+        )
+
+    monkeypatch.setattr(qualify_capacity, "resolve_ks_options", changed)
+    plan = qualify_capacity._qualified_aot_plan(1, "unpolarized")
+
+    with pytest.raises(RuntimeError, match="semilocal coefficients"):
+        qualify_capacity._public_selector_contract(
+            "pbe-rks",
+            expected_spin="unpolarized",
+            stationary_plan=plan,
+        )
 
 
 def test_machine_readable_report_round_trips_without_nonfinite_values() -> None:
