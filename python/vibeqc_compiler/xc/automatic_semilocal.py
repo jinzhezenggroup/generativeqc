@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .libxc_blacklist import blacklist_reason
 from .libxc_bulk_capabilities import functional_capability
+from .libxc_work import LIBXC_WORK_DOMAIN
 from .spec import AUTO_BULK_COMPONENTS, UnsupportedXC
 
 AUTOMATIC_FUNCTIONAL_CODE_BASE = 0x30000
-AUTOMATIC_SCF_DOMAIN = "libxc-bulk-production-candidate/v2"
+AUTOMATIC_SCF_DOMAIN = LIBXC_WORK_DOMAIN
 _SUPPORTED_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
 
 
@@ -19,11 +19,6 @@ def automatic_functional_code(name: str) -> int:
     if key not in AUTO_BULK_COMPONENTS:
         raise UnsupportedXC(
             f"Libxc functional {key!r} is not an automatic semilocal registration"
-        )
-    reason = blacklist_reason(key)
-    if reason is not None:
-        raise UnsupportedXC(
-            f"automatic Libxc functional {key} is blacklisted: {reason}"
         )
     capability = functional_capability(key)
     unsupported = tuple(
