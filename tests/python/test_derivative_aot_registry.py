@@ -8,6 +8,7 @@ from vibeqc_compiler.integral.derivative_aot_registry import (
     component_groups,
     entry_prefix_for_key,
     make_key,
+    radial_inventory_from_payload,
     select_packaged_component_derivative_aot,
     select_packaged_derivative_aot,
 )
@@ -140,3 +141,57 @@ def test_component_bundle_fails_closed_when_one_shard_is_missing() -> None:
         )
         is None
     )
+
+
+def test_radial_inventory_is_backend_scoped_and_rejects_duplicates() -> None:
+    payload = {
+        "schema": "vibeqc.derivative-aot.radials.v1",
+        "entries": [
+            {"backend": "cpu", "family": "short_range", "omega": 0.3},
+            {"backend": "cuda", "family": "short_range", "omega": 0.3},
+            {"backend": "cpu", "family": "long_range", "omega": 0.3},
+        ],
+    }
+    assert radial_inventory_from_payload(payload, backend="cpu") == (
+        CoulombKernel("short_range", 0.3),
+        CoulombKernel("long_range", 0.3),
+    )
+    assert radial_inventory_from_payload(payload, backend="cuda") == (
+        CoulombKernel("short_range", 0.3),
+    )
+
+    duplicate = {
+        **payload,
+        "entries": [
+            {"backend": "cpu", "family": "short_range", "omega": 0.3},
+            {"backend": "cpu", "family": "short_range", "omega": 0.3},
+        ],
+    }
+    import pytest
+
+    with pytest.raises(ValueError, match="duplicate"):
+        radial_inventory_from_payload(duplicate, backend="cpu")
+
+
+def test_radial_inventory_rejects_undeclared_schema_or_entry_shape() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="schema"):
+        radial_inventory_from_payload(
+            {"schema": "other", "entries": []}, backend="cpu"
+        )
+    with pytest.raises(ValueError, match="entry"):
+        radial_inventory_from_payload(
+            {
+                "schema": "vibeqc.derivative-aot.radials.v1",
+                "entries": [
+                    {
+                        "backend": "cpu",
+                        "family": "short_range",
+                        "omega": 0.3,
+                        "method": "WB97M-V",
+                    }
+                ],
+            },
+            backend="cpu",
+        )
