@@ -344,6 +344,30 @@ class GridXcCandidateAssessment:
         }
 
 
+def grid_xc_tile_capacities(shape: GridXcCandidateShape) -> dict[str, int]:
+    """Return exact compiler-visible per-tile capacities shared by all lowerings."""
+
+    if not isinstance(shape, GridXcCandidateShape):
+        raise TypeError("grid/XC tile capacities require GridXcCandidateShape")
+    points = min(shape.npoint, shape.tile_points)
+    scalar_bytes = 8
+    return {
+        "ao_jets": scalar_bytes
+        * points
+        * shape.max_active_ao
+        * shape.jet_components,
+        "density_panel": scalar_bytes
+        * shape.spins
+        * points
+        * shape.max_active_ao,
+        "features": scalar_bytes * shape.spins * points * (1 + 3 + 3 + 1),
+        "vxc": scalar_bytes
+        * shape.spins
+        * shape.max_active_ao
+        * shape.max_active_ao,
+    }
+
+
 def _storage_pressure(
     schedule: GridXcExecutionSchedule,
     shape: GridXcCandidateShape,
@@ -359,10 +383,11 @@ def _storage_pressure(
 
     points = min(shape.npoint, shape.tile_points)
     scalar_bytes = 8
-    ao_bytes = scalar_bytes * points * shape.max_active_ao * shape.jet_components
-    density_bytes = scalar_bytes * shape.spins * points * shape.max_active_ao
-    feature_bytes = scalar_bytes * shape.spins * points * (1 + 3 + 3 + 1)
-    vxc_bytes = scalar_bytes * shape.spins * shape.max_active_ao * shape.max_active_ao
+    capacities = grid_xc_tile_capacities(shape)
+    ao_bytes = capacities["ao_jets"]
+    density_bytes = capacities["density_panel"]
+    feature_bytes = capacities["features"]
+    vxc_bytes = capacities["vxc"]
     # The source is a dependency token here, not another estimate of the full
     # density owner; PreparedXCContractions already accounts for that storage.
     seed = BufferValue("density_source", 0, "device", compiler_owned=False)
