@@ -89,7 +89,7 @@ _PUBLIC_DFT_IDENTIFIERS = _public_dft_identifier_index()
 
 def _public_dft_binding(method: typing.Any) -> tuple[str, str]:
     if not isinstance(method, str):
-        raise ValueError("KS options require a string RKS/UKS method selector")
+        raise TypeError("KS options require a string RKS/UKS method selector")
     selector = method.lower()
     legacy = _LEGACY_KS_SELECTORS.get(selector)
     if legacy is not None:
