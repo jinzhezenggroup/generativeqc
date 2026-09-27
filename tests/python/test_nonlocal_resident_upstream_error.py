@@ -37,6 +37,7 @@ PREFIX = r"""
 #include <cstdlib>
 #include <limits>
 using std::isfinite;
+using std::signbit;
 struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1};
 void atomicExch(int* out, int value) { *out = value; }
 double __longlong_as_double(unsigned long long value) {
@@ -182,7 +183,7 @@ def test_zero_weight_row_mask_distinguishes_active_from_density_inactive() -> No
 
 
 def _two_point_vv10_energy(weight0: float) -> float:
-    b, c = 6.0, 0.01
+    b = 6.0
     rho = (0.8, 1.1)
     weights = (weight0, 1.0)
     positions = (0.0, 1.0)
