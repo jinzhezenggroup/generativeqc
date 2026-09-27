@@ -120,6 +120,21 @@ def test_routine_python_ci_defers_qualification_scale_megatests() -> None:
         assert nodeid in section
 
 
+def test_affordable_wb97mv_uks_fd_stays_on_routine_ci() -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text()
+        .split("\n  python:\n", 1)[1]
+        .split("\n  upload-coverage:\n", 1)[0]
+    )
+    nodeid = (
+        "tests/python/test_wb97mv_complete.py::"
+        "test_public_wb97mv_force_matches_reconverged_energy_differences"
+        "[grid_shape0-oh-doublet-uks]"
+    )
+    assert nodeid not in section
+
+
 def test_fast_spd_reconverged_cases_stay_on_routine_ci() -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
     section = (
