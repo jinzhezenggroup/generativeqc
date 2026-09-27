@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from vibeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
@@ -11,6 +11,9 @@ from vibeqc_compiler.dft import NativeAO
 
 from tools.vibeqc_hessian import rks_hvp
 from tools.vibeqc_response import GMRESOptions, NativeRKSResponse
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 ATOMS = [("He", (0.13, -0.21, -0.8)), ("He", (-0.09, 0.17, 0.86))]
 # Seven Cartesian AOs on each center; s/p shells keep this regression smaller
