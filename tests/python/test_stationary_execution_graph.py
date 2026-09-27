@@ -2,8 +2,14 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.method import MethodSpec, original_nonlocal_correlation, resolve_method
-from vibeqc_compiler.method.stationary_execution import compile_stationary_execution_graph
+from vibeqc_compiler.method import (
+    MethodSpec,
+    original_nonlocal_correlation,
+    resolve_method,
+)
+from vibeqc_compiler.method.stationary_execution import (
+    compile_stationary_execution_graph,
+)
 from vibeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
@@ -11,20 +17,22 @@ from vibeqc_compiler.method.stationary_gradient import (
 )
 
 
-def _plan(method="PBE"):
+def _plan(method: str | MethodSpec = "PBE") -> StationaryGradientPlan:
     return StationaryGradientPlan(
         resolve_method(method), StationaryMeanField(SCF_POINT_MODEL)
     )
 
 
-def test_grid_feature_inventory_is_ingredient_driven():
+def test_grid_feature_inventory_is_ingredient_driven() -> None:
     pbe = compile_stationary_execution_graph(_plan("PBE"))
     r2scan = compile_stationary_execution_graph(_plan("R2SCAN"))
     assert pbe.grid_features == ("rho", "gradient")
     assert r2scan.grid_features == ("rho", "gradient", "tau")
 
 
-def test_nonlocal_composition_reuses_density_features_without_named_method_node():
+def test_nonlocal_composition_reuses_density_features_without_named_method_node() -> (
+    None
+):
     method = MethodSpec(
         "arbitrary-pbe-vv10-alias",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
@@ -43,13 +51,13 @@ def test_nonlocal_composition_reuses_density_features_without_named_method_node(
     assert "wb97" not in repr(graph).lower()
 
 
-def test_range_exchange_sources_are_graph_nodes_not_method_dispatch():
+def test_range_exchange_sources_are_graph_nodes_not_method_dispatch() -> None:
     graph = compile_stationary_execution_graph(_plan("CAM-B3LYP"))
     assert graph.node("integral:exchange_short_range").inputs == ("final_density",)
     assert graph.node("integral:exchange_long_range").inputs == ("final_density",)
 
 
-def test_graph_covers_stationary_source_inventory_exactly():
+def test_graph_covers_stationary_source_inventory_exactly() -> None:
     plan = _plan("CAM-B3LYP")
     graph = compile_stationary_execution_graph(plan)
     produced = {
@@ -63,7 +71,7 @@ def test_graph_covers_stationary_source_inventory_exactly():
     )
 
 
-def test_aliases_with_identical_science_share_graph_identity():
+def test_aliases_with_identical_science_share_graph_identity() -> None:
     first = MethodSpec(
         "first-name",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
