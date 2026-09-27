@@ -967,6 +967,23 @@ class PreparedStationaryCudaExecution:
         stack = ExitStack()
         try:
             source_names = stationary_runtime_sources(plan)
+            needs_first = functional != 0
+            # Register the borrowed grid owner first so ExitStack closes the
+            # stationary consumer before destroying the CUDA stream it borrows.
+            grid = stack.enter_context(
+                CudaGrid(
+                    basis,
+                    grid_artifact,
+                    order=2 if needs_first else 1,
+                    tile_points=tile_points,
+                    budget_bytes=grid_plan.peak_bytes,
+                    device_id=device,
+                    active_ao_capacity=basis.nao,
+                    ingredients=(
+                        ("rho", "gradient", "tau") if needs_first else ("rho",)
+                    ),
+                )
+            )
             sources = stack.enter_context(
                 _CudaSources(
                     basis,
@@ -981,21 +998,6 @@ class PreparedStationaryCudaExecution:
                     target=target,
                     work_budget=work_budget,
                     profile_device=profile_device,
-                )
-            )
-            needs_first = functional != 0
-            grid = stack.enter_context(
-                CudaGrid(
-                    basis,
-                    grid_artifact,
-                    order=2 if needs_first else 1,
-                    tile_points=tile_points,
-                    budget_bytes=grid_plan.peak_bytes,
-                    device_id=device,
-                    active_ao_capacity=basis.nao,
-                    ingredients=(
-                        ("rho", "gradient", "tau") if needs_first else ("rho",)
-                    ),
                 )
             )
             tensors = {
@@ -1516,6 +1518,24 @@ def _complete_rks_cuda_gradient_diagnostic(
     with ExitStack() as stack:
         if prepared is None:
             with timeline.phase("owner_construction"):
+                # ExitStack unwinds in reverse: keep the borrowed grid stream
+                # alive until the stationary consumer has drained and closed.
+                ao = stack.enter_context(
+                    CudaGrid(
+                        basis,
+                        grid_artifact,
+                        order=2 if needs_first else 1,
+                        tile_points=tile_points,
+                        budget_bytes=grid_plan.peak_bytes,
+                        device_id=device,
+                        active_ao_capacity=n,
+                        # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
+                        # additionally consumes tau from the same current density.
+                        ingredients=("rho", "gradient", "tau")
+                        if needs_first
+                        else ("rho",),
+                    )
+                )
                 sources = stack.enter_context(
                     _CudaSources(
                         basis,
@@ -1531,22 +1551,6 @@ def _complete_rks_cuda_gradient_diagnostic(
                         work_budget=records,
                         timeline=timeline,
                         profile_device=profile_device,
-                    )
-                )
-                ao = stack.enter_context(
-                    CudaGrid(
-                        basis,
-                        grid_artifact,
-                        order=2 if needs_first else 1,
-                        tile_points=tile_points,
-                        budget_bytes=grid_plan.peak_bytes,
-                        device_id=device,
-                        active_ao_capacity=n,
-                        # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
-                        # additionally consumes tau from the same current density.
-                        ingredients=("rho", "gradient", "tau")
-                        if needs_first
-                        else ("rho",),
                     )
                 )
             source_before = grid_before = None
