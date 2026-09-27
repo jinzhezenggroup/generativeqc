@@ -73,7 +73,10 @@ def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
         )[0]
     )
     assert "rho < threshold" in kernel
-    assert "effective_weights[i] = inactive ? 0.0 : weight" in kernel
+    assert (
+        "effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight)"
+        in kernel
+    )
     assert "effective_density[i] = inactive ? 1.0 : rho" in kernel
     assert "inactive ? 0.0 : gx" in kernel
     assert "if (!valid) atomicExch(failed, 1)" in kernel
@@ -151,8 +154,10 @@ enum class Vv10Variant {vv10=1,rvv10=2};
 struct Vv10Parameters {Vv10Variant variant=Vv10Variant::vv10;double b=6.0,c=0.01,coefficient=1.0;};
 struct Vv10CudaDeviceLayout {
  std::size_t point_count{},tile_points{},workspace_bytes{};
- bool features{},geometry{};
+ bool features{},geometry{},mask_zero_weight_rows{};
 };
+Vv10CudaDeviceLayout vv10_cuda_device_layout(
+ std::size_t,std::size_t,bool,bool,bool mask_zero_weight_rows=false);
 unsigned launch_blocks(std::size_t,unsigned) {return 1;}
 template<Vv10Variant, bool, class... T> void local_scales_kernel(T&&...) {}
 template<Vv10Variant, bool, bool, class... T> void launch_pair_rows(T&&...) {}

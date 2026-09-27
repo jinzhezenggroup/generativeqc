@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "dft/grid_task_view.cuh"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_resources.cuh"
@@ -81,6 +82,9 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
   omega[i] = sqrt(c * ratio * ratio + (4.0 * kPi / 3.0) * rho);
   kappa[i] = b * 1.5 * kPi * pow(rho / (9.0 * kPi), 1.0 / 6.0);
   weighted_density[i] = weights[i] * rho;
+  // Preserve the inactive -0 marker, but do not create one when an active
+  // negative integration weight underflows in the density product.
+  if (weighted_density[i] == 0.0 && weights[i] != 0.0) weighted_density[i] = 0.0;
   if (!isfinite(omega[i]) || !isfinite(kappa[i]) || kappa[i] <= 0.0 ||
       !isfinite(weighted_density[i]))
     atomicExch(failed, 1);
@@ -103,7 +107,7 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
   }
 }
 
-template <Vv10Variant Variant, bool Features, bool Geometry>
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
 __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_count,
                                     std::size_t npoint, double coefficient, const double* points,
                                     const double* density, const double* omega, const double* kappa,
@@ -126,6 +130,24 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
   const double domega_rhoi = Features ? domega_drho[i] : 0.0;
   const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
   const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
+  if constexpr (MaskZeroRows) {
+    // Only negative zero denotes a density-screened row. Finite negative
+    // quadrature weights and active positive-zero rows retain their derivatives.
+    if (weighted_i == 0.0 && signbit(weighted_i)) {
+      energy_terms[i] = 0.0;
+      if constexpr (Features) {
+        vrho[i] = 0.0;
+        vsigma[i] = 0.0;
+      }
+      if constexpr (Geometry) {
+        point_derivative[3 * i] = 0.0;
+        point_derivative[3 * i + 1] = 0.0;
+        point_derivative[3 * i + 2] = 0.0;
+        weight_derivative[i] = 0.0;
+      }
+      return;
+    }
+  }
   double row_inverse_kappa = 0.0;
   if constexpr (Variant == Vv10Variant::rvv10 && Features)
     row_inverse_kappa = 1.0 / (6.0 * rhoi * dkappa_rhoi);
@@ -139,9 +161,10 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
     const double dy = points[3 * j + 1] - yi;
     const double dz = points[3 * j + 2] - zi;
     const double r2 = dx * dx + dy * dy + dz * dz;
+    const double factor = weighted_density[j];
+    if (factor == 0.0) continue;
     const auto pair = pair_kernel_values<Variant, Features, Geometry>(r2, wi, omega[j], ki,
                                                                       kappa[j], row_inverse_kappa);
-    const double factor = weighted_density[j];
     sum_phi += factor * pair.phi;
     if constexpr (Features) {
       const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
@@ -176,6 +199,28 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
   if (nonfinite) atomicExch(failed, 1);
 }
 
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
+void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
+                           double coefficient, const double* points, const double* density,
+                           const double* omega, const double* kappa, const double* domega_drho,
+                           const double* domega_dsigma, const double* dkappa_drho,
+                           const double* weighted_density, double beta, double* energy_terms,
+                           double* vrho, double* vsigma, double* point_derivative,
+                           double* weight_derivative, int* failed) {
+  constexpr unsigned threads = 128;
+  const auto max_rows_per_launch =
+      static_cast<std::size_t>(std::numeric_limits<int>::max()) * threads;
+  for (std::size_t first = 0; first < layout.point_count; first += max_rows_per_launch) {
+    const auto count = std::min(max_rows_per_launch, layout.point_count - first);
+    const auto blocks = launch_blocks(count, threads);
+    pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows><<<blocks, threads, 0, stream>>>(
+        first, count, layout.point_count, coefficient, points, density, omega, kappa, domega_drho,
+        domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
+        point_derivative, weight_derivative, failed);
+    runtime::cuda_resource_check(cudaGetLastError());
+  }
+}
+
 template <Vv10Variant Variant, bool Features, bool Geometry>
 void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, double coefficient,
                       const double* points, const double* density, const double* omega,
@@ -183,18 +228,16 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
                       const double* dkappa_drho, const double* weighted_density, double beta,
                       double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
                       double* weight_derivative, int* failed) {
-  constexpr unsigned threads = 128;
-  const auto max_rows_per_launch =
-      static_cast<std::size_t>(std::numeric_limits<int>::max()) * threads;
-  for (std::size_t first = 0; first < layout.point_count; first += max_rows_per_launch) {
-    const auto count = std::min(max_rows_per_launch, layout.point_count - first);
-    const auto blocks = launch_blocks(count, threads);
-    pair_kernel_ordered<Variant, Features, Geometry><<<blocks, threads, 0, stream>>>(
-        first, count, layout.point_count, coefficient, points, density, omega, kappa, domega_drho,
-        domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
-        point_derivative, weight_derivative, failed);
-    runtime::cuda_resource_check(cudaGetLastError());
-  }
+  if (layout.mask_zero_weight_rows)
+    launch_pair_rows_impl<Variant, Features, Geometry, true>(
+        layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
+        dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma, point_derivative,
+        weight_derivative, failed);
+  else
+    launch_pair_rows_impl<Variant, Features, Geometry, false>(
+        layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
+        dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma, point_derivative,
+        weight_derivative, failed);
 }
 
 __global__ void reduce_energy_ordered_kernel(std::size_t npoint, const double* energy_terms,
@@ -221,12 +264,76 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
                        isfinite(gz) && isfinite(weight);
     if (!valid) atomicExch(failed, 1);
     const bool inactive = !valid || rho < threshold;
-    effective_weights[i] = inactive ? 0.0 : weight;
+    // Distinguish screened density rows from active signed-zero weights without
+    // allocating an additional point mask.
+    effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight);
     effective_density[i] = inactive ? 1.0 : rho;
     effective_gradient[3 * i] = inactive ? 0.0 : gx;
     effective_gradient[3 * i + 1] = inactive ? 0.0 : gy;
     effective_gradient[3 * i + 2] = inactive ? 0.0 : gz;
   }
+}
+
+__global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view, std::size_t offset,
+                                              std::size_t total_points, double* density,
+                                              double* gradient, int* failed) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= view.npoint) return;
+  if (offset > total_points || view.npoint > total_points - offset || !view.features) {
+    atomicExch(failed, 1);
+    return;
+  }
+  const auto np = view.npoint;
+  const auto out = offset + i;
+  // A finite feature buffer may still belong to a failed producer generation.
+  // Carry its sticky status before reading features, and initialize safe padding
+  // for the downstream domain kernel. Seed publication will poison every row.
+  if (view.error && *view.error) {
+    atomicExch(failed, 1);
+    density[out] = 0.0;
+    gradient[3 * out] = 0.0;
+    gradient[3 * out + 1] = 0.0;
+    gradient[3 * out + 2] = 0.0;
+    return;
+  }
+  const double rho = view.features[i] + view.features[5 * np + i];
+  const double gx = view.features[np + i] + view.features[6 * np + i];
+  const double gy = view.features[2 * np + i] + view.features[7 * np + i];
+  const double gz = view.features[3 * np + i] + view.features[8 * np + i];
+  const bool valid = isfinite(rho) && rho >= 0.0 && isfinite(gx) && isfinite(gy) && isfinite(gz);
+  if (!valid) atomicExch(failed, 1);
+  density[out] = valid ? rho : 0.0;
+  gradient[3 * out] = valid ? gx : 0.0;
+  gradient[3 * out + 1] = valid ? gy : 0.0;
+  gradient[3 * out + 2] = valid ? gz : 0.0;
+}
+
+__global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effective_weights,
+                                        const double* point_derivative, double* seeds,
+                                        const int* collect_error, const int* domain_error,
+                                        const int* pair_error) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= npoint) return;
+  bool failed = *collect_error != 0 || *domain_error != 0 || *pair_error != 0;
+  const double px = point_derivative[3 * i];
+  const double py = point_derivative[3 * i + 1];
+  const double pz = point_derivative[3 * i + 2];
+  failed = failed || !isfinite(effective_weights[i]) || !isfinite(seeds[i]) ||
+           !isfinite(seeds[npoint + i]) || !isfinite(px) || !isfinite(py) || !isfinite(pz) ||
+           !isfinite(seeds[5 * npoint + i]);
+  if (failed) {
+    const double poison = __longlong_as_double(0x7ff8000000000000ULL);
+    for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = poison;
+    return;
+  }
+  // Only the inactive negative-zero marker erases the force seeds.
+  if (effective_weights[i] == 0.0 && signbit(effective_weights[i])) {
+    for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = 0.0;
+    return;
+  }
+  seeds[2 * npoint + i] = px;
+  seeds[3 * npoint + i] = py;
+  seeds[4 * npoint + i] = pz;
 }
 
 }  // namespace
@@ -249,16 +356,51 @@ void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_c
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
+void enqueue_vv10_collect_total_features_cuda(cudaStream_t stream,
+                                              const vibeqc::dft::GridTaskView& view,
+                                              std::size_t offset, std::size_t total_points,
+                                              double* density, double* density_gradient,
+                                              int* numerical_error) {
+  if (stream == nullptr || view.version != 1 || !view.npoint || !view.features ||
+      view.stream != stream || offset > total_points || view.npoint > total_points - offset ||
+      density == nullptr || density_gradient == nullptr || numerical_error == nullptr)
+    throw std::invalid_argument("invalid resident VV10 feature collection request");
+  constexpr unsigned threads = 128;
+  collect_total_features_kernel<<<launch_blocks(view.npoint, threads), threads, 0, stream>>>(
+      view, offset, total_points, density, density_gradient, numerical_error);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
+
+void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_count,
+                                        const double* effective_weights,
+                                        const double* point_derivative, double* seeds,
+                                        const int* collect_error, const int* domain_error,
+                                        const int* pair_error) {
+  if (stream == nullptr || !point_count || effective_weights == nullptr ||
+      point_derivative == nullptr || seeds == nullptr || collect_error == nullptr ||
+      domain_error == nullptr || pair_error == nullptr)
+    throw std::invalid_argument("invalid resident VV10 force seed pack request");
+  constexpr unsigned threads = 128;
+  pack_force_seeds_kernel<<<launch_blocks(point_count, threads), threads, 0, stream>>>(
+      point_count, effective_weights, point_derivative, seeds, collect_error, domain_error,
+      pair_error);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
+
 Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_t tile_points,
-                                             bool features, bool geometry) {
+                                             bool features, bool geometry,
+                                             bool mask_zero_weight_rows) {
   if (!point_count || !tile_points)
     throw std::invalid_argument("resident VV10 CUDA layout requires nonzero point/tile counts");
   const auto arrays = std::size_t{4} + (features ? 3u : 0u);
   const auto doubles =
       runtime::size_mul(arrays, point_count, "resident VV10 CUDA workspace extent overflow");
-  return {point_count, std::min(tile_points, point_count),
+  return {point_count,
+          std::min(tile_points, point_count),
           runtime::size_mul(doubles, sizeof(double), "resident VV10 CUDA workspace byte overflow"),
-          features, geometry};
+          features,
+          geometry,
+          mask_zero_weight_rows};
 }
 
 void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters parameters,
@@ -276,10 +418,12 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
       parameters.coefficient <= 0.0)
     throw std::invalid_argument(
         "resident VV10 CUDA parameters must have a supported variant and finite positive values");
-  const auto canonical = vv10_cuda_device_layout(layout.point_count, layout.tile_points,
-                                                 layout.features, layout.geometry);
+  const auto canonical =
+      vv10_cuda_device_layout(layout.point_count, layout.tile_points, layout.features,
+                              layout.geometry, layout.mask_zero_weight_rows);
   if (layout.point_count != canonical.point_count || layout.tile_points != canonical.tile_points ||
       layout.workspace_bytes != canonical.workspace_bytes ||
+      layout.mask_zero_weight_rows != canonical.mask_zero_weight_rows ||
       workspace_bytes < layout.workspace_bytes)
     throw std::invalid_argument("resident VV10 CUDA layout/workspace mismatch");
   if (device_id < 0 || stream == nullptr || points_xyz == nullptr || weights == nullptr ||

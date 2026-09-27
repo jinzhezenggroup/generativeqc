@@ -86,7 +86,8 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
         if (keep && topology.fock_consumer != detail::GeneratedFockConsumer::Coulomb) {
           keep = direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
               batch, bra_pair, ket_pair, screening_tolerance, topology.shell_pair_bounds,
-              density_bounds);
+              density_bounds, nullptr,
+              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange);
         }
         stream_state = keep ? kConsume : kSkip;
         if (keep) {
@@ -125,7 +126,8 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
           contract_fock_direct_quartet_subtile<Unrestricted, kDdddAngularOrder>(
               batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
               output, nullptr, subtile, lane,
-              topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb);
+              topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb,
+              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange);
         }
       }
       __syncwarp();

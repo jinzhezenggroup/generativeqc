@@ -328,7 +328,7 @@ class _CudaSources:
             ct.c_double,
             *tail,
         ]
-        lib.stationary_geometry.argtypes = [
+        geometry_args = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
             _DOUBLE,
@@ -337,6 +337,25 @@ class _CudaSources:
             _DOUBLE,
             *tail,
         ]
+        lib.stationary_geometry.argtypes = geometry_args
+        lib.stationary_geometry_enqueue.argtypes = geometry_args
+        resident_external_args = [
+            ct.c_void_p,
+            ct.POINTER(GridTaskView),
+            _DOUBLE,
+            _INT,
+            _DOUBLE,
+            _DOUBLE,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            *tail,
+        ]
+        lib.stationary_geometry_external_device.argtypes = resident_external_args
+        lib.stationary_geometry_external_device_enqueue.argtypes = (
+            resident_external_args
+        )
+        lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
         lib.stationary_finish_reduced.argtypes = [
             ct.c_void_p,
@@ -543,6 +562,12 @@ class _CudaSources:
         functional: typing.Any = None,
         pbe: typing.Any = None,
     ) -> None:
+        """Enqueue one semilocal geometry tile on the borrowed grid stream.
+
+        Production execution defers the host error/synchronization gate until
+        drain_geometry(). Detailed device profiling keeps the legacy synchronous
+        call so its per-phase event timings remain attributable.
+        """
         view = task.view
         if task._owner.device_id != self.device:
             raise ValueError("stationary/grid current owner device mismatch")
@@ -569,7 +594,9 @@ class _CudaSources:
             raise ValueError("unsupported stationary semilocal functional")
         work = task.density_jets(4 if functional else 1)
         self._call(
-            "stationary_geometry",
+            "stationary_geometry"
+            if self.profile_device
+            else "stationary_geometry_enqueue",
             self.handle,
             ct.byref(view),
             work,
@@ -577,6 +604,72 @@ class _CudaSources:
             _ptr(weights),
             _ptr(raw),
         )
+
+    def geometry_external_device(
+        self,
+        task: typing.Any,
+        owners: typing.Any,
+        weights: typing.Any,
+        raw: typing.Any,
+        external_device: typing.Any,
+        external_stride: typing.Any,
+        external_offset: typing.Any = 0,
+    ) -> None:
+        """Borrow one strided tile from a resident [6, stride] nonlocal seed owner.
+
+        The seed allocation must belong to the same CUDA device and remain alive
+        until drain_geometry() when production uses the deferred entry point.
+        No seed values cross the host boundary here; the device kernel validates
+        all six seed fields before consuming them.
+        """
+        view = task.view
+        if task._owner.device_id != self.device:
+            raise ValueError("stationary/grid current owner device mismatch")
+        self.borrowed_streams.add(view.stream)
+        owners = _checked(owners, (view.npoint,), np.int64)
+        weights = _checked(weights, (view.npoint,))
+        raw = _checked(raw, (view.npoint,))
+        if type(external_stride) is not int or type(external_offset) is not int:
+            raise TypeError("resident nonlocal seed stride/offset must be integers")
+        if (
+            external_stride <= 0
+            or external_offset < 0
+            or external_offset > external_stride
+            or view.npoint > external_stride - external_offset
+        ):
+            raise ValueError("resident nonlocal seed tile exceeds its strided owner")
+        if isinstance(external_device, int):
+            external_device = ct.c_void_p(external_device)
+        elif not isinstance(external_device, ct.c_void_p):
+            try:
+                external_device = ct.cast(external_device, ct.c_void_p)
+            except (TypeError, ValueError) as error:
+                raise TypeError(
+                    "resident nonlocal seeds require a device pointer"
+                ) from error
+        if not external_device.value:
+            raise ValueError("resident nonlocal seed device pointer is null")
+        work = task.density_jets(4)
+        self._call(
+            (
+                "stationary_geometry_external_device"
+                if self.profile_device
+                else "stationary_geometry_external_device_enqueue"
+            ),
+            self.handle,
+            ct.byref(view),
+            work,
+            _ptr(owners),
+            _ptr(weights),
+            _ptr(raw),
+            external_device,
+            external_stride,
+            external_offset,
+        )
+
+    def drain_geometry(self) -> None:
+        """Complete all queued semilocal geometry tiles with one error/sync gate."""
+        self._call("stationary_geometry_drain", self.handle)
 
     def finish(self) -> typing.Any:
         self.flush()
@@ -952,6 +1045,23 @@ class PreparedStationaryCudaExecution:
         stack = ExitStack()
         try:
             source_names = stationary_runtime_sources(plan)
+            needs_first = functional != 0
+            # Register the borrowed grid owner first so ExitStack closes the
+            # stationary consumer before destroying the CUDA stream it borrows.
+            grid = stack.enter_context(
+                CudaGrid(
+                    basis,
+                    grid_artifact,
+                    order=2 if needs_first else 1,
+                    tile_points=tile_points,
+                    budget_bytes=grid_plan.peak_bytes,
+                    device_id=device,
+                    active_ao_capacity=basis.nao,
+                    ingredients=(
+                        ("rho", "gradient", "tau") if needs_first else ("rho",)
+                    ),
+                )
+            )
             sources = stack.enter_context(
                 _CudaSources(
                     basis,
@@ -966,21 +1076,6 @@ class PreparedStationaryCudaExecution:
                     target=target,
                     work_budget=work_budget,
                     profile_device=profile_device,
-                )
-            )
-            needs_first = functional != 0
-            grid = stack.enter_context(
-                CudaGrid(
-                    basis,
-                    grid_artifact,
-                    order=2 if needs_first else 1,
-                    tile_points=tile_points,
-                    budget_bytes=grid_plan.peak_bytes,
-                    device_id=device,
-                    active_ao_capacity=basis.nao,
-                    ingredients=(
-                        ("rho", "gradient", "tau") if needs_first else ("rho",)
-                    ),
                 )
             )
             tensors = {
@@ -1501,6 +1596,24 @@ def _complete_rks_cuda_gradient_diagnostic(
     with ExitStack() as stack:
         if prepared is None:
             with timeline.phase("owner_construction"):
+                # ExitStack unwinds in reverse: keep the borrowed grid stream
+                # alive until the stationary consumer has drained and closed.
+                ao = stack.enter_context(
+                    CudaGrid(
+                        basis,
+                        grid_artifact,
+                        order=2 if needs_first else 1,
+                        tile_points=tile_points,
+                        budget_bytes=grid_plan.peak_bytes,
+                        device_id=device,
+                        active_ao_capacity=n,
+                        # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
+                        # additionally consumes tau from the same current density.
+                        ingredients=("rho", "gradient", "tau")
+                        if needs_first
+                        else ("rho",),
+                    )
+                )
                 sources = stack.enter_context(
                     _CudaSources(
                         basis,
@@ -1516,22 +1629,6 @@ def _complete_rks_cuda_gradient_diagnostic(
                         work_budget=records,
                         timeline=timeline,
                         profile_device=profile_device,
-                    )
-                )
-                ao = stack.enter_context(
-                    CudaGrid(
-                        basis,
-                        grid_artifact,
-                        order=2 if needs_first else 1,
-                        tile_points=tile_points,
-                        budget_bytes=grid_plan.peak_bytes,
-                        device_id=device,
-                        active_ao_capacity=n,
-                        # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
-                        # additionally consumes tau from the same current density.
-                        ingredients=("rho", "gradient", "tau")
-                        if needs_first
-                        else ("rho",),
                     )
                 )
             source_before = grid_before = None
@@ -1571,13 +1668,14 @@ def _complete_rks_cuda_gradient_diagnostic(
                 sources.nuclear(atom, other, charges)
         sources.flush()
         grid = state.grid
-        with timeline.phase("xc_geometry_and_sync"):
+        with timeline.phase("xc_geometry_enqueue"):
             for begin in range(0, len(grid.points), tile_points):
                 end = min(begin + tile_points, len(grid.points))
                 with ao.feature_task(
                     grid.points[begin:end],
                     np.arange(n, dtype=np.uintp),
                     ingredients,
+                    defer_error_to_consumer=True,
                 ) as task:
                     sources.geometry(
                         task,
@@ -1586,6 +1684,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                         state._source.atomic_weights[begin:end],
                         functional=functional,
                     )
+        with timeline.phase("xc_geometry_drain"):
+            sources.drain_geometry()
         with timeline.phase("source_d2h_publication"):
             components = sources.finish()
         if ecp:

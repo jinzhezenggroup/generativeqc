@@ -141,3 +141,19 @@ def test_missing_profiled_values_are_null_not_nan_or_zero() -> None:
     assert record["profiled_ms"]["h2d_d2h"] is None
     assert record["wall_seconds"]["scf_full_range_k"] is None
     assert math.isfinite(record["unattributed_wall_seconds"])
+
+
+def test_stationary_split_geometry_phases_preserve_component_attribution() -> None:
+    work = {
+        "endpoint_seconds": 1.0,
+        "timeline": {
+            "endpoint_seconds": 1.0,
+            "exclusive_wall_seconds": {
+                "xc_geometry_enqueue": 0.12,
+                "xc_geometry_drain": 0.08,
+            },
+        },
+    }
+    record = normalize_force_work(work)
+    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.20)
+    assert "semilocal_geometry_response" in record["coverage"]["wall_seconds"]

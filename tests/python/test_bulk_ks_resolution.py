@@ -55,14 +55,15 @@ def test_positive_evidence_is_not_a_public_admission_gate() -> None:
     assert result.admission == "default-allow/explicit-blacklist"
 
 
-def test_bulk_ks_rejects_explicit_blacklist() -> None:
-    assert blacklist_reason("GGA_C_AM05") is not None
-    with pytest.raises(UnsupportedMethod, match="blacklisted"):
-        bulk_ks.resolve_bulk_ks("GGA_C_AM05")
+def test_shared_boundary_failures_are_not_function_blacklist_entries() -> None:
+    for name in ("GGA_C_AM05", "GGA_X_AK13"):
+        assert blacklist_reason(name) is None
+        result = bulk_ks.resolve_bulk_ks(name)
+        assert result.public_dft
 
 
-def test_blacklist_is_negative_only_and_immutable() -> None:
-    assert "GGA_X_APBE" not in LIBXC_SEMILOCAL_BLACKLIST
+def test_blacklist_is_negative_only_empty_and_immutable() -> None:
+    assert dict(LIBXC_SEMILOCAL_BLACKLIST) == {}
     with pytest.raises(TypeError):
         LIBXC_SEMILOCAL_BLACKLIST["GGA_X_APBE"] = "do not allow"  # type: ignore[index]
 
@@ -115,10 +116,10 @@ def test_qualification_candidate_remains_evidence_gated() -> None:
     assert "production-domain" in exc.value.missing_stages
 
 
-def test_qualification_candidate_can_retest_blacklisted_functional(
+def test_qualification_candidate_ignores_public_exception_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    capability = functional_capability("GGA_C_AM05")
+    capability = functional_capability("GGA_X_APBE")
     qualified = CapabilityResolution(
         name=capability.name,
         identity=capability.identity,
@@ -130,6 +131,13 @@ def test_qualification_candidate_can_retest_blacklisted_functional(
             "production-domain",
         ),
         public_dft=False,
+    )
+    monkeypatch.setattr(
+        bulk_ks,
+        "blacklist_reason",
+        lambda *args, **kwargs: pytest.fail(
+            "qualification candidates must not consult public exception policy"
+        ),
     )
     monkeypatch.setattr(
         bulk_ks, "resolve_capability", lambda *args, **kwargs: qualified

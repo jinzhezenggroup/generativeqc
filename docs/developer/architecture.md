@@ -25,16 +25,18 @@ C / C++ / Python API
   -> scientific implementation and backend plan
 ```
 
-RHF and UHF are implemented by the Hartree-Fock adapter. LDA/PBE RKS and UKS
-share the DFT adapter: it validates restricted or unrestricted spin
-populations, resolves an absent-K CPU Fock plan and retains its AO/grid state;
-the SCF loop selects the versioned spin-aware XC evaluator. System validation,
-SCF option translation, backend selection and retained execution state remain
-private to each adapter. Adding another DFT or correlated method therefore adds
-a registry definition and its own prepared-plan implementation instead of
-adding branches to the C ABI.
+RHF and UHF are implemented by the Hartree-Fock adapter. DFT RKS/UKS
+execution shares one prepared adapter. Its compiler-resolved KS descriptor
+carries the MethodIR primitives, spin and explicit exchange/nonlocal
+contributions; the native method ID selects a stable provider carrier rather
+than re-stating the scientific functional. Existing named DFT ABI IDs remain as
+compatibility selectors, while new qualified DFT names do not require a new C
+enum or a new `public_methods.json` row. PBE-D4 retains its dedicated carrier
+because that ID still selects the separately qualified native D4 correction
+owner. System validation, SCF option translation, backend selection and retained
+execution state remain private to the adapter.
 
-The registry reports method family, executable properties, and batch support.
+The ABI registry reports method family, executable properties, and batch support.
 Unimplemented DFT and coupled-cluster identifiers remain discoverable with zero
 executable properties. LDA/PBE RKS and UKS advertise energy only and no
 prepared batch.
