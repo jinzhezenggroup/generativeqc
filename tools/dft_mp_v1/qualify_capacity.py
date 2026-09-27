@@ -671,7 +671,7 @@ def _artifact_verification(
     }
 
 
-def build_report(
+def _build_report(
     repository: Path,
     *,
     source_sha: str,
@@ -991,6 +991,26 @@ def _clean_git_sha(repository: Path) -> str:
     return revision
 
 
+def build_report(
+    repository: Path,
+    *,
+    aot_directory: Path | None = None,
+) -> dict[str, Any]:
+    """Build a report whose source identity is the clean tool-checkout HEAD."""
+
+    repository = Path(repository).resolve()
+    _assert_local_imports()
+    if repository != SOURCE_REPOSITORY:
+        raise ValueError(
+            "capacity report must run against the checkout containing this tool"
+        )
+    return _build_report(
+        repository,
+        source_sha=_clean_git_sha(repository),
+        aot_directory=aot_directory,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1009,7 +1029,6 @@ def main() -> None:
     repository = args.repository.resolve()
     payload = build_report(
         repository,
-        source_sha=_clean_git_sha(repository),
         aot_directory=args.aot_directory,
     )
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"

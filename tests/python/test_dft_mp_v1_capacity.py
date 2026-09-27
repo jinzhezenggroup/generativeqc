@@ -13,7 +13,7 @@ SOURCE_SHA = "f" * 40
 
 
 def report(*, aot_directory: Path | None = None) -> dict:
-    return qualify_capacity.build_report(
+    return qualify_capacity._build_report(
         ROOT,
         source_sha=SOURCE_SHA,
         aot_directory=aot_directory,
@@ -243,7 +243,18 @@ def test_report_rejects_a_repository_other_than_its_import_checkout(
     tmp_path: Path,
 ) -> None:
     with pytest.raises(ValueError, match="checkout containing this tool"):
-        qualify_capacity.build_report(tmp_path, source_sha=SOURCE_SHA)
+        qualify_capacity.build_report(tmp_path)
+
+
+def test_public_report_binds_the_clean_git_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = "e" * 40
+    monkeypatch.setattr(qualify_capacity, "_clean_git_sha", lambda _: revision)
+
+    result = qualify_capacity.build_report(ROOT)
+
+    assert result["source"]["sha"] == revision
 
 
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
@@ -379,7 +390,7 @@ def test_report_rejects_a_helper_imported_outside_the_tool_checkout(
 ) -> None:
     monkeypatch.setattr(qualify_capacity, "Atom", Path)
     with pytest.raises(RuntimeError, match="outside the tool checkout"):
-        qualify_capacity.build_report(ROOT, source_sha=SOURCE_SHA)
+        qualify_capacity.build_report(ROOT)
 
 
 def test_malformed_optional_aot_manifest_is_reported_not_raised(
