@@ -147,8 +147,9 @@ physical final closure required by #586.
 The two-slot path is bound to the shared compiled-execution lifecycle also used
 by TensorIR graph replay. \`VIBEQC_CUDA_KS_REPLAY=1\` (also \`on\`, \`true\` or
 \`small-native\`) additionally requests shared CUDA-Graph capture/replay for
-this qualification route. Replay is admitted only when the KS eigensolver is
-the capture-safe small-native implementation (currently at most 16 AOs).
+this qualification route. Replay is admitted only for LDA/PBE when the KS
+eigensolver is the capture-safe small-native implementation (currently at most
+16 AOs).
 Provider-backed ordinary \`Xsyevd\` remains outside capture, so larger systems
 continue through the ordinary two-slot path even when replay is requested.
 
