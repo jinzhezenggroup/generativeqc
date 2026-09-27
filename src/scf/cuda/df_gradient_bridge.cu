@@ -693,6 +693,12 @@ vibeqc_status execute_cuda_df_hf_gradient(
         return VIBEQC_STATUS_INVALID_ARGUMENT;
       }
     }
+    if (occupied->final_fitted_occupied_projection &&
+        (!whitened || !whitened->packed_pairs || terms.size() != 1 ||
+         !occupied->factors[0].rank || occupied->factors[0].density_scale != 2.0)) {
+      detail = "final fitted occupied projection lacks its canonical single-B owner";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
+    }
   }
   if (whitened &&
       (!whitened->data || !whitened->owner_identity || whitened->nbf != n || whitened->naux != a ||
@@ -1144,6 +1150,8 @@ vibeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.occupied_factors = occupied->factors;
         owned_buffers.occupied_response = true;
         owned_buffers.fitted_occupied_source = whitened;
+        owned_buffers.final_fitted_occupied_projection =
+            occupied->final_fitted_occupied_projection;
         arena.stats.borrowed_device_bytes = occupied_coefficients * sizeof(double);
         runtime::cuda_trace::trace_counter("response_borrowed_occupied_factor_bytes",
                                            arena.stats.borrowed_device_bytes);
@@ -1151,6 +1159,13 @@ vibeqc_status execute_cuda_df_hf_gradient(
           const auto forward_bytes = whitened->pair_count * a * sizeof(double);
           arena.stats.borrowed_device_bytes += forward_bytes;
           runtime::cuda_trace::trace_counter("response_borrowed_whitened_bytes", forward_bytes);
+        }
+        if (occupied->final_fitted_occupied_projection) {
+          const auto rank = occupied->factors[0].rank;
+          const auto projection_bytes = n * a * rank * sizeof(double);
+          arena.stats.borrowed_device_bytes += projection_bytes;
+          runtime::cuda_trace::trace_counter(
+              "response_borrowed_final_fitted_projection_bytes", projection_bytes);
         }
         runtime::cuda_trace::trace_counter(
             "response_owned_occupied_projection_bytes",
