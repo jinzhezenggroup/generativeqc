@@ -485,21 +485,25 @@ __device__ __forceinline__ bool {prefix}_stream_survives(
   const auto ad = topology.shell_pair_density_bounds[ad_pair];
   const auto bc = topology.shell_pair_density_bounds[bc_pair];
   const auto bd = topology.shell_pair_density_bounds[bd_pair];
-  double density_bound = fmax(ab.coulomb, cd.coulomb);
+  const bool exchange_only =
+      topology.fock_consumer ==
+      vibeqc::scf::detail::GeneratedFockConsumer::Exchange;
+  double density_bound = exchange_only ? 0.0 : fmax(ab.coulomb, cd.coulomb);
   if constexpr (Unrestricted) {{
-    density_bound = fmax(
-        density_bound,
+    const double exchange_bound = fmax(
         fmax(fmax(ac.exchange_alpha, ac.exchange_beta),
-             fmax(ad.exchange_alpha, ad.exchange_beta)));
-    density_bound = fmax(
-        density_bound,
+             fmax(ad.exchange_alpha, ad.exchange_beta)),
         fmax(fmax(bc.exchange_alpha, bc.exchange_beta),
              fmax(bd.exchange_alpha, bd.exchange_beta)));
+    density_bound =
+        exchange_only ? exchange_bound : fmax(density_bound, exchange_bound);
   }} else {{
     const double exchange_bound = fmax(
         fmax(ac.exchange_alpha, ad.exchange_alpha),
         fmax(bc.exchange_alpha, bd.exchange_alpha));
-    density_bound = fmax(density_bound, 0.5 * exchange_bound);
+    density_bound = exchange_only
+        ? exchange_bound
+        : fmax(density_bound, 0.5 * exchange_bound);
   }}
   const double contribution = quartet_bound * density_bound;
   if (contribution_bound != nullptr) *contribution_bound = contribution;
