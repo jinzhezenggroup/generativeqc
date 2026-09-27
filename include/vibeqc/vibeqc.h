@@ -695,6 +695,17 @@ VIBEQC_API uint32_t vibeqc_ks_options_version(void);
 VIBEQC_API vibeqc_status vibeqc_libxc_semilocal_program_get(const char* component_id,
                                                             vibeqc_ks_semilocal_program* program);
 
+/** Evaluate one exact installed AOT bulk Libxc point program.
+ *
+ * Inputs are spin-major rho[2,n], Cartesian gradient[2,n,3], and tau[2,n].
+ * Output is point-major with stride 11: energy, vrho[2], Cartesian gradient
+ * coefficients[2][3], and kinetic coefficients[2].  The descriptor must be
+ * the unchanged value returned by vibeqc_libxc_semilocal_program_get.
+ */
+VIBEQC_API vibeqc_status vibeqc_libxc_semilocal_program_evaluate_v1(
+    const vibeqc_ks_semilocal_program* program, const double* rho, const double* gradient,
+    const double* tau, size_t point_count, double* values, size_t value_count);
+
 /** Current method preparation descriptor. Callers must provide this complete layout. */
 typedef struct vibeqc_method_descriptor {
   uint32_t struct_size;
