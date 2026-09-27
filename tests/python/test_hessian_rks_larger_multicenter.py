@@ -77,7 +77,10 @@ def test_larger_multicenter_rks_hvp_matches_nonzero_gradient_difference(
     )
 
     errors = []
-    # Two separated central-difference steps are sufficient to verify both\n    # the nonzero oracle and second-order convergence without paying for a\n    # third pair of independently reconverged SCF/gradient calculations.\n    for step in (1.2e-3, 1.3e-4):
+    # Two separated central-difference steps are sufficient to verify both
+    # the nonzero oracle and second-order convergence without paying for a
+    # third pair of independently reconverged SCF/gradient calculations.
+    for step in (1.2e-3, 1.3e-4):
         gradients = []
         for sign in (1, -1):
             atoms = [
