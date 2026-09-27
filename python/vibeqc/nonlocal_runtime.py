@@ -523,7 +523,9 @@ class _ResidentNonlocalForceOwner:
         self._context = context_pointer
         self._owner = ctypes.c_void_p()
         self._executions = 0
-        pointer = lambda array: array.ctypes.data_as(double)
+        def pointer(array: np.ndarray) -> typing.Any:
+            return array.ctypes.data_as(double)
+
         _native.check(
             library,
             getattr(library, self._CREATE)(
