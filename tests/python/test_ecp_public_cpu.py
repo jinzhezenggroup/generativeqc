@@ -311,20 +311,23 @@ def check_spd_arbitrary_ordered_weights_against_libcint_energy_differences(
     atoms, record, mol = fixture(representation=representation, d_shell=True)
     direction = np.array([[0.17, -0.11, 0.29], [-0.23, 0.31, -0.07]])
     with NativeAO(atoms, basis=record, representation=representation) as basis:
+        aot_library = _native.load_library()
+        cache = Path(os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu"))
+        compiler = CppCompilerAdapter(Path(os.environ.get("CXX", "c++")))
         executor = ComponentPrimitiveExecutor(
             basis,
-            Path(os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu")),
+            cache,
             2,
-            CppCompilerAdapter(Path(os.environ.get("CXX", "c++"))),
+            compiler,
+            aot_library=aot_library,
         )
         candidates = [
             CompiledComponentExecutor(
                 basis,
-                Path(
-                    os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu")
-                ),
+                cache,
                 tile,
-                CppCompilerAdapter(Path(os.environ.get("CXX", "c++"))),
+                compiler,
+                aot_library=aot_library,
             )
             for tile in (1, 2, 128)
         ]
