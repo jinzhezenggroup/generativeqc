@@ -71,6 +71,8 @@ _EXPORTS = {
     "KsExchangeContribution": ".ks_execution",
     "KsExecutionPlan": ".ks_execution",
     "BulkKsResolution": ".bulk_ks",
+    "installed_public_evidence": ".libxc_public_evidence",
+    "installed_public_evidence_provenance": ".libxc_public_evidence",
     "METHOD_ALIASES": "._generated_xc_aliases",
     "METHOD_CATALOG": ".spec",
     "MethodIR": ".spec",
