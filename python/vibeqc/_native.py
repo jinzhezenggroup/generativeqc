@@ -45,6 +45,42 @@ DENSITY_FITTING_CUDA = 2
 DENSITY_FITTING_AUTO = 3
 PRECISION_FP64 = 0
 PRECISION_AUTO = 1
+PRECISION_WORK_DETAIL_VERSION = 1
+PRECISION_EVENT_MIXED_FOCK = 1
+PRECISION_EVENT_STRICT_FOCK = 2
+PRECISION_EVENT_POST_SCF_FOCK = 3
+PRECISION_EVENT_FINAL_AUDIT = 4
+PRECISION_EVENT_RETRY = 5
+PRECISION_EVENT_FALLBACK = 6
+PRECISION_EVENT_CONVERSION = 7
+PRECISION_PHASE_SCF = 1
+PRECISION_PHASE_REFINEMENT = 2
+PRECISION_PHASE_FINALIZATION = 3
+PRECISION_PHASE_RETRY = 4
+PRECISION_OPERATOR_COULOMB_J = 1
+PRECISION_OPERATOR_EXCHANGE_K = 2
+PRECISION_OPERATOR_XC = 3
+PRECISION_OPERATOR_FOCK_ASSEMBLY = 4
+PRECISION_OPERATOR_PHYSICAL_RESIDUAL = 5
+PRECISION_OPERATOR_EIGENSOLVER = 6
+PRECISION_OPERATOR_DENSITY_BUILD = 7
+PRECISION_OPERATOR_DIIS = 8
+PRECISION_OPERATOR_MATRIX_PRODUCT = 9
+PRECISION_OPERATOR_DIAGNOSTICS = 10
+PRECISION_OPERATOR_OCCUPATION_STABILIZATION = 11
+PRECISION_OPERATOR_COULOMB_RECURRENCE = 12
+PRECISION_OPERATOR_EXCHANGE_RECURRENCE = 13
+PRECISION_DTYPE_UNKNOWN = 0
+PRECISION_DTYPE_FP64 = 1
+PRECISION_DTYPE_FP32 = 2
+PRECISION_DTYPE_TF32 = 3
+PRECISION_DTYPE_FP16 = 4
+PRECISION_DTYPE_BF16 = 5
+PRECISION_ARITHMETIC_STRICT = 1
+PRECISION_ARITHMETIC_MIXED = 2
+PRECISION_ARITHMETIC_TF32 = 3
+PRECISION_ARITHMETIC_FP16 = 4
+PRECISION_ARITHMETIC_BF16 = 5
 XC_EXECUTION_DEVICE_FUSED = 0
 XC_EXECUTION_HOST_UNFUSED = 1
 BASIS_CARTESIAN = 0
@@ -467,6 +503,51 @@ class PrecisionProvenance(ctypes.Structure):
         ("final_residual_audits", ctypes.c_uint64),
         ("skipped_final_fock_builds", ctypes.c_uint64),
         ("operator_work_counters_valid", ctypes.c_uint32),
+    ]
+
+
+class PrecisionWorkDetail(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("detail_version", ctypes.c_uint32),
+        ("complete", ctypes.c_int32),
+        ("operator_inventory_complete", ctypes.c_int32),
+        ("event_count", ctypes.c_uint32),
+        ("operator_count", ctypes.c_uint32),
+        ("conversion_count", ctypes.c_uint64),
+        ("fallback_count", ctypes.c_uint64),
+        ("owner_id", ctypes.c_uint64),
+        ("returned_solve_epoch", ctypes.c_uint64),
+        ("returned_state_generation", ctypes.c_uint64),
+    ]
+
+
+class PrecisionWorkEvent(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("kind", ctypes.c_int32),
+        ("phase", ctypes.c_int32),
+        ("sequence", ctypes.c_uint64),
+        ("iteration", ctypes.c_uint32),
+        ("owner_id", ctypes.c_uint64),
+        ("solve_epoch", ctypes.c_uint64),
+        ("state_generation", ctypes.c_uint64),
+    ]
+
+
+class PrecisionOperatorRecord(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("kind", ctypes.c_int32),
+        ("storage_dtype", ctypes.c_int32),
+        ("compute_dtype", ctypes.c_int32),
+        ("accumulation_dtype", ctypes.c_int32),
+        ("reduction_dtype", ctypes.c_int32),
+        ("arithmetic_mode", ctypes.c_int32),
+        ("count", ctypes.c_uint64),
     ]
 
 
@@ -961,6 +1042,23 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
     ):
         getter = getattr(library, name)
         getter.argtypes = [*arguments, ctypes.POINTER(PrecisionProvenance)]
+        getter.restype = ctypes.c_int
+    for name, arguments in (
+        ("vibeqc_calculation_get_precision_work", [ctypes.c_void_p]),
+        ("vibeqc_batch_get_precision_work", [ctypes.c_void_p, ctypes.c_uint32]),
+    ):
+        getter = getattr(library, name, None)
+        if getter is None:
+            continue  # Older libraries keep their unchanged aggregate ABI.
+        getter.argtypes = [
+            *arguments,
+            ctypes.c_uint32,
+            ctypes.POINTER(PrecisionWorkDetail),
+            ctypes.POINTER(PrecisionWorkEvent),
+            ctypes.c_uint32,
+            ctypes.POINTER(PrecisionOperatorRecord),
+            ctypes.c_uint32,
+        ]
         getter.restype = ctypes.c_int
     library.vibeqc_calculation_prepare.argtypes = [
         ctypes.c_void_p,

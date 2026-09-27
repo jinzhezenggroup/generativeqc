@@ -45,6 +45,7 @@ vibeqc_status vibeqc_batch_prepare(vibeqc_context* context, const vibeqc_system*
     candidate->atom_counts = std::move(atom_counts);
     candidate->last_fock_builds.resize(system_count);
     candidate->precision.resize(system_count);
+    candidate->precision_work.resize(system_count);
     candidate->scf_diagnostics.resize(system_count);
     candidate->ks_diagnostics.resize(system_count);
     candidate->plan = vibeqc::methods::prepare_batch(context->state, std::move(native_systems),
@@ -482,6 +483,7 @@ vibeqc_status vibeqc_batch_execute(vibeqc_batch* batch, const vibeqc_batch_input
   // Invalidation mutates shared diagnostics even when validation rejects the
   // replay, so it belongs to the same serialized operation as execution.
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
   // Method-owned tokens must follow the same invalidation boundary as the
   // cached diagnostics, including malformed descriptors and output counts.
   try {
@@ -566,6 +568,9 @@ vibeqc_status vibeqc_batch_execute(vibeqc_batch* batch, const vibeqc_batch_input
       const bool valid_force_buffer =
           omit_forces || (output.forces != nullptr && output.force_count >= required_forces);
       output.status = valid_force_buffer ? item.status : VIBEQC_STATUS_INVALID_ARGUMENT;
+      if (output.status == VIBEQC_STATUS_SUCCESS || output.status == VIBEQC_STATUS_NOT_CONVERGED) {
+        batch->precision_work[i] = std::move(item.calculation.precision_work);
+      }
       if ((batch->flags & VIBEQC_BATCH_ENABLE_WARM_STARTS) != 0) {
         output.warm_start_used = item.warm_start_used ? 1 : 0;
         output.warm_start_fallback = item.warm_start_fallback ? 1 : 0;
@@ -599,6 +604,19 @@ vibeqc_status vibeqc_batch_get_precision_provenance(const vibeqc_batch* batch, u
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   if (!batch->precision[index].has_value()) return VIBEQC_STATUS_PRECISION_UNAVAILABLE;
   return vibeqc::api::copy_precision_provenance(*batch->precision[index], out);
+}
+
+vibeqc_status vibeqc_batch_get_precision_work(
+    const vibeqc_batch* batch, uint32_t index, uint32_t detail_version,
+    vibeqc_precision_work_detail* out, vibeqc_precision_work_event* events, uint32_t event_capacity,
+    vibeqc_precision_operator_record* operators, uint32_t operator_capacity) {
+  if (batch == nullptr || index >= batch->precision_work.size()) {
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  }
+  std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  if (!batch->precision_work[index].has_value()) return VIBEQC_STATUS_PRECISION_UNAVAILABLE;
+  return vibeqc::api::copy_precision_work(*batch->precision_work[index], detail_version, out,
+                                          events, event_capacity, operators, operator_capacity);
 }
 
 vibeqc_status vibeqc_batch_get_last_fock_builds(const vibeqc_batch* batch, uint32_t index,

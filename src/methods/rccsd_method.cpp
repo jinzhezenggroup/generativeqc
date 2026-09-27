@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <optional>
@@ -24,6 +25,8 @@
 #include "posthf/raw_source.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
 #include "runtime/execution_context.hpp"
+#include "scf/fock_prepared.hpp"
+#include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
 
 namespace vibeqc::methods::detail {
@@ -168,9 +171,9 @@ std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
   return result;
 }
 
-cc::Problem build_problem(const core::System& system, const hf::PhysicalReference& ref,
-                          const cc::SolverOptions& options, bool cuda, int device,
-                          posthf::ProviderWork& provider_work,
+cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
+                          const hf::PhysicalReference& ref, const cc::SolverOptions& options,
+                          bool cuda, int device, posthf::ProviderWork& provider_work,
                           vibeqc_tensor::Metrics& provider_metrics) {
   cc::Problem p;
   p.nocc = ref.nocc;
@@ -220,7 +223,6 @@ cc::Problem build_problem(const core::System& system, const hf::PhysicalReferenc
         }
 
   p.minimum_absolute_denominator = minimum;
-  posthf::RawSource source(system);
   const auto occ = range(0, o), vir = range(o, n);
   const std::array<posthf::MOSlots, 7> requests{{
       {occ, vir, occ, vir},
@@ -331,13 +333,23 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
                                         const core::System& system,
                                         const scf::ScfOptions& reference_options,
                                         const cc::SolverOptions& solver_options,
-                                        std::size_t reference_capacity) {
+                                        std::size_t reference_capacity,
+                                        scf::PreparedFockPlan* prepared_exact) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
+    if (cuda && prepared_exact)
+      throw std::invalid_argument("CUDA RCCSD cannot borrow a CPU prepared exact source");
     const auto reference_started = std::chrono::steady_clock::now();
-    auto hf = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id())
-                   : scf::run_rhf(system, reference_options);
+    scf::ScfResult hf;
+    if (prepared_exact) {
+      auto prepared_options = reference_options;
+      prepared_options.resolved_fock_build = prepared_exact->strategy();
+      hf = scf::run_prepared_fock_strategy(*prepared_exact, prepared_options);
+    } else {
+      hf = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id())
+                : scf::run_rhf(system, reference_options);
+    }
     const double reference_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - reference_started).count();
     if (!hf.converged || !hf.reference)
@@ -356,11 +368,28 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
                        reference->orbital_energies.end());
     posthf::ProviderWork provider_work;
     vibeqc_tensor::Metrics provider_metrics{};
+    std::unique_ptr<posthf::RawSource> raw_source;
+    std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
+    const integrals::ElectronInteractionSource* source = nullptr;
+    if (prepared_exact) {
+      prepared_source.emplace(*prepared_exact);
+      source = &*prepared_source;
+    } else {
+      raw_source = std::make_unique<posthf::RawSource>(system);
+      source = raw_source.get();
+    }
     const auto problem_started = std::chrono::steady_clock::now();
-    state.problem = build_problem(system, *reference, solver_options, cuda, execution.device_id(),
+    state.problem = build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
                                   provider_work, provider_metrics);
     const double problem_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
+    // Provider planning already charged this source. Subsequent CC/(T)/force
+    // stages must additionally retain the prepared owner beside the reference.
+    if (prepared_exact)
+      state.problem.reference_retained_bytes = posthf::checked_add(
+          state.problem.reference_retained_bytes, prepared_source->retained_numeric_bytes());
+    prepared_source.reset();
+    raw_source.reset();
     allocation_stage = "CC resident solve";
     const auto solver_started = std::chrono::steady_clock::now();
     state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
@@ -494,8 +523,14 @@ class RccsdPrepared final : public PreparedCalculation {
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
+    if (!execution_.cuda_requested() && !cpu_exact_plan_) {
+      const auto strategy =
+          scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
+                                  scf::FockBackend::Cpu, reference_options_.screening_tolerance);
+      cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
+    }
     auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
-                                        reference_capacity_);
+                                        reference_capacity_, cpu_exact_plan_.get());
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -564,6 +599,7 @@ class RccsdPrepared final : public PreparedCalculation {
   scf::ScfOptions reference_options_;
   cc::SolverOptions solver_options_;
   std::size_t reference_capacity_{};
+  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   std::optional<vibeqc_correlation_diagnostic> last_;
   std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;
@@ -681,9 +717,10 @@ class RccsdPreparedBatch final : public PreparedBatch {
 
 }  // namespace
 
-RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext& execution,
-                                        const core::System& system,
-                                        const vibeqc_method_descriptor& descriptor) {
+RccsdNativeState run_rccsd_native_state(
+    runtime::ExecutionContext& execution, const core::System& system,
+    const vibeqc_method_descriptor& descriptor,
+    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache) {
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
   auto solver_options = cc_options(descriptor, budget);
@@ -693,7 +730,23 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext& execution,
   if (reference_capacity > budget)
     throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
                       "RCCSD bounded RHF reference exceeds correlation memory budget");
-  return execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity);
+  scf::PreparedFockPlan* prepared_exact = nullptr;
+  if (prepared_exact_cache) {
+    if (execution.cuda_requested()) {
+      if (*prepared_exact_cache)
+        throw std::invalid_argument("CUDA RCCSD cannot retain a CPU prepared exact source");
+    } else {
+      if (!*prepared_exact_cache) {
+        const auto strategy =
+            scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
+                                    scf::FockBackend::Cpu, reference.screening_tolerance);
+        *prepared_exact_cache = std::make_unique<scf::PreparedFockPlan>(system, nullptr, strategy);
+      }
+      prepared_exact = prepared_exact_cache->get();
+    }
+  }
+  return execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
+                                prepared_exact);
 }
 
 vibeqc_status validate_rccsd_system(vibeqc_method, const core::System& system,

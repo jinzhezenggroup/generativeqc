@@ -15,7 +15,7 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     begin = source.index("GeneratedCoulombPlan::~GeneratedCoulombPlan()")
-    end = source.index("cudaError_t enqueue_generated_coulomb(", begin)
+    end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     get_limit = "*n=100000; return cudaSuccess;"
     set_limit = (

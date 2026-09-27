@@ -79,7 +79,7 @@ struct Layout {
   std::array<std::size_t, 14> inputs{};
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
   std::size_t gram{}, system{}, coefficients{}, r1_partials{}, r2_partials{}, scalars{};
-  std::size_t status{}, arithmetic{}, total{};
+  std::size_t status{}, generated_error{}, arithmetic{}, total{};
 };
 
 std::size_t reserve(Layout& layout, std::size_t& cursor, std::size_t bytes) {
@@ -140,7 +140,10 @@ struct Owner {
     layout.r1_partials = reserve(layout, cursor, checked_mul(partial1, sizeof(double)));
     layout.r2_partials = reserve(layout, cursor, checked_mul(partial2, sizeof(double)));
     layout.scalars = reserve(layout, cursor, 2 * sizeof(double));
-    layout.status = reserve(layout, cursor, sizeof(int));
+    // Pack the generated-tensor error beside DIIS status so separating
+    // generated and DIIS arithmetic state does not increase the aligned arena.
+    layout.status = reserve(layout, cursor, 2 * sizeof(int));
+    layout.generated_error = checked_add(layout.status, sizeof(int));
     layout.arithmetic = reserve(layout, cursor, sizeof(int));
     layout.total = align256(cursor);
 
@@ -170,7 +173,7 @@ struct Owner {
       state.stream = stream;
       state.iteration_arena = reinterpret_cast<double*>(base + layout.iteration);
       state.replay_arena = reinterpret_cast<double*>(base + layout.replay);
-      state.error = reinterpret_cast<int*>(base + layout.arithmetic);
+      state.error = reinterpret_cast<int*>(base + layout.generated_error);
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
       vectors = reinterpret_cast<double*>(base + layout.vectors);
@@ -286,37 +289,53 @@ void run_diis(Owner& s, const SolverOptions& options,
                              s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
   cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.elements + s.n1, trial.r2,
                              s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
+  if (count == 1) {
+    s.check_generated_error();
+    s.history = 1;
+    return;
+  }
+  bool generated_error_checked = false;
+  int generated_error = 0;
   while (count > 1) {
     gram_kernel<<<count * count, 256, 0, s.stream>>>(s.errors, s.elements, count, s.gram);
     ++s.diagnostic.diis_gram_calls;
     vibeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system, s.coefficients,
                                                          s.status);
     ++s.diagnostic.diis_coefficient_calls;
-    int host_status = 1;
+    // The combine kernels already guard on the device-side DIIS status. Queue
+    // them before publishing control state so a successful extrapolation needs
+    // only one host fence instead of one fence for coefficients and another
+    // for arithmetic validation.
+    cuda_check(cudaMemsetAsync(s.arithmetic, 0, sizeof(int), s.stream));
+    vibeqc::cc::diis_combine_slice<<<
+        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n1), 256), 256, 0, s.stream>>>(
+        s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements), 0,
+        static_cast<vibeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
+    vibeqc::cc::diis_combine_slice<<<
+        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n2), 256), 256, 0, s.stream>>>(
+        s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements),
+        static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
+        s.state.t2, s.arithmetic);
+    s.diagnostic.diis_combine_calls += 2;
+    int host_status = 1, arithmetic = 0;
+    if (!generated_error_checked)
+      cuda_check(cudaMemcpyAsync(&generated_error, s.state.error, sizeof(int),
+                                 cudaMemcpyDeviceToHost, s.stream));
     cuda_check(
         cudaMemcpyAsync(&host_status, s.status, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
+    cuda_check(
+        cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
     cuda_check(cudaStreamSynchronize(s.stream));
-    s.diagnostic.scalar_d2h_bytes += sizeof(int);
+    s.diagnostic.scalar_d2h_bytes += (generated_error_checked ? 2 : 3) * sizeof(int);
     ++s.diagnostic.synchronizations;
+    if (!generated_error_checked) {
+      generated_error_checked = true;
+      if (generated_error)
+        throw std::runtime_error("nonfinite RCCSD generated CUDA tensor at node " +
+                                 std::to_string(std::abs(generated_error)));
+    }
     if (host_status == 2) break;
     if (host_status == 0) {
-      cuda_check(cudaMemsetAsync(s.arithmetic, 0, sizeof(int), s.stream));
-      vibeqc::cc::diis_combine_slice<<<
-          vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n1), 256), 256, 0, s.stream>>>(
-          s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements), 0,
-          static_cast<vibeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
-      vibeqc::cc::diis_combine_slice<<<
-          vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n2), 256), 256, 0, s.stream>>>(
-          s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements),
-          static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
-          s.state.t2, s.arithmetic);
-      s.diagnostic.diis_combine_calls += 2;
-      int arithmetic = 0;
-      cuda_check(cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost,
-                                 s.stream));
-      cuda_check(cudaStreamSynchronize(s.stream));
-      s.diagnostic.scalar_d2h_bytes += sizeof(int);
-      ++s.diagnostic.synchronizations;
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
       break;
     }
@@ -391,13 +410,14 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       owner.diagnostic.update_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
       ++owner.diagnostic.update_calls;
-      const auto trial_started = std::chrono::steady_clock::now();
-      const auto trial = generated::run_iteration_cuda(owner.state);
-      owner.check_generated_error();
-      owner.diagnostic.iteration_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
-      ++owner.diagnostic.iteration_graph_calls;
-      run_diis(owner, options, trial);
+      if (options.diis_size) {
+        const auto trial_started = std::chrono::steady_clock::now();
+        const auto trial = generated::run_iteration_cuda(owner.state);
+        owner.diagnostic.iteration_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
+        ++owner.diagnostic.iteration_graph_calls;
+        run_diis(owner, options, trial);
+      }
       previous = status[0];
     } catch (const std::runtime_error& error) {
       const std::string message = error.what();

@@ -3,8 +3,15 @@
 The bulk Libxc importer has a machine-readable qualification layer in
 `vibeqc_compiler.xc.libxc_bulk_capabilities`.
 
-It separates **representation**, **runtime qualification**, and **public
-admission**. Every imported registration starts with two intrinsic claims:
+It separates **representation** from optional **runtime qualification**.
+User-facing automatic semilocal admission is intentionally a different policy:
+supported imported registrations are default-allow. The negative exception hook
+is intentionally empty today. Shared boundary classes such as zero-spin channels,
+zero gradients, density tails, and work-domain regularization are generic runtime
+semantics and must not be encoded as per-functional blacklist entries. Only a
+reproducible defect unique to one functional, with no generic capability/domain
+rule available, belongs in that hook. Every imported registration starts with two
+intrinsic claims:
 
 - `graph-imported`: the pinned Libxc Maple owner lowers to the canonical Graph;
 - `pointwise-validated`: polarized and unpolarized energy, `vxc`, and packed
@@ -14,11 +21,19 @@ admission**. Every imported registration starts with two intrinsic claims:
 C and CUDA source emitters are also available, but source emission is not
 compilation or runtime evidence.
 
-## Evidence-driven promotion
+## Qualification evidence is not an admission whitelist
 
-Higher stages are no longer inferred from the pointwise claim. They are
-computed from identity-bound evidence envelopes and a fail-closed dependency
-DAG:
+Higher stages are optional regression/qualification claims. They are computed
+from identity-bound evidence envelopes and a fail-closed dependency DAG, but
+they do **not** decide whether an otherwise structurally supported automatic
+semilocal functional is user-accessible. The public resolver checks imported
+Graph support, required ingredients, backend support, and the explicit negative
+exception map instead. That map is currently empty; it is not a catalog of
+qualification failures. New representable registrations therefore do not need a
+positive per-functional admission record.
+
+The evidence DAG remains useful for CI diagnostics and for proving stronger
+claims:
 
 ```text
 graph-imported

@@ -764,6 +764,116 @@ typedef struct vibeqc_precision_provenance {
   uint32_t operator_work_counters_valid;
 } vibeqc_precision_provenance;
 
+/** Version of the separate, variable-length precision-work query. */
+#define VIBEQC_PRECISION_WORK_DETAIL_VERSION 1u
+
+typedef int32_t vibeqc_precision_work_event_kind;
+enum {
+  VIBEQC_PRECISION_EVENT_MIXED_FOCK = 1,
+  VIBEQC_PRECISION_EVENT_STRICT_FOCK = 2,
+  VIBEQC_PRECISION_EVENT_POST_SCF_FOCK = 3,
+  VIBEQC_PRECISION_EVENT_FINAL_AUDIT = 4,
+  VIBEQC_PRECISION_EVENT_RETRY = 5,
+  VIBEQC_PRECISION_EVENT_FALLBACK = 6,
+  VIBEQC_PRECISION_EVENT_CONVERSION = 7
+};
+
+typedef int32_t vibeqc_precision_work_phase;
+enum {
+  VIBEQC_PRECISION_PHASE_SCF = 1,
+  VIBEQC_PRECISION_PHASE_REFINEMENT = 2,
+  VIBEQC_PRECISION_PHASE_FINALIZATION = 3,
+  VIBEQC_PRECISION_PHASE_RETRY = 4
+};
+
+typedef int32_t vibeqc_precision_operator_kind;
+enum {
+  VIBEQC_PRECISION_OPERATOR_COULOMB_J = 1,
+  VIBEQC_PRECISION_OPERATOR_EXCHANGE_K = 2,
+  VIBEQC_PRECISION_OPERATOR_XC = 3,
+  VIBEQC_PRECISION_OPERATOR_FOCK_ASSEMBLY = 4,
+  VIBEQC_PRECISION_OPERATOR_PHYSICAL_RESIDUAL = 5,
+  VIBEQC_PRECISION_OPERATOR_EIGENSOLVER = 6,
+  VIBEQC_PRECISION_OPERATOR_DENSITY_BUILD = 7,
+  VIBEQC_PRECISION_OPERATOR_DIIS = 8,
+  VIBEQC_PRECISION_OPERATOR_MATRIX_PRODUCT = 9,
+  VIBEQC_PRECISION_OPERATOR_DIAGNOSTICS = 10,
+  VIBEQC_PRECISION_OPERATOR_OCCUPATION_STABILIZATION = 11,
+  VIBEQC_PRECISION_OPERATOR_COULOMB_RECURRENCE = 12,
+  VIBEQC_PRECISION_OPERATOR_EXCHANGE_RECURRENCE = 13
+};
+
+typedef int32_t vibeqc_precision_dtype;
+enum {
+  VIBEQC_PRECISION_DTYPE_UNKNOWN = 0,
+  VIBEQC_PRECISION_DTYPE_FP64 = 1,
+  VIBEQC_PRECISION_DTYPE_FP32 = 2,
+  VIBEQC_PRECISION_DTYPE_TF32 = 3,
+  VIBEQC_PRECISION_DTYPE_FP16 = 4,
+  VIBEQC_PRECISION_DTYPE_BF16 = 5
+};
+
+typedef int32_t vibeqc_precision_arithmetic_mode;
+enum {
+  VIBEQC_PRECISION_ARITHMETIC_STRICT = 1,
+  VIBEQC_PRECISION_ARITHMETIC_MIXED = 2,
+  VIBEQC_PRECISION_ARITHMETIC_TF32 = 3,
+  VIBEQC_PRECISION_ARITHMETIC_FP16 = 4,
+  VIBEQC_PRECISION_ARITHMETIC_BF16 = 5
+};
+
+/** Summary for one execution-owned precision-work record.
+ *
+ * Query first with NULL row arrays, allocate exactly event_count and
+ * operator_count initialized descriptors, then query again. Calls must be
+ * serialized with execution. Each event is one observed logical call and has
+ * an implicit count of one. Operator counts are logical applications, except
+ * recurrence records count the actually evaluated AO-ERI values.
+ *
+ * owner_id/returned_solve_epoch/returned_state_generation identify native
+ * state within the current process; they are not portable scientific labels.
+ * complete and operator_inventory_complete remain zero for uninstrumented or
+ * partial execution. In particular, aggregate counters are never expanded into
+ * a synthetic timeline by this query. */
+typedef struct vibeqc_precision_work_detail {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint32_t detail_version;
+  int32_t complete;
+  int32_t operator_inventory_complete;
+  uint32_t event_count;
+  uint32_t operator_count;
+  uint64_t conversion_count;
+  uint64_t fallback_count;
+  uint64_t owner_id;
+  uint64_t returned_solve_epoch;
+  uint64_t returned_state_generation;
+} vibeqc_precision_work_detail;
+
+typedef struct vibeqc_precision_work_event {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  vibeqc_precision_work_event_kind kind;
+  vibeqc_precision_work_phase phase;
+  uint64_t sequence;
+  uint32_t iteration;
+  uint64_t owner_id;
+  uint64_t solve_epoch;
+  uint64_t state_generation;
+} vibeqc_precision_work_event;
+
+typedef struct vibeqc_precision_operator_record {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  vibeqc_precision_operator_kind kind;
+  vibeqc_precision_dtype storage_dtype;
+  vibeqc_precision_dtype compute_dtype;
+  vibeqc_precision_dtype accumulation_dtype;
+  vibeqc_precision_dtype reduction_dtype;
+  vibeqc_precision_arithmetic_mode arithmetic_mode;
+  uint64_t count;
+} vibeqc_precision_operator_record;
+
 typedef struct vibeqc_correlation_diagnostic {
   uint32_t struct_size;
   uint32_t abi_version;
@@ -1203,6 +1313,13 @@ VIBEQC_API vibeqc_status vibeqc_calculation_get_ks_transport_diagnostic(
  */
 VIBEQC_API vibeqc_status vibeqc_calculation_get_precision_provenance(
     const vibeqc_calculation* calculation, vibeqc_precision_provenance* out);
+/** Query ordered precision work without changing the aggregate descriptor.
+ * Unsupported detail versions return NOT_IMPLEMENTED. Too-small row buffers
+ * return INVALID_ARGUMENT without modifying any output descriptor. */
+VIBEQC_API vibeqc_status vibeqc_calculation_get_precision_work(
+    const vibeqc_calculation* calculation, uint32_t detail_version,
+    vibeqc_precision_work_detail* out, vibeqc_precision_work_event* events, uint32_t event_capacity,
+    vibeqc_precision_operator_record* operators, uint32_t operator_capacity);
 /** Most recent successful correlated execution; failure/absence is explicit. */
 VIBEQC_API vibeqc_status vibeqc_calculation_get_correlation_diagnostic(
     const vibeqc_calculation* calculation, vibeqc_correlation_diagnostic* diagnostic);
@@ -1221,6 +1338,11 @@ VIBEQC_API vibeqc_status vibeqc_calculation_get_cc_performance_diagnostic(
 VIBEQC_API vibeqc_status vibeqc_batch_get_precision_provenance(const vibeqc_batch* batch,
                                                                uint32_t index,
                                                                vibeqc_precision_provenance* out);
+/** Original-index batch equivalent of vibeqc_calculation_get_precision_work. */
+VIBEQC_API vibeqc_status vibeqc_batch_get_precision_work(
+    const vibeqc_batch* batch, uint32_t index, uint32_t detail_version,
+    vibeqc_precision_work_detail* out, vibeqc_precision_work_event* events, uint32_t event_capacity,
+    vibeqc_precision_operator_record* operators, uint32_t operator_capacity);
 
 /**
  * Prepare a persistent ragged fleet plan. Systems may have different atom,

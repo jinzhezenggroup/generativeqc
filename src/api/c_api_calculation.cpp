@@ -47,6 +47,7 @@ vibeqc_status vibeqc_calculation_execute(vibeqc_calculation* calculation,
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  calculation->precision_work.reset();
   // An attempted execution revokes any internal final-state token even if
   // the output descriptor is rejected before the method can run.
   try {
@@ -92,6 +93,7 @@ vibeqc_status vibeqc_calculation_execute(vibeqc_calculation* calculation,
     output->converged = native.convergence.converged ? 1 : 0;
     output->executed_backend = native.executed_backend;
     if (!native.convergence.converged) {
+      calculation->precision_work = std::move(native.precision_work);
       return VIBEQC_STATUS_NOT_CONVERGED;
     }
     if (!omit_forces) {
@@ -100,6 +102,7 @@ vibeqc_status vibeqc_calculation_execute(vibeqc_calculation* calculation,
       }
       std::copy(native.forces.begin(), native.forces.end(), output->forces);
     }
+    calculation->precision_work = std::move(native.precision_work);
     return VIBEQC_STATUS_SUCCESS;
   } catch (...) {
     calculation->plan->invalidate_result();
@@ -166,6 +169,17 @@ vibeqc_status vibeqc_calculation_get_precision_provenance(const vibeqc_calculati
     return VIBEQC_STATUS_PRECISION_UNAVAILABLE;
   }
   return vibeqc::api::copy_precision_provenance(calculation->precision, out);
+}
+
+vibeqc_status vibeqc_calculation_get_precision_work(
+    const vibeqc_calculation* calculation, uint32_t detail_version,
+    vibeqc_precision_work_detail* out, vibeqc_precision_work_event* events, uint32_t event_capacity,
+    vibeqc_precision_operator_record* operators, uint32_t operator_capacity) {
+  if (calculation == nullptr) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  if (!calculation->precision_work.has_value()) return VIBEQC_STATUS_PRECISION_UNAVAILABLE;
+  return vibeqc::api::copy_precision_work(*calculation->precision_work, detail_version, out, events,
+                                          event_capacity, operators, operator_capacity);
 }
 
 vibeqc_status vibeqc_calculation_get_correlation_diagnostic(
