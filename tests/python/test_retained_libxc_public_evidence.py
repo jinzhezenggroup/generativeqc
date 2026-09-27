@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from vibeqc_compiler.xc import retained_public_evidence as retained
 
 
@@ -32,7 +31,9 @@ def test_rejects_stale_capability_before_stage_files(
     class Capability:
         identity = "current"
 
-    monkeypatch.setattr(retained, "functional_capability", lambda *args, **kwargs: Capability())
+    monkeypatch.setattr(
+        retained, "functional_capability", lambda *args, **kwargs: Capability()
+    )
     _write(
         tmp_path / "summary.json",
         {
@@ -58,7 +59,9 @@ def test_loads_only_revalidated_public_rows(
         identity = "identity"
         public_dft = True
 
-    monkeypatch.setattr(retained, "functional_capability", lambda *args, **kwargs: Capability())
+    monkeypatch.setattr(
+        retained, "functional_capability", lambda *args, **kwargs: Capability()
+    )
     name = "GGA_X_FAKE"
     _write(
         tmp_path / "summary.json",
