@@ -1,13 +1,15 @@
 """Run the broad automatic Libxc CPU promotion matrix outside routine PR CI.
 
-The default deterministic matrix satisfies the #1121 breadth target: three
-non-curated LDA, five non-curated GGA, and three non-curated tau meta-GGA
-registrations. Each selected registration traverses the existing evidence
-producers in order:
+The campaign satisfies the #1121 breadth target by evidence, not by a
+hand-maintained functional list. It scans deterministic non-curated LDA/GGA/
+tau-meta-GGA candidates, retains production-domain blockers, and advances only
+admitted candidates through the remaining exact evidence producers:
 
-compiled CPU -> production domain -> molecular SCF -> public method.
+production domain -> compiled CPU -> molecular SCF -> public method.
 
-This tool is intentionally suitable for scheduled/manual qualification. It does
+Scanning continues within each family until three LDA, five GGA, and three
+tau-meta-GGA registrations reach the public endpoint, or the eligible inventory
+is exhausted. This tool is intended for scheduled/manual qualification and does
 not add per-functional scientific branches or runtime Libxc dependencies.
 """
 
@@ -35,9 +37,15 @@ from tools.qualify_libxc_molecular_scf import qualify_molecular_scf
 from tools.qualify_libxc_production_domain import qualify_functional
 from tools.qualify_libxc_public_method import qualify_public_method
 
-MATRIX_SCHEMA = "vibeqc.libxc-broad-promotion-matrix/v1"
+MATRIX_SCHEMA = "vibeqc.libxc-broad-promotion-matrix/v2"
 DEFAULT_QUOTAS = {"lda": 3, "gga": 5, "mgga": 3}
-_STAGE_ORDER = ("compiled-cpu", "production-domain", "molecular-scf", "public-method")
+_FAMILY_ORDER = ("lda", "gga", "mgga")
+_STAGE_ORDER = ("production-domain", "compiled-cpu", "molecular-scf", "public-method")
+_EXPECTED_INGREDIENTS = {
+    "lda": ("rho",),
+    "gga": ("rho", "sigma"),
+    "mgga": ("rho", "sigma", "tau"),
+}
 
 
 def _validate_quotas(quotas: Mapping[str, int]) -> dict[str, int]:
@@ -45,7 +53,7 @@ def _validate_quotas(quotas: Mapping[str, int]) -> dict[str, int]:
     if set(quotas) != expected:
         raise ValueError(f"matrix quotas must contain exactly {sorted(expected)!r}")
     normalized: dict[str, int] = {}
-    for family in sorted(expected):
+    for family in _FAMILY_ORDER:
         value = quotas[family]
         if type(value) is not int or value <= 0:
             raise ValueError("matrix quotas must be positive integers")
@@ -54,51 +62,39 @@ def _validate_quotas(quotas: Mapping[str, int]) -> dict[str, int]:
 
 
 def _eligible(capability: BulkFunctionalCapability) -> bool:
-    if capability.name not in AUTO_BULK_COMPONENTS:
-        return False
-    if not capability.production_domain_profile.eligible:
-        return False
-    ingredients = capability.required_ingredients
-    if capability.family == "lda":
-        return ingredients == ("rho",)
-    if capability.family == "gga":
-        return ingredients == ("rho", "sigma")
-    if capability.family == "mgga":
-        return ingredients == ("rho", "sigma", "tau")
-    return False
+    expected = _EXPECTED_INGREDIENTS.get(capability.family)
+    return (
+        expected is not None
+        and capability.name in AUTO_BULK_COMPONENTS
+        and capability.production_domain_profile.eligible
+        and capability.required_ingredients == expected
+    )
 
 
-def _spread(
-    values: list[BulkFunctionalCapability], count: int
-) -> tuple[BulkFunctionalCapability, ...]:
-    if len(values) < count:
-        raise ValueError(
-            f"broad matrix needs {count} candidates but only {len(values)} are eligible"
-        )
-    if count == 1:
-        return (values[len(values) // 2],)
-    indices = tuple(index * (len(values) - 1) // (count - 1) for index in range(count))
-    if len(set(indices)) != count:
-        raise RuntimeError("deterministic broad-matrix sampling produced duplicates")
-    return tuple(values[index] for index in indices)
-
-
-def select_representatives(
+def candidate_inventory(
     quotas: Mapping[str, int] = DEFAULT_QUOTAS,
 ) -> tuple[BulkFunctionalCapability, ...]:
-    """Select a deterministic catalog-spanning non-curated semilocal matrix."""
+    """Return deterministic structurally eligible candidates for evidence scanning."""
     requested = _validate_quotas(quotas)
     groups: dict[str, list[BulkFunctionalCapability]] = {
-        family: [] for family in requested
+        family: [] for family in _FAMILY_ORDER
     }
     for capability in sorted(available_capabilities(), key=lambda item: item.name):
         if _eligible(capability):
             groups[capability.family].append(capability)
 
-    selected: list[BulkFunctionalCapability] = []
-    for family in ("lda", "gga", "mgga"):
-        selected.extend(_spread(groups[family], requested[family]))
-    return tuple(selected)
+    shortages = {
+        family: (requested[family], len(groups[family]))
+        for family in _FAMILY_ORDER
+        if len(groups[family]) < requested[family]
+    }
+    if shortages:
+        raise ValueError(f"insufficient broad-matrix candidate inventory: {shortages!r}")
+    return tuple(
+        capability
+        for family in _FAMILY_ORDER
+        for capability in groups[family]
+    )
 
 
 def _stage_status(payload: Mapping[str, Any]) -> str:
@@ -111,10 +107,41 @@ def _stage_status(payload: Mapping[str, Any]) -> str:
     return str(status)
 
 
+def _stage_reason(payload: Mapping[str, Any]) -> str | None:
+    envelope = payload.get("stage_evidence")
+    if not isinstance(envelope, Mapping):
+        raise TypeError("qualification payload omitted stage_evidence")
+    reason = envelope.get("reason")
+    if reason is not None and not isinstance(reason, str):
+        raise TypeError("qualification stage reason must be a string or null")
+    return reason
+
+
 def _write_stage(root: Path, stage: str, payload: Mapping[str, Any]) -> str:
     path = root / f"{stage}.json"
     atomic_json(path, dict(payload))
     return str(path)
+
+
+def _record(
+    capability: BulkFunctionalCapability,
+    *,
+    stages: Mapping[str, str],
+    artifacts: Mapping[str, str],
+    blocker_stage: str | None,
+    blocker: str | None,
+) -> dict[str, Any]:
+    return {
+        "name": capability.name,
+        "family": capability.family,
+        "required_ingredients": list(capability.required_ingredients),
+        "capability_identity": capability.identity,
+        "stages": dict(stages),
+        "artifacts": dict(artifacts),
+        "status": "pass" if stages.get("public-method") == "pass" else "blocked",
+        "blocker_stage": blocker_stage,
+        "blocker": blocker,
+    }
 
 
 def run_matrix(
@@ -125,37 +152,40 @@ def run_matrix(
     build_dir: Path,
     pyscf_version: str,
     libxc: Any,
+    quotas: Mapping[str, int] = DEFAULT_QUOTAS,
     cxx: str | None = None,
     timeout: float = 120.0,
 ) -> dict[str, Any]:
-    """Run the exact promotion chain and retain every stage artifact."""
+    """Scan candidates until exact public endpoint quotas are satisfied."""
+    requested = _validate_quotas(quotas)
     if not isinstance(evidence_prefix, str) or not evidence_prefix.strip():
         raise ValueError("broad matrix requires a nonempty evidence prefix")
     prefix = evidence_prefix.rstrip("/")
     output.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
+    attempted: Counter[str] = Counter()
+    production_passed: Counter[str] = Counter()
+    public_passed: Counter[str] = Counter()
+
     for capability in capabilities:
+        family = capability.family
+        if family not in requested or public_passed[family] >= requested[family]:
+            continue
+        if not _eligible(capability):
+            continue
+
+        attempted[family] += 1
         name = capability.name
         functional_dir = output / name
         functional_dir.mkdir(parents=True, exist_ok=True)
         evidence_base = f"{prefix}/{name}"
-        stages: dict[str, str] = {}
+        stages = {stage: "not-run" for stage in _STAGE_ORDER}
         artifacts: dict[str, str] = {}
+        blocker_stage: str | None = None
         blocker: str | None = None
 
         try:
-            compiled = qualify_compiled_cpu(
-                name,
-                evidence=f"{evidence_base}/compiled-cpu.json",
-                cxx=cxx,
-                timeout=timeout,
-            )
-            stages["compiled-cpu"] = _stage_status(compiled)
-            artifacts["compiled-cpu"] = _write_stage(
-                functional_dir, "compiled-cpu", compiled
-            )
-
             production = qualify_functional(
                 name,
                 evidence=f"{evidence_base}/production-domain.json",
@@ -166,66 +196,121 @@ def run_matrix(
             artifacts["production-domain"] = _write_stage(
                 functional_dir, "production-domain", production
             )
+            if stages["production-domain"] != "pass":
+                blocker_stage = "production-domain"
+                blocker = _stage_reason(production)
+                rows.append(
+                    _record(
+                        capability,
+                        stages=stages,
+                        artifacts=artifacts,
+                        blocker_stage=blocker_stage,
+                        blocker=blocker,
+                    )
+                )
+                continue
+            production_passed[family] += 1
 
-            if (
-                stages["compiled-cpu"] == "pass"
-                and stages["production-domain"] == "pass"
-            ):
-                molecular = qualify_molecular_scf(
-                    name,
-                    compiled_cpu_evidence=compiled["stage_evidence"],
-                    production_domain_evidence=production["stage_evidence"],
-                    build_dir=build_dir,
-                    evidence=f"{evidence_base}/molecular-scf.json",
-                    cxx=cxx,
-                    timeout=timeout,
+            compiled = qualify_compiled_cpu(
+                name,
+                evidence=f"{evidence_base}/compiled-cpu.json",
+                cxx=cxx,
+                timeout=timeout,
+            )
+            stages["compiled-cpu"] = _stage_status(compiled)
+            artifacts["compiled-cpu"] = _write_stage(
+                functional_dir, "compiled-cpu", compiled
+            )
+            if stages["compiled-cpu"] != "pass":
+                blocker_stage = "compiled-cpu"
+                blocker = _stage_reason(compiled)
+                rows.append(
+                    _record(
+                        capability,
+                        stages=stages,
+                        artifacts=artifacts,
+                        blocker_stage=blocker_stage,
+                        blocker=blocker,
+                    )
                 )
-                stages["molecular-scf"] = _stage_status(molecular)
-                artifacts["molecular-scf"] = _write_stage(
-                    functional_dir, "molecular-scf", molecular
-                )
-            else:
-                molecular = None
-                stages["molecular-scf"] = "not-run"
+                continue
 
-            if molecular is not None and stages["molecular-scf"] == "pass":
-                public = qualify_public_method(
-                    name,
-                    compiled_cpu_evidence=compiled["stage_evidence"],
-                    production_domain_evidence=production["stage_evidence"],
-                    molecular_scf_evidence=molecular["stage_evidence"],
-                    evidence=f"{evidence_base}/public-method.json",
+            molecular = qualify_molecular_scf(
+                name,
+                compiled_cpu_evidence=compiled["stage_evidence"],
+                production_domain_evidence=production["stage_evidence"],
+                build_dir=build_dir,
+                evidence=f"{evidence_base}/molecular-scf.json",
+                cxx=cxx,
+                timeout=timeout,
+            )
+            stages["molecular-scf"] = _stage_status(molecular)
+            artifacts["molecular-scf"] = _write_stage(
+                functional_dir, "molecular-scf", molecular
+            )
+            if stages["molecular-scf"] != "pass":
+                blocker_stage = "molecular-scf"
+                blocker = _stage_reason(molecular)
+                rows.append(
+                    _record(
+                        capability,
+                        stages=stages,
+                        artifacts=artifacts,
+                        blocker_stage=blocker_stage,
+                        blocker=blocker,
+                    )
                 )
-                stages["public-method"] = _stage_status(public)
-                artifacts["public-method"] = _write_stage(
-                    functional_dir, "public-method", public
-                )
+                continue
+
+            public = qualify_public_method(
+                name,
+                compiled_cpu_evidence=compiled["stage_evidence"],
+                production_domain_evidence=production["stage_evidence"],
+                molecular_scf_evidence=molecular["stage_evidence"],
+                evidence=f"{evidence_base}/public-method.json",
+            )
+            stages["public-method"] = _stage_status(public)
+            artifacts["public-method"] = _write_stage(
+                functional_dir, "public-method", public
+            )
+            if stages["public-method"] != "pass":
+                blocker_stage = "public-method"
+                blocker = _stage_reason(public)
             else:
-                stages["public-method"] = "not-run"
+                public_passed[family] += 1
         except (ArithmeticError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            blocker_stage = next(
+                (stage for stage in _STAGE_ORDER if stages[stage] == "not-run"),
+                "runner",
+            )
             blocker = f"{type(exc).__name__}: {exc}"
-            for stage in _STAGE_ORDER:
-                stages.setdefault(stage, "not-run")
 
         rows.append(
-            {
-                "name": name,
-                "family": capability.family,
-                "required_ingredients": list(capability.required_ingredients),
-                "capability_identity": capability.identity,
-                "stages": stages,
-                "artifacts": artifacts,
-                "status": "pass" if stages.get("public-method") == "pass" else "fail",
-                "blocker": blocker,
-            }
+            _record(
+                capability,
+                stages=stages,
+                artifacts=artifacts,
+                blocker_stage=blocker_stage,
+                blocker=blocker,
+            )
         )
 
-    passed = Counter(row["family"] for row in rows if row["status"] == "pass")
-    selected = Counter(row["family"] for row in rows)
+    complete = all(
+        public_passed[family] >= requested[family] for family in _FAMILY_ORDER
+    )
     summary = {
         "schema": MATRIX_SCHEMA,
-        "selected_counts": dict(sorted(selected.items())),
-        "public_pass_counts": dict(sorted(passed.items())),
+        "quotas": requested,
+        "complete": complete,
+        "attempted_counts": {
+            family: attempted[family] for family in _FAMILY_ORDER
+        },
+        "production_pass_counts": {
+            family: production_passed[family] for family in _FAMILY_ORDER
+        },
+        "public_pass_counts": {
+            family: public_passed[family] for family in _FAMILY_ORDER
+        },
         "functionals": rows,
     }
     atomic_json(output / "summary.json", summary)
@@ -248,9 +333,8 @@ def main() -> int:
     import pyscf
     from pyscf.dft import libxc
 
-    selected = select_representatives()
     summary = run_matrix(
-        selected,
+        candidate_inventory(),
         output=args.output,
         evidence_prefix=args.evidence_prefix,
         build_dir=args.build_dir,
@@ -260,9 +344,6 @@ def main() -> int:
         timeout=args.timeout,
     )
     counts = summary["public_pass_counts"]
-    passed = all(
-        counts.get(family, 0) >= count for family, count in DEFAULT_QUOTAS.items()
-    )
     print(
         "bulk Libxc broad matrix: "
         + ", ".join(
@@ -271,7 +352,7 @@ def main() -> int:
         )
         + f" -> {args.output / 'summary.json'}"
     )
-    return 1 if args.require_pass and not passed else 0
+    return 1 if args.require_pass and not summary["complete"] else 0
 
 
 if __name__ == "__main__":
