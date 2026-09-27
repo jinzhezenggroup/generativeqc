@@ -101,10 +101,13 @@ spin blocks and `S` is the plan-owned source count (seven or eight). The Becke
 scratch has 32 atom-sized worker slices; there is no coordinate/grid/AO tensor.
 Ordered primitive work is `(1+H)*K**4 + (A+2)*K**2 + A*(A-1)/2`, where
 `H=1` when full-range exchange is present and `H=0` otherwise, and `K` sums each
-public AO's primitive count once per normalized Cartesian expansion term. The
-bounded implementation currently traverses ERI derivative tasks once per
-Coulomb/exchange contribution; it does not claim a fused-J/K speedup. Pair
-visits are `(1+2*grid_points)*A*(A-1)/2`.
+public AO's primitive count once per normalized Cartesian expansion term. Native
+submissions are cut adaptively by both descriptor capacity and primitive-work
+budget, so a high-primitive basis can shrink a page without changing the compiled
+scientific graph or introducing a whole-force work cap. The bounded implementation
+currently traverses ERI derivative tasks once per Coulomb/exchange contribution; it
+does not claim a fused-J/K speedup. Pair visits are
+`(1+2*grid_points)*A*(A-1)/2`.
 
 All TensorIR programs and the grid/source capacities are admitted before device
 allocation. Default additional-device and host-numeric bounds are 512 MiB and
