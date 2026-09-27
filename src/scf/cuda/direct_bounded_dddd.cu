@@ -157,9 +157,9 @@ void launch_bounded_direct_dddd_streaming_kernel_scaled(
       }
     } else {
       bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Force, true>
-          <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
-                                                  schwarz_bounds, density, active, output, bra_head,
-                                                  profile, fp64_work_count);
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, topology_pointer, screening_tolerance, schwarz_bounds, density, active, output,
+              bra_head, profile, fp64_work_count, coulomb_coefficient, exchange_coefficient);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -178,9 +178,9 @@ void launch_bounded_direct_dddd_streaming_kernel_scaled(
       }
     } else {
       bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Force, true>
-          <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
-                                                  schwarz_bounds, density, active, output, bra_head,
-                                                  profile, fp64_work_count);
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, topology_pointer, screening_tolerance, schwarz_bounds, density, active, output,
+              bra_head, profile, fp64_work_count, coulomb_coefficient, exchange_coefficient);
     }
   }
 }
