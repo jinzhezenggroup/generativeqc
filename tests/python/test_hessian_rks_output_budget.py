@@ -128,9 +128,7 @@ def test_weighted_provider_admission_has_no_legacy_size_cap(
         SimpleNamespace(
             angular_momentum=0,
             atom_index=index % len(atoms),
-            primitives=(
-                SimpleNamespace(exponent=1.0 + 0.01 * index, coefficient=1.0),
-            ),
+            primitives=(SimpleNamespace(exponent=1.0 + 0.01 * index, coefficient=1.0),),
         )
         for index in range(13)
     )
