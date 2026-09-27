@@ -725,12 +725,7 @@ class CudaGrid:
                 raise ValueError("device task views require a local CUDA plan")
             if set(self.ingredients) != {"rho", "gradient", "sigma", "tau"}:
                 raise ValueError("device task ABI v1 requires the full feature layout")
-            with self._task(
-                points,
-                ao_ids,
-                stamp=stamp,
-                defer_error_to_consumer=defer_error_to_consumer,
-            ) as lease:
+            with self._task(points, ao_ids, stamp=stamp) as lease:
                 yield lease
 
     @contextmanager
@@ -792,7 +787,12 @@ class CudaGrid:
                 raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
-            with self._task(points, ao_ids, stamp=stamp) as lease:
+            with self._task(
+                points,
+                ao_ids,
+                stamp=stamp,
+                defer_error_to_consumer=defer_error_to_consumer,
+            ) as lease:
                 yield lease
 
     @contextmanager
