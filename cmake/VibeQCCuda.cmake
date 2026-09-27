@@ -42,6 +42,7 @@ macro(vibeqc_configure_cuda_backend target)
     ${VIBEQC_DIRECT_RECURRENCE_HEADERS}
     ${VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    ${VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS}
     "${VIBEQC_DIRECT_FOCK_ACCUMULATION_HEADER}")
   target_include_directories(vibeqc_direct_angular_force PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -72,6 +73,7 @@ macro(vibeqc_configure_cuda_backend target)
     ${VIBEQC_DIRECT_RECURRENCE_HEADERS}
     ${VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    ${VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS}
     "${VIBEQC_DIRECT_FOCK_ACCUMULATION_HEADER}")
     target_include_directories(vibeqc_direct_native PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -397,17 +399,16 @@ macro(vibeqc_configure_cuda_backend target)
         POSITION_INDEPENDENT_CODE ON
         JOB_POOL_COMPILE vibeqc_cuda_compile)
 
-    # Generated source weights are plan-bound after #665/#689. Keep RKS and
-    # UKS artifacts distinct so one-spin D/W lowering cannot serve two-spin work.
-    set(_vibeqc_stationary_functionals 0 0 1 1 2 2)
-    set(_vibeqc_stationary_spins
-        unpolarized polarized unpolarized polarized unpolarized polarized)
+    # Generated source weights are exact-plan-bound after #665/#689. Package
+    # semilocal and admitted global-hybrid plans through one profile catalog;
+    # runtime selection still verifies the exact StationaryGradientPlan identity.
     set(_vibeqc_stationary_names
-        lda_rks lda_uks pbe_rks pbe_uks r2scan_rks r2scan_uks)
-    foreach(_vibeqc_stationary_functional _vibeqc_stationary_spin
-            _vibeqc_stationary_name IN ZIP_LISTS
-            _vibeqc_stationary_functionals _vibeqc_stationary_spins
-            _vibeqc_stationary_names)
+        lda_rks lda_uks
+        pbe_rks pbe_uks
+        r2scan_rks r2scan_uks
+        pbe0_rks pbe0_uks
+        b3lyp_rks b3lyp_uks)
+    foreach(_vibeqc_stationary_name IN LISTS _vibeqc_stationary_names)
       set(_vibeqc_stationary_source
           "${VIBEQC_STATIONARY_AOT_DIRECTORY}/vibeqc_stationary_${_vibeqc_stationary_name}.cu")
       set(_vibeqc_stationary_manifest
@@ -418,10 +419,13 @@ macro(vibeqc_configure_cuda_backend target)
         OUTPUTS "${_vibeqc_stationary_source}"
         DEPENDS
           "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/stationary_gradient_cuda.cuh"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/stationary_cuda.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/stationary_gradient.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/spec.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/geometry_cuda.py"
         ARGS
           --output "${_vibeqc_stationary_source}"
-          --functional "${_vibeqc_stationary_functional}"
-          --spin "${_vibeqc_stationary_spin}"
+          --profile "${_vibeqc_stationary_name}"
           --iterations 3
         COMMENT
           "Generating ${_vibeqc_stationary_name} stationary CUDA AOT source")
@@ -462,8 +466,7 @@ macro(vibeqc_configure_cuda_backend target)
                 --library "$<TARGET_FILE:${_vibeqc_stationary_target}>"
                 --source "${_vibeqc_stationary_source}"
                 --output "${_vibeqc_stationary_manifest}"
-                --functional "${_vibeqc_stationary_functional}"
-                --spin "${_vibeqc_stationary_spin}"
+                --profile "${_vibeqc_stationary_name}"
                 --iterations 3
                 ${_vibeqc_stationary_architecture_args}
                 ${_vibeqc_stationary_compile_architecture_args}
@@ -493,10 +496,13 @@ macro(vibeqc_configure_cuda_backend target)
         OUTPUTS "${_vibeqc_stationary_spd_source}"
         DEPENDS
           "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/stationary_gradient_cuda.cuh"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/stationary_cuda.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/stationary_gradient.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/spec.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/geometry_cuda.py"
         ARGS
           --output "${_vibeqc_stationary_spd_source}"
-          --functional "${_vibeqc_stationary_functional}"
-          --spin "${_vibeqc_stationary_spin}"
+          --profile "${_vibeqc_stationary_name}"
           --iterations 3
           --component-domain spd
         COMMENT
@@ -538,8 +544,7 @@ macro(vibeqc_configure_cuda_backend target)
                 --library "$<TARGET_FILE:${_vibeqc_stationary_spd_target}>"
                 --source "${_vibeqc_stationary_spd_source}"
                 --output "${_vibeqc_stationary_spd_manifest}"
-                --functional "${_vibeqc_stationary_functional}"
-                --spin "${_vibeqc_stationary_spin}"
+                --profile "${_vibeqc_stationary_name}"
                 --iterations 3
                 --component-domain spd
                 ${_vibeqc_stationary_spd_primitive_args}

@@ -646,7 +646,7 @@ __device__ inline Scalar primitive_eri_order4(
 #include <type_traits>
 
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_cartesian.cuh"
+#include "generated_direct_cartesian.cuh"
 #include "generated_direct_eri_order2.cuh"
 #include "generated_direct_eri_order3.cuh"
 #include "generated_direct_eri_order4.cuh"

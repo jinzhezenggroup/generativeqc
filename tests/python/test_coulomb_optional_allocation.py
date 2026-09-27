@@ -110,6 +110,8 @@ struct GeneratedCoulombPlan {
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{}, *shell_bounds{};
   std::uint8_t* active{};
   std::uint32_t* heads{};
+  const std::uint32_t* pair_order{};
+  const std::uint32_t* pair_class_offsets{};
   GeneratedShellPairStream* topology{};
   ~GeneratedCoulombPlan();
 };
@@ -156,7 +158,7 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     begin = source.index("GeneratedCoulombPlan::~GeneratedCoulombPlan()")
-    end = source.index("cudaError_t enqueue_generated_coulomb(", begin)
+    end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     for stage, anchor in enumerate(
         (

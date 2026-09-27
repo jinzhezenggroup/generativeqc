@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes as ct
+import json
 import os
 import shutil
 import typing
@@ -14,6 +15,9 @@ import numpy as np
 import pytest
 from vibeqc import _stationary_rsh_cpu as runtime
 from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from vibeqc_compiler.integral.derivative_aot_registry import (
+    radial_inventory_from_payload,
+)
 from vibeqc_compiler.integral.ir import four_center_eri_operator
 from vibeqc_compiler.integral.range_separation import CoulombKernel
 from vibeqc_compiler.integral.rsh_cpu_aot import (
@@ -305,10 +309,26 @@ def test_native_library_exports_wb97mv_rsh_aot() -> None:
     assert count == 34
 
 
-def test_cmake_packages_all_wb97mv_rsh_programs() -> None:
+def test_range_aot_manifest_covers_current_wb97mv_operator_identity() -> None:
+    root = Path(__file__).resolve().parents[2]
+    payload = json.loads(
+        (root / "manifests/derivative_aot_radials.json").read_text(encoding="utf-8")
+    )
+    packaged = radial_inventory_from_payload(payload, backend="cpu")
+    expected = tuple(_radial(primitive) for primitive in _wb97mv_ranges())
+    assert packaged == expected
+
+
+def test_cmake_packages_method_neutral_range_derivative_inventory() -> None:
     root = Path(__file__).resolve().parents[2]
     cmake = (root / "cmake/VibeQCGeneratedSources.cmake").read_text(encoding="utf-8")
-    assert "VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES" in cmake
-    assert "generate_wb97mv_rsh_cpu_aot.py" in cmake
-    assert "foreach(_vibeqc_rsh_family IN ITEMS sr lr)" in cmake
-    assert 'if(_vibeqc_rsh_shell STREQUAL "1111")' in cmake
+    generator = (root / "tools/generate_derivative_range_aot.py").read_text(
+        encoding="utf-8"
+    )
+    assert "VIBEQC_RANGE_DERIVATIVE_CPU_AOT_SOURCES" in cmake
+    assert "generate_derivative_range_aot.py" in cmake
+    assert "manifests/derivative_aot_radials.json" in cmake
+    assert "vibeqc_derivative_range_" in cmake
+    assert "WB97M-V" not in generator
+    assert "resolve_method" not in generator
+    assert 'if(_vibeqc_range_shell STREQUAL "1111")' in cmake

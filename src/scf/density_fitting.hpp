@@ -69,7 +69,9 @@ struct DensityFittingScfData {
   unsigned one_electron_gradient_mapping{};
   std::size_t one_electron_gradient_budget{};
   // Early preparation and its device plan must use the same representation.
-  // Changing it retires cached full host tensors as well as captured J/K work.
+  // Keep both the user request and the resolved executable layout so changing
+  // an explicit/automatic policy retires stale captured J/K work.
+  DfPairStorageRequest value_storage_request{DfPairStorageRequest::Automatic};
   DfPairStorage value_storage{DfPairStorage::Dense};
 };
 
@@ -302,6 +304,17 @@ class DensityFittingBudgetError : public std::invalid_argument {
     std::size_t batch_size, std::size_t nbf, std::size_t naux, std::size_t rank_capacity,
     std::size_t memory_budget_bytes, std::size_t fixed_device_bytes = 0,
     std::size_t automatic_rhf_rank = 0, bool retain_raw = true);
+
+/** Resolve dense/packed value storage from the requested policy and executable
+ * resource plan. Automatic promotion is deliberately bounded to singleton RHF:
+ * retain dense whenever it is fully resident, otherwise use a single fitted
+ * packed owner only when that owner fits the same value allowance.
+ */
+[[nodiscard]] DensityFittingTilePlan plan_requested_density_fitting_tiles(
+    DfPairStorageRequest request, std::size_t batch_size, std::size_t nbf, std::size_t naux,
+    std::size_t occupied, std::size_t packed_rank_capacity, std::size_t memory_budget_bytes,
+    std::size_t fixed_device_bytes = 0, bool generated_source = false,
+    std::size_t automatic_rhf_rank = 0);
 
 /** Additional lazy SCF DIIS capacity, conservatively covering joined-spin UHF.
  * Add this to fixed_device_bytes before choosing K panels, and to native

@@ -14,6 +14,23 @@ def test_batch_precision_provenance_availability_abi_and_failed_replay() -> None
     calculator = Calculator(precision="auto", device="cpu")
     with calculator.prepare_batch(systems()[:2]) as prepared:
         getter = prepared._library.vibeqc_batch_get_precision_provenance
+        work_getter = prepared._library.vibeqc_batch_get_precision_work
+        detail = _native.PrecisionWorkDetail(
+            ctypes.sizeof(_native.PrecisionWorkDetail), _native.ABI_VERSION
+        )
+        assert (
+            work_getter(
+                prepared._batch,
+                0,
+                _native.PRECISION_WORK_DETAIL_VERSION,
+                ctypes.byref(detail),
+                None,
+                0,
+                None,
+                0,
+            )
+            == _native.STATUS_PRECISION_UNAVAILABLE
+        )
         record = _native.PrecisionProvenance(
             ctypes.sizeof(_native.PrecisionProvenance), _native.ABI_VERSION
         )
@@ -33,6 +50,36 @@ def test_batch_precision_provenance_availability_abi_and_failed_replay() -> None
             assert item.precision["effective_bits"] == 64
             assert item.precision["refinement_iterations"] == 0
         assert getter(prepared._batch, 0, None) == _native.STATUS_SUCCESS
+        assert (
+            work_getter(
+                prepared._batch,
+                0,
+                _native.PRECISION_WORK_DETAIL_VERSION,
+                ctypes.byref(detail),
+                None,
+                0,
+                None,
+                0,
+            )
+            == _native.STATUS_SUCCESS
+        )
+        assert detail.detail_version == _native.PRECISION_WORK_DETAIL_VERSION
+        assert detail.complete == 0
+        assert detail.operator_inventory_complete == 0
+        assert detail.event_count == detail.operator_count == 0
+        assert (
+            work_getter(
+                prepared._batch,
+                0,
+                _native.PRECISION_WORK_DETAIL_VERSION + 1,
+                ctypes.byref(detail),
+                None,
+                0,
+                None,
+                0,
+            )
+            == _native.STATUS_NOT_IMPLEMENTED
+        )
         record.struct_size, record.abi_version = (
             ctypes.sizeof(record),
             _native.ABI_VERSION + 1,
@@ -65,6 +112,19 @@ def test_batch_precision_provenance_availability_abi_and_failed_replay() -> None
         assert failed.items[0].precision is None
         assert failed.items[1].precision == result.items[1].precision
         assert getter(prepared._batch, 0, None) == _native.STATUS_PRECISION_UNAVAILABLE
+        assert (
+            work_getter(
+                prepared._batch,
+                0,
+                _native.PRECISION_WORK_DETAIL_VERSION,
+                ctypes.byref(detail),
+                None,
+                0,
+                None,
+                0,
+            )
+            == _native.STATUS_PRECISION_UNAVAILABLE
+        )
         # Reject the entire invocation with a wrong result count, after a
         # successful neighbor populated its record in the previous call.
         outputs = (_native.BatchItemResultDescriptor * 1)()
@@ -73,6 +133,19 @@ def test_batch_precision_provenance_availability_abi_and_failed_replay() -> None
             == _native.STATUS_INVALID_ARGUMENT
         )
         assert getter(prepared._batch, 1, None) == _native.STATUS_PRECISION_UNAVAILABLE
+        assert (
+            work_getter(
+                prepared._batch,
+                1,
+                _native.PRECISION_WORK_DETAIL_VERSION,
+                ctypes.byref(detail),
+                None,
+                0,
+                None,
+                0,
+            )
+            == _native.STATUS_PRECISION_UNAVAILABLE
+        )
 
 
 def test_unconverged_batch_retains_completed_precision_record() -> None:

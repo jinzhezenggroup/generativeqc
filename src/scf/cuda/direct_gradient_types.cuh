@@ -8,9 +8,8 @@
 #include <cstdint>
 #include <type_traits>
 
-// Retained direct integral arithmetic for gradient types.
-// Shared definitions use ordinary inline linkage; host plans and queue policy
-// remain outside this numerical owner.
+// Direct-force result-layout contract shared by native runtime and generated math.
+// This header contains data layout only; scientific derivative equations live in generated owners.
 namespace vibeqc::scf::cuda_execution {
 
 /** Density-weighted psss derivatives for the first three canonical centers. */
