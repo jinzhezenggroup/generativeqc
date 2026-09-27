@@ -834,31 +834,38 @@ __device__ __forceinline__ double generated_dppp_density_coefficient_scaled(
   if (k == l) orbit_scale *= 0.5;
   if ((i == k && j == l) || (i == l && j == k)) orbit_scale *= 0.5;
   if constexpr (Unrestricted) {{
-    const double alpha_ij = density[task.spin_offset + ij];
-    const double alpha_kl = density[task.spin_offset + kl];
-    const double beta_ij =
-        density[task.spin_offset + matrix_size + ij];
-    const double beta_kl =
-        density[task.spin_offset + matrix_size + kl];
-    const double coulomb =
-        4.0 * coulomb_coefficient *
-        (alpha_ij + beta_ij) * (alpha_kl + beta_kl);
-    const double exchange = 2.0 * exchange_coefficient * (
-        density[task.spin_offset + ik] * density[task.spin_offset + jl] +
-        density[task.spin_offset + il] * density[task.spin_offset + jk] +
-        density[task.spin_offset + matrix_size + ik] *
-            density[task.spin_offset + matrix_size + jl] +
-        density[task.spin_offset + matrix_size + il] *
-            density[task.spin_offset + matrix_size + jk]);
+    double coulomb = 0.0;
+    if (coulomb_coefficient != 0.0) {{
+      const double alpha_ij = density[task.spin_offset + ij];
+      const double alpha_kl = density[task.spin_offset + kl];
+      const double beta_ij = density[task.spin_offset + matrix_size + ij];
+      const double beta_kl = density[task.spin_offset + matrix_size + kl];
+      coulomb = 4.0 * coulomb_coefficient *
+                (alpha_ij + beta_ij) * (alpha_kl + beta_kl);
+    }}
+    double exchange = 0.0;
+    if (exchange_coefficient != 0.0) {{
+      exchange = 2.0 * exchange_coefficient * (
+          density[task.spin_offset + ik] * density[task.spin_offset + jl] +
+          density[task.spin_offset + il] * density[task.spin_offset + jk] +
+          density[task.spin_offset + matrix_size + ik] *
+              density[task.spin_offset + matrix_size + jl] +
+          density[task.spin_offset + matrix_size + il] *
+              density[task.spin_offset + matrix_size + jk]);
+    }}
     return orbit_scale * (coulomb + exchange);
   }} else {{
     const std::size_t offset = task.density_offset;
-    return orbit_scale * (
-        4.0 * coulomb_coefficient *
-            density[offset + ij] * density[offset + kl] +
-        2.0 * exchange_coefficient * (
-            density[offset + ik] * density[offset + jl] +
-            density[offset + il] * density[offset + jk]));
+    double coulomb = 0.0;
+    if (coulomb_coefficient != 0.0)
+      coulomb = 4.0 * coulomb_coefficient *
+                density[offset + ij] * density[offset + kl];
+    double exchange = 0.0;
+    if (exchange_coefficient != 0.0)
+      exchange = 2.0 * exchange_coefficient * (
+          density[offset + ik] * density[offset + jl] +
+          density[offset + il] * density[offset + jk]);
+    return orbit_scale * (coulomb + exchange);
   }}
 }}
 

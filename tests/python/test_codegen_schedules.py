@@ -660,6 +660,8 @@ def test_dppp_fused_cuda_emits_one_shared_shell_class_schedule() -> None:
     assert "orbit_scale" in density_helper
     assert "4.0 * coulomb_coefficient *" in density_helper
     assert "2.0 * exchange_coefficient *" in density_helper
+    assert "if (coulomb_coefficient != 0.0)" in density_helper
+    assert "if (exchange_coefficient != 0.0)" in density_helper
     assert (
         "constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;"
         in density_helper
