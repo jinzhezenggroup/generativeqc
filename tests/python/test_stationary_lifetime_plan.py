@@ -8,6 +8,7 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 from vibeqc_compiler.method.stationary_execution import (
+    StationaryExecutionGraph,
     compile_stationary_execution_graph,
 )
 from vibeqc_compiler.method.stationary_gradient import (
@@ -19,11 +20,14 @@ from vibeqc_compiler.method.stationary_lifetime import (
     DEVICE_BORROWED,
     DEVICE_RETAINED,
     HOST_PUBLISHED,
+    StationaryLifetimePlan,
     plan_stationary_lifetimes,
 )
 
 
-def _lifetime(method):
+def _lifetime(
+    method: str | MethodSpec,
+) -> tuple[StationaryExecutionGraph, StationaryLifetimePlan]:
     gradient = StationaryGradientPlan(
         resolve_method(method), StationaryMeanField(SCF_POINT_MODEL)
     )
@@ -31,7 +35,7 @@ def _lifetime(method):
     return graph, plan_stationary_lifetimes(graph)
 
 
-def test_nonlocal_shared_features_are_retained_without_method_name_policy():
+def test_nonlocal_shared_features_are_retained_without_method_name_policy() -> None:
     method = MethodSpec(
         "unrelated-alias",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
@@ -45,13 +49,13 @@ def test_nonlocal_shared_features_are_retained_without_method_name_policy():
     assert lifetime.graph_identity == graph.identity
 
 
-def test_semilocal_only_feature_can_be_borrowed_by_one_consumer():
+def test_semilocal_only_feature_can_be_borrowed_by_one_consumer() -> None:
     _, lifetime = _lifetime("PBE")
     assert lifetime.value("grid_feature:rho").placement == DEVICE_BORROWED
     assert lifetime.value("grid_feature:gradient").placement == DEVICE_BORROWED
 
 
-def test_final_density_is_retained_when_integral_and_grid_consumers_share_it():
+def test_final_density_is_retained_when_integral_and_grid_consumers_share_it() -> None:
     _, lifetime = _lifetime("CAM-B3LYP")
     final_density = lifetime.value("final_density")
     assert final_density.placement == DEVICE_RETAINED
@@ -60,7 +64,7 @@ def test_final_density_is_retained_when_integral_and_grid_consumers_share_it():
     assert "integral:exchange_long_range" in final_density.consumers
 
 
-def test_public_gradient_is_the_only_forced_host_publication():
+def test_public_gradient_is_the_only_forced_host_publication() -> None:
     graph, lifetime = _lifetime("PBE")
     assert lifetime.value("gradient").placement == HOST_PUBLISHED
     for value in graph.values:
@@ -68,7 +72,7 @@ def test_public_gradient_is_the_only_forced_host_publication():
             assert lifetime.value(value.name).placement != HOST_PUBLISHED
 
 
-def test_aliases_with_identical_science_share_lifetime_identity():
+def test_aliases_with_identical_science_share_lifetime_identity() -> None:
     first = MethodSpec(
         "name-a",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
