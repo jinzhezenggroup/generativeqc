@@ -307,11 +307,11 @@ def test_pointwise_lda_gga_components_are_automatically_representable() -> None:
     assert payload["production_admitted"] is False
     assert payload["expression_provenance"]["kind"] == "libxc-bulk-pointwise"
 
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        build_program(spec)
+    program = build_program(spec, order=1)
+    assert len(program.outputs) == 1 + len(spec.features)
 
 
-def test_tau_only_mgga_is_automatically_representable_but_not_production() -> None:
+def test_tau_only_mgga_is_automatically_representable_and_default_lowerable() -> None:
     representable = libxc_bulk_capabilities.claimable_components(
         families=("mgga",),
         supported_ingredients=("rho", "sigma", "tau"),
@@ -322,8 +322,8 @@ def test_tau_only_mgga_is_automatically_representable_but_not_production() -> No
     spec = functional("MGGA_X_R2SCAN01", spin="unpolarized")
     assert spec.ingredients == ("rho", "sigma", "tau")
     assert spec.to_payload()["production_admitted"] is False
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        build_program(spec)
+    program = build_program(spec, order=1)
+    assert len(program.outputs) == 1 + len(spec.features)
 
 
 def test_laplacian_mgga_remains_fail_closed_until_feature_ir_exists() -> None:
