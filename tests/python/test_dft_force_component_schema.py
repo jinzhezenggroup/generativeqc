@@ -157,3 +157,19 @@ def test_stationary_split_geometry_phases_preserve_component_attribution() -> No
     record = normalize_force_work(work)
     assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.20)
     assert "semilocal_geometry_response" in record["coverage"]["wall_seconds"]
+
+
+def test_stationary_split_geometry_phases_preserve_component_attribution() -> None:
+    work = {
+        "endpoint_seconds": 1.0,
+        "timeline": {
+            "endpoint_seconds": 1.0,
+            "exclusive_wall_seconds": {
+                "xc_geometry_enqueue": 0.12,
+                "xc_geometry_drain": 0.08,
+            },
+        },
+    }
+    record = normalize_force_work(work)
+    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.20)
+    assert "semilocal_geometry_response" in record["coverage"]["wall_seconds"]
