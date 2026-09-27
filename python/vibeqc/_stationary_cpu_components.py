@@ -86,23 +86,21 @@ class ComponentPrimitiveExecutor:
         )
         self.libraries, self.dispatchers, self.calls = [], [], {}
         requests = derivative_requests(domain)
-        groups = tuple(
-            requests[begin : begin + REQUESTS_PER_UNIT]
-            for begin in range(0, len(requests), REQUESTS_PER_UNIT)
-        )
-        packaged = (
-            _packaged_aot_dispatchers(aot_library) if domain == COMPONENT_LABELS else ()
-        )
+        packaged = _packaged_aot_dispatchers(aot_library)
         if packaged:
-            if len(packaged) != len(groups):
-                raise RuntimeError("packaged CPU derivative shard inventory mismatch")
+            full_requests = derivative_requests(COMPONENT_LABELS)
+            positions = {request: index for index, request in enumerate(full_requests)}
             self.libraries.append(aot_library)
             self.dispatchers.extend(packaged)
-            for shard, selected in enumerate(groups):
-                for kind, request in enumerate(selected):
-                    self.calls[request] = (packaged[shard], kind)
+            for request in requests:
+                index = positions[request]
+                self.calls[request] = (
+                    packaged[index // REQUESTS_PER_UNIT],
+                    index % REQUESTS_PER_UNIT,
+                )
             source_bytes = largest_source = 0
             runtime_compilations = 0
+            translation_units = CPU_AOT_SHARDS
         else:
             sources = derivative_sources(domain)
             for selected, source in sources:
@@ -114,9 +112,10 @@ class ComponentPrimitiveExecutor:
             source_bytes = sum(len(source.encode("utf-8")) for _, source in sources)
             largest_source = max(len(source.encode("utf-8")) for _, source in sources)
             runtime_compilations = len(sources)
+            translation_units = len(sources)
         self.compilation_work = {
             "primitive_compiled_kernels": len(self.calls),
-            "primitive_translation_units": len(groups),
+            "primitive_translation_units": translation_units,
             "primitive_generated_source_bytes": source_bytes,
             "primitive_largest_source_bytes": largest_source,
             "primitive_runtime_compilations": runtime_compilations,
