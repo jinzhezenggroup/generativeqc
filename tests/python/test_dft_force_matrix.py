@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import typing
+from pathlib import Path
+
 import numpy as np
 import pytest
 from vibeqc import GridSpec
@@ -74,7 +77,7 @@ def test_qualification_system_set_covers_scaling_and_holdout() -> None:
 
 
 def test_late_changed_geometry_failure_preserves_successful_samples(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from types import SimpleNamespace
 
@@ -94,10 +97,10 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
     class Batch:
         resource_diagnostics = {"ok": True}
 
-        def set_warm_start_updates(self, _enabled):
+        def set_warm_start_updates(self, _enabled: bool) -> None:
             pass
 
-        def close(self):
+        def close(self) -> None:
             pass
 
     batch = Batch()
@@ -108,7 +111,14 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
 
     calls = []
 
-    def sample(_batch, _atoms, _cupy, *, scenario, coordinates=None):
+    def sample(
+        _batch: typing.Any,
+        _atoms: typing.Any,
+        _cupy: typing.Any,
+        *,
+        scenario: str,
+        coordinates: typing.Any = None,
+    ) -> dict[str, typing.Any]:
         calls.append(scenario)
         if coordinates is not None:
             raise RuntimeError("changed replay failed")
@@ -119,11 +129,10 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         }
 
     monkeypatch.setattr(matrix, "_clean_sample", sample)
-    monkeypatch.setattr(
-        matrix,
-        "_scf_trace_profile",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("trace failed")),
-    )
+    def fail_trace(*_args: typing.Any, **_kwargs: typing.Any) -> typing.NoReturn:
+        raise RuntimeError("trace failed")
+
+    monkeypatch.setattr(matrix, "_scf_trace_profile", fail_trace)
     result = matrix.benchmark_case(
         method="pbe-rks",
         system="water-3",
@@ -151,7 +160,7 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
 
 
 def test_partial_warm_failure_preserves_prior_warm_samples(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     from types import SimpleNamespace
 
@@ -171,10 +180,10 @@ def test_partial_warm_failure_preserves_prior_warm_samples(
     class Batch:
         resource_diagnostics = {"ok": True}
 
-        def set_warm_start_updates(self, _enabled):
+        def set_warm_start_updates(self, _enabled: bool) -> None:
             pass
 
-        def close(self):
+        def close(self) -> None:
             pass
 
     batch = Batch()
@@ -183,7 +192,14 @@ def test_partial_warm_failure_preserves_prior_warm_samples(
     monkeypatch.setattr(matrix, "_exchange_operators", lambda _calculator: ())
     monkeypatch.setattr(matrix, "_has_nonlocal_correlation", lambda _calculator: False)
 
-    def sample(_batch, _atoms, _cupy, *, scenario, coordinates=None):
+    def sample(
+        _batch: typing.Any,
+        _atoms: typing.Any,
+        _cupy: typing.Any,
+        *,
+        scenario: str,
+        coordinates: typing.Any = None,
+    ) -> dict[str, typing.Any]:
         if scenario == "same_geometry_warm_1":
             raise RuntimeError("warm replay failed")
         return {
