@@ -24,7 +24,11 @@ from vibeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
 from .batch import PreparedBatch
-from .ks import (\n    SPLIT_HYBRID_SCF_DOMAIN,\n    native_xc_functional_code,\n    scf_domain_for_method,\n)
+from .ks import (
+    SPLIT_HYBRID_SCF_DOMAIN,
+    native_xc_functional_code,
+    scf_domain_for_method,
+)
 
 _SCF_DOMAIN_VERSION_BY_DOMAIN = {
     domain: version for version, domain in SCF_DOMAIN_BY_VERSION.items()
