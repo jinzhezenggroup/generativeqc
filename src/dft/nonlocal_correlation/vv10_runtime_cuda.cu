@@ -104,7 +104,7 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
   }
 }
 
-template <Vv10Variant Variant, bool Features, bool Geometry>
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
 __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_count,
                                     std::size_t npoint, double coefficient, const double* points,
                                     const double* density, const double* omega, const double* kappa,
@@ -127,6 +127,22 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
   const double domega_rhoi = Features ? domega_drho[i] : 0.0;
   const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
   const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
+  if constexpr (MaskZeroRows) {
+    if (weighted_i == 0.0) {
+      energy_terms[i] = 0.0;
+      if constexpr (Features) {
+        vrho[i] = 0.0;
+        vsigma[i] = 0.0;
+      }
+      if constexpr (Geometry) {
+        point_derivative[3 * i] = 0.0;
+        point_derivative[3 * i + 1] = 0.0;
+        point_derivative[3 * i + 2] = 0.0;
+        weight_derivative[i] = 0.0;
+      }
+      return;
+    }
+  }
   double row_inverse_kappa = 0.0;
   if constexpr (Variant == Vv10Variant::rvv10 && Features)
     row_inverse_kappa = 1.0 / (6.0 * rhoi * dkappa_rhoi);
@@ -178,8 +194,9 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
   if (nonfinite) atomicExch(failed, 1);
 }
 
-template <Vv10Variant Variant, bool Features, bool Geometry>
-void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, double coefficient,
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
+void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
+                           double coefficient,
                       const double* points, const double* density, const double* omega,
                       const double* kappa, const double* domega_drho, const double* domega_dsigma,
                       const double* dkappa_drho, const double* weighted_density, double beta,
@@ -191,12 +208,33 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
   for (std::size_t first = 0; first < layout.point_count; first += max_rows_per_launch) {
     const auto count = std::min(max_rows_per_launch, layout.point_count - first);
     const auto blocks = launch_blocks(count, threads);
-    pair_kernel_ordered<Variant, Features, Geometry><<<blocks, threads, 0, stream>>>(
+    pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows>
+        <<<blocks, threads, 0, stream>>>(
         first, count, layout.point_count, coefficient, points, density, omega, kappa, domega_drho,
         domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
         point_derivative, weight_derivative, failed);
     runtime::cuda_resource_check(cudaGetLastError());
   }
+}
+
+template <Vv10Variant Variant, bool Features, bool Geometry>
+void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
+                      double coefficient, const double* points, const double* density,
+                      const double* omega, const double* kappa, const double* domega_drho,
+                      const double* domega_dsigma, const double* dkappa_drho,
+                      const double* weighted_density, double beta, double* energy_terms,
+                      double* vrho, double* vsigma, double* point_derivative,
+                      double* weight_derivative, int* failed) {
+  if (layout.mask_zero_weight_rows)
+    launch_pair_rows_impl<Variant, Features, Geometry, true>(
+        layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
+        dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma, point_derivative,
+        weight_derivative, failed);
+  else
+    launch_pair_rows_impl<Variant, Features, Geometry, false>(
+        layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
+        dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma, point_derivative,
+        weight_derivative, failed);
 }
 
 __global__ void reduce_energy_ordered_kernel(std::size_t npoint, const double* energy_terms,
@@ -333,7 +371,8 @@ void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_c
 }
 
 Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_t tile_points,
-                                             bool features, bool geometry) {
+                                             bool features, bool geometry,
+                                             bool mask_zero_weight_rows) {
   if (!point_count || !tile_points)
     throw std::invalid_argument("resident VV10 CUDA layout requires nonzero point/tile counts");
   const auto arrays = std::size_t{4} + (features ? 3u : 0u);
@@ -341,7 +380,7 @@ Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_
       runtime::size_mul(arrays, point_count, "resident VV10 CUDA workspace extent overflow");
   return {point_count, std::min(tile_points, point_count),
           runtime::size_mul(doubles, sizeof(double), "resident VV10 CUDA workspace byte overflow"),
-          features, geometry};
+          features, geometry, mask_zero_weight_rows};
 }
 
 void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters parameters,
@@ -359,10 +398,12 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
       parameters.coefficient <= 0.0)
     throw std::invalid_argument(
         "resident VV10 CUDA parameters must have a supported variant and finite positive values");
-  const auto canonical = vv10_cuda_device_layout(layout.point_count, layout.tile_points,
-                                                 layout.features, layout.geometry);
+  const auto canonical =
+      vv10_cuda_device_layout(layout.point_count, layout.tile_points, layout.features,
+                              layout.geometry, layout.mask_zero_weight_rows);
   if (layout.point_count != canonical.point_count || layout.tile_points != canonical.tile_points ||
       layout.workspace_bytes != canonical.workspace_bytes ||
+      layout.mask_zero_weight_rows != canonical.mask_zero_weight_rows ||
       workspace_bytes < layout.workspace_bytes)
     throw std::invalid_argument("resident VV10 CUDA layout/workspace mismatch");
   if (device_id < 0 || stream == nullptr || points_xyz == nullptr || weights == nullptr ||
