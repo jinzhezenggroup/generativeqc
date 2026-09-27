@@ -116,3 +116,5 @@ def test_streaming_fock_emits_exchange_only_consumer_identity() -> None:
     assert "GeneratedFockConsumer::Exchange" in source
     assert "ExchangeConsumerBit" in source
     assert "GeneratedFockConsumer::Coulomb" in source
+    assert "exchange_only ? exchange_bound" in source
+    assert "fmax(density_bound, 0.5 * exchange_bound)" in source
