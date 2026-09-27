@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import replace
 
 import pytest
+from vibeqc_compiler.common.program import ProgramIR
 from vibeqc_compiler.dft.xc_program import (
     bind_grid_xc_region_candidates,
     host_unfused_grid_xc_program,
@@ -14,8 +16,10 @@ from vibeqc_compiler.dft.xc_program import (
 from vibeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
+    GridXcCandidateAssessment,
     GridXcCandidateLimits,
     GridXcCandidateShape,
+    GridXcExecutionSchedule,
     assess_grid_xc_schedule,
     grid_xc_tile_capacities,
 )
@@ -42,7 +46,9 @@ def _limits() -> GridXcCandidateLimits:
     )
 
 
-def _assessment(schedule, *, device_xc_available: bool = True):
+def _assessment(
+    schedule: GridXcExecutionSchedule, *, device_xc_available: bool = True
+) -> GridXcCandidateAssessment:
     return assess_grid_xc_schedule(
         schedule,
         _shape(),
@@ -53,7 +59,7 @@ def _assessment(schedule, *, device_xc_available: bool = True):
     )
 
 
-def _program():
+def _program() -> ProgramIR:
     return host_unfused_grid_xc_program(
         _shape(),
         source_identity="cuda-density-source-v1",
@@ -199,7 +205,7 @@ def test_device_executable_identity_invalidates_replacement_program() -> None:
         {"host_unfused": 1.0, "device_fused": True},
     ],
 )
-def test_region_binding_rejects_invalid_endpoint_timing(timing) -> None:
+def test_region_binding_rejects_invalid_endpoint_timing(timing: typing.Any) -> None:
     with pytest.raises((TypeError, ValueError), match="endpoint timing"):
         bind_grid_xc_region_candidates(
             _program(),
