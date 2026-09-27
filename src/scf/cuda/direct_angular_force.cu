@@ -40,7 +40,8 @@ __global__ void two_electron_force_quartet_packed_persistent_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, std::uint32_t* task_head,
     double screening_tolerance, const double* schwarz_bounds, const double* density,
-    const std::uint8_t* active, double* forces) {
+    double coulomb_coefficient, double exchange_coefficient, const std::uint8_t* active,
+    double* forces) {
   static_assert(AngularOrder < kPackedSsssAngularOrderCount);
   const unsigned lane = threadIdx.x;
   const std::uint32_t work_count = *active_shell_quartet_tile_count;
@@ -55,7 +56,7 @@ __global__ void two_electron_force_quartet_packed_persistent_kernel(
     if (packed_item < work_count) {
       contract_two_electron_force_ssss_task<Unrestricted>(
           batch, active_shell_quartet_tiles[packed_item], screening_tolerance, schwarz_bounds,
-          density, active, forces);
+          density, coulomb_coefficient, exchange_coefficient, active, forces);
     }
   }
 }
@@ -151,7 +152,8 @@ __global__ void two_electron_force_psss_persistent_kernel(
     if (packed_item < work_count) {
       contract_two_electron_force_psss_task<Unrestricted>(
           batch, active_shell_quartet_tiles[packed_item], screening_tolerance, schwarz_bounds,
-          density, active, forces, generated_shell_class_mask);
+          density, coulomb_coefficient, exchange_coefficient, active, forces,
+          generated_shell_class_mask);
     }
     // Keep tail lanes live through the next full-mask queue broadcast.
   }
@@ -171,7 +173,7 @@ __global__ void two_electron_force_psps_grid_stride_kernel(
        task_index += stride) {
     contract_two_electron_force_psps_task<Unrestricted>(
         batch, active_shell_quartet_tiles[task_index], screening_tolerance, schwarz_bounds, density,
-        active, forces, generated_shell_class_mask);
+        coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   }
 }
 
@@ -190,7 +192,7 @@ __global__ void two_electron_force_pair_order2_grid_stride_kernel(
        task_index += stride) {
     contract_two_electron_force_pair_order2_task<Unrestricted, TargetShellClass>(
         batch, active_shell_quartet_tiles[task_index], screening_tolerance, schwarz_bounds, density,
-        active, forces, generated_shell_class_mask);
+        coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   }
 }
 
@@ -215,7 +217,7 @@ __global__ void two_electron_force_order3_grid_stride_kernel(
        task_index += stride) {
     contract_two_electron_force_order3_task<Unrestricted>(
         batch, active_shell_quartet_tiles[task_index], screening_tolerance, schwarz_bounds, density,
-        active, forces, generated_shell_class_mask);
+        coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   }
 }
 
@@ -334,7 +336,7 @@ void launch_angular_force_quartets(
         two_electron_force_order3_grid_stride_kernel<Unrestricted>
             <<<worker_blocks, detail::kDirectQuartetThreads, 0, stream>>>(
                 batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds, density,
-                active, forces, generated_shell_class_mask);
+                coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
       } else if constexpr (AngularOrder < kPersistentForceAngularOrderCount) {
         const unsigned capacity_blocks = static_cast<unsigned>(
             capacities[AngularOrder] * detail::direct_quartet_subtiles_per_tile(AngularOrder));
@@ -349,7 +351,7 @@ void launch_angular_force_quartets(
                                      detail::direct_quartet_subtiles_per_tile(AngularOrder)),
                detail::kDirectQuartetThreads, 0, stream>>>(
                 batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds, density,
-                active, forces, generated_shell_class_mask);
+                coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
       }
     }
     launch_angular_force_quartets<Unrestricted, AngularOrder + 1>(
