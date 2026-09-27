@@ -390,3 +390,41 @@ def test_public_bulk_ks_rejects_endpoint_identity_drift(
 
     with pytest.raises(RuntimeError, match="endpoint identity changed"):
         bulk_ks.resolve_public_bulk_ks(capability.name)
+
+
+def test_bulk_ks_requires_exact_molecular_scf_qualification() -> None:
+    result_identity = "c" * 64
+    qualification = {
+        "schema": bulk_ks.ENDPOINT_COVERAGE_SCHEMA,
+        "coverage": [
+            {"backend": "cpu", "spin": spin, "products": ["energy"]}
+            for spin in ("polarized", "unpolarized")
+        ],
+        "result_schema": bulk_ks.MOLECULAR_SCF_RESULT_SCHEMA,
+        "result_identity": result_identity,
+        "qualification_schema": bulk_ks.MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+    }
+    stage = SimpleNamespace(
+        stage="molecular-scf",
+        status="pass",
+        qualification=qualification,
+        evidence="test://molecular-scf#sha256=" + result_identity,
+    )
+    capability = SimpleNamespace(stage_evidence=(stage,))
+
+    assert bulk_ks._require_exact_molecular_scf(capability) == result_identity
+
+    forged = dict(qualification)
+    forged["result_schema"] = "vibeqc.libxc-molecular-scf-result/forged"
+    bad = SimpleNamespace(
+        stage_evidence=(
+            SimpleNamespace(
+                stage="molecular-scf",
+                status="pass",
+                qualification=forged,
+                evidence="test://molecular-scf#sha256=" + result_identity,
+            ),
+        )
+    )
+    with pytest.raises(UnsupportedMethod, match="exact molecular-SCF"):
+        bulk_ks._require_exact_molecular_scf(bad)
