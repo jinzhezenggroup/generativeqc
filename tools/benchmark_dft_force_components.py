@@ -182,6 +182,17 @@ def _matrix_records(
         for sample in samples:
             metadata = {**base, **_metadata(sample)}
             metadata["scenario"] = sample.get("scenario")
+            sample_status = str(sample.get("status", "measured"))
+            if sample_status != "measured":
+                result.append(
+                    {
+                        "metadata": metadata,
+                        "status": sample_status,
+                        "error_type": sample.get("error_type"),
+                        "error": sample.get("error"),
+                    }
+                )
+                continue
             components = sample.get("force_components")
             if isinstance(components, Mapping):
                 result.append(

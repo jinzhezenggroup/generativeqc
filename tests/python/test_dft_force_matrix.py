@@ -71,3 +71,68 @@ def test_qualification_system_set_covers_scaling_and_holdout() -> None:
         "water-12",
         "formaldehyde",
     )
+
+
+def test_late_changed_geometry_failure_preserves_successful_samples(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from types import SimpleNamespace
+
+    import benchmarks.dft_force_matrix as matrix
+
+    library = tmp_path / "libvibeqc.so"
+    library.write_bytes(b"test")
+    execution_plan = SimpleNamespace(to_payload=lambda: {"version": 1})
+    options = SimpleNamespace(identity="ks-id", execution_plan=execution_plan)
+    calculator = SimpleNamespace(
+        _library=SimpleNamespace(_name=str(library)),
+        _method_name="pbe-rks",
+        method_ir=SimpleNamespace(identity="method-id"),
+        ks_options=options,
+    )
+
+    class Batch:
+        resource_diagnostics = {"ok": True}
+
+        def set_warm_start_updates(self, _enabled):
+            pass
+
+        def close(self):
+            pass
+
+    batch = Batch()
+    calculator.prepare_batch = lambda *_args, **_kwargs: batch
+    monkeypatch.setattr(matrix, "_calculator", lambda *_args, **_kwargs: calculator)
+    monkeypatch.setattr(matrix, "_exchange_operators", lambda _calculator: ())
+    monkeypatch.setattr(matrix, "_has_nonlocal_correlation", lambda _calculator: False)
+
+    calls = []
+
+    def sample(_batch, _atoms, _cupy, *, scenario, coordinates=None):
+        calls.append(scenario)
+        if coordinates is not None:
+            raise RuntimeError("changed replay failed")
+        return {
+            "scenario": scenario,
+            "force_status": "ok",
+            "force_components": {"schema": "vibeqc.dft-force-components.v1"},
+        }
+
+    monkeypatch.setattr(matrix, "_clean_sample", sample)
+    result = matrix.benchmark_case(
+        method="pbe-rks",
+        system="water-3",
+        grid=object(),
+        basis="def2-svp",
+        density_fitting="none",
+        repeats=2,
+        trace_directory=None,
+        cupy_module=object(),
+    )
+
+    assert result["status"] == "measured"
+    assert result["cold"]["scenario"] == "cold"
+    assert len(result["warm"]) == 2
+    assert result["changed_geometry"]["status"] == "failed"
+    assert result["changed_geometry"]["error"] == "changed replay failed"
+    assert calls[:4] == ["cold", "priming", "same_geometry_warm_0", "same_geometry_warm_1"]

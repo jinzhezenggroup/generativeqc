@@ -416,21 +416,54 @@ def benchmark_case(
         ]
         scf_profile = None
         if trace_directory is not None:
-            scf_profile = _scf_trace_profile(
-                batch,
-                cupy_module,
-                trace_directory / f"{method}-{system}.jsonl",
-                exchange_operators,
-                nonlocal_correlation=nonlocal_correlation,
-            )
+            try:
+                scf_profile = _scf_trace_profile(
+                    batch,
+                    cupy_module,
+                    trace_directory / f"{method}-{system}.jsonl",
+                    exchange_operators,
+                    nonlocal_correlation=nonlocal_correlation,
+                )
+            except (
+                NotImplementedError,
+                ValueError,
+                RuntimeError,
+                MemoryError,
+                OSError,
+            ) as error:
+                scf_profile = {
+                    "status": (
+                        "unsupported"
+                        if isinstance(error, NotImplementedError)
+                        else "failed"
+                    ),
+                    "error_type": type(error).__name__,
+                    "reason": str(error),
+                }
         changed_atoms, coordinates = _changed_atoms(atoms)
-        changed = _clean_sample(
-            batch,
-            changed_atoms,
-            cupy_module,
-            scenario="changed_geometry",
-            coordinates=coordinates,
-        )
+        try:
+            changed = _clean_sample(
+                batch,
+                changed_atoms,
+                cupy_module,
+                scenario="changed_geometry",
+                coordinates=coordinates,
+            )
+        except (
+            NotImplementedError,
+            ValueError,
+            RuntimeError,
+            MemoryError,
+            OSError,
+        ) as error:
+            changed = {
+                "scenario": "changed_geometry",
+                "status": (
+                    "unsupported" if isinstance(error, NotImplementedError) else "failed"
+                ),
+                "error_type": type(error).__name__,
+                "error": str(error),
+            }
         return _jsonable(
             {
                 "status": "measured",
