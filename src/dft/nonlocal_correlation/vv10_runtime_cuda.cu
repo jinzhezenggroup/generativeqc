@@ -26,21 +26,25 @@ struct PairKernelValues {
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
-                                               double kj) {
+                                               double kj, double row_alpha,
+                                               double row_inverse_kappa) {
   PairKernelValues result{};
   if constexpr (Variant == Vv10Variant::rvv10) {
-    const double ai = wi / ki;
     const double aj = wj / kj;
-    const double zi = ai * r2 + 1.0;
+    const double zi = row_alpha * r2 + 1.0;
     const double zj = aj * r2 + 1.0;
-    result.phi = -1.5 / (pow(ki * kj, 1.5) * zi * zj * (zi + zj));
+    const double kappa_product = ki * kj;
+    result.phi =
+        -1.5 / (kappa_product * sqrt(kappa_product) * zi * zj * (zi + zj));
     if constexpr (Features) {
       const double factor_z = 1.0 / zi + 1.0 / (zi + zj);
-      result.dphi_domega = -result.phi * r2 / ki * factor_z;
-      result.dphi_dkappa = result.phi / ki * (-1.5 + (zi - 1.0) * factor_z);
+      result.dphi_domega = -result.phi * r2 * row_inverse_kappa * factor_z;
+      result.dphi_dkappa =
+          result.phi * row_inverse_kappa * (-1.5 + (zi - 1.0) * factor_z);
     }
     if constexpr (Geometry) {
-      const double logarithmic = ai / zi + aj / zj + (ai + aj) / (zi + zj);
+      const double logarithmic =
+          row_alpha / zi + aj / zj + (row_alpha + aj) / (zi + zj);
       result.dphi_dr2 = -result.phi * logarithmic;
     }
   } else {
@@ -122,6 +126,12 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
   const double domega_rhoi = Features ? domega_drho[i] : 0.0;
   const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
   const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
+  double row_inverse_kappa = 0.0;
+  double row_alpha = 0.0;
+  if constexpr (Variant == Vv10Variant::rvv10) {
+    row_inverse_kappa = 1.0 / ki;
+    row_alpha = wi * row_inverse_kappa;
+  }
 
   double sum_phi = 0.0;
   double sum_rho = 0.0;
@@ -132,8 +142,8 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
     const double dy = points[3 * j + 1] - yi;
     const double dz = points[3 * j + 2] - zi;
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const auto pair =
-        pair_kernel_values<Variant, Features, Geometry>(r2, wi, omega[j], ki, kappa[j]);
+    const auto pair = pair_kernel_values<Variant, Features, Geometry>(
+        r2, wi, omega[j], ki, kappa[j], row_alpha, row_inverse_kappa);
     const double factor = weighted_density[j];
     sum_phi += factor * pair.phi;
     if constexpr (Features) {
