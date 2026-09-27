@@ -75,19 +75,9 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method meth
     case VIBEQC_METHOD_PBE_D4_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::Pbe, false, true};
     case VIBEQC_METHOD_PBE_RKS:
-    case VIBEQC_METHOD_PBE0_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::Pbe, false};
     case VIBEQC_METHOD_PBE_UKS:
-    case VIBEQC_METHOD_PBE0_UKS:
       return NativeKsExecutionPlan{2, dft::SemilocalFamily::Pbe, false};
-    case VIBEQC_METHOD_B3LYP_RKS:
-      return NativeKsExecutionPlan{1, dft::SemilocalFamily::B3lyp, false};
-    case VIBEQC_METHOD_B3LYP_UKS:
-      return NativeKsExecutionPlan{2, dft::SemilocalFamily::B3lyp, false};
-    case VIBEQC_METHOD_WB97M_V:
-      return NativeKsExecutionPlan{1, dft::SemilocalFamily::Wb97mv, false};
-    case VIBEQC_METHOD_WB97M_V_UKS:
-      return NativeKsExecutionPlan{2, dft::SemilocalFamily::Wb97mv, false};
     case VIBEQC_METHOD_R2SCAN_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::R2scan, false};
     case VIBEQC_METHOD_R2SCAN_UKS:
@@ -260,12 +250,6 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
     if (!legacy_plan)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT execution requires a compiler-resolved KS plan");
-    if (descriptor.method == VIBEQC_METHOD_PBE0_RKS ||
-        descriptor.method == VIBEQC_METHOD_PBE0_UKS ||
-        descriptor.method == VIBEQC_METHOD_B3LYP_RKS ||
-        descriptor.method == VIBEQC_METHOD_B3LYP_UKS)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
-                        "hybrid DFT requires a compiler-resolved KS plan");
     execution_plan = *legacy_plan;
     semilocal = {execution_plan.semilocal_family, 1.0, 1.0};
   }
