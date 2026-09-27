@@ -24,7 +24,8 @@ using namespace cuda_execution;
 CudaDirectJkPlan::~CudaDirectJkPlan() {
   if (device_id >= 0) (void)cudaSetDevice(device_id);
   if (stream) (void)cudaStreamSynchronize(stream);
-  generated_coulomb.reset();  // Release the borrower before its stream/metadata.
+  generated_exchange.reset();
+  generated_coulomb.reset();  // Release borrowers before their stream/metadata.
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
   if (stream) (void)cudaStreamDestroy(stream);
 }
@@ -201,10 +202,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   return bytes;
 }
 
-vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::System>& systems,
-                                         unsigned derivative_order, double screening_tolerance,
-                                         std::size_t budget, CudaDirectJkPlan** output,
-                                         CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+static vibeqc_status create_cuda_direct_jk_plan_impl(
+    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
+    double screening_tolerance, std::size_t budget, bool generated_exchange_requested,
+    CudaDirectJkPlan** output, CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
   if (output) *output = nullptr;
   diagnostic = {};
   return direct_jk_guard(nullptr, detail, [&] {
