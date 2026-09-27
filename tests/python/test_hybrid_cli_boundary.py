@@ -70,7 +70,7 @@ def test_methods_command_can_discover_default_allow_libxc() -> None:
 def test_methods_libxc_discovery_honors_public_blacklist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import vibeqc_compiler.method.bulk_ks as bulk_ks
+    from vibeqc_compiler.method import bulk_ks
 
     original = bulk_ks.blacklist_reason
 
