@@ -94,13 +94,18 @@ __device__ __forceinline__ void {function_name}(
 
 
 def emit_direct_force_density_coefficient() -> str:
-    """Emit the exact symmetry-reduced Direct force density coefficient."""
+    """Emit the symmetry-reduced Direct force density contraction.
+
+    The scaled form is the method-neutral primitive used by composed mean-field
+    methods. The compatibility wrapper preserves the historical HF convention.
+    """
 
     return """template <bool Unrestricted>
-__device__ __forceinline__ double direct_force_density_coefficient(
+__device__ __forceinline__ double direct_force_density_coefficient_scaled(
     std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
     const double* density,
-    std::size_t i, std::size_t j, std::size_t k, std::size_t l) {
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    double coulomb_coefficient, double exchange_coefficient) {
   const std::size_t matrix_size = n * n;
   double coefficient = 0.0;
   for (unsigned permutation = 0; permutation < 8; ++permutation) {
@@ -116,26 +121,44 @@ __device__ __forceinline__ double direct_force_density_coefficient(
     const std::size_t ac = matrix_index(a, c, n);
     const std::size_t cd = matrix_index(c, d, n);
     const std::size_t bd = matrix_index(b, d, n);
-    if constexpr (Unrestricted) {
-      const double total_ab =
-          density[spin_offset + ab] + density[spin_offset + matrix_size + ab];
-      const double total_cd =
-          density[spin_offset + cd] + density[spin_offset + matrix_size + cd];
-      coefficient += 0.5 * total_ab * total_cd;
-      coefficient -=
-          0.5 * (density[spin_offset + ac] * density[spin_offset + bd] +
-                 density[spin_offset + matrix_size + ac] *
-                     density[spin_offset + matrix_size + bd]);
-    } else {
-      coefficient +=
-          0.5 * density[physical_offset + ab] * density[physical_offset + cd] -
-          0.25 * density[physical_offset + ac] * density[physical_offset + bd];
+    if (coulomb_coefficient != 0.0) {
+      if constexpr (Unrestricted) {
+        const double total_ab =
+            density[spin_offset + ab] + density[spin_offset + matrix_size + ab];
+        const double total_cd =
+            density[spin_offset + cd] + density[spin_offset + matrix_size + cd];
+        coefficient += 0.5 * coulomb_coefficient * total_ab * total_cd;
+      } else {
+        coefficient += 0.5 * coulomb_coefficient *
+                       density[physical_offset + ab] * density[physical_offset + cd];
+      }
+    }
+    if (exchange_coefficient != 0.0) {
+      if constexpr (Unrestricted) {
+        coefficient +=
+            0.5 * exchange_coefficient *
+            (density[spin_offset + ac] * density[spin_offset + bd] +
+             density[spin_offset + matrix_size + ac] *
+                 density[spin_offset + matrix_size + bd]);
+      } else {
+        coefficient += 0.5 * exchange_coefficient *
+                       density[physical_offset + ac] * density[physical_offset + bd];
+      }
     }
   }
   return coefficient;
 }
-"""
 
+template <bool Unrestricted>
+__device__ __forceinline__ double direct_force_density_coefficient(
+    std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
+    const double* density,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l) {
+  constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;
+  return direct_force_density_coefficient_scaled<Unrestricted>(
+      n, physical_offset, spin_offset, density, i, j, k, l, 1.0, exchange_coefficient);
+}
+"""
 
 def emit_generated_shell_fock_accumulation() -> str:
     """Emit the scatter helper embedded in compiler-generated shell kernels."""
