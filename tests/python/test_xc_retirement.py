@@ -99,12 +99,15 @@ def test_xc_retirement_final_gate_detects_remaining_consumer(tmp_path: Path) -> 
     source.parent.mkdir(parents=True)
     source.write_text("from .rsh_expressions import energy_expression\n")
     failures = errors(tmp_path, require_no_consumers=True)
-    assert failures == [
-        (
-            "python/vibeqc_compiler/xc/expression_dispatch.py:1: legacy XC consumer remains "
-            "vibeqc_compiler.xc.rsh_expressions"
-        )
-    ]
+    newly_forbidden = (
+        "python/vibeqc_compiler/xc/expression_dispatch.py:1: new legacy XC consumer "
+        "vibeqc_compiler.xc.rsh_expressions (import-from)"
+    )
+    remaining = (
+        "python/vibeqc_compiler/xc/expression_dispatch.py:1: legacy XC consumer remains "
+        "vibeqc_compiler.xc.rsh_expressions"
+    )
+    assert failures == [newly_forbidden, remaining]
 
 
 def test_retired_direct_program_import_is_not_reauthorized(tmp_path: Path) -> None:
