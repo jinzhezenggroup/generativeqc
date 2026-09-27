@@ -123,7 +123,9 @@ def test_integral_budget_refuses_before_dense_output_allocation(
     operator = _stub_operator(monkeypatch)
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
-        raise AssertionError("dense allocation or HVP started before integral admission")
+        raise AssertionError(
+            "dense allocation or HVP started before integral admission"
+        )
 
     monkeypatch.setattr(rks_molecular.np, "empty", forbidden)
     monkeypatch.setattr(rks_molecular, "rks_hvp_many", forbidden)
