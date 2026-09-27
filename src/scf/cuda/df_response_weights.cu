@@ -807,9 +807,8 @@ static cudaError_t contract_occupied_response(
       runtime::cuda_trace::TraceRegion products("exchange_response_occupied_products", stream);
       if (reuse_final_fitted_projection) {
         if (t != 0) return cudaErrorInvalidValue;
-        checked(generated::df_occupied_finish_projection(blas, ni, ri, ai, factor.coefficients,
-                                                         final_fitted_projection,
-                                                         transformed_projected));
+        checked(generated::df_occupied_finish_projection(
+            blas, ni, ri, ai, factor.coefficients, final_fitted_projection, transformed_projected));
         gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
             a, r, transformed_projected, projected);
         error = cudaGetLastError();
