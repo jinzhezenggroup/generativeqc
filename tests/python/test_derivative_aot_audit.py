@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from vibeqc_compiler.integral.range_separation import CoulombKernel
 
 from tools import audit_derivative_aot_registry as audit
