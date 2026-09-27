@@ -8,6 +8,7 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 from vibeqc_compiler.method.stationary_feature_lease import (
+    StationaryFeatureLeasePlan,
     plan_stationary_feature_leases,
 )
 from vibeqc_compiler.method.stationary_gradient import (
@@ -18,19 +19,19 @@ from vibeqc_compiler.method.stationary_gradient import (
 from vibeqc_compiler.method.stationary_prepared import compile_stationary_prepared_plan
 
 
-def _features(method):
+def _features(method: str | MethodSpec) -> StationaryFeatureLeasePlan:
     gradient = StationaryGradientPlan(
         resolve_method(method), StationaryMeanField(SCF_POINT_MODEL)
     )
     return plan_stationary_feature_leases(compile_stationary_prepared_plan(gradient))
 
 
-def test_semilocal_feature_inventory_comes_from_method_requirements():
+def test_semilocal_feature_inventory_comes_from_method_requirements() -> None:
     assert _features("PBE").features == ("rho", "gradient")
     assert _features("R2SCAN").features == ("rho", "gradient", "tau")
 
 
-def test_nonlocal_consumer_turns_shared_features_into_retained_leases():
+def test_nonlocal_consumer_turns_shared_features_into_retained_leases() -> None:
     method = MethodSpec(
         "generic-meta-independent-name",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
@@ -45,12 +46,12 @@ def test_nonlocal_consumer_turns_shared_features_into_retained_leases():
     assert "wb97" not in repr(leases).lower()
 
 
-def test_semilocal_only_features_do_not_request_cross_consumer_retention():
+def test_semilocal_only_features_do_not_request_cross_consumer_retention() -> None:
     leases = _features("R2SCAN")
     assert leases.retained_features == ()
 
 
-def test_feature_lease_identity_is_method_alias_independent():
+def test_feature_lease_identity_is_method_alias_independent() -> None:
     a = MethodSpec(
         "alias-feature-a",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
