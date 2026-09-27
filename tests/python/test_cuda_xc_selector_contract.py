@@ -65,7 +65,7 @@ def test_curated_selector_reaches_both_geometry_consumers(
         functional=code,
     )
     assert jets == [1 if expected == 0 else 4]
-    assert len(calls) == 1 and calls[0][0] == "stationary_geometry"
+    assert len(calls) == 1 and calls[0][0] == "stationary_geometry_enqueue"
     assert owner.borrowed_streams == {17}
 
 
