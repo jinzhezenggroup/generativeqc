@@ -1,10 +1,25 @@
 #include "api/error.hpp"
+#include "generated_libxc_public_cpu.hpp"
 #include "methods/method.hpp"
 #include "vibeqc/vibeqc.h"
 
 extern "C" {
 
 uint32_t vibeqc_ks_options_version(void) { return 1; }
+
+vibeqc_status vibeqc_libxc_semilocal_program_get(
+    const char* component_id, vibeqc_ks_semilocal_program* program) {
+  if (component_id == nullptr || *component_id == '\0' || program == nullptr)
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  const auto* native = vibeqc::dft::bulk_public::find(component_id);
+  if (native == nullptr) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  program->identifier = native->identifier;
+  program->expression_identity = native->expression_identity;
+  program->ingredient_mask = native->ingredient_mask;
+  program->domain_version = native->domain_version;
+  program->native_program = native;
+  return VIBEQC_STATUS_SUCCESS;
+}
 
 uint32_t vibeqc_get_abi_version(void) { return VIBEQC_ABI_VERSION; }
 
