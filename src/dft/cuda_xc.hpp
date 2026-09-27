@@ -136,6 +136,10 @@ class CudaXcPlan {
    * matrix assembly. Signed directions use the same input layout as density. */
   void enqueue_response(const double* density, const double* direction, std::size_t elements,
                         std::uint64_t generation);
+  /** Publish the next logical generation after the shared runtime successfully
+   * submits a cached replay of this plan's already-captured device work. This
+   * performs no numerical launch or transfer. */
+  void publish_replayed_generation(std::uint64_t generation);
   CudaXcView view(std::uint64_t generation) const;
   CudaXcScalars read_scalars(std::uint64_t generation);
   /** Explicit user/reference matrix export, never called by enqueue. */
