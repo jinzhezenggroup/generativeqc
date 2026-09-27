@@ -326,10 +326,10 @@ int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, c
   });
 }
 
-static int grid_cuda_run_selected_impl(
-    void* pointer, const double* points, size_t npoint, int features, const size_t* ao_ids,
-    size_t active, double* feature_output, double* jet_output, int defer_error_to_consumer,
-    char* error, size_t size) {
+static int grid_cuda_run_selected_impl(void* pointer, const double* points, size_t npoint,
+                                       int features, const size_t* ao_ids, size_t active,
+                                       double* feature_output, double* jet_output,
+                                       int defer_error_to_consumer, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || (features != 0 && features != 1) ||
         (defer_error_to_consumer != 0 && defer_error_to_consumer != 1))
@@ -354,8 +354,7 @@ static int grid_cuda_run_selected_impl(
         (features && (((p.feature_mask & 14) && p.jets < 4) || !p.density_ready ||
                       (p.use_orbitals && !p.orbital_ready))))
       throw std::invalid_argument("invalid grid tile/output");
-    if (defer_error_to_consumer &&
-        (!p.local || !features || feature_output || jet_output))
+    if (defer_error_to_consumer && (!p.local || !features || feature_output || jet_output))
       throw std::invalid_argument(
           "deferred CUDA grid errors require a device-only local feature lease");
     p.last_points = npoint;
@@ -368,8 +367,7 @@ static int grid_cuda_run_selected_impl(
     // outputs, empty publication, and non-feature consumers retain detailed
     // section timing.
     const bool detailed_profile =
-        !defer_error_to_consumer &&
-        !(npoint && features && !feature_output && !jet_output);
+        !defer_error_to_consumer && !(npoint && features && !feature_output && !jet_output);
     for (size_t i = 0; i < 3 * npoint; ++i)
       if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
     ctx.section(detailed_profile, ctx.metrics.input_ms, [&] {
@@ -479,9 +477,10 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
                                      feature_output, jet_output, 0, error, size);
 }
 
-int grid_cuda_run_selected_deferred_v1(
-    void* pointer, const double* points, size_t npoint, int features, const size_t* ao_ids,
-    size_t active, double* feature_output, double* jet_output, char* error, size_t size) {
+int grid_cuda_run_selected_deferred_v1(void* pointer, const double* points, size_t npoint,
+                                       int features, const size_t* ao_ids, size_t active,
+                                       double* feature_output, double* jet_output, char* error,
+                                       size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
                                      feature_output, jet_output, 1, error, size);
 }
