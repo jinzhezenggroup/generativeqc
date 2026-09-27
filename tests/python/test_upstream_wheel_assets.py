@@ -107,7 +107,7 @@ print(json.dumps({name: hashlib.sha256(emit_split_hybrid_device(name).encode()).
                  for name in ('M06-2X', 'MN15')}))
 """
     completed = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, "-S", "-c", script],
         cwd=tmp_path,
         env={**os.environ, "PYTHONPATH": str(tmp_path)},
         check=False,
