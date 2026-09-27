@@ -16,7 +16,7 @@ __device__ __forceinline__ bool direct_shell_quartet_survives_screening(
     const DeviceBatch& batch, std::size_t first_pair, std::size_t second_pair,
     double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds,
-    double* fock_contribution_bound = nullptr) {
+    double* fock_contribution_bound = nullptr, bool exchange_only = false) {
   const double quartet_bound = shell_pair_bounds[first_pair] * shell_pair_bounds[second_pair];
   if (quartet_bound < screening_tolerance) return false;
 
@@ -36,17 +36,21 @@ __device__ __forceinline__ bool direct_shell_quartet_survives_screening(
   const ShellPairDensityBounds bc = shell_pair_density_bounds[bc_pair];
   const ShellPairDensityBounds bd = shell_pair_density_bounds[bd_pair];
 
-  double fock_density_bound = fmax(ab.coulomb, cd.coulomb);
+  double fock_density_bound = exchange_only ? 0.0 : fmax(ab.coulomb, cd.coulomb);
   if constexpr (Unrestricted) {
-    fock_density_bound = fmax(fock_density_bound, fmax(fmax(ac.exchange_alpha, ac.exchange_beta),
-                                                       fmax(ad.exchange_alpha, ad.exchange_beta)));
-    fock_density_bound = fmax(fock_density_bound, fmax(fmax(bc.exchange_alpha, bc.exchange_beta),
-                                                       fmax(bd.exchange_alpha, bd.exchange_beta)));
+    const double exchange_bound =
+        fmax(fmax(fmax(ac.exchange_alpha, ac.exchange_beta),
+                  fmax(ad.exchange_alpha, ad.exchange_beta)),
+             fmax(fmax(bc.exchange_alpha, bc.exchange_beta),
+                  fmax(bd.exchange_alpha, bd.exchange_beta)));
+    fock_density_bound =
+        exchange_only ? exchange_bound : fmax(fock_density_bound, exchange_bound);
   } else {
-    // Preserve the established RHF Fock gate exactly: F = J - K/2.
     const double exchange_bound = fmax(fmax(ac.exchange_alpha, ad.exchange_alpha),
                                        fmax(bc.exchange_alpha, bd.exchange_alpha));
-    fock_density_bound = fmax(fock_density_bound, 0.5 * exchange_bound);
+    // Ordinary RHF Fock uses J-K/2; the raw-K provider uses the full bound.
+    fock_density_bound =
+        exchange_only ? exchange_bound : fmax(fock_density_bound, 0.5 * exchange_bound);
   }
   const double contribution_bound = quartet_bound * fock_density_bound;
   if (fock_contribution_bound != nullptr) {
