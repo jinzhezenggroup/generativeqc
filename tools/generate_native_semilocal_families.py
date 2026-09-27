@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate native curated semilocal metadata for C++ and Python consumers."""
 
 from __future__ import annotations
