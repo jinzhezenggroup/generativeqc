@@ -34,9 +34,14 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
     assert 'contribution_name = f"{function_name}_contribution"' in shared
     assert "static_cast<float>(density_value) * static_cast<float>(integral)" in shared
     assert "return scale * density_value * static_cast<double>(integral);" in shared
-    assert "static_cast<float>(density_value) * static_cast<float>(integral)" not in native
+    assert (
+        "static_cast<float>(density_value) * static_cast<float>(integral)" not in native
+    )
     assert "return scale * density_value * static_cast<double>(integral);" not in native
-    assert "static_cast<float>(density_value) * static_cast<float>(integral)" not in shell_lowering
+    assert (
+        "static_cast<float>(density_value) * static_cast<float>(integral)"
+        not in shell_lowering
+    )
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
 
 
