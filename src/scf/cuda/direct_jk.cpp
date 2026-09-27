@@ -651,6 +651,7 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
     std::vector<double> result(3 * coordinates);
     if (coulomb_coefficient != 0.0 || short_exchange_coefficient != 0.0 ||
         long_exchange_coefficient != 0.0) {
+      direct_jk_check(cudaSetDevice(plan->device_id));
       DirectJkDownloadFence fence{plan->stream};
       for (unsigned source = 0; source < 3; ++source)
         direct_jk_check(cudaMemsetAsync(plan->derivative + source * plan->coordinate_elements, 0,
