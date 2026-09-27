@@ -118,6 +118,21 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     assert owner.bulk_pack_chunks == 1
     assert owner.bulk_packed_descriptors == 2
 
+    owner.reset(1.0e-12, density, 3 * density)
+    owner.page_work_budget = 1
+    library.stationary_tasks.reset_mock()
+    owner.integral_page(
+        0,
+        "four_center_eri",
+        ((0, 1, 0, 1), (1, 0, 1, 0)),
+    )
+    owner.flush()
+    assert library.stationary_tasks.call_count == 2
+    assert owner.primitive_pages == 2
+    assert owner.primitive_page_peak_records == 1
+    assert owner.bulk_pack_chunks == 2
+    assert owner.bulk_packed_descriptors == 2
+
 
 @pytest.mark.parametrize("aot", (False, True))
 def test_weight_fusion_orchestration_runs_without_a_device(
