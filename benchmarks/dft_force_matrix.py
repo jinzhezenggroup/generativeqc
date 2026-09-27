@@ -38,7 +38,7 @@ FORMALDEHYDE = (
     ("O", (0.0, 0.0, 2.28)),
     ("H", (1.75, 0.0, -1.05)),
     ("H", (-1.75, 0.0, -1.05)),
-) 
+)
 
 
 def _jsonable(value: typing.Any) -> typing.Any:
@@ -426,7 +426,13 @@ def benchmark_case(
                 "resource_diagnostics": batch.resource_diagnostics,
             }
         )
-    except (NotImplementedError, ValueError, RuntimeError, MemoryError, OSError) as error:
+    except (
+        NotImplementedError,
+        ValueError,
+        RuntimeError,
+        MemoryError,
+        OSError,
+    ) as error:
         return {
             "status": (
                 "unsupported" if isinstance(error, NotImplementedError) else "failed"
