@@ -47,9 +47,19 @@ def installed_public_evidence(name: str) -> dict[str, Any] | None:
     return detached
 
 
+def installed_public_functionals() -> tuple[str, ...]:
+    """Return exact-current registrations with usable installed public evidence."""
+
+    admitted: list[str] = []
+    for name in sorted(PUBLIC_EVIDENCE):
+        if installed_public_evidence(name) is not None:
+            admitted.append(name)
+    return tuple(admitted)
+
+
 def installed_public_evidence_provenance() -> dict[str, Any]:
     """Return detached provenance for the generated installed inventory."""
     return deepcopy(dict(PUBLIC_EVIDENCE_PROVENANCE))
 
 
-__all__ = ["installed_public_evidence", "installed_public_evidence_provenance"]
+__all__ = [\n    "installed_public_evidence",\n    "installed_public_evidence_provenance",\n    "installed_public_functionals",\n]
