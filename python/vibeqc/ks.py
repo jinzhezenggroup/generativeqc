@@ -25,11 +25,13 @@ from vibeqc_compiler.dft.nonlocal_policy import (
 from vibeqc_compiler.method import (
     METHOD_ALIASES,
     METHOD_CATALOG,
+    D4_METHOD_SUFFIX,
     D4Spec,
     DispersionCorrectionPrimitive,
     MethodIR,
     SemilocalXCPrimitive,
     compile_ks_execution_plan,
+    d4_composite_method_identifiers,
     resolve_method,
 )
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
@@ -113,6 +115,14 @@ def _public_dft_identifier_index() -> dict[str, str]:
         # Preserve the requested alias in MethodIR provenance; resolve_method()
         # still maps it to the canonical mathematical specification.
         result[key] = alias
+    for identifier in d4_composite_method_identifiers():
+        result[identifier.lower()] = identifier
+        base = identifier[: -len(D4_METHOD_SUFFIX)]
+        short = f"{base}-D4".lower()
+        existing = result.get(short)
+        if existing is not None and existing != identifier:
+            raise RuntimeError(f"ambiguous public D4 selector {short!r}")
+        result[short] = identifier
     return result
 
 
@@ -347,6 +357,28 @@ def _native_pbe_d4_semilocal(method_ir: typing.Any) -> typing.Any:
     return typing.cast("SemilocalXCPrimitive", method_ir.primitives[0]).functional
 
 
+def _d4_electronic_projection(method_ir: typing.Any) -> MethodIR | None:
+    """Strip one standalone D4 correction while preserving electronic semantics."""
+    if not isinstance(method_ir, MethodIR):
+        return None
+    corrections = tuple(
+        primitive
+        for primitive in method_ir.primitives
+        if isinstance(primitive, DispersionCorrectionPrimitive)
+    )
+    if len(corrections) != 1 or not isinstance(corrections[0].specification, D4Spec):
+        return None
+    return replace(
+        method_ir,
+        identifier=f"{method_ir.identifier}/electronic",
+        primitives=tuple(
+            primitive
+            for primitive in method_ir.primitives
+            if not isinstance(primitive, DispersionCorrectionPrimitive)
+        ),
+    )
+
+
 def _native_semilocal(method_ir: typing.Any) -> typing.Any:
     return _native_execution_plan(method_ir).semilocal.functional
 
@@ -571,6 +603,12 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
     if _is_pbe_d4_composition(method_ir):
         return method_ir, functional("PBE", spin=spin)
 
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        semilocal = _native_semilocal(d4_electronic)
+        ks_coefficients(d4_electronic)
+        return method_ir, semilocal
+
     semilocal = _native_semilocal(method_ir)
     ks_coefficients(method_ir)
     return method_ir, semilocal
@@ -579,16 +617,39 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
 def public_dft_selectors() -> tuple[str, ...]:
     """Enumerate compiler-owned DFT selectors that pass current native lowerer gates."""
     selectors = set(_LEGACY_KS_SELECTORS)
-    for identifier in METHOD_CATALOG:
-        stem = identifier.lower()
+    identifiers = set(METHOD_CATALOG)
+    identifiers.update(d4_composite_method_identifiers())
+    for identifier in sorted(identifiers):
+        if identifier.endswith(D4_METHOD_SUFFIX):
+            stem = f"{identifier[: -len(D4_METHOD_SUFFIX)].lower()}-d4"
+        else:
+            stem = identifier.lower()
         for suffix in ("rks", "uks"):
             selector = f"{stem}-{suffix}"
             try:
                 resolve_ks_method(selector)
+                native_dft_carrier(selector)
             except (ValueError, NotImplementedError):
                 continue
             selectors.add(selector)
     return tuple(sorted(selectors))
+
+
+def native_dft_carrier_for_ir(method_ir: MethodIR) -> str:
+    """Choose a provider carrier from the electronic ingredient contract."""
+    semilocal = _native_semilocal(method_ir)
+    ks_coefficients(method_ir)
+    carrier = {
+        ("rho",): "lda",
+        ("rho", "sigma"): "pbe",
+        ("rho", "sigma", "tau"): "r2scan",
+    }.get(semilocal.ingredients)
+    if carrier is None:
+        raise NotImplementedError(
+            "native KS has no provider carrier for these XC ingredients"
+        )
+    suffix = "uks" if method_ir.spin == "polarized" else "rks"
+    return f"{carrier}-{suffix}"
 
 
 def native_dft_carrier(method: typing.Any) -> str:
@@ -596,11 +657,17 @@ def native_dft_carrier(method: typing.Any) -> str:
     method_ir, _ = resolve_ks_method(method)
     if _is_pbe_d4_composition(method_ir):
         return "pbe-d4-rks"
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        return native_dft_carrier_for_ir(d4_electronic)
     return "pbe-uks" if method_ir.spin == "polarized" else "pbe-rks"
 
 
 def _scf_domain_for_ir(method_ir: typing.Any) -> str:
     """Select the native work domain from the resolved, possibly renamed IR."""
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        method_ir = d4_electronic
     if _automatic_semilocal_name(method_ir) is not None:
         return AUTOMATIC_SCF_DOMAIN
     code = _native_semilocal_family(method_ir)
@@ -622,6 +689,9 @@ def native_xc_functional_code(method: typing.Any) -> int:
         name, _ = automatic
         return automatic_functional_code(name)
     method_ir, _ = resolve_ks_method(method)
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        method_ir = d4_electronic
     return int(_native_semilocal_family(method_ir))
 
 
@@ -632,7 +702,12 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
     if not isinstance(options, KsOptions):
         raise TypeError("ks_options must be KsOptions")
 
-    method_ir = named_ir
+    native_named_ir = named_ir
+    if not _is_pbe_d4_composition(named_ir):
+        d4_electronic = _d4_electronic_projection(named_ir)
+        if d4_electronic is not None:
+            native_named_ir = d4_electronic
+    method_ir = native_named_ir
     # Calculator passes its resolved options to resource planning. Keep that
     # graph authoritative: rebinding the descriptive selector loses custom K.
     composition = options.composition or options._method_ir
@@ -681,7 +756,7 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if _native_semilocal_family(named_ir) == _NativeSemilocalFamily.R2SCAN:
+        if _native_semilocal_family(native_named_ir) == _NativeSemilocalFamily.R2SCAN:
             # The v2 policy has no qualified meta-GGA profile. Preserve the
             # existing explicit v1 default rather than assigning a GGA grid.
             if options.grid_accuracy != "standard":

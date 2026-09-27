@@ -205,9 +205,11 @@ class Calculator:
         name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
         primitive lowerers are qualified, an automatic semilocal Libxc selector
         (``libxc:NAME``, ``libxc-rks:NAME``, or ``libxc-uks:NAME``), the
-        public ``r2scan-3c[-rks|-uks]`` composite selectors, a spin-explicit
-        PBE-family MethodIR with one production D3(BJ) correction, or the
-        canonical r2SCAN-3c MethodIR. Automatic Libxc selectors are currently
+        public ``r2scan-3c[-rks|-uks]`` composite selectors, parameterized
+        ``<method>-d4-rks/uks`` selectors whose electronic lowerers are
+        qualified, a spin-explicit PBE-family MethodIR with one production
+        D3(BJ) correction, or the canonical r2SCAN-3c MethodIR. Automatic Libxc
+        selectors are currently
         CPU FP64 energy/SCF only and use structural admission plus the explicit
         negative blacklist. The composite forms bind the exact def2-mTZVPP basis
         and compose r2SCAN + D4 + gCP without a named native scientific driver.
@@ -285,8 +287,35 @@ class Calculator:
                     except ValueError as error:
                         raise ValueError(f"unknown method {method!r}") from error
                     carrier = native_dft_carrier(canonical_method)
+                    execution_ir = discovered_ir
+                    corrections = tuple(
+                        node
+                        for node in discovered_ir.primitives
+                        if isinstance(node, DispersionCorrectionPrimitive)
+                    )
+                    gcp_nodes = tuple(
+                        node
+                        for node in discovered_ir.primitives
+                        if isinstance(node, GeometricCounterpoisePrimitive)
+                    )
+                    if (
+                        carrier != "pbe-d4-rks"
+                        and len(corrections) == 1
+                        and isinstance(corrections[0].specification, D4Spec)
+                        and not gcp_nodes
+                    ):
+                        execution_ir = replace(
+                            discovered_ir,
+                            identifier=f"{discovered_ir.identifier}/electronic",
+                            primitives=tuple(
+                                node
+                                for node in discovered_ir.primitives
+                                if not isinstance(node, DispersionCorrectionPrimitive)
+                            ),
+                        )
+                        self._dispersion_method_ir = discovered_ir
                     if ks_options is None:
-                        ks_options = KsOptions(composition=discovered_ir)
+                        ks_options = KsOptions(composition=execution_ir)
                     elif not isinstance(ks_options, KsOptions):
                         raise TypeError("ks_options must be KsOptions")
                     elif (
@@ -298,7 +327,7 @@ class Calculator:
                             "ks_options may only set execution controls"
                         )
                     else:
-                        ks_options = replace(ks_options, composition=discovered_ir)
+                        ks_options = replace(ks_options, composition=execution_ir)
                     discovered_method_name = canonical_method
                     method = carrier
         supplied_method_ir = method if isinstance(method, MethodIR) else None
@@ -327,16 +356,21 @@ class Calculator:
                         )
                     electronic_family = "pbe"
                 elif isinstance(correction, D4Spec):
-                    expected = resolve_method("R2SCAN-3c", spin=supplied_method_ir.spin)
-                    if (
-                        len(gcp_nodes) != 1
-                        or supplied_method_ir.manifest_identity
-                        != expected.manifest_identity
-                    ):
-                        raise NotImplementedError(
-                            "Calculator D4+gCP execution requires the canonical r2SCAN-3c MethodIR"
+                    if gcp_nodes:
+                        expected = resolve_method(
+                            "R2SCAN-3c", spin=supplied_method_ir.spin
                         )
-                    electronic_family = "r2scan"
+                        if (
+                            len(gcp_nodes) != 1
+                            or supplied_method_ir.manifest_identity
+                            != expected.manifest_identity
+                        ):
+                            raise NotImplementedError(
+                                "Calculator D4+gCP execution requires the canonical r2SCAN-3c MethodIR"
+                            )
+                        electronic_family = "r2scan"
+                    else:
+                        electronic_family = "parameterized-d4"
                 else:
                     raise NotImplementedError(
                         "Calculator MethodIR execution does not support this correction family"
@@ -401,6 +435,10 @@ class Calculator:
                         "automatic Libxc native transport was not resolved"
                     )
                 method = automatic_libxc_transport
+            elif electronic_family == "parameterized-d4":
+                from .ks import native_dft_carrier_for_ir
+
+                method = native_dft_carrier_for_ir(electronic_ir)
             elif electronic_family == "pbe":
                 if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
                     raise NotImplementedError(
