@@ -70,15 +70,15 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("host C++ compiler unavailable")
     mp2 = (ROOT / "src/methods/mp2_method.cpp").read_text()
     cc = (ROOT / "src/methods/rccsd_method.cpp").read_text()
-    mp2_setup = mp2.split(
-        "      std::unique_ptr<posthf::RawSource> raw_source;", 1
-    )[1].split("      const auto corr =", 1)[0]
+    mp2_setup = mp2.split("      std::unique_ptr<posthf::RawSource> raw_source;", 1)[
+        1
+    ].split("      const auto corr =", 1)[0]
     force_prefix = mp2.split("      if (compute_forces) {", 1)[1].split(
         "        response::GmresOptions response_options;", 1
     )[0]
-    cc_handoff = cc.split(
-        "    std::unique_ptr<posthf::RawSource> raw_source;", 1
-    )[1].split('    allocation_stage = "CC resident solve";', 1)[0]
+    cc_handoff = cc.split("    std::unique_ptr<posthf::RawSource> raw_source;", 1)[
+        1
+    ].split('    allocation_stage = "CC resident solve";', 1)[0]
     program = (
         PREFIX
         + r"""
