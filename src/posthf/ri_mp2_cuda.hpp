@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include "posthf/raw_source.hpp"
-#include "scf/mean_field.hpp"
+#include "hf/reference.hpp"
 #include "tensor/metrics.hpp"
 
 namespace vibeqc::mp2 {
@@ -31,7 +31,7 @@ struct RiMp2CudaEnergy {
   vibeqc_tensor::Metrics metrics;
 };
 
-RiMp2CudaEnergy density_fitted_energy_cuda(const scf::PhysicalReference& reference,
+RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& reference,
                                            const posthf::RawSource& source, std::size_t budget,
                                            double metric_relative_threshold, int device);
 
