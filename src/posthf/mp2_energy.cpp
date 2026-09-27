@@ -15,7 +15,7 @@
 
 namespace vibeqc::mp2 {
 namespace {
-void validate_reference(const scf::PhysicalReference& ref, double threshold,
+void validate_reference(const hf::PhysicalReference& ref, double threshold,
                         unsigned requested_tile) {
   if (!ref.nocc || ref.nocc >= ref.nbf || ref.orbital_energies.size() != ref.nbf ||
       !std::isfinite(threshold) || threshold <= 0 || !requested_tile)
@@ -25,7 +25,7 @@ void validate_reference(const scf::PhysicalReference& ref, double threshold,
     throw std::invalid_argument("nonfinite MP2 orbital energies");
 }
 
-std::pair<double, double> denominator_bounds(const scf::PhysicalReference& ref, double threshold) {
+std::pair<double, double> denominator_bounds(const hf::PhysicalReference& ref, double threshold) {
   const auto& eps = ref.orbital_energies;
   const double hi = *std::max_element(eps.begin(), eps.begin() + ref.nocc);
   const double lo = *std::min_element(eps.begin() + ref.nocc, eps.end());
@@ -49,7 +49,7 @@ unsigned resolved_tile(std::size_t virtuals, unsigned requested) {
 }
 }  // namespace
 
-Energy conventional_energy(const scf::PhysicalReference& ref, const posthf::RawSource& source,
+Energy conventional_energy(const hf::PhysicalReference& ref, const posthf::RawSource& source,
                            std::size_t budget, double threshold, unsigned requested_tile, bool cuda,
                            int device) {
   validate_reference(ref, threshold, requested_tile);
@@ -250,7 +250,7 @@ Energy conventional_energy(const scf::PhysicalReference& ref, const posthf::RawS
   return result;
 }
 
-Energy density_fitted_energy(const scf::PhysicalReference& ref, const posthf::RawSource& source,
+Energy density_fitted_energy(const hf::PhysicalReference& ref, const posthf::RawSource& source,
                              std::size_t budget, double threshold, double metric_relative_threshold,
                              unsigned requested_tile, bool cuda, int device) {
   (void)device;  // Referenced only by the compiled CUDA branch below.

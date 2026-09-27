@@ -171,7 +171,7 @@ struct RawHamiltonian {
   std::vector<double> h, g, density, rotation;
 };
 
-RawHamiltonian raw_hamiltonian(const core::System& system, const scf::PhysicalReference& ref,
+RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalReference& ref,
                                std::size_t max_bytes) {
   const auto n = ref.nbf;
   const auto n2 = square(n), n4 = fourth(n);
@@ -357,7 +357,7 @@ double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
 }  // namespace
 
 static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
-                                                    const scf::PhysicalReference& reference,
+                                                    const hf::PhysicalReference& reference,
                                                     const Problem& p, const SolverResult& cc,
                                                     std::size_t max_bytes, bool include_triples) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
@@ -478,19 +478,19 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
 }
 
 RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
-                                     const scf::PhysicalReference& reference, const Problem& p,
+                                     const hf::PhysicalReference& reference, const Problem& p,
                                      const SolverResult& cc, std::size_t max_bytes) {
   return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false);
 }
 
 RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
-                                      const scf::PhysicalReference& reference, const Problem& p,
+                                      const hf::PhysicalReference& reference, const Problem& p,
                                       const SolverResult& cc, std::size_t max_bytes) {
   return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true);
 }
 
 static RccsdtForceResult relaxed_rccsd_force_impl(
-    const core::System& system, const scf::PhysicalReference& reference, const Problem& problem,
+    const core::System& system, const hf::PhysicalReference& reference, const Problem& problem,
     const SolverResult& cc_result, std::span<const double> eps_o, std::span<const double> eps_v,
     std::size_t max_bytes, bool include_triples, bool cuda_derivative, int device_id,
     std::size_t derivative_stage_budget, double denominator_threshold) {
@@ -741,7 +741,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 }
 
 RccsdtForceResult rccsd_force_cpu(const core::System& system,
-                                  const scf::PhysicalReference& reference, const Problem& problem,
+                                  const hf::PhysicalReference& reference, const Problem& problem,
                                   const SolverResult& cc_result, std::span<const double> eps_o,
                                   std::span<const double> eps_v, std::size_t max_bytes) {
   return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
@@ -749,7 +749,7 @@ RccsdtForceResult rccsd_force_cpu(const core::System& system,
 }
 
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
-                                   const scf::PhysicalReference& reference, const Problem& problem,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    int device_id, std::size_t derivative_stage_budget) {
@@ -758,7 +758,7 @@ RccsdtForceResult rccsd_force_cuda(const core::System& system,
 }
 
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
-                                   const scf::PhysicalReference& reference, const Problem& problem,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    double denominator_threshold) {
@@ -767,7 +767,7 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
 }
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
-                                    const scf::PhysicalReference& reference, const Problem& problem,
+                                    const hf::PhysicalReference& reference, const Problem& problem,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,

@@ -7,7 +7,7 @@
 namespace vibeqc::core {
 struct System;
 }
-namespace vibeqc::scf {
+namespace vibeqc::hf {
 struct PhysicalReference;
 }
 
@@ -21,7 +21,7 @@ namespace vibeqc::mp2 {
  * or coordinate-major derivative tensor exists.
  */
 std::vector<double> conventional_derivative_cpu(const core::System& system,
-                                                const scf::PhysicalReference& reference,
+                                                const hf::PhysicalReference& reference,
                                                 const LagrangianWeights& weights);
 
 /** Contract public-AO RI Lagrangian weights through the bounded #143 CPU
@@ -33,7 +33,7 @@ std::vector<double> density_fitted_derivative_cpu(const core::System& orbital,
                                                   std::size_t stage_budget);
 
 std::vector<double> conventional_derivative_cuda(const core::System& system,
-                                                 const scf::PhysicalReference& reference,
+                                                 const hf::PhysicalReference& reference,
                                                  const LagrangianWeights& weights, int device_id,
                                                  std::size_t stage_budget);
 
