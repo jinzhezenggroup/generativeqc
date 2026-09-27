@@ -159,4 +159,3 @@ def test_manifest_rejects_lossy_abi_and_capability_values(
     monkeypatch.setattr(generator, "MANIFEST", path)
     with pytest.raises(ValueError):
         generator.load_manifest()
-
