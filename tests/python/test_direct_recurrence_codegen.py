@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+from vibeqc_compiler.integral.direct_order2_shell_cuda import (
+    emit_direct_order2_shell_header,
+)
 from vibeqc_compiler.integral.direct_pair_support_cuda import (
     emit_direct_pair_support_headers,
 )
@@ -43,9 +46,7 @@ def test_native_recurrence_owners_are_retired() -> None:
 
 
 def test_remaining_consumers_use_generated_recurrence() -> None:
-    order2_shell = (ROOT / "src/scf/cuda/direct_native_order2_shell.cuh").read_text(
-        encoding="utf-8"
-    )
+    order2_shell = emit_direct_order2_shell_header()
     pair3 = emit_direct_pair_support_headers()["generated_direct_pair_order3.cuh"]
     pair_gradient = (
         ROOT / "python/vibeqc_compiler/integral/direct_pair_gradient_cuda.py"

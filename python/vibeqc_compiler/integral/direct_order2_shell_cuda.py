@@ -1,4 +1,8 @@
-#pragma once
+"""Compiler-owned emission of the Direct order-two shell contraction."""
+
+from __future__ import annotations
+
+_SOURCE = r"""#pragma once
 
 #include <cuda_runtime.h>
 
@@ -14,9 +18,10 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
-// Retained direct integral arithmetic for order2 shell.
-// Shared definitions use ordinary inline linkage; host plans and queue policy
-// remain outside this numerical owner.
+// Generated from the compiler-owned Direct order-two shell lowering.
+// Do not edit this build artifact: change
+// python/vibeqc_compiler/integral/direct_order2_shell_cuda.py instead.
+// Arithmetic/workspace order is preserved; host plans and queue policy remain native.
 namespace vibeqc::scf::cuda_execution {
 
 /** Maximum full Cartesian output count among the three order-two classes. */
@@ -248,3 +253,10 @@ __device__ inline __noinline__ Order2IntegralVector contracted_eri_cartesian_sou
 }
 
 }  // namespace vibeqc::scf::cuda_execution
+"""
+
+
+def emit_direct_order2_shell_header() -> str:
+    """Emit the qualified Direct order-two shell contraction header."""
+
+    return _SOURCE
