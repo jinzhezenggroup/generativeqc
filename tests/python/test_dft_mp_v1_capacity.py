@@ -891,6 +891,15 @@ def test_report_rejects_same_checkout_helper_source_changed_since_import(
         qualify_capacity._assert_local_imports()
 
 
+def test_report_requires_a_fresh_interpreter_after_checkout_head_moves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qualify_capacity, "_IMPORTED_TOOL_HEAD", "0" * 40)
+
+    with pytest.raises(RuntimeError, match="start a fresh interpreter"):
+        qualify_capacity._assert_local_imports()
+
+
 def test_report_reloads_basis_data_instead_of_reusing_a_stale_cache() -> None:
     baseline = next(case for case in report()["cases"] if case["id"] == "water")
     qualify_capacity._basis_pack.cache_clear()

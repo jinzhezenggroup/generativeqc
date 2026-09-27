@@ -24,6 +24,22 @@ from typing import Any
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
 SOURCE_PYTHON = SOURCE_REPOSITORY / "python"
 
+
+def _git_head(repository: Path) -> str:
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+        raise RuntimeError("Git did not return a full source SHA")
+    return revision
+
+
+_IMPORTED_TOOL_HEAD = _git_head(SOURCE_REPOSITORY)
+
 source_python = str(SOURCE_PYTHON)
 if source_python in sys.path:
     sys.path.remove(source_python)
@@ -181,6 +197,10 @@ STATIONARY_OWNER = {
 def _assert_local_imports() -> None:
     """Reject helpers already imported from an installed or foreign checkout."""
 
+    if _git_head(SOURCE_REPOSITORY) != _IMPORTED_TOOL_HEAD:
+        raise RuntimeError(
+            "capacity tool checkout changed since import; start a fresh interpreter"
+        )
     foreign = []
     stale = []
     for name, original in _LOCAL_HELPERS.items():
@@ -1371,16 +1391,7 @@ def _clean_git_sha(
     )
     if status.stdout.strip():
         raise RuntimeError("capacity report requires a clean Git worktree")
-    revision = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repository,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
-        raise RuntimeError("Git did not return a full source SHA")
-    return revision
+    return _git_head(repository)
 
 
 def _report_output_exemption(repository: Path, output_path: Path) -> Path | None:
