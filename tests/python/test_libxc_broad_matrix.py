@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from tools import qualify_libxc_broad_matrix as matrix
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _payload(stage: str) -> dict:
@@ -140,3 +144,19 @@ def test_broad_matrix_stops_endpoint_promotion_after_failed_prerequisite(
     assert row["stages"]["molecular-scf"] == "not-run"
     assert row["stages"]["public-method"] == "not-run"
     assert row["status"] == "fail"
+
+
+def test_broad_matrix_cli_imports_outside_repository(tmp_path: Path) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "qualify_libxc_broad_matrix.py"),
+            "--help",
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "broad automatic Libxc CPU promotion matrix" in completed.stdout
