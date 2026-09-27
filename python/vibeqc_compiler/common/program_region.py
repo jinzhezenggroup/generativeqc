@@ -57,10 +57,10 @@ def _normalize_effects(
         raise TypeError("ProgramIR region effects must be a provider mapping")
     normalized: dict[str, EffectKind] = {}
     for provider, effect in effects.items():
-        provider = _text(provider, "effect provider")
+        provider_name = _text(provider, "effect provider")
         if not isinstance(effect, EffectKind):
             raise TypeError("ProgramIR region effects must use EffectKind")
-        normalized[provider] = effect
+        normalized[provider_name] = effect
     return normalized
 
 
