@@ -1,24 +1,33 @@
 # Methods and long-term scope
 
 VibeQC's long-term mission is to cover **all quantum-chemistry methods** in one
-accelerator-native system. Public method discovery is generated at Sphinx build
+accelerator-native system. Public method discovery is rendered at Sphinx build
 time in the [public method catalog](../public_methods.md). The catalog combines
-stable native ABI registrations, public compiler-owned composite selectors, and
-the automatic Libxc semilocal MethodIR inventory instead of maintaining a second
-handwritten support list.
+stable native ABI registrations, compiler-discovered DFT selectors, public
+composite selectors, and the automatic Libxc semilocal MethodIR inventory.
+
+Stable native ABI IDs, providers, declared properties, batch capability, and
+compatibility aliases remain owned by `manifests/public_methods.json`. DFT
+scientific identity remains compiler-owned: representation never bypasses
+backend, basis, grid, spin, derivative, or production-domain admission gates.
 
 ## Current method status
 
-Use the generated [public method catalog](../public_methods.md) for current
-public entry points, aliases, declared properties, and execution class. A listed
-method is not a blanket claim that every backend, basis, grid, spin state, or
-requested property is qualified; the corresponding method contract and
-execution-time admission checks remain authoritative for those combinations.
+Run the Python frontend (`python -m vibeqc methods`) for the current public
+discovery set, and use the generated
+[public method catalog](../public_methods.md) for the documentation view across
+native, compiler-discovered, composite, and automatic Libxc entry paths.
 
-Internal validation helpers and compiler plans are not substitutes for native
-public method registration. Planned families and development directions are
-listed in the [implementation roadmap](../maintainer/roadmap.md), which does not
-promise release dates or a fixed implementation order.
+A discovered or listed method is not a blanket claim that every backend, basis,
+grid, spin state, or requested property is qualified. The method contract and
+execution-time admission checks remain authoritative for those combinations.
+Compiler representation alone is likewise not a public execution guarantee:
+unsupported lowerers fail closed. A Python-free native SDK install has a
+separate `vibeqc methods` command that intentionally reports the C/C++ ABI/provider
+registry only; it does not import the compiler catalog. Planned families and
+development directions are listed in the
+[implementation roadmap](../maintainer/roadmap.md), which does not promise
+release dates or a fixed implementation order.
 
 ## CUDA global-hybrid forces
 
