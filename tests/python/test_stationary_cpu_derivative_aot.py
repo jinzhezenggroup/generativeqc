@@ -115,9 +115,7 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
         natom=1,
         nprimitive=len(labels),
         shells=(SimpleNamespace(angular_momentum=2),),
-        packed=np.asarray(
-            [0.0, 0.0, 0.0, *primitive_rows, *aos], dtype=float
-        ),
+        packed=np.asarray([0.0, 0.0, 0.0, *primitive_rows, *aos], dtype=float),
     )
 
     monkeypatch.setattr(

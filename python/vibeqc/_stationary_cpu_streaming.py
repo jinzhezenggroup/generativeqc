@@ -54,9 +54,7 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
             if self.compilation_work["primitive_packaged_aot"]
             else domain
         )
-        bindings = np.asarray(
-            derivative_dispatch_table(binding_domain), dtype=np.int64
-        )
+        bindings = np.asarray(derivative_dispatch_table(binding_domain), dtype=np.int64)
         self.bindings = np.frombuffer(bindings.tobytes(), dtype=np.int64).reshape(
             bindings.shape
         )
