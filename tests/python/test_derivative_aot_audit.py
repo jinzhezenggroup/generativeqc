@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from vibeqc_compiler.integral.range_separation import CoulombKernel
 
 from tools import audit_derivative_aot_registry as audit
@@ -19,7 +21,7 @@ def test_source_statistics_report_translation_units_and_bytes() -> None:
 
 
 def test_audit_schema_keeps_radial_identity_and_provenance(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     manifest = tmp_path / "radials.json"
     manifest.write_text(
