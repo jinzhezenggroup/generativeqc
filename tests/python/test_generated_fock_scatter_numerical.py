@@ -79,6 +79,34 @@ int main() {
     }
   }
   if(cases!=330) return 2;
+  {
+    constexpr float mixed_value = 0.9876543F;
+    std::vector<double> density(100), actual(100);
+    density[off] = 0.123456789123;
+    accumulate_direct_fock_integral<false, true>(
+        1, off, spin, density.data(), actual.data(), 0, 0, 0, 0,
+        mixed_value, true);
+    const double expected = static_cast<double>(
+        static_cast<float>(density[off]) * mixed_value);
+    if(std::abs(actual[off]-expected)>1e-15) return 3;
+    if(std::abs(actual[off]-density[off]*static_cast<double>(mixed_value))<1e-10) return 4;
+  }
+  {
+    std::vector<double> density(100), actual(100);
+    density[off + 1 + 1*n] = 1e308;
+    density[off + 1 + 3*n] = 1e308;
+    density[off + 3 + 1*n] = 1e308;
+    density[off + 3 + 3*n] = 1e308;
+    accumulate_direct_fock_integral<false>(
+        n, off, spin, density.data(), actual.data(), 3, 2, 1, 0,
+        2.0, false);
+    bool saw_finite_exchange = false;
+    for(double value : actual) {
+      if(!std::isfinite(value)) return 5;
+      if(value != 0.0) saw_finite_exchange = true;
+    }
+    if(!saw_finite_exchange) return 6;
+  }
   std::cout<<cases<<" independent dense RHF/UHF scatter comparisons passed\n";
 }
 """
