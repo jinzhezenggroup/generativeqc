@@ -1287,11 +1287,31 @@ def _clean_git_sha(
     return revision
 
 
+def _report_output_exemption(repository: Path, output_path: Path) -> Path | None:
+    """Allow only an untracked JSON report to be ignored inside the checkout."""
+
+    output_path = Path(output_path).resolve()
+    if not output_path.is_relative_to(repository):
+        return None
+    if output_path.suffix.lower() != ".json":
+        raise ValueError("in-checkout capacity report output must be a JSON file")
+    relative = output_path.relative_to(repository).as_posix()
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", relative],
+        cwd=repository,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if tracked.returncode == 0:
+        raise ValueError("capacity report output must not replace a tracked file")
+    return output_path
+
+
 def build_report(
     repository: Path,
     *,
     aot_directory: Path | None = None,
-    output_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build a report whose source identity is the clean tool-checkout HEAD."""
 
@@ -1303,7 +1323,7 @@ def build_report(
         )
     return _build_report(
         repository,
-        source_sha=_clean_git_sha(repository, ignored_path=output_path),
+        source_sha=_clean_git_sha(repository),
         aot_directory=aot_directory,
     )
 
@@ -1325,11 +1345,20 @@ def main() -> None:
     args = parser.parse_args()
     repository = args.repository.resolve()
     output_path = None if args.output is None else args.output.resolve()
-    payload = build_report(
-        repository,
-        aot_directory=args.aot_directory,
-        output_path=output_path,
-    )
+    if output_path is None:
+        payload = build_report(repository, aot_directory=args.aot_directory)
+    else:
+        _assert_local_imports()
+        if repository != SOURCE_REPOSITORY:
+            raise ValueError(
+                "capacity report must run against the checkout containing this tool"
+            )
+        exemption = _report_output_exemption(repository, output_path)
+        payload = _build_report(
+            repository,
+            source_sha=_clean_git_sha(repository, ignored_path=exemption),
+            aot_directory=args.aot_directory,
+        )
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
     if args.output is None:
         print(text, end="")

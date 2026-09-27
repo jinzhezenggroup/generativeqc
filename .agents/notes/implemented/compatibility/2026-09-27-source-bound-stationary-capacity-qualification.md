@@ -30,8 +30,10 @@ report records the clean Git HEAD, frozen input/basis/grid identities, owner
 hashes, gate order, first blocker, and whether the optional packaged AOT is
 present and valid.
 
-The report output itself may be regenerated inside the checkout and is excluded
-from the clean-tree check. No other dirty path is ignored.
+The writing CLI may regenerate one untracked `.json` report inside the checkout
+and exclude exactly that path from the clean-tree check. The public
+`build_report()` API has no exemption, and the CLI refuses to replace a tracked
+file. No other dirty path is ignored.
 
 ## Rejected alternatives
 
@@ -56,8 +58,8 @@ from the clean-tree check. No other dirty path is ignored.
   source-only construction is not accepted as an independent proxy.
 - Static admission is never reported as scientific qualification.
 - The qualifier does not change caps, tolerances, frozen cases, or losing rows.
-- A report SHA identifies a clean source revision; only its selected output file
-  may be excluded from the cleanliness check.
+- A report SHA identifies a clean source revision; only the writing CLI's
+  validated untracked JSON output may be excluded from the cleanliness check.
 - Changes such as the proposed whole-force to page-local primitive-work contract
   require recomputing the matrix from the merged source, not predicting results.
 

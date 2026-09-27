@@ -338,6 +338,14 @@ def test_public_report_binds_the_clean_git_head(
     assert result["source"]["sha"] == revision
 
 
+def test_public_report_cannot_exempt_an_arbitrary_dirty_path() -> None:
+    with pytest.raises(TypeError, match="unexpected keyword argument 'output_path'"):
+        qualify_capacity.build_report(  # type: ignore[call-arg]
+            ROOT,
+            output_path=ROOT / "python/vibeqc/calculator.py",
+        )
+
+
 def test_source_contract_hashes_do_not_use_version_dependent_ast_dump(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -375,14 +383,26 @@ def test_clean_git_sha_ignores_only_the_requested_report_output(
     git("init")
     git("config", "user.name", "Capacity Test")
     git("config", "user.email", "capacity@example.invalid")
-    (repository / "tracked.txt").write_text("tracked\n", encoding="utf-8")
-    git("add", "tracked.txt")
+    (repository / "tracked.json").write_text("{}\n", encoding="utf-8")
+    git("add", "tracked.json")
     git("commit", "-m", "fixture")
     revision = git("rev-parse", "HEAD").stdout.strip()
 
     output = repository / "capacity-report.json"
     output.write_text("first run\n", encoding="utf-8")
+    assert qualify_capacity._report_output_exemption(repository, output) == (
+        output.resolve()
+    )
     assert qualify_capacity._clean_git_sha(repository, ignored_path=output) == revision
+
+    with pytest.raises(ValueError, match="must not replace a tracked file"):
+        qualify_capacity._report_output_exemption(
+            repository, repository / "tracked.json"
+        )
+    with pytest.raises(ValueError, match="must be a JSON file"):
+        qualify_capacity._report_output_exemption(
+            repository, repository / "capacity-report.py"
+        )
 
     (repository / "unrelated.txt").write_text("dirty\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="clean Git worktree"):
