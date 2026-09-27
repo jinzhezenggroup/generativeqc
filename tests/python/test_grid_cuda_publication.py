@@ -58,7 +58,7 @@ struct Context {
 struct GridPlan {
   Context context;
   bool view_ready=true,features_ready=true,density_jets_ready=true;
-  bool local=true,density_ready=true,use_orbitals=false,orbital_ready=false;
+  bool local=true,density_ready=true,use_orbitals=false,orbital_ready=false,last_identity_map=false;
   std::size_t generation=7,nao=2,active_capacity=2,capacity=2,jets=4;
   std::size_t last_points{},last_active{},natom=1,nprimitive=2;
   std::size_t orbital_count[2]{},orbital_tile=1;
