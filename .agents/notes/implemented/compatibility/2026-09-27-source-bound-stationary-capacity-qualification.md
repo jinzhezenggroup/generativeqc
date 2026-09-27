@@ -41,6 +41,8 @@ file. No other dirty path is ignored.
 Imported planner, basis, grid, and AOT helpers retain their import-time source
 path and content identity. A long-lived process fails closed if the same
 checkout changes underneath already-imported helper objects.
+The bundled basis-pack and named-record caches are cleared before every report,
+so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 
 ## Rejected alternatives
 

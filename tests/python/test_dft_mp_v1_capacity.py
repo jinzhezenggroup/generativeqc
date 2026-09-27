@@ -891,6 +891,28 @@ def test_report_rejects_same_checkout_helper_source_changed_since_import(
         qualify_capacity._assert_local_imports()
 
 
+def test_report_reloads_basis_data_instead_of_reusing_a_stale_cache() -> None:
+    baseline = next(case for case in report()["cases"] if case["id"] == "water")
+    qualify_capacity._basis_pack.cache_clear()
+    qualify_capacity._named_basis_record.cache_clear()
+    pack = qualify_capacity._basis_pack()
+    bases = pack["bases"]
+    assert isinstance(bases, dict)
+    shells = bases["def2-svp"]["elements"]["1"]
+    coefficients = shells[0]["coefficients"]
+    original = coefficients[0]
+    coefficients[0] = "999.0"
+    try:
+        result = report()
+    finally:
+        coefficients[0] = original
+        qualify_capacity._basis_pack.cache_clear()
+        qualify_capacity._named_basis_record.cache_clear()
+
+    water = next(case for case in result["cases"] if case["id"] == "water")
+    assert water["identities"]["basis"] == baseline["identities"]["basis"]
+
+
 def test_malformed_optional_aot_manifest_is_reported_not_raised(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

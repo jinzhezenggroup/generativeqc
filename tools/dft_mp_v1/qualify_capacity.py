@@ -34,7 +34,7 @@ from vibeqc import Atom
 from vibeqc import _generated_methods as generated_methods
 from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
 from vibeqc.basis_capabilities import resolved_basis_metadata
-from vibeqc.calculator import _named_basis_record, _named_basis_shells
+from vibeqc.calculator import _basis_pack, _named_basis_record, _named_basis_shells
 from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from vibeqc_compiler.dft.plan import plan_tiles
 from vibeqc_compiler.method.stationary_cuda import (
@@ -52,6 +52,7 @@ _LOCAL_HELPERS = {
     "generated_methods": generated_methods,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
     "resolved_basis_metadata": resolved_basis_metadata,
+    "_basis_pack": _basis_pack,
     "_named_basis_record": _named_basis_record,
     "_named_basis_shells": _named_basis_shells,
     "GridSpec": GridSpec,
@@ -1029,6 +1030,8 @@ def _build_report(
         )
     if re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
         raise ValueError("source_sha must be a full lowercase Git commit SHA")
+    _basis_pack.cache_clear()
+    _named_basis_record.cache_clear()
     root = repository / "tools/dft_mp_v1"
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     frozen_hash = manifest.get("contract_sha256")
