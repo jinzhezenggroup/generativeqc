@@ -7,6 +7,7 @@ import pytest
 from vibeqc_compiler.method.libxc_public_evidence import (
     installed_public_evidence,
     installed_public_evidence_provenance,
+    installed_public_functionals,
 )
 
 from tools.render_libxc_public_evidence import collect_public_evidence
@@ -39,3 +40,8 @@ def test_renderer_rejects_stale_capability_identity(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="stale for the current compiler identity"):
         collect_public_evidence(tmp_path)
+
+
+
+def test_empty_generated_inventory_exposes_no_public_functionals() -> None:
+    assert installed_public_functionals() == ()
