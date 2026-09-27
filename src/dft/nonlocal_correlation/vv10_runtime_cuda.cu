@@ -105,9 +105,8 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_count,
-                                    std::size_t npoint, double coefficient,
-                                    const double* points, const double* density,
-                                    const double* omega, const double* kappa,
+                                    std::size_t npoint, double coefficient, const double* points,
+                                    const double* density, const double* omega, const double* kappa,
                                     const double* domega_drho, const double* domega_dsigma,
                                     const double* dkappa_drho, const double* weighted_density,
                                     double beta, double* energy_terms, double* vrho, double* vsigma,
@@ -191,9 +190,9 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
     const auto count = std::min(max_rows_per_launch, layout.point_count - first);
     const auto blocks = launch_blocks(count, threads);
     pair_kernel_ordered<Variant, Features, Geometry><<<blocks, threads, 0, stream>>>(
-        first, count, layout.point_count, coefficient, points, density, omega, kappa,
-        domega_drho, domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed);
+        first, count, layout.point_count, coefficient, points, density, omega, kappa, domega_drho,
+        domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
+        point_derivative, weight_derivative, failed);
     runtime::cuda_resource_check(cudaGetLastError());
   }
 }
