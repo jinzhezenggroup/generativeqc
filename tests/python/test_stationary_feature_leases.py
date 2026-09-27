@@ -2,8 +2,14 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.method import MethodSpec, original_nonlocal_correlation, resolve_method
-from vibeqc_compiler.method.stationary_feature_lease import plan_stationary_feature_leases
+from vibeqc_compiler.method import (
+    MethodSpec,
+    original_nonlocal_correlation,
+    resolve_method,
+)
+from vibeqc_compiler.method.stationary_feature_lease import (
+    plan_stationary_feature_leases,
+)
 from vibeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
@@ -16,9 +22,7 @@ def _features(method):
     gradient = StationaryGradientPlan(
         resolve_method(method), StationaryMeanField(SCF_POINT_MODEL)
     )
-    return plan_stationary_feature_leases(
-        compile_stationary_prepared_plan(gradient)
-    )
+    return plan_stationary_feature_leases(compile_stationary_prepared_plan(gradient))
 
 
 def test_semilocal_feature_inventory_comes_from_method_requirements():
