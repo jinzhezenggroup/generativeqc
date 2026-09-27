@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Emit fixed WB97M-V CPU SR/LR weighted-ERI derivative programs."""
 
 from __future__ import annotations
