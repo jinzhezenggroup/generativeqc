@@ -185,7 +185,9 @@ def load_composite_methods() -> list[dict]:
             raise ValueError(f"invalid public composite method entry {method!r}")
         name = method["name"]
         if not isinstance(name, str) or not name or name != name.lower():
-            raise ValueError("public composite names must be non-empty lowercase strings")
+            raise ValueError(
+                "public composite names must be non-empty lowercase strings"
+            )
         if name in occupied or name in names or name in aliases:
             raise ValueError(f"duplicate public method selector {name!r}")
         if method["family"] not in FAMILIES:
