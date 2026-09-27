@@ -117,9 +117,9 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task(
   const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
       n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3]);
   if (density_coefficient == 0.0) return;
-  const double component_weight = direct_force_component_weight(
-      batch.direct_ao_coefficients, system_ao_begin, ao[0], ao[1], ao[2], ao[3],
-      density_coefficient);
+  const double component_weight =
+      direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, ao[0], ao[1],
+                                    ao[2], ao[3], density_coefficient);
   const auto gradient = contracted_eri_cartesian_source_ssss_generated_weighted_gradient(
       batch, first_pair, second_pair, shells[0], shells[1], shells[2], shells[3], component_weight);
 
@@ -199,12 +199,11 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task(
     }
     const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
         n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3]);
-    component_weight[axis] = direct_force_component_weight(
-        batch.direct_ao_coefficients, system_ao_begin, raw_ao[0], raw_ao[1], raw_ao[2],
-        raw_ao[3], density_coefficient);
+    component_weight[axis] =
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
   }
-  if (component_weight[0] == 0.0 && component_weight[1] == 0.0 &&
-      component_weight[2] == 0.0) {
+  if (component_weight[0] == 0.0 && component_weight[1] == 0.0 && component_weight[2] == 0.0) {
     return;
   }
 

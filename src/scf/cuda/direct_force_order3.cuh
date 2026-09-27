@@ -227,9 +227,9 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
                             component[3];
     if (output >= 27U) return;
 
-    component_weight[output] += direct_force_component_weight(
-        batch.direct_ao_coefficients, system_ao_begin, raw_ao[0], raw_ao[1], raw_ao[2],
-        raw_ao[3], density_coefficient);
+    component_weight[output] +=
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
     any_component = true;
   }
   if (!any_component) return;

@@ -194,9 +194,9 @@ contracted_eri_cartesian_source_order2_generated_gradient(const DeviceBatch& bat
   }
 
   double component_weight[9]{};
-  component_weight[output] = direct_force_component_weight(
-      batch.direct_ao_coefficients, system_ao_begin, raw_ao[0], raw_ao[1], raw_ao[2],
-      raw_ao[3], 1.0);
+  component_weight[output] =
+      direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                    raw_ao[1], raw_ao[2], raw_ao[3], 1.0);
 
   generated_weighted_eri::IndependentGradient gradient{};
   if (shell_class == kPspsShellClass) {
@@ -320,9 +320,9 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
     const unsigned second_axis =
         static_cast<unsigned>(raw_ao[canonical_raw_slot[2]] - second_p_ao_begin);
     if (first_axis >= 3 || second_axis >= 3) return;
-    component_weight[first_axis * 3 + second_axis] += direct_force_component_weight(
-        batch.direct_ao_coefficients, system_ao_begin, raw_ao[0], raw_ao[1], raw_ao[2],
-        raw_ao[3], density_coefficient);
+    component_weight[first_axis * 3 + second_axis] +=
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
     any_component = true;
   }
   if (!any_component) return;
@@ -444,9 +444,9 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
     } else if (first_component >= 6U) {
       return;
     }
-    component_weight[output] += direct_force_component_weight(
-        batch.direct_ao_coefficients, system_ao_begin, raw_ao[0], raw_ao[1], raw_ao[2],
-        raw_ao[3], density_coefficient);
+    component_weight[output] +=
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
     any_component = true;
   }
   if (!any_component) return;
