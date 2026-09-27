@@ -276,6 +276,25 @@ class GridXcCandidateShape:
             )
 
 
+def grid_xc_shape_identity(shape: GridXcCandidateShape) -> str:
+    """Identity of the exact candidate-local resource and tiling evidence."""
+    if not isinstance(shape, GridXcCandidateShape):
+        raise TypeError("grid/XC shape identity requires GridXcCandidateShape")
+    return canonical_hash(asdict(shape))
+
+
+def grid_xc_domain_identity(shape: GridXcCandidateShape) -> str:
+    """Common workload domain, excluding candidate-local tiling and resources."""
+    if not isinstance(shape, GridXcCandidateShape):
+        raise TypeError("grid/XC domain identity requires GridXcCandidateShape")
+    return canonical_hash(
+        {
+            name: getattr(shape, name)
+            for name in ("npoint", "nao", "max_active_ao", "spins", "jet_components")
+        }
+    )
+
+
 @dataclass(frozen=True)
 class GridXcScheduleCandidate:
     """One executable DFT schedule paired with its own measured/planned shape.
@@ -569,6 +588,8 @@ def assess_grid_xc_schedule(
         ),
         provenance=(
             ("domain_schedule", resolved.name),
+            ("candidate_shape", grid_xc_shape_identity(shape)),
+            ("candidate_domain", grid_xc_domain_identity(shape)),
             ("precision_contract", "common.precision"),
             ("lifetime_analysis", "common.storage"),
             ("resource_admission", "common.schedule"),

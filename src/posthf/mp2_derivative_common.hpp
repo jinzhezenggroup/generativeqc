@@ -11,7 +11,7 @@
 namespace vibeqc::core {
 struct System;
 }
-namespace vibeqc::scf {
+namespace vibeqc::hf {
 struct PhysicalReference;
 }
 
@@ -23,7 +23,7 @@ using EriShellDerivativeContract = std::function<std::array<double, 12>(
     const std::array<std::size_t, 4>&, std::span<const double>)>;
 
 std::vector<double> conventional_derivative(const core::System& system,
-                                            const scf::PhysicalReference& reference,
+                                            const hf::PhysicalReference& reference,
                                             const LagrangianWeights& weights,
                                             const OneElectronDerivativeContract& one_electron,
                                             const EriShellDerivativeContract& eri_shell);

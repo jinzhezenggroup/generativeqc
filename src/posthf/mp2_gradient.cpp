@@ -272,7 +272,7 @@ OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<con
   return result;
 }
 
-OrbitalRhs canonical_orbital_rhs_streamed(const scf::PhysicalReference& reference,
+OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference,
                                           std::span<const double> hcore_mo,
                                           const posthf::MOBlockProvider& provider,
                                           const EnergyAdjoint& adjoint, double same_space_threshold,
@@ -364,7 +364,7 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
 }
 
 LagrangianWeights canonical_lagrangian_weights_streamed(
-    const scf::PhysicalReference& reference, std::span<const double> hcore_mo,
+    const hf::PhysicalReference& reference, std::span<const double> hcore_mo,
     const posthf::MOBlockProvider& provider, const EnergyAdjoint& adjoint,
     std::span<const double> response, double same_space_threshold, bool cuda, int device_id) {
   auto orbital = canonical_orbital_rhs_streamed(reference, hcore_mo, provider, adjoint,
@@ -402,7 +402,7 @@ LagrangianWeights canonical_lagrangian_weights_streamed(
 }
 
 DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
-    const scf::PhysicalReference& reference, const posthf::DensityFittedBlockProvider& provider,
+    const hf::PhysicalReference& reference, const posthf::DensityFittedBlockProvider& provider,
     const LagrangianWeights& weights, std::size_t maximum_bytes) {
   const auto n = reference.nbf, occupied = reference.nocc, na = provider.auxiliary_count();
   if (&provider.reference() != &reference || !n || !occupied || occupied >= n || !na ||

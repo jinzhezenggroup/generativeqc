@@ -593,14 +593,15 @@ def _emit_shell_class_mixed_fock_cuda(
     *,
     rys_support_integral: IntegralIR | None = None,
 ) -> str:
-    """Emit an FP32 ERI specialization with FP64 Fock contraction.
+    """Emit an FP32 ERI specialization with a bounded FP32 Fock product.
 
     Mixed workers use a compact FP32 primitive-geometry record. Geometry
     differences, powers, and Boys values are evaluated in double precision
     and converted once when stored in the float recurrence record; this keeps
     the accuracy-sensitive recurrence stable while removing repeated
     double-to-float conversions from the Coulomb/component hot loop. Density
-    reads and global Fock atomics remain in double precision.
+    storage and global Fock atomics remain in double precision, while only the
+    density-by-integral product is rounded in FP32.
     """
 
     state_axis_bits = max(3, spec.maximum_force_coulomb_order.bit_length())
@@ -763,6 +764,11 @@ __device__ __forceinline__ void generated_dppp_make_mixed_primitive_geometry(
     for original, replacement in symbol_replacements:
         source = source.replace(original, replacement)
 
+    source = source.replace(
+        "generated_dppp_mixed_accumulate_fock<Unrestricted>(",
+        "generated_dppp_mixed_accumulate_fock<Unrestricted, true>(",
+    )
+
     # The FP64 geometry helpers are emitted once for the ordinary force/value
     # path. Mixed workers use a compact record and builder so the component
     # recurrence reads native floats instead of converting every geometry
@@ -775,9 +781,9 @@ __device__ __forceinline__ void generated_dppp_make_mixed_primitive_geometry(
         "generated_dppp_make_mixed_primitive_geometry(\n",
     )
 
-    # Convert only the ERI-evaluation data flow. Density reads, Fock values,
-    # and atomics retain their double declarations in the duplicated
-    # accumulation helper and kernel ABI.
+    # Convert the ERI-evaluation data flow and explicitly select the bounded
+    # FP32 density-by-integral product in the duplicated mixed accumulation
+    # helper. Density storage, Fock storage, and global atomics stay double.
     source = source.replace(
         "struct GeneratedDpppMixedValueTerm {\n"
         "  unsigned derivative_state;\n"

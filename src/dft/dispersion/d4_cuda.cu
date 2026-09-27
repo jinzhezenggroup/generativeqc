@@ -270,21 +270,15 @@ __global__ void two_body_kernel(D4CudaBatch batch, D4Parameters parameters, D4Ta
     if (distance > parameters.pair_cutoff) continue;
     const auto coefficient = d4_detail::coefficient(first, second, z, tables, weights,
                                                     cn_derivatives, charge_derivatives);
-    const double rr =
-        3.0 * tables.elements[z[first] - 1].r4r2 * tables.elements[z[second] - 1].r4r2;
-    const double r0 = d4_detail::radius(first, second, z, tables, parameters);
-    const double u = r0 * r0;
-    const double t6 = 1.0 / (r2 * r2 * r2 + u * u * u);
-    const double t8 = 1.0 / (r2 * r2 * r2 * r2 + u * u * u * u);
-    const double damping = parameters.s6 * t6 + parameters.s8 * rr * t8;
-    const double damping_derivative = -6.0 * parameters.s6 * r2 * r2 * t6 * t6 -
-                                      8.0 * parameters.s8 * rr * r2 * r2 * r2 * t8 * t8;
-    atomic_add_fp64(result.energies + 2 * system, -coefficient.c6 * damping);
-    atomic_add_fp64(dedq + first, -coefficient.qi * damping);
-    atomic_add_fp64(dedq + second, -coefficient.qj * damping);
-    atomic_add_fp64(coordination_adjoints + first, -coefficient.ci * damping);
-    atomic_add_fp64(coordination_adjoints + second, -coefficient.cj * damping);
-    add_pair_gradient_atomic(first, second, vector, -coefficient.c6 * damping_derivative, gradient);
+    const auto damping =
+        math::pair_damping(tables.elements[z[first] - 1], tables.elements[z[second] - 1], r2,
+                           parameters.s6, parameters.s8, parameters.a1, parameters.a2);
+    atomic_add_fp64(result.energies + 2 * system, -coefficient.c6 * damping.value);
+    atomic_add_fp64(dedq + first, -coefficient.qi * damping.value);
+    atomic_add_fp64(dedq + second, -coefficient.qj * damping.value);
+    atomic_add_fp64(coordination_adjoints + first, -coefficient.ci * damping.value);
+    atomic_add_fp64(coordination_adjoints + second, -coefficient.cj * damping.value);
+    add_pair_gradient_atomic(first, second, vector, -coefficient.c6 * damping.derivative, gradient);
   }
 }
 
@@ -330,39 +324,30 @@ __global__ void atm_kernel(D4CudaBatch batch, D4Parameters parameters, D4Tables 
       record_status(result.statuses, system, D4Status::numerical_failure);
       continue;
     }
-    const double r2_product = a * b * c;
-    const double r1_product = sqrt(r2_product);
-    const double r3_product = r2_product * r1_product;
-    const double r5_product = r3_product * r2_product;
-    const double ratio = d4_detail::radius(first, second, z, tables, parameters) *
-                         d4_detail::radius(first, third, z, tables, parameters) *
-                         d4_detail::radius(second, third, z, tables, parameters) / r1_product;
-    const double rp = pow(ratio, 16.0 / 3.0);
-    const double damping = 1.0 / (1.0 + 6.0 * rp);
-    const double angle =
-        0.375 * (a + c - b) * (a - c + b) * (-a + c + b) / r5_product + 1.0 / r3_product;
-    const double c9 = -parameters.s9 * sqrt(c12.c6 * c13.c6 * c23.c6);
-    const double delta_energy = angle * damping * c9;
-    const double damping_derivative = -32.0 * rp * damping * damping;
-    atomic_add_fp64(result.energies + 2 * system + 1, -delta_energy);
-    add_pair_gradient_atomic(
-        first, second, first_second,
-        d4_detail::atm_radial(a, c, b, r5_product, damping, angle, damping_derivative, c9),
-        gradient);
-    add_pair_gradient_atomic(
-        first, third, first_third,
-        d4_detail::atm_radial(b, c, a, r5_product, damping, angle, damping_derivative, c9),
-        gradient);
-    add_pair_gradient_atomic(
-        second, third, second_third,
-        d4_detail::atm_radial(c, b, a, r5_product, damping, angle, damping_derivative, c9),
-        gradient);
+    const auto atm =
+        math::atm_terms(a, b, c, d4_detail::radius(first, second, z, tables, parameters),
+                        d4_detail::radius(first, third, z, tables, parameters),
+                        d4_detail::radius(second, third, z, tables, parameters), c12.c6, c13.c6,
+                        c23.c6, parameters.s9);
+    atomic_add_fp64(result.energies + 2 * system + 1, -atm.energy);
+    add_pair_gradient_atomic(first, second, first_second,
+                             d4_detail::atm_radial(a, c, b, atm.r5_product, atm.damping, atm.angle,
+                                                   atm.damping_derivative, atm.c9),
+                             gradient);
+    add_pair_gradient_atomic(first, third, first_third,
+                             d4_detail::atm_radial(b, c, a, atm.r5_product, atm.damping, atm.angle,
+                                                   atm.damping_derivative, atm.c9),
+                             gradient);
+    add_pair_gradient_atomic(second, third, second_third,
+                             d4_detail::atm_radial(c, b, a, atm.r5_product, atm.damping, atm.angle,
+                                                   atm.damping_derivative, atm.c9),
+                             gradient);
     atomic_add_fp64(coordination_adjoints + first,
-                    -0.5 * delta_energy * (c12.ci / c12.c6 + c13.ci / c13.c6));
+                    math::atm_cn_adjoint(atm.energy, c12.c6, c13.c6, c12.ci, c13.ci));
     atomic_add_fp64(coordination_adjoints + second,
-                    -0.5 * delta_energy * (c12.cj / c12.c6 + c23.ci / c23.c6));
+                    math::atm_cn_adjoint(atm.energy, c12.c6, c23.c6, c12.cj, c23.ci));
     atomic_add_fp64(coordination_adjoints + third,
-                    -0.5 * delta_energy * (c13.cj / c13.c6 + c23.cj / c23.c6));
+                    math::atm_cn_adjoint(atm.energy, c13.c6, c23.c6, c13.cj, c23.cj));
   }
 }
 
