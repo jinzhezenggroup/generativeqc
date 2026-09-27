@@ -25,6 +25,11 @@ struct vibeqc_ks_snapshot {
   std::size_t atoms{};
   vibeqc::dft::CudaKsFinalStateToken token;
   std::vector<double> values;
+  // Snapshot creation already paid the strict final-state export/validation.
+  // Retain only D/W needed by the later stationary integral bridge instead of
+  // triggering a second complete final-state device export.
+  std::vector<vibeqc::scf::reference::Matrix> stationary_density;
+  std::vector<vibeqc::scf::reference::Matrix> stationary_weighted_density;
   double energy{};
   bool all_electron{};
 };
@@ -176,6 +181,8 @@ vibeqc_status vibeqc_ks_snapshot_create_v1(vibeqc_batch* batch, std::size_t inde
     // Even publication uses the same token gate as a later derivative read.
     status = check_current(*batch, *result);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
+    result->stationary_density = std::move(source.state.density);
+    result->stationary_weighted_density = std::move(source.state.weighted_density);
     std::copy(info.begin(), info.end(), metadata);
     *output = result.release();
     return VIBEQC_STATUS_SUCCESS;
@@ -471,8 +478,9 @@ vibeqc_status vibeqc_ks_snapshot_cuda_integral_gradient_v1(
     std::vector<double> candidate;
     std::array<std::uint64_t, 9> usage{};
     std::string detail;
-    status = vibeqc::methods::detail::dft_cuda_integral_gradient(
-        *batch->plan, snapshot->index, snapshot->token, candidate, maximum_bytes, usage, detail);
+    status = vibeqc::methods::detail::dft_cuda_integral_gradient_cached(
+        *batch->plan, snapshot->index, snapshot->token, snapshot->stationary_density,
+        snapshot->stationary_weighted_density, candidate, maximum_bytes, usage, detail);
     if (status != VIBEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       return status;
