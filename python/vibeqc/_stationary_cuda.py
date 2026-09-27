@@ -169,8 +169,8 @@ class _BoundedStationaryTaskExecutor:
             or any(char not in "0123456789abcdef" for char in identity)
         ):
             raise ValueError("stationary derivative task source requires a SHA-256 identity")
-        if type(logical_tasks) is not int or logical_tasks < 1:
-            raise ValueError("stationary derivative task source requires positive logical size")
+        if type(logical_tasks) is not int or logical_tasks < 0:
+            raise ValueError("stationary derivative task source requires nonnegative logical size")
         if not callable(page_source) or not callable(payload_source):
             raise TypeError("stationary derivative task source requires bounded pages/payload")
         payload = payload_source()
@@ -187,9 +187,17 @@ class _BoundedStationaryTaskExecutor:
             raise TypeError("stationary derivative producer requires a finish callback")
 
         mode = (
-            "fixed"
-            if logical_tasks <= self.fixed_capacity
-            else ("resident" if logical_tasks <= self.resident_capacity else "paged")
+            "empty"
+            if logical_tasks == 0
+            else (
+                "fixed"
+                if logical_tasks <= self.fixed_capacity
+                else (
+                    "resident"
+                    if logical_tasks <= self.resident_capacity
+                    else "paged"
+                )
+            )
         )
         submitted = pages = 0
         page_rank: int | None = None
