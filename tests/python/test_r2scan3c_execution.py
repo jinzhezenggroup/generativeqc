@@ -281,7 +281,7 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
         ) as basis:
             state = StationaryKsState.from_native(batch, basis)
             try:
-                with pytest.raises(ValueError, match="primitive work budget"):
+                with pytest.raises(ValueError, match="primitive page work budget"):
                     complete_rks_cuda_gradient_diagnostic(
                         state,
                         basis,
@@ -294,7 +294,7 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
                         ),
                         aot_directory=None,
                         native_grid_library=Path(str(batch._library._name)).resolve(),
-                        max_primitive_records=12_134_768,
+                        max_primitive_records=1,
                     )
             finally:
                 state._source.close()
@@ -302,13 +302,15 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
 
     assert force.shape == (3, 3)
     assert work["primitive_records"] == 12_134_769
-    assert work["primitive_records"] <= 16_000_000
+    assert work["primitive_record_page_budget"] == 16_000_000
+    assert 0 < work["primitive_page_peak_records"] <= work["primitive_record_page_budget"]
+    assert work["primitive_pages"] > 0
     assert work["task_descriptors"] > 0
     assert work["task_batches"] > 0
     assert work["additional_device_peak_bound"] <= work["additional_device_budget"]
     _cuda_evidence(
         "water-spd-resource-work",
-        {**work, "allocation": allocation, "rejected_work_budget": 12_134_768},
+        {**work, "allocation": allocation, "rejected_page_budget": 1},
     )
 
 
