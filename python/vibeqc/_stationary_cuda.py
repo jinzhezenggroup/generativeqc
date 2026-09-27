@@ -376,6 +376,8 @@ class _CudaSources:
         self.tasks = np.full((records, 9), -1, dtype=np.int64)
         self.charges = np.ones(records)
         self.used = 0
+        self.page_work_budget = int(page_work_budget)
+        self.pending_primitive_records = 0
         self.primitive_pages = 0
         self.primitive_page_peak_records = 0
         self.bulk_task_pages = 0
@@ -524,6 +526,7 @@ class _CudaSources:
         weighted_density: typing.Any,
     ) -> None:
         self.used = 0
+        self.pending_primitive_records = 0
         self.primitive_pages = 0
         self.primitive_page_peak_records = 0
         self.bulk_task_pages = 0
@@ -567,6 +570,7 @@ class _CudaSources:
                 self.primitive_page_peak_records, page_primitive_records
             )
             self.used = 0
+            self.pending_primitive_records = 0
 
     def integral(
         self,
@@ -655,11 +659,6 @@ class _CudaSources:
                     charge=charge,
                 )
             return
-        if len(coordinates) > len(self.tasks):
-            raise ValueError("stationary CUDA logical page exceeds descriptor capacity")
-        if self.used + len(coordinates) > len(self.tasks):
-            self.flush()
-
         indices = np.asarray(coordinates, dtype=np.int64)
         if np.any(indices < 0) or np.any(indices >= self.nao):
             raise ValueError("stationary CUDA page contains invalid AO indices")
@@ -675,20 +674,44 @@ class _CudaSources:
             axis=1,
             dtype=np.int64,
         )
+        if np.any(primitive_work > self.page_work_budget):
+            raise ValueError(
+                "stationary CUDA descriptor exceeds primitive page work budget"
+            )
 
-        begin, end = self.used, self.used + len(coordinates)
-        tasks = self.tasks[begin:end]
-        tasks.fill(-1)
-        tasks[:, 0] = kinds
-        tasks[:, 1] = int(source)
-        tasks[:, 2] = rank
-        tasks[:, 3] = -1 if nucleus is None else int(nucleus)
-        tasks[:, 4 : 4 + rank] = indices
-        tasks[:, 8] = primitive_work
-        self.charges[begin:end] = float(charge)
-        self.used = end
-        self.bulk_task_pages += 1
-        self.bulk_task_descriptors += len(coordinates)
+        offset = 0
+        while offset < len(coordinates):
+            if self.used == len(self.tasks):
+                self.flush()
+            descriptor_room = len(self.tasks) - self.used
+            work_room = self.page_work_budget - self.pending_primitive_records
+            if work_room <= 0:
+                self.flush()
+                continue
+            candidate = primitive_work[offset : offset + descriptor_room]
+            cumulative = np.cumsum(candidate, dtype=np.int64)
+            count = int(np.searchsorted(cumulative, work_room, side="right"))
+            if count == 0:
+                self.flush()
+                continue
+
+            begin, end = self.used, self.used + count
+            source_begin, source_end = offset, offset + count
+            tasks = self.tasks[begin:end]
+            tasks.fill(-1)
+            tasks[:, 0] = kinds[source_begin:source_end]
+            tasks[:, 1] = int(source)
+            tasks[:, 2] = rank
+            tasks[:, 3] = -1 if nucleus is None else int(nucleus)
+            tasks[:, 4 : 4 + rank] = indices[source_begin:source_end]
+            selected_work = primitive_work[source_begin:source_end]
+            tasks[:, 8] = selected_work
+            self.charges[begin:end] = float(charge)
+            self.used = end
+            self.pending_primitive_records += int(np.sum(selected_work, dtype=np.int64))
+            self.bulk_task_pages += 1
+            self.bulk_task_descriptors += count
+            offset = source_end
 
     def _append_task(
         self,
@@ -700,7 +723,14 @@ class _CudaSources:
         nucleus: typing.Any,
         charge: float,
     ) -> None:
-        if self.used == len(self.tasks):
+        if primitive_work > self.page_work_budget:
+            raise ValueError(
+                "stationary CUDA descriptor exceeds primitive page work budget"
+            )
+        if (
+            self.used == len(self.tasks)
+            or self.pending_primitive_records + primitive_work > self.page_work_budget
+        ):
             self.flush()
         task = self.tasks[self.used]
         task.fill(-1)
@@ -714,6 +744,7 @@ class _CudaSources:
         task[8] = primitive_work
         self.charges[self.used] = charge
         self.used += 1
+        self.pending_primitive_records += primitive_work
         self.scalar_task_descriptors += 1
 
     def nuclear(self, a: typing.Any, b: typing.Any, charges: typing.Any) -> None:
