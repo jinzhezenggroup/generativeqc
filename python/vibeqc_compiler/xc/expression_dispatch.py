@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import typing
 
-from .bulk_runtime import build_bulk_runtime_program
 from .rsh_expressions import energy_expression as rsh_energy_expression
 from .semilocal_family import energy_expression as semilocal_energy_expression
 from .spec import (
@@ -35,6 +34,11 @@ def build_pointwise_energy_expression(spec: typing.Any) -> typing.Any:
         raise UnsupportedXC(
             "bulk pointwise native bridge currently requires one unit-weight component"
         )
+    # Keep the lightweight compiler import graph free of NumPy/runtime dependencies.
+    # The generic runtime projection is needed only when this automatic path is
+    # actually lowered.
+    from .bulk_runtime import build_bulk_runtime_program
+
     program = build_bulk_runtime_program(active[0][0], spin=spec.spin, order=0)
     expected_features = tuple(spec.features[: len(program.spec.features)])
     if program.spec.features != expected_features:
