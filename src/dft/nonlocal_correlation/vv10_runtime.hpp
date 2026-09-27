@@ -129,8 +129,9 @@ void enqueue_vv10_collect_total_features_cuda(
  * rows with NaN when any upstream asynchronous error flag is set.
  */
 void enqueue_vv10_pack_force_seeds_cuda(
-    cudaStream_t stream, std::size_t point_count, const double* point_derivative,
-    double* seeds, const int* collect_error, const int* domain_error, const int* pair_error);
+    cudaStream_t stream, std::size_t point_count, const double* effective_weights,
+    const double* point_derivative, double* seeds, const int* collect_error,
+    const int* domain_error, const int* pair_error);
 
 void execute_vv10_cuda(const double* coordinates, const double* weights, const double* density,
                        const double* density_gradient, std::size_t point_count,
