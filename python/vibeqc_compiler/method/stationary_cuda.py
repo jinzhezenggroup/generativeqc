@@ -351,7 +351,7 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external,
-                                double* partial, double* scratch, int* error) {
+                                double* partial, double* scratch, double* output, int* error) {
   const size_t lane = threadIdx.x;
   const size_t np = view.npoint, n = view.nactive, stride = np * n;
   double* grad = partial + lane * 9 * na;
@@ -359,10 +359,12 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
   double* ws = scratch + lane * 9 * na;
   auto* distances = reinterpret_cast<std::array<double, 4>*>(ws + 5 * na);
   auto* zeros = reinterpret_cast<size_t*>(ws + 4 * na);
-  for (size_t p = lane; p < np; p += workers) {
+  bool lane_valid = true;
+  for (size_t p = lane; p < np && lane_valid; p += workers) {
     if (owners[p] < 0 || owners[p] >= int64_t(na) || !isfinite(weights[p]) || !isfinite(raw[p])) {
       atomicExch(error, 1);
-      return;
+      lane_valid = false;
+      break;
     }
     double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
     if (stationary_functional != 0)
@@ -389,17 +391,20 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
     }
     if (!xc.valid) {
       atomicExch(error, 1);
-      return;
+      lane_valid = false;
+      break;
     }
     for (size_t mu = 0; mu < n; ++mu) {
       if (view.ao_ids[mu] >= view.nao) {
         atomicExch(error, 1);
-        return;
+        lane_valid = false;
+        break;
       }
       const auto atom = ao_atoms[view.ao_ids[mu]];
       if (atom < 0 || atom >= int64_t(na)) {
         atomicExch(error, 1);
-        return;
+        lane_valid = false;
+        break;
       }
       double pullback[4]{};
       for (size_t s = 0; s < 2; ++s) {
@@ -421,23 +426,30 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
         grad[3 * na + 3 * owners[p] + k] += value;
       }
     }
+    if (!lane_valid) break;
     if (!vibeqc_grid_adjoint::contract_point(view.points + 3 * p, centers, na, owners[p],
                                              xc.energy * raw[p], grad + 6 * na, ws, ws + na,
                                              ws + 2 * na, ws + 3 * na, zeros, distances, local_norm,
                                              local_ratio, local_log, local_becke)) {
       atomicExch(error, 1);
-      return;
+      lane_valid = false;
+      break;
     }
   }
-  for (size_t k = 0; k < 9 * na; ++k) finite(grad[k], error, 0);
-}
-__global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error) {
+  if (lane_valid)
+    for (size_t k = 0; k < 9 * na; ++k) finite(grad[k], error, 0);
+
+  // Every worker reaches this barrier, including lanes that observed invalid
+  // input. Publish no source on any error. On success, preserve the former
+  // geometry_reduce accumulation order exactly: lane 0, 1, ..., workers-1.
+  __syncthreads();
   if (*error) return;
-  const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-  if (i >= 9 * na) return;
-  double sum = 0;
-  for (size_t lane = 0; lane < workers; ++lane) sum += partial[lane * 9 * na + i];
-  output[i] = finite(output[i] + sum, error, 0);
+  for (size_t i = lane; i < 9 * na; i += workers) {
+    double sum = 0;
+    for (size_t source_lane = 0; source_lane < workers; ++source_lane)
+      sum += partial[source_lane * 9 * na + i];
+    output[i] = finite(output[i] + sum, error, 0);
+  }
 }
 
 }  // namespace vibeqc_stationary_cuda
