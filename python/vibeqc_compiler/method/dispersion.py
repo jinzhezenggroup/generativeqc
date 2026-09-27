@@ -220,14 +220,26 @@ def d4_eeq_spec_for_method(method: str) -> D4Spec:
     """
     if not isinstance(method, str) or not method:
         raise TypeError("D4 method identifier must be a nonempty string")
-    parameter_name = (
-        method if method.endswith(D4_METHOD_SUFFIX) else f"{method}{D4_METHOD_SUFFIX}"
-    )
-    try:
-        parameters = _parameters.d4_parameters(parameter_name)
-    except KeyError as error:
-        raise KeyError(f"no pinned D4(BJ-EEQ-ATM) parameters for {method!r}") from error
-    return D4Spec(**parameters)
+    candidates = [method]
+    if not method.endswith(D4_METHOD_SUFFIX):
+        from ._generated_xc_aliases import METHOD_ALIASES
+
+        candidates.extend(
+            alias
+            for alias, canonical in METHOD_ALIASES.items()
+            if canonical == method and alias not in candidates
+        )
+    for candidate in candidates:
+        parameter_name = (
+            candidate
+            if candidate.endswith(D4_METHOD_SUFFIX)
+            else f"{candidate}{D4_METHOD_SUFFIX}"
+        )
+        try:
+            return D4Spec(**_parameters.d4_parameters(parameter_name))
+        except KeyError:
+            continue
+    raise KeyError(f"no pinned D4(BJ-EEQ-ATM) parameters for {method!r}")
 
 
 def r2scan3c_d4_eeq() -> D4Spec:

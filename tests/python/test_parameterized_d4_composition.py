@@ -38,6 +38,11 @@ def test_parameterized_d4_reuses_electronic_method_ir(base: str) -> None:
     )
 
 
+def test_parameterized_d4_reuses_generated_xc_aliases() -> None:
+    assert d4_eeq_spec_for_method("CAM-B3LYP") == d4_eeq_spec_for_method("CAMB3LYP")
+    assert "CAM-B3LYP-D4(BJ-EEQ-ATM)" in set(d4_composite_method_identifiers())
+
+
 def test_parameterized_d4_inventory_is_intersection_not_cartesian_product() -> None:
     names = set(d4_composite_method_identifiers())
     assert "PBE0-D4(BJ-EEQ-ATM)" in names
