@@ -316,7 +316,9 @@ def extract_records(
         return _stationary_records(payload)
     if schema.startswith("vibeqc.readme-wb97mv."):
         return _wb97mv_records(payload)
-    if schema.startswith("vibeqc.readme-endpoint."):\n        return _readme_endpoint_records(payload)\n    if schema.startswith("vibeqc.dft-force-matrix."):
+    if schema.startswith("vibeqc.readme-endpoint."):
+        return _readme_endpoint_records(payload)
+    if schema.startswith("vibeqc.dft-force-matrix."):
         return _matrix_records(payload)
     if "component_seconds" in payload or "timeline" in payload:
         return [
