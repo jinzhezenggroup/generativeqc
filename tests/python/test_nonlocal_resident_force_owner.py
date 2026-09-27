@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
-
 from vibeqc.nonlocal_runtime import _ResidentNonlocalForceOwner
 from vibeqc_compiler.method import original_nonlocal_correlation
 
@@ -89,9 +88,7 @@ def _fake_library() -> tuple[SimpleNamespace, list[tuple[object, ...]]]:
             side_effect=seed_view
         ),
         vibeqc_internal_nonlocal_cuda_force_reset_v1=MagicMock(side_effect=reset),
-        vibeqc_internal_nonlocal_cuda_force_metrics_v1=MagicMock(
-            side_effect=metrics
-        ),
+        vibeqc_internal_nonlocal_cuda_force_metrics_v1=MagicMock(side_effect=metrics),
     )
     return library, calls
 
@@ -167,9 +164,7 @@ def test_resident_force_hot_path_has_no_host_transfer_or_fence() -> None:
 
 
 def test_resident_force_helpers_are_all_device_only() -> None:
-    source = (
-        ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu"
-    ).read_text()
+    source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     body = source.split("void enqueue_vv10_collect_total_features_cuda(", 1)[1].split(
         "Vv10CudaDeviceLayout vv10_cuda_device_layout(", 1
     )[0]

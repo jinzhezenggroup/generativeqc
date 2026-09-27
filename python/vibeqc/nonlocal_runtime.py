@@ -418,9 +418,11 @@ class _ResidentNonlocalForceOwner:
             raise ValueError("maximum_bytes must be a positive uint64 integer")
         if type(device_id) is not int or device_id < 0:
             raise ValueError("device_id must be a nonnegative integer")
-        if not isinstance(density_threshold, (int, float)) or not np.isfinite(
-            density_threshold
-        ) or density_threshold <= 0:
+        if (
+            not isinstance(density_threshold, (int, float))
+            or not np.isfinite(density_threshold)
+            or density_threshold <= 0
+        ):
             raise ValueError("density_threshold must be finite and positive")
         points = np.ascontiguousarray(coordinates, dtype=np.float64)
         if points.ndim != 2 or points.shape[1:] != (3,) or not len(points):
@@ -523,6 +525,7 @@ class _ResidentNonlocalForceOwner:
         self._context = context_pointer
         self._owner = ctypes.c_void_p()
         self._executions = 0
+
         def pointer(array: np.ndarray) -> typing.Any:
             return array.ctypes.data_as(double)
 
@@ -601,7 +604,9 @@ class _ResidentNonlocalForceOwner:
             or stride.value != self.point_count
             or generation.value == 0
         ):
-            raise RuntimeError("resident nonlocal force owner returned an invalid seed view")
+            raise RuntimeError(
+                "resident nonlocal force owner returned an invalid seed view"
+            )
         self._executions += 1
         return NonlocalResidentSeedView(
             int(pointer.value),

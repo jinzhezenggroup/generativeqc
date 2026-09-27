@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <vector>
 
-#include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/grid_task_view.cuh"
+#include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_resources.cuh"
 
@@ -231,9 +231,9 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
   }
 }
 
-__global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view,
-                                              std::size_t offset, std::size_t total_points,
-                                              double* density, double* gradient, int* failed) {
+__global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view, std::size_t offset,
+                                              std::size_t total_points, double* density,
+                                              double* gradient, int* failed) {
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= view.npoint) return;
   if (offset > total_points || view.npoint > total_points - offset || !view.features) {
@@ -256,8 +256,8 @@ __global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view,
 
 __global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effective_weights,
                                         const double* point_derivative, double* seeds,
-                                        const int* collect_error,
-                                        const int* domain_error, const int* pair_error) {
+                                        const int* collect_error, const int* domain_error,
+                                        const int* pair_error) {
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= npoint) return;
   bool failed = *collect_error != 0 || *domain_error != 0 || *pair_error != 0;
@@ -265,8 +265,8 @@ __global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effect
   const double py = point_derivative[3 * i + 1];
   const double pz = point_derivative[3 * i + 2];
   failed = failed || !isfinite(effective_weights[i]) || !isfinite(seeds[i]) ||
-           !isfinite(seeds[npoint + i]) || !isfinite(px) || !isfinite(py) ||
-           !isfinite(pz) || !isfinite(seeds[5 * npoint + i]);
+           !isfinite(seeds[npoint + i]) || !isfinite(px) || !isfinite(py) || !isfinite(pz) ||
+           !isfinite(seeds[5 * npoint + i]);
   if (failed) {
     const double poison = __longlong_as_double(0x7ff8000000000000ULL);
     for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = poison;
@@ -301,9 +301,11 @@ void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_c
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
-void enqueue_vv10_collect_total_features_cuda(
-    cudaStream_t stream, const vibeqc::dft::GridTaskView& view, std::size_t offset,
-    std::size_t total_points, double* density, double* density_gradient, int* numerical_error) {
+void enqueue_vv10_collect_total_features_cuda(cudaStream_t stream,
+                                              const vibeqc::dft::GridTaskView& view,
+                                              std::size_t offset, std::size_t total_points,
+                                              double* density, double* density_gradient,
+                                              int* numerical_error) {
   if (stream == nullptr || view.version != 1 || !view.npoint || !view.features ||
       view.stream != stream || offset > total_points || view.npoint > total_points - offset ||
       density == nullptr || density_gradient == nullptr || numerical_error == nullptr)
@@ -314,10 +316,11 @@ void enqueue_vv10_collect_total_features_cuda(
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
-void enqueue_vv10_pack_force_seeds_cuda(
-    cudaStream_t stream, std::size_t point_count, const double* effective_weights,
-    const double* point_derivative, double* seeds, const int* collect_error,
-    const int* domain_error, const int* pair_error) {
+void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_count,
+                                        const double* effective_weights,
+                                        const double* point_derivative, double* seeds,
+                                        const int* collect_error, const int* domain_error,
+                                        const int* pair_error) {
   if (stream == nullptr || !point_count || effective_weights == nullptr ||
       point_derivative == nullptr || seeds == nullptr || collect_error == nullptr ||
       domain_error == nullptr || pair_error == nullptr)
