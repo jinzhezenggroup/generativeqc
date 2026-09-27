@@ -26,5 +26,5 @@ def test_b3lyp_family_does_not_alias_unqualified_rsh_semilocal() -> None:
     # The semantic KS plan ABI transports SR/LR exchange structurally, but CAM-B3LYP
     # still has no qualified native semilocal family. Keep that distinct from
     # B3LYP rather than relying on the old transport-layer range-exchange rejection.
-    with pytest.raises(NotImplementedError, match="semilocal family"):
+    with pytest.raises(NotImplementedError, match="qualified lowerer"):
         _native_semilocal_code(resolve_method("CAM-B3LYP"))
