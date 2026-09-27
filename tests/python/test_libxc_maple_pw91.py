@@ -273,7 +273,7 @@ def test_canonical_dispatch_calls_pw91_maple_adapter(
         called = True
         return graph.constant(0)
 
-    monkeypatch.setattr(rsh_expressions, attribute, replacement)
+    monkeypatch.setattr(expression_dispatch, attribute, replacement)
     spec = FunctionalSpec(
         f"{name}_DISPATCH",
         ((name, Fraction(1)),),
