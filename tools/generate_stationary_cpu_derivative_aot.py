@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Emit the packaged s/p/d stationary CPU first-derivative inventory."""
 
 from __future__ import annotations
