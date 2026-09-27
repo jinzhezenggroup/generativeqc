@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from vibeqc_compiler.method.libxc_public_evidence import (
@@ -18,7 +19,7 @@ def test_empty_generated_inventory_is_fail_closed() -> None:
     assert provenance["source"] is None
 
 
-def test_renderer_rejects_stale_capability_identity(tmp_path) -> None:
+def test_renderer_rejects_stale_capability_identity(tmp_path: Path) -> None:
     (tmp_path / "summary.json").write_text(
         json.dumps(
             {
