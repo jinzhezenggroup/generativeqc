@@ -100,9 +100,7 @@ def test_public_native_rccsd_force_matches_pinned_pyscf_gradient(
     device: str, case: str
 ) -> None:
     atoms, reference = _reference_case(case)
-    result = _calculator(device).singlepoint(
-        atoms, properties=("energy", "forces")
-    )
+    result = _calculator(device).singlepoint(atoms, properties=("energy", "forces"))
     assert result.converged and result.forces is not None
     np.testing.assert_allclose(
         result.forces, -np.asarray(reference["gradient"]), atol=1.0e-6, rtol=0
@@ -125,7 +123,9 @@ def test_public_rccsd_zero_diis_uses_native_jacobi() -> None:
     assert result.correlation.ccsd_diis_restarts == 0
 
 
-def test_public_rccsd_rejects_unsupported_reference_precision_df_and_frozen_core() -> None:
+def test_public_rccsd_rejects_unsupported_reference_precision_df_and_frozen_core() -> (
+    None
+):
     atoms, _ = _reference_case()
     calc = _calculator()
     with pytest.raises(NotImplementedError, match=r"closed-shell"):

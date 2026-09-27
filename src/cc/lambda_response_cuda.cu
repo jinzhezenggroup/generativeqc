@@ -540,9 +540,10 @@ LambdaResult solve_lambda_cuda_with_energy_source(const Problem& problem,
   return solve_impl(problem, cc_result, t1_source, t2_source, device, options, nullptr);
 }
 
-CudaFixedOrbitalResponseResult solve_lambda_parameter_response_cuda(
-    const Problem& problem, const SolverResult& cc_result, int device,
-    const LambdaOptions& options) {
+CudaFixedOrbitalResponseResult solve_lambda_parameter_response_cuda(const Problem& problem,
+                                                                    const SolverResult& cc_result,
+                                                                    int device,
+                                                                    const LambdaOptions& options) {
   CudaFixedOrbitalResponseResult result;
   result.lambda = solve_impl(problem, cc_result, {}, {}, device, options, &result);
   return result;

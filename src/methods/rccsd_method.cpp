@@ -386,13 +386,13 @@ class RccsdPrepared final : public PreparedCalculation {
                         "RCCSD force owner lost the converged RHF reference");
 
     constexpr std::size_t kCudaDerivativeStageBudget = 64ULL << 20;
-    auto force = execution_.cuda_requested()
-                     ? cc::rccsd_force_cuda(system_, *state.reference, state.problem, state.solved,
-                                            state.eps_o, state.eps_v, state.budget,
-                                            execution_.device_id(),
-                                            std::min(state.budget, kCudaDerivativeStageBudget))
-                     : cc::rccsd_force_cpu(system_, *state.reference, state.problem, state.solved,
-                                           state.eps_o, state.eps_v, state.budget);
+    auto force =
+        execution_.cuda_requested()
+            ? cc::rccsd_force_cuda(system_, *state.reference, state.problem, state.solved,
+                                   state.eps_o, state.eps_v, state.budget, execution_.device_id(),
+                                   std::min(state.budget, kCudaDerivativeStageBudget))
+            : cc::rccsd_force_cpu(system_, *state.reference, state.problem, state.solved,
+                                  state.eps_o, state.eps_v, state.budget);
     auto diagnostic = state.diagnostic;
     if (execution_.cuda_requested()) {
       if (!force.lambda.cuda_actions || !force.lambda.owned_device_bytes)

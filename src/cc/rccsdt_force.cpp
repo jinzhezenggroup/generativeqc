@@ -356,9 +356,10 @@ double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
 
 }  // namespace
 
-static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(
-    const core::System& system, const scf::PhysicalReference& reference, const Problem& p,
-    const SolverResult& cc, std::size_t max_bytes, bool include_triples) {
+static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
+                                                    const scf::PhysicalReference& reference,
+                                                    const Problem& p, const SolverResult& cc,
+                                                    std::size_t max_bytes, bool include_triples) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
   if (!o || !v || n > 12 || reference.nbf != n || reference.nocc != o ||
       molecule::ao_count(system) != n || !max_bytes)
@@ -389,22 +390,19 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(
           ? bytes(sum({checked_mul(o, checked_mul(v, square(v))), checked_mul(ov, square(o)),
                        checked_mul(2, square(ov)), checked_mul(2, ov), n}))
           : 0;
-  const auto pages =
-      include_triples
-          ? std::min<std::size_t>(TriplesResponseOptions{}.batch_capacity,
-                                  checked_mul(v, checked_mul(v + 1, v + 2)) / 6)
-          : 0;
+  const auto pages = include_triples
+                         ? std::min<std::size_t>(TriplesResponseOptions{}.batch_capacity,
+                                                 checked_mul(v, checked_mul(v + 1, v + 2)) / 6)
+                         : 0;
   plan.triples_phase_bytes =
-      include_triples
-          ? sum({plan.retained_input_bytes, bytes(n), triples_retained,
-                 bytes(generated::triples_response_arena_elements(o, v, pages)),
-                 checked_mul(pages, 3 * sizeof(std::int64_t) + 2 * sizeof(double))})
-          : 0;
+      include_triples ? sum({plan.retained_input_bytes, bytes(n), triples_retained,
+                             bytes(generated::triples_response_arena_elements(o, v, pages)),
+                             checked_mul(pages, 3 * sizeof(std::int64_t) + 2 * sizeof(double))})
+                      : 0;
   LambdaOptions lambda_options;
   lambda_options.max_bytes = max_bytes;
   lambda_options.gmres.max_workspace_bytes = max_bytes;
-  const auto lambda_capacity =
-      lambda_cpu_numeric_capacity(p, cc, lambda_options, include_triples);
+  const auto lambda_capacity = lambda_cpu_numeric_capacity(p, cc, lambda_options, include_triples);
   if (lambda_capacity < lambda_borrowed) throw std::logic_error("Lambda capacity underflow");
   plan.lambda_phase_bytes =
       sum({plan.retained_input_bytes, triples_retained, lambda_capacity - lambda_borrowed});
@@ -473,8 +471,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(
            posthf::source_capacity(system), posthf::source_scratch_bytes});
   plan.peak_bytes =
       std::max({plan.lambda_phase_bytes, plan.parameter_phase_bytes, plan.raw_phase_bytes,
-                plan.response_phase_bytes, plan.derivative_phase_bytes,
-                plan.triples_phase_bytes});
+                plan.response_phase_bytes, plan.derivative_phase_bytes, plan.triples_phase_bytes});
   if (plan.peak_bytes > max_bytes)
     throw std::length_error("RCCSD(T) complete force exceeds simultaneous host budget");
   return plan;
@@ -512,9 +509,9 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   const auto o = problem.nocc, v = problem.nvir, n = reference.nbf;
   if (reference.orbital_energies.size() != n || !finite(reference.orbital_energies))
     throw std::invalid_argument("RCCSD(T) force requires finite canonical orbital energies");
-  const auto resources = include_triples
-                             ? plan_rccsdt_force_cpu(system, reference, problem, cc_result, max_bytes)
-                             : plan_rccsd_force_cpu(system, reference, problem, cc_result, max_bytes);
+  const auto resources =
+      include_triples ? plan_rccsdt_force_cpu(system, reference, problem, cc_result, max_bytes)
+                      : plan_rccsd_force_cpu(system, reference, problem, cc_result, max_bytes);
 
   std::optional<TriplesResponseResult> triples;
   if (include_triples) {
@@ -551,11 +548,9 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   } else
 #endif
   {
-    corrected =
-        include_triples
-            ? solve_lambda_cpu_with_energy_source(problem, cc_result, triples->t1, triples->t2,
-                                                  lambda_options)
-            : solve_lambda_cpu(problem, cc_result, lambda_options);
+    corrected = include_triples ? solve_lambda_cpu_with_energy_source(
+                                      problem, cc_result, triples->t1, triples->t2, lambda_options)
+                                : solve_lambda_cpu(problem, cc_result, lambda_options);
     parameters = parameter_vjp(problem, cc_result, corrected, max_bytes);
   }
   if (cuda_derivative && !corrected.diagnostic.cuda_actions)
@@ -590,8 +585,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   std::vector<double> bar_fock(square(n), 0.0);
   if (triples) {
     for (std::size_t i = 0; i < o; ++i) bar_fock[i * n + i] = triples->eps_o[i];
-    for (std::size_t a = 0; a < v; ++a)
-      bar_fock[(o + a) * n + o + a] = triples->eps_v[a];
+    for (std::size_t a = 0; a < v; ++a) bar_fock[(o + a) * n + o + a] = triples->eps_v[a];
     const auto denominator = fock_dispatch(bar_fock);
     add_in_place(correlation, denominator);
     std::fill(bar_fock.begin(), bar_fock.end(), 0.0);

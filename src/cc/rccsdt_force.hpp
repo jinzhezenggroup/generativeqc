@@ -34,9 +34,9 @@ struct RccsdtForcePlan {
  * max_bytes is the complete endpoint allowance, including borrowed inputs.
  */
 RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
-                                    const scf::PhysicalReference& reference,
-                                    const Problem& problem, const SolverResult& cc_result,
-                                    std::size_t max_bytes);
+                                     const scf::PhysicalReference& reference,
+                                     const Problem& problem, const SolverResult& cc_result,
+                                     std::size_t max_bytes);
 RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
                                       const scf::PhysicalReference& reference,
                                       const Problem& problem, const SolverResult& cc_result,
