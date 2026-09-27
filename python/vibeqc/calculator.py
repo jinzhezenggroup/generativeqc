@@ -49,6 +49,22 @@ _HF_METHODS = _method_manifest.HF_METHOD_IDS
 _COUPLED_CLUSTER_METHODS = frozenset((_native.METHOD_RCCSD, _native.METHOD_RCCSD_T))
 _CORRELATED_METHODS = frozenset((_native.METHOD_MP2, *_COUPLED_CLUSTER_METHODS))
 
+
+def _automatic_libxc_transport(required_ingredients: tuple[str, ...], spin: str) -> str:
+    """Select only the native ingredient/spin provider for automatic Libxc."""
+    family = {
+        ("rho",): "lda",
+        ("rho", "sigma"): "pbe",
+        ("rho", "sigma", "tau"): "r2scan",
+    }.get(required_ingredients)
+    if family is None:
+        raise NotImplementedError(
+            f"automatic Libxc ingredients are unsupported: {required_ingredients!r}"
+        )
+    suffix = "uks" if spin == "polarized" else "rks"
+    return f"{family}-{suffix}"
+
+
 # Private aliases retain long-standing benchmark/tool imports while the actual
 # implementations live behind the model-resolution owner.
 _basis_pack = _model_resolution._basis_pack
@@ -61,6 +77,21 @@ def method_capabilities(method: str) -> MethodCapabilities:
     """Query method support without constructing a calculator or system."""
 
     canonical = method.lower()
+    from .ks import parse_automatic_libxc_selector
+
+    automatic = parse_automatic_libxc_selector(method)
+    if automatic is not None:
+        from vibeqc_compiler.method import resolve_bulk_ks
+
+        name, spin = automatic
+        resolution = resolve_bulk_ks(name, spin=spin, backend="cpu")
+        transport = _automatic_libxc_transport(resolution.required_ingredients, spin)
+        native = method_capabilities(transport)
+        return replace(
+            native,
+            method=canonical,
+            supported_properties=frozenset({"energy"}),
+        )
     composite = _COMPOSITE_METHOD_ALIASES.get(canonical)
     if composite is not None:
         _, spin = composite
@@ -172,11 +203,14 @@ class Calculator:
 
         ``method`` may be a native selector string, any compiler MethodIR
         name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
-        primitive lowerers are qualified, the public ``r2scan-3c[-rks|-uks]``
-        composite selectors, a spin-explicit PBE-family MethodIR with one
-        production D3(BJ) correction, or the canonical
-        r2SCAN-3c MethodIR. The latter forms bind the exact def2-mTZVPP basis and
-        composes r2SCAN + D4 + gCP without a named native scientific driver.
+        primitive lowerers are qualified, an automatic semilocal Libxc selector
+        (``libxc:NAME``, ``libxc-rks:NAME``, or ``libxc-uks:NAME``), the
+        public ``r2scan-3c[-rks|-uks]`` composite selectors, a spin-explicit
+        PBE-family MethodIR with one production D3(BJ) correction, or the
+        canonical r2SCAN-3c MethodIR. Automatic Libxc selectors are currently
+        CPU FP64 energy/SCF only and use structural admission plus the explicit
+        negative blacklist. The composite forms bind the exact def2-mTZVPP basis
+        and compose r2SCAN + D4 + gCP without a named native scientific driver.
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
         tile schedule. ``dispersion_memory_budget_bytes`` independently bounds
         the retained external-correction owner. Production two-body D3(BJ)
@@ -203,6 +237,12 @@ class Calculator:
             )
         self._dispersion_memory_budget_bytes = dispersion_memory_budget_bytes
         self._dispersion_method_ir = None
+        if device not in {"cpu", "cuda"}:
+            raise ValueError("device must be 'cpu' or 'cuda'")
+
+        automatic_libxc_resolution = None
+        automatic_libxc_public_name = None
+        automatic_libxc_transport = None
 
         from vibeqc_compiler.method import (
             D3Spec,
@@ -211,41 +251,56 @@ class Calculator:
             GeometricCounterpoisePrimitive,
             MethodIR,
             SemilocalXCPrimitive,
+            resolve_bulk_ks,
             resolve_method,
             validate_basis_snapshot,
         )
 
         discovered_method_name = None
         if isinstance(method, str):
-            canonical_method = method.lower()
-            composite = _COMPOSITE_METHOD_ALIASES.get(canonical_method)
-            if composite is not None:
-                identifier, spin = composite
-                method = resolve_method(identifier, spin=spin)
-            elif canonical_method not in _METHODS:
-                from .ks import KsOptions, native_dft_carrier, resolve_ks_method
+            from .ks import parse_automatic_libxc_selector
 
-                try:
-                    discovered_ir, _ = resolve_ks_method(canonical_method)
-                except ValueError as error:
-                    raise ValueError(f"unknown method {method!r}") from error
-                carrier = native_dft_carrier(canonical_method)
-                if ks_options is None:
-                    ks_options = KsOptions(composition=discovered_ir)
-                elif not isinstance(ks_options, KsOptions):
-                    raise TypeError("ks_options must be KsOptions")
-                elif (
-                    ks_options.functional is not None
-                    or ks_options.composition is not None
-                ):
-                    raise ValueError(
-                        "a discovered DFT method owns its KS composition; "
-                        "ks_options may only set execution controls"
-                    )
-                else:
-                    ks_options = replace(ks_options, composition=discovered_ir)
-                discovered_method_name = canonical_method
-                method = carrier
+            canonical_method = method.lower()
+            automatic = parse_automatic_libxc_selector(method)
+            if automatic is not None:
+                name, spin = automatic
+                automatic_libxc_public_name = canonical_method
+                automatic_libxc_resolution = resolve_bulk_ks(
+                    name, spin=spin, backend=device
+                )
+                automatic_libxc_transport = _automatic_libxc_transport(
+                    automatic_libxc_resolution.required_ingredients, spin
+                )
+                method = automatic_libxc_resolution.method
+            else:
+                composite = _COMPOSITE_METHOD_ALIASES.get(canonical_method)
+                if composite is not None:
+                    identifier, spin = composite
+                    method = resolve_method(identifier, spin=spin)
+                elif canonical_method not in _METHODS:
+                    from .ks import KsOptions, native_dft_carrier, resolve_ks_method
+
+                    try:
+                        discovered_ir, _ = resolve_ks_method(canonical_method)
+                    except ValueError as error:
+                        raise ValueError(f"unknown method {method!r}") from error
+                    carrier = native_dft_carrier(canonical_method)
+                    if ks_options is None:
+                        ks_options = KsOptions(composition=discovered_ir)
+                    elif not isinstance(ks_options, KsOptions):
+                        raise TypeError("ks_options must be KsOptions")
+                    elif (
+                        ks_options.functional is not None
+                        or ks_options.composition is not None
+                    ):
+                        raise ValueError(
+                            "a discovered DFT method owns its KS composition; "
+                            "ks_options may only set execution controls"
+                        )
+                    else:
+                        ks_options = replace(ks_options, composition=discovered_ir)
+                    discovered_method_name = canonical_method
+                    method = carrier
         supplied_method_ir = method if isinstance(method, MethodIR) else None
         if supplied_method_ir is not None:
             corrections = tuple(
@@ -323,13 +378,30 @@ class Calculator:
                 else set()
             )
             if electronic_family is None:
-                if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
-                    raise NotImplementedError(
-                        "Calculator electronic MethodIR execution currently supports the PBE family"
-                    )
-                electronic_family = "pbe"
+                if automatic_libxc_resolution is not None:
+                    if (
+                        electronic_ir.identity
+                        != automatic_libxc_resolution.method.identity
+                    ):
+                        raise RuntimeError(
+                            "automatic Libxc MethodIR changed during Calculator resolution"
+                        )
+                    electronic_family = "automatic-libxc"
+                else:
+                    if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
+                        raise NotImplementedError(
+                            "Calculator electronic MethodIR execution currently supports "
+                            "the PBE family or one automatic Libxc semilocal functional"
+                        )
+                    electronic_family = "pbe"
 
-            if electronic_family == "pbe":
+            if electronic_family == "automatic-libxc":
+                if automatic_libxc_transport is None:
+                    raise RuntimeError(
+                        "automatic Libxc native transport was not resolved"
+                    )
+                method = automatic_libxc_transport
+            elif electronic_family == "pbe":
                 if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
                     raise NotImplementedError(
                         "Calculator PBE-family MethodIR has incompatible semilocal components"
@@ -348,10 +420,17 @@ class Calculator:
                     else "r2scan-rks"
                 )
 
-            from .ks import KsOptions
+            from .ks import AUTOMATIC_SCF_DOMAIN, SCF_DOMAIN, KsOptions
 
             if ks_options is None:
-                ks_options = KsOptions(composition=electronic_ir)
+                ks_options = KsOptions(
+                    composition=electronic_ir,
+                    scf_domain=(
+                        AUTOMATIC_SCF_DOMAIN
+                        if automatic_libxc_resolution is not None
+                        else SCF_DOMAIN
+                    ),
+                )
             elif not isinstance(ks_options, KsOptions):
                 raise TypeError("ks_options must be KsOptions")
             elif (
@@ -361,14 +440,20 @@ class Calculator:
                     "a MethodIR calculator owns its KS composition; ks_options may only set execution controls"
                 )
             else:
-                ks_options = replace(ks_options, composition=electronic_ir)
+                ks_options = replace(
+                    ks_options,
+                    composition=electronic_ir,
+                    scf_domain=(
+                        AUTOMATIC_SCF_DOMAIN
+                        if automatic_libxc_resolution is not None
+                        else ks_options.scf_domain
+                    ),
+                )
             if corrections:
                 self._dispersion_method_ir = supplied_method_ir
 
         if not isinstance(method, str) or method.lower() not in _METHODS:
             raise ValueError(f"unknown method {method!r}")
-        if device not in {"cpu", "cuda"}:
-            raise ValueError("device must be 'cpu' or 'cuda'")
         representations = {
             "cartesian": _native.BASIS_CARTESIAN,
             "spherical": _native.BASIS_SPHERICAL,
@@ -450,7 +535,17 @@ class Calculator:
             )
         if int(density_fitting_memory_budget_bytes) < 0:
             raise ValueError("density_fitting_memory_budget_bytes must be non-negative")
-        self._method_name = discovered_method_name or method.lower()
+        self._native_method_name = method.lower()
+        self._method_name = (
+            automatic_libxc_public_name
+            or discovered_method_name
+            or self._native_method_name
+        )
+        self._automatic_libxc_name = (
+            None
+            if automatic_libxc_resolution is None
+            else automatic_libxc_resolution.capability.name
+        )
         self._method = method_id
         precision_modes = {
             "fp64": _native.PRECISION_FP64,
@@ -508,7 +603,12 @@ class Calculator:
                             composition=electronic_graph,
                         )
                         self._dispersion_method_ir = full_graph
-            self._ks_options = resolve_ks_options(self._method_name, ks_options)
+            ks_resolution_name = (
+                self._native_method_name
+                if self._automatic_libxc_name is not None
+                else self._method_name
+            )
+            self._ks_options = resolve_ks_options(ks_resolution_name, ks_options)
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:
@@ -716,7 +816,8 @@ class Calculator:
                 )
             )
         semilocal_force = (
-            self._ks_options is not None
+            self._automatic_libxc_name is None
+            and self._ks_options is not None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
                 self._device_name == "cuda"
