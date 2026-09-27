@@ -341,7 +341,7 @@ class _CudaSources:
         budget: typing.Any,
         spin_blocks: typing.Any = 1,
         target: typing.Any = None,
-        work_budget: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
+        page_work_budget: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
         timeline: _ExclusiveWallTimeline | None = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
@@ -454,7 +454,7 @@ class _CudaSources:
             points,
             records,
             spin_blocks,
-            work_budget,
+            page_work_budget,
             budget,
             ct.byref(self.handle),
         )
@@ -846,7 +846,7 @@ class PreparedStationaryCudaExecution:
         tile_points: int,
         primitive_tile: int,
         integral_terms: int,
-        work_budget: int,
+        page_work_budget: int,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
         scientific_identity = canonical_hash(
@@ -874,7 +874,7 @@ class PreparedStationaryCudaExecution:
                 "tile_points": tile_points,
                 "primitive_tile": primitive_tile,
                 "integral_terms": integral_terms,
-                "work_budget": work_budget,
+                "primitive_page_work_budget": page_work_budget,
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
                 "tensor_plans": [
                     (name, value.identity)
@@ -934,7 +934,7 @@ class PreparedStationaryCudaExecution:
         tile_points: int,
         primitive_tile: int,
         integral_terms: int,
-        work_budget: int,
+        page_work_budget: int,
         max_device_bytes: int,
         max_host_bytes: int,
         host_bound: int,
@@ -958,7 +958,7 @@ class PreparedStationaryCudaExecution:
             tile_points=tile_points,
             primitive_tile=primitive_tile,
             integral_terms=integral_terms,
-            work_budget=work_budget,
+            page_work_budget=page_work_budget,
         )
         if self._lease.contract is not None:
             try:
@@ -1064,7 +1064,7 @@ class PreparedStationaryCudaExecution:
                     spin_blocks=plan.spin_blocks,
                     source_names=source_names,
                     target=target,
-                    work_budget=work_budget,
+                    page_work_budget=page_work_budget,
                     profile_device=profile_device,
                 )
             )
@@ -1139,7 +1139,7 @@ class PreparedStationaryCudaExecution:
                     "tile_points": tile_points,
                     "primitive_tile": primitive_tile,
                     "integral_terms": integral_terms,
-                    "work_budget": work_budget,
+                    "primitive_page_work_budget": page_work_budget,
                     "grid_allocation_bytes": grid_plan.allocation_bytes,
                 },
                 "tensor_plans": tuple(
@@ -1555,7 +1555,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 tile_points=tile_points,
                 primitive_tile=primitive_tile,
                 integral_terms=integral_terms,
-                work_budget=max_primitive_records,
+                page_work_budget=max_primitive_records,
                 max_device_bytes=max_device_bytes,
                 max_host_bytes=max_host_bytes,
                 host_bound=host_bound,
@@ -1613,7 +1613,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         spin_blocks=plan.spin_blocks,
                         source_names=source_names,
                         target=target,
-                        work_budget=max_primitive_records,
+                        page_work_budget=max_primitive_records,
                         timeline=timeline,
                         profile_device=profile_device,
                     )
