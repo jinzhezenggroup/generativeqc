@@ -59,8 +59,9 @@ def _sample(atom_count: int, device: str, budget: int) -> dict[str, object]:
         + perf.solver_seconds
         + perf.triples_seconds
     )
-    phases["unattributed_endpoint"] = max(0.0, wall - attributed)
-    work = {        "source_scans": perf.source_scans,
+    phases["unattributed_endpoint"] = wall - attributed
+    work = {
+        "source_scans": perf.source_scans,
         "source_reads": perf.source_reads,
         "source_values": perf.source_values,
         "transform_fmas": perf.transform_fmas,
