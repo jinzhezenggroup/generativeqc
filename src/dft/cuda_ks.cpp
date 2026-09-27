@@ -740,9 +740,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool replay =
         configured_replay_enabled() &&
         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
-    return {{"cuda-ks-rks-solver-region-v1", device, stream, arena, fock_binding.source_identity},
-            kCudaKsChunkCapacity,
-            runtime::SolverRegionCompletionMode::Scalar,
+    auto graph = device_chunk_binding();
+    graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
+    return {std::move(graph), kCudaKsChunkCapacity, runtime::SolverRegionCompletionMode::Scalar,
             replay};
   }
 
@@ -846,6 +846,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } catch (...) {
       cudaStreamSynchronize(stream);
       ++movement.synchronizations;
+      solver_region_executor.invalidate();
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
@@ -869,6 +870,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       cudaStreamSynchronize(stream);
+      solver_region_executor.invalidate();
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
@@ -885,6 +887,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
+      solver_region_executor.invalidate();
       device_chunk_region.mark_failure("CUDA KS device chunk returned an invalid iteration count");
       throw std::runtime_error("CUDA KS device chunk returned an invalid iteration count");
     }
