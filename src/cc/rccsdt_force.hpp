@@ -12,7 +12,7 @@
 namespace vibeqc::core {
 struct System;
 }
-namespace vibeqc::scf {
+namespace vibeqc::hf {
 struct PhysicalReference;
 }
 
@@ -34,7 +34,7 @@ struct RccsdtForcePlan {
  * max_bytes is the complete endpoint allowance, including borrowed inputs.
  */
 RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
-                                      const scf::PhysicalReference& reference,
+                                      const hf::PhysicalReference& reference,
                                       const Problem& problem, const SolverResult& cc_result,
                                       std::size_t max_bytes);
 
@@ -71,7 +71,7 @@ struct RccsdtForceResult {
  * and occupied/virtual energy vectors, as in plan_rccsdt_force_cpu.
  */
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
-                                   const scf::PhysicalReference& reference, const Problem& problem,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    double denominator_threshold = 1e-10);
@@ -85,7 +85,7 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
  * consumer without authorizing a CPU fallback.
  */
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
-                                    const scf::PhysicalReference& reference, const Problem& problem,
+                                    const hf::PhysicalReference& reference, const Problem& problem,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
