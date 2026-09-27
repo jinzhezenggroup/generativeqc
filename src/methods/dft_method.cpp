@@ -38,8 +38,7 @@
 namespace vibeqc::methods::detail {
 namespace {
 
-inline constexpr const char* kBulkLibxcProductionScfDomain =
-    "libxc-bulk-production-candidate/v2";
+inline constexpr const char* kBulkLibxcProductionScfDomain = "libxc-bulk-production-candidate/v2";
 inline constexpr std::uint32_t kBulkLibxcProductionDomainVersion = 3U;
 
 std::uint64_t next_cpu_ks_owner() {
