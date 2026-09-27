@@ -54,7 +54,9 @@ The complete route retains these explicit host boundaries:
   The final D/F/C/epsilon export, validation and W construction are explicit host
   operations. The derivative function consumes that exported snapshot.
 - Python consumes a versioned identity-bearing bounded task-source contract
-  (`to_payload().schema + identity + logical_size + pages(capacity)`). The current producer enumerates
+  (`to_payload().schema + identity + logical_size + pages(capacity)`). The identity
+  must equal the canonical hash of the versioned payload, and every page must bind
+  that same identity plus contiguous ordinal/offset metadata. The current producer enumerates
   ordered AO pairs/quartets through `RuntimeTaskDomain`; a compact shell-task
   producer can replace it without changing the executor. Non-component-expanded
   s/p paths fill each page of task descriptors in
