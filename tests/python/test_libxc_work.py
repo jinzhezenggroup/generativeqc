@@ -35,7 +35,7 @@ def test_gga_shared_boundary_cases_use_one_generic_work_policy() -> None:
 
 
 def test_mgga_work_policy_owns_tau_and_fhc_boundary() -> None:
-    policy = automatic_work_policy("MGGA_C_RSCAN")
+    policy = automatic_work_policy("MGGA_X_LTA")
     lines, arguments = polarized_work_setup(
         policy,
         (
