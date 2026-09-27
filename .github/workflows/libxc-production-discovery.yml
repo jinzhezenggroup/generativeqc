@@ -1,0 +1,114 @@
+name: Scratch Libxc production discovery
+
+on:
+  push:
+    branches:
+      - scratch/libxc-production-discovery
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      NUMEXPR_NUM_THREADS: 1
+      PYTHONPATH: python:.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and pinned reference stack
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install reference dependencies
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python             numpy scipy 'pyscf==2.14.0' 'mpmath>=1.3' 'threadpoolctl>=3.1'
+      - name: Discover production-qualified representatives
+        run: |
+          mkdir -p .artifacts/libxc-production-discovery
+          .venv/bin/python - <<'PY_INNER'
+          import json
+          from pathlib import Path
+
+          import pyscf
+          from pyscf.dft import libxc
+          from vibeqc_compiler.xc.libxc_bulk_capabilities import available_capabilities
+          from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+          from tools.qualify_libxc_production_domain import qualify_functional
+
+          quotas = {"lda": 3, "gga": 5, "mgga": 3}
+          expected = {
+              "lda": ("rho",),
+              "gga": ("rho", "sigma"),
+              "mgga": ("rho", "sigma", "tau"),
+          }
+          passed = {family: [] for family in quotas}
+          attempts = {family: [] for family in quotas}
+          inventory = sorted(available_capabilities(), key=lambda item: item.name)
+
+          for capability in inventory:
+              family = capability.family
+              if family not in quotas or len(passed[family]) >= quotas[family]:
+                  continue
+              if capability.name not in AUTO_BULK_COMPONENTS:
+                  continue
+              if capability.required_ingredients != expected[family]:
+                  continue
+              if not capability.production_domain_profile.eligible:
+                  continue
+
+              payload = qualify_functional(
+                  capability.name,
+                  evidence=(
+                      "artifact://github-actions/"
+                      + str(__import__("os").environ["GITHUB_RUN_ID"])
+                      + "/production-domain/"
+                      + capability.name
+                  ),
+                  pyscf_version=pyscf.__version__,
+                  libxc=libxc,
+              )
+              envelope = payload["stage_evidence"]
+              row = {
+                  "name": capability.name,
+                  "family": family,
+                  "status": envelope["status"],
+                  "reason": envelope["reason"],
+                  "capability_identity": capability.identity,
+                  "profile_identity": capability.production_domain_profile.identity,
+              }
+              attempts[family].append(row)
+              if envelope["status"] == "pass":
+                  passed[family].append(capability.name)
+              print(json.dumps(row, sort_keys=True))
+
+          summary = {
+              "schema": "vibeqc.libxc-production-discovery/v1",
+              "quotas": quotas,
+              "passed": passed,
+              "attempts": attempts,
+          }
+          path = Path(".artifacts/libxc-production-discovery/summary.json")
+          path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if any(len(passed[family]) < quotas[family] for family in quotas):
+              raise SystemExit(1)
+          PY_INNER
+      - name: Preserve discovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: libxc-production-discovery-${{ github.run_id }}
+          path: .artifacts/libxc-production-discovery
+          if-no-files-found: warn
+          retention-days: 14
