@@ -35,7 +35,7 @@ from vibeqc_compiler.common.prepared_execution import (
     PreparedExecutionRequest,
 )
 from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain
+from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain, RuntimeTaskPage
 from vibeqc_compiler.dft.cuda import (
     CudaGrid,
     GridTaskView,
@@ -132,19 +132,19 @@ class _BoundedStationaryTaskExecutor:
         self.resident_capacity = resident_capacity
         self.page_capacity = page_capacity
 
-    def execute(
+    def execute_pages(
         self,
         domain: RuntimeTaskDomain,
-        submit: typing.Callable[[tuple[int, ...]], None],
+        submit_page: typing.Callable[[RuntimeTaskPage], None],
         *,
         finish_page: typing.Callable[[], None] | None = None,
     ) -> _StationaryTaskExecution:
         if not isinstance(domain, RuntimeTaskDomain):
             raise TypeError("stationary derivative producer requires RuntimeTaskDomain")
-        if not callable(submit):
-            raise TypeError("stationary derivative producer requires a submit callback")
-        if finish_page is not None and not callable(finish_page):
+        if not callable(submit_page):
             raise TypeError("stationary derivative producer requires a page callback")
+        if finish_page is not None and not callable(finish_page):
+            raise TypeError("stationary derivative producer requires a finish callback")
         logical_tasks = domain.logical_size
         mode = (
             "fixed"
@@ -155,8 +155,7 @@ class _BoundedStationaryTaskExecutor:
         for page in domain.pages(self.page_capacity):
             if page.count > self.page_capacity:
                 raise RuntimeError("stationary task producer exceeded page capacity")
-            for coordinate in page.coordinates:
-                submit(coordinate)
+            submit_page(page)
             if finish_page is not None:
                 finish_page()
             submitted += page.count
@@ -172,6 +171,22 @@ class _BoundedStationaryTaskExecutor:
             self.page_capacity,
             pages,
         )
+
+    def execute(
+        self,
+        domain: RuntimeTaskDomain,
+        submit: typing.Callable[[tuple[int, ...]], None],
+        *,
+        finish_page: typing.Callable[[], None] | None = None,
+    ) -> _StationaryTaskExecution:
+        if not callable(submit):
+            raise TypeError("stationary derivative producer requires a submit callback")
+
+        def submit_page(page: RuntimeTaskPage) -> None:
+            for coordinate in page.coordinates:
+                submit(coordinate)
+
+        return self.execute_pages(domain, submit_page, finish_page=finish_page)
 
 
 class _ExclusiveWallTimeline:
@@ -385,6 +400,11 @@ class _CudaSources:
             key: i
             for i, key in enumerate(_artifact_derivative_requests(requests, artifact))
         }
+        component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+        self.component_ids = np.asarray(
+            [component_index[label] for label in self.components], dtype=np.int64
+        )
+        self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
             [ct.c_int] * 3 + [ct.c_size_t] * 8 + [ct.POINTER(ct.c_void_p), *tail]
@@ -587,6 +607,78 @@ class _CudaSources:
         self._append_task(
             kind, source, rank, indices, primitive_work, nucleus, float(charge)
         )
+
+    def _kind_table(self, operator: str, rank: int) -> np.ndarray:
+        key = (operator, rank)
+        cached = self.kind_tables.get(key)
+        if cached is not None:
+            return cached
+        shape = (len(COMPONENT_LABELS),) * rank
+        table = np.full(shape, -1, dtype=np.int64)
+        component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+        for request, kind in self.kinds.items():
+            request_operator, components = request
+            if request_operator != operator or len(components) != rank:
+                continue
+            table[tuple(component_index[label] for label in components)] = kind
+        self.kind_tables[key] = table
+        return table
+
+    def integral_page(
+        self,
+        source: int,
+        operator: str,
+        coordinates: typing.Iterable[tuple[int, ...]],
+        nucleus: int | None = None,
+        charge: float = 1.0,
+    ) -> None:
+        """Append one bounded logical page, vectorizing the scalar AO producer."""
+        coordinates = tuple(coordinates)
+        if not coordinates:
+            return
+        rank = len(coordinates[0])
+        if rank not in (2, 4) or any(len(row) != rank for row in coordinates):
+            raise ValueError("stationary CUDA page requires uniform rank two or four")
+        if self.component_mode:
+            for indices in coordinates:
+                self.integral(
+                    source,
+                    operator,
+                    indices,
+                    nucleus=nucleus,
+                    charge=charge,
+                )
+            return
+        if len(coordinates) > len(self.tasks):
+            raise ValueError("stationary CUDA logical page exceeds descriptor capacity")
+        if self.used + len(coordinates) > len(self.tasks):
+            self.flush()
+
+        indices = np.asarray(coordinates, dtype=np.int64)
+        if np.any(indices < 0) or np.any(indices >= self.nao):
+            raise ValueError("stationary CUDA page contains invalid AO indices")
+        table = self._kind_table(operator, rank)
+        selectors = tuple(self.component_ids[indices[:, axis]] for axis in range(rank))
+        kinds = table[selectors]
+        if np.any(kinds < 0):
+            raise ValueError("stationary CUDA page requests an unavailable derivative kind")
+        primitive_work = np.prod(
+            self.aos[indices, 2].astype(np.int64),
+            axis=1,
+            dtype=np.int64,
+        )
+
+        begin, end = self.used, self.used + len(coordinates)
+        tasks = self.tasks[begin:end]
+        tasks.fill(-1)
+        tasks[:, 0] = kinds
+        tasks[:, 1] = int(source)
+        tasks[:, 2] = rank
+        tasks[:, 3] = -1 if nucleus is None else int(nucleus)
+        tasks[:, 4 : 4 + rank] = indices
+        tasks[:, 8] = primitive_work
+        self.charges[begin:end] = float(charge)
+        self.used = end
 
     def _append_task(
         self,
@@ -1661,25 +1753,29 @@ def _complete_rks_cuda_gradient_diagnostic(
             domain = RuntimeTaskDomain.rectangular((n,) * rank)
             source_index = source_names.index(source)
 
-            def submit(
-                indices: tuple[int, ...],
+            def submit_page(
+                page: RuntimeTaskPage,
                 *,
                 _source_index: int = source_index,
                 _operator: str = operator,
                 _source: str = source,
             ) -> None:
-                sources.integral(_source_index, _operator, indices)
+                sources.integral_page(
+                    _source_index,
+                    _operator,
+                    page.coordinates,
+                )
                 if _source == "one_electron":
                     for atom in range(na):
-                        sources.integral(
+                        sources.integral_page(
                             0,
                             "nuclear_attraction",
-                            indices,
+                            page.coordinates,
                             atom,
                             charges[atom],
                         )
 
-            execution = task_executor.execute(domain, submit)
+            execution = task_executor.execute_pages(domain, submit_page)
             task_executions.append(
                 {
                     "source": source,
