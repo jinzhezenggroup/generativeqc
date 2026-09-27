@@ -18,12 +18,12 @@ from vibeqc_compiler.xc.automatic_semilocal import (
     automatic_functional_code,
 )
 from vibeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
+from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from vibeqc_compiler.xc.libxc_work import (
     LIBXC_WORK_DOMAIN_VERSION,
     automatic_work_policy,
     polarized_work_setup,
 )
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 SHARD_COUNT = 8
