@@ -137,6 +137,22 @@ __device__ __forceinline__ double direct_force_density_coefficient(
 """
 
 
+def emit_direct_force_component_weight() -> str:
+    """Emit normalized Direct-force external component weights."""
+
+    return """__device__ __forceinline__ double direct_force_component_weight(
+    const double* ao_coefficients, std::size_t system_ao_begin,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    double density_coefficient) {
+  return density_coefficient *
+         ao_coefficients[system_ao_begin + i] *
+         ao_coefficients[system_ao_begin + j] *
+         ao_coefficients[system_ao_begin + k] *
+         ao_coefficients[system_ao_begin + l];
+}
+"""
+
+
 def emit_generated_shell_fock_accumulation() -> str:
     """Emit the scatter helper embedded in compiler-generated shell kernels."""
 
@@ -223,5 +239,6 @@ namespace vibeqc::scf::cuda_execution {{
 
 {function}
 {emit_direct_force_density_coefficient()}
+{emit_direct_force_component_weight()}
 }}  // namespace vibeqc::scf::cuda_execution
 """
