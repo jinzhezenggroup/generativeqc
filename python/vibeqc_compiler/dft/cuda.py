@@ -345,7 +345,7 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
-        lib.grid_cuda_run_selected_v1.argtypes = [
+        selected_run_args = [
             ct.c_void_p,
             DOUBLE,
             ct.c_size_t,
@@ -357,6 +357,8 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        lib.grid_cuda_run_selected_v1.argtypes = selected_run_args
+        lib.grid_cuda_run_selected_deferred_v1.argtypes = selected_run_args
         lib.grid_cuda_view_v1.argtypes = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -566,6 +568,7 @@ class CudaGrid:
         ao_ids: typing.Any = None,
         download_features: typing.Any = True,
         stamp: typing.Any = None,
+        _defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
         """Return one detached result tile; no downstream CPU arithmetic fallback."""
         raw = np.asarray(points)
@@ -575,9 +578,16 @@ class CudaGrid:
             type(features) is not bool
             or type(download_jets) is not bool
             or type(download_features) is not bool
+            or type(_defer_error_to_consumer) is not bool
             or not (features or download_jets)
         ):
             raise ValueError("request features and/or AO jets")
+        if _defer_error_to_consumer and (
+            not features or download_features or download_jets
+        ):
+            raise ValueError(
+                "deferred CUDA grid errors require device-only feature publication"
+            )
         with self._lock:
             self._check_open()
             need_first = any(k != "rho" for k in self.ingredients)
@@ -626,7 +636,11 @@ class CudaGrid:
                 else None
             )
             self._call(
-                "grid_cuda_run_selected_v1",
+                (
+                    "grid_cuda_run_selected_deferred_v1"
+                    if _defer_error_to_consumer
+                    else "grid_cuda_run_selected_v1"
+                ),
                 self._handle,
                 pointer(points),
                 len(points),
@@ -671,10 +685,27 @@ class CudaGrid:
 
     @contextmanager
     def _task(
-        self, points: typing.Any, ao_ids: typing.Any, *, stamp: typing.Any = None
+        self,
+        points: typing.Any,
+        ao_ids: typing.Any,
+        *,
+        stamp: typing.Any = None,
+        defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
-        """Evaluate local features and lend their current private device view."""
-        self.evaluate(points, ao_ids=ao_ids, download_features=False, stamp=stamp)
+        """Evaluate local features and lend their current private device view.
+
+        A deferred error lease is valid only for a same-stream consumer that
+        inspects or propagates view.error before reading AO/features.
+        """
+        if type(defer_error_to_consumer) is not bool:
+            raise ValueError("deferred grid error flag must be boolean")
+        self.evaluate(
+            points,
+            ao_ids=ao_ids,
+            download_features=False,
+            stamp=stamp,
+            _defer_error_to_consumer=defer_error_to_consumer,
+        )
         with self._borrow_current_task() as lease:
             yield lease
 
@@ -694,7 +725,12 @@ class CudaGrid:
                 raise ValueError("device task views require a local CUDA plan")
             if set(self.ingredients) != {"rho", "gradient", "sigma", "tau"}:
                 raise ValueError("device task ABI v1 requires the full feature layout")
-            with self._task(points, ao_ids, stamp=stamp) as lease:
+            with self._task(
+                points,
+                ao_ids,
+                stamp=stamp,
+                defer_error_to_consumer=defer_error_to_consumer,
+            ) as lease:
                 yield lease
 
     @contextmanager
@@ -731,11 +767,14 @@ class CudaGrid:
         ingredients: typing.Iterable[str],
         *,
         stamp: typing.Any = None,
+        defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
         """Lend AO/features for a composed consumer without a functional alias.
 
         FunctionalSpec sigma requires Cartesian gradients. The consumer builds
         sigma locally while preserving the native fixed feature-buffer layout.
+        defer_error_to_consumer is reserved for same-stream consumers that
+        consume GridTaskView.error before reading the borrowed buffers.
         """
         required = set(ingredients)
         if (
