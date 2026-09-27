@@ -156,6 +156,8 @@ def _external_comparison(
         "branches": payload.get("branches"),
         "accuracy": payload.get("accuracy"),
         "native_unavailable": payload.get("native_unavailable"),
+        "native_build": payload.get("native_build"),
+        "environment": payload.get("environment"),
         "reference_component_attribution": (
             "whole matched endpoint boundary only; retained GPU4PySCF evidence "
             "does not expose a compatible J/K/XC/VV10 split"
