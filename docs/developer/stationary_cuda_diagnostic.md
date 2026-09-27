@@ -53,8 +53,11 @@ The complete route retains these explicit host boundaries:
 - Native CUDA SCF constructs its grid and has existing provider setup boundaries.
   The final D/F/C/epsilon export, validation and W construction are explicit host
   operations. The derivative function consumes that exported snapshot.
-- Python enumerates ordered AO pairs/quartets only through bounded runtime-domain
-  pages. Non-component-expanded s/p paths fill each page of task descriptors in
+- Python consumes an identity-bearing bounded task-source contract
+  (`identity + logical_size + pages(capacity)`). The current producer enumerates
+  ordered AO pairs/quartets through `RuntimeTaskDomain`; a compact shell-task
+  producer can replace it without changing the executor. Non-component-expanded
+  s/p paths fill each page of task descriptors in
   one vectorized operation rather than one Python call per AO tuple; spherical
   component expansion retains the scalar fallback. Primitive expansion remains
   native. Python does not evaluate a derivative or reduce scientific contributions.
