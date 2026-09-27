@@ -692,8 +692,8 @@ VIBEQC_API uint32_t vibeqc_ks_options_version(void);
  * remain valid for the library lifetime. Unknown, stale or non-admitted
  * registrations return VIBEQC_STATUS_NOT_IMPLEMENTED.
  */
-VIBEQC_API vibeqc_status vibeqc_libxc_semilocal_program_get(
-    const char* component_id, vibeqc_ks_semilocal_program* program);
+VIBEQC_API vibeqc_status vibeqc_libxc_semilocal_program_get(const char* component_id,
+                                                            vibeqc_ks_semilocal_program* program);
 
 /** Current method preparation descriptor. Callers must provide this complete layout. */
 typedef struct vibeqc_method_descriptor {

@@ -78,9 +78,7 @@ def render_registry() -> str:
         chunks.extend(
             [
                 f"  if (name == {json.dumps(name)})",
-                "    return &::vibeqc::dft::"
-                + namespace_name
-                + "::point_program();",
+                "    return &::vibeqc::dft::" + namespace_name + "::point_program();",
             ]
         )
     chunks.extend(

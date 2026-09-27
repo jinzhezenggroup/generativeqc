@@ -7,8 +7,8 @@ extern "C" {
 
 uint32_t vibeqc_ks_options_version(void) { return 1; }
 
-vibeqc_status vibeqc_libxc_semilocal_program_get(
-    const char* component_id, vibeqc_ks_semilocal_program* program) {
+vibeqc_status vibeqc_libxc_semilocal_program_get(const char* component_id,
+                                                 vibeqc_ks_semilocal_program* program) {
   if (component_id == nullptr || *component_id == '\0' || program == nullptr)
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   const auto* native = vibeqc::dft::bulk_public::find(component_id);
