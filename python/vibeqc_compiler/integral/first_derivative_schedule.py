@@ -26,6 +26,9 @@ COMPONENT_LABELS = ("", "x", "xx", "xy", "xz", "y", "yy", "yz", "z", "zz")
 COMPONENT_OPERATORS = ("overlap", "kinetic", "nuclear_attraction", "four_center_eri")
 DISPATCH_ROWS = 3 * len(COMPONENT_LABELS) ** 2 + len(COMPONENT_LABELS) ** 4
 DISPATCH_WIDTH = 9
+CPU_AOT_COMPONENTS = COMPONENT_LABELS
+CPU_AOT_SHARDS = 46
+CPU_AOT_SYMBOL_PREFIX = "vibeqc_first_derivative_cpu_shard_"
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,33 @@ def derivative_sources(
         if size > MAX_UNIT_BYTES or total > MAX_PROGRAM_BYTES:
             raise ValueError("first derivative generated source budget exceeded")
         units.append((selected, source))
+    return tuple(units)
+
+
+def cpu_aot_symbol(shard: int) -> str:
+    if type(shard) is not int or not 0 <= shard < CPU_AOT_SHARDS:
+        raise ValueError("CPU derivative AOT shard is out of range")
+    return f"{CPU_AOT_SYMBOL_PREFIX}{shard}"
+
+
+@lru_cache(maxsize=1)
+def derivative_cpu_aot_sources() -> tuple[
+    tuple[tuple[DerivativeRequest, ...], str], ...
+]:
+    """Emit the full s/p/d CPU inventory with link-safe exported dispatchers."""
+
+    requests = derivative_requests(CPU_AOT_COMPONENTS)
+    units, total = [], 0
+    for shard, begin in enumerate(range(0, len(requests), REQUESTS_PER_UNIT)):
+        selected = requests[begin : begin + REQUESTS_PER_UNIT]
+        source = emit_first_derivative_cpu(selected, symbol=cpu_aot_symbol(shard))
+        size = len(source.encode("utf-8"))
+        total += size
+        if size > MAX_UNIT_BYTES or total > MAX_PROGRAM_BYTES:
+            raise ValueError("first derivative generated source budget exceeded")
+        units.append((selected, source))
+    if len(units) != CPU_AOT_SHARDS:
+        raise RuntimeError("stationary CPU derivative AOT shard contract drift")
     return tuple(units)
 
 
