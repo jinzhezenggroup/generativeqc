@@ -1501,8 +1501,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             plan.reduction_program(atoms=na), target, max_bytes=available
         )
     # Conservative numeric-array bound: compact task pages/sort staging, resident
-    # topology mirrors, D/W admission copies, adapter staging,
-    # candidate/publication copies, and tile owners.
+    # topology mirrors, D/W admission copies, adapter staging, cached Cartesian
+    # derivative-kind lookup tables, candidate/publication copies, and tile owners.
     # Compiler objects, Python headers and the caller's existing SCF snapshot
     # are explicit exclusions, as in the reused grid/TensorIR resource contracts.
     host_bound = (
@@ -1514,6 +1514,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             + 120 * na
             + 12 * (len(source_names) - len(_SOURCE_NAMES)) * na
             + 26 * integral_terms
+            + len(COMPONENT_LABELS) ** 4
+            + 3 * len(COMPONENT_LABELS) ** 2
             + 3 * tile_points
             + 2 * basis.nprimitive
             + 4 * n
