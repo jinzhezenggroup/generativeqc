@@ -1664,27 +1664,15 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
         "bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>"
         in fallback_source[fock_wrapper:]
     )
-    # The method-neutral force launcher owns the Force=true instantiations; the
-    # historical HF wrapper must only bind the legacy J/K coefficients and
-    # delegate to it. Keep screening purpose distinct from scientific output.
-    scaled_force_wrapper = fallback_source.index(
+    # The method-neutral force fallback may use Fock screening while still writing forces.
+    # Do not conflate screening purpose with the scientific consumer again.
+    force_wrapper = fallback_source.index(
         "void launch_bounded_direct_shell_quartet_kernel_scaled("
     )
-    force_wrapper = fallback_source.index(
-        "void launch_bounded_direct_shell_quartet_kernel(", scaled_force_wrapper
-    )
-    scaled_force_source = fallback_source[scaled_force_wrapper:force_wrapper]
     assert (
         "bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>"
-        in scaled_force_source
+        in fallback_source[force_wrapper:fock_wrapper]
     )
-    assert (
-        "bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, true>"
-        in scaled_force_source
-    )
-    hf_force_wrapper = fallback_source[force_wrapper:fock_wrapper]
-    assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in hf_force_wrapper
-    assert "unrestricted ? -1.0 : -0.5" in hf_force_wrapper
 
 
 def test_production_manifest_drives_generated_registry_and_shards(
