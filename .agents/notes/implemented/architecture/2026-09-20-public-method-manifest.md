@@ -69,3 +69,11 @@ permits replacing the current explicit integer method IDs.
 - #349
 - `python/vibeqc_compiler/method/spec.py`
 - `src/methods/registry.cpp`
+
+## Superseded ownership boundary
+
+The DFT-discovery portion of this decision was superseded on 2026-09-27 by
+[the MethodIR-owned DFT discovery decision](2026-09-27-dft-methodir-public-discovery.md).
+The explicit ABI-ID and native-provider ownership remains in force; the native
+manifest no longer owns DFT `compiler_method` / `spin` bindings or acts as a
+functional discovery whitelist.
