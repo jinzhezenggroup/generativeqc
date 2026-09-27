@@ -250,6 +250,7 @@ struct Owner {
   }
 
   void check_generated_error() {
+    ++diagnostic.generated_error_checks;
     int host_error = 0;
     cuda_check(
         cudaMemcpyAsync(&host_error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
@@ -265,6 +266,7 @@ struct Owner {
 void run_diis(Owner& s, const SolverOptions& options,
               const generated::DeviceIterationOutputs& trial) {
   if (!options.diis_size) return;
+  const auto diis_started = std::chrono::steady_clock::now();
   int count = static_cast<int>(s.history);
   if (count == static_cast<int>(options.diis_size)) {
     vibeqc::cc::history_shift<<<
@@ -286,8 +288,10 @@ void run_diis(Owner& s, const SolverOptions& options,
                              s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
   while (count > 1) {
     gram_kernel<<<count * count, 256, 0, s.stream>>>(s.errors, s.elements, count, s.gram);
+    ++s.diagnostic.diis_gram_calls;
     vibeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system, s.coefficients,
                                                          s.status);
+    ++s.diagnostic.diis_coefficient_calls;
     int host_status = 1;
     cuda_check(
         cudaMemcpyAsync(&host_status, s.status, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
@@ -306,6 +310,7 @@ void run_diis(Owner& s, const SolverOptions& options,
           s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements),
           static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
           s.state.t2, s.arithmetic);
+      s.diagnostic.diis_combine_calls += 2;
       int arithmetic = 0;
       cuda_check(cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost,
                                  s.stream));
@@ -326,6 +331,8 @@ void run_diis(Owner& s, const SolverOptions& options,
   }
   s.history = static_cast<unsigned>(count);
   cuda_check(cudaGetLastError());
+  s.diagnostic.diis_seconds +=
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
 }
 
 }  // namespace
@@ -344,8 +351,13 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
 
   for (unsigned iteration = 0; iteration <= options.max_iterations; ++iteration) {
     try {
+      const auto iteration_started = std::chrono::steady_clock::now();
       const auto output = generated::run_iteration_cuda(owner.state);
       const auto status = owner.read_status(output);
+      owner.diagnostic.iteration_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
+              .count();
+      ++owner.diagnostic.iteration_graph_calls;
       const double delta = std::isfinite(previous) ? std::abs(status[0] - previous)
                                                    : std::numeric_limits<double>::infinity();
       result.correlation_energy = status[0];
@@ -356,8 +368,12 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       owner.diagnostic.r2_max = status[2];
       if (std::isfinite(previous) && delta <= options.energy_tolerance &&
           std::max(status[1], status[2]) <= options.residual_tolerance) {
+        const auto replay_started = std::chrono::steady_clock::now();
         const auto replay = generated::run_replay_cuda(owner.state);
         const auto replay_status = owner.read_status(replay);
+        owner.diagnostic.replay_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started).count();
+        ++owner.diagnostic.replay_graph_calls;
         owner.diagnostic.replay_r1_max = replay_status[1];
         owner.diagnostic.replay_r2_max = replay_status[2];
         if (std::max(replay_status[1], replay_status[2]) <= options.residual_tolerance &&
@@ -368,10 +384,18 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         }
       }
       if (iteration == options.max_iterations) break;
+      const auto update_started = std::chrono::steady_clock::now();
       owner.advance(output, 1.0 - options.damping);
       owner.check_generated_error();
+      owner.diagnostic.update_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
+      ++owner.diagnostic.update_calls;
+      const auto trial_started = std::chrono::steady_clock::now();
       const auto trial = generated::run_iteration_cuda(owner.state);
       owner.check_generated_error();
+      owner.diagnostic.iteration_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
+      ++owner.diagnostic.iteration_graph_calls;
       run_diis(owner, options, trial);
       previous = status[0];
     } catch (const std::runtime_error& error) {
@@ -398,6 +422,8 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
   cuda_check(cudaStreamSynchronize(owner.stream));
   result.diagnostic.amplitude_d2h_bytes = (owner.n1 + owner.n2) * sizeof(double);
   ++result.diagnostic.synchronizations;
+  result.diagnostic.tensor_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
   return result;
 }
 
