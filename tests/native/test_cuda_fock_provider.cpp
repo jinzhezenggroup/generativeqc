@@ -524,17 +524,17 @@ void direct_providers(bool through_f_response) {
                std::string::npos) == (angular <= 2),
               "generated pure J admission/class fallback mismatch");
 
-      CudaDirectJkPlan* generated_k_raw{};
-      CudaDirectJkDiagnostic generated_k_diagnostic;
-      require(create_cuda_direct_jk_plan_with_generated_exchange(
-                  0, {first, second}, 0, 0.0, 64U * 1024U * 1024U, &generated_k_raw,
-                  generated_k_diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+      CudaDirectJkPlan* generated_value_raw{};
+      CudaDirectJkDiagnostic generated_value_diagnostic;
+      require(create_cuda_direct_jk_plan(
+                  0, {first, second}, 0, 0.0, 64U * 1024U * 1024U, &generated_value_raw,
+                  generated_value_diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
               detail.c_str());
-      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> generated_k_plan(
-          generated_k_raw, &destroy_cuda_direct_jk_plan);
-      require((std::string(generated_k_diagnostic.schedule).find("coulomb+exchange") !=
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> generated_value_plan(
+          generated_value_raw, &destroy_cuda_direct_jk_plan);
+      require((std::string(generated_value_diagnostic.schedule).find("coulomb+exchange") !=
                std::string::npos) == (angular <= 2),
-              "generated exchange admission/class fallback mismatch");
+              "automatic generated exchange admission/class fallback mismatch");
 
       CudaDirectJkPlan* fallback_raw{};
       CudaDirectJkDiagnostic fallback_diagnostic;
@@ -604,7 +604,7 @@ void direct_providers(bool through_f_response) {
               direct_device(fallback_plan.get(), spec, packed_a, packed_b, ej, eka, ekb);
             }
             if (angular <= 2 && (j || k)) {
-              direct_device(generated_k_plan.get(), spec, packed_a, packed_b, ej, eka, ekb);
+              direct_device(generated_value_plan.get(), spec, packed_a, packed_b, ej, eka, ekb);
             }
             std::vector<double> actual_gradient;
             if (response || !derivatives) {
