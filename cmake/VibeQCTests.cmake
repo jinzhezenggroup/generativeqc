@@ -321,7 +321,7 @@ macro(vibeqc_add_native_tests)
                        LIBRARIES CUDA::cudart SKIP_77)
   endif()
 
-  vibeqc_native_test(vibeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
+  vibeqc_native_test(vibeqc_dft_api_tests tests/native/test_dft_api.cpp)
   vibeqc_native_test(vibeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   vibeqc_native_test(vibeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   vibeqc_native_test(vibeqc_uks_tests tests/native/test_uks.cpp)
