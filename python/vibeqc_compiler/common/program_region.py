@@ -174,9 +174,7 @@ def derive_program_region(
             produced_so_far.add(write)
             produced_order.append(write)
 
-    later_reads = {
-        read for call in program.calls[end + 1 :] for read in call.reads
-    }
+    later_reads = {read for call in program.calls[end + 1 :] for read in call.reads}
     externally_needed = later_reads.union(program.outputs)
     boundary_writes = tuple(
         write for write in produced_order if write in externally_needed
@@ -271,8 +269,7 @@ def select_program_region_candidate(
     if not materialized:
         raise ValueError("ProgramIR region selection requires candidates")
     if any(
-        not isinstance(candidate, ProgramRegionCandidate)
-        for candidate in materialized
+        not isinstance(candidate, ProgramRegionCandidate) for candidate in materialized
     ):
         raise TypeError("ProgramIR region selection requires region candidates")
     if len({candidate.name for candidate in materialized}) != len(materialized):
@@ -292,7 +289,9 @@ def select_program_region_candidate(
     for candidate in materialized:
         if candidate.schedule is selected:
             return candidate
-    raise AssertionError("shared schedule selector returned an unknown region candidate")
+    raise AssertionError(
+        "shared schedule selector returned an unknown region candidate"
+    )
 
 
 def apply_program_region_candidate(
@@ -333,7 +332,7 @@ def apply_program_region_candidate(
     last = positions[-1]
     replacement = PlanCall(
         candidate.name,
-        typing.cast(str, candidate.provider),
+        typing.cast("str", candidate.provider),
         candidate.replacement_identity,
         region.reads,
         region.writes,

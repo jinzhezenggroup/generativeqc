@@ -193,9 +193,7 @@ def test_measured_region_selection_reuses_shared_promotion_policy() -> None:
 
 
 def _pbe_program() -> ProgramIR:
-    contract = ContractionProgram(
-        functional("PBE", spin="polarized")
-    ).contract
+    contract = ContractionProgram(functional("PBE", spin="polarized")).contract
     return fixed_density_tile_program(
         contract,
         nao=12,
