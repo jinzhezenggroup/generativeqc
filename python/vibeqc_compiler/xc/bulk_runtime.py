@@ -7,13 +7,11 @@ force, response, or public-method capability.
 
 from __future__ import annotations
 
+import math
 import typing
 from dataclasses import dataclass
 from itertools import combinations_with_replacement
 
-import numpy as np
-
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
 from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.integral.expr import AlgebraForm, Expr, Graph
 
@@ -74,6 +72,8 @@ class BulkRuntimeSpec:
         copy: typing.Any = True,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Validate the exact versioned bulk runtime-candidate domain."""
+        import numpy as np
+
         if type(order) is not int or order not in (0, 1, 2):
             raise UnsupportedXC("bulk XC supports derivative orders 0, 1 and 2")
         if type(copy) is not bool:
@@ -213,6 +213,10 @@ class BulkRuntimeProgram:
 
     def evaluate(self, features: typing.Any) -> np.ndarray:
         """Interpret the exact generated Graph without a runtime Libxc call."""
+        import numpy as np
+
+        from vibeqc_compiler.common.array_graph import evaluate_array_graph
+
         x, active = self.validate_features(features)
         result = np.zeros((len(self.outputs), x.shape[1]), dtype=np.float64)
         if np.any(active):
@@ -225,6 +229,8 @@ class BulkRuntimeProgram:
         return result
 
     def unpack(self, result: typing.Any) -> dict[str, np.ndarray]:
+        import numpy as np
+
         result = np.asarray(result)
         if result.ndim != 2 or result.shape[0] != len(self.outputs):
             raise ValueError("output shape does not match bulk XC program")
@@ -294,7 +300,7 @@ def build_bulk_runtime_program(
             item for item in catalog["registrations"] if item["name"] == capability.name
         )
         density_threshold = float(record["bindings"]["p_a_dens_threshold"])
-        if not np.isfinite(density_threshold) or density_threshold < 0.0:
+        if not math.isfinite(density_threshold) or density_threshold < 0.0:
             raise UnsupportedXC("bulk Libxc density threshold is invalid")
     # Project the runtime ABI, not the imported expression. Flags alone are not
     # proof that an input is dead; never replace a reachable variable with zero.
