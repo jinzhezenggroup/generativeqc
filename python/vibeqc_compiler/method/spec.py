@@ -29,8 +29,10 @@ from ._generated_libxc_methods import (
 from .basis_binding import BasisBinding, r2scan3c_def2_mtzvpp_h_ar
 from .dispersion import (
     D3Spec,
+    D4_METHOD_SUFFIX,
     D4Spec,
     DispersionCorrectionPrimitive,
+    d4_eeq_spec_for_method,
     pbe0_d3_bj_spec,
     pbe0_d3_zero_spec,
     pbe_d3_bj_atm_spec,
@@ -821,6 +823,40 @@ METHOD_CATALOG = MappingProxyType(
 )
 
 
+def _d4_composite_method_spec(identifier: str) -> MethodSpec | None:
+    """Compose a catalog electronic method with its exact pinned D4 fit."""
+    if not identifier.endswith(D4_METHOD_SUFFIX):
+        return None
+    from ._generated_xc_aliases import METHOD_ALIASES
+
+    requested_base = identifier[: -len(D4_METHOD_SUFFIX)]
+    canonical_base = METHOD_ALIASES.get(requested_base, requested_base)
+    base = METHOD_CATALOG.get(canonical_base)
+    if base is None:
+        return None
+    if base.dispersion is not None or base.basis is not None or base.gcp is not None:
+        return None
+    try:
+        correction = d4_eeq_spec_for_method(canonical_base)
+    except KeyError:
+        return None
+    return replace(base, identifier=identifier, dispersion=correction)
+
+
+def d4_composite_method_identifiers() -> tuple[str, ...]:
+    """Return D4 composites derivable from both MethodIR and the pinned D4 catalog."""
+    identifiers: list[str] = []
+    for identifier, base in METHOD_CATALOG.items():
+        if base.dispersion is not None or base.basis is not None or base.gcp is not None:
+            continue
+        try:
+            d4_eeq_spec_for_method(identifier)
+        except KeyError:
+            continue
+        identifiers.append(f"{identifier}{D4_METHOD_SUFFIX}")
+    return tuple(sorted(set(identifiers)))
+
+
 def resolve_method(
     method: typing.Any, *, spin: typing.Any = "unpolarized"
 ) -> typing.Any:
@@ -835,8 +871,13 @@ def resolve_method(
         try:
             spec = METHOD_CATALOG[canonical_identifier]
         except KeyError as error:
-            raise UnsupportedMethod(f"unknown DFT method {method!r}") from error
-        if canonical_identifier != requested_identifier:
+            spec = _d4_composite_method_spec(requested_identifier)
+            if spec is None:
+                raise UnsupportedMethod(f"unknown DFT method {method!r}") from error
+        if (
+            canonical_identifier != requested_identifier
+            and spec.identifier != requested_identifier
+        ):
             spec = replace(spec, identifier=requested_identifier)
     elif isinstance(method, MethodSpec):
         spec = method
