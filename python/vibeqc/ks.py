@@ -31,7 +31,12 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, CATALOG, FunctionalSpec, functional
+from vibeqc_compiler.xc.spec import (
+    AUTO_BULK_COMPONENTS,
+    CATALOG,
+    FunctionalSpec,
+    functional,
+)
 
 from ._generated_methods import METHOD_METADATA
 
@@ -634,7 +639,9 @@ def resolve_public_libxc_ks_options(
     """
 
     if not isinstance(grid, GridSpec):
-        raise TypeError("public automatic Libxc KS execution requires an explicit GridSpec")
+        raise TypeError(
+            "public automatic Libxc KS execution requires an explicit GridSpec"
+        )
     from vibeqc_compiler.method.bulk_ks import resolve_public_bulk_ks
 
     resolution = resolve_public_bulk_ks(name, spin=spin, backend="cpu")
@@ -846,7 +853,9 @@ def native_ks_options(options: typing.Any, *, library: typing.Any = None) -> typ
             ("rho", "sigma", "tau"): 15,
         }.get(tuple(semilocal.functional.ingredients))
         if expected_mask is None or semilocal_program.ingredient_mask != expected_mask:
-            raise RuntimeError("installed Libxc point-program ingredient contract mismatch")
+            raise RuntimeError(
+                "installed Libxc point-program ingredient contract mismatch"
+            )
 
     domain = options.scf_domain.encode("ascii")
     descriptor = _native.KsOptionsDescriptor(

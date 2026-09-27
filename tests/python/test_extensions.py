@@ -152,18 +152,17 @@ def test_empty_method_and_standalone_xc_still_fail_closed(
         xc.compose("empty", components)
 
 
-
 def test_libxc_method_builder_delegates_to_exact_public_resolution(
     monkeypatch: typing.Any,
 ) -> None:
-    import vibeqc_compiler.method.bulk_ks as bulk_ks
+    from vibeqc_compiler.method import bulk_ks
 
     expected = method.named("PBE")
     calls: list[tuple[str, str, str]] = []
 
     def resolve(identifier: str, *, spin: str, backend: str) -> typing.Any:
         calls.append((identifier, spin, backend))
-        return typing.cast(typing.Any, type("Resolution", (), {"method": expected})())
+        return typing.cast("typing.Any", type("Resolution", (), {"method": expected})())
 
     monkeypatch.setattr(bulk_ks, "resolve_public_bulk_ks", resolve)
     assert method.libxc("GGA_X_PBE_SOL", spin="polarized") is expected
