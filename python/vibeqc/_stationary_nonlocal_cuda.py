@@ -36,7 +36,7 @@ def resident_nonlocal_geometry(
     if type(tile_points) is not int or tile_points <= 0:
         raise ValueError("resident nonlocal tile_points must be a positive integer")
     if not callable(getattr(sources, "geometry_external_device", None)):
-        raise RuntimeError("stationary owner lacks the resident nonlocal seed consumer")
+        raise TypeError("stationary owner lacks the resident nonlocal seed consumer")
     points = state.grid.points
     count = len(points)
     if count == 0 or nonlocal_owner.point_count != count:
