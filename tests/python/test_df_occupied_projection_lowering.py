@@ -33,6 +33,7 @@ STANDIN = r"""
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <vector>
 #include "cublas_v2.h"
 static int calls, fail_on;
 static void product(cublasOperation_t ta,cublasOperation_t tb,int m,int n,int k,
@@ -68,6 +69,18 @@ extern "C" int project(int n,int r,int a,int begin,int count,const double* c,
   calls=0;fail_on=fail;
   return vibeqc::scf::generated::df_occupied_project_panel(
       nullptr,n,r,a,begin,count,c,values,temp,out);
+}
+extern "C" int finish_project(int n,int r,int a,const double* c,
+                                const double* linear,double* out,int fail) {
+  calls=0;fail_on=fail;
+  std::vector<double> pair_major(static_cast<std::size_t>(a)*r*r);
+  auto result=vibeqc::scf::generated::df_occupied_finish_projection(
+      nullptr,n,r,a,c,linear,pair_major.data());
+  if(result) return result;
+  // Mirror the production gather from [i,j,Q] into [Q,i,j].
+  for(int q=0;q<a;++q) for(int i=0;i<r;++i) for(int j=0;j<r;++j)
+    out[q*r*r+i+j*r]=pair_major[(i*r+j)*a+q];
+  return 0;
 }
 extern "C" int call_count() { return calls; }
 extern "C" std::size_t tile_size(std::size_t n,std::size_t r,std::size_t a,
@@ -134,6 +147,8 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     ptr = ct.POINTER(ct.c_double)
     lib.project.argtypes = [ct.c_int] * 5 + [ptr] * 4 + [ct.c_int]
     lib.project.restype = ct.c_int
+    lib.finish_project.argtypes = [ct.c_int] * 3 + [ptr] * 3 + [ct.c_int]
+    lib.finish_project.restype = ct.c_int
     lib.call_count.restype = ct.c_int
     lib.tile_size.argtypes = [ct.c_size_t] * 5 + [ct.c_bool]
     lib.tile_size.restype = ct.c_size_t
@@ -186,6 +201,49 @@ def test_projected_panel_layout_and_tails(
         )
         assert np.isnan(out[begin + count :]).all()
     assert total_calls == 2 * ((a + width - 1) // width)
+
+
+@pytest.mark.parametrize("n,r,a", [(4, 1, 3), (7, 3, 9), (12, 5, 13), (31, 7, 11)])
+def test_finish_final_k_projection_layout(
+    native: ct.CDLL, n: int, r: int, a: int
+) -> None:
+    """The carried final-K B*C factor reproduces C^T B C without rereading B."""
+    rng = np.random.default_rng(20260927 + n + r + a)
+    coefficients = np.asfortranarray(rng.normal(size=(n, r)))
+    fitted = rng.normal(size=(a, n, n))
+    # The packed final-K kernel stores Q fastest within each occupied column.
+    linear = np.empty((a * r, n), dtype=np.float64, order="F")
+    expected = []
+    for q in range(a):
+        projection = fitted[q] @ coefficients
+        for j in range(r):
+            linear[q + a * j, :] = projection[:, j]
+        expected.append(coefficients.T @ fitted[q] @ coefficients)
+    output = np.full(a * r * r, np.nan)
+    assert (
+        native.finish_project(
+            n,
+            r,
+            a,
+            pointer(coefficients),
+            pointer(linear),
+            pointer(output),
+            0,
+        )
+        == 0
+    )
+    for q, reference in enumerate(expected):
+        actual = output[q * r * r : (q + 1) * r * r].reshape((r, r), order="F")
+        np.testing.assert_allclose(actual, reference, atol=3e-12, rtol=3e-13)
+    assert native.call_count() == 1
+
+
+def test_finish_final_k_projection_rejects_invalid_shape(native: ct.CDLL) -> None:
+    data = np.ones(4)
+    assert (
+        native.finish_project(2, 3, 1, pointer(data), pointer(data), pointer(data), 0)
+        == 7
+    )
 
 
 @pytest.mark.parametrize("a,r", [(1, 1), (3, 2), (9, 3), (17, 5)])

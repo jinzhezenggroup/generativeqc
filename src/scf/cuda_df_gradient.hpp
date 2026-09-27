@@ -59,6 +59,10 @@ struct CudaDfOccupiedResponseView {
   std::array<CudaDfOccupiedResponseFactor, 3> factors{};
   std::size_t nbf{}, naux{};
   std::uint64_t owner_identity{};
+  // Optional exact final-K fitted U[(Q,i),mu]=B[Q,mu,nu]C[nu,i].
+  // The final-state token and this view's owner/factor identity are validated
+  // before construction. It is read-only until the synchronous bridge drains.
+  const double* final_fitted_occupied_projection{};
 };
 /** Immutable FP64 raw [Q,mu,nu] view borrowed from one resident value plan.
  * Strides are in doubles. owner_identity is the process-unique immutable
@@ -124,6 +128,10 @@ struct CudaDfResponseBuffers {
   // staging_weights and is consumed before that allocation becomes mutable
   // response storage. occupied_factors[0] is its exact final canonical C.
   const double* final_occupied_projection{};
+  // Fitted single-B analogue of final_occupied_projection. This is the exact
+  // final-K linear factor U=B*C, not a raw-A projection. The occupied response
+  // may finish C^T*U directly into its owned rank-squared staging.
+  const double* final_fitted_occupied_projection{};
   CudaDfPackedRawTensorView resident_packed_raw{};
   // Packed plans lend three distinct mutable buffers with unequal capacities;
   // raw_auxiliary_major becomes bounded unpack scratch, never the raw owner.
