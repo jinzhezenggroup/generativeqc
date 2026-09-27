@@ -331,7 +331,6 @@ def test_stationary_cuda_production_task_page_default() -> None:
         assert parameter.default == 4096
 
 
-
 def test_borrowed_grid_owner_outlives_stationary_consumer() -> None:
     """Deferred geometry must drain before its borrowed CUDA stream is destroyed."""
     from pathlib import Path
