@@ -211,7 +211,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         *,
         spin_blocks: int = 1,
         target: object = None,
-        work_budget: int = 2_000_000,
+        page_work_budget: int = 2_000_000,
         timeline: object = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = runtime._SOURCE_NAMES,
@@ -221,7 +221,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         assert source_names == runtime._SOURCE_NAMES
         admitted["budget"] = budget
         admitted["spin_blocks"] = spin_blocks
-        admitted["work_budget"] = work_budget
+        admitted["page_work_budget"] = page_work_budget
         return owner
 
     monkeypatch.setattr(runtime, "_CudaSources", make_owner)
