@@ -7,10 +7,10 @@ import pytest
 from vibeqc import GridSpec
 
 from benchmarks.dft_force_matrix import (
+    QUALIFICATION_SYSTEMS,
     _atoms,
     _changed_atoms,
     _method_configuration,
-    QUALIFICATION_SYSTEMS,
 )
 
 
