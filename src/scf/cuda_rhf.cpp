@@ -581,8 +581,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool bounded_direct_count_diagnostic = bounded_direct_count_diagnostic_requested();
   const bool bounded_direct_aot_only_diagnostic = bounded_direct_aot_only_diagnostic_requested();
   const bool bounded_direct_fock_only_diagnostic = bounded_direct_fock_only_diagnostic_requested();
+  const auto primary_streaming_fock_override =
+      bounded_direct_primary_streaming_fock_mask_requested();
   const std::uint64_t requested_primary_streaming_fock_mask =
-      bounded_direct_primary_streaming_fock_mask_requested().value_or(0U);
+      primary_streaming_fock_override.value_or(
+          generated::preferred_streaming_fock_shell_class_mask());
   const bool bounded_fock_class_timing = bounded_fock_class_timing_requested();
   const auto direct_tile_validation_policy = cuda_policy::resolve_direct_tile_validation_policy();
   const bool direct_tile_validation = direct_tile_validation_policy.requested;
@@ -2895,7 +2898,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // target refinement re-enters this same physical residual gate first.
     plan.last_direct_final_state.target_precision = true;
   }
-  const double* force_convergence_residual = stationary_force_required ? residual : nullptr;
+  // FP64 direct and DF share the physical pre-DIIS residual gate for both
+  // energy and force endpoints. Coarse mixed stages still defer to refinement.
+  const double* force_convergence_residual = residual;
   const auto launch_iteration_post_eigensolver = [&](bool append_device_tail,
                                                      bool allow_mixed_precision) -> vibeqc_status {
     // Only the item's coarse mixed stage may defer stationarity. Exact peers
@@ -2918,17 +2923,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
               true, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
               resources.stream_, static_cast<std::int32_t>(batch_size),
               static_cast<std::int32_t>(nbf), options.energy_tolerance, options.density_tolerance,
-              quartet_direct, energy, previous_energy, next_density, density, active, converged,
-              iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              true, energy, previous_energy, next_density, density, active, converged, iterations,
+              energy_change, density_rms, force_convergence_residual, approximate_census);
         } else {
           launch_update_uhf_convergence_kernel(
               false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
               resources.stream_, static_cast<std::int32_t>(batch_size),
               static_cast<std::int32_t>(nbf), options.energy_tolerance, options.density_tolerance,
-              quartet_direct, energy, previous_energy, next_density, density, active, converged,
-              iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              true, energy, previous_energy, next_density, density, active, converged, iterations,
+              energy_change, density_rms, force_convergence_residual, approximate_census);
         }
       }
     } else {
@@ -2946,17 +2949,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
               true, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
               resources.stream_, static_cast<std::int32_t>(batch_size),
               static_cast<std::int32_t>(nbf), options.energy_tolerance, options.density_tolerance,
-              quartet_direct, energy, previous_energy, next_density, density, active, converged,
-              iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              true, energy, previous_energy, next_density, density, active, converged, iterations,
+              energy_change, density_rms, force_convergence_residual, approximate_census);
         } else {
           launch_update_convergence_kernel(
               false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
               resources.stream_, static_cast<std::int32_t>(batch_size),
               static_cast<std::int32_t>(nbf), options.energy_tolerance, options.density_tolerance,
-              quartet_direct, energy, previous_energy, next_density, density, active, converged,
-              iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              true, energy, previous_energy, next_density, density, active, converged, iterations,
+              energy_change, density_rms, force_convergence_residual, approximate_census);
         }
       }
     }

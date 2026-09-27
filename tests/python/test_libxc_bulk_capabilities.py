@@ -369,13 +369,17 @@ def test_production_domain_profiles_are_ingredient_driven_and_versioned() -> Non
     for capability in (lda, gga, mgga):
         profile = capability.production_domain_profile
         payload = profile.to_payload()
-        assert payload["schema"] == "vibeqc.libxc-production-domain-profile.v1"
-        assert payload["profile"] == "semilocal-boundary-matrix/v1"
+        assert payload["schema"] == "vibeqc.libxc-production-domain-profile.v3"
+        assert payload["profile"] == "semilocal-boundary-matrix/v3"
         assert payload["identity"] == profile.identity
         assert payload["spin_layouts"] == ["polarized", "unpolarized"]
-        assert payload["outputs"] == ["energy", "vxc", "fxc"]
+        assert payload["outputs"] == ["energy", "vxc"]
+        assert capability.validated_outputs == ("energy", "vxc", "fxc")
+        assert "response" in capability.unqualified_stages
         assert "density/vacuum" in payload["case_ids"]
         assert "spin/zero-a" in payload["case_ids"]
+        assert "spin/zero-a" in payload["cases_by_spin"]["polarized"]
+        assert "spin/zero-a" not in payload["cases_by_spin"]["unpolarized"]
         assert "control/lazy-inactive-branch" in payload["case_ids"]
         assert "control/invalid-nonfinite" in payload["case_ids"]
 
@@ -458,7 +462,8 @@ def test_blocked_ingredient_cannot_be_promoted_with_forged_profile() -> None:
 
 
 @pytest.mark.parametrize(
-    "field", ("required_ingredients", "case_ids", "spin_layouts", "outputs")
+    "field",
+    ("required_ingredients", "case_ids", "cases_by_spin", "spin_layouts", "outputs"),
 )
 @pytest.mark.parametrize("origin", ("input", "output"))
 def test_production_qualification_is_detached_from_caller_lists(
@@ -480,7 +485,10 @@ def test_production_qualification_is_detached_from_caller_lists(
         if item["stage"] == "production-domain"
     )
     target = evidence if origin == "input" else published
-    target["qualification"][field].clear()
+    if field == "cases_by_spin":
+        target["qualification"][field]["polarized"].clear()
+    else:
+        target["qualification"][field].clear()
     assert stage.qualification == expected
     assert stage.to_payload()["qualification"] == expected
     assert "production-domain" in capability.qualified_stages

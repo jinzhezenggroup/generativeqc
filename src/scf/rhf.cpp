@@ -192,6 +192,17 @@ DfBudgetWorkload df_budget_workload(const core::System& orbital, const core::Sys
           forces};
 }
 
+std::size_t df_response_budget_override_bytes() {
+  const char* control = std::getenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES");
+  if (!control || !*control) return 0U;
+  const std::string_view text(control);
+  std::size_t bytes{};
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), bytes);
+  if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || !bytes)
+    throw std::invalid_argument("DF response budget override must be a positive byte count");
+  return bytes;
+}
+
 DfResolvedBudget resolve_df_budget_for_workload(DfBudgetWorkload workload, int device_id,
                                                 std::size_t requested) {
   auto result = resolve_df_budget(workload, df_resource_envelope(device_id), requested);
@@ -201,11 +212,8 @@ DfResolvedBudget resolve_df_budget_for_workload(DfBudgetWorkload workload, int d
       throw std::invalid_argument("DF response budget override requires a zero public DF budget");
     if (!workload.forces)
       throw std::invalid_argument("DF response budget override requires force response");
-    const std::string_view text(control);
-    std::size_t bytes{};
-    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), bytes);
-    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || !bytes)
-      throw std::invalid_argument("DF response budget override must be a positive byte count");
+    const auto bytes = df_response_budget_override_bytes();
+    result.response_override_bytes = bytes;
     if (result.total_bytes < 2U) {
       result.feasible = false;
     } else {
@@ -275,9 +283,18 @@ void bind_generated_df(DensityFittingScfData& data, const core::System& orbital,
                                                  std::size_t budget, double relative_threshold,
                                                  bool needs_cuda_response) {
 #if VIBEQC_HAS_CUDA
+  std::size_t response_override = 0U;
+  try {
+    response_override = df_response_budget_override_bytes();
+  } catch (const std::invalid_argument&) {
+    // Force a fresh preparation so the normal resolver reports the invalid
+    // diagnostic control instead of silently reusing an older owner.
+    return false;
+  }
   const bool generated = needs_cuda_response;
   return data.metric_relative_threshold == relative_threshold &&
          data.resolved_budget.requested_bytes == budget &&
+         data.resolved_budget.response_override_bytes == response_override &&
          data.df_gradient_orbital.has_value() == generated &&
          (!generated ||
           (data.df_gradient_mapping == cuda_policy::df_derivative_mapping_requested() &&
@@ -767,6 +784,9 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     final_diagnostic = state.diagnostic;
     result.energy = state.diagnostic.energy;
     result.converged = true;
+    prepare_cuda_density_fitting_rhf_warm_state(
+        cuda_plan, response_token, density, data.one_electron.hcore, data.one_electron.overlap,
+        orthogonalizer, occupied, data.one_electron.nuclear_repulsion);
   } else {
     // Preserve the independent CPU oracle's established solve/project/rebuild
     // sequence and derivative convention; it does not share retained state.
@@ -819,6 +839,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   }
   if (!options.compute_forces) {
     result.density = density;
+    if (cuda_plan) commit_cuda_density_fitting_rhf_warm_state(cuda_plan, response_token);
     return;
   }
 
@@ -865,6 +886,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
                                                      options.density_fitting_relative_threshold);
   }
   result.density = density;
+  if (cuda_plan) commit_cuda_density_fitting_rhf_warm_state(cuda_plan, response_token);
 }
 
 [[maybe_unused]] void finalize_density_fitting_uhf(
@@ -2340,9 +2362,20 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           overlap_caches ? (*overlap_caches)[source] : nullptr, eigen);
       const auto occupied = static_cast<std::size_t>(systems[source].electron_count / 2);
       std::optional<EigenResult> initial;
-      densities[slot] = prepare_initial_density(
-          systems[source], data[slot].one_electron, orthogonalizers[slot], occupied,
-          initial_densities[source], initial, df_initial_orbital_request(), eigen);
+      const bool retained_warm =
+          initial_densities[source] && data.size() == 1 &&
+          cuda_density_fitting_rhf_warm_matches(
+              plan, *initial_densities[source], data[slot].one_electron.hcore,
+              data[slot].one_electron.overlap, orthogonalizers[slot], occupied,
+              data[slot].one_electron.nuclear_repulsion);
+      // Exact accepted same-geometry D already passed electron-trace and
+      // determinant checks. Normalizing it again breaks its retained frame.
+      densities[slot] =
+          retained_warm
+              ? *initial_densities[source]
+              : prepare_initial_density(systems[source], data[slot].one_electron,
+                                        orthogonalizers[slot], occupied, initial_densities[source],
+                                        initial, df_initial_orbital_request(), eigen);
       orbitals[slot] = std::move(initial).value_or(EigenResult{});
       survivors.push_back(slot);
     } catch (const std::bad_alloc&) {

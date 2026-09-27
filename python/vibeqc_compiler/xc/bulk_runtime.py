@@ -22,6 +22,15 @@ from .libxc_bulk_capabilities import functional_capability
 from .spec import UnsupportedXC
 
 _SUPPORTED_RUNTIME_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
+PRODUCTION_CANDIDATE_DOMAIN = "libxc-bulk-production-candidate/v1"
+PRODUCTION_DENSITY_CANDIDATE_DOMAIN = "libxc-bulk-production-candidate/v2"
+_RUNTIME_DOMAINS = frozenset(
+    (
+        libxc_bulk.BULK_SEMANTICS,
+        PRODUCTION_CANDIDATE_DOMAIN,
+        PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -36,10 +45,11 @@ class BulkRuntimeSpec:
     capability_identity: str
     source_identity: str
     domain: str = libxc_bulk.BULK_SEMANTICS
+    density_threshold: float | None = None
 
     def to_payload(self) -> dict[str, typing.Any]:
         """Return semantic identity without implying production admission."""
-        return {
+        payload = {
             "identifier": self.identifier,
             "family": self.family,
             "spin": self.spin,
@@ -52,6 +62,9 @@ class BulkRuntimeSpec:
             "runtime_candidate": True,
             "production_admitted": False,
         }
+        if self.density_threshold is not None:
+            payload["density_threshold"] = self.density_threshold
+        return payload
 
     def validate_features(
         self,
@@ -60,7 +73,7 @@ class BulkRuntimeSpec:
         order: typing.Any = 1,
         copy: typing.Any = True,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Validate only the declared positive-interior bulk runtime domain."""
+        """Validate the exact versioned bulk runtime-candidate domain."""
         if type(order) is not int or order not in (0, 1, 2):
             raise UnsupportedXC("bulk XC supports derivative orders 0, 1 and 2")
         if type(copy) is not bool:
@@ -81,38 +94,101 @@ class BulkRuntimeSpec:
 
         rows = dict(zip(self.features, x, strict=True))
         density_names = ("rho_a", "rho_b") if self.spin == "polarized" else ("rho",)
-        if any(np.any(rows[name] <= 0) for name in density_names):
+        density_boundary = self.domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN
+        density_invalid = (
+            any(np.any(rows[name] < 0) for name in density_names)
+            if density_boundary
+            else any(np.any(rows[name] <= 0) for name in density_names)
+        )
+        if density_invalid:
+            requirement = "nonnegative" if density_boundary else "strictly positive"
             raise UnsupportedXC(
-                "bulk Libxc runtime candidate requires strictly positive density"
+                f"bulk Libxc runtime candidate requires {requirement} density"
             )
+        total_density = np.zeros(x.shape[1], dtype=np.float64)
+        for name in density_names:
+            total_density += rows[name]
+        if density_boundary:
+            if self.density_threshold is None:
+                raise ValueError(
+                    "production density candidate requires a density threshold"
+                )
+            active = np.asarray(total_density >= self.density_threshold, dtype=bool)
+        else:
+            active = np.ones(x.shape[1], dtype=bool)
 
         if "sigma" in self.ingredients:
             if self.spin == "polarized":
                 aa = rows["sigma_aa"]
                 ab = rows["sigma_ab"]
                 bb = rows["sigma_bb"]
-                if np.any(aa <= 0) or np.any(bb <= 0):
+                sigma_invalid = (
+                    (aa < 0) | (bb < 0)
+                    if self.domain
+                    in (
+                        PRODUCTION_CANDIDATE_DOMAIN,
+                        PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+                    )
+                    else (aa <= 0) | (bb <= 0)
+                )
+                if np.any(sigma_invalid):
+                    requirement = (
+                        "nonnegative"
+                        if self.domain
+                        in (
+                            PRODUCTION_CANDIDATE_DOMAIN,
+                            PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+                        )
+                        else "positive"
+                    )
                     raise UnsupportedXC(
-                        "bulk Libxc runtime candidate requires positive same-spin sigma"
+                        "bulk Libxc runtime candidate requires "
+                        f"{requirement} same-spin sigma"
                     )
                 bound = np.sqrt(aa) * np.sqrt(bb)
                 if np.any(np.abs(ab) > bound * (1 + 16 * np.finfo(float).eps)):
                     raise UnsupportedXC(
                         "bulk XC sigma Gram matrix is not positive semidefinite"
                     )
-            elif np.any(rows["sigma"] <= 0):
-                raise UnsupportedXC(
-                    "bulk Libxc runtime candidate requires positive sigma"
+            else:
+                sigma = rows["sigma"]
+                sigma_invalid = (
+                    sigma < 0
+                    if self.domain
+                    in (
+                        PRODUCTION_CANDIDATE_DOMAIN,
+                        PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+                    )
+                    else sigma <= 0
                 )
+                if np.any(sigma_invalid):
+                    requirement = (
+                        "nonnegative"
+                        if self.domain
+                        in (
+                            PRODUCTION_CANDIDATE_DOMAIN,
+                            PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+                        )
+                        else "positive"
+                    )
+                    raise UnsupportedXC(
+                        f"bulk Libxc runtime candidate requires {requirement} sigma"
+                    )
 
         if "tau" in self.ingredients:
             tau_names = ("tau_a", "tau_b") if self.spin == "polarized" else ("tau",)
-            if any(np.any(rows[name] <= 0) for name in tau_names):
+            tau_invalid = (
+                any(np.any(rows[name] < 0) for name in tau_names)
+                if density_boundary
+                else any(np.any(rows[name] <= 0) for name in tau_names)
+            )
+            if tau_invalid:
+                requirement = "nonnegative" if density_boundary else "strictly positive"
                 raise UnsupportedXC(
-                    "bulk Libxc runtime candidate requires strictly positive tau"
+                    f"bulk Libxc runtime candidate requires {requirement} tau"
                 )
 
-        return x, np.ones(x.shape[1], dtype=bool)
+        return x, active
 
 
 @dataclass(frozen=True)
@@ -138,11 +214,12 @@ class BulkRuntimeProgram:
     def evaluate(self, features: typing.Any) -> np.ndarray:
         """Interpret the exact generated Graph without a runtime Libxc call."""
         x, active = self.validate_features(features)
-        variables = dict(zip(self.spec.features, x[:, active], strict=True))
-        values = evaluate_array_graph(self.graph, self.roots, variables)
-        result = np.empty((len(self.outputs), x.shape[1]), dtype=np.float64)
-        for row, value in enumerate(values):
-            result[row] = np.broadcast_to(value, (x.shape[1],))
+        result = np.zeros((len(self.outputs), x.shape[1]), dtype=np.float64)
+        if np.any(active):
+            variables = dict(zip(self.spec.features, x[:, active], strict=True))
+            values = evaluate_array_graph(self.graph, self.roots, variables)
+            for row, value in enumerate(values):
+                result[row, active] = np.broadcast_to(value, (int(np.sum(active)),))
         if not np.all(np.isfinite(result)):
             raise ArithmeticError("nonfinite bulk XC runtime output")
         return result
@@ -183,12 +260,21 @@ def build_bulk_runtime_program(
     order: int = 1,
     outputs: typing.Any = None,
     optimization: str = "after",
+    domain: str = libxc_bulk.BULK_SEMANTICS,
 ) -> BulkRuntimeProgram:
     """Build one pointwise-qualified runtime candidate without promoting it.
 
-    Only rho/sigma/tau registrations enter this bridge. Production-domain and
-    molecular capability remain evidence gates owned by downstream lanes.
+    Only rho/sigma/tau registrations enter this bridge. The default preserves
+    the strictly-positive interior domain. The versioned production candidate
+    v1 additionally admits physical zero sigma. v2 also admits nonnegative
+    density/tau and applies the pinned Libxc outer total-density screening before
+    Graph evaluation. Empty-spin and zero-tau active points are still evaluated
+    without clipping so the independent campaign decides whether their E/vxc
+    behavior is actually valid. Production-domain and molecular capability remain
+    evidence gates owned by downstream lanes.
     """
+    if domain not in _RUNTIME_DOMAINS:
+        raise UnsupportedXC(f"unsupported bulk runtime domain {domain!r}")
     capability = functional_capability(name)
     ingredients = capability.required_ingredients
     unsupported = set(ingredients) - _SUPPORTED_RUNTIME_INGREDIENTS
@@ -201,6 +287,15 @@ def build_bulk_runtime_program(
         raise UnsupportedXC(f"bulk runtime spin layout is unsupported: {spin!r}")
 
     bulk = libxc_bulk.build_bulk_program(capability.name, spin=spin)
+    density_threshold = None
+    if domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
+        catalog = libxc_bulk.read_catalog()
+        record = next(
+            item for item in catalog["registrations"] if item["name"] == capability.name
+        )
+        density_threshold = float(record["bindings"]["p_a_dens_threshold"])
+        if not np.isfinite(density_threshold) or density_threshold < 0.0:
+            raise UnsupportedXC("bulk Libxc density threshold is invalid")
     # Project the runtime ABI, not the imported expression. Flags alone are not
     # proof that an input is dead; never replace a reachable variable with zero.
     families = {"rho": "rho", "sigma": "sigma", "lapl": "laplacian", "tau": "tau"}
@@ -224,6 +319,8 @@ def build_bulk_runtime_program(
         ingredients=ingredients,
         capability_identity=capability.identity,
         source_identity=bulk.identity,
+        domain=domain,
+        density_threshold=density_threshold,
     )
     available = _output_set(len(spec.features), order)
     requested = available if outputs is None else tuple(tuple(v) for v in outputs)

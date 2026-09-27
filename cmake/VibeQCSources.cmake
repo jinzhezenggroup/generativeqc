@@ -96,6 +96,7 @@ function(vibeqc_add_posthf_cc_sources target)
     src/posthf/mp2_gradient.cpp
     src/posthf/native_provider.cpp
     src/response/native_gmres.cpp
+    src/response/resident_gmres.cpp
     src/methods/gfn2_runtime_bridge.cpp
     src/methods/xtb_method.cpp)
   if(VIBEQC_ENABLE_CUDA)
@@ -154,6 +155,7 @@ function(vibeqc_add_integrals_scf_sources target)
       src/scf/cuda/df_occupied_exchange.cpp
       src/scf/cuda/df_scf_factor.cpp
       src/scf/cuda/df_scf_final_state.cpp
+      src/scf/cuda/df_scf_warm.cpp
       src/scf/cuda/df_force_response.cpp
       src/scf/cuda/df_jk.cpp
       src/scf/cuda/df_jk_kernels.cu

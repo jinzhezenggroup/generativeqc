@@ -70,6 +70,85 @@ def test_cpu_scc_uses_shared_method_neutral_iteration_control() -> None:
     assert "while (driver_state.converged[0]" not in source
 
 
+def test_cpu_runtime_does_not_stage_rejected_attachments() -> None:
+    source = (ROOT / "src/xtb/native/src/runtime/gfn2_cpu_execution.cpp").read_text()
+    assert "validate_molecular_request(batch, options, error)" in source
+    for retired in (
+        "stage_electric_fields",
+        "total_point_charges",
+        "point_charge_positions",
+        "periodic_shifts",
+        "periodic_response",
+        "VIBEQC_XTB_COMPUTE_POINT_CHARGE_FORCES",
+        "VIBEQC_XTB_COMPUTE_DIPOLE_MOMENTS",
+        "VIBEQC_XTB_COMPUTE_STRAIN_DERIVATIVES",
+        "ExternalPointChargePlan",
+        "PeriodicEmbeddingPlan",
+    ):
+        assert retired not in source
+
+
+def test_cuda_runtime_ingress_matches_molecular_contract() -> None:
+    source = (ROOT / "src/xtb/native/src/runtime/gfn2_cuda_execution.cu").read_text()
+    assert "struct Gfn2CudaNumericalInputView" not in source
+    ingress = source.split("vibeqc_xtb_status_t stage_numerical_ingress_locked(", 1)[
+        1
+    ].split("vibeqc_xtb_status_t execute_numerical_body_locked(", 1)[0]
+    assert "const vibeqc_xtb_const_buffer_t& positions" in ingress
+    assert "sources.positions" in ingress
+    for retired in (
+        "input.point_charge_positions",
+        "input.point_charge_values",
+        "input.point_charge_gammas",
+        "input.atomic_potential_shifts",
+        "input.charge_response_matrix",
+        "input.interaction_descriptors",
+        "input.interaction_payload",
+        "input.total_interactions",
+        "input.requested_mask",
+        "strict_warm",
+        "allow_blocking_interaction_readback",
+    ):
+        assert retired not in ingress
+    public = source.split("execute_restricted_gfn2_cuda_impl(", 1)[1]
+    assert public.index(
+        "validate_molecular_request(batch, options, error)"
+    ) < public.index("refresh_numerical_locked")
+    assert "refresh_numerical_locked(*working, batch.positions, error)" in public
+
+
+def test_cuda_runtime_retires_unreachable_host_attachment_staging() -> None:
+    source = (ROOT / "src/xtb/native/src/runtime/gfn2_cuda_execution.cu").read_text()
+    state = source.split("struct NumericalRefreshState {", 1)[1].split(
+        "struct NumericalHostUploadCompletion", 1
+    )[0]
+    assert "double* host_positions = nullptr;" in state
+    assert "double* owned_host_positions = nullptr;" in state
+    for retired in (
+        "host_point_positions",
+        "host_point_values",
+        "host_point_gammas",
+        "host_periodic_shifts",
+        "host_periodic_response",
+        "host_requested",
+        "owned_host_point_positions",
+        "owned_host_point_values",
+        "owned_host_point_gammas",
+        "owned_host_periodic_shifts",
+        "owned_host_periodic_response",
+        "owned_host_requested",
+        "owned_host_interaction_descriptors",
+        "owned_host_interaction_payload",
+        "owned_host_interaction_descriptor_snapshot",
+        "interaction_descriptor_capacity_bytes",
+        "interaction_payload_capacity_bytes",
+    ):
+        assert retired not in state
+    assert "InteractionStagingLayout" not in source
+    assert "interaction_device_staging_arena" not in source
+    assert "interaction_host_staging_arena" not in source
+
+
 def test_retired_runtime_and_external_api_cannot_reenter_production() -> None:
     assert not (ROOT / "src/xtb/gfn2_runtime").exists()
     native = ROOT / "src/xtb/native"
