@@ -137,9 +137,7 @@ def emit_direct_fock_accumulation_header() -> str:
         density_offset="physical_offset",
         spin_offset="spin_offset",
         coulomb_scale="exchange_only ? 0.0 : 1.0",
-        restricted_exchange_scale=(
-            "coulomb_only ? 0.0 : (exchange_only ? 1.0 : -0.5)"
-        ),
+        restricted_exchange_scale=("coulomb_only ? 0.0 : (exchange_only ? 1.0 : -0.5)"),
         unrestricted_exchange_scale=(
             "coulomb_only ? 0.0 : (exchange_only ? 1.0 : -1.0)"
         ),

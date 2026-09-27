@@ -109,8 +109,7 @@ def test_streaming_fock_emits_exchange_only_consumer_identity() -> None:
     selection = next(
         item
         for item in profile.selections
-        if item.spec.name == "psss"
-        and "streaming_fock" in item.capabilities
+        if item.spec.name == "psss" and "streaming_fock" in item.capabilities
     )
     source = _streaming_fock_source(selection)
     assert "GeneratedFockConsumer::Exchange" in source
