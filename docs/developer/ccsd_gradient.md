@@ -234,13 +234,18 @@ displaced geometry. Separate tests exercise the generated raw h/g/U chain,
 AO duality, shared/generated/independent orbital matrices, finite rotations,
 translation/rotation covariance, changed geometry, immutable results and
 rejection of stale, failed, nonfinite and under-budget requests. Negative tests
-remove overlap or orbital response and require a visible error. `gradient_capabilities()` reports this internal endpoint separately from the
-energy-only `method_capabilities("rccsd")`: it advertises CPU/CUDA derivative
-backends while explicitly marking `public_calculator=False`. Public/native
-Calculator force registration, a resident GPU response chain, scalable tiled
-MO/AO weights and perturbative-(T) gradients remain outside this endpoint.
+remove overlap or orbital response and require a visible error. `gradient_capabilities()`
+continues to describe this internal validation endpoint, while `public_calculator=True`
+records that the same qualified conventional <=12-AO RCCSD force capability is now
+published through the native Calculator owner. The older
+`tools.vibeqc_cc.api.method_capabilities("rccsd")` energy helper remains a narrow
+internal energy facade rather than the public capability registry. A fully resident
+GPU response chain, scalable tiled MO/AO weights, DF/frozen-core/open-shell/ECP
+extensions and perturbative-(T) behavior remain separate capabilities.
 
-Public force capabilities and (T) gradient support remain outside this validation endpoint.
+The internal validation endpoint and the public owner therefore share the RCCSD
+response mathematics and numerical domain without turning this Python helper into
+a second public force implementation.
 
 See the [complete-gradient decision](../../.agents/notes/implemented/numerics/2026-09-19-complete-cpu-ccsd-gradient.md)
 for the dense validation boundary and migration conditions.

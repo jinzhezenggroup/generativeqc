@@ -93,6 +93,9 @@ struct CudaFixedOrbitalResponseResult {
   std::vector<double> foo, fov, fvv, ovov, ovvo, oovv, ovvv, ovoo, oooo, vvvv;
 };
 
+CudaFixedOrbitalResponseResult solve_lambda_parameter_response_cuda(
+    const Problem& problem, const SolverResult& cc_result, int device,
+    const LambdaOptions& options = {});
 CudaFixedOrbitalResponseResult solve_lambda_parameter_response_cuda_with_energy_source(
     const Problem& problem, const SolverResult& cc_result, std::span<const double> t1_source,
     std::span<const double> t2_source, int device, const LambdaOptions& options = {});

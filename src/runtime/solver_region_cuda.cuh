@@ -61,6 +61,7 @@ class SolverRegionCudaExecutor {
   }
 
   const GraphMetrics& replay_metrics() const noexcept { return replay_.metrics; }
+  bool replayed_last_submission() const noexcept { return replay_.metrics.mode == 3; }
   const std::string& replay_reason() const noexcept { return replay_.reason; }
 
  private:

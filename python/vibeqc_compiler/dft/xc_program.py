@@ -30,7 +30,14 @@ from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.common.resources import byte_product
 from vibeqc_compiler.common.schedule import ScheduleResources
 
-from .xc_schedule import GridXcCandidateAssessment, GridXcCandidateShape
+from .xc_schedule import (
+    GridXcCandidateAssessment,
+    GridXcCandidateShape,
+    GridXcScientificIdentity,
+    grid_xc_domain_identity,
+    grid_xc_shape_identity,
+    schedule_profile_key,
+)
 
 if typing.TYPE_CHECKING:
     import collections.abc
@@ -69,6 +76,7 @@ def _density_bytes(shape: GridXcCandidateShape) -> int:
 def native_ks_host_unfused_xc_program(
     shape: GridXcCandidateShape,
     *,
+    scientific: GridXcScientificIdentity,
     density_identity: str,
     host_xc_identity: str,
     transfer_identity: str,
@@ -76,6 +84,17 @@ def native_ks_host_unfused_xc_program(
 ) -> ProgramIR:
     """Describe the current host-unfused `CudaKsPlan::stage_xc` boundary."""
 
+    if not isinstance(scientific, GridXcScientificIdentity):
+        raise TypeError("native KS XC source requires scientific identity")
+    if not isinstance(shape, GridXcCandidateShape):
+        raise TypeError("native KS XC source requires candidate shape")
+    if (
+        shape.spins != (2 if scientific.spin == "polarized" else 1)
+        or scientific.observable != "potential"
+        or scientific.density_route != "density_matrix"
+        or shape.jet_components != len(scientific.jet_outputs)
+    ):
+        raise ValueError("native KS XC source scientific domain mismatch")
     density_identity = _text(density_identity, "KS density identity")
     host_xc_identity = _text(host_xc_identity, "host XC identity")
     transfer_identity = _text(transfer_identity, "transfer identity")
@@ -83,6 +102,8 @@ def native_ks_host_unfused_xc_program(
     density_bytes = _density_bytes(shape)
     matrix_bytes = byte_product(8, shape.nao, shape.nao)
     topology = {
+        "scientific": scientific.identity,
+        "shape": grid_xc_shape_identity(shape),
         "npoint": shape.npoint,
         "tile_points": shape.tile_points,
         "nao": shape.nao,
@@ -183,6 +204,71 @@ def native_ks_host_unfused_xc_program(
         tuple(calls),
         ("vxc_device", "totals_device", "error_device"),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class NativeKsXcSource:
+    """DFT-owned source binding used to reconstruct, not relabel, an XC region.
+
+    ProgramIR remains method-neutral. The domain owner carries science and shape
+    separately and reconstructs the complete graph before attaching admission
+    records; matching just a supplied program digest is not sufficient.
+    """
+
+    shape: GridXcCandidateShape
+    scientific: GridXcScientificIdentity
+    density_identity: str
+    host_xc_identity: str
+    transfer_identity: str
+    device_ordinal: int = 0
+
+    def program(self) -> ProgramIR:
+        return native_ks_host_unfused_xc_program(
+            self.shape,
+            scientific=self.scientific,
+            density_identity=self.density_identity,
+            host_xc_identity=self.host_xc_identity,
+            transfer_identity=self.transfer_identity,
+            device_ordinal=self.device_ordinal,
+        )
+
+
+def _validate_source_admissions(
+    program: ProgramIR,
+    source: NativeKsXcSource,
+    host: GridXcCandidateAssessment,
+    device: GridXcCandidateAssessment,
+) -> None:
+    if not isinstance(source, NativeKsXcSource):
+        raise TypeError("native KS XC binding requires a typed source")
+    if program.identity != source.program().identity:
+        raise ValueError("native KS XC source program mismatch")
+    scientific = source.scientific
+    expected_target = canonical_hash(
+        {"backend": "cuda", "architecture": scientific.architecture}
+    )
+    for assessment in (host, device):
+        contract = assessment.schedule_contract
+        provenance = dict(contract.provenance)
+        if (
+            contract.consumer != "dft.grid_xc"
+            or assessment.schedule_hash != contract.schedule_hash
+            or contract.workload_hash != scientific.identity
+            or contract.profile_key != schedule_profile_key(scientific)
+            or contract.target_hash != expected_target
+            or provenance.get("candidate_domain")
+            != grid_xc_domain_identity(source.shape)
+        ):
+            raise ValueError("grid/XC admission source provenance mismatch")
+    if dict(host.schedule_contract.provenance).get(
+        "candidate_shape"
+    ) != grid_xc_shape_identity(source.shape):
+        raise ValueError("host grid/XC admission source shape mismatch")
+    if (
+        host.schedule_contract.precision_schedule_hash
+        != device.schedule_contract.precision_schedule_hash
+    ):
+        raise ValueError("grid/XC admission source precision mismatch")
 
 
 def native_ks_xc_region(program: ProgramIR) -> ProgramRegion:
@@ -304,6 +390,7 @@ class GridXcRegionCandidates:
 def bind_native_ks_xc_region_candidates(
     program: ProgramIR,
     *,
+    source: NativeKsXcSource,
     host_unfused: GridXcCandidateAssessment,
     device_fused: GridXcCandidateAssessment,
     device_xc_identity: str,
@@ -323,6 +410,7 @@ def bind_native_ks_xc_region_candidates(
     if not host_unfused.legal:
         raise ValueError("host_unfused fallback must be legal")
 
+    _validate_source_admissions(program, source, host_unfused, device_fused)
     region = native_ks_xc_region(program)
     host_schedule = _region_schedule(
         host_unfused,
@@ -364,6 +452,7 @@ class GridXcRegionSelection:
 def select_native_ks_xc_region_program(
     program: ProgramIR,
     *,
+    source: NativeKsXcSource,
     host_unfused: GridXcCandidateAssessment,
     device_fused: GridXcCandidateAssessment,
     device_xc_identity: str,
@@ -375,6 +464,7 @@ def select_native_ks_xc_region_program(
 
     candidates = bind_native_ks_xc_region_candidates(
         program,
+        source=source,
         host_unfused=host_unfused,
         device_fused=device_fused,
         device_xc_identity=device_xc_identity,

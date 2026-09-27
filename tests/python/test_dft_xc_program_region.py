@@ -7,8 +7,8 @@ from dataclasses import replace
 
 import pytest
 from vibeqc_compiler.dft.xc_program import (
+    NativeKsXcSource,
     bind_native_ks_xc_region_candidates,
-    native_ks_host_unfused_xc_program,
     native_ks_xc_region,
     select_native_ks_xc_region_program,
 )
@@ -17,6 +17,7 @@ from vibeqc_compiler.dft.xc_schedule import (
     HOST_UNFUSED,
     GridXcCandidateLimits,
     GridXcCandidateShape,
+    GridXcScientificIdentity,
     assess_grid_xc_schedule,
 )
 
@@ -49,6 +50,24 @@ def _limits() -> GridXcCandidateLimits:
     )
 
 
+def _scientific(*, spins: int = 2) -> GridXcScientificIdentity:
+    return GridXcScientificIdentity(
+        architecture="sm_120",
+        functional="PBE",
+        functional_identity="pbe-science-v1",
+        ingredients=("rho", "gradient", "sigma"),
+        jet_outputs=((0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)),
+        grid_identity="grid-v1",
+        grid_model="grid-model-v1",
+        screening_identity=None,
+        precision="fp64",
+        spin="polarized" if spins == 2 else "unpolarized",
+        observable="potential",
+        density_route="density_matrix",
+        source_identity="xc-source-v1",
+    )
+
+
 def _assessment(
     schedule: GridXcExecutionSchedule,
     *,
@@ -62,16 +81,22 @@ def _assessment(
         device_xc_available=device_xc_available,
         observable="potential",
         functional="PBE",
+        scientific=_scientific(spins=spins),
     )
 
 
-def _program(*, spins: int = 2) -> ProgramIR:
-    return native_ks_host_unfused_xc_program(
+def _source(*, spins: int = 2) -> NativeKsXcSource:
+    return NativeKsXcSource(
         _shape(spins=spins),
+        _scientific(spins=spins),
         density_identity="cuda-ks-density-v1",
         host_xc_identity="host-pbe-v1",
         transfer_identity="cuda-ks-xc-transfer-v1",
     )
+
+
+def _program(*, spins: int = 2) -> ProgramIR:
+    return _source(spins=spins).program()
 
 
 def test_host_unfused_uks_program_matches_cuda_ks_stage_xc_boundary() -> None:
@@ -135,6 +160,7 @@ def test_host_region_cost_counts_exact_cuda_ks_bridge_payload() -> None:
         program,
         host_unfused=_assessment(HOST_UNFUSED),
         device_fused=_assessment(DEVICE_FUSED),
+        source=_source(),
         device_xc_identity="cuda-xc-plan-pbe-v1",
     )
     buffers = {buffer.name: buffer.bytes for buffer in program.buffers}
@@ -156,6 +182,7 @@ def test_measured_device_fused_route_replaces_complete_host_region() -> None:
         program,
         host_unfused=_assessment(HOST_UNFUSED),
         device_fused=_assessment(DEVICE_FUSED),
+        source=_source(),
         device_xc_identity="cuda-xc-plan-pbe-v1",
         endpoint_seconds={
             "host_unfused": 1.0,
@@ -190,6 +217,7 @@ def test_missing_endpoint_evidence_keeps_exact_host_fallback() -> None:
         program,
         host_unfused=_assessment(HOST_UNFUSED),
         device_fused=_assessment(DEVICE_FUSED),
+        source=_source(),
         device_xc_identity="cuda-xc-plan-pbe-v1",
         endpoint_seconds=None,
         minimum_speedup=1.02,
@@ -204,6 +232,7 @@ def test_unavailable_device_xc_cannot_be_promoted_by_fast_timing() -> None:
         program,
         host_unfused=_assessment(HOST_UNFUSED),
         device_fused=_assessment(DEVICE_FUSED, device_xc_available=False),
+        source=_source(),
         device_xc_identity="cuda-xc-plan-pbe-v1",
         endpoint_seconds={
             "host_unfused": 1.0,
@@ -228,10 +257,12 @@ def test_device_executable_identity_invalidates_replacement_program() -> None:
         "minimum_speedup": 1.02,
     }
     first = select_native_ks_xc_region_program(
+        source=_source(),
         device_xc_identity="cuda-xc-plan-pbe-v1",
         **kwargs,
     )
     second = select_native_ks_xc_region_program(
+        source=_source(),
         device_xc_identity="cuda-xc-plan-pbe-v2",
         **kwargs,
     )
@@ -256,6 +287,7 @@ def test_region_binding_rejects_invalid_endpoint_timing(
             _program(),
             host_unfused=_assessment(HOST_UNFUSED),
             device_fused=_assessment(DEVICE_FUSED),
+            source=_source(),
             device_xc_identity="cuda-xc-plan-pbe-v1",
             endpoint_seconds=timing,
         )
@@ -267,6 +299,7 @@ def test_region_binding_rejects_swapped_schedule_assessments() -> None:
             _program(),
             host_unfused=_assessment(DEVICE_FUSED),
             device_fused=_assessment(HOST_UNFUSED),
+            source=_source(),
             device_xc_identity="cuda-xc-plan-pbe-v1",
         )
 
@@ -279,6 +312,7 @@ def test_region_binding_rejects_inconsistent_assessment_legality() -> None:
             _program(),
             host_unfused=_assessment(HOST_UNFUSED),
             device_fused=inconsistent,
+            source=_source(),
             device_xc_identity="cuda-xc-plan-pbe-v1",
         )
 
@@ -300,5 +334,150 @@ def test_host_fallback_must_remain_legal() -> None:
             _program(),
             host_unfused=illegal_host,
             device_fused=_assessment(DEVICE_FUSED),
+            source=_source(),
             device_xc_identity="cuda-xc-plan-pbe-v1",
         )
+
+
+@pytest.mark.parametrize("assessment_spins", [1])
+def test_region_rejects_cross_spin_admission(assessment_spins: int) -> None:
+    with pytest.raises(ValueError, match="source provenance"):
+        select_native_ks_xc_region_program(
+            _program(spins=2),
+            source=_source(spins=2),
+            host_unfused=_assessment(HOST_UNFUSED, spins=assessment_spins),
+            device_fused=_assessment(DEVICE_FUSED, spins=assessment_spins),
+            device_xc_identity="rks-plan",
+            endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.1},
+        )
+
+
+@pytest.mark.parametrize("field,value", [("nao", 8), ("npoint", 64)])
+def test_region_rejects_other_shape_admission(field: str, value: int) -> None:
+    shape = replace(_shape(), **{field: value})
+    assessments = tuple(
+        assess_grid_xc_schedule(
+            schedule,
+            shape,
+            _limits(),
+            device_xc_available=True,
+            observable="potential",
+            functional="PBE",
+            scientific=_scientific(),
+        )
+        for schedule in (HOST_UNFUSED, DEVICE_FUSED)
+    )
+    with pytest.raises(ValueError, match="source provenance"):
+        bind_native_ks_xc_region_candidates(
+            _program(),
+            source=_source(),
+            host_unfused=assessments[0],
+            device_fused=assessments[1],
+            device_xc_identity="other-shape-plan",
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("grid_identity", "other-grid"),
+        ("source_identity", "other-source"),
+        ("functional_identity", "other-functional"),
+        ("architecture", "sm_90"),
+    ],
+)
+def test_region_rejects_other_scientific_admission(field: str, value: str) -> None:
+    science = replace(_scientific(), **{field: value})
+    assessments = tuple(
+        assess_grid_xc_schedule(
+            schedule,
+            _shape(),
+            _limits(),
+            device_xc_available=True,
+            observable="potential",
+            functional="PBE",
+            scientific=science,
+        )
+        for schedule in (HOST_UNFUSED, DEVICE_FUSED)
+    )
+    with pytest.raises(ValueError, match="source provenance"):
+        bind_native_ks_xc_region_candidates(
+            _program(),
+            source=_source(),
+            host_unfused=assessments[0],
+            device_fused=assessments[1],
+            device_xc_identity="other-science-plan",
+        )
+
+
+def test_region_rejects_missing_scientific_admission() -> None:
+    assessments = tuple(
+        assess_grid_xc_schedule(
+            schedule,
+            _shape(),
+            _limits(),
+            device_xc_available=True,
+            observable="potential",
+            functional="PBE",
+        )
+        for schedule in (HOST_UNFUSED, DEVICE_FUSED)
+    )
+    with pytest.raises(ValueError, match="source provenance"):
+        bind_native_ks_xc_region_candidates(
+            _program(),
+            source=_source(),
+            host_unfused=assessments[0],
+            device_fused=assessments[1],
+            device_xc_identity="unbound-plan",
+        )
+
+
+@pytest.mark.parametrize(
+    "field", ["density_identity", "host_xc_identity", "transfer_identity"]
+)
+def test_region_rejects_stale_source_binding(field: str) -> None:
+    source = replace(_source(), **{field: "changed-identity"})
+    with pytest.raises(ValueError, match="source program"):
+        bind_native_ks_xc_region_candidates(
+            _program(),
+            source=source,
+            host_unfused=_assessment(HOST_UNFUSED),
+            device_fused=_assessment(DEVICE_FUSED),
+            device_xc_identity="device-plan",
+        )
+
+
+def test_region_rejects_reconstructed_graph_with_stale_source() -> None:
+    program = _program()
+    calls = list(program.calls)
+    calls[0] = replace(calls[0], identity="other-transfer")
+    modified = replace(program, calls=tuple(calls))
+    with pytest.raises(ValueError, match="source program"):
+        bind_native_ks_xc_region_candidates(
+            modified,
+            source=_source(),
+            host_unfused=_assessment(HOST_UNFUSED),
+            device_fused=_assessment(DEVICE_FUSED),
+            device_xc_identity="device-plan",
+        )
+
+
+def test_region_accepts_candidate_local_device_tiling() -> None:
+    device = assess_grid_xc_schedule(
+        replace(DEVICE_FUSED, point_tile=8),
+        replace(_shape(), tile_points=8),
+        _limits(),
+        device_xc_available=True,
+        observable="potential",
+        functional="PBE",
+        scientific=_scientific(),
+    )
+    selected = select_native_ks_xc_region_program(
+        _program(),
+        source=_source(),
+        host_unfused=_assessment(HOST_UNFUSED),
+        device_fused=device,
+        device_xc_identity="retiled-plan",
+        endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.75},
+    )
+    assert selected.candidate.name == "device_fused"
