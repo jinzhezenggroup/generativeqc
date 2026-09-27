@@ -115,6 +115,7 @@ def _require_exact_molecular_scf(capability: BulkFunctionalCapability) -> str:
             "automatic bulk Libxc KS requires exact molecular-SCF qualification"
         ) from exc
 
+
 def _resolve_bulk_ks(
     name: str,
     *,
