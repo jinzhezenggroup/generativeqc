@@ -511,10 +511,10 @@
     "sm_90/vibeqc_generated_shell_sm90_shard_1.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
     "sm_90/vibeqc_generated_shell_sm90_shard_2.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
     "sm_90/vibeqc_generated_shell_sm90_shard_3.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
-    "sm_120/vibeqc_generated_shell_sm120_shard_0.cu": "886fe97996429c008e5eb1b5132400ac5d0db204f4348b600d8e2ae525eb5323",
-    "sm_120/vibeqc_generated_shell_sm120_shard_1.cu": "dba2910861ae335551dd09592e64385e9cd2c12a7d9a19e768a2890fd5f97dbb",
-    "sm_120/vibeqc_generated_shell_sm120_shard_2.cu": "45a8ad80e8aba9134cb1f102aa34463115384b9ac8f2635838bb3ebfee64acec",
-    "sm_120/vibeqc_generated_shell_sm120_shard_3.cu": "12734e79dab76ef4ba756ced057310a2a2a40bd264cfbceadac050336d8d8ca7",
+    "sm_120/vibeqc_generated_shell_sm120_shard_0.cu": "a752c5c673f82dccbb52c3f65ef980a51ccded8b918f2bf05139940ed7f1640e",
+    "sm_120/vibeqc_generated_shell_sm120_shard_1.cu": "e5db8961fbfbe51064d3ecde5f03f77b638b8348e58741382e2cb442e04ea6b3",
+    "sm_120/vibeqc_generated_shell_sm120_shard_2.cu": "ed4bc8e70393b5716e4dcd5115b6eeecc5dc246686ee56f4487ac8cf908644ff",
+    "sm_120/vibeqc_generated_shell_sm120_shard_3.cu": "233b21820676df5fa5c1ff34ea1ee19b8d9a259896b68a4371461b9352a21140",
     "vibeqc_generated_shell_registry.hpp": "a6aa314c13d80edc4c3d5cc0df7db25236efa9779bdd20b505ee6f5d68f41bcf",
     "vibeqc_generated_shell_registry.cu": "e4c5bda3269b46d4f0c785c81b3c704fd09875d689ac9d8ee0f450b257ad2c78"
   },
@@ -609,6 +609,17 @@
       "issue": 1434,
       "source_revision": "9e599a80f4258b425918c303f69c39d663f46814",
       "reason": "Lower the mixed-Fock density-by-integral product to FP32 while retaining FP64 density/Fock storage, global accumulation, scale application, and the ordinary FP64 evaluation order. Rebasing preserves the current HartreeFock/Coulomb/Exchange J-only/K-only scatter semantics. The four tuned sm_120 shards change intentionally; portable sm_90 shards, registry artifacts, manifest and shell catalog remain byte-identical. Dense RHF/UHF HF/J-only/K-only scatter coverage, the finite FP64 overflow regression, production CUDA AOT/runtime checks, and RTX 5090 qualification are retained.",
+      "paths": [
+        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 1477,
+      "source_revision": "9101d05bdb0e517764714ff4ef993a4abd782c69",
+      "reason": "Expose method-neutral Coulomb/exchange coefficients in the compiler-owned Direct force contraction while preserving the historical HF wrapper coefficients. The four tuned sm_120 shards change intentionally because they embed the shared force helper; portable sm_90 shards, registry artifacts, manifest and shell catalog remain byte-identical.",
       "paths": [
         "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
         "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
