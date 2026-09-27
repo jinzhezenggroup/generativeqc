@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_eri_order2.cuh"
 #include "scf/cuda/boys_table.cuh"
-#include "scf/cuda/direct_native_eri_order2.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"

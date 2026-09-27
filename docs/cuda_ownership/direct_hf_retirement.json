@@ -52,9 +52,9 @@
     {
       "id": "native-fock-and-jk",
       "status": "performance-exception",
-      "capability": "Native Direct J/K and Fock contraction families, including the retained psss Fock fast path and higher-angular ERI helpers used by Fock consumers.",
+      "capability": "Native Direct J/K and Fock contraction families retained where generated consumers are not yet promoted; order-2/3/4 primitive recurrence and shell-class dispatch are compiler-generated.",
       "current_selector": "Generated shell classes are used where promoted; retained native Fock families remain selected for unpromoted or measured faster domains. The psss force geometry adapter is tracked under native-low-order-force; any retained psss Fock path is tracked separately by its actual Fock owner.",
-      "generated_alternative": "The existing IntegralIR/AOT class registry already represents the underlying ERI mathematics; psss Fock still needs generated shared-work execution that matches the historical fused primitive/Boys traversal.",
+      "generated_alternative": "Compiler-generated primitive recurrence/shell dispatch plus the existing IntegralIR/AOT class registry represent the underlying ERI mathematics; retained Fock/J-K consumers still require matched default-path promotion or explicit exception evidence.",
       "schedule_requirements": "Share primitive/Boys work across Fock outputs, preserve symmetry/scatter semantics, and choose materialization/rematerialization from measured register and occupancy evidence rather than Direct-only shape tests.",
       "resource_profile": "Register/shared-memory pressure and repeated primitive work are the primary retirement constraints; endpoint selection must consume generic target/resource evidence.",
       "evidence": [
@@ -73,9 +73,6 @@
         "src/scf/cuda/direct_fock_order2.cuh",
         "src/scf/cuda/direct_fock_quartet.cuh",
         "src/scf/cuda/direct_jk_kernels.cu",
-        "src/scf/cuda/direct_native_eri_order2.cuh",
-        "src/scf/cuda/direct_native_eri_order3.cuh",
-        "src/scf/cuda/direct_native_eri_order4.cuh",
         "src/scf/cuda/direct_packed_fock_kernels.cu"
       ]
     },
@@ -109,9 +106,9 @@
     {
       "id": "shared-native-recurrence-support",
       "status": "unsupported-fallback",
-      "capability": "Shared native Cartesian, shell-class, Hermite, pair and contraction helpers still needed by retained Direct scientific consumers.",
+      "capability": "Shared native Cartesian, Hermite, pair and contraction helpers still needed by retained Direct scientific consumers; order-2/3/4 primitive recurrence and shell-class dispatch are compiler-generated.",
       "current_selector": "These helpers are reached through retained native Direct families; they are not independently selected as a second public method path.",
-      "generated_alternative": "Common IntegralIR recurrence/spec ownership can replace these helpers only when every dependent production consumer has a generated lowering with equivalent sharing and resource behavior.",
+      "generated_alternative": "Common IntegralIR/compiler recurrence ownership now covers order-2/3/4 primitive recurrence and shell dispatch. Remaining native pair/Hermite/cartesian helpers retire only when every dependent production consumer has equivalent qualified lowering.",
       "schedule_requirements": "Keep recurrence mathematics separate from queue/runtime plumbing, preserve shell symmetry and pair reuse, and avoid deleting shared helpers while any qualified fallback still depends on them.",
       "resource_profile": "Compact pair geometry and bounded local intermediates are part of the existing performance envelope; a generated replacement must not multiply recurrence work or unbound local storage.",
       "evidence": [
@@ -131,7 +128,6 @@
         "src/scf/cuda/direct_native_order2_shell.cuh",
         "src/scf/cuda/direct_native_pair_order2.cuh",
         "src/scf/cuda/direct_native_pair_order3.cuh",
-        "src/scf/cuda/direct_native_shell_class.cuh",
         "src/scf/cuda/direct_native_shell_pair_hermite.cuh",
         "src/scf/cuda/direct_pair_cache.cu"
       ]
