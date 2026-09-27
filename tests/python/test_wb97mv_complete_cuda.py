@@ -7,9 +7,21 @@ VV10 are all included in both engines; no component-only success promotes API.
 
 import os
 import typing
+from pathlib import Path
 
 import numpy as np
 import pytest
+
+
+def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
+    ).read_text(encoding="utf-8")
+    begin = source.index("vibeqc_status cuda_integral_gradient(")
+    end = source.index("Result execute(bool compute_forces)", begin)
+    bridge = source[begin:end]
+    assert "execute_cuda_stationary_one_electron_pair(" in bridge
+    assert "execute_cuda_one_electron_gradient(" not in bridge
 
 
 @pytest.mark.parametrize(
