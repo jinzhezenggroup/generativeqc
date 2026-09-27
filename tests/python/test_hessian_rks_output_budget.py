@@ -15,6 +15,7 @@ from tools.vibeqc_hessian import rks_molecular
 def _stub_operator(monkeypatch: pytest.MonkeyPatch) -> typing.Any:
     class Operator:
         xc_kernel = SimpleNamespace(basis=SimpleNamespace(natom=2))
+        _source = SimpleNamespace(nbf=2, shell_sizes=(1, 1), atoms=(None, None))
         state = SimpleNamespace(
             identity=SimpleNamespace(
                 method="lda-rks",
@@ -101,3 +102,66 @@ def test_one_byte_short_output_budget_refuses_before_block_work(
             block_size=2,
             output_budget_bytes=2 * 6 * 6 * np.dtype(np.float64).itemsize - 1,
         )
+
+
+@pytest.mark.parametrize(
+    ("budget", "error_type"),
+    [
+        (0, ValueError),
+        (-1, ValueError),
+        (True, ValueError),
+        (2**63, ValueError),
+        (1.5, ValueError),
+        (1, MemoryError),
+    ],
+)
+def test_integral_budget_refuses_before_dense_output_allocation(
+    monkeypatch: pytest.MonkeyPatch,
+    budget: typing.Any,
+    error_type: type[Exception],
+) -> None:
+    operator = _stub_operator(monkeypatch)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("dense allocation or HVP started before integral admission")
+
+    monkeypatch.setattr(rks_molecular.np, "empty", forbidden)
+    monkeypatch.setattr(rks_molecular, "rks_hvp_many", forbidden)
+    with pytest.raises(error_type, match="integral_budget_bytes"):
+        rks_molecular.rks_hessian(operator, integral_budget_bytes=budget)
+
+
+@pytest.mark.parametrize("batched", (False, True))
+def test_integral_accumulator_refuses_before_response(
+    monkeypatch: pytest.MonkeyPatch, batched: bool
+) -> None:
+    operator = _stub_operator(monkeypatch)
+    # Isolate the accumulator branch from the plan-weight envelope. This is a
+    # resource-control fixture, not a physical basis or molecular calculation.
+    operator._source = SimpleNamespace(nbf=1, shell_sizes=(1,), atoms=(None,) * 7)
+    operator.xc_kernel = SimpleNamespace(basis=SimpleNamespace(natom=7))
+    direction = np.zeros((7, 3), dtype=np.float64)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("CPKS started before integral accumulator admission")
+
+    monkeypatch.setattr(rks_molecular, "directional_rks_response", forbidden)
+    monkeypatch.setattr(rks_molecular, "directional_rks_responses", forbidden)
+    with pytest.raises(MemoryError, match="output accumulator"):
+        if batched:
+            rks_molecular.rks_hvp_many(
+                operator, direction[None], integral_budget_bytes=128
+            )
+        else:
+            rks_molecular.rks_hvp(operator, direction, integral_budget_bytes=128)
+
+
+def test_integral_accumulator_accepts_exact_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    operator = _stub_operator(monkeypatch)
+    operator._source = SimpleNamespace(nbf=1, shell_sizes=(1,), atoms=(None,) * 7)
+    required = 7 * 3 * np.dtype(np.float64).itemsize
+    assert rks_molecular._checked_integral_budget(operator, required) == 128
+    with pytest.raises(MemoryError, match="output accumulator"):
+        rks_molecular._checked_integral_budget(operator, required - 1)
