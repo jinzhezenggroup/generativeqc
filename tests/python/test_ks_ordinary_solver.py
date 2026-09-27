@@ -74,6 +74,10 @@ def test_large_ks_solver_energy_replay_geometry_and_final_state(
 ) -> None:
     """Exercise both spin slots, bounded submissions and a charged owner."""
     monkeypatch.setenv("VIBEQC_CUDA_KS_CHUNK", chunk)
+    if chunk == "2":
+        # 24 AOs use provider-backed Xsyevd and must stay outside capture even
+        # when the small-native replay qualification switch is requested.
+        monkeypatch.setenv("VIBEQC_CUDA_KS_REPLAY", "1")
     charge, multiplicity = (1, 2) if unrestricted else (0, 1)
     kwargs = {
         "method": f"{family}-uks" if unrestricted else f"{family}-rks",
