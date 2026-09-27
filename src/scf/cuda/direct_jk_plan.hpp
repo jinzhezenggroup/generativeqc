@@ -11,10 +11,10 @@
 
 namespace vibeqc::scf {
 
-/** Select the resident value sources without changing the requested mathematics.
- * Generated J is exact FP64 and may be composed with the independent exact-K
- * consumer on the same provider stream. Mixed-J and missing optional capacity
- * deliberately retain the generic source.
+/** Select resident value sources without changing the requested mathematics.
+ * Generated J/K are exact FP64 full-range consumers on the same provider stream.
+ * Mixed-J, range-separated K and missing optional capacity deliberately retain
+ * the generic source.
  */
 struct DirectJkValueDispatch {
   bool generated_coulomb{}, generated_exchange{}, generic_coulomb{}, generic_exchange{};
