@@ -470,6 +470,11 @@ def _artifact_verification(
             "status": "missing_or_invalid",
             "detail": f"missing AOT manifest field: {field}",
         }
+    except AttributeError as error:
+        return {
+            "status": "missing_or_invalid",
+            "detail": f"invalid AOT manifest schema: {error}",
+        }
     return {
         "status": "verified",
         "detail": "packaged s/p/d AOT contract and binary identity verified",

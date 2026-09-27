@@ -275,3 +275,26 @@ def test_malformed_optional_aot_manifest_is_reported_not_raised(
         "status": "missing_or_invalid",
         "detail": "missing AOT manifest field: source_identity",
     }
+
+
+def test_non_object_optional_aot_manifest_is_reported_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def non_object_loader(*_: object, **__: object) -> object:
+        raise AttributeError("'list' object has no attribute 'get'")
+
+    monkeypatch.setattr(
+        qualify_capacity, "load_stationary_aot_artifact", non_object_loader
+    )
+    result = qualify_capacity._artifact_verification(
+        tmp_path,
+        functional=0,
+        spin="unpolarized",
+        plan=object(),
+    )
+
+    assert result == {
+        "status": "missing_or_invalid",
+        "detail": "invalid AOT manifest schema: 'list' object has no attribute 'get'",
+    }
