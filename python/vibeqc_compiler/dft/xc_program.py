@@ -13,7 +13,6 @@ and fallback vocabulary. No XC equation or CUDA kernel is duplicated here.
 
 from __future__ import annotations
 
-import collections.abc
 import math
 import typing
 from dataclasses import dataclass, replace
@@ -29,9 +28,14 @@ from vibeqc_compiler.common.program_region import (
 )
 from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.common.resources import byte_product
-from vibeqc_compiler.common.schedule import ScheduleContract, ScheduleResources
+from vibeqc_compiler.common.schedule import ScheduleResources
 
 from .xc_schedule import GridXcCandidateAssessment, GridXcCandidateShape
+
+if typing.TYPE_CHECKING:
+    import collections.abc
+
+    from vibeqc_compiler.common.schedule import ScheduleContract
 
 _HOST_REGION_EFFECTS = {
     "runtime.cuda.ks_xc_density_d2h": EffectKind.PURE,
