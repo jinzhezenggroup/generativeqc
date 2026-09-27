@@ -91,13 +91,13 @@ from .force_aware_scf import (
     ScfForceErrorEstimator,
 )
 from .ks import FunctionalSpec, KsOptions
-from .libxc import available_libxc_functionals, resolve_libxc_functional
 from .ks_diagnostics import (
     KsDiagnostic,
     KsEnergyComponents,
     KsIteration,
     KsTransportDiagnostic,
 )
+from .libxc import available_libxc_functionals, resolve_libxc_functional
 from .mean_field import (
     FixedDensityExchangeEvaluation,
     FixedDensityMeanField,

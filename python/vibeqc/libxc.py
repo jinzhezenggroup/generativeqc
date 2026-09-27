@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import typing
-
 from vibeqc_compiler.method import BulkKsResolution, resolve_public_bulk_ks
 from vibeqc_compiler.xc.public_inventory import (
     available_public_functionals,

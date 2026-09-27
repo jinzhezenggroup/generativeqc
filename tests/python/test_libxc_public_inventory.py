@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from vibeqc_compiler.xc import public_inventory
 
 
@@ -14,7 +13,9 @@ def test_installed_inventory_is_explicitly_empty_until_requalified() -> None:
     assert public_inventory.available_public_functionals() == ()
 
 
-def test_inventory_rejects_incomplete_stage_sets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_inventory_rejects_incomplete_stage_sets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     path = tmp_path / "inventory.json"
     path.write_text(
         json.dumps(

@@ -46,6 +46,7 @@ def load_public_inventory(path: Path = DEFAULT_INVENTORY) -> dict[str, dict[str,
     """Return exact current public evidence, rejecting stale/tampered records."""
 
     from vibeqc_compiler.method.bulk_ks import resolve_public_bulk_ks
+
     from .libxc_bulk_capabilities import functional_capability
 
     payload = _read(Path(path))
@@ -61,7 +62,9 @@ def load_public_inventory(path: Path = DEFAULT_INVENTORY) -> dict[str, dict[str,
         for spin in ("unpolarized", "polarized"):
             resolved = resolve_public_bulk_ks(name, spin=spin, evidence=evidence)
             if not resolved.capability.public_dft:
-                raise ValueError(f"retained Libxc public admission is incomplete for {name}")
+                raise ValueError(
+                    f"retained Libxc public admission is incomplete for {name}"
+                )
         result[capability.name] = evidence
     return result
 
@@ -80,4 +83,6 @@ def public_evidence(name: str, path: Path = DEFAULT_INVENTORY) -> dict[str, Any]
     try:
         return dict(inventory[key])
     except KeyError as exc:
-        raise ValueError(f"Libxc functional is not retained as public: {name!r}") from exc
+        raise ValueError(
+            f"Libxc functional is not retained as public: {name!r}"
+        ) from exc
