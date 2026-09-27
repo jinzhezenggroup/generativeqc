@@ -81,6 +81,9 @@ def test_stationary_cuda_component_tasks_preserve_public_ao_indices_and_weights(
     owner.tasks = np.empty((8, 9), dtype=np.int64)
     owner.charges = np.empty(8)
     owner.used = 0
+    owner.page_work_budget = 1 << 20
+    owner.pending_primitive_records = 0
+    owner.scalar_packed_descriptors = 0
 
     owner.integral(0, "overlap", (0, 1), charge=2.0)
 
