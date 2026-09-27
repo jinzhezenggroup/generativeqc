@@ -29,7 +29,9 @@ def test_molecular_directional_imports_have_definitions() -> None:
         for alias in node.names
     }
     assert requested, "molecular RKS lost its directional provider binding"
-    assert requested <= declared, f"undefined RKS imports: {sorted(requested - declared)}"
+    assert requested <= declared, (
+        f"undefined RKS imports: {sorted(requested - declared)}"
+    )
     assert {"DirectionalRKSBatchResponse", "directional_rks_responses"} <= declared
 
 
