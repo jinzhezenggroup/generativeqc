@@ -19,6 +19,9 @@ from . import libxc_bulk
 from .libxc_bulk_capabilities import functional_capability
 from .spec import UnsupportedXC
 
+if typing.TYPE_CHECKING:
+    import numpy as np
+
 _SUPPORTED_RUNTIME_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
 PRODUCTION_CANDIDATE_DOMAIN = "libxc-bulk-production-candidate/v1"
 PRODUCTION_DENSITY_CANDIDATE_DOMAIN = "libxc-bulk-production-candidate/v2"
