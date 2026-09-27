@@ -26,9 +26,7 @@ def test_native_lowering_does_not_restore_positive_admission_gate(
     name: str, production: bool
 ) -> None:
     """The legacy production flag cannot turn default-allow into a whitelist."""
-    graph, roots, identity = build_roots(
-        functional(name), ((),), production=production
-    )
+    graph, roots, identity = build_roots(functional(name), ((),), production=production)
     assert graph is not None
     assert len(roots) == 1
     assert len(identity) == 64
