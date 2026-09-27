@@ -29,7 +29,7 @@ def installed_public_evidence(name: str) -> dict[str, Any] | None:
     if payload is None:
         return None
     if not isinstance(payload, Mapping):
-        raise RuntimeError(f"installed Libxc evidence for {key} is not a mapping")
+        raise TypeError(f"installed Libxc evidence for {key} is not a mapping")
 
     current_identity = functional_capability(key).identity
     stage_subjects = {
