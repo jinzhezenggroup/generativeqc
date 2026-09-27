@@ -469,7 +469,8 @@ def complete_rks_gradient_diagnostic(
         compiler = CppCompilerAdapter(Path(os.environ.get("CXX", "c++")))
     if not isinstance(compiler, CppCompilerAdapter):
         raise TypeError("the CPU diagnostic requires an explicit C++ compiler adapter")
-    if any(shell.angular_momentum == 2 for shell in basis.shells):
+    has_d_shell = any(shell.angular_momentum == 2 for shell in basis.shells)
+    if has_d_shell or (execution == "native" and component_execution == "native"):
         from ._stationary_cpu_components import ComponentPrimitiveExecutor
         from ._stationary_cpu_streaming import CompiledComponentExecutor
 
