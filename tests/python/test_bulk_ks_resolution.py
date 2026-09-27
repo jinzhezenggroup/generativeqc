@@ -9,7 +9,14 @@ from vibeqc_compiler.xc.capability_resolution import (
     CapabilityNotQualified,
     CapabilityResolution,
 )
+from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
+)
 
 
 def _qualified_resolution(name: str) -> tuple[object, CapabilityResolution]:
@@ -128,6 +135,9 @@ def test_bulk_ks_requires_exact_cpu_stages_and_builds_pure_plan(
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
     )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
+    )
 
     result = bulk_ks.resolve_bulk_ks(
         capability.name,
@@ -165,6 +175,9 @@ def test_bulk_ks_descriptive_identifier_does_not_change_semantic_plan(
     )
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
+    )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
     )
 
     first = bulk_ks.resolve_bulk_ks(capability.name, identifier="candidate-a")
@@ -331,6 +344,9 @@ def test_public_bulk_ks_requires_exact_public_endpoint_before_routing(
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
     )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
+    )
 
     result = bulk_ks.resolve_public_bulk_ks(
         capability.name,
@@ -391,6 +407,47 @@ def test_public_bulk_ks_rejects_endpoint_identity_drift(
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
     )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
+    )
 
     with pytest.raises(RuntimeError, match="endpoint identity changed"):
         bulk_ks.resolve_public_bulk_ks(capability.name)
+
+
+def test_bulk_ks_requires_exact_molecular_scf_qualification() -> None:
+    result_identity = "c" * 64
+    qualification = {
+        "schema": ENDPOINT_COVERAGE_SCHEMA,
+        "coverage": [
+            {"backend": "cpu", "spin": spin, "products": ["energy"]}
+            for spin in ("polarized", "unpolarized")
+        ],
+        "result_schema": MOLECULAR_SCF_RESULT_SCHEMA,
+        "result_identity": result_identity,
+        "qualification_schema": MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+    }
+    stage = SimpleNamespace(
+        stage="molecular-scf",
+        status="pass",
+        qualification=qualification,
+        evidence="test://molecular-scf#sha256=" + result_identity,
+    )
+    capability = SimpleNamespace(stage_evidence=(stage,))
+
+    assert bulk_ks._require_exact_molecular_scf(capability) == result_identity
+
+    forged = dict(qualification)
+    forged["result_schema"] = "vibeqc.libxc-molecular-scf-result/forged"
+    bad = SimpleNamespace(
+        stage_evidence=(
+            SimpleNamespace(
+                stage="molecular-scf",
+                status="pass",
+                qualification=forged,
+                evidence="test://molecular-scf#sha256=" + result_identity,
+            ),
+        )
+    )
+    with pytest.raises(UnsupportedMethod, match="exact molecular-SCF"):
+        bulk_ks._require_exact_molecular_scf(bad)

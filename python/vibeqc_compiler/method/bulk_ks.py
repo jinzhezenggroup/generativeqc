@@ -21,6 +21,7 @@ from vibeqc_compiler.xc.libxc_bulk_capabilities import (
     BulkFunctionalCapability,
     functional_capability,
 )
+from vibeqc_compiler.xc.molecular_scf_evidence import validate_stage_qualification
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 
 from .ks_execution import KsExecutionPlan, compile_ks_execution_plan
@@ -94,6 +95,27 @@ def _require_exact_compiled_cpu(
         ) from exc
 
 
+def _require_exact_molecular_scf(capability: BulkFunctionalCapability) -> str:
+    stage = next(
+        (
+            item
+            for item in capability.stage_evidence
+            if item.stage == "molecular-scf" and item.status == "pass"
+        ),
+        None,
+    )
+    if stage is None:
+        raise UnsupportedMethod(
+            "automatic bulk Libxc KS requires passing molecular-SCF evidence"
+        )
+    try:
+        return validate_stage_qualification(stage.qualification, stage.evidence)
+    except (TypeError, ValueError) as exc:
+        raise UnsupportedMethod(
+            "automatic bulk Libxc KS requires exact molecular-SCF qualification"
+        ) from exc
+
+
 def _resolve_bulk_ks(
     name: str,
     *,
@@ -136,6 +158,8 @@ def _resolve_bulk_ks(
             "bulk Libxc capability identity changed during KS resolution"
         )
     compiled_cpu = _require_exact_compiled_cpu(capability)
+    if "molecular-scf" in required_stages:
+        _require_exact_molecular_scf(capability)
 
     functional_spec = functional(capability.name, spin=spin)
     method = MethodIR(
