@@ -148,6 +148,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
     representation: typing.Any,
     record_property: typing.Any,
     d_shell: bool = False,
+    component_execution: str = "native",
 ) -> None:
     spin = int(method.endswith("uks"))
     atoms, record, mol = fixture(
@@ -219,14 +220,21 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         assert [item["index"] for item in work] == [0, 1]
         assert work[0]["work"]["ecp_quadrature_pair_samples"] > 0
         assert work[1]["work"]["ecp_quadrature_pair_samples"] == 0
-        for item in work:
+        for index, item in enumerate(work):
             generated = item["work"]
+            if component_execution == "python" and index == 1:
+                # The s-only fragment deliberately uses the legacy primitive baseline.
+                assert "component_execution" not in generated
+                assert "primitive_packaged_aot" not in generated
+                assert "component_contract_runtime_compilations" not in generated
+                continue
+            assert generated["component_execution"] == component_execution
             assert generated["primitive_packaged_aot"] == 1
             assert generated["primitive_runtime_compilations"] == 0
-            if generated["component_execution"] == "native":
+            if component_execution == "native":
                 assert generated["component_contract_runtime_compilations"] == 0
             else:
-                assert generated["component_execution"] == "python"
+                assert component_execution == "python"
                 assert "component_contract_runtime_compilations" not in generated
         if d_shell:
             schedule = work[0]["work"]
@@ -475,6 +483,7 @@ def check_spd_paired_endpoint(
                 representation,
                 measurements.__setitem__,
                 d_shell=True,
+                component_execution=strategy,
             )
         record_property(strategy, measurements)
         results[strategy] = (measurements, gradients)
