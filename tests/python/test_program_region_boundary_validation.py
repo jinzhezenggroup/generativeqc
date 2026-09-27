@@ -101,9 +101,7 @@ def test_derived_region_preserves_ordered_multiple_outputs() -> None:
     fused = apply_program_region_candidate(program, _candidate(region))
     assert fused.calls[0].reads == ("x",)
     assert fused.calls[0].writes == ("b", "c")
-    assert tuple(buffer.name for buffer in fused.buffers) == (
-        "x", "y", "b", "c", "out"
-    )
+    assert tuple(buffer.name for buffer in fused.buffers) == ("x", "y", "b", "c", "out")
     assert fused.inputs == program.inputs
     assert fused.outputs == program.outputs
 
