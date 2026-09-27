@@ -288,30 +288,30 @@ void run_diis(Owner& s, const SolverOptions& options,
     gram_kernel<<<count * count, 256, 0, s.stream>>>(s.errors, s.elements, count, s.gram);
     vibeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system, s.coefficients,
                                                          s.status);
-    int host_status = 1;
+    // The combine kernels already guard on the device-side DIIS status. Queue
+    // them before publishing control state so a successful extrapolation needs
+    // only one host fence instead of one fence for coefficients and another
+    // for arithmetic validation.
+    cuda_check(cudaMemsetAsync(s.arithmetic, 0, sizeof(int), s.stream));
+    vibeqc::cc::diis_combine_slice<<<
+        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n1), 256), 256, 0, s.stream>>>(
+        s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements), 0,
+        static_cast<vibeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
+    vibeqc::cc::diis_combine_slice<<<
+        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n2), 256), 256, 0, s.stream>>>(
+        s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements),
+        static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
+        s.state.t2, s.arithmetic);
+    int host_status = 1, arithmetic = 0;
     cuda_check(
         cudaMemcpyAsync(&host_status, s.status, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
+    cuda_check(cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost,
+                               s.stream));
     cuda_check(cudaStreamSynchronize(s.stream));
-    s.diagnostic.scalar_d2h_bytes += sizeof(int);
+    s.diagnostic.scalar_d2h_bytes += 2 * sizeof(int);
     ++s.diagnostic.synchronizations;
     if (host_status == 2) break;
     if (host_status == 0) {
-      cuda_check(cudaMemsetAsync(s.arithmetic, 0, sizeof(int), s.stream));
-      vibeqc::cc::diis_combine_slice<<<
-          vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n1), 256), 256, 0, s.stream>>>(
-          s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements), 0,
-          static_cast<vibeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
-      vibeqc::cc::diis_combine_slice<<<
-          vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n2), 256), 256, 0, s.stream>>>(
-          s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements),
-          static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
-          s.state.t2, s.arithmetic);
-      int arithmetic = 0;
-      cuda_check(cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost,
-                                 s.stream));
-      cuda_check(cudaStreamSynchronize(s.stream));
-      s.diagnostic.scalar_d2h_bytes += sizeof(int);
-      ++s.diagnostic.synchronizations;
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
       break;
     }
@@ -370,9 +370,11 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       if (iteration == options.max_iterations) break;
       owner.advance(output, 1.0 - options.damping);
       owner.check_generated_error();
-      const auto trial = generated::run_iteration_cuda(owner.state);
-      owner.check_generated_error();
-      run_diis(owner, options, trial);
+      if (options.diis_size) {
+        const auto trial = generated::run_iteration_cuda(owner.state);
+        owner.check_generated_error();
+        run_diis(owner, options, trial);
+      }
       previous = status[0];
     } catch (const std::runtime_error& error) {
       const std::string message = error.what();
