@@ -24,9 +24,9 @@ def _load_manifest() -> dict[str, Any]:
     if payload.get("schema_version") != 2:
         raise ValueError("unsupported public method manifest schema")
     if not isinstance(payload.get("methods"), list):
-        raise ValueError("public method manifest requires methods")
+        raise TypeError("public method manifest requires methods")
     if not isinstance(payload.get("composite_methods", []), list):
-        raise ValueError("public method manifest composite_methods must be a list")
+        raise TypeError("public method manifest composite_methods must be a list")
     return payload
 
 
@@ -155,8 +155,7 @@ def render_public_methods_markdown() -> str:
             "automatic public route until their functional-specific production defect",
             "is resolved.",
             "",
-            "Current explicit blacklist entries in the automatic inventory: "
-            f"**{len(blocked)}**.",
+            f"Current explicit blacklist entries in the automatic inventory: **{len(blocked)}**.",
             "",
             "| Libxc identifier | Family | Reason |",
             "| --- | --- | --- |",
