@@ -17,6 +17,7 @@
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
+#include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_usage.hpp"
@@ -61,6 +62,7 @@ struct NativeKsExecutionPlan {
   double range_omega{};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
+  const dft::SemilocalPointProgram* generic_semilocal_program{};
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method method) noexcept {
@@ -97,15 +99,18 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method meth
 bool unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
 
 std::uint32_t scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.generic_semilocal_program) return plan.generic_semilocal_program->domain_version;
   return plan.generated_split_hybrid ? 4U
                                      : dft::semilocal_family_domain_version(plan.semilocal_family);
 }
 
 std::uint32_t xc_functional_code(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.generic_semilocal_program) return std::numeric_limits<std::uint32_t>::max();
   return plan.functional ? plan.functional : dft::semilocal_family_code(plan.semilocal_family);
 }
 
 const char* semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.generic_semilocal_program) return plan.generic_semilocal_program->identifier;
   return plan.generated_split_hybrid ? "generated split global hybrid"
                                      : dft::semilocal_family_name(plan.semilocal_family);
 }
@@ -133,6 +138,7 @@ struct SemilocalAdmission {
   double correlation_scale{1.0};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
+  const dft::SemilocalPointProgram* generic_semilocal_program{};
 };
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const vibeqc_ks_options& input) {
@@ -171,6 +177,26 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
   if (!std::isfinite(input.semilocal_range_omega) || input.semilocal_range_omega < 0.0)
     throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid semilocal range parameter");
 
+  if (input.semilocal_program) {
+    const auto& external = *input.semilocal_program;
+    if (!external.identifier || !*external.identifier || !external.expression_identity ||
+        !*external.expression_identity || !external.native_program ||
+        input.semilocal_component_count != 1 || input.semilocal_components[0].coefficient != 1.0 ||
+        input.semilocal_range_omega != 0.0)
+      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+                        "invalid generic semilocal point-program descriptor");
+    const auto* program =
+        static_cast<const dft::SemilocalPointProgram*>(external.native_program);
+    dft::validate_semilocal_point_program(*program);
+    if (std::string_view(program->identifier) != external.identifier ||
+        std::string_view(program->expression_identity) != external.expression_identity ||
+        program->ingredient_mask != external.ingredient_mask ||
+        program->domain_version != external.domain_version)
+      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+                        "generic semilocal point-program identity mismatch");
+    return {dft::SemilocalFamily::Lda, 1.0, 1.0, 0U, false, program};
+  }
+
   if (auto curated = admit_curated_semilocal(input)) return *curated;
 
 #if VIBEQC_HAS_CUDA
@@ -191,6 +217,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.generic_semilocal_program) return "libxc-bulk-production-candidate/v2";
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
@@ -226,6 +253,10 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
                       descriptor.method == VIBEQC_METHOD_PBE_D4_RKS};
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
+    execution_plan.generic_semilocal_program = semilocal.generic_semilocal_program;
+    if (execution_plan.generic_semilocal_program && backend != VIBEQC_BACKEND_CPU_REFERENCE)
+      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+                        "generic semilocal point-program KS currently requires CPU");
     if (execution_plan.generated_split_hybrid && backend != VIBEQC_BACKEND_CUDA)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -267,6 +298,10 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
                       "DFT automatic precision currently requires CUDA");
   if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO && execution_plan.d4_correction)
     throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
+  if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO &&
+      execution_plan.generic_semilocal_program)
+    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+                      "generic semilocal point-program KS currently requires strict FP64");
   if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO &&
       (execution_plan.semilocal_family == dft::SemilocalFamily::R2scan ||
        execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv))
@@ -896,8 +931,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     invalidate_final_state();
     const char* method_name = semilocal_family_name(execution_plan_);
     if (compute_forces) {
-      const char* issue =
-          execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164" : "#163";
+      const char* issue = execution_plan_.generic_semilocal_program
+                              ? "#1122"
+                              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan
+                                     ? "#164"
+                                     : "#163");
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
@@ -955,7 +993,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (execution_plan_.generated_split_hybrid)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
-    if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+    if (execution_plan_.generic_semilocal_program) {
+      native = unrestricted(execution_plan_)
+                   ? scf::run_semilocal_uks(fock_, basis_, grid_, options_,
+                                            *execution_plan_.generic_semilocal_program, seed)
+                   : scf::run_semilocal_rks(fock_, basis_, grid_, options_,
+                                            *execution_plan_.generic_semilocal_program, seed);
+    } else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
       if (!range_correction_ || !nonlocal_)
         throw std::runtime_error("WB97M-V requires both range-exchange and nonlocal owners");
       native = unrestricted(execution_plan_)
