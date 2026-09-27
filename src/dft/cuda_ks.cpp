@@ -761,8 +761,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void enqueue_one(unsigned slot) {
     if (slot >= kCudaKsChunkCapacity) throw std::logic_error("CUDA KS chunk slot overflow");
-    if (generation == std::numeric_limits<std::uint64_t>::max())
-      throw std::overflow_error("CUDA KS density generation exhausted");
     std::string detail;
     check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange, nullptr,
                                           jk_error, false, detail),
@@ -772,9 +770,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                                            nullptr, matrix, range_exchange, nullptr,
                                                            range_jk_error, detail),
             detail);
-    xc->enqueue(density, elements, ++generation);
-    pending_generations[slot] = generation;
-    const auto potential = xc->view(generation);
+    const auto potential = xc->enqueue_replay_body(density, elements);
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
                                   enabled, fock);
@@ -834,15 +830,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
           solver_region_executor.submit(solver_region_binding(), width, remaining, false,
                                         [&](unsigned slot) { enqueue_one(slot); });
       movement.submitted_iterations += pending_iterations;
-      if (solver_region_executor.replayed_last_submission()) {
-        // Cached graph replay bypasses the host submission callback. Advance
-        // only the host-side logical generation ledger; the graph itself
-        // rewrites the same stable XC/control buffers captured for this width.
-        for (unsigned slot = 0; slot < pending_iterations; ++slot) {
-          const auto replayed_generation = ++generation;
-          xc->publish_replayed_generation(replayed_generation);
-          pending_generations[slot] = replayed_generation;
-        }
+      // The replay body has no host publication side effects. Publish exactly
+      // once for the physical warmup/capture/replay/fallback selected by the
+      // shared runtime, even when capture internally probes the body twice.
+      for (unsigned slot = 0; slot < pending_iterations; ++slot) {
+        const auto submitted_generation = ++generation;
+        xc->publish_submitted_generation(submitted_generation);
+        pending_generations[slot] = submitted_generation;
       }
     } catch (...) {
       cudaStreamSynchronize(stream);
