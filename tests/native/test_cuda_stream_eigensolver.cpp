@@ -127,11 +127,47 @@ void verify(int n) {
     require(status == 0, "inactive sanitized provider reported failure");
     for (double value : inactive) require(value == 1.0, "inactive matrix was not sanitized");
   }
+  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+    for (int spin = 0; spin < 2; ++spin)
+      check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
+                            cudaMemcpyHostToDevice, owner.stream));
+    check(cudaStreamSynchronize(owner.stream));
+  }
   check(cudaStreamBeginCapture(owner.stream, cudaStreamCaptureModeThreadLocal));
-  require(solver.launch(2, input, scratch, values, info, active) == VIBEQC_STATUS_INVALID_ARGUMENT,
-          "ordinary solver silently accepted graph capture");
+  const auto capture_status = solver.launch(2, input, scratch, values, info, active);
+  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+    require(capture_status == VIBEQC_STATUS_SUCCESS,
+            "small-native eigensolver rejected graph capture");
+  } else {
+    require(capture_status == VIBEQC_STATUS_INVALID_ARGUMENT,
+            "provider-backed ordinary solver silently accepted graph capture");
+  }
   cudaGraph_t graph{};
   check(cudaStreamEndCapture(owner.stream, &graph));
+  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+    cudaGraphExec_t executable{};
+    check(cudaGraphInstantiate(&executable, graph, 0));
+    for (int replay = 0; replay < 2; ++replay) {
+      for (int spin = 0; spin < 2; ++spin)
+        check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
+                              cudaMemcpyHostToDevice, owner.stream));
+      check(cudaGraphLaunch(executable, owner.stream));
+      std::vector<double> replay_values(n * 2);
+      int replay_info[2]{-1, -1};
+      check(cudaMemcpyAsync(replay_values.data(), values, replay_values.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost, owner.stream));
+      check(cudaMemcpyAsync(replay_info, info, sizeof(replay_info), cudaMemcpyDeviceToHost,
+                            owner.stream));
+      check(cudaStreamSynchronize(owner.stream));
+      for (int spin = 0; spin < 2; ++spin) {
+        require(replay_info[spin] == 0, "captured small-native eigensolver reported failure");
+        for (int j = 0; j < n; ++j)
+          require(std::abs(replay_values[spin * n + j] - d[j]) < 2e-11,
+                  "captured small-native eigenvalue mismatch");
+      }
+    }
+    check(cudaGraphExecDestroy(executable));
+  }
   check(cudaGraphDestroy(graph));
 }
 }  // namespace

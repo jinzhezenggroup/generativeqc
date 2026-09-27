@@ -6,6 +6,7 @@ language = "en"
 
 extensions = [
     "myst_parser",
+    "sphinx.ext.mathjax",
     "sphinx_book_theme",
 ]
 
@@ -26,4 +27,8 @@ exclude_patterns = [
 html_theme = "sphinx_book_theme"
 html_title = "VibeQC documentation"
 
+myst_enable_extensions = [
+    "amsmath",
+    "dollarmath",
+]
 myst_heading_anchors = 3

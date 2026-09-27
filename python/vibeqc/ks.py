@@ -304,6 +304,28 @@ def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     return None
 
 
+def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
+    """Check derivative source coverage for an already admitted CUDA KS graph.
+
+    Native preparation still enforces the SCF point-domain and composition
+    contract. This adds no name-based method admission: only one semilocal
+    source plus positive full-range exchange has a complete CUDA pullback.
+    Range separation, dispersion and nonlocal correlation need other providers.
+    """
+    plan = compile_ks_execution_plan(method_ir)
+    return (
+        len(method_ir.primitives) == 2
+        and plan.semilocal is not None
+        and plan.semilocal.functional.ingredients
+        in (("rho",), ("rho", "sigma"), ("rho", "sigma", "tau"))
+        and len(plan.exchange) == 1
+        and plan.exchange[0].operator == "full-range"
+        and plan.exchange[0].coefficient > 0
+        and plan.exchange[0].omega == 0
+        and plan.nonlocal_correlation is None
+    )
+
+
 def _curated_semilocal_family(plan: typing.Any) -> _NativeSemilocalFamily:
     """Classify one curated semilocal component inventory without method promotion."""
     components = dict(plan.semilocal.functional.components)
@@ -333,7 +355,7 @@ def _native_semilocal_family(method_ir: typing.Any) -> int:
     # owner. Do not route that explicit composition through electronic-only
     # admission, or generalize its exception to arbitrary post-SCF corrections.
     if _is_pbe_d4_composition(method_ir):
-        return _NativeSemilocalFamily.PBE
+        return int(_NativeSemilocalFamily.PBE)
     plan = _native_execution_plan(method_ir)
     split = _split_hybrid_record(method_ir)
     if split is not None:
@@ -353,7 +375,7 @@ def _native_semilocal_family(method_ir: typing.Any) -> int:
             raise NotImplementedError(
                 "native B97M lowerer requires canonical WB97M-V composition"
             )
-    return family
+    return int(family)
 
 
 def ks_coefficients(method_ir: typing.Any) -> typing.Any:

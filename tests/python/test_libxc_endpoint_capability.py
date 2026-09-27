@@ -10,6 +10,12 @@ from vibeqc_compiler.xc.endpoint_capability import (
     ENDPOINT_RESOLUTION_SCHEMA,
     resolve_endpoint_capability,
 )
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
+)
 from vibeqc_compiler.xc.public_method_evidence import build_result, stage_evidence
 
 
@@ -47,6 +53,27 @@ def _stage_evidence(
         qualification = capability.production_domain_profile.to_payload()
     if qualification is not None:
         payload["qualification"] = qualification
+    return payload
+
+
+def _exact_dual_spin_molecular_evidence(
+    capability: libxc_bulk_capabilities.BulkFunctionalCapability,
+) -> dict:
+    result_identity = "c" * 64
+    payload = _stage_evidence(
+        capability,
+        "molecular-scf",
+        qualification={
+            **_coverage(
+                ("cpu", "polarized", ("energy",)),
+                ("cpu", "unpolarized", ("energy",)),
+            ),
+            "result_schema": MOLECULAR_SCF_RESULT_SCHEMA,
+            "result_identity": result_identity,
+            "qualification_schema": MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+        },
+    )
+    payload["evidence"] += f"#sha256={result_identity}"
     return payload
 
 
@@ -203,14 +230,7 @@ def test_public_force_requires_exact_public_product_coverage() -> None:
 def test_matching_public_energy_coverage_is_admitted_exactly() -> None:
     base = libxc_bulk_capabilities.functional_capability("GGA_X_PBE_SOL")
     evidence = _cpu_energy_evidence(base)
-    evidence["molecular-scf"] = _stage_evidence(
-        base,
-        "molecular-scf",
-        qualification=_coverage(
-            ("cpu", "polarized", ("energy",)),
-            ("cpu", "unpolarized", ("energy",)),
-        ),
-    )
+    evidence["molecular-scf"] = _exact_dual_spin_molecular_evidence(base)
     result = build_result(
         base.name,
         prerequisite_evidence=evidence,

@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -170,7 +171,7 @@ struct RawHamiltonian {
   std::vector<double> h, g, density, rotation;
 };
 
-RawHamiltonian raw_hamiltonian(const core::System& system, const scf::PhysicalReference& ref,
+RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalReference& ref,
                                std::size_t max_bytes) {
   const auto n = ref.nbf;
   const auto n2 = square(n), n4 = fourth(n);
@@ -355,9 +356,10 @@ double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
 
 }  // namespace
 
-RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
-                                      const scf::PhysicalReference& reference, const Problem& p,
-                                      const SolverResult& cc, std::size_t max_bytes) {
+static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
+                                                    const hf::PhysicalReference& reference,
+                                                    const Problem& p, const SolverResult& cc,
+                                                    std::size_t max_bytes, bool include_triples) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
   if (!o || !v || n > 12 || reference.nbf != n || reference.nocc != o ||
       molecule::ao_count(system) != n || !max_bytes)
@@ -384,18 +386,23 @@ RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
            bytes(cc.t1.capacity()), bytes(cc.t2.capacity()), bytes(n),
            posthf::source_capacity(system)});
   const auto triples_retained =
-      bytes(sum({checked_mul(o, checked_mul(v, square(v))), checked_mul(ov, square(o)),
-                 checked_mul(2, square(ov)), checked_mul(2, ov), n}));
-  const auto pages = std::min<std::size_t>(TriplesResponseOptions{}.batch_capacity,
-                                           checked_mul(v, checked_mul(v + 1, v + 2)) / 6);
+      include_triples
+          ? bytes(sum({checked_mul(o, checked_mul(v, square(v))), checked_mul(ov, square(o)),
+                       checked_mul(2, square(ov)), checked_mul(2, ov), n}))
+          : 0;
+  const auto pages = include_triples
+                         ? std::min<std::size_t>(TriplesResponseOptions{}.batch_capacity,
+                                                 checked_mul(v, checked_mul(v + 1, v + 2)) / 6)
+                         : 0;
   plan.triples_phase_bytes =
-      sum({plan.retained_input_bytes, bytes(n), triples_retained,
-           bytes(generated::triples_response_arena_elements(o, v, pages)),
-           checked_mul(pages, 3 * sizeof(std::int64_t) + 2 * sizeof(double))});
+      include_triples ? sum({plan.retained_input_bytes, bytes(n), triples_retained,
+                             bytes(generated::triples_response_arena_elements(o, v, pages)),
+                             checked_mul(pages, 3 * sizeof(std::int64_t) + 2 * sizeof(double))})
+                      : 0;
   LambdaOptions lambda_options;
   lambda_options.max_bytes = max_bytes;
   lambda_options.gmres.max_workspace_bytes = max_bytes;
-  const auto lambda_capacity = lambda_cpu_numeric_capacity(p, cc, lambda_options, true);
+  const auto lambda_capacity = lambda_cpu_numeric_capacity(p, cc, lambda_options, include_triples);
   if (lambda_capacity < lambda_borrowed) throw std::logic_error("Lambda capacity underflow");
   plan.lambda_phase_bytes =
       sum({plan.retained_input_bytes, triples_retained, lambda_capacity - lambda_borrowed});
@@ -463,18 +470,30 @@ RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
            checked_mul(system.shells.size() + 1, sizeof(std::size_t)),
            posthf::source_capacity(system), posthf::source_scratch_bytes});
   plan.peak_bytes =
-      std::max({plan.triples_phase_bytes, plan.lambda_phase_bytes, plan.parameter_phase_bytes,
-                plan.raw_phase_bytes, plan.response_phase_bytes, plan.derivative_phase_bytes});
+      std::max({plan.lambda_phase_bytes, plan.parameter_phase_bytes, plan.raw_phase_bytes,
+                plan.response_phase_bytes, plan.derivative_phase_bytes, plan.triples_phase_bytes});
   if (plan.peak_bytes > max_bytes)
     throw std::length_error("RCCSD(T) complete force exceeds simultaneous host budget");
   return plan;
 }
 
-static RccsdtForceResult rccsdt_force_impl(
-    const core::System& system, const scf::PhysicalReference& reference, const Problem& problem,
+RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
+                                     const hf::PhysicalReference& reference, const Problem& p,
+                                     const SolverResult& cc, std::size_t max_bytes) {
+  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false);
+}
+
+RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
+                                      const hf::PhysicalReference& reference, const Problem& p,
+                                      const SolverResult& cc, std::size_t max_bytes) {
+  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true);
+}
+
+static RccsdtForceResult relaxed_rccsd_force_impl(
+    const core::System& system, const hf::PhysicalReference& reference, const Problem& problem,
     const SolverResult& cc_result, std::span<const double> eps_o, std::span<const double> eps_v,
-    std::size_t max_bytes, bool cuda_derivative, int device_id, std::size_t derivative_stage_budget,
-    double denominator_threshold) {
+    std::size_t max_bytes, bool include_triples, bool cuda_derivative, int device_id,
+    std::size_t derivative_stage_budget, double denominator_threshold) {
   validate_problem(problem);
 #if !VIBEQC_HAS_CUDA
   if (cuda_derivative) throw std::runtime_error("RCCSD(T) CUDA force is unavailable in this build");
@@ -490,14 +509,19 @@ static RccsdtForceResult rccsdt_force_impl(
   const auto o = problem.nocc, v = problem.nvir, n = reference.nbf;
   if (reference.orbital_energies.size() != n || !finite(reference.orbital_energies))
     throw std::invalid_argument("RCCSD(T) force requires finite canonical orbital energies");
-  const auto resources = plan_rccsdt_force_cpu(system, reference, problem, cc_result, max_bytes);
+  const auto resources =
+      include_triples ? plan_rccsdt_force_cpu(system, reference, problem, cc_result, max_bytes)
+                      : plan_rccsd_force_cpu(system, reference, problem, cc_result, max_bytes);
 
-  TriplesResponseOptions triples_options;
-  triples_options.denominator_threshold = denominator_threshold;
-  triples_options.max_bytes = max_bytes;
-  const auto triples =
-      triples_response_cpu(problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
-                           std::vector<double>(eps_v.begin(), eps_v.end()), triples_options);
+  std::optional<TriplesResponseResult> triples;
+  if (include_triples) {
+    TriplesResponseOptions triples_options;
+    triples_options.denominator_threshold = denominator_threshold;
+    triples_options.max_bytes = max_bytes;
+    triples.emplace(
+        triples_response_cpu(problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
+                             std::vector<double>(eps_v.begin(), eps_v.end()), triples_options));
+  }
 
   LambdaOptions lambda_options;
   lambda_options.max_bytes = max_bytes;
@@ -510,8 +534,11 @@ static RccsdtForceResult rccsdt_force_impl(
   ParameterWeights parameters;
 #if VIBEQC_HAS_CUDA
   if (cuda_derivative) {
-    auto fixed_orbital = solve_lambda_parameter_response_cuda_with_energy_source(
-        problem, cc_result, triples.t1, triples.t2, device_id, lambda_options);
+    auto fixed_orbital =
+        include_triples
+            ? solve_lambda_parameter_response_cuda_with_energy_source(
+                  problem, cc_result, triples->t1, triples->t2, device_id, lambda_options)
+            : solve_lambda_parameter_response_cuda(problem, cc_result, device_id, lambda_options);
     corrected = std::move(fixed_orbital.lambda);
     parameters = {std::move(fixed_orbital.foo),  std::move(fixed_orbital.fov),
                   std::move(fixed_orbital.fvv),  std::move(fixed_orbital.ovov),
@@ -521,14 +548,15 @@ static RccsdtForceResult rccsdt_force_impl(
   } else
 #endif
   {
-    corrected = solve_lambda_cpu_with_energy_source(problem, cc_result, triples.t1, triples.t2,
-                                                    lambda_options);
+    corrected = include_triples ? solve_lambda_cpu_with_energy_source(
+                                      problem, cc_result, triples->t1, triples->t2, lambda_options)
+                                : solve_lambda_cpu(problem, cc_result, lambda_options);
     parameters = parameter_vjp(problem, cc_result, corrected, max_bytes);
   }
   if (cuda_derivative && !corrected.diagnostic.cuda_actions)
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
-  add_projected_triples(parameters, triples, o, v);
+  if (triples) add_projected_triples(parameters, *triples, o, v);
   const auto raw = raw_hamiltonian(system, reference, max_bytes);
 #if VIBEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
@@ -555,13 +583,15 @@ static RccsdtForceResult rccsdt_force_impl(
   auto correlation = hamiltonian_dispatch(parameters, 0.0);
 
   std::vector<double> bar_fock(square(n), 0.0);
-  for (std::size_t i = 0; i < o; ++i) bar_fock[i * n + i] = triples.eps_o[i];
-  for (std::size_t a = 0; a < v; ++a) bar_fock[(o + a) * n + o + a] = triples.eps_v[a];
-  const auto denominator = fock_dispatch(bar_fock);
-  add_in_place(correlation, denominator);
+  if (triples) {
+    for (std::size_t i = 0; i < o; ++i) bar_fock[i * n + i] = triples->eps_o[i];
+    for (std::size_t a = 0; a < v; ++a) bar_fock[(o + a) * n + o + a] = triples->eps_v[a];
+    const auto denominator = fock_dispatch(bar_fock);
+    add_in_place(correlation, denominator);
+    std::fill(bar_fock.begin(), bar_fock.end(), 0.0);
+  }
 
   double minimum_same_space_gap = std::numeric_limits<double>::infinity();
-  std::fill(bar_fock.begin(), bar_fock.end(), 0.0);
   for (const auto& bounds :
        {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}}) {
     for (std::size_t p = bounds.first; p < bounds.second; ++p)
@@ -695,7 +725,7 @@ static RccsdtForceResult rccsdt_force_impl(
   result.orbital_stationarity = stationarity;
   result.minimum_orbital_curvature = minimum_curvature;
   result.minimum_same_space_gap = minimum_same_space_gap;
-  result.triples_response_pages = triples.pages;
+  result.triples_response_pages = triples ? triples->pages : 0;
   result.numeric_capacity_bytes = resources.peak_bytes;
 #if VIBEQC_HAS_CUDA
   if (cuda_response) {
@@ -710,23 +740,41 @@ static RccsdtForceResult rccsdt_force_impl(
   return result;
 }
 
+RccsdtForceResult rccsd_force_cpu(const core::System& system,
+                                  const hf::PhysicalReference& reference, const Problem& problem,
+                                  const SolverResult& cc_result, std::span<const double> eps_o,
+                                  std::span<const double> eps_v, std::size_t max_bytes) {
+  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                                  false, false, 0, 0, 1e-10);
+}
+
+RccsdtForceResult rccsd_force_cuda(const core::System& system,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
+                                   const SolverResult& cc_result, std::span<const double> eps_o,
+                                   std::span<const double> eps_v, std::size_t max_bytes,
+                                   int device_id, std::size_t derivative_stage_budget) {
+  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                                  false, true, device_id, derivative_stage_budget, 1e-10);
+}
+
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
-                                   const scf::PhysicalReference& reference, const Problem& problem,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    double denominator_threshold) {
-  return rccsdt_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes, false, 0,
-                           0, denominator_threshold);
+  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                                  true, false, 0, 0, denominator_threshold);
 }
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
-                                    const scf::PhysicalReference& reference, const Problem& problem,
+                                    const hf::PhysicalReference& reference, const Problem& problem,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
                                     double denominator_threshold) {
-  return rccsdt_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes, true,
-                           device_id, derivative_stage_budget, denominator_threshold);
+  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                                  true, true, device_id, derivative_stage_budget,
+                                  denominator_threshold);
 }
 
 }  // namespace vibeqc::cc

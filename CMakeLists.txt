@@ -21,6 +21,8 @@ option(VIBEQC_ENABLE_AOT_SHELLS
        "Build generated shell kernels in addition to the generic CUDA path" ON)
 option(VIBEQC_ENABLE_STATIONARY_FORCE_AOT
        "Build packaged stationary CUDA force artifacts" ON)
+option(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
+       "Build packaged stationary CPU first-derivative artifacts" ON)
 option(VIBEQC_BUILD_TESTS "Build native tests" ON)
 option(VIBEQC_PYTHON_WHEEL
        "Install one unversioned shared library for a Python wheel" OFF)

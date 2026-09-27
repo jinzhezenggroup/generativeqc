@@ -76,10 +76,11 @@ int main() {
  assert(executor.submit(binding,2,8,false,step)==2);
  assert(calls==5 && executor.replay_metrics().mode==1);
  assert(executor.submit(binding,2,8,false,step)==2);
- assert(calls==7 && executor.replay_metrics().mode==2);
+ assert(calls==7 && executor.replay_metrics().mode==2 && !executor.replayed_last_submission());
  const int before=calls;
  assert(executor.submit(binding,2,8,false,step)==2);
  assert(calls==before && launches==2 && executor.replay_metrics().mode==3);
+ assert(executor.replayed_last_submission());
  assert(executor.metrics.submissions==5 && executor.metrics.submitted_steps==9);
 
  // A different realized width is a different replay shape and must invalidate.

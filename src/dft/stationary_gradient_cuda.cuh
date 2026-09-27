@@ -46,10 +46,14 @@ struct Owner {
 // Caps make all products below representable before any allocation or pointer
 // dereference. The fixed worker count bounds O(worker*natom) adjoint scratch.
 size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntask, size_t ns) {
-  if (!na || na > 32 || !n || n > 128 || !nprimitive || nprimitive > 4096 || !np || np > 4096 ||
+  if (!na || na > 128 || !n || n > 1024 || !nprimitive || nprimitive > 16384 || !np || np > 4096 ||
       !ntask || ntask > 4096 || (ns != 1 && ns != 2) || ns != stationary_spin_blocks)
     throw std::invalid_argument("stationary CUDA shape exceeds small-domain caps");
-  return 8 * (2 * nprimitive + 4 * n + 22 * ntask + 600 * na + 3 * np + 2 * ns * n * n) + 256;
+  // Three center coordinates, two 32-worker nine-coordinate scratch panels,
+  // and one three-coordinate panel per compiler-owned gradient source.
+  return 8 * (2 * nprimitive + 4 * n + 22 * ntask + (579 + 3 * stationary_source_count) * na +
+              3 * np + 2 * ns * n * n) +
+         256;
 }
 template <class F>
 int guarded(Owner* owner, char* error, size_t size, F f) noexcept {
@@ -118,7 +122,8 @@ __global__ void validate_centers(const double* centers, size_t na, double tolera
 __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
-                                const double* raw, double* partial, double* scratch, int* error);
+                                const double* raw, const double* external, double* partial,
+                                double* scratch, int* error);
 __global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
 }  // namespace vibeqc_stationary_cuda
@@ -163,7 +168,7 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->raw = take(np);
     p->partial = take(workers * 9 * na);
     p->scratch = take(workers * 9 * na);
-    p->sources = take(21 * na);
+    p->sources = take(3 * stationary_source_count * na);
     p->ao_ranges = reinterpret_cast<int64_t*>(take(2 * n));
     p->tasks = reinterpret_cast<int64_t*>(take(task_stride * ntask));
     p->ao_atoms = reinterpret_cast<int64_t*>(take(n));
@@ -247,7 +252,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
-    cuda_check(cudaMemsetAsync(p->sources, 0, 21 * p->atoms * 8, stream));
+    cuda_check(cudaMemsetAsync(p->sources, 0, 3 * stationary_source_count * p->atoms * 8, stream));
     upload(*p, p->centers, centers, 3 * p->atoms, stream);
     upload(*p, p->density, density, p->spin_blocks * p->aos * p->aos, stream);
     upload(*p, p->weighted_density, weighted_density, p->spin_blocks * p->aos * p->aos, stream);
@@ -273,7 +278,7 @@ int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges,
     for (size_t i = 0; i < count; ++i) {
       const auto* task = tasks + task_stride * i;
       const auto source = task[1], rank = task[2], nucleus = task[3], work = task[8];
-      if ((source != 0 && source != 1 && source != 5) || (rank != 2 && rank != 4) ||
+      if (!stationary_integral_source(source) || (rank != 2 && rank != 4) ||
           (nucleus >= 0 && (rank != 2 || nucleus >= int64_t(p->atoms))) || work <= 0)
         throw std::invalid_argument("invalid stationary task descriptor");
       for (size_t center = 0; center < size_t(rank); ++center)
@@ -294,7 +299,7 @@ int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges,
         p->ao_norms, p->ao_atoms, p->centers, p->density, p->weighted_density, p->aos, p->atoms,
         p->task_values, p->context.error);
     profile_record(*p, p->stage2, stream);
-    task_reduce<<<blocks(21 * p->atoms, 64), 64, 0, stream>>>(
+    task_reduce<<<blocks(3 * stationary_source_count * p->atoms, 64), 64, 0, stream>>>(
         p->task_values, p->tasks, count, p->ao_atoms, p->atoms, p->sources, p->context.error);
     profile_record(*p, p->stage3, stream);
     p->launches += 2;
@@ -326,9 +331,10 @@ int stationary_nuclear(void* pointer, unsigned kind, int64_t a, int64_t b, doubl
     profile_elapsed(*p, p->primitive_kernel_ms, p->stage0, p->stage1);
   });
 }
-int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, const double* work,
-                        const int64_t* owners, const double* weights, const double* raw,
-                        char* error, size_t size) {
+int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView* view,
+                                 const double* work, const int64_t* owners, const double* weights,
+                                 const double* raw, const double* external, char* error,
+                                 size_t size) {
   using namespace vibeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
@@ -338,6 +344,16 @@ int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, co
       throw std::invalid_argument("invalid geometry task lease");
     check(*p);
     auto stream = view->stream;
+    // This optional bounded tile is accounted separately by the nonlocal
+    // caller (6*npoint FP64 values). It lives through the borrowed stream.
+    vibeqc::runtime::OwnedCudaBuffer<double> seeds;
+    if (external) {
+      for (size_t i = 0; i < 6 * view->npoint; ++i)
+        if (!std::isfinite(external[i]))
+          throw std::invalid_argument("nonfinite nonlocal geometry seed");
+      seeds.allocate(p->context.device, 6 * view->npoint, stream);
+      upload(*p, seeds.get(), external, 6 * view->npoint, stream);
+    }
     // CudaGrid synchronized its producer before lending this view. Finish on
     // the SAME borrowed stream before the lease ends; retain no task pointers.
     try {
@@ -346,12 +362,12 @@ int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, co
       upload(*p, p->weights, weights, view->npoint, stream);
       upload(*p, p->raw, raw, view->npoint, stream);
       profile_record(*p, p->stage1, stream);
-      geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms,
-                                                 p->centers, p->atoms, p->weights, p->raw,
-                                                 p->partial, p->scratch, p->context.error);
+      geometry_kernel<<<1, workers, 0, stream>>>(
+          *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
+          seeds.get(), p->partial, p->scratch, p->context.error);
       profile_record(*p, p->stage2, stream);
       geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-          p->partial, p->atoms, p->sources + 6 * p->atoms, p->context.error);
+          p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
       profile_record(*p, p->stage3, stream);
       p->launches += 2;
       p->point_count += view->npoint;
@@ -377,11 +393,17 @@ int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, co
     }
   });
 }
+int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, const double* work,
+                        const int64_t* owners, const double* weights, const double* raw,
+                        char* error, size_t size) {
+  return stationary_geometry_external(pointer, view, work, owners, weights, raw, nullptr, error,
+                                      size);
+}
 int stationary_finish(void* pointer, double* output, size_t count, char* error, size_t size) {
   using namespace vibeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !output || count != 21 * p->atoms)
+    if (!p || !output || count != 3 * stationary_source_count * p->atoms)
       throw std::invalid_argument("invalid source output");
     check(*p);
     finished(*p, p->context.stream);
