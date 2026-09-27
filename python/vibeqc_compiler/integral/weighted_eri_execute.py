@@ -19,6 +19,7 @@ import time
 import typing
 from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -229,6 +230,11 @@ def compile_weighted_eri(
 
 
 
+@lru_cache(maxsize=8)
+def _packaged_library_hash(path: Path) -> str:
+    return file_hash(path)
+
+
 def packaged_weighted_eri(
     integral: IntegralIR,
     library: typing.Any,
@@ -255,7 +261,7 @@ def packaged_weighted_eri(
         {
             "identity": identity,
             "key": canonical_hash(identity),
-            "binary_sha256": file_hash(path),
+            "binary_sha256": _packaged_library_hash(path),
             "compile_seconds": 0.0,
             "resources": [],
         },
@@ -456,7 +462,11 @@ class PreparedWeightedEri:
             (record_capacity, PRIMITIVE_RANGE_RECORD.size), dtype=np.uint8
         )
         self._chunk = np.empty((tile_capacity, 13), dtype=np.float64)
-        target = artifact.native.metadata["identity"]["target"]
+        target = (
+            artifact.native.metadata["identity"]["target"]
+            if artifact.backend == "cuda"
+            else {}
+        )
         major = target["compute_capability_major"] if artifact.backend == "cuda" else 0
         minor = target["compute_capability_minor"] if artifact.backend == "cuda" else 0
         try:
