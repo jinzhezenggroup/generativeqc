@@ -235,6 +235,13 @@ void CudaXcPlan::enqueue(const double* density, std::size_t elements, std::uint6
   enqueue_impl(density, nullptr, elements, generation, precision);
 }
 
+CudaXcView CudaXcPlan::enqueue_replay_body(const double* density, std::size_t elements,
+                                           CudaXcDensityPrecision precision) {
+  if (layout_.response) throw std::invalid_argument("XC response plan requires a direction");
+  enqueue_impl(density, nullptr, elements, 0, precision, nullptr, nullptr, false);
+  return {0, layout_.nao, layout_.spins, potential_, totals_, error_, stream_};
+}
+
 void CudaXcPlan::enqueue_density_features(const double* density, std::size_t elements,
                                           std::uint64_t generation, double* total_density,
                                           double* total_gradient) {
@@ -252,7 +259,7 @@ void CudaXcPlan::enqueue_response(const double* density, const double* direction
   enqueue_impl(density, direction, elements, generation, CudaXcDensityPrecision::Fp64);
 }
 
-void CudaXcPlan::publish_replayed_generation(std::uint64_t generation) {
+void CudaXcPlan::publish_submitted_generation(std::uint64_t generation) {
   check_device();
   generations_.begin(generation);
   generations_.commit(generation);
@@ -315,7 +322,8 @@ void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
 
 void CudaXcPlan::enqueue_impl(const double* density, const double* direction, std::size_t elements,
                               std::uint64_t generation, CudaXcDensityPrecision precision,
-                              double* total_density, double* total_gradient) {
+                              double* total_density, double* total_gradient,
+                              bool publish_generation) {
   check_device();
   const auto matrix = size_mul(layout_.nao, layout_.nao, "CUDA XC density size overflow");
   const auto count = size_mul(layout_.spins, matrix, "CUDA XC density size overflow");
@@ -326,7 +334,7 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
   if (precision == CudaXcDensityPrecision::Fp32ComputeFp64Accumulate && layout_.functional > 2U)
     throw std::invalid_argument(
         "mixed CUDA XC density precision is not qualified for this functional");
-  if (!generation || generation <= generations_.submitted())
+  if (publish_generation && (!generation || generation <= generations_.submitted()))
     throw std::invalid_argument("CUDA XC density generation is stale");
   device_pointer(density, device_);
   const auto input_bytes = size_mul(count, sizeof(double), "CUDA XC density size overflow");
@@ -357,7 +365,7 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     if (vibeqc::runtime::ranges_overlap(direction, input_bytes, arena_, layout_.device_bytes))
       throw std::invalid_argument("CUDA XC direction aliases its workspace");
   }
-  generations_.begin(generation);
+  if (publish_generation) generations_.begin(generation);
   try {
 #if defined(VIBEQC_TEST_HOOKS)
     // Exercise the generated executor's real exception types without leaving a
@@ -377,8 +385,10 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
   } catch (const vibeqc_tensor::DeviceRuntimeError& error) {
     throw vibeqc::Error(VIBEQC_STATUS_CUDA_ERROR, error.what());
   }
-  generations_.commit(generation);
-  ++transfers_.evaluations;
+  if (publish_generation) {
+    generations_.commit(generation);
+    ++transfers_.evaluations;
+  }
 }
 
 CudaXcView CudaXcPlan::view(std::uint64_t generation) const {
