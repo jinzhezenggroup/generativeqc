@@ -100,3 +100,32 @@ def test_gfn2_cuda_kernels_do_not_take_reference_parameters() -> None:
                 offenders.append(relpath)
                 break
     assert offenders == []
+
+def test_gfn2_cuda_dense_d4_cache_api_is_retired() -> None:
+    source = (RUNTIME / "src/backends/cuda/gfn2_d4.cu").read_text(encoding="utf-8")
+    header = (RUNTIME / "src/backends/cuda/gfn2_d4.cuh").read_text(encoding="utf-8")
+    retired = (
+        "update_gfn2_d4_geometry_cache_cuda",
+        "evaluate_gfn2_d4_two_body_cuda",
+        "evaluate_gfn2_d4_scc_potential_cuda",
+        "evaluate_gfn2_d4_scc_energy_cuda",
+        "add_gfn2_d4_two_body_gradient_cuda",
+        "evaluate_gfn2_d4_atm_cuda",
+        "add_gfn2_d4_atm_gradient_cuda",
+    )
+    for symbol in retired:
+        assert symbol not in source
+        assert symbol not in header
+    assert "Gfn2D4DeviceCache" not in source
+    assert "Gfn2D4DeviceCache" not in header
+    for retained in (
+        "evaluate_gfn2_d4_two_body_pairlist_cuda",
+        "evaluate_gfn2_d4_scc_potential_pairlist_cuda",
+        "evaluate_gfn2_d4_scc_energy_pairlist_cuda",
+        "add_gfn2_d4_two_body_gradient_pairlist_cuda",
+        "evaluate_gfn2_d4_atm_pairlist_cuda",
+        "add_gfn2_d4_atm_gradient_pairlist_cuda",
+    ):
+        assert retained in source
+        assert retained in header
+
