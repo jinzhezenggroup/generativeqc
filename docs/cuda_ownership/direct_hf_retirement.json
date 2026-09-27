@@ -104,29 +104,6 @@
       ]
     },
     {
-      "id": "shared-native-recurrence-support",
-      "status": "unsupported-fallback",
-      "capability": "Only the compact gradient result type and primitive-pair cache remain native in the shared Direct scientific-support family. Cartesian primitive evaluation, generic contraction, primitive order-2/3/4 recurrence, shell dispatch, pair/Hermite support and exact order-two shell contraction are compiler-generated.",
-      "current_selector": "These helpers are reached through retained native Direct families; they are not independently selected as a second public method path.",
-      "generated_alternative": "Compiler ownership covers the reusable Direct recurrence/contraction mathematics. Remaining native gradient-type/cache owners should be retained only for actual ABI/data-lifetime semantics or migrated in a bounded follow-up.",
-      "schedule_requirements": "Keep recurrence mathematics separate from queue/runtime plumbing, preserve shell symmetry and pair reuse, and avoid deleting shared helpers while any qualified fallback still depends on them.",
-      "resource_profile": "Compact pair geometry and bounded local intermediates are part of the existing performance envelope; a generated replacement must not multiply recurrence work or unbound local storage.",
-      "evidence": [
-        "docs/developer/shell_codegen.md",
-        "docs/maintainer/cuda_ownership.md"
-      ],
-      "required_compiler_capabilities": [
-        "#351 shared recurrence/spec ownership",
-        "#832 resource-aware lowering",
-        "#833 reusable schedules"
-      ],
-      "retirement_condition": "Delete a shared native helper only after all production consumers that depend on its scientific mathematics have qualified generated replacements; runtime-only traversal may remain native.",
-      "files": [
-        "src/scf/cuda/direct_native_gradient_types.cuh",
-        "src/scf/cuda/direct_pair_cache.cu"
-      ]
-    },
-    {
       "id": "direct-screening-policy",
       "status": "scientific-policy",
       "capability": "Density/Schwarz/page screening, exact bounded task admission, and bounds that define the admitted Direct-HF scientific work domain.",

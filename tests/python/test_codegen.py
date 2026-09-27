@@ -200,7 +200,7 @@ def _direct_cuda_source() -> typing.Any:
             "cuda/direct_bounded_tasks.cu",
             "cuda/direct_queue_scan.cu",
             "cuda/direct_queue_diagnostics.cu",
-            "cuda/direct_native_gradient_types.cuh",
+            "cuda/direct_gradient_types.cuh",
             "cuda/direct_native_psss.cuh",
             "cuda/eri_tensor_index.cuh",
             "cuda/direct_eri_symmetry.cuh",
@@ -2191,7 +2191,7 @@ def test_ssss_force_retires_handwritten_math_and_selector() -> None:
     assert KernelConsumer.FORCE in ssss.consumers
 
     types_source = (
-        REPOSITORY_ROOT / "src/scf/cuda/direct_native_gradient_types.cuh"
+        REPOSITORY_ROOT / "src/scf/cuda/direct_gradient_types.cuh"
     ).read_text(encoding="utf-8")
     low_order_source = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_force_low_order.cuh"
