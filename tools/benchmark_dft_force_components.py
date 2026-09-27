@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import typing
 from collections.abc import Mapping
 from pathlib import Path
@@ -96,12 +97,75 @@ def _stationary_records(
     return result
 
 
+def _sample_seconds(sample: typing.Any) -> float | None:
+    if not isinstance(sample, Mapping) or sample.get("seconds") is None:
+        return None
+    value = float(sample["seconds"])
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError("external comparison duration must be finite and nonnegative")
+    return value
+
+
+def _warm_seconds(payload: Mapping[str, typing.Any], key: str) -> list[float]:
+    samples = payload.get(key)
+    if not isinstance(samples, list):
+        return []
+    result = []
+    for sample in samples:
+        value = _sample_seconds(sample)
+        if value is not None:
+            result.append(value)
+    return result
+
+
+def _external_comparison(
+    payload: Mapping[str, typing.Any],
+    *,
+    boundary: str,
+) -> dict[str, typing.Any]:
+    priming = payload.get("priming")
+    priming_native = priming.get("native") if isinstance(priming, Mapping) else None
+    priming_reference = (
+        priming.get("reference") if isinstance(priming, Mapping) else None
+    )
+    if boundary == "scf_energy_plus_force":
+        priming_native = payload.get("native_priming", priming_native)
+        priming_reference = payload.get("reference_priming", priming_reference)
+    return {
+        "schema": "vibeqc.dft-external-comparison.v1",
+        "boundary": boundary,
+        "native": {
+            "prepare_seconds": payload.get("native_prepare_seconds"),
+            "cold_seconds": _sample_seconds(payload.get("native_cold")),
+            "priming_seconds": _sample_seconds(priming_native),
+            "warm_seconds": _warm_seconds(payload, "native_samples"),
+        },
+        "reference": {
+            "prepare_seconds": payload.get("reference_prepare_seconds"),
+            "cold_seconds": _sample_seconds(payload.get("reference_cold")),
+            "priming_seconds": _sample_seconds(priming_reference),
+            "warm_seconds": _warm_seconds(payload, "reference_samples"),
+        },
+        "branches": payload.get("branches"),
+        "accuracy": payload.get("accuracy"),
+        "native_unavailable": payload.get("native_unavailable"),
+        "reference_component_attribution": (
+            "whole matched endpoint boundary only; retained GPU4PySCF evidence "
+            "does not expose a compatible J/K/XC/VV10 split"
+        ),
+    }
+
+
 def _wb97mv_records(
     payload: Mapping[str, typing.Any],
 ) -> list[dict[str, typing.Any]]:
     metadata = _metadata(payload)
     metadata.setdefault("method", payload.get("method", "WB97M-V/RKS"))
     status = str(payload.get("status", "unknown"))
+    comparison = _external_comparison(
+        payload,
+        boundary="scf_energy_plus_force",
+    )
     component = payload.get("native_force_components")
     if not isinstance(component, Mapping):
         work = payload.get("native_force_work")
@@ -111,14 +175,38 @@ def _wb97mv_records(
                     "metadata": metadata,
                     "status": status,
                     "error": payload.get("error"),
+                    "comparison": comparison,
                 }
             ]
         component = normalize_force_work(work)
+    normalized_status = (
+        "measured" if status in {"measured", "complete", "unknown"} else status
+    )
     return [
         {
             "metadata": metadata,
-            "status": (\n                "measured"\n                if status in {"measured", "complete", "unknown"}\n                else status\n            ),
+            "status": normalized_status,
             "components": dict(component),
+            "comparison": comparison,
+        }
+    ]
+
+
+def _readme_endpoint_records(
+    payload: Mapping[str, typing.Any],
+) -> list[dict[str, typing.Any]]:
+    method = str(payload.get("method", ""))
+    if not (method.endswith("-rks") or method.endswith("-uks")):
+        return []
+    metadata = _metadata(payload)
+    metadata["mode"] = payload.get("mode")
+    status = str(payload.get("status", "unknown"))
+    return [
+        {
+            "metadata": metadata,
+            "status": status,
+            "error": payload.get("error"),
+            "comparison": _external_comparison(payload, boundary="scf_energy"),
         }
     ]
 
@@ -228,7 +316,7 @@ def extract_records(
         return _stationary_records(payload)
     if schema.startswith("vibeqc.readme-wb97mv."):
         return _wb97mv_records(payload)
-    if schema.startswith("vibeqc.dft-force-matrix."):
+    if schema.startswith("vibeqc.readme-endpoint."):\n        return _readme_endpoint_records(payload)\n    if schema.startswith("vibeqc.dft-force-matrix."):
         return _matrix_records(payload)
     if "component_seconds" in payload or "timeline" in payload:
         return [
@@ -247,6 +335,9 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
     scf_profiled: set[str] = set()
     scf_missing: set[str] = set()
     outcomes: dict[str, int] = {}
+    external_methods: set[str] = set()
+    external_boundaries: set[str] = set()
+    external_count = 0
     for row in records:
         status = str(row.get("status", "unknown"))
         outcomes[status] = outcomes.get(status, 0) + 1
@@ -271,6 +362,13 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
             scf_missing.update(
                 str(name) for name in scf_profile.get("missing_expected_components", ())
             )
+        comparison = row.get("comparison")
+        if isinstance(comparison, Mapping):
+            external_count += 1
+            external_boundaries.add(str(comparison.get("boundary")))
+            metadata = row.get("metadata")
+            if isinstance(metadata, Mapping) and metadata.get("method") is not None:
+                external_methods.add(str(metadata["method"]))
     return {
         "outcomes": dict(sorted(outcomes.items())),
         "source_routes": sorted(routes),
@@ -278,6 +376,9 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         "wall_components_missing_in_at_least_one_record": sorted(missing_names),
         "scf_profiled_components_observed": sorted(scf_profiled),
         "scf_expected_components_missing_in_at_least_one_record": sorted(scf_missing),
+        "external_comparison_records": external_count,
+        "external_comparison_methods": sorted(external_methods),
+        "external_comparison_boundaries": sorted(external_boundaries),
     }
 
 
