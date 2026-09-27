@@ -12,7 +12,7 @@
 
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_gradient_types.cuh"
+#include "scf/cuda/direct_gradient_types.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
