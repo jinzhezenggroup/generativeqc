@@ -244,7 +244,7 @@ def test_prepared_d_shell_execution_selects_component_aot(
             tile_points=1,
             primitive_tile=1,
             integral_terms=1,
-            work_budget=1,
+            page_work_budget=1,
             max_device_bytes=1,
             max_host_bytes=1,
             host_bound=0,
