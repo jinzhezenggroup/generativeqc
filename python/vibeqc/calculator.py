@@ -948,7 +948,9 @@ class Calculator:
         if active_ks_options is not None and self._ks_options_version >= 1:
             from .ks import native_ks_options
 
-            descriptor.ks_options = ctypes.pointer(\n                native_ks_options(active_ks_options, library=self._library)\n            )
+            descriptor.ks_options = ctypes.pointer(
+                native_ks_options(active_ks_options, library=self._library)
+            )
         if self._method in _COUPLED_CLUSTER_METHODS:
             descriptor.ccsd_max_iterations = self._ccsd_max_iterations
             descriptor.ccsd_diis_history = self._ccsd_diis_history
