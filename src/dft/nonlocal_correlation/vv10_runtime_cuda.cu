@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
+#include "dft/grid_task_view.cuh"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_resources.cuh"
 
@@ -229,6 +230,51 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
   }
 }
 
+__global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view,
+                                              std::size_t offset, std::size_t total_points,
+                                              double* density, double* gradient, int* failed) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= view.npoint) return;
+  if (offset > total_points || view.npoint > total_points - offset || !view.features) {
+    atomicExch(failed, 1);
+    return;
+  }
+  const auto np = view.npoint;
+  const auto out = offset + i;
+  const double rho = view.features[i] + view.features[5 * np + i];
+  const double gx = view.features[np + i] + view.features[6 * np + i];
+  const double gy = view.features[2 * np + i] + view.features[7 * np + i];
+  const double gz = view.features[3 * np + i] + view.features[8 * np + i];
+  const bool valid = isfinite(rho) && rho >= 0.0 && isfinite(gx) && isfinite(gy) && isfinite(gz);
+  if (!valid) atomicExch(failed, 1);
+  density[out] = valid ? rho : 0.0;
+  gradient[3 * out] = valid ? gx : 0.0;
+  gradient[3 * out + 1] = valid ? gy : 0.0;
+  gradient[3 * out + 2] = valid ? gz : 0.0;
+}
+
+__global__ void pack_force_seeds_kernel(std::size_t npoint, const double* point_derivative,
+                                        double* seeds, const int* collect_error,
+                                        const int* domain_error, const int* pair_error) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= npoint) return;
+  bool failed = *collect_error != 0 || *domain_error != 0 || *pair_error != 0;
+  const double px = point_derivative[3 * i];
+  const double py = point_derivative[3 * i + 1];
+  const double pz = point_derivative[3 * i + 2];
+  failed = failed || !isfinite(seeds[i]) || !isfinite(seeds[npoint + i]) ||
+           !isfinite(px) || !isfinite(py) || !isfinite(pz) ||
+           !isfinite(seeds[5 * npoint + i]);
+  if (failed) {
+    const double poison = __longlong_as_double(0x7ff8000000000000ULL);
+    for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = poison;
+    return;
+  }
+  seeds[2 * npoint + i] = px;
+  seeds[3 * npoint + i] = py;
+  seeds[4 * npoint + i] = pz;
+}
+
 }  // namespace
 
 void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_count,
@@ -246,6 +292,31 @@ void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_c
   molecular_domain_kernel<<<launch_blocks(point_count, threads), threads, 0, stream>>>(
       point_count, density_threshold, weights, density, density_gradient, effective_weights,
       effective_density, effective_density_gradient, numerical_error);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
+
+void enqueue_vv10_collect_total_features_cuda(
+    cudaStream_t stream, const vibeqc::dft::GridTaskView& view, std::size_t offset,
+    std::size_t total_points, double* density, double* density_gradient, int* numerical_error) {
+  if (stream == nullptr || view.version != 1 || !view.npoint || !view.features ||
+      view.stream != stream || offset > total_points || view.npoint > total_points - offset ||
+      density == nullptr || density_gradient == nullptr || numerical_error == nullptr)
+    throw std::invalid_argument("invalid resident VV10 feature collection request");
+  constexpr unsigned threads = 128;
+  collect_total_features_kernel<<<launch_blocks(view.npoint, threads), threads, 0, stream>>>(
+      view, offset, total_points, density, density_gradient, numerical_error);
+  runtime::cuda_resource_check(cudaGetLastError());
+}
+
+void enqueue_vv10_pack_force_seeds_cuda(
+    cudaStream_t stream, std::size_t point_count, const double* point_derivative,
+    double* seeds, const int* collect_error, const int* domain_error, const int* pair_error) {
+  if (stream == nullptr || !point_count || point_derivative == nullptr || seeds == nullptr ||
+      collect_error == nullptr || domain_error == nullptr || pair_error == nullptr)
+    throw std::invalid_argument("invalid resident VV10 force seed pack request");
+  constexpr unsigned threads = 128;
+  pack_force_seeds_kernel<<<launch_blocks(point_count, threads), threads, 0, stream>>>(
+      point_count, point_derivative, seeds, collect_error, domain_error, pair_error);
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
