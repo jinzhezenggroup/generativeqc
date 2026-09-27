@@ -3,10 +3,10 @@
 #include <array>
 #include <vector>
 
+#include "hf/reference.hpp"
 #include "integrals/electron_interaction_source.hpp"
 #include "posthf/block_capacity_generated.hpp"
 #include "posthf/raw_source.hpp"
-#include "hf/reference.hpp"
 #include "tensor/metrics.hpp"
 
 namespace vibeqc::posthf {
