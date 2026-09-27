@@ -5,6 +5,7 @@
 #include <numeric>
 #include <stdexcept>
 
+#include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/mp2_derivative.hpp"
@@ -12,7 +13,6 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "response/solve.hpp"
-#include "hf/reference.hpp"
 
 namespace vibeqc::mp2 {
 namespace {
