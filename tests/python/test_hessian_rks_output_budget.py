@@ -105,17 +105,6 @@ def test_one_byte_short_output_budget_refuses_before_block_work(
         )
 
 
-@pytest.mark.parametrize(
-    ("budget", "error_type"),
-    [
-        (0, ValueError),
-        (-1, ValueError),
-        (True, ValueError),
-        (2**63, ValueError),
-        (1.5, ValueError),
-        (1, MemoryError),
-    ],
-)
 def test_weighted_provider_admission_has_no_legacy_size_cap(
     monkeypatch: pytest.MonkeyPatch, tmp_path: typing.Any
 ) -> None:
@@ -155,6 +144,17 @@ def test_weighted_provider_admission_has_no_legacy_size_cap(
     assert data["output_accumulator_bytes"] == 5 * 3 * np.dtype(np.float64).itemsize
 
 
+@pytest.mark.parametrize(
+    ("budget", "error_type"),
+    [
+        (0, ValueError),
+        (-1, ValueError),
+        (True, ValueError),
+        (2**63, ValueError),
+        (1.5, ValueError),
+        (1, MemoryError),
+    ],
+)
 def test_integral_budget_refuses_before_dense_output_allocation(
     monkeypatch: pytest.MonkeyPatch,
     budget: typing.Any,
