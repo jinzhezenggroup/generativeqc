@@ -15,11 +15,14 @@ The shared `SolverRegionCudaExecutor` and `CudaGraphRegion` own warmup,
 capture, replay, invalidation and fallback. KS continues to own convergence,
 DIIS/history, occupations, density/warm publication and failure semantics.
 
-Cached replay does not re-enter the host submission callback, so KS advances
-only its logical generation ledger after a cached graph launch. Capture and
-ordinary submissions continue to publish generations through the existing XC
-owner. Replay binding includes the mutable warm-update policy so toggling that
-policy invalidates the captured shape.
+The replay callback is device-only: it enqueues the stable XC/Fock/SCF body
+without publishing host generations or evaluation counters. After the shared
+runtime has selected and successfully submitted exactly one warmup, captured
+launch, cached replay or ordinary fallback, KS publishes exactly one logical XC
+generation per physical step. Capture probing can therefore invoke the device
+body without double-counting host diagnostics. Replay binding includes the
+mutable warm-update policy so toggling that policy invalidates the captured
+shape.
 
 ## Failure boundary
 
