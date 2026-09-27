@@ -1,0 +1,39 @@
+name: Scratch Libxc focused acceptance
+
+on:
+  push:
+    branches:
+      - scratch/libxc-focused-acceptance
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: python:.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install focused test dependencies
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python numpy pytest
+      - name: Run Libxc promotion acceptance tests
+        run: |
+          .venv/bin/python -m pytest -q \
+            tests/python/test_libxc_endpoint_capability.py \
+            tests/python/test_libxc_public_admission_scope.py \
+            tests/python/test_libxc_public_method_evidence.py \
+            tests/python/test_libxc_public_method_qualifier.py \
+            tests/python/test_libxc_broad_matrix.py
