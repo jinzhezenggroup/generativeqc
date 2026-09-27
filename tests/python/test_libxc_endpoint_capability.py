@@ -56,8 +56,6 @@ def _stage_evidence(
     return payload
 
 
-
-
 def _exact_dual_spin_molecular_evidence(
     capability: libxc_bulk_capabilities.BulkFunctionalCapability,
 ) -> dict:
@@ -77,6 +75,7 @@ def _exact_dual_spin_molecular_evidence(
     )
     payload["evidence"] += f"#sha256={result_identity}"
     return payload
+
 
 def _cpu_energy_evidence(
     capability: libxc_bulk_capabilities.BulkFunctionalCapability,
