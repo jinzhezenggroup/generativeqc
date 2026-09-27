@@ -130,6 +130,11 @@ class RangeExchangeExecutor:
             radial=radial,
             angular=angular,
             component=component,
+            target=(
+                "native-host"
+                if self.backend == "cpu"
+                else self.compiler.target.architecture
+            ),
         )
         key = (
             (
