@@ -140,9 +140,10 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
     const double dy = points[3 * j + 1] - yi;
     const double dz = points[3 * j + 2] - zi;
     const double r2 = dx * dx + dy * dy + dz * dz;
+    const double factor = weighted_density[j];
+    if (factor == 0.0) continue;
     const auto pair = pair_kernel_values<Variant, Features, Geometry>(r2, wi, omega[j], ki,
                                                                       kappa[j], row_inverse_kappa);
-    const double factor = weighted_density[j];
     sum_phi += factor * pair.phi;
     if constexpr (Features) {
       const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
@@ -253,8 +254,9 @@ __global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view,
   gradient[3 * out + 2] = valid ? gz : 0.0;
 }
 
-__global__ void pack_force_seeds_kernel(std::size_t npoint, const double* point_derivative,
-                                        double* seeds, const int* collect_error,
+__global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effective_weights,
+                                        const double* point_derivative, double* seeds,
+                                        const int* collect_error,
                                         const int* domain_error, const int* pair_error) {
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= npoint) return;
@@ -262,12 +264,16 @@ __global__ void pack_force_seeds_kernel(std::size_t npoint, const double* point_
   const double px = point_derivative[3 * i];
   const double py = point_derivative[3 * i + 1];
   const double pz = point_derivative[3 * i + 2];
-  failed = failed || !isfinite(seeds[i]) || !isfinite(seeds[npoint + i]) ||
-           !isfinite(px) || !isfinite(py) || !isfinite(pz) ||
-           !isfinite(seeds[5 * npoint + i]);
+  failed = failed || !isfinite(effective_weights[i]) || !isfinite(seeds[i]) ||
+           !isfinite(seeds[npoint + i]) || !isfinite(px) || !isfinite(py) ||
+           !isfinite(pz) || !isfinite(seeds[5 * npoint + i]);
   if (failed) {
     const double poison = __longlong_as_double(0x7ff8000000000000ULL);
     for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = poison;
+    return;
+  }
+  if (effective_weights[i] == 0.0) {
+    for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = 0.0;
     return;
   }
   seeds[2 * npoint + i] = px;
@@ -309,14 +315,17 @@ void enqueue_vv10_collect_total_features_cuda(
 }
 
 void enqueue_vv10_pack_force_seeds_cuda(
-    cudaStream_t stream, std::size_t point_count, const double* point_derivative,
-    double* seeds, const int* collect_error, const int* domain_error, const int* pair_error) {
-  if (stream == nullptr || !point_count || point_derivative == nullptr || seeds == nullptr ||
-      collect_error == nullptr || domain_error == nullptr || pair_error == nullptr)
+    cudaStream_t stream, std::size_t point_count, const double* effective_weights,
+    const double* point_derivative, double* seeds, const int* collect_error,
+    const int* domain_error, const int* pair_error) {
+  if (stream == nullptr || !point_count || effective_weights == nullptr ||
+      point_derivative == nullptr || seeds == nullptr || collect_error == nullptr ||
+      domain_error == nullptr || pair_error == nullptr)
     throw std::invalid_argument("invalid resident VV10 force seed pack request");
   constexpr unsigned threads = 128;
   pack_force_seeds_kernel<<<launch_blocks(point_count, threads), threads, 0, stream>>>(
-      point_count, point_derivative, seeds, collect_error, domain_error, pair_error);
+      point_count, effective_weights, point_derivative, seeds, collect_error, domain_error,
+      pair_error);
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
