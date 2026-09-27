@@ -246,7 +246,10 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
     routes: set[str] = set()
     scf_profiled: set[str] = set()
     scf_missing: set[str] = set()
+    outcomes: dict[str, int] = {}
     for row in records:
+        status = str(row.get("status", "unknown"))
+        outcomes[status] = outcomes.get(status, 0) + 1
         components = row.get("components")
         if isinstance(components, Mapping):
             routes.add(str(components.get("source_route")))
@@ -269,6 +272,7 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
                 str(name) for name in scf_profile.get("missing_expected_components", ())
             )
     return {
+        "outcomes": dict(sorted(outcomes.items())),
         "source_routes": sorted(routes),
         "wall_components_observed": sorted(component_names),
         "wall_components_missing_in_at_least_one_record": sorted(missing_names),
