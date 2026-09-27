@@ -17,7 +17,7 @@ SCHEMA = "vibeqc.installed-libxc-public-evidence/v1"
 def _read_json(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text())
     if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
+        raise TypeError(f"{path} must contain a JSON object")
     return payload
 
 
@@ -45,7 +45,7 @@ def collect_public_evidence(root: Path) -> dict[str, dict[str, Any]]:
             artifact = _read_json(root / name / f"{stage}.json")
             envelope = artifact.get("stage_evidence")
             if not isinstance(envelope, dict):
-                raise ValueError(f"{name}/{stage} is missing stage_evidence")
+                raise TypeError(f"{name}/{stage} is missing stage_evidence")
             if envelope.get("subject_identity") != current_identity:
                 raise ValueError(f"{name}/{stage} subject identity mismatch")
             stages[stage] = envelope
