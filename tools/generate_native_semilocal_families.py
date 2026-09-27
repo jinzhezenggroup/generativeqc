@@ -178,10 +178,10 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
     families = load_manifest() if families is None else families
     rows = []
     for item in families:
-        component_text = "(" + ", ".join(
-            f"({json.dumps(name)}, {json.dumps(coefficient)})"
+        component_text = "(\n" + "".join(
+            f"            ({json.dumps(name)}, {json.dumps(coefficient)}),\n"
             for name, coefficient in item["components"]
-        ) + ")"
+        ) + "        )"
         fields = [
             f'        "symbol": {json.dumps(item["symbol"])},',
             f'        "code": {item["code"]},',
@@ -206,8 +206,8 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         previous = domains.setdefault(version, domain)
         if previous != domain:
             raise ValueError("one native domain version cannot name two SCF domains")
-    domain_text = "{" + ", ".join(
-        f"{version}: {json.dumps(domain)}"
+    domain_text = "{\n" + "".join(
+        f"    {version}: {json.dumps(domain)},\n"
         for version, domain in sorted(domains.items())
     ) + "}"
     return (
