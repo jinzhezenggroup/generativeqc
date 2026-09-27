@@ -90,8 +90,9 @@ class _StationaryTaskExecution:
     mode: str
     domain_identity: str
     logical_tasks: int
-    page_capacity: int
+    fixed_capacity: int
     resident_capacity: int
+    page_capacity: int
     pages: int
 
 
@@ -105,33 +106,49 @@ class _BoundedStationaryTaskExecutor:
     Cartesian component expansion causes an earlier flush.
     """
 
-    def __init__(self, *, page_capacity: int, resident_capacity: int) -> None:
+    def __init__(
+        self,
+        *,
+        fixed_capacity: int,
+        resident_capacity: int,
+        page_capacity: int,
+    ) -> None:
         for value, label in (
-            (page_capacity, "stationary task page capacity"),
+            (fixed_capacity, "stationary fixed task capacity"),
             (resident_capacity, "stationary resident task capacity"),
+            (page_capacity, "stationary task page capacity"),
         ):
             if type(value) is not int or value < 1:
                 raise ValueError(f"{label} must be a positive integer")
+        if fixed_capacity > resident_capacity:
+            raise ValueError(
+                "stationary fixed task capacity exceeds resident task capacity"
+            )
         if page_capacity > resident_capacity:
             raise ValueError(
                 "stationary task page capacity exceeds resident task capacity"
             )
-        self.page_capacity = page_capacity
+        self.fixed_capacity = fixed_capacity
         self.resident_capacity = resident_capacity
+        self.page_capacity = page_capacity
 
     def execute(
         self,
         domain: RuntimeTaskDomain,
         submit: typing.Callable[[tuple[int, ...]], None],
+        *,
+        finish_page: typing.Callable[[], None] | None = None,
     ) -> _StationaryTaskExecution:
         if not isinstance(domain, RuntimeTaskDomain):
             raise TypeError("stationary derivative producer requires RuntimeTaskDomain")
         if not callable(submit):
             raise TypeError("stationary derivative producer requires a submit callback")
+        if finish_page is not None and not callable(finish_page):
+            raise TypeError("stationary derivative producer requires a page callback")
         logical_tasks = domain.logical_size
         mode = (
             "fixed"
-            if logical_tasks <= self.page_capacity
+            if logical_tasks <= self.fixed_capacity
             else ("resident" if logical_tasks <= self.resident_capacity else "paged")
         )
         submitted = pages = 0
@@ -140,6 +157,8 @@ class _BoundedStationaryTaskExecutor:
                 raise RuntimeError("stationary task producer exceeded page capacity")
             for coordinate in page.coordinates:
                 submit(coordinate)
+            if finish_page is not None:
+                finish_page()
             submitted += page.count
             pages += 1
         if submitted != logical_tasks:
@@ -148,8 +167,9 @@ class _BoundedStationaryTaskExecutor:
             mode,
             domain.identity,
             logical_tasks,
-            self.page_capacity,
+            self.fixed_capacity,
             self.resident_capacity,
+            self.page_capacity,
             pages,
         )
 
@@ -1319,8 +1339,6 @@ def _complete_rks_cuda_gradient_diagnostic(
         + na * (na - 1) // 2
     )
     pair_visits = (1 + 2 * len(state.grid.points)) * na * (na - 1) // 2
-    if records > max_primitive_records:
-        raise ValueError("primitive work budget exceeded")
     if len(state.grid.points) > max_grid_points:
         raise ValueError("grid point work budget exceeded")
     if pair_visits > max_grid_pair_visits:
@@ -1526,7 +1544,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 tile_points=tile_points,
                 primitive_tile=primitive_tile,
                 integral_terms=integral_terms,
-                work_budget=records,
+                work_budget=max_primitive_records,
                 max_device_bytes=max_device_bytes,
                 max_host_bytes=max_host_bytes,
                 host_bound=host_bound,
@@ -1584,7 +1602,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         spin_blocks=plan.spin_blocks,
                         source_names=source_names,
                         target=target,
-                        work_budget=records,
+                        work_budget=max_primitive_records,
                         timeline=timeline,
                         profile_device=profile_device,
                     )
@@ -1618,8 +1636,9 @@ def _complete_rks_cuda_gradient_diagnostic(
             ao.set_density(density)
         timeline.switch("python_packing")
         task_executor = _BoundedStationaryTaskExecutor(
-            page_capacity=integral_terms,
+            fixed_capacity=integral_terms,
             resident_capacity=primitive_tile,
+            page_capacity=primitive_tile,
         )
         task_executions: list[dict[str, typing.Any]] = []
         for source, rank, operator in (
@@ -1649,7 +1668,11 @@ def _complete_rks_cuda_gradient_diagnostic(
                             charges[atom],
                         )
 
-            execution = task_executor.execute(domain, submit)
+            execution = task_executor.execute(
+                domain,
+                submit,
+                finish_page=sources.flush,
+            )
             task_executions.append(
                 {
                     "source": source,
@@ -1802,9 +1825,12 @@ def _complete_rks_cuda_gradient_diagnostic(
             state.density.nbytes + state.weighted_density.nbytes
         ),
         stationary_task_executor={
-            "schema": "vibeqc.stationary-bounded-task-executor.v1",
-            "page_capacity": integral_terms,
+            "schema": "vibeqc.stationary-bounded-task-executor.v2",
+            "fixed_capacity": integral_terms,
             "resident_capacity": primitive_tile,
+            "page_capacity": primitive_tile,
+            "primitive_record_page_budget": max_primitive_records,
+            "logical_primitive_records": records,
             "sources": tuple(task_executions),
         },
         additional_host_numeric_bound=(
