@@ -24,7 +24,7 @@ from vibeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
 from .batch import PreparedBatch
-from .ks import SPLIT_HYBRID_SCF_DOMAIN, scf_domain_for_method
+from .ks import (\n    SPLIT_HYBRID_SCF_DOMAIN,\n    native_xc_functional_code,\n    scf_domain_for_method,\n)
 
 _SCF_DOMAIN_VERSION_BY_DOMAIN = {
     domain: version for version, domain in SCF_DOMAIN_BY_VERSION.items()
@@ -388,6 +388,8 @@ class NativeKsSnapshot:
         if (
             options is None
             or options.coefficients != self.coefficients
+            or functional
+            != native_xc_functional_code(self._batch._calculator._method_name)
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
