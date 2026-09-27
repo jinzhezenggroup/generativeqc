@@ -199,15 +199,14 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   return bytes;
 }
 
-static vibeqc_status create_cuda_direct_jk_plan_impl(
-    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
-    double screening_tolerance, std::size_t budget, bool generated_exchange_requested,
-    CudaDirectJkPlan** output, CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::System>& systems,
+                                         unsigned derivative_order, double screening_tolerance,
+                                         std::size_t budget, CudaDirectJkPlan** output,
+                                         CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
   if (output) *output = nullptr;
   diagnostic = {};
   return direct_jk_guard(nullptr, detail, [&] {
     direct_jk_require(output && device_id >= 0 && !systems.empty() && derivative_order <= 1 &&
-                          (!generated_exchange_requested || derivative_order == 0) &&
                           std::isfinite(screening_tolerance) && screening_tolerance >= 0.0 &&
                           budget > 0,
                       "invalid direct J/K preparation request");
@@ -342,12 +341,12 @@ static vibeqc_status create_cuda_direct_jk_plan_impl(
     if (numerical_failure)
       throw DirectJkFailure{VIBEQC_STATUS_NUMERICAL_FAILURE, "nonfinite direct J/K Schwarz bound"};
     if (derivative_order == 0 && budget > required) {
-      if (generated_exchange_requested)
-        plan->generated_exchange = prepare_generated_exchange(
-            host, plan->batch, plan->stream, device_id, screening_tolerance, budget - required);
-      else
+      const auto optional_budget = budget - required;
+      plan->generated_exchange = prepare_generated_exchange(
+          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+      if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
-            host, plan->batch, plan->stream, device_id, screening_tolerance, budget - required);
+            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
     }
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();
@@ -391,21 +390,6 @@ static vibeqc_status create_cuda_direct_jk_plan_impl(
     diagnostic = info;
     *output = plan.release();
   });
-}
-vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::System>& systems,
-                                         unsigned derivative_order, double screening_tolerance,
-                                         std::size_t budget, CudaDirectJkPlan** output,
-                                         CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
-  return create_cuda_direct_jk_plan_impl(device_id, systems, derivative_order, screening_tolerance,
-                                         budget, false, output, diagnostic, detail);
-}
-
-vibeqc_status create_cuda_direct_jk_plan_with_generated_exchange(
-    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
-    double screening_tolerance, std::size_t budget, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
-  return create_cuda_direct_jk_plan_impl(device_id, systems, derivative_order, screening_tolerance,
-                                         budget, true, output, diagnostic, detail);
 }
 
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept { delete plan; }
