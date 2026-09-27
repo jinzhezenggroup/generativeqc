@@ -9,14 +9,17 @@ from pathlib import Path
 from vibeqc_compiler.method._generated_libxc_public_evidence import PUBLIC_EVIDENCE
 from vibeqc_compiler.method.bulk_ks import resolve_public_bulk_ks
 from vibeqc_compiler.method.libxc_public_evidence import installed_public_evidence
-from vibeqc_compiler.xc.bulk_point_program import bind_runtime_semilocal_point_program
+from vibeqc_compiler.xc.bulk_point_program import (
+    SemilocalPointBinding,
+    bind_runtime_semilocal_point_program,
+)
 from vibeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
 
 
-def _binding(name: str):
+def _binding(name: str) -> SemilocalPointBinding:
     evidence = installed_public_evidence(name)
     if evidence is None:
         raise ValueError(f"{name} installed public evidence is absent or stale")
