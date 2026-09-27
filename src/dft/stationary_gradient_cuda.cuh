@@ -375,8 +375,8 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
       profile_record(*p, p->stage1, stream);
       geometry_kernel<<<1, workers, 0, stream>>>(
           *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-          seeds.get(), p->partial, p->scratch,
-          p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+          seeds.get(), p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms,
+          p->context.error);
       profile_record(*p, p->stage2, stream);
       p->launches += 1;
       p->point_count += view->npoint;
@@ -426,9 +426,8 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
     geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-        nullptr, p->partial, p->scratch,
-        p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw, nullptr,
+        p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 1;
     p->point_count += view->npoint;
