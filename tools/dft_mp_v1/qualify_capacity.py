@@ -60,10 +60,10 @@ AO_PACK_BRIDGE_CONTRACT_SHA256 = (
     "c5c8a0181075e7d171e1d189c875d5cc9e69467cb069b13267f91e73b1e1dd7e"
 )
 NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256 = (
-    "1cf236f40a51bdad066635e3eaaaab3d8fc4c7c094653b73898b8dc32bd89e08"
+    "c08f40375765a126782325dd4d03ded0ea9bf3caa25f23953a8a5cdc5c75c01b"
 )
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
-    "89568c04b3b5f91bec27a391ca5e819f279f3f0385e1712f33f522f7265fdb62"
+    "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -153,6 +153,15 @@ def _canonical_sha256(value: dict[str, Any]) -> str:
         allow_nan=False,
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _source_node_sha256(source: str, node: ast.AST) -> str:
+    """Hash the selected source span without Python-version AST formatting."""
+
+    segment = ast.get_source_segment(source, node)
+    if segment is None:
+        raise RuntimeError("source contract segment is unavailable")
+    return _lf_sha256(segment.encode())
 
 
 def _source_limits(repository: Path) -> dict[str, Any]:
@@ -327,11 +336,7 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
     ]
     if len(constructors) != 1:
         raise RuntimeError("NativeAO capacity constructor is missing or ambiguous")
-    constructor_digest = hashlib.sha256(
-        ast.dump(
-            constructors[0], annotate_fields=True, include_attributes=False
-        ).encode()
-    ).hexdigest()
+    constructor_digest = _source_node_sha256(source, constructors[0])
     packed = [
         ast.unparse(node.value)
         for node in ast.walk(constructors[0])
@@ -407,9 +412,7 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     ]
     if len(layouts) != 1:
         raise RuntimeError("stationary layout owner is missing or ambiguous")
-    layout_digest = hashlib.sha256(
-        ast.dump(layouts[0], annotate_fields=True, include_attributes=False).encode()
-    ).hexdigest()
+    layout_digest = _source_node_sha256(stationary_source, layouts[0])
     if layout_digest != STATIONARY_LAYOUT_CONTRACT_SHA256:
         raise RuntimeError("stationary layout contract changed")
 
@@ -1036,9 +1039,26 @@ def _build_report(
     }
 
 
-def _clean_git_sha(repository: Path) -> str:
+def _clean_git_sha(
+    repository: Path,
+    *,
+    ignored_path: Path | None = None,
+) -> str:
+    status_command = [
+        "git",
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        ".",
+    ]
+    if ignored_path is not None:
+        resolved_ignored = Path(ignored_path).resolve()
+        if resolved_ignored.is_relative_to(repository):
+            relative = resolved_ignored.relative_to(repository).as_posix()
+            status_command.append(f":(exclude,literal){relative}")
     status = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all"],
+        status_command,
         cwd=repository,
         check=True,
         capture_output=True,
@@ -1062,6 +1082,7 @@ def build_report(
     repository: Path,
     *,
     aot_directory: Path | None = None,
+    output_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build a report whose source identity is the clean tool-checkout HEAD."""
 
@@ -1073,7 +1094,7 @@ def build_report(
         )
     return _build_report(
         repository,
-        source_sha=_clean_git_sha(repository),
+        source_sha=_clean_git_sha(repository, ignored_path=output_path),
         aot_directory=aot_directory,
     )
 
@@ -1094,16 +1115,18 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     repository = args.repository.resolve()
+    output_path = None if args.output is None else args.output.resolve()
     payload = build_report(
         repository,
         aot_directory=args.aot_directory,
+        output_path=output_path,
     )
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
     if args.output is None:
         print(text, end="")
     else:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(text, encoding="utf-8")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(text, encoding="utf-8")
 
 
 if __name__ == "__main__":

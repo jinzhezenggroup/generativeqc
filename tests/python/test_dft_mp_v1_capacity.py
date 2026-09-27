@@ -69,10 +69,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "c5c8a0181075e7d171e1d189c875d5cc9e69467cb069b13267f91e73b1e1dd7e"
     )
     assert result["basis"]["native_ao_constructor_contract_sha256"] == (
-        "1cf236f40a51bdad066635e3eaaaab3d8fc4c7c094653b73898b8dc32bd89e08"
+        "c08f40375765a126782325dd4d03ded0ea9bf3caa25f23953a8a5cdc5c75c01b"
     )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
-        "89568c04b3b5f91bec27a391ca5e819f279f3f0385e1712f33f522f7265fdb62"
+        "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
     )
 
     cases = {item["id"]: item for item in result["cases"]}
@@ -277,11 +277,62 @@ def test_public_report_binds_the_clean_git_head(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     revision = "e" * 40
-    monkeypatch.setattr(qualify_capacity, "_clean_git_sha", lambda _: revision)
+    monkeypatch.setattr(qualify_capacity, "_clean_git_sha", lambda _, **__: revision)
 
     result = qualify_capacity.build_report(ROOT)
 
     assert result["source"]["sha"] == revision
+
+
+def test_source_contract_hashes_do_not_use_version_dependent_ast_dump(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject_ast_dump(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("source contracts must not depend on ast.dump formatting")
+
+    monkeypatch.setattr(qualify_capacity.ast, "dump", reject_ast_dump)
+
+    basis = qualify_capacity._basis_layout_contract(ROOT)
+    expansion = qualify_capacity._spd_expansion_contract(ROOT)
+
+    assert basis["native_ao_constructor_contract_sha256"] == (
+        qualify_capacity.NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256
+    )
+    assert expansion["stationary_layout_contract_sha256"] == (
+        qualify_capacity.STATIONARY_LAYOUT_CONTRACT_SHA256
+    )
+
+
+def test_clean_git_sha_ignores_only_the_requested_report_output(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    git("init")
+    git("config", "user.name", "Capacity Test")
+    git("config", "user.email", "capacity@example.invalid")
+    (repository / "tracked.txt").write_text("tracked\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-m", "fixture")
+    revision = git("rev-parse", "HEAD").stdout.strip()
+
+    output = repository / "capacity-report.json"
+    output.write_text("first run\n", encoding="utf-8")
+    assert qualify_capacity._clean_git_sha(repository, ignored_path=output) == revision
+
+    (repository / "unrelated.txt").write_text("dirty\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="clean Git worktree"):
+        qualify_capacity._clean_git_sha(repository, ignored_path=output)
 
 
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
