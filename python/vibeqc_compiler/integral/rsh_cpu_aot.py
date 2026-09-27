@@ -100,8 +100,8 @@ def inventory_size() -> int:
     """Number of programs for one short/long radial pair over the s/p domain."""
 
     per_family = sum(
-        len(component_groups(tuple(angular)))
-        for angular in product(AOT_ANGULAR_DOMAIN, repeat=4)
+        len(component_groups((a, b, c, d)))
+        for a, b, c, d in product(AOT_ANGULAR_DOMAIN, repeat=4)
     )
     return 2 * per_family
 
