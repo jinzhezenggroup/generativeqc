@@ -135,7 +135,7 @@ void validate_descriptor(const vibeqc_method_descriptor& d,
                       "RCCSD requires an explicit CPU or CUDA backend");
 }
 
-std::vector<double> fock_mo(const scf::PhysicalReference& ref) {
+std::vector<double> fock_mo(const hf::PhysicalReference& ref) {
   const auto n = ref.nbf;
   std::vector<double> scratch(n * n), result(n * n);
   for (std::size_t mu = 0; mu < n; ++mu)
@@ -156,7 +156,7 @@ std::vector<double> fock_mo(const scf::PhysicalReference& ref) {
   return result;
 }
 
-std::size_t retained_reference_bytes(const scf::PhysicalReference& ref) {
+std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
   std::size_t result = 0;
   const std::vector<double>* arrays[] = {
       &ref.overlap, &ref.hcore,           &ref.fock, &ref.coefficients, &ref.orbital_energies,
@@ -166,7 +166,7 @@ std::size_t retained_reference_bytes(const scf::PhysicalReference& ref) {
   return result;
 }
 
-cc::Problem build_problem(const core::System& system, const scf::PhysicalReference& ref,
+cc::Problem build_problem(const core::System& system, const hf::PhysicalReference& ref,
                           const cc::SolverOptions& options, bool cuda, int device,
                           posthf::ProviderWork& provider_work,
                           vibeqc_tensor::Metrics& provider_metrics) {
