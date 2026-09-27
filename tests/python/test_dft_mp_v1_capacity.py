@@ -877,6 +877,20 @@ def test_report_rejects_a_helper_imported_outside_the_tool_checkout(
         qualify_capacity.build_report(ROOT)
 
 
+def test_report_rejects_same_checkout_helper_source_changed_since_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _ = qualify_capacity._IMPORTED_HELPER_SOURCES["Atom"]
+    monkeypatch.setitem(
+        qualify_capacity._IMPORTED_HELPER_SOURCES,
+        "Atom",
+        (path, "0" * 64),
+    )
+
+    with pytest.raises(RuntimeError, match="helper source changed since import: Atom"):
+        qualify_capacity._assert_local_imports()
+
+
 def test_malformed_optional_aot_manifest_is_reported_not_raised(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

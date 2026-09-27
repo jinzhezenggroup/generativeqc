@@ -38,6 +38,10 @@ and exclude exactly that path from the clean-tree check. The public
 `build_report()` API has no exemption, and the CLI refuses to replace a tracked
 file. No other dirty path is ignored.
 
+Imported planner, basis, grid, and AOT helpers retain their import-time source
+path and content identity. A long-lived process fails closed if the same
+checkout changes underneath already-imported helper objects.
+
 ## Rejected alternatives
 
 - Raising caps or editing production owners was rejected because capacity

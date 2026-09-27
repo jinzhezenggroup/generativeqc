@@ -47,6 +47,38 @@ from vibeqc_compiler.method.stationary_cuda import (
     stationary_runtime_sources,
 )
 
+_LOCAL_HELPERS = {
+    "Atom": Atom,
+    "generated_methods": generated_methods,
+    "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
+    "resolved_basis_metadata": resolved_basis_metadata,
+    "_named_basis_record": _named_basis_record,
+    "_named_basis_shells": _named_basis_shells,
+    "GridSpec": GridSpec,
+    "MolecularGrid": MolecularGrid,
+    "plan_tiles": plan_tiles,
+    "_qualified_aot_plan": _qualified_aot_plan,
+    "load_stationary_aot_artifact": load_stationary_aot_artifact,
+    "stationary_aot_contract_identity": stationary_aot_contract_identity,
+    "stationary_runtime_sources": stationary_runtime_sources,
+}
+
+
+def _helper_source_path(helper: Any) -> Path | None:
+    module = helper if inspect.ismodule(helper) else inspect.getmodule(helper)
+    source = None if module is None else getattr(module, "__file__", None)
+    return None if source is None else Path(source).resolve()
+
+
+_IMPORTED_HELPER_SOURCES = {
+    name: (
+        path,
+        hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
+    )
+    for name, helper in _LOCAL_HELPERS.items()
+    if (path := _helper_source_path(helper)) is not None
+}
+
 SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
 SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
@@ -148,31 +180,33 @@ STATIONARY_OWNER = {
 def _assert_local_imports() -> None:
     """Reject helpers already imported from an installed or foreign checkout."""
 
-    helpers = {
-        "Atom": Atom,
-        "generated_methods": generated_methods,
-        "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
-        "resolved_basis_metadata": resolved_basis_metadata,
-        "_named_basis_record": _named_basis_record,
-        "_named_basis_shells": _named_basis_shells,
-        "GridSpec": GridSpec,
-        "MolecularGrid": MolecularGrid,
-        "plan_tiles": plan_tiles,
-        "_qualified_aot_plan": _qualified_aot_plan,
-        "load_stationary_aot_artifact": load_stationary_aot_artifact,
-        "stationary_aot_contract_identity": stationary_aot_contract_identity,
-        "stationary_runtime_sources": stationary_runtime_sources,
-    }
     foreign = []
-    for name, helper in helpers.items():
-        module = helper if inspect.ismodule(helper) else inspect.getmodule(helper)
-        source = None if module is None else getattr(module, "__file__", None)
-        if source is None or not Path(source).resolve().is_relative_to(SOURCE_PYTHON):
+    stale = []
+    for name, original in _LOCAL_HELPERS.items():
+        helper = globals()[name]
+        source = _helper_source_path(helper)
+        imported = _IMPORTED_HELPER_SOURCES.get(name)
+        if (
+            source is None
+            or not source.is_relative_to(SOURCE_PYTHON)
+            or imported is None
+            or source != imported[0]
+        ):
             foreign.append(name)
+            continue
+        current_digest = hashlib.sha256(
+            source.read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest()
+        if helper is not original or current_digest != imported[1]:
+            stale.append(name)
     if foreign:
         raise RuntimeError(
             "capacity helper imported outside the tool checkout: "
             + ", ".join(sorted(foreign))
+        )
+    if stale:
+        raise RuntimeError(
+            "capacity helper source changed since import: " + ", ".join(sorted(stale))
         )
 
 
