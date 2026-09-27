@@ -617,9 +617,11 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if "tau" in expected.ingredients:
-            # The v2 policy has no qualified meta-GGA profile. Preserve the
-            # existing explicit v1 default rather than assigning a GGA grid.
+        if "tau" in expected.ingredients and not compile_ks_execution_plan(
+            named_ir
+        ).exchange:
+            # The v2 policy has no qualified pure meta-GGA profile. Preserve
+            # the existing explicit v1 default rather than assigning a GGA grid.
             if options.grid_accuracy != "standard":
                 raise NotImplementedError(
                     "r2SCAN grid accuracy profiles require an explicit GridSpec"
