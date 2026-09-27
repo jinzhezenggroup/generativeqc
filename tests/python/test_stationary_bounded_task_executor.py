@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from vibeqc._stationary_cuda import _BoundedStationaryTaskExecutor
-from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain
+from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain, RuntimeTaskPage
 
 
 @pytest.mark.parametrize(
@@ -62,13 +62,13 @@ def test_executor_rejects_invalid_capacities(
         )
 
 
-def test_executor_rejects_non_domain_or_non_callback() -> None:
+def test_executor_rejects_invalid_task_source_or_callback() -> None:
     executor = _BoundedStationaryTaskExecutor(
         fixed_capacity=2, resident_capacity=4, page_capacity=4
     )
     domain = RuntimeTaskDomain.rectangular((2,))
 
-    with pytest.raises(TypeError, match="RuntimeTaskDomain"):
+    with pytest.raises(TypeError, match="identity-bearing task source"):
         executor.execute(object(), lambda _coordinate: None)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="submit callback"):
         executor.execute(domain, object())  # type: ignore[arg-type]
@@ -135,3 +135,43 @@ def test_fixed_and_paged_schedules_preserve_domain_result_and_identity() -> None
     assert paged.producer_pages == domain.page_count(7)
     assert fixed_coordinates == paged_coordinates == list(domain)
     assert fixed_total == paged_total
+
+
+def test_executor_accepts_structural_task_source_and_checks_page_identity() -> None:
+    domain = RuntimeTaskDomain.rectangular((3, 2))
+
+    class Source:
+        identity = domain.identity
+        logical_size = domain.logical_size
+
+        @staticmethod
+        def pages(capacity: int):
+            yield from domain.pages(capacity)
+
+    executor = _BoundedStationaryTaskExecutor(
+        fixed_capacity=2, resident_capacity=4, page_capacity=4
+    )
+    seen: list[tuple[int, ...]] = []
+    execution = executor.execute(Source(), seen.append)
+    assert execution.domain_identity == domain.identity
+    assert seen == list(domain)
+
+    class WrongIdentity:
+        identity = domain.identity
+        logical_size = domain.logical_size
+
+        @staticmethod
+        def pages(capacity: int):
+            first = next(domain.pages(capacity))
+            yield RuntimeTaskPage(
+                "0" * 64,
+                first.rank,
+                first.ordinal,
+                first.offset,
+                first.capacity,
+                first.coordinates,
+            )
+            yield from list(domain.pages(capacity))[1:]
+
+    with pytest.raises(RuntimeError, match="identity/order mismatch"):
+        executor.execute(WrongIdentity(), lambda _coordinate: None)
