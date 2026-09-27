@@ -30,6 +30,12 @@ LARGE_HE_BASIS = (
     Shell(0, 2, (Primitive(0.8, 1.0),)),
     Shell(0, 2, (Primitive(0.35, 1.0),)),
 )
+LARGE_H2_BASIS = (
+    Shell(0, 0, (Primitive(1.5, 1.0),)),
+    Shell(0, 2, (Primitive(0.75, 1.0),)),
+    Shell(1, 0, (Primitive(1.5, 1.0),)),
+    Shell(1, 2, (Primitive(0.75, 1.0),)),
+)
 GRID = GridSpec(radial_points=10, angular_polar=4, angular_azimuth=8)
 
 
@@ -522,6 +528,34 @@ def test_rks_hvp_integral_budget_fails_before_response(
         rks_hvp(operator, direction, integral_budget_bytes=1)
 
 
+@pytest.mark.parametrize(
+    ("integral_budget_bytes", "error"),
+    ((0, ValueError), (True, ValueError), (1, MemoryError)),
+)
+def test_rks_hessian_integral_budget_fails_before_output_allocation(
+    case: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    integral_budget_bytes: typing.Any,
+    error: type[Exception],
+) -> None:
+    """Full-Hessian integral admission must run before dense output allocation."""
+    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+
+    _, operator, _, _ = case
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("dense Hessian allocation started before integral budget gate")
+
+    monkeypatch.setattr(rks_molecular_module.np, "empty", forbidden)
+    with pytest.raises(error, match="integral_budget_bytes"):
+        rks_hessian(
+            operator,
+            block_size=2,
+            output_budget_bytes=1 << 20,
+            integral_budget_bytes=integral_budget_bytes,
+        )
+
+
 def test_rks_hvp_admits_resource_bounded_domain_above_12_aos(
     tmp_path: typing.Any,
 ) -> None:
@@ -563,3 +597,71 @@ def test_rks_hvp_admits_resource_bounded_domain_above_12_aos(
     for diagnostic in result.diagnostics["integral_providers"].values():
         assert diagnostic["budget_bytes"] == 64 << 20
         assert diagnostic["output_accumulator_bytes"] <= diagnostic["budget_bytes"]
+
+
+def test_rks_hvp_above_12_aos_matches_multicenter_gradient(
+    tmp_path: typing.Any,
+) -> None:
+    """Qualify the enlarged domain with a nonzero multicenter gradient oracle."""
+    direction = np.array(
+        [[0.13, -0.07, 0.29], [-0.13, 0.07, -0.29]], dtype=np.float64
+    )
+    direction /= np.linalg.norm(direction)
+
+    def calculator() -> Calculator:
+        return Calculator(
+            method="lda-rks",
+            basis=LARGE_H2_BASIS,
+            device="cpu",
+            ks_options=KsOptions(grid=GRID),
+            max_iterations=200,
+            energy_tolerance=1e-13,
+            density_tolerance=1e-11,
+        )
+
+    with (
+        calculator().prepare_batch([H2]) as batch,
+        NativeAO(H2, basis=LARGE_H2_BASIS) as basis,
+    ):
+        assert basis.nao == 14
+        batch.execute(strict=True)
+        with NativeRKSResponse.from_native(batch, basis, tile_points=257) as operator:
+            result = rks_hvp(
+                operator,
+                direction,
+                cache=tmp_path / "large-multicenter-hvp",
+                integral_budget_bytes=64 << 20,
+                solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
+            )
+
+    assert result.diagnostics["complete_source_coverage"]
+    assert np.max(np.abs(result.value)) > 1e-5
+
+    errors = []
+    for step in (1.2e-3, 4e-4, 1.3e-4):
+        gradients = []
+        for sign in (1, -1):
+            atoms = _moved(H2, direction, sign * step)
+            with (
+                calculator().prepare_batch([atoms]) as batch,
+                NativeAO(atoms, basis=LARGE_H2_BASIS) as basis,
+            ):
+                batch.execute(strict=True)
+                with NativeRKSResponse.from_native(batch, basis) as current:
+                    gradients.append(
+                        np.array(
+                            complete_rks_gradient_diagnostic(
+                                current.state,
+                                basis,
+                                cache=tmp_path / "large-multicenter-gradient",
+                                execution="reference",
+                            ).gradient,
+                            copy=True,
+                        )
+                    )
+        numeric = (gradients[0] - gradients[1]) / (2 * step)
+        errors.append(float(np.max(np.abs(result.value - numeric))))
+
+    assert errors[-1] < 6e-4, errors
+    assert errors[-1] < max(0.4 * errors[0], 3e-5), errors
+
