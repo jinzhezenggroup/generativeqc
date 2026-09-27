@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from tools.render_libxc_public_evidence import collect_public_evidence
 from vibeqc_compiler.method.libxc_public_evidence import (
     installed_public_evidence,
     installed_public_evidence_provenance,
 )
+
+from tools.render_libxc_public_evidence import collect_public_evidence
 
 
 def test_empty_generated_inventory_is_fail_closed() -> None:

@@ -14,7 +14,10 @@ from typing import Any
 
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 
-from ._generated_libxc_public_evidence import PUBLIC_EVIDENCE, PUBLIC_EVIDENCE_PROVENANCE
+from ._generated_libxc_public_evidence import (
+    PUBLIC_EVIDENCE,
+    PUBLIC_EVIDENCE_PROVENANCE,
+)
 
 
 def installed_public_evidence(name: str) -> dict[str, Any] | None:
