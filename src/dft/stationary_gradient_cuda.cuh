@@ -131,8 +131,7 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external, double* partial,
-                                double* scratch, int* error);
-__global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error);
+                                double* scratch, double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
 }  // namespace vibeqc_stationary_cuda
 
@@ -376,19 +375,16 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
       profile_record(*p, p->stage1, stream);
       geometry_kernel<<<1, workers, 0, stream>>>(
           *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-          seeds.get(), p->partial, p->scratch, p->context.error);
+          seeds.get(), p->partial, p->scratch,
+          p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
       profile_record(*p, p->stage2, stream);
-      geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-          p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
-      profile_record(*p, p->stage3, stream);
-      p->launches += 2;
+      p->launches += 1;
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
       finished(*p, stream);
       profile_elapsed(*p, p->geometry_h2d_ms, p->stage0, p->stage1);
       profile_elapsed(*p, p->geometry_kernel_ms, p->stage1, p->stage2);
-      profile_elapsed(*p, p->geometry_reduction_ms, p->stage2, p->stage3);
     } catch (...) {
       // Even an upload/launch failure must drain the borrowed stream before
       // our arena can be freed or the grid owner can reuse its leased buffers.
@@ -429,13 +425,12 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, p->centers,
-                                               p->atoms, p->weights, p->raw, nullptr, p->partial,
-                                               p->scratch, p->context.error);
-    geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+    geometry_kernel<<<1, workers, 0, stream>>>(
+        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
+        nullptr, p->partial, p->scratch,
+        p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
-    p->launches += 2;
+    p->launches += 1;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
