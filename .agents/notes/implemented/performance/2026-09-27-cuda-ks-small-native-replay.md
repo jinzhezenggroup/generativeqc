@@ -5,7 +5,7 @@ Date: 2026-09-27
 ## Decision
 
 Advance #370 with one deliberately narrow replay consumer rather than enabling
-CUDA Graphs for every KS shape. Direct all-electron strict-FP64 RKS may request
+CUDA Graphs for every KS shape. Direct all-electron strict-FP64 LDA/PBE RKS may request
 `VIBEQC_CUDA_KS_REPLAY=1` on top of the existing two-step
 `VIBEQC_CUDA_KS_CHUNK=2` qualification route. Replay is admitted only when
 the prepared KS eigensolver is the capture-safe small-native family (currently
