@@ -38,7 +38,11 @@ def _tag(family: CoulombKernelFamily | str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-directory", type=Path, required=True)
-    parser.add_argument("--radial-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--radial-manifest",
+        type=Path,
+        default=ROOT / "manifests/derivative_aot_radials.json",
+    )
     args = parser.parse_args()
 
     payload = json.loads(args.radial_manifest.read_text(encoding="utf-8"))
