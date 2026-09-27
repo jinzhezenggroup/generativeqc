@@ -34,7 +34,9 @@ def signed_weight_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     pieces = [
         _definition(source, "struct PairKernelValues") + ";",
-        _definition(source, "template <Vv10Variant Variant, bool Features, bool Geometry>"),
+        _definition(
+            source, "template <Vv10Variant Variant, bool Features, bool Geometry>"
+        ),
         _definition(source, "template <Vv10Variant Variant, bool Features>"),
         _definition(
             source,
@@ -134,7 +136,11 @@ extern "C" int run(int variant, int mask, double weight, double density, double*
     )
     native = ct.CDLL(str(library))
     native.run.argtypes = [
-        ct.c_int, ct.c_int, ct.c_double, ct.c_double, ct.POINTER(ct.c_double)
+        ct.c_int,
+        ct.c_int,
+        ct.c_double,
+        ct.c_double,
+        ct.POINTER(ct.c_double),
     ]
     native.run.restype = ct.c_int
     return native
