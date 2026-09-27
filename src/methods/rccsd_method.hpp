@@ -12,6 +12,7 @@ struct RccsdNativeState {
   cc::SolverResult solved;
   std::vector<double> eps_o, eps_v;
   vibeqc_correlation_diagnostic diagnostic{};
+  CcPerformanceDiagnostic performance{};
   Result result;
   std::size_t budget{};
 };

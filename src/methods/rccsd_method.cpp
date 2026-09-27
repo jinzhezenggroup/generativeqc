@@ -403,29 +403,30 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     diagnostic.ccsd_scalar_d2h_bytes = state.solved.diagnostic.scalar_d2h_bytes;
     diagnostic.ccsd_amplitude_d2h_bytes = state.solved.diagnostic.amplitude_d2h_bytes;
     diagnostic.ccsd_synchronizations = state.solved.diagnostic.synchronizations;
-    diagnostic.ccsd_reference_seconds = reference_seconds;
-    diagnostic.ccsd_problem_seconds = problem_seconds;
-    diagnostic.ccsd_provider_seconds = provider_work.provider_seconds;
-    diagnostic.ccsd_source_seconds = provider_work.source_seconds;
-    diagnostic.ccsd_solver_seconds = solver_seconds;
-    diagnostic.ccsd_iteration_seconds = state.solved.diagnostic.iteration_seconds;
-    diagnostic.ccsd_replay_seconds = state.solved.diagnostic.replay_seconds;
-    diagnostic.ccsd_update_seconds = state.solved.diagnostic.update_seconds;
-    diagnostic.ccsd_diis_seconds = state.solved.diagnostic.diis_seconds;
-    diagnostic.ccsd_source_scans = provider_work.source_scans;
-    diagnostic.ccsd_source_reads = provider_work.source_reads;
-    diagnostic.ccsd_source_values = provider_work.source_values;
-    diagnostic.ccsd_transform_fmas = provider_work.transform_fmas;
-    diagnostic.ccsd_mo_blocks = provider_work.mo_blocks;
-    diagnostic.ccsd_cuda_transform_calls = provider_work.cuda_transform_calls;
-    diagnostic.ccsd_cuda_batch_calls = provider_work.cuda_batch_calls;
-    diagnostic.ccsd_iteration_graph_calls = state.solved.diagnostic.iteration_graph_calls;
-    diagnostic.ccsd_replay_graph_calls = state.solved.diagnostic.replay_graph_calls;
-    diagnostic.ccsd_update_calls = state.solved.diagnostic.update_calls;
-    diagnostic.ccsd_generated_error_checks = state.solved.diagnostic.generated_error_checks;
-    diagnostic.ccsd_diis_gram_calls = state.solved.diagnostic.diis_gram_calls;
-    diagnostic.ccsd_diis_coefficient_calls = state.solved.diagnostic.diis_coefficient_calls;
-    diagnostic.ccsd_diis_combine_calls = state.solved.diagnostic.diis_combine_calls;
+    auto& performance = state.performance;
+    performance.reference_seconds = reference_seconds;
+    performance.problem_seconds = problem_seconds;
+    performance.provider_seconds = provider_work.provider_seconds;
+    performance.source_seconds = provider_work.source_seconds;
+    performance.solver_seconds = solver_seconds;
+    performance.iteration_seconds = state.solved.diagnostic.iteration_seconds;
+    performance.replay_seconds = state.solved.diagnostic.replay_seconds;
+    performance.update_seconds = state.solved.diagnostic.update_seconds;
+    performance.diis_seconds = state.solved.diagnostic.diis_seconds;
+    performance.source_scans = provider_work.source_scans;
+    performance.source_reads = provider_work.source_reads;
+    performance.source_values = provider_work.source_values;
+    performance.transform_fmas = provider_work.transform_fmas;
+    performance.mo_blocks = provider_work.mo_blocks;
+    performance.cuda_transform_calls = provider_work.cuda_transform_calls;
+    performance.cuda_batch_calls = provider_work.cuda_batch_calls;
+    performance.iteration_graph_calls = state.solved.diagnostic.iteration_graph_calls;
+    performance.replay_graph_calls = state.solved.diagnostic.replay_graph_calls;
+    performance.update_calls = state.solved.diagnostic.update_calls;
+    performance.generated_error_checks = state.solved.diagnostic.generated_error_checks;
+    performance.diis_gram_calls = state.solved.diagnostic.diis_gram_calls;
+    performance.diis_coefficient_calls = state.solved.diagnostic.diis_coefficient_calls;
+    performance.diis_combine_calls = state.solved.diagnostic.diis_combine_calls;
     if (cuda) {
       execution.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
                                      state.solved.diagnostic.owned_device_bytes);
@@ -475,20 +476,27 @@ class RccsdPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     return last_;
   }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_performance_;
+  }
   void invalidate_result() override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
   }
 
   Result execute(bool compute_forces) override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
     auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
                                         reference_capacity_);
     last_ = state.diagnostic;
+    last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
     if (!state.solved.converged() || !compute_forces) return state.result;
@@ -556,6 +564,7 @@ class RccsdPrepared final : public PreparedCalculation {
   cc::SolverOptions solver_options_;
   std::size_t reference_capacity_{};
   std::optional<vibeqc_correlation_diagnostic> last_;
+  std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;
 };
 
@@ -622,6 +631,12 @@ class RccsdPreparedBatch final : public PreparedBatch {
     if (index >= owners_.size())
       throw std::invalid_argument("correlation diagnostic batch index is out of range");
     return owners_[index]->correlation_diagnostic();
+  }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
+      std::size_t index) const override {
+    if (index >= owners_.size())
+      throw std::invalid_argument("CC performance diagnostic batch index is out of range");
+    return owners_[index]->cc_performance_diagnostic();
   }
 
   void clear_warm_starts() override {}

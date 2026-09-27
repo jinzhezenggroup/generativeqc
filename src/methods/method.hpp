@@ -55,6 +55,33 @@ struct Result {
 };
 
 /** Method-neutral copy of the cumulative native CUDA KS movement ledger. */
+struct CcPerformanceDiagnostic {
+  double reference_seconds{};
+  double problem_seconds{};
+  double provider_seconds{};
+  double source_seconds{};
+  double solver_seconds{};
+  double iteration_seconds{};
+  double replay_seconds{};
+  double update_seconds{};
+  double diis_seconds{};
+  double triples_seconds{};
+  std::uint64_t source_scans{};
+  std::uint64_t source_reads{};
+  std::uint64_t source_values{};
+  std::uint64_t transform_fmas{};
+  std::uint64_t mo_blocks{};
+  std::uint64_t cuda_transform_calls{};
+  std::uint64_t cuda_batch_calls{};
+  std::uint64_t iteration_graph_calls{};
+  std::uint64_t replay_graph_calls{};
+  std::uint64_t update_calls{};
+  std::uint64_t generated_error_checks{};
+  std::uint64_t diis_gram_calls{};
+  std::uint64_t diis_coefficient_calls{};
+  std::uint64_t diis_combine_calls{};
+};
+
 struct KsTransportDiagnostic {
   std::uint64_t setup_h2d_bytes{};
   std::uint64_t density_h2d_bytes{};
@@ -194,6 +221,9 @@ class PreparedCalculation {
       const {
     return std::nullopt;
   }
+  [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const {
+    return std::nullopt;
+  }
 };
 
 /** Prepared ragged execution. Method families choose their own batching policy.
@@ -227,6 +257,11 @@ class PreparedBatch {
     return std::nullopt;
   }
   [[nodiscard]] virtual std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic(
+      std::size_t index) const {
+    (void)index;
+    return std::nullopt;
+  }
+  [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
       std::size_t index) const {
     (void)index;
     return std::nullopt;
