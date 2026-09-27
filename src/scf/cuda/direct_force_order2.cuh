@@ -198,10 +198,11 @@ contracted_eri_cartesian_source_order2_generated_gradient(const DeviceBatch& bat
 
 /** Evaluate and write one complete density-weighted psps force shell task. */
 template <bool Unrestricted>
-__device__ inline __noinline__ void contract_two_electron_force_psps_task(
+__device__ inline __noinline__ void contract_two_electron_force_psps_task_scaled(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
-    std::uint64_t generated_shell_class_mask) {
+    std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
+    double exchange_coefficient) {
   // A psps shell quartet has at most nine Cartesian AO quartets and therefore
   // always fits in the first compact tile.
   if (task.tile != 0U) return;
@@ -268,8 +269,9 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
         screening_tolerance) {
       continue;
     }
-    const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
-        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3]);
+    const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
+        coulomb_coefficient, exchange_coefficient);
     if (density_coefficient == 0.0) continue;
     const unsigned first_axis =
         static_cast<unsigned>(raw_ao[canonical_raw_slot[0]] - first_p_ao_begin);
@@ -291,12 +293,24 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
                                             unique_center_count, gradient, forces);
 }
 
-/** Evaluate one closed ppss or dsss shell task over its exact AO domain. */
-template <bool Unrestricted, unsigned TargetShellClass>
-__device__ inline __noinline__ void contract_two_electron_force_pair_order2_task(
+template <bool Unrestricted>
+__device__ inline __noinline__ void contract_two_electron_force_psps_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
+  constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;
+  contract_two_electron_force_psps_task_scaled<Unrestricted>(
+      batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+      generated_shell_class_mask, 1.0, exchange_coefficient);
+}
+
+/** Evaluate one closed ppss or dsss shell task over its exact AO domain. */
+template <bool Unrestricted, unsigned TargetShellClass>
+__device__ inline __noinline__ void contract_two_electron_force_pair_order2_task_scaled(
+    const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
+    double exchange_coefficient) {
   static_assert(TargetShellClass == kPpssShellClass || TargetShellClass == kDsssShellClass);
   if (task.tile != 0U) return;
   const std::size_t first_pair = task.first_pair;
@@ -366,8 +380,9 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
         screening_tolerance) {
       continue;
     }
-    const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
-        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3]);
+    const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
+        coulomb_coefficient, exchange_coefficient);
     if (density_coefficient == 0.0) continue;
     const unsigned first_component =
         static_cast<unsigned>(raw_ao[canonical_raw_slot[0]] - first_component_begin);
@@ -394,6 +409,17 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
 
   scatter_direct_force_independent_gradient(canonical_center_atoms, unique_center_atoms,
                                             unique_center_count, gradient, forces);
+}
+
+template <bool Unrestricted, unsigned TargetShellClass>
+__device__ inline __noinline__ void contract_two_electron_force_pair_order2_task(
+    const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    std::uint64_t generated_shell_class_mask) {
+  constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;
+  contract_two_electron_force_pair_order2_task_scaled<Unrestricted, TargetShellClass>(
+      batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+      generated_shell_class_mask, 1.0, exchange_coefficient);
 }
 
 }  // namespace vibeqc::scf::cuda_execution
