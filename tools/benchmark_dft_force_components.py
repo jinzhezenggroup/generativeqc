@@ -205,7 +205,7 @@ def _readme_endpoint_records(
     payload: Mapping[str, typing.Any],
 ) -> list[dict[str, typing.Any]]:
     method = str(payload.get("method", ""))
-    if not (method.endswith("-rks") or method.endswith("-uks")):
+    if not method.endswith(("-rks", "-uks")):
         return []
     metadata = _metadata(payload)
     metadata["mode"] = payload.get("mode")
