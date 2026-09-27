@@ -3,11 +3,11 @@
 
 # Native method ABI registry
 
-This table is generated from `manifests/public_methods.json`. It owns stable
-native ABI IDs, providers, declared properties, and compatibility aliases.
+This table is generated from `manifests/public_methods.json`. It owns native
+provider carrier IDs, declared properties, and compatibility aliases.
 DFT scientific names and compositions are resolved from the compiler MethodIR
 catalog (including pinned Libxc metadata), not from this ABI registry.
-DFT rows below remain native compatibility selectors/carriers; they are not
+DFT rows below are native execution carriers; they are not
 a user-facing functional whitelist. Execution still fails closed when a
 backend, basis, grid, spin, or primitive lowerer is not qualified.
 
@@ -15,7 +15,6 @@ backend, basis, grid, spin, or primitive lowerer is not qualified.
 | --- | --- | --- | --- | --- | --- |
 |`rhf` | hartree fock | `energy`, `forces` | yes | — | available |
 |`uhf` | hartree fock | `energy`, `forces` | yes | — | available |
-|`wb97m-v` | density functional | `energy` | yes | `wb97m-v-rks` | available |
 |`rccsd(t)` | coupled cluster | `energy`, `forces` | yes | `ccsd(t)` | available |
 |`mp2` | perturbation | `energy`, `forces` | yes | — | available |
 |`lda-rks` | density functional | `energy` | yes | — | available |
@@ -25,14 +24,5 @@ backend, basis, grid, spin, or primitive lowerer is not qualified.
 |`r2scan-rks` | density functional | `energy` | yes | — | available |
 |`r2scan-uks` | density functional | `energy` | yes | — | available |
 |`rccsd` | coupled cluster | `energy`, `forces` | yes | — | available |
-|`pbe0-rks` | density functional | `energy` | yes | — | available |
-|`pbe0-uks` | density functional | `energy` | yes | — | available |
 |`gfn2-xtb` | semiempirical | `energy`, `forces` | no | `gfn2` | available |
-|`b3lyp-rks` | density functional | `energy` | yes | — | available |
-|`b3lyp-uks` | density functional | `energy` | yes | — | available |
 |`pbe-d4-rks` | density functional | `energy` | yes | — | available |
-|`wb97m-v-uks` | density functional | `energy` | yes | — | available |
-|`m06-2x-rks` | density functional | `energy` | yes | — | available |
-|`m06-2x-uks` | density functional | `energy` | yes | — | available |
-|`mn15-rks` | density functional | `energy` | yes | — | available |
-|`mn15-uks` | density functional | `energy` | yes | — | available |
