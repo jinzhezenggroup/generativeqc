@@ -59,26 +59,22 @@ inline cublasStatus_t df_occupied_project_panel(
 }
 
 /** Finish the exact fitted occupied projection from the final-K linear
- * factor U[(Q,i),mu]=sum_nu B[Q,mu,nu] C[nu,i].  The Q blocks are
- * interleaved in the leading dimension of U, so a strided batched GEMM emits
- * S[Q,i,j]=sum_mu C[mu,i] U[(Q,j),mu] directly in Q-major rank-squared layout.
- * This is the second half of df_occupied_project_panel(), reused without
- * rereading the immutable fitted tensor B.
+ * factor U[mu,j,Q]=sum_nu B[Q,mu,nu] C[nu,j]. The packed K kernel stores Q
+ * fastest, so one GEMM contracts C over mu into [i,j,Q] order. The caller
+ * gathers that result into [Q,i,j]; treating U as Q-major GEMM batches reads
+ * unrelated occupied/auxiliary elements once rank or auxiliary exceeds one.
  */
 inline cublasStatus_t df_occupied_finish_projection(
     cublasHandle_t blas, int n, int rank, int auxiliary,
-    const double* coefficients, const double* linear, double* projected) {
+    const double* coefficients, const double* linear, double* pair_major) {
   if (n <= 0 || rank <= 0 || rank > n || auxiliary <= 0 ||
       auxiliary > std::numeric_limits<int>::max() / rank ||
-      !coefficients || !linear || !projected)
+      !coefficients || !linear || !pair_major)
     return CUBLAS_STATUS_INVALID_VALUE;
   const int ar = auxiliary * rank;
-  const long long rr = static_cast<long long>(rank) * rank;
   const double one = 1, zero = 0;
-  return cublasDgemmStridedBatched(
-      blas, CUBLAS_OP_T, CUBLAS_OP_T, rank, rank, n, &one,
-      coefficients, n, 0, linear, ar, rank, &zero,
-      projected, rank, rr, auxiliary);
+  return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ar, rank, n, &one,
+                     linear, ar, coefficients, n, &zero, pair_major, ar);
 }
 
 inline cublasStatus_t df_occupied_to_metric_eigenbasis(

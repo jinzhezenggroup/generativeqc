@@ -33,6 +33,7 @@ STANDIN = r"""
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <vector>
 #include "cublas_v2.h"
 static int calls, fail_on;
 static void product(cublasOperation_t ta,cublasOperation_t tb,int m,int n,int k,
@@ -72,8 +73,14 @@ extern "C" int project(int n,int r,int a,int begin,int count,const double* c,
 extern "C" int finish_project(int n,int r,int a,const double* c,
                                 const double* linear,double* out,int fail) {
   calls=0;fail_on=fail;
-  return vibeqc::scf::generated::df_occupied_finish_projection(
-      nullptr,n,r,a,c,linear,out);
+  std::vector<double> pair_major(static_cast<std::size_t>(a)*r*r);
+  auto result=vibeqc::scf::generated::df_occupied_finish_projection(
+      nullptr,n,r,a,c,linear,pair_major.data());
+  if(result) return result;
+  // Mirror the production gather from [i,j,Q] into [Q,i,j].
+  for(int q=0;q<a;++q) for(int i=0;i<r;++i) for(int j=0;j<r;++j)
+    out[q*r*r+i+j*r]=pair_major[(i*r+j)*a+q];
+  return 0;
 }
 extern "C" int call_count() { return calls; }
 extern "C" std::size_t tile_size(std::size_t n,std::size_t r,std::size_t a,
@@ -204,10 +211,13 @@ def test_finish_final_k_projection_layout(
     rng = np.random.default_rng(20260927 + n + r + a)
     coefficients = np.asfortranarray(rng.normal(size=(n, r)))
     fitted = rng.normal(size=(a, n, n))
+    # The packed final-K kernel stores Q fastest within each occupied column.
     linear = np.empty((a * r, n), dtype=np.float64, order="F")
     expected = []
     for q in range(a):
-        linear[q * r : (q + 1) * r, :] = (fitted[q] @ coefficients).T
+        projection = fitted[q] @ coefficients
+        for j in range(r):
+            linear[q + a * j, :] = projection[:, j]
         expected.append(coefficients.T @ fitted[q] @ coefficients)
     output = np.full(a * r * r, np.nan)
     assert (
