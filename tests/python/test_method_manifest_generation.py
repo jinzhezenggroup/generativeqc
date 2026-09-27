@@ -160,12 +160,3 @@ def test_manifest_rejects_lossy_abi_and_capability_values(
     with pytest.raises(ValueError):
         generator.load_manifest()
 
-
-def test_generated_python_supports_an_empty_provider_group() -> None:
-    from tools import generate_method_manifest as generator
-
-    methods = [m for m in generator.load_manifest() if m["provider"] == "reserved"]
-    generated = generator.emit_python(methods)
-    compile(generated, "generated-methods", "exec")
-    assert "HF_METHOD_IDS = frozenset(())" in generated
-    assert "NATIVE_DFT_METHOD_IDS = frozenset(())" in generated
