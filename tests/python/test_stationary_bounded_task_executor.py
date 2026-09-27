@@ -37,6 +37,7 @@ def test_executor_classifies_and_covers_runtime_domain(
     execution = executor.execute(domain, seen.append, finish_page=finish_page)
 
     assert execution.mode == mode
+    assert execution.source_schema == domain.to_payload()["schema"]
     assert execution.domain_identity == domain.identity
     assert execution.logical_tasks == domain.logical_size
     assert execution.fixed_capacity == page_capacity
@@ -68,7 +69,7 @@ def test_executor_rejects_invalid_task_source_or_callback() -> None:
     )
     domain = RuntimeTaskDomain.rectangular((2,))
 
-    with pytest.raises(TypeError, match="identity-bearing task source"):
+    with pytest.raises(TypeError, match="versioned identity-bearing task source"):
         executor.execute(object(), lambda _coordinate: None)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="submit callback"):
         executor.execute(domain, object())  # type: ignore[arg-type]
@@ -148,6 +149,10 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
         def pages(capacity: int):
             yield from domain.pages(capacity)
 
+        @staticmethod
+        def to_payload() -> dict[str, object]:
+            return {"schema": "vibeqc.synthetic_stationary_task_source.v1"}
+
     executor = _BoundedStationaryTaskExecutor(
         fixed_capacity=2, resident_capacity=4, page_capacity=4
     )
@@ -172,6 +177,10 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
                 first.coordinates,
             )
             yield from list(domain.pages(capacity))[1:]
+
+        @staticmethod
+        def to_payload() -> dict[str, object]:
+            return {"schema": "vibeqc.synthetic_stationary_task_source.v1"}
 
     with pytest.raises(RuntimeError, match="identity/order mismatch"):
         executor.execute(WrongIdentity(), lambda _coordinate: None)
