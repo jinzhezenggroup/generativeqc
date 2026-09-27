@@ -66,7 +66,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "07858ba7f9a78fe6348bbcb9430eb4f8321db8774ea3ce1ecef495629abe2a1c"
     )
     assert result["basis"]["ao_pack_bridge_contract_sha256"] == (
-        "bce84835947d80f85a61a520deca3d763a4627266259b14e9b8835fc3a1c835b"
+        "c5c8a0181075e7d171e1d189c875d5cc9e69467cb069b13267f91e73b1e1dd7e"
+    )
+    assert result["basis"]["native_ao_constructor_contract_sha256"] == (
+        "1cf236f40a51bdad066635e3eaaaab3d8fc4c7c094653b73898b8dc32bd89e08"
     )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
         "89568c04b3b5f91bec27a391ca5e819f279f3f0385e1712f33f522f7265fdb62"
@@ -407,6 +410,20 @@ def test_spherical_component_count_fails_closed_when_layout_parser_moves(
     target.write_text(source.replace(old, "for term in range(1)", 1))
 
     with pytest.raises(RuntimeError, match="stationary layout contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+def test_spherical_component_count_fails_closed_when_basis_creation_moves(
+    tmp_path: Path,
+) -> None:
+    spd_contract_tree(tmp_path)
+    target = tmp_path / "src/dft/bridge.cpp"
+    source = target.read_text(encoding="utf-8")
+    old = "dimensions[2] = basis->nao;"
+    assert old in source
+    target.write_text(source.replace(old, "dimensions[2] = 0;", 1))
+
+    with pytest.raises(RuntimeError, match="packed-AO contract changed"):
         qualify_capacity._spd_expansion_contract(tmp_path)
 
 

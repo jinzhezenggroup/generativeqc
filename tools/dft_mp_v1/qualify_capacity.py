@@ -57,7 +57,10 @@ AO_PACKER_CONTRACT_SHA256 = (
     "07858ba7f9a78fe6348bbcb9430eb4f8321db8774ea3ce1ecef495629abe2a1c"
 )
 AO_PACK_BRIDGE_CONTRACT_SHA256 = (
-    "bce84835947d80f85a61a520deca3d763a4627266259b14e9b8835fc3a1c835b"
+    "c5c8a0181075e7d171e1d189c875d5cc9e69467cb069b13267f91e73b1e1dd7e"
+)
+NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256 = (
+    "1cf236f40a51bdad066635e3eaaaab3d8fc4c7c094653b73898b8dc32bd89e08"
 )
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "89568c04b3b5f91bec27a391ca5e819f279f3f0385e1712f33f522f7265fdb62"
@@ -324,6 +327,11 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
     ]
     if len(constructors) != 1:
         raise RuntimeError("NativeAO capacity constructor is missing or ambiguous")
+    constructor_digest = hashlib.sha256(
+        ast.dump(
+            constructors[0], annotate_fields=True, include_attributes=False
+        ).encode()
+    ).hexdigest()
     packed = [
         ast.unparse(node.value)
         for node in ast.walk(constructors[0])
@@ -344,9 +352,12 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
         raise RuntimeError("NativeAO packed capacity definition changed")
     if numeric != [BASIS_NUMERIC_CAPACITY_DEFINITION]:
         raise RuntimeError("NativeAO numeric capacity definition changed")
+    if constructor_digest != NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256:
+        raise RuntimeError("NativeAO constructor contract changed")
     return {
         "packed_capacity_definition": packed[0],
         "numeric_capacity_definition": numeric[0],
+        "native_ao_constructor_contract_sha256": constructor_digest,
     }
 
 
@@ -375,7 +386,7 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
 
     bridge_source = (repository / "src/dft/bridge.cpp").read_text(encoding="utf-8")
     try:
-        bridge_begin = bridge_source.index("VIBEQC_API int vibeqc_grid_basis_pack_v1")
+        bridge_begin = bridge_source.index("VIBEQC_API int vibeqc_grid_basis_create_v1")
         bridge_end = bridge_source.index(
             "VIBEQC_API int vibeqc_grid_ao_v1", bridge_begin
         )
