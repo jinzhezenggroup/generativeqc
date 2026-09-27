@@ -241,9 +241,7 @@ def _library_stamp(path: Path) -> tuple[int, int, int, int, int]:
 
 
 @lru_cache(maxsize=8)
-def _packaged_library_hash_at(
-    path: Path, stamp: tuple[int, int, int, int, int]
-) -> str:
+def _packaged_library_hash_at(path: Path, stamp: tuple[int, int, int, int, int]) -> str:
     if _library_stamp(path) != stamp:
         raise ValueError("packaged weighted ERI library changed during verification")
     digest = file_hash(path)
@@ -264,7 +262,10 @@ def _packaged_library_hash(path: Path) -> str:
 
 def _artifact_binary_hash(artifact: CompiledWeightedEri) -> str:
     identity = artifact.native.metadata["identity"]
-    if artifact.backend == "cpu" and identity.get("schema") == "vibeqc.weighted-packaged.v1":
+    if (
+        artifact.backend == "cpu"
+        and identity.get("schema") == "vibeqc.weighted-packaged.v1"
+    ):
         return _packaged_library_hash(Path(artifact.native.library))
     # Standalone JIT cache artifacts keep their original per-preparation check.
     return file_hash(artifact.native.library)
