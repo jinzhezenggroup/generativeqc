@@ -69,7 +69,10 @@ def test_audit_schema_keeps_radial_identity_and_provenance(
     assert result["full_range"]["translation_units"] == 2
     assert result["full_range"]["target"] == "native-host"
     assert result["full_range"]["package_identity"]
-    assert result["full_range"]["package_identity_payload"]["spin_contract"] == "spin-neutral"
+    assert (
+        result["full_range"]["package_identity_payload"]["spin_contract"]
+        == "spin-neutral"
+    )
     assert result["full_range"]["generated_source_bytes"] == len("full-a") + len(
         "full-bb"
     )

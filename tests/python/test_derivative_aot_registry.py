@@ -32,7 +32,9 @@ def test_registry_identity_covers_backend_radial_shell_and_group() -> None:
     assert full.to_payload()["derivative_order"] == 1
     assert full.to_payload()["radial"]["family"] == "full_range"
     assert full.to_payload()["spin_contract"] == "spin-neutral"
-    assert full.to_payload()["output_contract"] == "weighted-eri-value-center-gradient-v2"
+    assert (
+        full.to_payload()["output_contract"] == "weighted-eri-value-center-gradient-v2"
+    )
     assert short.to_payload()["radial"]["omega"] == 0.3
     assert short.component_indices == component_groups(angular)[0]
 
@@ -116,7 +118,9 @@ def test_shared_full_range_component_bundle_uses_same_registry() -> None:
     assert len(selected.symbols) == CPU_AOT_SHARDS
     assert selected.target == "native-host"
     assert selected.key.to_payload()["radial"]["family"] == "full_range"
-    assert selected.key.to_payload()["contraction_contract"] == "record-scalar-weight-v1"
+    assert (
+        selected.key.to_payload()["contraction_contract"] == "record-scalar-weight-v1"
+    )
     assert selected.package_key.scientific_identity == selected.key.identity
 
     assert (

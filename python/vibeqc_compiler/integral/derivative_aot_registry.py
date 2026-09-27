@@ -169,8 +169,13 @@ class DerivativeAotPackageKey:
             raise ValueError("derivative AOT package backend must be cpu or cuda")
         if not isinstance(self.target, str) or not self.target:
             raise ValueError("derivative AOT package target must be nonempty")
-        if not isinstance(self.scientific_identity, str) or not self.scientific_identity:
-            raise ValueError("derivative AOT package scientific identity must be nonempty")
+        if (
+            not isinstance(self.scientific_identity, str)
+            or not self.scientific_identity
+        ):
+            raise ValueError(
+                "derivative AOT package scientific identity must be nonempty"
+            )
         if self.generator_abi != AOT_GENERATOR_ABI:
             raise ValueError("derivative AOT package generator ABI mismatch")
         for value, label in (
@@ -399,9 +404,7 @@ def select_packaged_derivative_aot(
         getattr(library, f"{prefix}_identity_v2")
     except AttributeError:
         return None
-    return PackagedDerivativeAot(
-        key=key, entry_prefix=prefix, target=selected_target
-    )
+    return PackagedDerivativeAot(key=key, entry_prefix=prefix, target=selected_target)
 
 
 def program_source(
