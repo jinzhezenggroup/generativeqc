@@ -1664,15 +1664,27 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
         "bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>"
         in fallback_source[fock_wrapper:]
     )
-    # The older force fallback may use Fock screening while still writing forces.
-    # Do not conflate screening purpose with the scientific consumer again.
-    force_wrapper = fallback_source.index(
-        "void launch_bounded_direct_shell_quartet_kernel("
+    # The method-neutral force launcher owns the Force=true instantiations; the
+    # historical HF wrapper must only bind the legacy J/K coefficients and
+    # delegate to it. Keep screening purpose distinct from scientific output.
+    scaled_force_wrapper = fallback_source.index(
+        "void launch_bounded_direct_shell_quartet_kernel_scaled("
     )
+    force_wrapper = fallback_source.index(
+        "void launch_bounded_direct_shell_quartet_kernel(", scaled_force_wrapper
+    )
+    scaled_force_source = fallback_source[scaled_force_wrapper:force_wrapper]
     assert (
         "bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>"
-        in fallback_source[force_wrapper:fock_wrapper]
+        in scaled_force_source
     )
+    assert (
+        "bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, true>"
+        in scaled_force_source
+    )
+    hf_force_wrapper = fallback_source[force_wrapper:fock_wrapper]
+    assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in hf_force_wrapper
+    assert "unrestricted ? -1.0 : -0.5" in hf_force_wrapper
 
 
 def test_production_manifest_drives_generated_registry_and_shards(
@@ -2330,7 +2342,7 @@ def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
     bounded = (REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
         encoding="utf-8"
     )
-    assert "contract_two_electron_force_order3_task<Unrestricted>(" in bounded
+    assert "contract_two_electron_force_order3_task_scaled<Unrestricted>(" in bounded
     dispatcher = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
     ).read_text(encoding="utf-8")
