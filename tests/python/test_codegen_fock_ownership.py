@@ -72,11 +72,13 @@ def test_direct_force_density_exposes_method_neutral_coefficients() -> None:
     assert "double coulomb_coefficient, double exchange_coefficient" in generated
     assert "if (coulomb_coefficient != 0.0)" in generated
     assert "if (exchange_coefficient != 0.0)" in generated
-    assert "constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;" in generated
+    assert (
+        "constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;"
+        in generated
+    )
     assert (
         "n, physical_offset, spin_offset, density, i, j, k, l, 1.0, "
-        "exchange_coefficient"
-        in generated
+        "exchange_coefficient" in generated
     )
 
 

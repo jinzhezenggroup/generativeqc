@@ -160,6 +160,7 @@ __device__ __forceinline__ double direct_force_density_coefficient(
 }
 """
 
+
 def emit_direct_force_component_weight() -> str:
     """Emit normalized Direct-force external component weights."""
 
