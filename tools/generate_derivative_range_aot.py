@@ -56,6 +56,16 @@ def main() -> None:
     ):
         raise RuntimeError("range derivative generator requires SR/LR radial operators")
 
+    # CMake declares one translation unit per family/shell/component group.
+    # Distinct omega values have distinct symbols but would overwrite the same
+    # output paths. Reject the entire manifest before emitting or writing any
+    # source until the generator and build graph support omega-keyed outputs.
+    tags = tuple(_tag(radial.family) for radial in radials)
+    if len(set(tags)) != len(tags):
+        raise RuntimeError(
+            "range AOT output layout requires one omega per radial family"
+        )
+
     written = 0
     for radial in radials:
         tag = _tag(radial.family)
