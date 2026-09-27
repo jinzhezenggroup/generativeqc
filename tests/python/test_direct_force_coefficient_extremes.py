@@ -24,11 +24,7 @@ def _function(source: str, name: str) -> str:
     while depth:
         depth += (source[end] == "{") - (source[end] == "}")
         end += 1
-    return (
-        source[start:end]
-        .replace("__device__ ", "")
-        .replace("__forceinline__ ", "")
-    )
+    return source[start:end].replace("__device__ ", "").replace("__forceinline__ ", "")
 
 
 @pytest.fixture(scope="module")
@@ -45,7 +41,8 @@ def coefficient_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         emit_shell_class_fused_cuda(DPPP_SPEC),
         "generated_dppp_density_coefficient_scaled",
     )
-    source = r"""
+    source = (
+        r"""
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -80,7 +77,11 @@ struct GeneratedDpppShellTask {
   std::size_t spin_offset;
   std::size_t density_offset;
 };
-""" + generic + "\n" + exact + r"""
+"""
+        + generic
+        + "\n"
+        + exact
+        + r"""
 
 void set_symmetric(std::array<double, 16>& d, std::size_t i, std::size_t j, double value) {
   d[i * 4 + j] = value;
@@ -124,6 +125,7 @@ int main() {
   if (generic_zero != 0.0 || exact_zero != 0.0) return 3;
 }
 """
+    )
     directory = tmp_path_factory.mktemp("direct-force-coefficients")
     source_path = directory / "probe.cpp"
     executable = directory / "probe"
