@@ -92,8 +92,8 @@ contracted_eri_cartesian_source_order3_generated_weighted_gradient(
 template <bool Unrestricted, unsigned TargetShellClass>
 __device__ inline __noinline__ void contract_two_electron_force_order3_class_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active,
-    double* forces) {
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces) {
   static_assert(TargetShellClass == kPppsShellClass || TargetShellClass == kDspsShellClass ||
                 TargetShellClass == kDpssShellClass || TargetShellClass == kFsssShellClass);
   if (task.tile != 0U) return;
@@ -165,8 +165,9 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
       continue;
     }
 
-    const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
-        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3]);
+    const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
+        coulomb_coefficient, exchange_coefficient);
     if (density_coefficient == 0.0) continue;
 
     unsigned component[4];
@@ -203,7 +204,8 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
 template <bool Unrestricted>
 __device__ inline __noinline__ void contract_two_electron_force_order3_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   if (task.tile != 0U) return;
   const std::size_t first_pair = task.first_pair;
@@ -222,19 +224,23 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_task(
   switch (shell_class) {
     case kPppsShellClass:
       contract_two_electron_force_order3_class_task<Unrestricted, kPppsShellClass>(
-          batch, task, screening_tolerance, schwarz_bounds, density, active, forces);
+          batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+          exchange_coefficient, active, forces);
       break;
     case kDspsShellClass:
       contract_two_electron_force_order3_class_task<Unrestricted, kDspsShellClass>(
-          batch, task, screening_tolerance, schwarz_bounds, density, active, forces);
+          batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+          exchange_coefficient, active, forces);
       break;
     case kDpssShellClass:
       contract_two_electron_force_order3_class_task<Unrestricted, kDpssShellClass>(
-          batch, task, screening_tolerance, schwarz_bounds, density, active, forces);
+          batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+          exchange_coefficient, active, forces);
       break;
     case kFsssShellClass:
       contract_two_electron_force_order3_class_task<Unrestricted, kFsssShellClass>(
-          batch, task, screening_tolerance, schwarz_bounds, density, active, forces);
+          batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+          exchange_coefficient, active, forces);
       break;
     default:
       break;
