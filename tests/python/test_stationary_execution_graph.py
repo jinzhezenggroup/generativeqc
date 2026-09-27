@@ -71,6 +71,22 @@ def test_graph_covers_stationary_source_inventory_exactly() -> None:
     )
 
 
+def test_ecp_sources_are_density_consuming_integral_nodes_and_covered() -> None:
+    plan = StationaryGradientPlan(
+        resolve_method("PBE"),
+        StationaryMeanField(SCF_POINT_MODEL, hamiltonian="scalar-semilocal-ecp"),
+    )
+    graph = compile_stationary_execution_graph(plan)
+    assert graph.node("integral:ecp_local").inputs == ("final_density",)
+    assert graph.node("integral:ecp_nonlocal").inputs == ("final_density",)
+    produced = {
+        value.name.removeprefix("source:")
+        for value in graph.values
+        if value.name.startswith("source:")
+    }
+    assert produced == set(plan.source_names)
+
+
 def test_aliases_with_identical_science_share_graph_identity() -> None:
     first = MethodSpec(
         "first-name",
