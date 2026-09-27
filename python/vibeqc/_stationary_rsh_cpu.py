@@ -121,29 +121,36 @@ class RangeExchangeExecutor:
             )
         )
         radial = self._kernel(primitive)
-        key = (radial.family.value, radial.omega, angular, component)
+        aot_selection = None
+        if self.backend == "cpu" and self.aot_library is not None:
+            group_index, selected = component_group(angular, component)
+            prefix = entry_prefix(radial, angular, group_index)
+            try:
+                getattr(self.aot_library, f"{prefix}_identity_v2")
+            except AttributeError:
+                pass
+            else:
+                aot_selection = (group_index, selected, prefix)
+        key = (
+            (radial.family.value, radial.omega, angular, "aot", aot_selection[0])
+            if aot_selection is not None
+            else (radial.family.value, radial.omega, angular, "jit", component)
+        )
         plan = self._plans.get(key)
         if plan is None:
             integral = build_weighted_eri_ir(
                 angular, operator=four_center_eri_operator(radial)
             )
-            artifact = None
-            if self.backend == "cpu" and self.aot_library is not None:
-                group_index, selected = component_group(angular, component)
-                prefix = entry_prefix(radial, angular, group_index)
-                try:
-                    getattr(self.aot_library, f"{prefix}_identity_v2")
-                except AttributeError:
-                    pass
-                else:
-                    artifact = packaged_weighted_eri(
-                        integral,
-                        self.aot_library,
-                        component_indices=selected,
-                        entry_prefix=prefix,
-                    )
-                    self.packaged_aot_plans += 1
-            if artifact is None:
+            if aot_selection is not None:
+                _, selected, prefix = aot_selection
+                artifact = packaged_weighted_eri(
+                    integral,
+                    self.aot_library,
+                    component_indices=selected,
+                    entry_prefix=prefix,
+                )
+                self.packaged_aot_plans += 1
+            else:
                 artifact = compile_weighted_eri(
                     integral,
                     self.compiler,
