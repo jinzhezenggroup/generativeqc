@@ -222,7 +222,7 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
-                        work_budget=max(1, na * (na - 1) // 2),
+                        page_work_budget=max(1, na * (na - 1) // 2),
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
