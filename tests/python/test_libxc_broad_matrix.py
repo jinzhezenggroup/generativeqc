@@ -7,9 +7,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
-import pytest
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+
+if TYPE_CHECKING:
+    import pytest
 
 from tools import qualify_libxc_broad_matrix as matrix
 
