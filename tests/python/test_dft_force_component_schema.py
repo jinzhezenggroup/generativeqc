@@ -141,3 +141,22 @@ def test_missing_profiled_values_are_null_not_nan_or_zero() -> None:
     assert record["profiled_ms"]["h2d_d2h"] is None
     assert record["wall_seconds"]["scf_full_range_k"] is None
     assert math.isfinite(record["unattributed_wall_seconds"])
+
+
+def test_wb97mv_resident_nonlocal_timers_map_to_vv10_component() -> None:
+    work = {
+        "execution": "cuda-complete-wb97mv",
+        "endpoint_seconds": 2.0,
+        "component_seconds": {
+            "integral_derivatives": 0.4,
+            "semilocal_geometry_and_features": 0.5,
+            "nonlocal_reset": 0.01,
+            "vv10_pair_enqueue": 0.09,
+            "nonlocal_geometry_and_pair_drain": 0.6,
+            "reduction_and_validation": 0.2,
+            "prepare": 0.2,
+        },
+    }
+    record = normalize_force_work(work)
+    assert record["wall_seconds"]["vv10_rvv10"] == pytest.approx(0.70)
+    assert "vv10_rvv10" in record["coverage"]["wall_seconds"]
