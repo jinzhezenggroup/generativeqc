@@ -15,15 +15,17 @@ from vibeqc_compiler.dft.xc_program import (
 from vibeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
-    GridXcCandidateAssessment,
     GridXcCandidateLimits,
     GridXcCandidateShape,
-    GridXcExecutionSchedule,
     assess_grid_xc_schedule,
 )
 
 if typing.TYPE_CHECKING:
     from vibeqc_compiler.common.program import ProgramIR
+    from vibeqc_compiler.dft.xc_schedule import (
+        GridXcCandidateAssessment,
+        GridXcExecutionSchedule,
+    )
 
 
 def _shape(*, spins: int = 2) -> GridXcCandidateShape:
