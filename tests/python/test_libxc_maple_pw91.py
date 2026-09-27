@@ -19,7 +19,9 @@ from vibeqc_compiler.xc.libxc_maple import (
 )
 from vibeqc_compiler.xc.program import build_program
 from vibeqc_compiler.xc.pw91_maple import pw91_component, pw91_maple_provenance
-from vibeqc_compiler.xc.expression_dispatch import build_energy_expression as energy_expression
+from vibeqc_compiler.xc.expression_dispatch import (
+    build_energy_expression as energy_expression,
+)
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -259,7 +261,7 @@ def test_production_pw91_matches_dedicated_maple_adapter(name: str, spin: str) -
         ("GGA_C_PW91", "imported_pw91_correlation"),
     ],
 )
-def test_rsh_production_dispatch_calls_pw91_maple_adapter(
+def test_canonical_dispatch_calls_pw91_maple_adapter(
     name: str, attribute: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     called = False
@@ -277,7 +279,7 @@ def test_rsh_production_dispatch_calls_pw91_maple_adapter(
         ((name, Fraction(1)),),
         spin="unpolarized",
     )
-    graph, energy, _ = expression_dispatch.energy_expression(spec)
+    graph, energy, _ = expression_dispatch.build_energy_expression(spec)
     assert called
     assert graph.node(energy).operation == "constant"
 
