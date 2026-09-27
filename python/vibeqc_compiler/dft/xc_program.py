@@ -18,7 +18,6 @@ import math
 import typing
 from dataclasses import dataclass, replace
 
-from vibeqc_compiler.common.gpu_profitability import GpuProfitability
 from vibeqc_compiler.common.liveness import EffectKind
 from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
 from vibeqc_compiler.common.program_region import (
