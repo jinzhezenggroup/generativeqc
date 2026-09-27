@@ -111,6 +111,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["host_bound_definition"].startswith(
         "grid_plan.host_bytes + 8 * (34 * primitive_tile"
     )
+    assert result["admission_limits"]["available_device_bytes_definition"] == (
+        "max_device_bytes - grid_plan.peak_bytes - source_bytes"
+    )
+    assert result["admission_limits"]["additional_device_admission"] == (
+        "additional_device_peak_bound < additional_device_budget"
+    )
+    assert result["admission_limits"]["gate_predicates"] == {
+        "primitive_records": "records > max_primitive_records",
+        "grid_points": "len(state.grid.points) > max_grid_points",
+        "grid_pair_visits": "pair_visits > max_grid_pair_visits",
+        "additional_device": "available <= 0",
+        "additional_host": "host_bound > max_host_bytes",
+    }
     assert result["admission_limits"]["tile_points"] == 256
     assert result["admission_limits"]["primitive_tile"] == 4096
     assert result["admission_limits"]["integral_terms"] == 32
@@ -278,6 +291,18 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
         qualify_capacity._source_limits(tmp_path)
 
 
+def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "if host_bound > max_host_bytes:"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "if host_bound >= max_host_bytes:", 1))
+
+    with pytest.raises(RuntimeError, match="additional-host predicate"):
+        qualify_capacity._source_limits(tmp_path)
+
+
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
     tmp_path: Path,
 ) -> None:
@@ -401,3 +426,53 @@ def test_non_object_optional_aot_manifest_is_reported_not_raised(
         "status": "missing_or_invalid",
         "detail": "invalid AOT manifest schema: 'list' object has no attribute 'get'",
     }
+
+
+def test_unreadable_optional_aot_artifact_is_reported_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unreadable_loader(*_: object, **__: object) -> object:
+        raise PermissionError("access denied")
+
+    monkeypatch.setattr(
+        qualify_capacity, "load_stationary_aot_artifact", unreadable_loader
+    )
+    result = qualify_capacity._artifact_verification(
+        tmp_path,
+        functional=0,
+        spin="unpolarized",
+        plan=object(),
+    )
+
+    assert result == {
+        "status": "missing_or_invalid",
+        "detail": "access denied",
+    }
+
+
+def test_device_budget_requires_a_positive_remainder() -> None:
+    limits = {
+        "small_domain": {"atom_count": 32, "ao_count": 128},
+        "basis_primitive_count": 4096,
+        "primitive_records": 16_000_000,
+        "grid_points": 1_000_000,
+        "grid_pair_visits": 100_000_000,
+        "additional_device_bytes": 512,
+        "additional_host_bytes": 256,
+    }
+    failures = qualify_capacity._case_failures(
+        {
+            "atom_count": 1,
+            "ao_count_spherical": 1,
+            "basis_primitive_count": 1,
+        },
+        {"primitive_records": 1, "grid_points": 1, "grid_pair_visits": 1},
+        {
+            "additional_device_peak_bound": 512,
+            "additional_host_numeric_bound": 1,
+        },
+        limits,
+    )
+
+    assert [item["gate"] for item in failures] == ["additional_device_budget"]

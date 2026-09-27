@@ -74,6 +74,16 @@ HOST_BOUND_DEFINITION = (
     "26 * integral_terms + 3 * tile_points + 2 * basis.nprimitive + "
     "4 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
 )
+AVAILABLE_DEVICE_BYTES_DEFINITION = (
+    "max_device_bytes - grid_plan.peak_bytes - source_bytes"
+)
+GATE_PREDICATES = {
+    "primitive_records": "records > max_primitive_records",
+    "grid_points": "len(state.grid.points) > max_grid_points",
+    "grid_pair_visits": "pair_visits > max_grid_pair_visits",
+    "additional_device": "available <= 0",
+    "additional_host": "host_bound > max_host_bytes",
+}
 BASIS_PACKED_CAPACITY_DEFINITION = (
     "np.empty(3 * self.natom + 2 * self.nprimitive + 16 * self.nao)"
 )
@@ -172,6 +182,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "records",
             "pair_visits",
             "source_bytes",
+            "available",
             "host_bound",
         )
     }
@@ -187,6 +198,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "records": PRIMITIVE_RECORDS_DEFINITION,
         "pair_visits": GRID_PAIR_VISITS_DEFINITION,
         "source_bytes": SOURCE_BYTES_DEFINITION,
+        "available": AVAILABLE_DEVICE_BYTES_DEFINITION,
         "host_bound": HOST_BOUND_DEFINITION,
     }
     definition_labels = {
@@ -194,6 +206,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "records": "primitive-record",
         "pair_visits": "grid-pair-visits",
         "source_bytes": "source-bytes",
+        "available": "available-device-bytes",
         "host_bound": "host-bound",
     }
     for name, expected in expected_definitions.items():
@@ -201,22 +214,23 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             raise RuntimeError(
                 f"stationary CUDA {definition_labels[name]} definition changed"
             )
-    whole_force_primitive_budgets = [
-        node
-        for node in owner.body
-        if isinstance(node, ast.If)
-        and ast.unparse(node.test) == "records > max_primitive_records"
+    direct_if_tests = [
+        ast.unparse(node.test) for node in owner.body if isinstance(node, ast.If)
     ]
+    gate_labels = {
+        "primitive_records": "whole-force cumulative primitive-record",
+        "grid_points": "grid-point",
+        "grid_pair_visits": "grid-pair-visits",
+        "additional_device": "positive additional-device remainder",
+        "additional_host": "additional-host",
+    }
+    for name, predicate in GATE_PREDICATES.items():
+        if direct_if_tests.count(predicate) != 1:
+            raise RuntimeError(f"stationary CUDA {gate_labels[name]} predicate changed")
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"
         )
-    if len(whole_force_primitive_budgets) != 1:
-        raise RuntimeError(
-            "capacity qualifier requires a source-verified whole-force cumulative "
-            "primitive-record admission gate"
-        )
-
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
 
     def default(name: str) -> int:
@@ -252,6 +266,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
         "source_bytes_definition": SOURCE_BYTES_DEFINITION,
         "host_bound_definition": HOST_BOUND_DEFINITION,
+        "available_device_bytes_definition": AVAILABLE_DEVICE_BYTES_DEFINITION,
+        "additional_device_admission": (
+            "additional_device_peak_bound < additional_device_budget"
+        ),
+        "gate_predicates": dict(GATE_PREDICATES),
         "tile_points": default("tile_points"),
         "primitive_tile": default("primitive_tile"),
         "integral_terms": default("integral_terms"),
@@ -539,7 +558,7 @@ def _case_failures(
                     cap=limits[key],
                 )
             )
-    if memory["additional_device_peak_bound"] > limits["additional_device_bytes"]:
+    if memory["additional_device_peak_bound"] >= limits["additional_device_bytes"]:
         failures.append(
             _failure(
                 "additional_device_budget",
@@ -626,7 +645,9 @@ def _artifact_verification(
             architecture="sm_120",
             component_domain=QUALIFIED_SPD_COMPONENTS,
         )
-    except (FileNotFoundError, NotImplementedError, TypeError, ValueError) as error:
+    except OSError as error:
+        return {"status": "missing_or_invalid", "detail": str(error)}
+    except (NotImplementedError, TypeError, ValueError) as error:
         return {"status": "missing_or_invalid", "detail": str(error)}
     except KeyError as error:
         field = error.args[0] if error.args else "unknown"
