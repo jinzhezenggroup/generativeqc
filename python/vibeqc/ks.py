@@ -171,7 +171,7 @@ class KsOptions:
             "scf_domain": self.scf_domain,
             "grid": asdict(self.grid),
             "grid_provenance": grid_policy_provenance(self.grid),
-            "tile_points": options.tile_points,
+            "tile_points": self.tile_points,
             "xc_schedule": self.xc_schedule,
             "required_ao_order": self.ao_order,
             "required_ingredients": self.functional.ingredients,
