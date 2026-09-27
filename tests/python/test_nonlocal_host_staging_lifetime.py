@@ -154,8 +154,8 @@ struct Vv10CudaDeviceLayout {
  bool features{},geometry{};
 };
 unsigned launch_blocks(std::size_t,unsigned) {return 1;}
-template<class... T> void local_scales_kernel(T&&...) {}
-template<class... T> void pair_kernel_ordered(T&&...) {}
+template<Vv10Variant, bool, class... T> void local_scales_kernel(T&&...) {}
+template<Vv10Variant, bool, bool, class... T> void launch_pair_rows(T&&...) {}
 template<class... T> void reduce_energy_ordered_kernel(T&&...) {}
 """
 
