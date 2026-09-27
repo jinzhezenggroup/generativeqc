@@ -45,8 +45,9 @@ independent references, and performance claims require reproducible gates.
 
 ## Build and install
 
-Requirements: CMake 3.24+, a C++20 compiler, Python 3.10+, and optionally CUDA
-12.9 for the GPU backend.
+Requirements for source builds: CMake 3.24+, a C++20 compiler, Python 3.10+
+(build-time code generation), and optionally CUDA 12.9 for the GPU backend.
+An installed native SDK/runtime does not require Python.
 
 For a Python installation from source, `scikit-build-core` drives CMake and
 bundles the native library into the installed package:
@@ -146,6 +147,21 @@ Then build:
 ```bash
 cmake --build build -j10
 ```
+
+Install a native SDK/runtime prefix to use VibeQC without Python on the target
+machine:
+
+```bash
+cmake --install build --prefix /opt/vibeqc
+/opt/vibeqc/bin/vibeqc methods
+/opt/vibeqc/bin/vibeqc run molecule.xyz --method gfn2-xtb --forces
+```
+
+The native executable links the installed `libvibeqc` through a relocatable
+install RPATH. The first native `run` endpoint is GFN2-xTB, whose intrinsic
+basis lets the command consume XYZ directly; Gaussian-basis native CLI
+resolution is tracked separately. Python is still required when building from
+source because repository code generation currently uses Python.
 
 The source-tree Python interface finds `build/libvibeqc.so` automatically. An
 installed wheel loads its bundled library first; `VIBEQC_LIBRARY` remains the
