@@ -352,6 +352,21 @@ void retained_direct_derivative_reuse() {
   require(std::all_of(response.begin(), response.end(),
                       [](double value) { return std::isfinite(value); }),
           "prepared fused RSH derivative returned nonfinite values");
+
+  double* device_density = nullptr;
+  require(cudaMalloc(reinterpret_cast<void**>(&device_density), density.size() * sizeof(double)) ==
+              cudaSuccess,
+          "device density allocation failed");
+  require(cudaMemcpyAsync(device_density, density.data(), density.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, derivative.stream) == cudaSuccess,
+          "device density upload failed");
+  std::vector<double> resident_response;
+  require(execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+              plan, correction, device_density, nullptr, density.size(), resident_response,
+              detail) == VIBEQC_STATUS_SUCCESS,
+          detail.c_str());
+  require(cudaFree(device_density) == cudaSuccess, "device density free failed");
+  matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
 void independent_reference_export() {
