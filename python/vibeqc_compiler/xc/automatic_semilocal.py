@@ -22,7 +22,9 @@ def automatic_functional_code(name: str) -> int:
         )
     reason = blacklist_reason(key)
     if reason is not None:
-        raise UnsupportedXC(f"automatic Libxc functional {key} is blacklisted: {reason}")
+        raise UnsupportedXC(
+            f"automatic Libxc functional {key} is blacklisted: {reason}"
+        )
     capability = functional_capability(key)
     unsupported = tuple(
         ingredient
