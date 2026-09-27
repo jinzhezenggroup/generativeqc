@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import typing
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-import typing
 
 import numpy as np
 import pytest
