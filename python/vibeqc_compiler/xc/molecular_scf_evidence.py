@@ -378,8 +378,10 @@ def validate_stage_qualification(
         raise ValueError("molecular-SCF result schema mismatch")
     if qualification.get("qualification_schema") != QUALIFICATION_SCHEMA:
         raise ValueError("molecular-SCF qualification schema mismatch")
-    result_identity = qualification.get("result_identity")
-    _sha(result_identity, "molecular-SCF result identity")
+    result_identity = _sha(
+        qualification.get("result_identity"),
+        "molecular-SCF result identity",
+    )
     if not isinstance(evidence, str) or not evidence.strip().endswith(
         f"#sha256={result_identity}"
     ):
