@@ -19,9 +19,9 @@ struct RccsdNativeState {
   std::size_t budget{};
 };
 
-RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::System&,
-                                        const vibeqc_method_descriptor&,
-                                        scf::PreparedFockPlan* prepared_exact = nullptr);
+RccsdNativeState run_rccsd_native_state(
+    runtime::ExecutionContext&, const core::System&, const vibeqc_method_descriptor&,
+    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache = nullptr);
 vibeqc_status validate_rccsd_system(vibeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(const Capabilities&,
                                                                core::ContextState&,

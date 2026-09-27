@@ -671,7 +671,7 @@ class RccsdPreparedBatch final : public PreparedBatch {
 RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext& execution,
                                         const core::System& system,
                                         const vibeqc_method_descriptor& descriptor,
-                                        scf::PreparedFockPlan* prepared_exact) {
+                                        std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache) {
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
   auto solver_options = cc_options(descriptor, budget);
@@ -681,6 +681,21 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext& execution,
   if (reference_capacity > budget)
     throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
                       "RCCSD bounded RHF reference exceeds correlation memory budget");
+  scf::PreparedFockPlan* prepared_exact = nullptr;
+  if (prepared_exact_cache) {
+    if (execution.cuda_requested()) {
+      if (*prepared_exact_cache)
+        throw std::invalid_argument("CUDA RCCSD cannot retain a CPU prepared exact source");
+    } else {
+      if (!*prepared_exact_cache) {
+        const auto strategy =
+            scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
+                                    scf::FockBackend::Cpu, reference.screening_tolerance);
+        *prepared_exact_cache = std::make_unique<scf::PreparedFockPlan>(system, nullptr, strategy);
+      }
+      prepared_exact = prepared_exact_cache->get();
+    }
+  }
   return execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
                                 prepared_exact);
 }

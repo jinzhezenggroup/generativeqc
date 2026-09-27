@@ -107,12 +107,7 @@ class RccsdtPrepared final : public PreparedCalculation {
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
-    if (!execution_.cuda_requested() && !cpu_exact_plan_) {
-      const auto strategy = scf::resolve_fock_build(
-          scf::make_hf_fock_spec(scf::FockSpin::Restricted), scf::FockBackend::Cpu, 0.0);
-      cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
-    }
-    auto state = run_rccsd_native_state(execution_, system_, descriptor_, cpu_exact_plan_.get());
+    auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_);
     last_ = state.diagnostic;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
