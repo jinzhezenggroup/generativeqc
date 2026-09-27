@@ -111,11 +111,13 @@ def test_feature_task_with_features_reuses_one_evaluated_tile(
                 check(pbe_features["gradient"], arrays["gradient"][:, :3])
                 assert pbe_task.view.npoint == 3
 
-            with pytest.raises(ValueError, match="ingredient contract"):
-                with cuda.feature_task_with_features(
+            with (
+                pytest.raises(ValueError, match="ingredient contract"),
+                cuda.feature_task_with_features(
                     arrays["points"][:1], ids, ("gradient",)
-                ):
-                    pass
+                ),
+            ):
+                pass
 
 
 def test_orders_zero_to_three_and_budget_rejection(artifact: typing.Any) -> None:
