@@ -67,8 +67,8 @@ contracted_eri_cartesian_source_ssss_generated_weighted_gradient(
 template <bool Unrestricted>
 __device__ __forceinline__ void contract_two_electron_force_ssss_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active,
-    double* forces) {
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces) {
   // Every s shell contains one Cartesian AO, so a valid ssss shell quartet
   // occupies exactly the first compact tile and needs no AO-pair decoding.
   if (task.tile != 0U) return;
@@ -114,8 +114,9 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task(
       screening_tolerance) {
     return;
   }
-  const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
-      n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3]);
+  const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+      n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3],
+      coulomb_coefficient, exchange_coefficient);
   if (density_coefficient == 0.0) return;
   const double component_weight =
       direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, ao[0], ao[1],
@@ -131,7 +132,8 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task(
 template <bool Unrestricted, bool ResidentBra = false>
 __device__ inline __noinline__ void contract_two_electron_force_psss_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask,
     const PrimitivePairData* resident_first_pairs = nullptr,
     std::int64_t resident_first_pair_count = 0) {
@@ -197,8 +199,9 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task(
         screening_tolerance) {
       continue;
     }
-    const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
-        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3]);
+    const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
+        coulomb_coefficient, exchange_coefficient);
     component_weight[axis] =
         direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
                                       raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
