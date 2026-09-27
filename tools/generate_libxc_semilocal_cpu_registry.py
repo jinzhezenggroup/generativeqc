@@ -266,7 +266,7 @@ def emit_registry() -> str:
             for index in range(SHARD_COUNT)
         ]
     )
-    return "\n".join(
+    return "\n".join(  # noqa: FLY002
         [
             "// Generated automatic Libxc CPU registry dispatcher; do not edit.",
             '#include "generated_libxc_semilocal_registry.hpp"',
