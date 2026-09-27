@@ -18,7 +18,8 @@ struct Owner {
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
       max_primitive_work{}, bytes{};
   bool failed = true, topology_ready = false;
-  bool profile = false;
+  bool profile = false, geometry_pending = false;
+  cudaStream_t geometry_stream{};
   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
   double synchronization_wait_ms{}, setup_transfer_ms{}, setup_validation_ms{};
   double primitive_h2d_ms{}, primitive_kernel_ms{}, primitive_reduction_ms{};
@@ -101,6 +102,13 @@ void finished(Owner& p, cudaStream_t stream) {
   ++p.synchronizations;
   p.downloads += sizeof(int);
   if (failure) throw std::runtime_error("nonfinite or invalid stationary CUDA source");
+}
+void drain_geometry(Owner& p) {
+  if (!p.geometry_pending) return;
+  auto* stream = p.geometry_stream;
+  p.geometry_pending = false;
+  p.geometry_stream = nullptr;
+  finished(p, stream);
 }
 template <class T>
 void upload(Owner& p, T* out, const T* in, size_t n, cudaStream_t stream) {
@@ -247,6 +255,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     if (!p || !p->topology_ready || !std::isfinite(tolerance) || tolerance < 0)
       throw std::invalid_argument("invalid reset");
     p->context.check_device();
+    drain_geometry(*p);
     p->failed = false;
     p->reset_primitive_work();
     auto stream = p->context.stream;
@@ -274,6 +283,7 @@ int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges,
     if (!p || !tasks || !charges || !count || count > p->task_capacity)
       throw std::invalid_argument("invalid stationary task page");
     check(*p);
+    drain_geometry(*p);
     size_t primitive_work = 0;
     for (size_t i = 0; i < count; ++i) {
       const auto* task = tasks + task_stride * i;
@@ -393,6 +403,40 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
     }
   });
 }
+int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* view,
+                                const double* work, const int64_t* owners,
+                                const double* weights, const double* raw, char* error,
+                                size_t size) {
+  using namespace vibeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+        view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
+        !view->ao_ids || !view->ao || !view->points)
+      throw std::invalid_argument("invalid deferred geometry task lease");
+    check(*p);
+    auto stream = view->stream;
+    if (p->geometry_pending && p->geometry_stream != stream)
+      throw std::invalid_argument("stationary deferred geometry stream changed before drain");
+    if (!p->geometry_pending) {
+      p->geometry_stream = stream;
+      p->geometry_pending = true;
+    }
+    upload(*p, p->point_atoms, owners, view->npoint, stream);
+    upload(*p, p->weights, weights, view->npoint, stream);
+    upload(*p, p->raw, raw, view->npoint, stream);
+    geometry_kernel<<<1, workers, 0, stream>>>(
+        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
+        nullptr, p->partial, p->scratch, p->context.error);
+    geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
+        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+    cuda_check(cudaGetLastError());
+    p->launches += 2;
+    p->point_count += view->npoint;
+    p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    ++p->geometry_batches;
+  });
+}
 int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, const double* work,
                         const int64_t* owners, const double* weights, const double* raw,
                         char* error, size_t size) {
@@ -406,6 +450,7 @@ int stationary_finish(void* pointer, double* output, size_t count, char* error, 
     if (!p || !output || count != 3 * stationary_source_count * p->atoms)
       throw std::invalid_argument("invalid source output");
     check(*p);
+    drain_geometry(*p);
     finished(*p, p->context.stream);
     // Host output is touched only after every device source passed its gate.
     std::vector<double> candidate(count);
@@ -434,6 +479,7 @@ int stationary_finish_reduced(void* pointer, double* output, size_t count, char*
     if (!stationary_native_reduction_supported)
       throw std::invalid_argument("stationary source inventory requires external reduction");
     check(*p);
+    drain_geometry(*p);
     auto stream = p->context.stream;
     source_reduce<<<blocks(3 * p->atoms, 64), 64, 0, stream>>>(p->sources, p->atoms, p->partial,
                                                                p->context.error);
@@ -492,6 +538,9 @@ void stationary_destroy(void* pointer) {
   int previous = 0;
   const bool have_device = cudaGetDevice(&previous) == cudaSuccess;
   if (cudaSetDevice(p->context.device) == cudaSuccess) {
+    if (p->geometry_pending && p->geometry_stream) cudaStreamSynchronize(p->geometry_stream);
+    p->geometry_pending = false;
+    p->geometry_stream = nullptr;
     if (p->stage0) cudaEventDestroy(p->stage0);
     if (p->stage1) cudaEventDestroy(p->stage1);
     if (p->stage2) cudaEventDestroy(p->stage2);
