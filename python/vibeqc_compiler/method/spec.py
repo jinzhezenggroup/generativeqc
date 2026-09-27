@@ -844,9 +844,15 @@ def _d4_composite_method_spec(identifier: str) -> MethodSpec | None:
 
 
 def d4_composite_method_identifiers() -> tuple[str, ...]:
-    """Return D4 composites derivable from both MethodIR and the pinned D4 catalog."""
+    """Return D4 composites derivable from MethodIR names and the pinned catalog."""
+    from ._generated_xc_aliases import METHOD_ALIASES
+
     identifiers: list[str] = []
-    for identifier, base in METHOD_CATALOG.items():
+    for identifier in (*METHOD_CATALOG, *METHOD_ALIASES):
+        canonical = METHOD_ALIASES.get(identifier, identifier)
+        base = METHOD_CATALOG.get(canonical)
+        if base is None:
+            continue
         if (
             base.dispersion is not None
             or base.basis is not None
@@ -854,7 +860,7 @@ def d4_composite_method_identifiers() -> tuple[str, ...]:
         ):
             continue
         try:
-            d4_eeq_spec_for_method(identifier)
+            d4_eeq_spec_for_method(canonical)
         except KeyError:
             continue
         identifiers.append(f"{identifier}{D4_METHOD_SUFFIX}")

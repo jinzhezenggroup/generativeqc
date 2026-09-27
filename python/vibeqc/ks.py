@@ -617,7 +617,7 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
 def public_dft_selectors() -> tuple[str, ...]:
     """Enumerate compiler-owned DFT selectors that pass current native lowerer gates."""
     selectors = set(_LEGACY_KS_SELECTORS)
-    identifiers = set(METHOD_CATALOG)
+    identifiers = set(METHOD_CATALOG) | set(METHOD_ALIASES)
     identifiers.update(d4_composite_method_identifiers())
     for identifier in sorted(identifiers):
         if identifier.endswith(D4_METHOD_SUFFIX):

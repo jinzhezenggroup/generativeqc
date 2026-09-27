@@ -40,7 +40,10 @@ def test_parameterized_d4_reuses_electronic_method_ir(base: str) -> None:
 
 def test_parameterized_d4_reuses_generated_xc_aliases() -> None:
     assert d4_eeq_spec_for_method("CAM-B3LYP") == d4_eeq_spec_for_method("CAMB3LYP")
-    assert "CAM-B3LYP-D4(BJ-EEQ-ATM)" in set(d4_composite_method_identifiers())
+    names = set(d4_composite_method_identifiers())
+    assert "CAM-B3LYP-D4(BJ-EEQ-ATM)" in names
+    assert "CAMB3LYP-D4(BJ-EEQ-ATM)" in names
+    assert "PBEH-D4(BJ-EEQ-ATM)" in names
 
 
 def test_parameterized_d4_inventory_is_intersection_not_cartesian_product() -> None:
@@ -57,6 +60,7 @@ def test_public_d4_discovery_remains_lowerer_gated() -> None:
     selectors = set(public_dft_selectors())
     assert "pbe0-d4-rks" in selectors
     assert "pbe0-d4-uks" in selectors
+    assert "pbeh-d4-rks" in selectors
     assert "b3lyp-d4-rks" in selectors
     assert "r2scan-d4-rks" in selectors
     assert "scan-d4-rks" not in selectors
