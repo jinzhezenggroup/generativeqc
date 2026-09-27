@@ -13,7 +13,9 @@ from benchmarks.dft_force_matrix import (
 )
 
 
-def test_cam_b3lyp_matrix_case_uses_method_ir_range_exchange_not_name_dispatch() -> None:
+def test_cam_b3lyp_matrix_case_uses_method_ir_range_exchange_not_name_dispatch() -> (
+    None
+):
     selector, options = _method_configuration(
         "cam-b3lyp-rks",
         GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8),

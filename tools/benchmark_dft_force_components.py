@@ -92,7 +92,6 @@ def _wb97mv_records(
     return [{"metadata": metadata, "components": dict(component)}]
 
 
-
 def _matrix_records(
     payload: Mapping[str, typing.Any],
 ) -> list[dict[str, typing.Any]]:
@@ -152,6 +151,7 @@ def _matrix_records(
             )
     return result
 
+
 def extract_records(
     payload: Mapping[str, typing.Any],
 ) -> list[dict[str, typing.Any]]:
@@ -198,8 +198,7 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
                     str(name) for name, value in measured.items() if value is not None
                 )
             scf_missing.update(
-                str(name)
-                for name in scf_profile.get("missing_expected_components", ())
+                str(name) for name in scf_profile.get("missing_expected_components", ())
             )
     return {
         "source_routes": sorted(routes),

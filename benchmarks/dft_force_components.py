@@ -312,7 +312,6 @@ def _normalize_stationary(
     }
 
 
-
 _EXCHANGE_COMPONENT = {
     "full-range": "scf_full_range_k",
     "short-range": "scf_short_range_k",
@@ -395,7 +394,9 @@ def normalize_scf_trace(
                 field=f"scf_trace.{operation}.gpu_inclusive_ms",
             )
         elif operation == "ri_jk_shared":
-            ambiguous["scf_shared_jk"] = ambiguous.get("scf_shared_jk", 0.0) + milliseconds
+            ambiguous["scf_shared_jk"] = (
+                ambiguous.get("scf_shared_jk", 0.0) + milliseconds
+            )
         else:
             unclassified[operation] = unclassified.get(operation, 0.0) + milliseconds
 
@@ -443,7 +444,7 @@ def merge_scf_profile(
         measured = _finite_nonnegative(value, field=f"scf_profile.{name}")
         previous = result["profiled_ms"].get(name)
         if previous is not None and not math.isclose(
-            float(previous), typing.cast(float, measured), rel_tol=1e-9, abs_tol=1e-9
+            float(previous), typing.cast("float", measured), rel_tol=1e-9, abs_tol=1e-9
         ):
             raise ValueError(f"duplicate component timing disagrees for {name}")
         result["profiled_ms"][name] = measured
@@ -459,6 +460,7 @@ def merge_scf_profile(
         )
     }
     return result
+
 
 def normalize_force_work(
     raw: typing.Any,

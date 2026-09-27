@@ -21,8 +21,8 @@ from time import perf_counter
 
 import numpy as np
 
-from benchmarks.dft_force_components import normalize_force_work, normalize_scf_trace
 from benchmarks.df_component_ledger import read_trace, trace_identity
+from benchmarks.dft_force_components import normalize_force_work, normalize_scf_trace
 
 DEFAULT_METHODS = (
     "pbe-rks",
@@ -127,8 +127,9 @@ def _force_diagnostic(
     from vibeqc_compiler.dft import NativeAO
 
     calculator = batch._calculator
-    if calculator.ks_options.has_range_exchange and not calculator._method_name.startswith(
-        "wb97m-v"
+    if (
+        calculator.ks_options.has_range_exchange
+        and not calculator._method_name.startswith("wb97m-v")
     ):
         raise NotImplementedError(
             "cross-functional matrix retains generic RSH force as an explicit missing owner"
@@ -189,9 +190,7 @@ def _force_diagnostic(
                 "compiler": None if packaged else batch._stationary_cuda_compiler(),
                 "target": batch._stationary_cuda_target(),
                 "cache": Path(
-                    os.environ.get(
-                        "VIBEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
-                    )
+                    os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cuda")
                 ),
                 "aot_directory": native_library.parent if packaged else None,
                 "native_grid_library": native_library,
