@@ -116,6 +116,82 @@ class Calculator:
     or PySCF/libcint-ordered real spherical AOs through `g` on CPU (`f` on CUDA).
     """
 
+    @staticmethod
+    def available_libxc_functionals() -> tuple[str, ...]:
+        """Return exact-current automatic Libxc registrations installed for public CPU energy."""
+
+        from vibeqc_compiler.method import installed_public_functionals
+
+        return installed_public_functionals()
+
+    @classmethod
+    def from_libxc(
+        cls,
+        identifier: str,
+        *,
+        spin: str,
+        grid: typing.Any,
+        basis: str | Path | BasisSet | Sequence[Shell] | None = None,
+        device: str = "cpu",
+        tile_points: int = 256,
+        xc_schedule: str = "host_unfused",
+        **kwargs: typing.Any,
+    ) -> "Calculator":
+        """Create an evidence-gated automatic Libxc CPU-energy calculator.
+
+        Automatic Libxc promotion currently qualifies CPU FP64 energy only.
+        The caller supplies an explicit GridSpec; CUDA, density fitting, forces
+        and implicit grid-policy promotion remain closed until separately
+        qualified.
+        """
+
+        if device != "cpu":
+            raise NotImplementedError("automatic Libxc public execution currently requires CPU")
+        density_fitting = kwargs.get("density_fitting", "none")
+        if density_fitting not in ("none", False):
+            raise NotImplementedError(
+                "automatic Libxc public execution is qualified only for direct Coulomb"
+            )
+        if kwargs.get("auxiliary_basis") is not None:
+            raise ValueError("automatic Libxc public execution does not accept an auxiliary basis")
+        if str(kwargs.get("precision", "fp64")).lower() != "fp64":
+            raise NotImplementedError("automatic Libxc public execution requires strict FP64")
+
+        from .ks import resolve_public_libxc_ks_options
+
+        options = resolve_public_libxc_ks_options(
+            identifier,
+            spin=spin,
+            grid=grid,
+            tile_points=tile_points,
+            xc_schedule=xc_schedule,
+        )
+        carrier_family = {
+            ("rho",): "lda",
+            ("rho", "sigma"): "pbe",
+            ("rho", "sigma", "tau"): "r2scan",
+        }.get(tuple(options.functional.ingredients))
+        if carrier_family is None:
+            raise NotImplementedError(
+                "automatic Libxc public execution has no native rho/sigma/tau carrier"
+            )
+        carrier = f"{carrier_family}-{'uks' if spin == 'polarized' else 'rks'}"
+        calculator = cls(
+            carrier,
+            basis=basis,
+            device=device,
+            ks_options=options,
+            **kwargs,
+        )
+        selector = f"libxc:{identifier.upper()}:{'uks' if spin == 'polarized' else 'rks'}"
+        calculator._capabilities = replace(
+            calculator._capabilities,
+            method=selector,
+            supports_batch=False,
+            supported_properties=frozenset(("energy",)),
+        )
+        return calculator
+
     def __init__(
         self,
         method: typing.Any = "rhf",
@@ -474,7 +550,14 @@ class Calculator:
                             composition=electronic_graph,
                         )
                         self._dispersion_method_ir = full_graph
-            self._ks_options = resolve_ks_options(self._method_name, ks_options)
+            if (
+                isinstance(ks_options, KsOptions)
+                and ks_options._method_ir is not None
+                and ks_options.generic_libxc_registration is not None
+            ):
+                self._ks_options = ks_options
+            else:
+                self._ks_options = resolve_ks_options(self._method_name, ks_options)
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:
@@ -683,6 +766,7 @@ class Calculator:
             )
         semilocal_force = (
             self._ks_options is not None
+            and self._ks_options.generic_libxc_registration is None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
                 self._device_name == "cuda"
