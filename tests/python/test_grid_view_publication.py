@@ -99,9 +99,7 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     begin = source.index("static int grid_cuda_run_selected_impl(")
     end = source.index("\nint grid_cuda_run_selected_v1(", begin)
     implementation = source[begin:end]
-    tail = implementation[
-        implementation.index("    if (defer_error_to_consumer) {") :
-    ]
+    tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
     view_begin = source.index("int grid_cuda_view_v1(")
     view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
     view = source[view_begin:view_end]

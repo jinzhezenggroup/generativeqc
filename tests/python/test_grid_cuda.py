@@ -120,7 +120,6 @@ def test_feature_task_with_features_reuses_one_evaluated_tile(
                 pass
 
 
-
 def test_full_identity_map_matches_explicit_local_map(artifact: typing.Any) -> None:
     meta, arrays = load_fixture("water")
     with NativeAO(**basis_arguments(meta)) as basis:
@@ -151,6 +150,7 @@ def test_full_identity_map_matches_explicit_local_map(artifact: typing.Any) -> N
 
             check(identity_integrals, explicit_integrals)
             check(identity_potential, explicit_potential)
+
 
 def test_orders_zero_to_three_and_budget_rejection(artifact: typing.Any) -> None:
     meta, arrays = load_fixture("f_spherical")
