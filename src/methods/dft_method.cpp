@@ -181,8 +181,9 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
     const auto& external = *input.semilocal_program;
     if (!external.identifier || !*external.identifier || !external.expression_identity ||
         !*external.expression_identity || !external.native_program ||
-        input.semilocal_component_count != 1 || input.semilocal_components[0].coefficient != 1.0 ||
-        input.semilocal_range_omega != 0.0)
+        input.semilocal_component_count != 1 || !input.semilocal_components[0].component_id ||
+        std::string_view(input.semilocal_components[0].component_id) != external.identifier ||
+        input.semilocal_components[0].coefficient != 1.0 || input.semilocal_range_omega != 0.0)
       throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
                         "invalid generic semilocal point-program descriptor");
     const auto* program =
