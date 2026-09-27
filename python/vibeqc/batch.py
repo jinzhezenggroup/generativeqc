@@ -735,9 +735,10 @@ class PreparedBatch:
         ``(natoms, 3)``. Atom-count and nonfinite-coordinate errors retain the
         native per-item failure contract; malformed layouts fail before replay.
 
-        The default requests the method's supported properties. Energy-only
-        methods return ``forces=None``; HF can omit forces explicitly with
-        ``properties=("energy",)``.
+        RCCSD retains its energy-only default; request
+        ``properties=("energy", "forces")`` explicitly for its qualified force
+        domain. Other methods default to their supported properties. Energy-only
+        execution returns ``forces=None``.
         Output selection does not change the prepared model or warm snapshot;
         a later force replay rebuilds response caches when necessary. Resource
         plans retain their conservative energy-plus-force capacity allowance.
@@ -746,7 +747,11 @@ class PreparedBatch:
         """
         self._ensure_open()
         if properties is None:
-            properties = self._calculator._capabilities.supported_properties
+            properties = (
+                frozenset({"energy"})
+                if self._calculator._method == _native.METHOD_RCCSD
+                else self._calculator._capabilities.supported_properties
+            )
         if isinstance(properties, (str, bytes)):
             raise TypeError("properties must be an iterable of property names")
         try:

@@ -1610,14 +1610,19 @@ class Calculator:
 
         Energy and convergence diagnostics are always returned. Select
         ``properties=("energy",)`` to omit analytic-force evaluation; the
-        returned ``Result.forces`` is then ``None``. By default each method
-        requests all properties reported by its native capability record.
+        returned ``Result.forces`` is then ``None``. RCCSD retains its energy-only
+        default; request ``properties=("energy", "forces")`` explicitly for the
+        qualified force domain. Other methods request their supported properties,
+        except density-fitted MP2, which also defaults to energy only.
         """
         if properties is None:
             properties = (
                 frozenset({"energy"})
-                if self._method == _native.METHOD_MP2
-                and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                if self._method == _native.METHOD_RCCSD
+                or (
+                    self._method == _native.METHOD_MP2
+                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                )
                 else self._capabilities.supported_properties
             )
         if isinstance(properties, (str, bytes)):
