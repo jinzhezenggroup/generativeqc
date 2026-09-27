@@ -523,8 +523,13 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
       }
       if (streamed_factors.owner_identity && final_fitted_projection &&
           streamed_factors.factors[0].rank == final_state->identity.occupied[0] &&
-          streamed_factors.factors[0].density_scale == 2.0)
-        streamed_factors.final_fitted_occupied_projection = final_fitted_projection;
+          streamed_factors.factors[0].density_scale == 2.0) {
+        auto* state = static_cast<PersistentScfState*>(plan->persistent_scf_state);
+        if (state && state->d_final_alpha_coefficients) {
+          streamed_factors.factors[0].coefficients = state->d_final_alpha_coefficients;
+          streamed_factors.final_fitted_occupied_projection = final_fitted_projection;
+        }
+      }
       // The explicit fitted experiment projects forward B before applying
       // the second metric root. Preserve the validated view only on that path;
       // legacy source-occupied response continues to read physical raw A.
