@@ -237,7 +237,7 @@ def test_provider_kernel_interfaces_cannot_acquire_plan_state(
 def test_retained_numerics_cannot_acquire_queue_policy_or_plan_state(
     tmp_path: typing.Any, owner: typing.Any, dependency: typing.Any
 ) -> None:
-    """Scientific implementations remain independent of scheduling and lifetime."""
+    """Numerical and pair-cache launch boundaries remain independent of plan state."""
     source = tmp_path / "src/scf/cuda"
     source.mkdir(parents=True)
     (source / dependency).write_text("// Queue policy or host ownership\n")

@@ -1,7 +1,7 @@
 {
   "path": "src/scf/cuda/direct_fock_quartet.cuh",
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "direct_integrals",
-  "reason": "Retained native direct Fock/force contraction on borrowed metadata and density/output views; original scientific equations and reduction order are preserved.",
+  "reason": "Generic Direct-Fock task adapter only: integral evaluation and Fock scatter are compiler-owned and AO Schwarz admission delegates to direct_screening.cuh. This file retains tile decoding, generated-class dispatch and task control.",
   "regions": []
 }
