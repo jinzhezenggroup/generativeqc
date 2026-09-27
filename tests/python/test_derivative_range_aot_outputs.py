@@ -41,8 +41,7 @@ def test_colliding_radials_fail_before_generation_or_publication(
     reverse: bool,
 ) -> None:
     entries = [
-        {"backend": "cpu", "family": family, "omega": omega}
-        for omega in (0.3, 0.4)
+        {"backend": "cpu", "family": family, "omega": omega} for omega in (0.3, 0.4)
     ]
     if reverse:
         entries.reverse()
