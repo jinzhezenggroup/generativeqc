@@ -132,8 +132,7 @@ def _exchange_operators(calculator: typing.Any) -> tuple[str, ...]:
 def _has_nonlocal_correlation(calculator: typing.Any) -> bool:
     options = calculator.ks_options
     return bool(
-        options is not None
-        and options.execution_plan.nonlocal_correlation is not None
+        options is not None and options.execution_plan.nonlocal_correlation is not None
     )
 
 
