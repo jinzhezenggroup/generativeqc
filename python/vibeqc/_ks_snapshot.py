@@ -19,7 +19,7 @@ from vibeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
 from .batch import PreparedBatch
-from .ks import native_xc_functional_code, scf_domain_for_method
+from .ks import native_xc_functional_code
 
 
 def _scf_xc_points(
