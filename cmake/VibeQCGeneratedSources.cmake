@@ -19,8 +19,16 @@ macro(vibeqc_register_host_generated_sources target)
       GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_derivative_aot.py"
       OUTPUTS ${VIBEQC_STATIONARY_CPU_AOT_SOURCES}
       DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/expr.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_native.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_schedule.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/one_electron_derivatives.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/range_separation.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/scalar_c.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/shell_spec.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_native.py"
       ARGS --output-directory "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}"
       COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
       COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
