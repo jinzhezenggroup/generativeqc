@@ -260,7 +260,6 @@ void CudaXcPlan::enqueue_response(const double* density, const double* direction
 }
 
 void CudaXcPlan::publish_submitted_generation(std::uint64_t generation) {
-  check_device();
   generations_.begin(generation);
   generations_.commit(generation);
   ++transfers_.evaluations;
