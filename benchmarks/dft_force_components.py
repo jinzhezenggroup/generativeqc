@@ -197,6 +197,7 @@ def _normalize_wb97mv(
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
+        "source_component_seconds": dict(component),
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
         "unattributed_wall_seconds": _unattributed(endpoint, attributed),
