@@ -119,6 +119,11 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         }
 
     monkeypatch.setattr(matrix, "_clean_sample", sample)
+    monkeypatch.setattr(
+        matrix,
+        "_scf_trace_profile",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("trace failed")),
+    )
     result = matrix.benchmark_case(
         method="pbe-rks",
         system="water-3",
@@ -126,13 +131,15 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         basis="def2-svp",
         density_fitting="none",
         repeats=2,
-        trace_directory=None,
+        trace_directory=tmp_path / "trace",
         cupy_module=object(),
     )
 
     assert result["status"] == "measured"
     assert result["cold"]["scenario"] == "cold"
     assert len(result["warm"]) == 2
+    assert result["scf_profile"]["status"] == "failed"
+    assert result["scf_profile"]["reason"] == "trace failed"
     assert result["changed_geometry"]["status"] == "failed"
     assert result["changed_geometry"]["error"] == "changed replay failed"
     assert calls[:4] == [
