@@ -34,7 +34,7 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
     DeviceBatch batch, const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
-    unsigned long long* fp64_work_count) {
+    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient) {
   static_assert(detail::kDirectQuartetThreads == 32);
   constexpr std::uint32_t kSkip = 0U;
   constexpr std::uint32_t kConsume = 1U;
@@ -119,9 +119,9 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
       __syncwarp();
       for (std::size_t subtile = 0U; subtile < kSubtilesPerTile; ++subtile) {
         if constexpr (Force) {
-          contract_two_electron_force_quartet_subtile<Unrestricted, kDdddAngularOrder>(
+          contract_two_electron_force_quartet_subtile_scaled<Unrestricted, kDdddAngularOrder>(
               batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
-              output, 0U, subtile, lane);
+              output, 0U, coulomb_coefficient, exchange_coefficient, subtile, lane);
         } else {
           contract_fock_direct_quartet_subtile<Unrestricted, kDdddAngularOrder>(
               batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
@@ -135,31 +135,33 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
   }
 }
 
-void launch_bounded_direct_dddd_streaming_kernel(
+void launch_bounded_direct_dddd_streaming_kernel_scaled(
     bool unrestricted, DirectScreeningPurpose purpose, bool force, dim3 grid, dim3 block,
     std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,
     const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
-    unsigned long long* fp64_work_count) {
+    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient) {
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
       if (force == false) {
         bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Fock, false>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       } else {
         bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Fock, true>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       }
     } else {
       bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Force, true>
-          <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
-                                                  schwarz_bounds, density, active, output, bra_head,
-                                                  profile, fp64_work_count);
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, topology_pointer, screening_tolerance, schwarz_bounds, density, active, output,
+              bra_head, profile, fp64_work_count, coulomb_coefficient, exchange_coefficient);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -167,20 +169,35 @@ void launch_bounded_direct_dddd_streaming_kernel(
         bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Fock, false>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       } else {
         bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Fock, true>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       }
     } else {
       bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Force, true>
-          <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
-                                                  schwarz_bounds, density, active, output, bra_head,
-                                                  profile, fp64_work_count);
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, topology_pointer, screening_tolerance, schwarz_bounds, density, active, output,
+              bra_head, profile, fp64_work_count, coulomb_coefficient, exchange_coefficient);
     }
   }
+}
+
+void launch_bounded_direct_dddd_streaming_kernel(
+    bool unrestricted, DirectScreeningPurpose purpose, bool force, dim3 grid, dim3 block,
+    std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,
+    const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
+    unsigned long long* fp64_work_count) {
+  launch_bounded_direct_dddd_streaming_kernel_scaled(
+      unrestricted, purpose, force, grid, block, shared_bytes, stream, batch, topology_pointer,
+      screening_tolerance, schwarz_bounds, density, active, output, bra_head, profile,
+      fp64_work_count, 1.0, unrestricted ? -1.0 : -0.5);
 }
 
 }  // namespace vibeqc::scf::cuda_execution

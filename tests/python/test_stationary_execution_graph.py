@@ -30,8 +30,9 @@ def test_grid_feature_inventory_is_ingredient_driven() -> None:
     assert r2scan.grid_features == ("rho", "gradient", "tau")
 
 
-def test_nonlocal_composition_reuses_density_features_without_named_method_node(
-) -> None:
+def test_nonlocal_composition_reuses_density_features_without_named_method_node() -> (
+    None
+):
     method = MethodSpec(
         "arbitrary-pbe-vv10-alias",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
@@ -68,6 +69,22 @@ def test_graph_covers_stationary_source_inventory_exactly() -> None:
     assert graph.node("gradient_reduction").inputs == tuple(
         f"source:{name}" for name in plan.source_names
     )
+
+
+def test_ecp_sources_are_density_consuming_integral_nodes_and_covered() -> None:
+    plan = StationaryGradientPlan(
+        resolve_method("PBE"),
+        StationaryMeanField(SCF_POINT_MODEL, hamiltonian="scalar-semilocal-ecp"),
+    )
+    graph = compile_stationary_execution_graph(plan)
+    assert graph.node("integral:ecp_local").inputs == ("final_density",)
+    assert graph.node("integral:ecp_nonlocal").inputs == ("final_density",)
+    produced = {
+        value.name.removeprefix("source:")
+        for value in graph.values
+        if value.name.startswith("source:")
+    }
+    assert produced == set(plan.source_names)
 
 
 def test_aliases_with_identical_science_share_graph_identity() -> None:

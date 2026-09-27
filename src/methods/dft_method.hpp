@@ -33,6 +33,15 @@ vibeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index
                                          std::vector<double>& output, std::size_t maximum_bytes,
                                          std::array<std::uint64_t, 9>& work, std::string& detail);
 
+/** Snapshot-backed variant for a consumer that already exported and validated
+ * D/W under the exact same live token. The native owner still revalidates the
+ * resident device density before two-electron derivative execution. */
+vibeqc_status dft_cuda_integral_gradient_cached(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
+
 vibeqc_status validate_dft_system(vibeqc_method method, const core::System& system,
                                   std::string& detail);
 

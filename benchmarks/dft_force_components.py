@@ -323,6 +323,163 @@ def _normalize_stationary(
     }
 
 
+_EXCHANGE_COMPONENT = {
+    "full-range": "scf_full_range_k",
+    "short-range": "scf_short_range_k",
+    "long-range": "scf_long_range_k",
+}
+_SCF_TRACE_COMPONENT = {
+    "ri_j": "scf_fock_j",
+    "ri_k": "scf_full_range_k",
+    "ri_k_occupied": "scf_full_range_k",
+    "ri_k_short_range": "scf_short_range_k",
+    "ri_k_long_range": "scf_long_range_k",
+}
+
+
+def _accumulate_component(
+    target: dict[str, float | None], name: str, value: typing.Any, *, field: str
+) -> None:
+    measured = _finite_nonnegative(value, field=field)
+    if measured is None:
+        return
+    previous = target.get(name)
+    target[name] = measured if previous is None else previous + measured
+
+
+def expected_scf_components(
+    exchange_operators: Sequence[str],
+    *,
+    semilocal: bool = True,
+    nonlocal_correlation: bool = False,
+) -> tuple[str, ...]:
+    """Return method-graph component names without using a named functional."""
+
+    expected = ["scf_fock_j"]
+    if semilocal:
+        expected.append("semilocal_ao_grid_xc")
+    if nonlocal_correlation:
+        expected.append("vv10_rvv10")
+    for operator in exchange_operators:
+        try:
+            component = _EXCHANGE_COMPONENT[operator]
+        except KeyError as error:
+            raise ValueError(f"unsupported exchange operator: {operator}") from error
+        if component not in expected:
+            expected.append(component)
+    return tuple(expected)
+
+
+def normalize_scf_trace(
+    records: Sequence[Mapping[str, typing.Any]],
+    *,
+    exchange_operators: Sequence[str] = (),
+    semilocal: bool = True,
+    nonlocal_correlation: bool = False,
+) -> dict[str, typing.Any]:
+    """Normalize opt-in CUDA SCF traces without splitting fused J/K evidence.
+
+    The native DF trace is intrusive diagnostic evidence. Its CUDA-event times
+    never become clean endpoint wall time. A shared J/K root cannot be assigned
+    to J and K separately, so that duration remains explicitly ambiguous.
+    Direct/RSH providers that do not emit this trace remain missing rather than
+    receiving inferred timings.
+    """
+
+    from benchmarks.df_component_ledger import aggregate
+
+    summary = aggregate(list(records))
+    profiled = _empty_components()
+    ambiguous: dict[str, float] = {}
+    unclassified: dict[str, float] = {}
+    for group in summary["groups"]:
+        if group["execution"] != "stream":
+            continue
+        operation = str(group["operation"])
+        milliseconds = _finite_nonnegative(
+            group.get("gpu_inclusive_ms"),
+            field=f"scf_trace.{operation}.gpu_inclusive_ms",
+        )
+        if milliseconds is None:
+            continue
+        component = _SCF_TRACE_COMPONENT.get(operation)
+        if component is not None:
+            _accumulate_component(
+                profiled,
+                component,
+                milliseconds,
+                field=f"scf_trace.{operation}.gpu_inclusive_ms",
+            )
+        elif operation == "ri_jk_shared":
+            ambiguous["scf_shared_jk"] = (
+                ambiguous.get("scf_shared_jk", 0.0) + milliseconds
+            )
+        else:
+            unclassified[operation] = unclassified.get(operation, 0.0) + milliseconds
+
+    expected = expected_scf_components(
+        exchange_operators,
+        semilocal=semilocal,
+        nonlocal_correlation=nonlocal_correlation,
+    )
+    missing = [name for name in expected if profiled[name] is None]
+    return {
+        "schema": "vibeqc.dft-scf-components.v1",
+        "profiled_ms": profiled,
+        "expected_components": list(expected),
+        "missing_expected_components": missing,
+        "ambiguous_profiled_ms": ambiguous,
+        "unclassified_root_profiled_ms": unclassified,
+        "source_summary": summary,
+        "measurement_policy": (
+            "opt-in CUDA-event diagnostic; do not add to clean endpoint wall time; "
+            "shared J/K roots remain unsplit"
+        ),
+    }
+
+
+def merge_scf_profile(
+    force_components: Mapping[str, typing.Any],
+    scf_profile: Mapping[str, typing.Any],
+) -> dict[str, typing.Any]:
+    """Attach measured SCF component events to one force-component record."""
+
+    if force_components.get("schema") != "vibeqc.dft-force-components.v1":
+        raise ValueError("force component schema mismatch")
+    if scf_profile.get("schema") != "vibeqc.dft-scf-components.v1":
+        raise ValueError("SCF component schema mismatch")
+    result = {
+        **force_components,
+        "wall_seconds": dict(_mapping(force_components.get("wall_seconds"))),
+        "profiled_ms": dict(_mapping(force_components.get("profiled_ms"))),
+        "notes": dict(_mapping(force_components.get("notes"))),
+    }
+    incoming = _mapping(scf_profile.get("profiled_ms"))
+    for name in COMPONENTS:
+        value = incoming.get(name)
+        if value is None:
+            continue
+        measured = _finite_nonnegative(value, field=f"scf_profile.{name}")
+        previous = result["profiled_ms"].get(name)
+        if previous is not None and not math.isclose(
+            float(previous), typing.cast("float", measured), rel_tol=1e-9, abs_tol=1e-9
+        ):
+            raise ValueError(f"duplicate component timing disagrees for {name}")
+        result["profiled_ms"][name] = measured
+    result["coverage"] = _coverage(result["wall_seconds"], result["profiled_ms"])
+    result["scf_profile"] = {
+        key: scf_profile.get(key)
+        for key in (
+            "expected_components",
+            "missing_expected_components",
+            "ambiguous_profiled_ms",
+            "unclassified_root_profiled_ms",
+            "measurement_policy",
+        )
+    }
+    return result
+
+
 def normalize_force_work(
     raw: typing.Any,
     *,

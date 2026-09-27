@@ -102,6 +102,41 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     assert owner.charges[0] == pytest.approx(2.5)
     np.testing.assert_array_equal(owner.tasks[0, :9], [0, 0, 4, -1, 0, 1, 0, 1, 1])
 
+    owner.used = 0
+    owner.integral_page(
+        0,
+        "four_center_eri",
+        ((0, 1, 0, 1), (1, 0, 1, 0)),
+        charge=2.5,
+    )
+    assert owner.used == 2
+    np.testing.assert_array_equal(
+        owner.tasks[:2, :9],
+        [
+            [0, 0, 4, -1, 0, 1, 0, 1, 1],
+            [0, 0, 4, -1, 1, 0, 1, 0, 1],
+        ],
+    )
+    np.testing.assert_allclose(owner.charges[:2], 2.5)
+    assert owner.scalar_packed_descriptors == 1
+    assert owner.bulk_pack_chunks == 1
+    assert owner.bulk_packed_descriptors == 2
+
+    owner.reset(1.0e-12, density, 3 * density)
+    owner.page_work_budget = 1
+    library.stationary_tasks.reset_mock()
+    owner.integral_page(
+        0,
+        "four_center_eri",
+        ((0, 1, 0, 1), (1, 0, 1, 0)),
+    )
+    owner.flush()
+    assert library.stationary_tasks.call_count == 2
+    assert owner.primitive_pages == 2
+    assert owner.primitive_page_peak_records == 1
+    assert owner.bulk_pack_chunks == 2
+    assert owner.bulk_packed_descriptors == 2
+
 
 @pytest.mark.parametrize("aot", (False, True))
 def test_weight_fusion_orchestration_runs_without_a_device(
@@ -215,7 +250,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         *,
         spin_blocks: int = 1,
         target: object = None,
-        work_budget: int = 2_000_000,
+        page_work_budget: int = 2_000_000,
         timeline: object = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = runtime._SOURCE_NAMES,
@@ -225,7 +260,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         assert source_names == runtime._SOURCE_NAMES
         admitted["budget"] = budget
         admitted["spin_blocks"] = spin_blocks
-        admitted["work_budget"] = work_budget
+        admitted["page_work_budget"] = page_work_budget
         return owner
 
     monkeypatch.setattr(runtime, "_CudaSources", make_owner)
@@ -234,12 +269,12 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         "h2d_bytes": 0,
         "d2h_bytes": 0,
         "launches": 1,
-        "primitive_records": owner.integral.call_count,
+        "primitive_records": owner.integral_page.call_count,
         "xc_points": 0,
         "grid_pair_visits": 0,
         "stream": 0,
-        "task_descriptors": owner.integral.call_count,
-        "task_batches": owner.integral.call_count,
+        "task_descriptors": owner.integral_page.call_count,
+        "task_batches": owner.integral_page.call_count,
     }
 
     grid_owner = MagicMock()
@@ -293,17 +328,17 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         native_grid_library=tmp_path / "native.so" if aot else None,
         cache=tmp_path / "cache",
         tile_points=4,
-        integral_terms=2,
-        primitive_tile=4,
+        integral_terms=32,
+        primitive_tile=16,
     )
 
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
     assert admitted["spin_blocks"] == 1
-    assert owner.integral.call_args_list == [
-        call(0, "kinetic", (0, 0)),
-        call(0, "nuclear_attraction", (0, 0), 0, 1),
-        call(5, "overlap", (0, 0)),
-        call(1, "four_center_eri", (0, 0, 0, 0)),
+    assert owner.integral_page.call_args_list == [
+        call(0, "kinetic", ((0, 0),)),
+        call(0, "nuclear_attraction", ((0, 0),), 0, 1),
+        call(5, "overlap", ((0, 0),)),
+        call(1, "four_center_eri", ((0, 0, 0, 0),)),
     ]
     owner.reduced.assert_called_once_with()
     assert result.work["tensor_executions"] == 0
@@ -313,6 +348,20 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     assert result.work["stationary_weight_tensor_executions"] == 0
     assert result.work["stationary_weight_roundtrip_bytes"] == 0
     assert result.work["stationary_state_dw_upload_bytes"] == 16
+    task_schedule = result.work["stationary_task_executor"]
+    assert task_schedule["fixed_capacity"] == 16
+    assert task_schedule["resident_capacity"] == 16
+    assert task_schedule["page_capacity"] == 16
+    assert [source["mode"] for source in task_schedule["sources"]] == [
+        "fixed",
+        "fixed",
+        "fixed",
+    ]
+    assert [source["producer_pages"] for source in task_schedule["sources"]] == [
+        1,
+        1,
+        1,
+    ]
     assert result.execution.endswith("/generated-device-stationary-weights-v1")
 
 
