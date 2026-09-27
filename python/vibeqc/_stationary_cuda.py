@@ -83,6 +83,18 @@ _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
 _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
 
 
+class _StationaryTaskSource(typing.Protocol):
+    """Versioned/identity-bearing bounded derivative task producer."""
+
+    @property
+    def identity(self) -> str: ...
+
+    @property
+    def logical_size(self) -> int: ...
+
+    def pages(self, capacity: int) -> typing.Iterator[RuntimeTaskPage]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class _StationaryTaskExecution:
     """Bounded producer evidence independent of the derivative task source."""
@@ -134,27 +146,57 @@ class _BoundedStationaryTaskExecutor:
 
     def execute_pages(
         self,
-        domain: RuntimeTaskDomain,
+        source: _StationaryTaskSource,
         submit_page: typing.Callable[[RuntimeTaskPage], None],
         *,
         finish_page: typing.Callable[[], None] | None = None,
     ) -> _StationaryTaskExecution:
-        if not isinstance(domain, RuntimeTaskDomain):
-            raise TypeError("stationary derivative producer requires RuntimeTaskDomain")
+        try:
+            identity = source.identity
+            logical_tasks = source.logical_size
+            page_source = source.pages
+        except AttributeError as error:
+            raise TypeError(
+                "stationary derivative producer requires an identity-bearing task source"
+            ) from error
+        if (
+            type(identity) is not str
+            or len(identity) != 64
+            or any(char not in "0123456789abcdef" for char in identity)
+        ):
+            raise ValueError("stationary derivative task source requires a SHA-256 identity")
+        if type(logical_tasks) is not int or logical_tasks < 1:
+            raise ValueError("stationary derivative task source requires positive logical size")
+        if not callable(page_source):
+            raise TypeError("stationary derivative task source requires bounded pages")
         if not callable(submit_page):
             raise TypeError("stationary derivative producer requires a page callback")
         if finish_page is not None and not callable(finish_page):
             raise TypeError("stationary derivative producer requires a finish callback")
-        logical_tasks = domain.logical_size
+
         mode = (
             "fixed"
             if logical_tasks <= self.fixed_capacity
             else ("resident" if logical_tasks <= self.resident_capacity else "paged")
         )
         submitted = pages = 0
-        for page in domain.pages(self.page_capacity):
+        page_rank: int | None = None
+        for page in page_source(self.page_capacity):
+            if not isinstance(page, RuntimeTaskPage):
+                raise TypeError("stationary derivative task source yielded an invalid page")
+            if (
+                page.domain_identity != identity
+                or page.ordinal != pages
+                or page.offset != submitted
+                or page.capacity != self.page_capacity
+            ):
+                raise RuntimeError("stationary derivative task page identity/order mismatch")
             if page.count > self.page_capacity:
                 raise RuntimeError("stationary task producer exceeded page capacity")
+            if page_rank is None:
+                page_rank = page.rank
+            elif page.rank != page_rank:
+                raise RuntimeError("stationary derivative task source changed page rank")
             submit_page(page)
             if finish_page is not None:
                 finish_page()
@@ -164,7 +206,7 @@ class _BoundedStationaryTaskExecutor:
             raise RuntimeError("stationary task producer coverage mismatch")
         return _StationaryTaskExecution(
             mode,
-            domain.identity,
+            identity,
             logical_tasks,
             self.fixed_capacity,
             self.resident_capacity,
@@ -174,7 +216,7 @@ class _BoundedStationaryTaskExecutor:
 
     def execute(
         self,
-        domain: RuntimeTaskDomain,
+        source: _StationaryTaskSource,
         submit: typing.Callable[[tuple[int, ...]], None],
         *,
         finish_page: typing.Callable[[], None] | None = None,
@@ -186,7 +228,7 @@ class _BoundedStationaryTaskExecutor:
             for coordinate in page.coordinates:
                 submit(coordinate)
 
-        return self.execute_pages(domain, submit_page, finish_page=finish_page)
+        return self.execute_pages(source, submit_page, finish_page=finish_page)
 
 
 class _ExclusiveWallTimeline:
