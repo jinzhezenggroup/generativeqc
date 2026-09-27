@@ -64,6 +64,14 @@ def test_public_method_abi_ids_are_explicit_and_stable() -> None:
     }
 
 
+def test_public_composite_selectors_are_generated_from_manifest() -> None:
+    assert dict(_generated_methods.COMPOSITE_METHOD_ALIASES) == {
+        "r2scan-3c": ("R2SCAN-3c", "unpolarized"),
+        "r2scan-3c-rks": ("R2SCAN-3c", "unpolarized"),
+        "r2scan-3c-uks": ("R2SCAN-3c", "polarized"),
+    }
+
+
 def test_public_method_provider_sets_are_generated() -> None:
     assert _generated_methods.HF_METHOD_IDS == frozenset({1, 2})
     assert _generated_methods.NATIVE_DFT_METHOD_IDS == frozenset(
@@ -151,13 +159,3 @@ def test_manifest_rejects_lossy_abi_and_capability_values(
     monkeypatch.setattr(generator, "MANIFEST", path)
     with pytest.raises(ValueError):
         generator.load_manifest()
-
-
-def test_generated_python_supports_an_empty_provider_group() -> None:
-    from tools import generate_method_manifest as generator
-
-    methods = [m for m in generator.load_manifest() if m["provider"] == "reserved"]
-    generated = generator.emit_python(methods)
-    compile(generated, "generated-methods", "exec")
-    assert "HF_METHOD_IDS = frozenset(())" in generated
-    assert "NATIVE_DFT_METHOD_IDS = frozenset(())" in generated

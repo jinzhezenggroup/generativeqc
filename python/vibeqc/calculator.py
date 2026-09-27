@@ -40,11 +40,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
-_COMPOSITE_METHOD_ALIASES = {
-    "r2scan-3c": ("R2SCAN-3c", "unpolarized"),
-    "r2scan-3c-rks": ("R2SCAN-3c", "unpolarized"),
-    "r2scan-3c-uks": ("R2SCAN-3c", "polarized"),
-}
+_COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
 _COUPLED_CLUSTER_METHODS = frozenset((_native.METHOD_RCCSD, _native.METHOD_RCCSD_T))
 _CORRELATED_METHODS = frozenset((_native.METHOD_MP2, *_COUPLED_CLUSTER_METHODS))
