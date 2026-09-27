@@ -33,7 +33,9 @@ class Grid:
         assert ingredients == ("rho", "gradient", "tau")
         self.live = True
         self.visits += len(points)
-        task = SimpleNamespace(view=SimpleNamespace(stream=self.stream, npoint=len(points)))
+        task = SimpleNamespace(
+            view=SimpleNamespace(stream=self.stream, npoint=len(points))
+        )
         self.events.append(("lease", len(points)))
         try:
             yield task
@@ -73,8 +75,10 @@ class Nonlocal:
         self.generation += 1
         self.events.append(("pair_enqueue",))
         return SimpleNamespace(
-            pointer=0x1234, stride=self.point_count,
-            stream=self.seed_stream, generation=self.generation,
+            pointer=0x1234,
+            stride=self.point_count,
+            stream=self.seed_stream,
+            generation=self.generation,
         )
 
 
@@ -91,14 +95,18 @@ class Sources:
     def finish(self):
         self.finishes += 1
         self.events.append(("drain", self.finishes))
-        return {name: np.ones((2, 3)) * self.finishes
-                for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")}
+        return {
+            name: np.ones((2, 3)) * self.finishes
+            for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+        }
 
     def reset(self, tolerance, density, weighted):
         assert self.finishes >= 1
         self.events.append(("source_reset",))
 
-    def geometry_external_device(self, task, owners, weights, raw, pointer, stride, begin):
+    def geometry_external_device(
+        self, task, owners, weights, raw, pointer, stride, begin
+    ):
         assert self.grid.live and pointer == 0x1234 and stride == 5
         self.events.append(("external", begin))
         self.external_weights.extend(weights)
@@ -110,21 +118,36 @@ def fixture():
     owner = Nonlocal(events, grid, 5)
     sources = Sources(events, grid)
     args = dict(
-        points=np.zeros((5, 3)), weights=np.arange(1, 6, dtype=float),
-        owners=np.array([0, 0, 1, 1, 1]), atomic_weights=np.ones(5),
-        ao_ids=np.arange(3, dtype=np.uintp), tile_points=2,
-        density=np.eye(3)[None], weighted_density=np.eye(3)[None],
-        coincident_tolerance=1e-12, functional=4,
+        points=np.zeros((5, 3)),
+        weights=np.arange(1, 6, dtype=float),
+        owners=np.array([0, 0, 1, 1, 1]),
+        atomic_weights=np.ones(5),
+        ao_ids=np.arange(3, dtype=np.uintp),
+        tile_points=2,
+        density=np.eye(3)[None],
+        weighted_density=np.eye(3)[None],
+        coincident_tolerance=1e-12,
+        functional=4,
     )
     return events, grid, sources, owner, args
 
 
 def test_production_join_uses_one_owner_and_only_resident_leases():
     events, grid, sources, owner, args = fixture()
-    parts, seconds, work = MODULE.resident_nonlocal_geometry(grid, sources, owner, **args)
+    parts, seconds, work = MODULE.resident_nonlocal_geometry(
+        grid, sources, owner, **args
+    )
     assert grid.visits == 10
-    assert [x for x in events if x[0] == "collect"] == [("collect", 0), ("collect", 2), ("collect", 4)]
-    assert [x for x in events if x[0] == "external"] == [("external", 0), ("external", 2), ("external", 4)]
+    assert [x for x in events if x[0] == "collect"] == [
+        ("collect", 0),
+        ("collect", 2),
+        ("collect", 4),
+    ]
+    assert [x for x in events if x[0] == "external"] == [
+        ("external", 0),
+        ("external", 2),
+        ("external", 4),
+    ]
     assert events.index(("drain", 1)) < events.index(("pair_enqueue",))
     assert events.index(("pair_enqueue",)) < events.index(("source_reset",))
     assert np.array_equal(parts["nuclear"], np.ones((2, 3)))

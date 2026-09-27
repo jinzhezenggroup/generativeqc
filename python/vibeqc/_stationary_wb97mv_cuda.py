@@ -274,10 +274,16 @@ class PreparedWb97mvCudaGradient:
                     raise ValueError(
                         "WB97M-V stationary reduction exceeds host capacity"
                     )
-                if not callable(getattr(self.sources, "geometry_external_device", None)):
-                    self._resident_nonlocal_fallback = "device-seed-consumer-unavailable"
+                if not callable(
+                    getattr(self.sources, "geometry_external_device", None)
+                ):
+                    self._resident_nonlocal_fallback = (
+                        "device-seed-consumer-unavailable"
+                    )
                 elif not hasattr(source._library, _ResidentNonlocalForceOwner._CREATE):
-                    self._resident_nonlocal_fallback = "native-resident-producer-unavailable"
+                    self._resident_nonlocal_fallback = (
+                        "native-resident-producer-unavailable"
+                    )
                 else:
                     try:
                         self._resident_nonlocal = _ResidentNonlocalForceOwner(
@@ -293,13 +299,20 @@ class PreparedWb97mvCudaGradient:
                             library=source._library,
                         )
                     except MemoryError:
-                        self._resident_nonlocal_fallback = "resident-capacity-unavailable"
+                        self._resident_nonlocal_fallback = (
+                            "resident-capacity-unavailable"
+                        )
                     except Exception as error:
                         # Only a capacity failure permits the existing bounded
                         # compacted path. Never hide CUDA/numerical/identity errors.
-                        if getattr(error, "status", None) != _native.STATUS_OUT_OF_MEMORY:
+                        if (
+                            getattr(error, "status", None)
+                            != _native.STATUS_OUT_OF_MEMORY
+                        ):
                             raise
-                        self._resident_nonlocal_fallback = "resident-capacity-unavailable"
+                        self._resident_nonlocal_fallback = (
+                            "resident-capacity-unavailable"
+                        )
                 self._identity = identity
             except BaseException:
                 self.close()
@@ -370,20 +383,22 @@ class PreparedWb97mvCudaGradient:
                 )
         ids = np.arange(n, dtype=np.uintp)
         if self._resident_nonlocal is not None:
-            resident_parts, resident_seconds, nonlocal_work = resident_nonlocal_geometry(
-                self.grid,
-                self.sources,
-                self._resident_nonlocal,
-                points=state.grid.points,
-                weights=state.grid.weights,
-                owners=state.grid.owners,
-                atomic_weights=source.atomic_weights,
-                ao_ids=ids,
-                tile_points=tile_points,
-                density=state.density,
-                weighted_density=state.weighted_density,
-                coincident_tolerance=source.grid_spec.coincident_tolerance,
-                functional=4,
+            resident_parts, resident_seconds, nonlocal_work = (
+                resident_nonlocal_geometry(
+                    self.grid,
+                    self.sources,
+                    self._resident_nonlocal,
+                    points=state.grid.points,
+                    weights=state.grid.weights,
+                    owners=state.grid.owners,
+                    atomic_weights=source.atomic_weights,
+                    ao_ids=ids,
+                    tile_points=tile_points,
+                    density=state.density,
+                    weighted_density=state.weighted_density,
+                    coincident_tolerance=source.grid_spec.coincident_tolerance,
+                    functional=4,
+                )
             )
             components.update(resident_parts)
             component_seconds.update(resident_seconds)
@@ -448,7 +463,9 @@ class PreparedWb97mvCudaGradient:
             component_seconds["vv10_pairs"] = perf_counter() - component_start
             component_start = perf_counter()
             self.sources.reset(
-                source.grid_spec.coincident_tolerance, state.density, state.weighted_density
+                source.grid_spec.coincident_tolerance,
+                state.density,
+                state.weighted_density,
             )
             for begin in range(0, npnt, tile_points):
                 end = min(begin + tile_points, npnt)

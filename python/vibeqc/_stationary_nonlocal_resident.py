@@ -50,7 +50,9 @@ def resident_nonlocal_geometry(
     ):
         raise ValueError("resident geometry and nonlocal grid shapes differ")
     if not callable(getattr(sources, "geometry_external_device", None)):
-        raise RuntimeError("resident nonlocal geometry requires the device-seed consumer")
+        raise RuntimeError(
+            "resident nonlocal geometry requires the device-seed consumer"
+        )
 
     diagnostic = nonlocal_owner.diagnostic()
     if diagnostic.executed:
@@ -78,7 +80,9 @@ def resident_nonlocal_geometry(
             )
             batches += 1
     local = sources.finish()
-    components = {name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")}
+    components = {
+        name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+    }
     timings = {"semilocal_geometry_and_features": perf_counter() - started}
 
     started = perf_counter()
