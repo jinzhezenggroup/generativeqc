@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 from .freeze_contract import REPO, ROOT, build, canonical, digest, source_digest
+from .precision import require_public_precision
 
 OFFICIAL_UPSTREAM_URL = "https://github.com/jinzhezenggroup/vibeqc.git"
 OFFICIAL_UPSTREAM_MASTER_REF = "refs/heads/master"
@@ -450,6 +451,14 @@ def _check_run(
         type(precision) is dict and type(precision.get("native_provenance")) is dict,
         "native precision provenance missing",
     )
+    try:
+        require_public_precision(precision)
+    except ValueError as error:
+        raise InvalidEvidence(str(error)) from error
+    require(
+        precision["returned_state"] == run["attained_state"],
+        "public precision returned-state mismatch",
+    )
     native = precision["native_provenance"]
     require(
         native.get("operator_work_counters_valid") is True,
@@ -546,6 +555,25 @@ def _check_run(
     for operator in precision["operators"]:
         require(type(operator) is dict, "malformed operator record")
         require(
+            operator.get("name")
+            in (
+                "coulomb_j",
+                "exchange_k",
+                "xc",
+                "fock_assembly",
+                "physical_residual",
+                "eigensolver",
+                "density_build",
+                "diis",
+                "matrix_product",
+                "diagnostics",
+                "occupation_stabilization",
+                "coulomb_recurrence",
+                "exchange_recurrence",
+            ),
+            "unknown precision operator",
+        )
+        require(
             all(
                 operator.get(name) in ("fp64", "fp32", "tf32", "fp16", "bf16")
                 for name in ("storage", "compute", "accumulation", "reduction")
@@ -553,9 +581,7 @@ def _check_run(
             "unknown arithmetic dtype",
         )
         require(
-            type(operator.get("name")) is str
-            and type(operator.get("count")) is int
-            and operator["count"] >= 0,
+            type(operator.get("count")) is int and operator["count"] >= 0,
             "invalid operator count",
         )
         require(

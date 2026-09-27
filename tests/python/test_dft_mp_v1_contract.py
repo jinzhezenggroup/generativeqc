@@ -416,8 +416,19 @@ def _run_record(tmp_path: Path, contract: dict, row: dict, campaign: dict) -> di
         },
         "online_scientific_cuda_compiles": 0,
         "precision": {
+            "detail_version": 1,
+            "complete": True,
+            "returned_state": "state-1",
             "requested_mode": "auto",
             "operator_inventory_complete": True,
+            "mixed_stage_fock_builds": 2,
+            "strict_stage_fock_builds": 2,
+            "post_scf_fock_builds": 1,
+            "refinement_iterations": 2,
+            "execution_retries": 0,
+            "final_residual_audits": 1,
+            "strict_refinement_applied": True,
+            "operator_work_counters_valid": True,
             "native_provenance": {
                 "mixed_stage_fock_builds": 2,
                 "strict_stage_fock_builds": 2,
@@ -452,7 +463,7 @@ def _run_record(tmp_path: Path, contract: dict, row: dict, campaign: dict) -> di
             "fallback_count": 0,
             "operators": [
                 {
-                    "name": "J",
+                    "name": "coulomb_j",
                     "count": 2,
                     "storage": "fp64",
                     "compute": "fp32",
@@ -508,6 +519,36 @@ def test_mixed_numerical_oracle_and_work_negative_controls(
             "zero actual mixed work",
             lambda x: x["precision"]["native_provenance"].update(
                 mixed_stage_fock_builds=0
+            ),
+        ),
+        ("no public version", lambda x: x["precision"].pop("detail_version")),
+        ("partial work", lambda x: x["precision"].update(complete=False)),
+        (
+            "partial operators",
+            lambda x: x["precision"].update(operator_inventory_complete=False),
+        ),
+        (
+            "wrong public state",
+            lambda x: x["precision"].update(returned_state="other-owner"),
+        ),
+        ("no events", lambda x: x["precision"].update(scf_fock_timeline=[])),
+        ("no operators", lambda x: x["precision"].update(operators=[])),
+        (
+            "aggregate mismatch",
+            lambda x: x["precision"].update(strict_stage_fock_builds=99),
+        ),
+        (
+            "unknown operator",
+            lambda x: x["precision"]["operators"][0].update(name="unknown:777"),
+        ),
+        (
+            "unknown dtype",
+            lambda x: x["precision"]["operators"][0].update(compute="unknown:777"),
+        ),
+        (
+            "unknown mode",
+            lambda x: x["precision"]["operators"][0].update(
+                arithmetic_mode="unknown:777"
             ),
         ),
         ("audit before Fock", lambda x: x["precision"]["scf_fock_timeline"].reverse()),
