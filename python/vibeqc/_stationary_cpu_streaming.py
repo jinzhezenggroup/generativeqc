@@ -22,6 +22,12 @@ IndexPointer = ct.POINTER(ct.c_int64)
 Dispatch = ct.CFUNCTYPE(ct.c_int, ct.c_uint, DoublePointer, ct.c_size_t, DoublePointer)
 
 
+class ComponentDispatchPlan(typing.NamedTuple):
+    bindings: np.ndarray
+    dispatch: typing.Any
+    dispatcher_count: int
+
+
 class CompiledComponentExecutor(ComponentPrimitiveExecutor):
     """Retain generated library lifetimes and reuse one fixed primitive buffer."""
 
@@ -54,13 +60,11 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
             if self.compilation_work["primitive_packaged_aot"]
             else domain
         )
-        bindings = np.asarray(derivative_dispatch_table(binding_domain), dtype=np.int64)
-        self.bindings = np.frombuffer(bindings.tobytes(), dtype=np.int64).reshape(
-            bindings.shape
+        self.dispatch_plan = self.prepare_dispatch_plan(
+            self.dispatchers, binding_domain
         )
-        self.dispatch = (Dispatch * len(self.dispatchers))(
-            *(ct.cast(call, Dispatch) for call in self.dispatchers)
-        )
+        self.bindings = self.dispatch_plan.bindings
+        self.dispatch = self.dispatch_plan.dispatch
         contract = None
         if aot_library is not None:
             try:
@@ -117,23 +121,40 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
             self.aos.ctypes.data_as(DoublePointer),
             len(self.aos),
             self.labels.ctypes.data_as(IndexPointer),
-            self.bindings.ctypes.data_as(IndexPointer),
-            len(self.bindings),
-            len(COMPONENT_LABELS),
-            self.dispatch,
-            len(self.dispatchers),
         )
         self.compilation_work["component_dispatch_bytes"] = (
-            self.labels.nbytes + self.bindings.nbytes + ct.sizeof(self.dispatch)
+            self.labels.nbytes
+            + self.dispatch_plan.bindings.nbytes
+            + ct.sizeof(self.dispatch_plan.dispatch)
         )
 
-    def integral(
+    @staticmethod
+    def prepare_dispatch_plan(
+        dispatchers: typing.Iterable[typing.Any],
+        domain: tuple[str, ...],
+    ) -> ComponentDispatchPlan:
+        selected = tuple(dispatchers)
+        if not selected:
+            raise ValueError("component dispatch plan requires at least one dispatcher")
+        bindings = np.asarray(derivative_dispatch_table(domain), dtype=np.int64)
+        bindings = np.frombuffer(bindings.tobytes(), dtype=np.int64).reshape(
+            bindings.shape
+        )
+        dispatch = (Dispatch * len(selected))(
+            *(ct.cast(call, Dispatch) for call in selected)
+        )
+        return ComponentDispatchPlan(bindings, dispatch, len(selected))
+
+    def _integral_with_dispatch_plan(
         self,
         operator: str,
         indices: tuple[int, ...],
         weight: float,
-        nucleus: int | None = None,
-    ) -> tuple[list[int], np.ndarray]:
+        nucleus: int | None,
+        plan: ComponentDispatchPlan,
+        *,
+        account: bool,
+    ) -> tuple[list[int], np.ndarray, int]:
         if operator not in COMPONENT_OPERATORS:
             raise ValueError("unsupported component derivative operator")
         op = COMPONENT_OPERATORS.index(operator)
@@ -155,6 +176,11 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
         result, work = np.empty((4, 3)), ct.c_uint64()
         if self.contract(
             *self.arguments,
+            plan.bindings.ctypes.data_as(IndexPointer),
+            len(plan.bindings),
+            len(COMPONENT_LABELS),
+            plan.dispatch,
+            plan.dispatcher_count,
             op,
             ids.ctypes.data_as(IndexPointer),
             weight,
@@ -165,8 +191,45 @@ class CompiledComponentExecutor(ComponentPrimitiveExecutor):
             ct.byref(work),
         ):
             raise ArithmeticError("generated CPU component derivative failed")
-        self.records += work.value
+        if account:
+            self.records += work.value
         owners = [int(self.aos[i, 0]) for i in indices]
         if nucleus is not None:
             owners.append(nucleus)
-        return owners, result[: len(owners)]
+        return owners, result[: len(owners)], int(work.value)
+
+    def integral_with_dispatch_plan(
+        self,
+        operator: str,
+        indices: tuple[int, ...],
+        weight: float,
+        plan: ComponentDispatchPlan,
+        nucleus: int | None = None,
+    ) -> tuple[list[int], np.ndarray, int]:
+        """Execute an alternate compiler-owned primitive family without re-JIT."""
+
+        return self._integral_with_dispatch_plan(
+            operator,
+            indices,
+            weight,
+            nucleus,
+            plan,
+            account=False,
+        )
+
+    def integral(
+        self,
+        operator: str,
+        indices: tuple[int, ...],
+        weight: float,
+        nucleus: int | None = None,
+    ) -> tuple[list[int], np.ndarray]:
+        owners, values, _ = self._integral_with_dispatch_plan(
+            operator,
+            indices,
+            weight,
+            nucleus,
+            self.dispatch_plan,
+            account=True,
+        )
+        return owners, values
