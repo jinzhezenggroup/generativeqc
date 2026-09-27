@@ -151,8 +151,9 @@ int main() {
   if(p.primitive_count!=18000000) return 2;
   task[8]=16000001;
   if(page()==0 || !p.failed || p.primitive_count!=18000000) return 3;
-  task[8]=3; fail_finish=true;
+  task[8]=3;
   if(reset()) return 4;
+  fail_finish=true;
   if(page()==0 || !p.failed || p.primitive_count!=18000003) return 5;
   task[8]=9000000;
   if(reset() || page() || p.primitive_count!=27000003) return 6;
