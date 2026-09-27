@@ -90,7 +90,7 @@ def test_blacklist_section_tracks_only_returned_exceptions(
     monkeypatch: pytest.MonkeyPatch, blocked: list[tuple[str, str, str]]
 ) -> None:
     monkeypatch.setattr(renderer, "_load_manifest", _manifest)
-    monkeypatch.setattr(renderer, "_compiler_dft_rows", lambda: [])
+    monkeypatch.setattr(renderer, "_compiler_dft_rows", list)
     monkeypatch.setattr(renderer, "_automatic_libxc_rows", lambda: ([], blocked))
     section = renderer.render_public_methods_markdown().split(
         "## Explicit Libxc blacklist", 1
