@@ -51,7 +51,7 @@ from vibeqc import _generated_methods as generated_methods
 from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
 from vibeqc.basis_capabilities import resolved_basis_metadata
 from vibeqc.calculator import _basis_pack, _named_basis_record, _named_basis_shells
-from vibeqc.ks import resolve_ks_method, resolve_ks_options
+from vibeqc.ks import _native_semilocal_family, resolve_ks_method, resolve_ks_options
 from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from vibeqc_compiler.dft.plan import plan_tiles
 from vibeqc_compiler.method.stationary_cuda import (
@@ -74,6 +74,7 @@ _LOCAL_HELPERS = {
     "generated_methods": generated_methods,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
     "resolved_basis_metadata": resolved_basis_metadata,
+    "_native_semilocal_family": _native_semilocal_family,
     "resolve_ks_method": resolve_ks_method,
     "resolve_ks_options": resolve_ks_options,
     "_basis_pack": _basis_pack,
@@ -177,6 +178,8 @@ PRIMITIVE_RECORDS_DEFINITION = (
     "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
 )
 GRID_PAIR_VISITS_DEFINITION = "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
+METHOD_IR_DEFINITION = "state._source.method_ir"
+FUNCTIONAL_LOWERING_DEFINITION = "_native_semilocal_family(method)"
 NEEDS_FIRST_DEFINITION = "functional != 0"
 GRID_PLAN_DEFINITION = (
     "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
@@ -331,6 +334,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "primitive_sum",
             "records",
             "pair_visits",
+            "method",
+            "functional",
             "needs_first",
             "grid_plan",
             "source_bytes",
@@ -349,6 +354,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_sum": PRIMITIVE_SUM_DEFINITION,
         "records": PRIMITIVE_RECORDS_DEFINITION,
         "pair_visits": GRID_PAIR_VISITS_DEFINITION,
+        "method": METHOD_IR_DEFINITION,
+        "functional": FUNCTIONAL_LOWERING_DEFINITION,
         "needs_first": NEEDS_FIRST_DEFINITION,
         "grid_plan": GRID_PLAN_DEFINITION,
         "source_bytes": SOURCE_BYTES_DEFINITION,
@@ -359,6 +366,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_sum": "primitive-sum",
         "records": "primitive-record",
         "pair_visits": "grid-pair-visits",
+        "method": "stationary MethodIR",
+        "functional": "native functional-family lowering",
         "needs_first": "grid derivative-order",
         "grid_plan": "grid-plan input",
         "source_bytes": "source-bytes",
@@ -422,6 +431,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
         "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
         "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
+        "method_ir_definition": METHOD_IR_DEFINITION,
+        "functional_lowering_definition": FUNCTIONAL_LOWERING_DEFINITION,
         "grid_derivative_order_definition": NEEDS_FIRST_DEFINITION,
         "grid_plan_definition": GRID_PLAN_DEFINITION,
         "source_bytes_definition": SOURCE_BYTES_DEFINITION,
@@ -1026,6 +1037,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
 def _public_selector_contract(
     selector: str,
     *,
+    expected_functional: int,
     expected_spin: str,
     stationary_plan: Any,
 ) -> dict[str, Any]:
@@ -1038,6 +1050,7 @@ def _public_selector_contract(
         raise RuntimeError(f"unrecognized frozen public selector {selector}") from error
     method_ir, functional = resolve_ks_method(selector)
     options = resolve_ks_options(selector)
+    native_functional = int(_native_semilocal_family(method_ir))
     public_stationary = StationaryGradientPlan(
         method_ir,
         StationaryMeanField(SCF_POINT_MODEL),
@@ -1053,6 +1066,8 @@ def _public_selector_contract(
         failures.append("batch/energy registry eligibility")
     if method_ir.spin != expected_spin or functional.spin != expected_spin:
         failures.append("spin")
+    if native_functional != expected_functional:
+        failures.append("native functional-family lowering")
     if options.coefficients != (1.0, 1.0, 0.0):
         failures.append("semilocal coefficients")
     if (
@@ -1074,6 +1089,7 @@ def _public_selector_contract(
         "native_abi_id": expected_abi,
         "native_dft_eligible": True,
         "supports_batch": True,
+        "native_functional_code": native_functional,
         "spin": expected_spin,
         "coefficients": list(options.coefficients),
         "method_ir_identity": method_ir.identity,
@@ -1329,6 +1345,7 @@ def _build_report(
         if selector not in selector_cache:
             selector_cache[selector] = _public_selector_contract(
                 selector,
+                expected_functional=functional,
                 expected_spin=spin,
                 stationary_plan=plan,
             )

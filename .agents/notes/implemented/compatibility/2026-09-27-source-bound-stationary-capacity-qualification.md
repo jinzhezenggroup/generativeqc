@@ -48,6 +48,8 @@ Each frozen selector is additionally resolved through the public MethodIR/KS
 path and must reproduce the audited native ABI ID, spin, semilocal coefficients,
 execution domain, native DFT eligibility, batch/energy registry eligibility, and
 packaged stationary plan identity.
+The public MethodIR must also reproduce the production native functional-family
+code that selects grid derivative order and the packaged AOT profile.
 The bundled basis-pack and named-record caches are cleared before every report,
 so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 

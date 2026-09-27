@@ -197,6 +197,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["grid_derivative_order_definition"] == (
         "functional != 0"
     )
+    assert result["admission_limits"]["method_ir_definition"] == (
+        "state._source.method_ir"
+    )
+    assert result["admission_limits"]["functional_lowering_definition"] == (
+        "_native_semilocal_family(method)"
+    )
     assert result["admission_limits"]["grid_plan_definition"] == (
         "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
         "tile_points=tile_points, active_ao_capacity=n, "
@@ -418,6 +424,7 @@ def test_public_selector_contract_rejects_changed_semilocal_coefficients(
     with pytest.raises(RuntimeError, match="semilocal coefficients"):
         qualify_capacity._public_selector_contract(
             "pbe-rks",
+            expected_functional=1,
             expected_spin="unpolarized",
             stationary_plan=plan,
         )
@@ -436,6 +443,7 @@ def test_public_selector_contract_rejects_removed_native_eligibility(
     with pytest.raises(RuntimeError, match="native DFT eligibility"):
         qualify_capacity._public_selector_contract(
             "pbe-rks",
+            expected_functional=1,
             expected_spin="unpolarized",
             stationary_plan=plan,
         )
@@ -597,6 +605,35 @@ def test_grid_memory_fails_closed_when_production_plan_inputs_move(
 
     with pytest.raises(RuntimeError, match="grid-plan input definition changed"):
         qualify_capacity._source_limits(tmp_path)
+
+
+def test_grid_memory_fails_closed_when_functional_lowering_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "functional = _native_semilocal_family(method)"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "functional = 0", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="functional-family lowering"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_public_selector_contract_rejects_changed_functional_lowering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qualify_capacity, "_native_semilocal_family", lambda _: 0)
+    plan = qualify_capacity._qualified_aot_plan(1, "unpolarized")
+
+    with pytest.raises(RuntimeError, match="native functional-family lowering"):
+        qualify_capacity._public_selector_contract(
+            "pbe-rks",
+            expected_functional=1,
+            expected_spin="unpolarized",
+            stationary_plan=plan,
+        )
 
 
 def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
