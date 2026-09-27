@@ -119,7 +119,7 @@ struct Owner {
     if (failure_mode==2) state.reference.reset();
     last_=state.diagnostic; // Retain the existing CC convergence diagnostic.
     const std::size_t retained=16, triples_virtual_count=7, triples_workspace_bytes=32;
-    const double triples_energy=0.25, triples_minimum_denominator=2;
+    const double triples_energy=0.25, triples_minimum_denominator=2, triples_seconds=0.0;
 """
         + body
         + r"""
@@ -167,16 +167,16 @@ int main(int argc,char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("cuda", (False, True))
-@pytest.mark.parametrize("mode", range(6))
 def test_post_triples_diagnostic_is_published_only_after_success(
-    publication: Path, mode: int, cuda: bool
+    publication: Path,
 ) -> None:
-    result = subprocess.run(
-        [str(publication), str(mode), str(int(cuda))],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
+    for mode in range(6):
+        for cuda in (False, True):
+            result = subprocess.run(
+                [str(publication), str(mode), str(int(cuda))],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert result.returncode == 0, (mode, cuda, result.stderr)
