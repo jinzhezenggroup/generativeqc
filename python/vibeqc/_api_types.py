@@ -112,30 +112,36 @@ class CorrelationResult:
     ccsd_t_virtual_triples: int
     ccsd_t_workspace_bytes: int
     ccsd_t_equation_hash: str
-    ccsd_reference_seconds: float
-    ccsd_problem_seconds: float
-    ccsd_provider_seconds: float
-    ccsd_source_seconds: float
-    ccsd_solver_seconds: float
-    ccsd_iteration_seconds: float
-    ccsd_replay_seconds: float
-    ccsd_update_seconds: float
-    ccsd_diis_seconds: float
-    ccsd_t_seconds: float
-    ccsd_source_scans: int
-    ccsd_source_reads: int
-    ccsd_source_values: int
-    ccsd_transform_fmas: int
-    ccsd_mo_blocks: int
-    ccsd_cuda_transform_calls: int
-    ccsd_cuda_batch_calls: int
-    ccsd_iteration_graph_calls: int
-    ccsd_replay_graph_calls: int
-    ccsd_update_calls: int
-    ccsd_generated_error_checks: int
-    ccsd_diis_gram_calls: int
-    ccsd_diis_coefficient_calls: int
-    ccsd_diis_combine_calls: int
+
+
+@dataclass(frozen=True)
+class CcPerformanceResult:
+    """Observational RCCSD/RCCSD(T) phase and semantic-work telemetry."""
+
+    reference_seconds: float
+    problem_seconds: float
+    provider_seconds: float
+    source_seconds: float
+    solver_seconds: float
+    iteration_seconds: float
+    replay_seconds: float
+    update_seconds: float
+    diis_seconds: float
+    triples_seconds: float
+    source_scans: int
+    source_reads: int
+    source_values: int
+    transform_fmas: int
+    mo_blocks: int
+    cuda_transform_calls: int
+    cuda_batch_calls: int
+    iteration_graph_calls: int
+    replay_graph_calls: int
+    update_calls: int
+    generated_error_checks: int
+    diis_gram_calls: int
+    diis_coefficient_calls: int
+    diis_combine_calls: int
 
 
 @dataclass(frozen=True)
@@ -154,6 +160,7 @@ class Result:
     resource_diagnostics: dict | None = None
     precision: dict | None = None
     correlation: CorrelationResult | None = None
+    cc_performance: CcPerformanceResult | None = None
     physical_residual_rms: float | None = None
     ks_diagnostic: KsDiagnostic | None = None
     ks_transport_diagnostic: KsTransportDiagnostic | None = None
@@ -174,6 +181,7 @@ class MethodCapabilities:
 __all__ = [
     "Atom",
     "CorrelationResult",
+    "CcPerformanceResult",
     "MethodCapabilities",
     "Primitive",
     "Result",

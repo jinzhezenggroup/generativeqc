@@ -28,6 +28,9 @@ from ._model_resolution import (
 from ._model_resolution import (
     snapshot_basis as _snapshot_basis,
 )
+from ._result_translation import (
+    read_cc_performance_result as _read_cc_performance_result,
+)
 from ._result_translation import read_correlation_result as _read_correlation_result
 from .accuracy import AccuracyAssessment, ResolvedModel, TargetAccuracy
 from .basis import BasisSet
@@ -1835,6 +1838,11 @@ class Calculator:
                 if self._method in _CORRELATED_METHODS
                 else None
             )
+            cc_performance = (
+                _read_cc_performance_result(self._library, calculation, context=context)
+                if self._method in _COUPLED_CLUSTER_METHODS
+                else None
+            )
             physical_residual_rms = None
             scf_diag = _native.ScfDiagnostic(
                 ctypes.sizeof(_native.ScfDiagnostic), _native.ABI_VERSION
@@ -1886,6 +1894,7 @@ class Calculator:
                     bool(result_descriptor.converged),
                 ),
                 correlation=correlation,
+                cc_performance=cc_performance,
                 physical_residual_rms=physical_residual_rms,
                 ks_diagnostic=ks_diagnostic,
                 ks_transport_diagnostic=ks_transport_diagnostic,
