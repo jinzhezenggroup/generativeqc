@@ -2,6 +2,25 @@
 
 from __future__ import annotations
 
+import sys as _compiler_sys
+import types as _compiler_types
+from pathlib import Path as _CompilerPath
+
+_compiler_root = (
+    _CompilerPath(__file__).resolve().parents[1] / "python" / "vibeqc_compiler"
+)
+for _name, _path in (
+    ("vibeqc_compiler", _compiler_root),
+    ("vibeqc_compiler.common", _compiler_root / "common"),
+    ("vibeqc_compiler.integral", _compiler_root / "integral"),
+    ("vibeqc_compiler.xc", _compiler_root / "xc"),
+    ("vibeqc_compiler.dft", _compiler_root / "dft"),
+    ("vibeqc_compiler.method", _compiler_root / "method"),
+):
+    _module = _compiler_types.ModuleType(_name)
+    _module.__path__ = [str(_path)]
+    _compiler_sys.modules[_name] = _module
+
 import argparse
 import json
 from pathlib import Path
