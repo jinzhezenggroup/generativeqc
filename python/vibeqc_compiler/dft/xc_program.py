@@ -12,7 +12,6 @@ ProgramIR region legality, and shared measured promotion remain authoritative.
 
 from __future__ import annotations
 
-import collections.abc
 import math
 import typing
 from dataclasses import dataclass, replace
@@ -33,6 +32,11 @@ from .xc_schedule import (
     GridXcCandidateShape,
     grid_xc_tile_capacities,
 )
+
+if typing.TYPE_CHECKING:
+    import collections.abc
+
+    from vibeqc_compiler.common.schedule import ScheduleContract
 
 _HOST_REGION_EFFECTS = {
     "dft.CudaDensityGrid.collocate": EffectKind.PURE,
@@ -195,7 +199,7 @@ def _region_schedule(
     region: ProgramRegion,
     *,
     endpoint_seconds: float | None,
-):
+) -> ScheduleContract:
     contract = assessment.schedule_contract
     provenance = dict(contract.provenance)
     provenance["program_region"] = region.identity
