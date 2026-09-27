@@ -170,7 +170,7 @@ struct RawHamiltonian {
   std::vector<double> h, g, density, rotation;
 };
 
-RawHamiltonian raw_hamiltonian(const core::System& system, const scf::PhysicalReference& ref,
+RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalReference& ref,
                                std::size_t max_bytes) {
   const auto n = ref.nbf;
   const auto n2 = square(n), n4 = fourth(n);
@@ -356,7 +356,7 @@ double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
 }  // namespace
 
 RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
-                                      const scf::PhysicalReference& reference, const Problem& p,
+                                      const hf::PhysicalReference& reference, const Problem& p,
                                       const SolverResult& cc, std::size_t max_bytes) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
   if (!o || !v || n > 12 || reference.nbf != n || reference.nocc != o ||
@@ -471,7 +471,7 @@ RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
 }
 
 static RccsdtForceResult rccsdt_force_impl(
-    const core::System& system, const scf::PhysicalReference& reference, const Problem& problem,
+    const core::System& system, const hf::PhysicalReference& reference, const Problem& problem,
     const SolverResult& cc_result, std::span<const double> eps_o, std::span<const double> eps_v,
     std::size_t max_bytes, bool cuda_derivative, int device_id, std::size_t derivative_stage_budget,
     double denominator_threshold) {
@@ -711,7 +711,7 @@ static RccsdtForceResult rccsdt_force_impl(
 }
 
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
-                                   const scf::PhysicalReference& reference, const Problem& problem,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    double denominator_threshold) {
@@ -720,7 +720,7 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
 }
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
-                                    const scf::PhysicalReference& reference, const Problem& problem,
+                                    const hf::PhysicalReference& reference, const Problem& problem,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
