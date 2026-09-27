@@ -141,6 +141,16 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
     assert executor.compilation_work["component_contract_runtime_compilations"] == 0
     assert len(executor.dispatchers) == schedule.CPU_AOT_SHARDS
 
+    python_scheduler = component_module.ComponentPrimitiveExecutor(
+        basis,
+        tmp_path,
+        1,
+        None,  # type: ignore[arg-type]
+        aot_library=library,
+    )
+    assert python_scheduler.compilation_work["primitive_packaged_aot"] == 1
+    assert python_scheduler.compilation_work["primitive_runtime_compilations"] == 0
+
     # The packaged inventory is the full qualified domain, so an s/p-only
     # basis must select the corresponding full-domain kinds rather than
     # regenerating a smaller runtime program.
