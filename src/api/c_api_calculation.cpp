@@ -204,6 +204,7 @@ vibeqc_status vibeqc_calculation_get_cc_performance_diagnostic(
               value->source_reads,
               value->source_values,
               value->transform_fmas,
+              value->transform_stages,
               value->mo_blocks,
               value->cuda_transform_calls,
               value->cuda_batch_calls,

@@ -852,6 +852,7 @@ typedef struct vibeqc_cc_performance_diagnostic {
   uint64_t source_reads;
   uint64_t source_values;
   uint64_t transform_fmas;
+  uint64_t transform_stages;
   uint64_t mo_blocks;
   uint64_t cuda_transform_calls;
   uint64_t cuda_batch_calls;
