@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "posthf/raw_source.hpp"
 #include "hf/reference.hpp"
+#include "posthf/raw_source.hpp"
 #include "tensor/metrics.hpp"
 
 namespace vibeqc::mp2 {
