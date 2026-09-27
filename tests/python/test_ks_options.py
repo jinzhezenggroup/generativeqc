@@ -668,9 +668,7 @@ def test_semantic_abi_serializes_range_exchange_without_named_method_branch() ->
     )
 
 
-
 def test_bulk_libxc_native_plan_binds_installed_aot_program() -> None:
-    import ctypes
 
     from vibeqc import _native
 
@@ -700,7 +698,7 @@ def test_bulk_libxc_native_plan_binds_installed_aot_program() -> None:
             return _native.STATUS_SUCCESS
 
     library = typing.cast(
-        typing.Any,
+        "typing.Any",
         type("Library", (), {"vibeqc_libxc_semilocal_program_get": Lookup()})(),
     )
     native = native_ks_options(options, library=library)
@@ -726,11 +724,10 @@ def test_bulk_libxc_native_plan_requires_exact_production_domain() -> None:
         native_ks_options(options, library=object())
 
 
-
 def test_public_bulk_libxc_options_preserve_exact_resolved_method(
     monkeypatch: typing.Any,
 ) -> None:
-    import vibeqc_compiler.method.bulk_ks as bulk_ks
+    from vibeqc_compiler.method import bulk_ks
 
     name = "GGA_X_PBE_SOL"
     spec = functional(name, spin="polarized")
@@ -740,7 +737,7 @@ def test_public_bulk_libxc_options_preserve_exact_resolved_method(
         primitives=(SemilocalXCPrimitive(spec),),
     )
     resolution = typing.cast(
-        typing.Any,
+        "typing.Any",
         type(
             "Resolution",
             (),
@@ -783,7 +780,9 @@ def test_bulk_libxc_calculator_fails_before_native_without_explicit_grid(
     monkeypatch.setattr(
         _native,
         "load_library",
-        lambda *args, **kwargs: pytest.fail("unqualified bulk route reached native load"),
+        lambda *args, **kwargs: pytest.fail(
+            "unqualified bulk route reached native load"
+        ),
     )
     with pytest.raises(NotImplementedError, match="explicit GridSpec"):
         Calculator(method=ir)
