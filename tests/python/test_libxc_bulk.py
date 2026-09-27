@@ -78,17 +78,18 @@ def test_unknown_and_blocked_names_do_not_fall_back() -> None:
             libxc_bulk.build_bulk_program(name)
 
 
-def test_bulk_does_not_promote_public_functional_admission() -> None:
+def test_bulk_representation_enters_default_dispatch_without_catalog_row() -> None:
     from fractions import Fraction
 
     from vibeqc_compiler.xc.program import build_program
-    from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, UnsupportedXC
+    from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec
 
     spec = FunctionalSpec("BULK_ONLY", (("GGA_X_PBE_SOL", Fraction(1)),))
     assert spec.to_payload()["production_admitted"] is False
     assert "GGA_X_PBE_SOL" not in CATALOG
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        build_program(spec)
+
+    program = build_program(spec, order=1)
+    assert len(program.outputs) == 1 + len(spec.features)
 
 
 def test_source_and_parameter_owner_tampering_is_rejected(tmp_path: Path) -> None:
