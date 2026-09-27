@@ -23,6 +23,8 @@ try:
 except ModuleNotFoundError:
     from benchmarks._support import raw_output_path
 
+from benchmarks.dft_force_components import normalize_force_work
+
 
 def reference_engine(
     atoms: typing.Any, basis: str, spec: typing.Any, *, spin: int = 0
@@ -230,6 +232,9 @@ def main() -> None:
             )
             if record["native_force_work"] is None:
                 record["native_force_work"] = batch._stationary_cuda_execution.last_work
+            record["native_force_components"] = normalize_force_work(
+                record["native_force_work"]
+            )
             record["gates"] = {"energy_hartree": 1e-8, "force_hartree_per_bohr": 1e-7}
             record["accepted"] = (
                 record["accuracy"]["maximum_energy_error_hartree"] <= 1e-8
