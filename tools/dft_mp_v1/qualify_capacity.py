@@ -50,6 +50,9 @@ from vibeqc_compiler.method.stationary_cuda import (
 SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
 SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
+SPD_EXPANSION_CONTRACT_SHA256 = (
+    "82ee0e49a850b8bb47e7f1cfff450c5fc8b8890800dfbe12b37c836d4b3a99cc"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -316,6 +319,29 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
     return {
         "packed_capacity_definition": packed[0],
         "numeric_capacity_definition": numeric[0],
+    }
+
+
+def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
+    """Bind frozen s/p/d term counts to the native public-AO expansion table."""
+
+    source = (repository / "src/molecule/basis.cpp").read_text(encoding="utf-8")
+    try:
+        begin = source.index("std::vector<AoExpansion> ao_expansions")
+        end = source.index("  if (l == 3)", begin)
+    except ValueError as error:
+        raise RuntimeError("native s/p/d expansion owner is missing") from error
+    digest = _lf_sha256(source[begin:end].encode())
+    if digest != SPD_EXPANSION_CONTRACT_SHA256:
+        raise RuntimeError("native s/p/d expansion contract changed")
+    return {
+        "spd_expansion_contract_sha256": digest,
+        "sparse_spherical_component_terms": {
+            "s": SPARSE_SPHERICAL_COMPONENT_TERMS[0],
+            "p": SPARSE_SPHERICAL_COMPONENT_TERMS[1],
+            "d": SPARSE_SPHERICAL_COMPONENT_TERMS[2],
+        },
+        "spd_expansion_owner": "src/molecule/basis.cpp::ao_expansions",
     }
 
 
@@ -654,6 +680,7 @@ def build_report(
 
     limits = _source_limits(repository)
     basis_layout = _basis_layout_contract(repository)
+    spd_expansion = _spd_expansion_contract(repository)
     _source_package_inventory(repository)
     _source_public_route(repository)
     grid_spec = _grid_spec(manifest["model"]["grid_spec"])
@@ -872,6 +899,8 @@ def build_report(
         "python/vibeqc/calculator.py",
         "python/vibeqc/batch.py",
         "python/vibeqc_compiler/method/stationary_cuda.py",
+        "python/vibeqc_compiler/dft/ao.py",
+        "src/molecule/basis.cpp",
         "cmake/VibeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)
@@ -896,6 +925,7 @@ def build_report(
             "basis_pack_sha256_match": basis_pack_matches,
             "manifest_ao_counts_match": ao_counts_match,
             **basis_layout,
+            **spd_expansion,
             "component_primitive_sum_derivation": (
                 "sum(shell primitive count * sparse public-AO Cartesian term count); "
                 "s=1, p=3, spherical d=8 from src/molecule/basis.cpp"

@@ -39,6 +39,14 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "2 * self.packed.nbytes + 32 * self.natom + "
         "32 * len(self.shells) + 16 * self.nprimitive"
     )
+    assert result["basis"]["spd_expansion_contract_sha256"] == (
+        "82ee0e49a850b8bb47e7f1cfff450c5fc8b8890800dfbe12b37c836d4b3a99cc"
+    )
+    assert result["basis"]["sparse_spherical_component_terms"] == {
+        "s": 1,
+        "p": 3,
+        "d": 8,
+    }
 
     cases = {item["id"]: item for item in result["cases"]}
     assert set(cases) == {
@@ -284,6 +292,20 @@ def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
 
     with pytest.raises(RuntimeError, match="numeric capacity definition"):
         qualify_capacity._basis_layout_contract(tmp_path)
+
+
+def test_spherical_component_count_fails_closed_when_d_expansion_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "src/molecule/basis.cpp").read_text(encoding="utf-8")
+    old = ", {{0, 2, 0}, -root_three_over_two}"
+    assert old in source
+    target = tmp_path / "src/molecule/basis.cpp"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
 
 
 def test_module_import_binds_helpers_to_the_tool_checkout(tmp_path: Path) -> None:
