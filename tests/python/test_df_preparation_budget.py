@@ -280,7 +280,10 @@ int main() {
   const auto selected = requested_df_pair_storage();
   if (!df_packed_pairs(selected) || df_retains_packed_raw(selected) ||
       selected == DfPairStorage::SymmetricLower) return 3;
-  if (df_packed_pairs(static_cast<DfPairStorage>(123))) return 4;
+  if (setenv("VIBEQC_DF_VALUE_STORAGE","auto",1)) return 4;
+  if (requested_df_pair_storage_request() != DfPairStorageRequest::Automatic ||
+      requested_df_pair_storage() != DfPairStorage::Dense) return 5;
+  if (df_packed_pairs(static_cast<DfPairStorage>(123))) return 6;
   return 0;
 }
 """)
@@ -347,6 +350,22 @@ int main() {
     return 5;
   } catch (const DensityFittingBudgetError&) {
   }
+
+  const auto auto_cross = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,160,160,13685173124ULL,0,true,160);
+  if (!auto_cross.stores_full_three_center ||
+      auto_cross.value_storage.pairs != DfPairStorage::SymmetricLowerSingle) return 6;
+  const auto explicit_dense = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Dense,1,768,3712,160,160,13685173124ULL,0,true,160);
+  if (explicit_dense.value_storage.pairs != DfPairStorage::Dense ||
+      explicit_dense.stores_full_three_center) return 7;
+  const auto auto_resident = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,96,96,24,24,1ULL<<30,0,true,24);
+  if (!auto_resident.stores_full_three_center ||
+      auto_resident.value_storage.pairs != DfPairStorage::Dense) return 8;
+  const auto auto_uhf = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,160,160,13685173124ULL,0,true,0);
+  if (auto_uhf.value_storage.pairs != DfPairStorage::Dense) return 9;
   return 0;
 }
 """)
