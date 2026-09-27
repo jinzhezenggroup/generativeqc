@@ -24,18 +24,38 @@ inline bool df_retains_packed_raw(DfPairStorage storage) noexcept {
   return storage == DfPairStorage::SymmetricLower;
 }
 
-/** Explicit comparison selector for physical SCF preparation. Automatic
- * selection stays dense until complete endpoint/capacity qualification; the
- * native explicit constructor never consults this ambient setting.
+/** Requested storage policy before workload/resource selection. */
+enum class DfPairStorageRequest { Automatic, Dense, SymmetricLower, SymmetricLowerSingle };
+
+/** Parse the public/diagnostic selector without collapsing auto into a layout.
+ * Native explicit constructors never consult this ambient setting.
  */
-inline DfPairStorage requested_df_pair_storage() {
+inline DfPairStorageRequest requested_df_pair_storage_request() {
   const char* value = std::getenv("VIBEQC_DF_VALUE_STORAGE");
-  if (!value || std::strcmp(value, "auto") == 0 || std::strcmp(value, "dense") == 0)
-    return DfPairStorage::Dense;
-  if (std::strcmp(value, "packed") == 0) return DfPairStorage::SymmetricLower;
-  if (std::strcmp(value, "packed-single") == 0) return DfPairStorage::SymmetricLowerSingle;
+  if (!value || std::strcmp(value, "auto") == 0) return DfPairStorageRequest::Automatic;
+  if (std::strcmp(value, "dense") == 0) return DfPairStorageRequest::Dense;
+  if (std::strcmp(value, "packed") == 0) return DfPairStorageRequest::SymmetricLower;
+  if (std::strcmp(value, "packed-single") == 0)
+    return DfPairStorageRequest::SymmetricLowerSingle;
   throw std::invalid_argument(
       "VIBEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single");
+}
+
+/** Compatibility view for callers that have not yet run the workload planner.
+ * Automatic has no selected representation yet and therefore reports dense;
+ * executable source-backed plans must retain their resolved layout separately.
+ */
+inline DfPairStorage requested_df_pair_storage() {
+  switch (requested_df_pair_storage_request()) {
+    case DfPairStorageRequest::SymmetricLower:
+      return DfPairStorage::SymmetricLower;
+    case DfPairStorageRequest::SymmetricLowerSingle:
+      return DfPairStorage::SymmetricLowerSingle;
+    case DfPairStorageRequest::Automatic:
+    case DfPairStorageRequest::Dense:
+      return DfPairStorage::Dense;
+  }
+  return DfPairStorage::Dense;
 }
 
 /** A lower-pair address cannot be mistaken for mu*nbf+nu. The owning shape
