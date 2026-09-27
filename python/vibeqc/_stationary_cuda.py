@@ -546,6 +546,12 @@ class _CudaSources:
         functional: typing.Any = None,
         pbe: typing.Any = None,
     ) -> None:
+        """Enqueue one semilocal geometry tile on the borrowed grid stream.
+
+        Production execution defers the host error/synchronization gate until
+        drain_geometry(). Detailed device profiling keeps the legacy synchronous
+        call so its per-phase event timings remain attributable.
+        """
         view = task.view
         if task._owner.device_id != self.device:
             raise ValueError("stationary/grid current owner device mismatch")
