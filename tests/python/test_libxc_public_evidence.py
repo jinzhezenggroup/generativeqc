@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from vibeqc_compiler.method.libxc_public_evidence import (
@@ -10,6 +10,9 @@ from vibeqc_compiler.method.libxc_public_evidence import (
 )
 
 from tools.render_libxc_public_evidence import collect_public_evidence
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_empty_generated_inventory_is_fail_closed() -> None:
