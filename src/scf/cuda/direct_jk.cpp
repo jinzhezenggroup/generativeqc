@@ -174,8 +174,9 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
 }
 
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
-                                             std::size_t shells, std::size_t primitives) {
-  auto bytes = cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, 0);
+                                             std::size_t shells, std::size_t primitives,
+                                             unsigned derivative_order) {
+  auto bytes = cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, derivative_order);
   const auto add = [&](std::size_t n, std::size_t width) {
     bytes = runtime::size_add(bytes, runtime::size_mul(n, width));
   };
@@ -340,10 +341,14 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
     direct_jk_check(cudaStreamSynchronize(plan->stream));
     if (numerical_failure)
       throw DirectJkFailure{VIBEQC_STATUS_NUMERICAL_FAILURE, "nonfinite direct J/K Schwarz bound"};
-    if (derivative_order == 0 && budget > required) {
+    // Derivative capability is orthogonal to the value schedule. Retained
+    // first-derivative owners may still use the generated shell-Coulomb path,
+    // while value-only owners continue to prefer generated full-range exchange.
+    if (budget > required) {
       const auto optional_budget = budget - required;
-      plan->generated_exchange = prepare_generated_exchange(
-          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+      if (derivative_order == 0)
+        plan->generated_exchange = prepare_generated_exchange(
+            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);

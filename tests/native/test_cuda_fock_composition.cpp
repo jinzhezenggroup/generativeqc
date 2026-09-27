@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "molecule/basis.hpp"
+#include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_fock_provider.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_prepared.hpp"
@@ -309,6 +310,50 @@ void prepared_replay() {
           "changed CUDA device accepted as compatible");
 }
 
+void retained_direct_derivative_reuse() {
+  const auto system = fixture(true);
+  const auto strategy = resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
+                                           FockBackend::Cuda, 0.0);
+  const auto correction = resolve_fock_build(
+      make_rsh_correction_fock_spec(FockSpin::Restricted, 0.2, 0.5, 0.4), FockBackend::Cuda, 0.0);
+  std::size_t primitives = 0;
+  for (const auto& shell : system.shells) primitives += shell.primitives.size();
+  const auto budget =
+      cuda_direct_coulomb_device_bytes(1, vibeqc::molecule::ao_count(system), system.atoms.size(),
+                                       system.shells.size(), primitives, 1);
+  PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
+  require(plan.strategy().spec.derivative_order == 0,
+          "retained derivative capability changed value-side Fock identity");
+  require(plan.diagnostic().direct.derivative_order == 1,
+          "prepared Direct owner did not retain first-derivative capability");
+  require(std::string(plan.diagnostic().direct.schedule).find("generated-shell-coulomb") !=
+              std::string::npos,
+          "retained derivative capability disabled generated value-J scheduling");
+
+  const auto value = prepared_cuda_fock_binding(plan);
+  const auto derivative = prepared_cuda_direct_derivative_binding(plan);
+  require(value && derivative, "prepared Direct owner did not expose both value/derivative views");
+  require(value.source_identity == derivative.source_identity,
+          "prepared value/derivative bindings borrowed different Direct owners");
+  require(derivative.maximum_derivative_order == 1 &&
+              derivative.coordinates_per_item == 3 * system.atoms.size(),
+          "prepared derivative binding reported the wrong capability");
+
+  const auto n = vibeqc::molecule::ao_count(system);
+  std::vector<double> density(n * n);
+  for (std::size_t i = 0; i < n; ++i) density[i * n + i] = 1.0;
+  std::vector<double> response;
+  std::string detail;
+  require(execute_prepared_cuda_direct_rsh_energy_derivatives(
+              plan, correction, density, {}, response, detail) == VIBEQC_STATUS_SUCCESS,
+          detail.c_str());
+  require(response.size() == 3 * derivative.coordinates_per_item,
+          "prepared fused RSH derivative returned the wrong shape");
+  require(std::all_of(response.begin(), response.end(),
+                      [](double value) { return std::isfinite(value); }),
+          "prepared fused RSH derivative returned nonfinite values");
+}
+
 void independent_reference_export() {
   // Calling the prepared entry directly exercises the independent host driver
   // even for a standard fitted HF pair. Its exported physical frame must not
@@ -353,6 +398,7 @@ int main() {
     molecular_endpoints();
     ragged_replay();
     prepared_replay();
+    retained_direct_derivative_reuse();
     independent_reference_export();
     std::cout << "CUDA common Fock composition: exact/DF/absent pairs, signed gradients, batch "
                  "items, SCF/replay/geometry PASS\n";

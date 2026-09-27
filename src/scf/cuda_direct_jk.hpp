@@ -31,10 +31,13 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
                                         unsigned derivative_order);
 
 /** Conservative shape-only capacity for the optional generated pure-J owner
- * plus the exact bounded generic fallback. Counts are totals as above.
+ * plus the exact bounded generic fallback. derivative_order reserves generic
+ * derivative scratch without disabling the generated value-J owner. Counts are
+ * totals as above.
  */
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
-                                             std::size_t shells, std::size_t primitives);
+                                             std::size_t shells, std::size_t primitives,
+                                             unsigned derivative_order = 0);
 
 /** Bind normalized, homogeneous public AO dimensions and coordinate counts.
  * Each item retains its own shell/geometry metadata. A geometry or basis change
