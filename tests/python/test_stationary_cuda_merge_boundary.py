@@ -329,3 +329,23 @@ def test_stationary_cuda_production_task_page_default() -> None:
     ):
         parameter = inspect.signature(function).parameters["primitive_tile"]
         assert parameter.default == 4096
+
+
+
+def test_borrowed_grid_owner_outlives_stationary_consumer() -> None:
+    """Deferred geometry must drain before its borrowed CUDA stream is destroyed."""
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[2] / "python/vibeqc/_stationary_cuda.py"
+    ).read_text()
+    prepared = source.split("        stack = ExitStack()", 1)[1].split(
+        "        self._stack = stack", 1
+    )[0]
+    assert prepared.index("grid = stack.enter_context(") < prepared.index(
+        "sources = stack.enter_context("
+    )
+    runtime = source.split("    with ExitStack() as stack:", 1)[1]
+    assert runtime.index("ao = stack.enter_context(") < runtime.index(
+        "sources = stack.enter_context("
+    )
