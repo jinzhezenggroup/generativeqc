@@ -606,25 +606,19 @@ typedef struct vibeqc_ks_semilocal_component {
   double coefficient;
 } vibeqc_ks_semilocal_component;
 
-/** Backend-neutral value returned by one compiler-owned semilocal point program. */
-typedef struct vibeqc_ks_semilocal_point_value {
-  double energy;
-  double rho[2];
-  double gradient[2][3];
-  double kinetic[2];
-} vibeqc_ks_semilocal_point_value;
-
-/** C-callable evaluator owned by one compiled semilocal artifact. */
-typedef vibeqc_ks_semilocal_point_value (*vibeqc_ks_semilocal_point_evaluator)(
-    const double* rho, const double* gradient, const double* tau);
-
-/** Optional generic semilocal point program carried by the compiler KS plan. */
+/** Optional compiler-owned generic semilocal program carried by the KS plan.
+ *
+ * `native_program` points to the exact in-process C++ SemilocalPointProgram
+ * object exported by the compiler artifact. The compiler-side shared-object
+ * owner must outlive every prepared calculation that consumes this descriptor.
+ * Identity fields let native preparation validate the opaque program before use.
+ */
 typedef struct vibeqc_ks_semilocal_program {
   const char* identifier;
   const char* expression_identity;
   uint32_t ingredient_mask;
   uint32_t domain_version;
-  vibeqc_ks_semilocal_point_evaluator evaluate;
+  const void* native_program;
 } vibeqc_ks_semilocal_program;
 
 /** Exact-exchange operator carried by one KS execution-plan contribution. */
