@@ -445,6 +445,15 @@ int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, co
   return stationary_geometry_external(pointer, view, work, owners, weights, raw, nullptr, error,
                                       size);
 }
+int stationary_geometry_drain(void* pointer, char* error, size_t size) {
+  using namespace vibeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p) throw std::invalid_argument("invalid stationary owner");
+    check(*p);
+    drain_geometry(*p);
+  });
+}
 int stationary_finish(void* pointer, double* output, size_t count, char* error, size_t size) {
   using namespace vibeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
