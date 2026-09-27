@@ -49,6 +49,7 @@ def test_curated_selector_reaches_both_geometry_consumers(
         device=0,
         borrowed_streams=set(),
         handle=None,
+        profile_device=False,
         _call=lambda *args: calls.append(args),
     )
     task = SimpleNamespace(
@@ -65,8 +66,84 @@ def test_curated_selector_reaches_both_geometry_consumers(
         functional=code,
     )
     assert jets == [1 if expected == 0 else 4]
-    assert len(calls) == 1 and calls[0][0] == "stationary_geometry"
+    assert len(calls) == 1 and calls[0][0] == "stationary_geometry_enqueue"
     assert owner.borrowed_streams == {17}
+
+    calls.clear()
+    owner.profile_device = True
+    _CudaSources.geometry(
+        owner,
+        task,
+        np.array([0, 1], dtype=np.int64),
+        np.ones(2),
+        np.ones(2),
+        functional=code,
+    )
+    assert len(calls) == 1 and calls[0][0] == "stationary_geometry"
+
+
+def test_resident_nonlocal_seed_handoff_uses_device_pointer_and_stride() -> None:
+    calls = []
+    jets = []
+
+    def density_jets(count: int) -> int:
+        jets.append(count)
+        return 456
+
+    owner = SimpleNamespace(
+        device=0,
+        borrowed_streams=set(),
+        handle=None,
+        profile_device=False,
+        _call=lambda *args: calls.append(args),
+    )
+    task = SimpleNamespace(
+        view=_View(2, 19),
+        _owner=SimpleNamespace(device_id=0),
+        density_jets=density_jets,
+    )
+    _CudaSources.geometry_external_device(
+        owner,
+        task,
+        np.array([0, 1], dtype=np.int64),
+        np.ones(2),
+        np.ones(2),
+        0x1234,
+        17,
+        5,
+    )
+    assert jets == [4]
+    assert len(calls) == 1
+    assert calls[0][0] == "stationary_geometry_external_device_enqueue"
+    assert calls[0][-3].value == 0x1234
+    assert calls[0][-2:] == (17, 5)
+    assert owner.borrowed_streams == {19}
+
+    calls.clear()
+    owner.profile_device = True
+    _CudaSources.geometry_external_device(
+        owner,
+        task,
+        np.array([0, 1], dtype=np.int64),
+        np.ones(2),
+        np.ones(2),
+        ct.c_void_p(0x5678),
+        17,
+        7,
+    )
+    assert calls[0][0] == "stationary_geometry_external_device"
+
+    with pytest.raises(ValueError, match="exceeds"):
+        _CudaSources.geometry_external_device(
+            owner,
+            task,
+            np.array([0, 1], dtype=np.int64),
+            np.ones(2),
+            np.ones(2),
+            0x1234,
+            8,
+            7,
+        )
 
 
 def test_pbe_d4_selector_also_returns_builtin_integer(
