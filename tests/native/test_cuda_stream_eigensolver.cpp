@@ -128,10 +128,23 @@ void verify(int n) {
     for (double value : inactive) require(value == 1.0, "inactive matrix was not sanitized");
   }
   check(cudaStreamBeginCapture(owner.stream, cudaStreamCaptureModeThreadLocal));
-  require(solver.launch(2, input, scratch, values, info, active) == VIBEQC_STATUS_INVALID_ARGUMENT,
-          "ordinary solver silently accepted graph capture");
+  const auto capture_status = solver.launch(2, input, scratch, values, info, active);
+  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+    require(capture_status == VIBEQC_STATUS_SUCCESS,
+            "small-native eigensolver rejected graph capture");
+  } else {
+    require(capture_status == VIBEQC_STATUS_INVALID_ARGUMENT,
+            "provider-backed ordinary solver silently accepted graph capture");
+  }
   cudaGraph_t graph{};
   check(cudaStreamEndCapture(owner.stream, &graph));
+  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+    cudaGraphExec_t executable{};
+    check(cudaGraphInstantiate(&executable, graph, nullptr, nullptr, 0));
+    check(cudaGraphLaunch(executable, owner.stream));
+    check(cudaStreamSynchronize(owner.stream));
+    check(cudaGraphExecDestroy(executable));
+  }
   check(cudaGraphDestroy(graph));
 }
 }  // namespace
