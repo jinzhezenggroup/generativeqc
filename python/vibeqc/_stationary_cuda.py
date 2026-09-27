@@ -352,7 +352,9 @@ class _CudaSources:
             *tail,
         ]
         lib.stationary_geometry_external_device.argtypes = resident_external_args
-        lib.stationary_geometry_external_device_enqueue.argtypes = resident_external_args
+        lib.stationary_geometry_external_device_enqueue.argtypes = (
+            resident_external_args
+        )
         lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
         lib.stationary_finish_reduced.argtypes = [
@@ -642,7 +644,9 @@ class _CudaSources:
             try:
                 external_device = ct.cast(external_device, ct.c_void_p)
             except (TypeError, ValueError) as error:
-                raise TypeError("resident nonlocal seeds require a device pointer") from error
+                raise TypeError(
+                    "resident nonlocal seeds require a device pointer"
+                ) from error
         if not external_device.value:
             raise ValueError("resident nonlocal seed device pointer is null")
         work = task.density_jets(4)

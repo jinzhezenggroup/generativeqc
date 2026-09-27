@@ -130,9 +130,9 @@ __global__ void validate_centers(const double* centers, size_t na, double tolera
 __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
-                                const double* raw, const double* external,
-                                size_t external_stride, size_t external_offset,
-                                double* partial, double* scratch, int* error);
+                                const double* raw, const double* external, size_t external_stride,
+                                size_t external_offset, double* partial, double* scratch,
+                                int* error);
 __global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
 }  // namespace vibeqc_stationary_cuda
@@ -406,11 +406,11 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
     }
   });
 }
-int stationary_geometry_external_device(
-    void* pointer, const vibeqc::dft::GridTaskView* view, const double* work,
-    const int64_t* owners, const double* weights, const double* raw,
-    const double* external_device, size_t external_stride, size_t external_offset,
-    char* error, size_t size) {
+int stationary_geometry_external_device(void* pointer, const vibeqc::dft::GridTaskView* view,
+                                        const double* work, const int64_t* owners,
+                                        const double* weights, const double* raw,
+                                        const double* external_device, size_t external_stride,
+                                        size_t external_offset, char* error, size_t size) {
   using namespace vibeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
@@ -431,10 +431,10 @@ int stationary_geometry_external_device(
       upload(*p, p->weights, weights, view->npoint, stream);
       upload(*p, p->raw, raw, view->npoint, stream);
       profile_record(*p, p->stage1, stream);
-      geometry_kernel<<<1, workers, 0, stream>>>(
-          *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-          external_device, external_stride, external_offset, p->partial, p->scratch,
-          p->context.error);
+      geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms,
+                                                 p->centers, p->atoms, p->weights, p->raw,
+                                                 external_device, external_stride, external_offset,
+                                                 p->partial, p->scratch, p->context.error);
       profile_record(*p, p->stage2, stream);
       geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
           p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
@@ -462,10 +462,9 @@ int stationary_geometry_external_device(
   });
 }
 int stationary_geometry_external_device_enqueue(
-    void* pointer, const vibeqc::dft::GridTaskView* view, const double* work,
-    const int64_t* owners, const double* weights, const double* raw,
-    const double* external_device, size_t external_stride, size_t external_offset,
-    char* error, size_t size) {
+    void* pointer, const vibeqc::dft::GridTaskView* view, const double* work, const int64_t* owners,
+    const double* weights, const double* raw, const double* external_device, size_t external_stride,
+    size_t external_offset, char* error, size_t size) {
   using namespace vibeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
@@ -487,10 +486,10 @@ int stationary_geometry_external_device_enqueue(
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-        external_device, external_stride, external_offset, p->partial, p->scratch,
-        p->context.error);
+    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, p->centers,
+                                               p->atoms, p->weights, p->raw, external_device,
+                                               external_stride, external_offset, p->partial,
+                                               p->scratch, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
@@ -525,9 +524,9 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw, nullptr,
-        0, 0, p->partial, p->scratch, p->context.error);
+    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, p->centers,
+                                               p->atoms, p->weights, p->raw, nullptr, 0, 0,
+                                               p->partial, p->scratch, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
