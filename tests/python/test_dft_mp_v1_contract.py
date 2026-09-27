@@ -553,6 +553,12 @@ def test_mixed_numerical_oracle_and_work_negative_controls(
                 arithmetic_mode="unknown:777"
             ),
         ),
+        (
+            "unknown phase",
+            lambda x: x["precision"]["scf_fock_timeline"][0].update(
+                phase="unknown:777"
+            ),
+        ),
         ("audit before Fock", lambda x: x["precision"]["scf_fock_timeline"].reverse()),
         ("mixed after refinement", late_mixed),
         (

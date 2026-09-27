@@ -495,6 +495,10 @@ def _check_run(
             "unknown SCF/Fock event",
         )
         require(
+            event.get("phase") in ("scf", "refinement", "finalization", "retry"),
+            "unknown precision-work phase",
+        )
+        require(
             event.get("sequence") == sequence
             and event.get("count") == 1
             and type(event.get("iteration")) is int
