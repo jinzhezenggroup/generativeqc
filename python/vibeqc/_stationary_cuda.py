@@ -378,6 +378,9 @@ class _CudaSources:
         self.used = 0
         self.primitive_pages = 0
         self.primitive_page_peak_records = 0
+        self.bulk_task_pages = 0
+        self.bulk_task_descriptors = 0
+        self.scalar_task_descriptors = 0
         self.device = device
         self.borrowed_streams = set()
         self.centers = np.ascontiguousarray(
@@ -523,6 +526,9 @@ class _CudaSources:
         self.used = 0
         self.primitive_pages = 0
         self.primitive_page_peak_records = 0
+        self.bulk_task_pages = 0
+        self.bulk_task_descriptors = 0
+        self.scalar_task_descriptors = 0
         self.borrowed_streams.clear()
         shape = (self.spin_blocks, self.nao, self.nao)
         density = _checked(density, shape)
@@ -681,6 +687,8 @@ class _CudaSources:
         tasks[:, 8] = primitive_work
         self.charges[begin:end] = float(charge)
         self.used = end
+        self.bulk_task_pages += 1
+        self.bulk_task_descriptors += len(coordinates)
 
     def _append_task(
         self,
@@ -706,6 +714,7 @@ class _CudaSources:
         task[8] = primitive_work
         self.charges[self.used] = charge
         self.used += 1
+        self.scalar_task_descriptors += 1
 
     def nuclear(self, a: typing.Any, b: typing.Any, charges: typing.Any) -> None:
         self.flush()
@@ -1869,6 +1878,9 @@ def _complete_rks_cuda_gradient_diagnostic(
             work["primitive_pages"] = sources.primitive_pages
             work["primitive_page_peak_records"] = sources.primitive_page_peak_records
             work["primitive_record_page_budget"] = max_primitive_records
+            work["bulk_task_pages"] = sources.bulk_task_pages
+            work["bulk_task_descriptors"] = sources.bulk_task_descriptors
+            work["scalar_task_descriptors"] = sources.scalar_task_descriptors
         if work["owned_device_bytes"] != source_bytes:
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
