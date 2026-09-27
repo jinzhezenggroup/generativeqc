@@ -14,9 +14,7 @@ def _selected_execution() -> str:
 
 def test_device_feature_lease_skips_detailed_section_fences() -> None:
     block = _selected_execution()
-    assert (
-        "!(npoint && features && !feature_output && !jet_output);" in block
-    )
+    assert "!(npoint && features && !feature_output && !jet_output);" in block
     output = block.index("ctx.section(true, ctx.metrics.output_ms")
     before_output = block[:output]
     assert "ctx.section(true," not in before_output

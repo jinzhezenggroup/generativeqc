@@ -361,8 +361,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
     // the single correctness synchronization for this tile. Explicit host
     // outputs, empty publication, and non-feature consumers retain detailed
     // section timing.
-    const bool detailed_profile =
-        !(npoint && features && !feature_output && !jet_output);
+    const bool detailed_profile = !(npoint && features && !feature_output && !jet_output);
     for (size_t i = 0; i < 3 * npoint; ++i)
       if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
     ctx.section(detailed_profile, ctx.metrics.input_ms, [&] {
