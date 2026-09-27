@@ -338,7 +338,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
     ctx.check_device();
-    p.view_ready = false;
+    p.view_ready = p.density_jets_ready = false;
     ++p.generation;
     if (!p.local) {
       if (ao_ids) throw std::invalid_argument("dense plan does not own AO gather buffers");
@@ -447,9 +447,9 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         cuda_check(cudaGetLastError());
       });
     }
-    p.density_jets_ready = features && !p.use_orbitals;
-    p.view_ready = true;
     if (defer_error_to_consumer) {
+      p.density_jets_ready = features && !p.use_orbitals;
+      p.view_ready = true;
       // AO/features and the sticky device error remain ordered on this stream.
       // A qualified consumer must inspect/propagate GridTaskView.error before
       // reading the borrowed buffers; no host correctness gate runs here.
@@ -467,6 +467,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
                                    cudaMemcpyDeviceToHost, ctx.stream));
     });
     if (failure) throw std::runtime_error("nonfinite CUDA AO/density output");
+    p.density_jets_ready = features && !p.use_orbitals;
+    p.view_ready = true;
   });
 }
 
