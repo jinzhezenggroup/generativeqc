@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from vibeqc._stationary_cuda import _BoundedStationaryTaskExecutor
+from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain, RuntimeTaskPage
 
 
@@ -142,31 +143,41 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
     domain = RuntimeTaskDomain.rectangular((3, 2))
 
     class Source:
-        identity = domain.identity
+        payload = {
+            "schema": "vibeqc.synthetic_stationary_task_source.v1",
+            "logical_source": "fixture",
+        }
+        identity = canonical_hash(payload)
         logical_size = domain.logical_size
 
-        @staticmethod
-        def pages(capacity: int):
-            yield from domain.pages(capacity)
+        @classmethod
+        def pages(cls, capacity: int):
+            for page in domain.pages(capacity):
+                yield RuntimeTaskPage(
+                    cls.identity,
+                    page.rank,
+                    page.ordinal,
+                    page.offset,
+                    page.capacity,
+                    page.coordinates,
+                )
 
-        @staticmethod
-        def to_payload() -> dict[str, object]:
-            return {"schema": "vibeqc.synthetic_stationary_task_source.v1"}
+        @classmethod
+        def to_payload(cls) -> dict[str, object]:
+            return dict(cls.payload)
 
     executor = _BoundedStationaryTaskExecutor(
         fixed_capacity=2, resident_capacity=4, page_capacity=4
     )
     seen: list[tuple[int, ...]] = []
     execution = executor.execute(Source(), seen.append)
-    assert execution.domain_identity == domain.identity
+    assert execution.domain_identity == Source.identity
+    assert execution.source_schema == Source.payload["schema"]
     assert seen == list(domain)
 
-    class WrongIdentity:
-        identity = domain.identity
-        logical_size = domain.logical_size
-
-        @staticmethod
-        def pages(capacity: int):
+    class WrongIdentity(Source):
+        @classmethod
+        def pages(cls, capacity: int):
             first = next(domain.pages(capacity))
             yield RuntimeTaskPage(
                 "0" * 64,
@@ -176,11 +187,17 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
                 first.capacity,
                 first.coordinates,
             )
-            yield from list(domain.pages(capacity))[1:]
-
-        @staticmethod
-        def to_payload() -> dict[str, object]:
-            return {"schema": "vibeqc.synthetic_stationary_task_source.v1"}
 
     with pytest.raises(RuntimeError, match="identity/order mismatch"):
         executor.execute(WrongIdentity(), lambda _coordinate: None)
+
+    class WrongPayload(Source):
+        @classmethod
+        def to_payload(cls) -> dict[str, object]:
+            return {
+                "schema": "vibeqc.synthetic_stationary_task_source.v1",
+                "logical_source": "changed",
+            }
+
+    with pytest.raises(ValueError, match="identity/payload mismatch"):
+        executor.execute(WrongPayload(), lambda _coordinate: None)
