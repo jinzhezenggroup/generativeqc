@@ -1,4 +1,4 @@
-"""Public native RCCSD acceptance for #149 C."""
+"""Public native RCCSD energy/analytic-force acceptance for #149/#153."""
 
 from __future__ import annotations
 
@@ -51,11 +51,11 @@ def device(request: pytest.FixtureRequest) -> str:
     return request.param
 
 
-def test_native_rccsd_capability_is_honest_energy_only_batch() -> None:
+def test_native_rccsd_capability_is_energy_forces_batch() -> None:
     caps = method_capabilities("rccsd")
     assert caps.family == "coupled_cluster"
     assert caps.available and caps.supports_batch
-    assert caps.supported_properties == frozenset({"energy"})
+    assert caps.supported_properties == frozenset({"energy", "forces"})
     triples = method_capabilities("ccsd(t)")
     assert triples.available and triples.supports_batch
     assert triples.supported_properties == frozenset({"energy", "forces"})
@@ -95,6 +95,28 @@ def test_public_native_rccsd_matches_pinned_pyscf_endpoint(
         assert not diag.mo_host_staging
 
 
+@pytest.mark.parametrize("case", ("h2", "h2o"))
+def test_public_native_rccsd_force_matches_pinned_pyscf_gradient(
+    device: str, case: str
+) -> None:
+    atoms, reference = _reference_case(case)
+    result = _calculator(device).singlepoint(
+        atoms, properties=("energy", "forces")
+    )
+    assert result.converged and result.forces is not None
+    np.testing.assert_allclose(
+        result.forces, -np.asarray(reference["gradient"]), atol=1.0e-6, rtol=0
+    )
+    diag = result.correlation
+    assert diag is not None
+    assert diag.response_absolute_residual <= 1.0e-9
+    assert diag.response_iterations > 0
+    assert diag.force_provenance_flags & 0x1
+    if device == "cuda":
+        assert diag.force_provenance_flags & 0x8
+        assert diag.correlation_owned_device_bytes > 0
+
+
 def test_public_rccsd_zero_diis_uses_native_jacobi() -> None:
     atoms, reference = _reference_case()
     result = _calculator(ccsd_diis_history=0).singlepoint(atoms, properties=("energy",))
@@ -103,13 +125,9 @@ def test_public_rccsd_zero_diis_uses_native_jacobi() -> None:
     assert result.correlation.ccsd_diis_restarts == 0
 
 
-def test_public_rccsd_rejects_unsupported_reference_force_precision_df_and_frozen_core() -> (
-    None
-):
+def test_public_rccsd_rejects_unsupported_reference_precision_df_and_frozen_core() -> None:
     atoms, _ = _reference_case()
     calc = _calculator()
-    with pytest.raises(ValueError, match=r"does not support.*forces"):
-        calc.singlepoint(atoms, properties=("energy", "forces"))
     with pytest.raises(NotImplementedError, match=r"closed-shell"):
         calc.singlepoint(atoms, multiplicity=3, properties=("energy",))
     with pytest.raises(ValueError, match=r"precision=.*fp64"):
@@ -151,6 +169,8 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
             item.correlation.ccsd_replay_doubles_residual_max <= 1e-11
             for item in first.items
         )
+        forced = prepared.execute(properties=("energy", "forces"), strict=True)
+        assert all(item.forces is not None for item in forced.items)
         partial = prepared.execute([np.zeros((1, 3)), None])
         assert partial.failure_indices == (0,)
         assert partial.items[0].correlation is None
