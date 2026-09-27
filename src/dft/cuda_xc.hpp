@@ -123,9 +123,8 @@ class CudaXcPlan {
   /** Enqueue only the stable device body for a shared replay region. The caller
    * must publish exactly one logical generation per physically submitted body
    * after the runtime chooses warmup/capture/replay/fallback. */
-  CudaXcView enqueue_replay_body(
-      const double* density, std::size_t elements,
-      CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
+  CudaXcView enqueue_replay_body(const double* density, std::size_t elements,
+                                 CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
   /** Execute the ordinary physical XC evaluation while also publishing total
    * rho and grad-rho to caller-owned full-grid device buffers. This adds no
    * plan-owned storage and is admitted only for GGA/meta-GGA ingredient sets. */
