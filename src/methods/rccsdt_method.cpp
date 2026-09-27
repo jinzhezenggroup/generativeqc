@@ -1,6 +1,7 @@
 #include "methods/rccsdt_method.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -131,6 +132,7 @@ class RccsdtPrepared final : public PreparedCalculation {
       std::size_t triples_virtual_count = 0;
       std::size_t triples_workspace_bytes = 0;
 
+      const auto triples_started = std::chrono::steady_clock::now();
       if (execution_.cuda_requested()) {
 #if VIBEQC_HAS_CUDA
         const auto triples = cc::triples::evaluate_cuda(
@@ -158,7 +160,10 @@ class RccsdtPrepared final : public PreparedCalculation {
         triples_workspace_bytes = triples.workspace_bytes;
       }
 
+      const double triples_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - triples_started).count();
       auto diagnostic = state.diagnostic;
+      diagnostic.ccsd_t_seconds = triples_seconds;
       diagnostic.minimum_absolute_denominator =
           std::min(diagnostic.minimum_absolute_denominator, triples_minimum_denominator);
       diagnostic.numeric_capacity_bytes = std::max<std::uint64_t>(

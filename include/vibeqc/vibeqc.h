@@ -828,6 +828,31 @@ typedef struct vibeqc_correlation_diagnostic {
   uint64_t ccsd_t_workspace_bytes;
   /** Audited standard-(T) inventory identity; empty for non-RCCSD(T) methods. */
   char ccsd_t_equation_hash[65];
+  /** #1501 phase/work diagnostics. Times are observed seconds for this completed call. */
+  double ccsd_reference_seconds;
+  double ccsd_problem_seconds;
+  double ccsd_provider_seconds;
+  double ccsd_source_seconds;
+  double ccsd_solver_seconds;
+  double ccsd_iteration_seconds;
+  double ccsd_replay_seconds;
+  double ccsd_update_seconds;
+  double ccsd_diis_seconds;
+  double ccsd_t_seconds;
+  uint64_t ccsd_source_scans;
+  uint64_t ccsd_source_reads;
+  uint64_t ccsd_source_values;
+  uint64_t ccsd_transform_fmas;
+  uint64_t ccsd_mo_blocks;
+  uint64_t ccsd_cuda_transform_calls;
+  uint64_t ccsd_cuda_batch_calls;
+  uint64_t ccsd_iteration_graph_calls;
+  uint64_t ccsd_replay_graph_calls;
+  uint64_t ccsd_update_calls;
+  uint64_t ccsd_generated_error_checks;
+  uint64_t ccsd_diis_gram_calls;
+  uint64_t ccsd_diis_coefficient_calls;
+  uint64_t ccsd_diis_combine_calls;
 } vibeqc_correlation_diagnostic;
 
 /** Executable capabilities for one method identifier. */

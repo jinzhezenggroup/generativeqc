@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -334,8 +335,11 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
+    const auto reference_started = std::chrono::steady_clock::now();
     auto hf = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id())
                    : scf::run_rhf(system, reference_options);
+    const double reference_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - reference_started).count();
     if (!hf.converged || !hf.reference)
       throw MethodError(VIBEQC_STATUS_NOT_CONVERGED,
                         "HF did not converge; no RCCSD energy evaluated");
@@ -352,11 +356,17 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
                        reference->orbital_energies.end());
     posthf::ProviderWork provider_work;
     vibeqc_tensor::Metrics provider_metrics{};
+    const auto problem_started = std::chrono::steady_clock::now();
     state.problem = build_problem(system, *reference, solver_options, cuda, execution.device_id(),
                                   provider_work, provider_metrics);
+    const double problem_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
     allocation_stage = "CC resident solve";
+    const auto solver_started = std::chrono::steady_clock::now();
     state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
                         : cc::solve_cpu(state.problem, solver_options);
+    const double solver_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - solver_started).count();
     state.budget = solver_options.max_bytes;
 
     auto& diagnostic = state.diagnostic;
@@ -393,6 +403,29 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     diagnostic.ccsd_scalar_d2h_bytes = state.solved.diagnostic.scalar_d2h_bytes;
     diagnostic.ccsd_amplitude_d2h_bytes = state.solved.diagnostic.amplitude_d2h_bytes;
     diagnostic.ccsd_synchronizations = state.solved.diagnostic.synchronizations;
+    diagnostic.ccsd_reference_seconds = reference_seconds;
+    diagnostic.ccsd_problem_seconds = problem_seconds;
+    diagnostic.ccsd_provider_seconds = provider_work.provider_seconds;
+    diagnostic.ccsd_source_seconds = provider_work.source_seconds;
+    diagnostic.ccsd_solver_seconds = solver_seconds;
+    diagnostic.ccsd_iteration_seconds = state.solved.diagnostic.iteration_seconds;
+    diagnostic.ccsd_replay_seconds = state.solved.diagnostic.replay_seconds;
+    diagnostic.ccsd_update_seconds = state.solved.diagnostic.update_seconds;
+    diagnostic.ccsd_diis_seconds = state.solved.diagnostic.diis_seconds;
+    diagnostic.ccsd_source_scans = provider_work.source_scans;
+    diagnostic.ccsd_source_reads = provider_work.source_reads;
+    diagnostic.ccsd_source_values = provider_work.source_values;
+    diagnostic.ccsd_transform_fmas = provider_work.transform_fmas;
+    diagnostic.ccsd_mo_blocks = provider_work.mo_blocks;
+    diagnostic.ccsd_cuda_transform_calls = provider_work.cuda_transform_calls;
+    diagnostic.ccsd_cuda_batch_calls = provider_work.cuda_batch_calls;
+    diagnostic.ccsd_iteration_graph_calls = state.solved.diagnostic.iteration_graph_calls;
+    diagnostic.ccsd_replay_graph_calls = state.solved.diagnostic.replay_graph_calls;
+    diagnostic.ccsd_update_calls = state.solved.diagnostic.update_calls;
+    diagnostic.ccsd_generated_error_checks = state.solved.diagnostic.generated_error_checks;
+    diagnostic.ccsd_diis_gram_calls = state.solved.diagnostic.diis_gram_calls;
+    diagnostic.ccsd_diis_coefficient_calls = state.solved.diagnostic.diis_coefficient_calls;
+    diagnostic.ccsd_diis_combine_calls = state.solved.diagnostic.diis_combine_calls;
     if (cuda) {
       execution.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
                                      state.solved.diagnostic.owned_device_bytes);

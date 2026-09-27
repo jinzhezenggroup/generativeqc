@@ -112,6 +112,30 @@ class CorrelationResult:
     ccsd_t_virtual_triples: int
     ccsd_t_workspace_bytes: int
     ccsd_t_equation_hash: str
+    ccsd_reference_seconds: float
+    ccsd_problem_seconds: float
+    ccsd_provider_seconds: float
+    ccsd_source_seconds: float
+    ccsd_solver_seconds: float
+    ccsd_iteration_seconds: float
+    ccsd_replay_seconds: float
+    ccsd_update_seconds: float
+    ccsd_diis_seconds: float
+    ccsd_t_seconds: float
+    ccsd_source_scans: int
+    ccsd_source_reads: int
+    ccsd_source_values: int
+    ccsd_transform_fmas: int
+    ccsd_mo_blocks: int
+    ccsd_cuda_transform_calls: int
+    ccsd_cuda_batch_calls: int
+    ccsd_iteration_graph_calls: int
+    ccsd_replay_graph_calls: int
+    ccsd_update_calls: int
+    ccsd_generated_error_checks: int
+    ccsd_diis_gram_calls: int
+    ccsd_diis_coefficient_calls: int
+    ccsd_diis_combine_calls: int
 
 
 @dataclass(frozen=True)
