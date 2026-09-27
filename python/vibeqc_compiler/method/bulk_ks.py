@@ -16,19 +16,12 @@ from vibeqc_compiler.xc.capability_resolution import (
     resolve_capability,
 )
 from vibeqc_compiler.xc.compiled_cpu_evidence import validate_qualification
-from vibeqc_compiler.xc.endpoint_capability import (
-    ENDPOINT_COVERAGE_SCHEMA,
-    resolve_endpoint_capability,
-)
+from vibeqc_compiler.xc.endpoint_capability import resolve_endpoint_capability
 from vibeqc_compiler.xc.libxc_bulk_capabilities import (
-    SPIN_LAYOUTS,
     BulkFunctionalCapability,
     functional_capability,
 )
-from vibeqc_compiler.xc.molecular_scf_evidence import (
-    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
-    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
-)
+from vibeqc_compiler.xc.molecular_scf_evidence import validate_stage_qualification
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 
 from .ks_execution import KsExecutionPlan, compile_ks_execution_plan
@@ -116,43 +109,11 @@ def _require_exact_molecular_scf(capability: BulkFunctionalCapability) -> str:
             "automatic bulk Libxc KS requires passing molecular-SCF evidence"
         )
     try:
-        qualification = stage.qualification
-        if not isinstance(qualification, typing.Mapping):
-            raise ValueError("molecular-SCF qualification must be a mapping")
-        if qualification.get("schema") != ENDPOINT_COVERAGE_SCHEMA:
-            raise ValueError("molecular-SCF endpoint coverage schema mismatch")
-        if qualification.get("result_schema") != MOLECULAR_SCF_RESULT_SCHEMA:
-            raise ValueError("molecular-SCF result schema mismatch")
-        if (
-            qualification.get("qualification_schema")
-            != MOLECULAR_SCF_QUALIFICATION_SCHEMA
-        ):
-            raise ValueError("molecular-SCF qualification schema mismatch")
-        expected_coverage = [
-            {"backend": "cpu", "spin": spin, "products": ["energy"]}
-            for spin in SPIN_LAYOUTS
-        ]
-        if qualification.get("coverage") != expected_coverage:
-            raise ValueError("molecular-SCF coverage is not exact dual-spin CPU energy")
-        result_identity = qualification.get("result_identity")
-        if (
-            not isinstance(result_identity, str)
-            or len(result_identity) != 64
-            or any(ch not in "0123456789abcdef" for ch in result_identity)
-        ):
-            raise ValueError("molecular-SCF result identity is invalid")
-        evidence = stage.evidence
-        if (
-            not isinstance(evidence, str)
-            or not evidence.strip().endswith(f"#sha256={result_identity}")
-        ):
-            raise ValueError("molecular-SCF evidence result identity mismatch")
-        return result_identity
+        return validate_stage_qualification(stage.qualification, stage.evidence)
     except (TypeError, ValueError) as exc:
         raise UnsupportedMethod(
             "automatic bulk Libxc KS requires exact molecular-SCF qualification"
         ) from exc
-
 
 def _resolve_bulk_ks(
     name: str,
