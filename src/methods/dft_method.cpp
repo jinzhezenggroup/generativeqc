@@ -892,12 +892,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
     candidate.insert(candidate.end(), value.begin(), value.end());
     const std::vector<double> empty;
     const auto& beta = state.density.size() == 2 ? state.density[1] : empty;
-    const auto spin = expected.identity.determinant.model.spec.spin;
-    const double exchange_spin_scale = state.density.size() == 1 ? 2.0 : 1.0;
+    if (!range_strategy_) {
+      detail = "CUDA RSH integral gradient is missing its resolved range correction";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
+    }
     status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives(
-        fock_, spin, 1.0, -execution_plan_.short_range_exchange / exchange_spin_scale,
-        -execution_plan_.long_range_exchange / exchange_spin_scale, execution_plan_.range_omega,
-        state.density[0], beta, value, detail);
+        fock_, *range_strategy_, state.density[0], beta, value, detail);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
     candidate.insert(candidate.end(), value.begin(), value.end());
     output = std::move(candidate);

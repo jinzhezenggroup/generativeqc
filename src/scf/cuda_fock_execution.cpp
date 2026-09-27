@@ -69,23 +69,38 @@ PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
 }
 
 vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
-    const PreparedFockPlan& plan, FockSpin spin, double coulomb_coefficient,
-    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivatives, std::string& detail) {
   const auto binding = prepared_cuda_direct_derivative_binding(plan);
   auto* source = plan.cuda_direct_source();
+  const auto& primary = plan.strategy();
+  const auto& p = primary.spec;
+  const auto& c = long_range_correction.spec;
   if (!binding || !source) {
     detail = "prepared CUDA Fock owner did not retain Direct first-derivative capability";
     return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
-  if (spin != plan.strategy().spec.spin) {
-    detail = "prepared CUDA Direct derivative spin differs from the owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  const bool valid_primary =
+      primary.backend == FockBackend::Cuda && p.derivative_order == 0 && p.coulomb.present &&
+      p.coulomb.approximation == FockApproximation::Exact &&
+      p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
+      p.exchange.approximation == FockApproximation::Exact &&
+      p.exchange.op == FockOperator::FullRange;
+  const bool valid_correction =
+      long_range_correction.backend == FockBackend::Cuda && c.derivative_order == 0 &&
+      c.spin == p.spin && !c.coulomb.present && c.exchange.present &&
+      c.exchange.approximation == FockApproximation::Exact &&
+      c.exchange.op == FockOperator::LongRange && c.exchange.omega > 0.0 &&
+      long_range_correction.screening_tolerance == primary.screening_tolerance;
+  if (!valid_primary || !valid_correction) {
+    detail = "prepared CUDA RSH derivative plans have incompatible scientific identity";
+    return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
   return execute_cuda_direct_rsh_energy_derivatives_item(
-      source, 0, spin, coulomb_coefficient, short_exchange_coefficient,
-      long_exchange_coefficient, omega, density, beta, derivatives, detail);
+      source, 0, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
+      p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
+      derivatives, detail);
 }
 
 vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,

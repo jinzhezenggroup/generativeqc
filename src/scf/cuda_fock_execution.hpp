@@ -64,12 +64,12 @@ PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
     const PreparedFockPlan& plan) noexcept;
 
 /** Execute the fused fixed-density J'/SR-K'/LR-K' derivative through the
- * retained Direct owner. This host-facing bridge preserves the existing
- * derivative implementation while removing duplicate plan/topology ownership.
+ * retained Direct owner. Scientific coefficients and omega are derived from
+ * the prepared primary strategy plus a validated long-range correction; callers
+ * cannot reinterpret the borrowed source with arbitrary operator parameters.
  */
 vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
-    const PreparedFockPlan& plan, FockSpin spin, double coulomb_coefficient,
-    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivatives, std::string& detail);
 

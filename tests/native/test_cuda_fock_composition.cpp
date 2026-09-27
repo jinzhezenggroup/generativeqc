@@ -312,9 +312,12 @@ void prepared_replay() {
 
 void retained_direct_derivative_reuse() {
   const auto system = fixture(true);
-  auto spec = make_hf_fock_spec(FockSpin::Restricted);
-  spec.exchange.present = false;
-  const auto strategy = resolve_fock_build(spec, FockBackend::Cuda, 0.0);
+  const auto strategy =
+      resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
+                         FockBackend::Cuda, 0.0);
+  const auto correction =
+      resolve_fock_build(make_rsh_correction_fock_spec(FockSpin::Restricted, 0.2, 0.5, 0.4),
+                         FockBackend::Cuda, 0.0);
   std::size_t primitives = 0;
   for (const auto& shell : system.shells) primitives += shell.primitives.size();
   const auto budget = cuda_direct_coulomb_device_bytes(
@@ -344,8 +347,7 @@ void retained_direct_derivative_reuse() {
   std::vector<double> response;
   std::string detail;
   require(execute_prepared_cuda_direct_rsh_energy_derivatives(
-              plan, FockSpin::Restricted, 1.0, -0.2, -0.3, 0.4, density, {}, response, detail) ==
-              VIBEQC_STATUS_SUCCESS,
+              plan, correction, density, {}, response, detail) == VIBEQC_STATUS_SUCCESS,
           detail.c_str());
   require(response.size() == 3 * derivative.coordinates_per_item,
           "prepared fused RSH derivative returned the wrong shape");
