@@ -108,7 +108,9 @@ def test_public_native_rccsd_force_matches_pinned_pyscf_gradient(
     diag = result.correlation
     assert diag is not None
     assert diag.response_absolute_residual <= 1.0e-9
-    assert diag.response_iterations > 0
+    # H2 can satisfy the orbital-response tolerance with its initial GMRES guess.
+    if case == "h2o":
+        assert diag.response_iterations > 0
     assert diag.force_provenance_flags & 0x1
     if device == "cuda":
         assert diag.force_provenance_flags & 0x8
