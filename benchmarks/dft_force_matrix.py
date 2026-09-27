@@ -459,7 +459,9 @@ def benchmark_case(
             changed = {
                 "scenario": "changed_geometry",
                 "status": (
-                    "unsupported" if isinstance(error, NotImplementedError) else "failed"
+                    "unsupported"
+                    if isinstance(error, NotImplementedError)
+                    else "failed"
                 ),
                 "error_type": type(error).__name__,
                 "error": str(error),

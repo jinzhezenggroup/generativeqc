@@ -135,4 +135,9 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
     assert len(result["warm"]) == 2
     assert result["changed_geometry"]["status"] == "failed"
     assert result["changed_geometry"]["error"] == "changed replay failed"
-    assert calls[:4] == ["cold", "priming", "same_geometry_warm_0", "same_geometry_warm_1"]
+    assert calls[:4] == [
+        "cold",
+        "priming",
+        "same_geometry_warm_0",
+        "same_geometry_warm_1",
+    ]
