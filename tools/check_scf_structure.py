@@ -255,6 +255,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/df_jk_kernels.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",
+    "scf/cuda/direct_density_bounds.hpp",
     "scf/cuda/direct_pair_cache.hpp",
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/queue_plan.hpp",
