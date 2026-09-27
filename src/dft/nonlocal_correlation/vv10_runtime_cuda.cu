@@ -26,7 +26,7 @@ struct PairKernelValues {
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
-                                                double kj) {
+                                               double kj) {
   PairKernelValues result{};
   if constexpr (Variant == Vv10Variant::rvv10) {
     const double ai = wi / ki;
@@ -137,8 +137,7 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
     const double factor = weighted_density[j];
     sum_phi += factor * pair.phi;
     if constexpr (Features) {
-      const double dphi_drho =
-          pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
+      const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
       const double dphi_dsigma = pair.dphi_domega * domega_sigmai;
       sum_rho += factor * dphi_drho;
       sum_sigma += factor * dphi_dsigma;
@@ -164,19 +163,18 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
     point_derivative[3 * i + 2] = coefficient * weighted_i * coordinate_sum[2];
     weight_derivative[i] = coefficient * rhoi * (beta + sum_phi);
     nonfinite = nonfinite || !isfinite(point_derivative[3 * i]) ||
-                !isfinite(point_derivative[3 * i + 1]) ||
-                !isfinite(point_derivative[3 * i + 2]) || !isfinite(weight_derivative[i]);
+                !isfinite(point_derivative[3 * i + 1]) || !isfinite(point_derivative[3 * i + 2]) ||
+                !isfinite(weight_derivative[i]);
   }
   if (nonfinite) atomicExch(failed, 1);
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
-void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
-                      double coefficient, const double* points, const double* density,
-                      const double* omega, const double* kappa, const double* domega_drho,
-                      const double* domega_dsigma, const double* dkappa_drho,
-                      const double* weighted_density, double beta, double* energy_terms,
-                      double* vrho, double* vsigma, double* point_derivative,
+void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, double coefficient,
+                      const double* points, const double* density, const double* omega,
+                      const double* kappa, const double* domega_drho, const double* domega_dsigma,
+                      const double* dkappa_drho, const double* weighted_density, double beta,
+                      double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
                       double* weight_derivative, int* failed) {
   constexpr unsigned threads = 128;
   const auto tile_blocks = launch_blocks(layout.tile_points, threads);
@@ -188,9 +186,9 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
     pair_kernel_ordered<Variant, Features, Geometry>
         <<<static_cast<unsigned>(count * tile_blocks), threads, 0, stream>>>(
             first * layout.tile_points, layout.tile_points, tile_blocks, layout.point_count,
-            coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
-            dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma, point_derivative,
-            weight_derivative, failed);
+            coefficient, points, density, omega, kappa, domega_drho, domega_dsigma, dkappa_drho,
+            weighted_density, beta, energy_terms, vrho, vsigma, point_derivative, weight_derivative,
+            failed);
     runtime::cuda_resource_check(cudaGetLastError());
   }
 }
@@ -336,14 +334,14 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
     if (layout.features) {
       if (layout.geometry)
         launch_pair_rows<Vv10Variant::rvv10, true, true>(
-            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa,
-            domega_drho, domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho,
-            vsigma, point_derivative, weight_derivative, numerical_error);
+            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
+            domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
+            point_derivative, weight_derivative, numerical_error);
       else
         launch_pair_rows<Vv10Variant::rvv10, true, false>(
-            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa,
-            domega_drho, domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho,
-            vsigma, point_derivative, weight_derivative, numerical_error);
+            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
+            domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
+            point_derivative, weight_derivative, numerical_error);
     } else if (layout.geometry) {
       launch_pair_rows<Vv10Variant::rvv10, false, true>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
@@ -359,14 +357,14 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
     if (layout.features) {
       if (layout.geometry)
         launch_pair_rows<Vv10Variant::vv10, true, true>(
-            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa,
-            domega_drho, domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho,
-            vsigma, point_derivative, weight_derivative, numerical_error);
+            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
+            domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
+            point_derivative, weight_derivative, numerical_error);
       else
         launch_pair_rows<Vv10Variant::vv10, true, false>(
-            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa,
-            domega_drho, domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho,
-            vsigma, point_derivative, weight_derivative, numerical_error);
+            layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
+            domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
+            point_derivative, weight_derivative, numerical_error);
     } else if (layout.geometry) {
       launch_pair_rows<Vv10Variant::vv10, false, true>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
