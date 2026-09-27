@@ -1,4 +1,4 @@
-"""Generate stable native ABI/provider metadata from one audited manifest."""
+"""Generate stable native C/C++ ABI/provider metadata from one audited manifest."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/public_methods.json"
 C_IDS = ROOT / "include/vibeqc/generated_method_ids.h"
-PYTHON = ROOT / "python/vibeqc/_generated_methods.py"
 CPP = ROOT / "src/methods/generated_method_manifest.hpp"
 
 FAMILIES = {
@@ -228,59 +227,6 @@ def emit_c_ids(methods: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def emit_python(methods: list[dict], composites: list[dict] | None = None) -> str:
-    if composites is None:
-        composites = load_composite_methods()
-    lines = [
-        '"""Generated native ABI/provider identity metadata; do not edit by hand."""',
-        "",
-        "# fmt: off",
-        "from types import MappingProxyType",
-        "",
-    ]
-    for method in methods:
-        lines.append(f"METHOD_{method['symbol']} = {method['abi_id']}")
-
-    lines.extend(["", "METHOD_CONSTANTS = MappingProxyType({"])
-    for method in methods:
-        lines.append(f'    "METHOD_{method["symbol"]}": METHOD_{method["symbol"]},')
-    lines.extend(["})", "", "METHOD_METADATA = MappingProxyType({"])
-    for method in methods:
-        method_aliases = tuple(method.get("aliases", []))
-        lines.append(
-            f'    {method["name"]!r}: MappingProxyType({{"abi_id": '
-            f'{method["abi_id"]}, "family": {method["family"]!r}, '
-            f'"provider": {method["provider"]!r}, '
-            f'"properties": {tuple(method["properties"])!r}, '
-            f'"supports_batch": {bool(method["supports_batch"])!r}, '
-            f'"aliases": {method_aliases!r}}}),'
-        )
-    lines.extend(["})", "", "METHOD_NAME_TO_ID = MappingProxyType({"])
-    for method in methods:
-        lines.append(f"    {method['name']!r}: METHOD_{method['symbol']},")
-        for alias in method.get("aliases", []):
-            lines.append(f"    {alias!r}: METHOD_{method['symbol']},")
-    lines.extend(["})", "METHOD_ID_TO_NAME = MappingProxyType({"])
-    for method in methods:
-        lines.append(f"    METHOD_{method['symbol']}: {method['name']!r},")
-    lines.extend(["})", ""])
-
-    hf = [f"METHOD_{m['symbol']}" for m in methods if m["provider"] == "hf"]
-    dft = [f"METHOD_{m['symbol']}" for m in methods if m["provider"] == "dft"]
-    lines.append(f"HF_METHOD_IDS = frozenset(({', '.join(hf)}{',' if hf else ''}))")
-    lines.append(
-        f"NATIVE_DFT_METHOD_IDS = frozenset(({', '.join(dft)}{',' if dft else ''}))"
-    )
-    lines.extend(["", "COMPOSITE_METHOD_ALIASES = MappingProxyType({"])
-    for method in composites:
-        target = (method["identifier"], method["spin"])
-        lines.append(f"    {method['name']!r}: {target!r},")
-        for alias in method["aliases"]:
-            lines.append(f"    {alias!r}: {target!r},")
-    lines.extend(["})", "# fmt: on", ""])
-    return "\n".join(lines)
-
-
 def cpp_properties(method: dict) -> str:
     values = [PROPERTIES[prop] for prop in method["properties"]]
     return " | ".join(values) if values else "0"
@@ -370,9 +316,8 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     methods = load_manifest()
-    composites = load_composite_methods()
+    load_composite_methods()
     write_or_check(C_IDS, emit_c_ids(methods), check=args.check)
-    write_or_check(PYTHON, emit_python(methods, composites), check=args.check)
     write_or_check(CPP, emit_cpp(methods), check=args.check)
 
 
