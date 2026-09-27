@@ -10,10 +10,24 @@ from . import _native, profiles
 
 
 def _public_method_rows() -> tuple[dict[str, object], ...]:
-    """Return the generated public native method catalog without loading the ABI."""
+    """Return public discovery rows without loading the native ABI."""
+
+    from .ks import public_dft_selectors
 
     rows = []
+    dft_compatibility = {
+        name: metadata
+        for name, metadata in _method_manifest.METHOD_METADATA.items()
+        if metadata["provider"] == "dft"
+    }
+    dft_aliases = {
+        alias
+        for metadata in dft_compatibility.values()
+        for alias in metadata["aliases"]
+    }
     for name, metadata in _method_manifest.METHOD_METADATA.items():
+        if metadata["provider"] == "dft":
+            continue
         properties = tuple(metadata["properties"])
         rows.append(
             {
@@ -23,6 +37,23 @@ def _public_method_rows() -> tuple[dict[str, object], ...]:
                 "supports_batch": bool(metadata["supports_batch"]),
                 "aliases": tuple(metadata["aliases"]),
                 "status": "available" if properties else "unavailable",
+            }
+        )
+
+    carrier = _method_manifest.METHOD_METADATA["pbe-rks"]
+    for name in public_dft_selectors():
+        if name in dft_aliases:
+            continue
+        compatibility = dft_compatibility.get(name)
+        aliases = tuple(compatibility["aliases"]) if compatibility else ()
+        rows.append(
+            {
+                "name": name,
+                "family": "density_functional",
+                "properties": tuple(carrier["properties"]),
+                "supports_batch": bool(carrier["supports_batch"]),
+                "aliases": aliases,
+                "status": "available",
             }
         )
     return tuple(rows)

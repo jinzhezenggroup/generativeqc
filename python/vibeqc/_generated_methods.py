@@ -1,4 +1,4 @@
-"""Generated public method identity metadata; do not edit by hand."""
+"""Generated native ABI/provider identity metadata; do not edit by hand."""
 
 # fmt: off
 from types import MappingProxyType
@@ -56,27 +56,27 @@ METHOD_CONSTANTS = MappingProxyType({
 METHOD_METADATA = MappingProxyType({
     'rhf': MappingProxyType({"abi_id": 1, "family": 'hartree_fock', "provider": 'hf', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
     'uhf': MappingProxyType({"abi_id": 2, "family": 'hartree_fock', "provider": 'hf', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'wb97m-v': MappingProxyType({"abi_id": 3, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ('wb97m-v-rks',), "compiler_method": 'WB97M-V', "spin": 'unpolarized'}),
+    'wb97m-v': MappingProxyType({"abi_id": 3, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ('wb97m-v-rks',)}),
     'rccsd(t)': MappingProxyType({"abi_id": 4, "family": 'coupled_cluster', "provider": 'rccsdt', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ('ccsd(t)',)}),
     'mp2': MappingProxyType({"abi_id": 5, "family": 'perturbation', "provider": 'mp2', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'lda-rks': MappingProxyType({"abi_id": 6, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'LDA_XC_PW', "spin": 'unpolarized'}),
-    'pbe-rks': MappingProxyType({"abi_id": 7, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE', "spin": 'unpolarized'}),
-    'lda-uks': MappingProxyType({"abi_id": 8, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'LDA_XC_PW', "spin": 'polarized'}),
-    'pbe-uks': MappingProxyType({"abi_id": 9, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE', "spin": 'polarized'}),
-    'r2scan-rks': MappingProxyType({"abi_id": 10, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'R2SCAN', "spin": 'unpolarized'}),
-    'r2scan-uks': MappingProxyType({"abi_id": 11, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'R2SCAN', "spin": 'polarized'}),
+    'lda-rks': MappingProxyType({"abi_id": 6, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'pbe-rks': MappingProxyType({"abi_id": 7, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'lda-uks': MappingProxyType({"abi_id": 8, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'pbe-uks': MappingProxyType({"abi_id": 9, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'r2scan-rks': MappingProxyType({"abi_id": 10, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'r2scan-uks': MappingProxyType({"abi_id": 11, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
     'rccsd': MappingProxyType({"abi_id": 12, "family": 'coupled_cluster', "provider": 'rccsd', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'pbe0-rks': MappingProxyType({"abi_id": 13, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE0', "spin": 'unpolarized'}),
-    'pbe0-uks': MappingProxyType({"abi_id": 14, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE0', "spin": 'polarized'}),
+    'pbe0-rks': MappingProxyType({"abi_id": 13, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'pbe0-uks': MappingProxyType({"abi_id": 14, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
     'gfn2-xtb': MappingProxyType({"abi_id": 15, "family": 'semiempirical', "provider": 'xtb', "properties": ('energy', 'forces'), "supports_batch": False, "aliases": ('gfn2',)}),
-    'b3lyp-rks': MappingProxyType({"abi_id": 16, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'B3LYP', "spin": 'unpolarized'}),
-    'b3lyp-uks': MappingProxyType({"abi_id": 17, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'B3LYP', "spin": 'polarized'}),
-    'pbe-d4-rks': MappingProxyType({"abi_id": 18, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE-D4(BJ-EEQ-ATM)', "spin": 'unpolarized'}),
-    'wb97m-v-uks': MappingProxyType({"abi_id": 19, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'WB97M-V', "spin": 'polarized'}),
-    'm06-2x-rks': MappingProxyType({"abi_id": 20, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'M06-2X', "spin": 'unpolarized'}),
-    'm06-2x-uks': MappingProxyType({"abi_id": 21, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'M06-2X', "spin": 'polarized'}),
-    'mn15-rks': MappingProxyType({"abi_id": 22, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'MN15', "spin": 'unpolarized'}),
-    'mn15-uks': MappingProxyType({"abi_id": 23, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'MN15', "spin": 'polarized'}),
+    'b3lyp-rks': MappingProxyType({"abi_id": 16, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'b3lyp-uks': MappingProxyType({"abi_id": 17, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'pbe-d4-rks': MappingProxyType({"abi_id": 18, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'wb97m-v-uks': MappingProxyType({"abi_id": 19, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'm06-2x-rks': MappingProxyType({"abi_id": 20, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'm06-2x-uks': MappingProxyType({"abi_id": 21, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'mn15-rks': MappingProxyType({"abi_id": 22, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'mn15-uks': MappingProxyType({"abi_id": 23, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
 })
 
 METHOD_NAME_TO_ID = MappingProxyType({

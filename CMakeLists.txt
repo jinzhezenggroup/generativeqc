@@ -24,6 +24,7 @@ option(VIBEQC_ENABLE_STATIONARY_FORCE_AOT
 option(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
 option(VIBEQC_BUILD_TESTS "Build native tests" ON)
+option(VIBEQC_BUILD_CLI "Build the Python-free native command-line executable" ON)
 option(VIBEQC_PYTHON_WHEEL
        "Install one unversioned shared library for a Python wheel" OFF)
 option(VIBEQC_BUNDLE_XTB_OPENBLAS
@@ -332,8 +333,40 @@ if(NOT VIBEQC_PYTHON_WHEEL)
   )
 endif()
 
+if(VIBEQC_BUILD_CLI)
+  add_executable(vibeqc_cli src/cli/main.cpp)
+  target_link_libraries(vibeqc_cli PRIVATE vibeqc)
+  target_include_directories(vibeqc_cli PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_definitions(vibeqc_cli PRIVATE VIBEQC_CLI_VERSION="${PROJECT_VERSION}")
+  target_compile_options(vibeqc_cli PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
+  set_target_properties(vibeqc_cli PROPERTIES OUTPUT_NAME vibeqc)
+  if(APPLE)
+    set_target_properties(vibeqc_cli PROPERTIES
+      INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}")
+  elseif(UNIX)
+    set_target_properties(vibeqc_cli PROPERTIES
+      INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+  endif()
+endif()
+
 if(VIBEQC_BUILD_TESTS)
   vibeqc_add_native_tests()
+  if(VIBEQC_BUILD_CLI)
+    add_test(NAME vibeqc_cli_methods
+             COMMAND vibeqc_cli methods --json)
+    set_tests_properties(vibeqc_cli_methods PROPERTIES
+                         PASS_REGULAR_EXPRESSION "gfn2-xtb")
+    if(VIBEQC_XTB_CPU_LINALG_LIBRARY OR VIBEQC_BUNDLE_XTB_OPENBLAS)
+      add_test(NAME vibeqc_cli_gfn2_cpu
+               COMMAND vibeqc_cli run
+                       "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/gfn2_h3_plus.xyz"
+                       --method gfn2-xtb --backend cpu --charge 1 --units bohr
+                       --forces --json)
+      set_tests_properties(vibeqc_cli_gfn2_cpu PROPERTIES
+                           PASS_REGULAR_EXPRESSION "energy_hartree")
+    endif()
+  endif()
 endif()
 
 vibeqc_add_codegen_pilot()
@@ -343,4 +376,7 @@ install(TARGETS vibeqc
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(VIBEQC_BUILD_CLI)
+  install(TARGETS vibeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

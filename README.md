@@ -45,8 +45,9 @@ independent references, and performance claims require reproducible gates.
 
 ## Build and install
 
-Requirements: CMake 3.24+, a C++20 compiler, Python 3.10+, and optionally CUDA
-12.9 for the GPU backend.
+Requirements for source builds: CMake 3.24+, a C++20 compiler, Python 3.10+
+(build-time code generation), and optionally CUDA 12.9 for the GPU backend.
+An installed native SDK/runtime does not require Python.
 
 For a Python installation from source, `scikit-build-core` drives CMake and
 bundles the native library into the installed package:
@@ -147,6 +148,21 @@ Then build:
 cmake --build build -j10
 ```
 
+Install a native SDK/runtime prefix to use VibeQC without Python on the target
+machine:
+
+```bash
+cmake --install build --prefix /opt/vibeqc
+/opt/vibeqc/bin/vibeqc methods
+/opt/vibeqc/bin/vibeqc run molecule.xyz --method gfn2-xtb --forces
+```
+
+The native executable links the installed `libvibeqc` through a relocatable
+install RPATH. The first native `run` endpoint is GFN2-xTB, whose intrinsic
+basis lets the command consume XYZ directly; Gaussian-basis native CLI
+resolution is tracked separately. Python is still required when building from
+source because repository code generation currently uses Python.
+
 The source-tree Python interface finds `build/libvibeqc.so` automatically. An
 installed wheel loads its bundled library first; `VIBEQC_LIBRARY` remains the
 explicit override for a different development or benchmark build. Linux CUDA
@@ -161,21 +177,23 @@ and fallback rationale are recorded in the
 
 ## Methods
 
-The canonical native method names and declared capabilities are generated from
-`manifests/public_methods.json`. Run `vibeqc methods` or see the
-[public method table](docs/public_methods.md) for the current list.
+Stable native ABI IDs, providers and compatibility selectors are generated from
+`manifests/public_methods.json`; see the
+[native ABI registry](docs/public_methods.md). DFT scientific names and
+compositions are discovered from the compiler MethodIR catalog, including
+generated metadata from the pinned Libxc sources. `Calculator(method=...)`
+accepts qualified `<method>-rks` / `<method>-uks` selectors without requiring
+one ABI-manifest row per functional.
 
-DFT selectors exposed through `Calculator(method=...)` currently include
-`lda-rks`, `lda-uks`, `pbe-rks`, `pbe-uks`, `r2scan-rks`,
-`r2scan-uks`, `pbe0-rks`, `pbe0-uks`, `b3lyp-rks`, `b3lyp-uks`,
-and `pbe-d4-rks`. The Python API also accepts the composite selectors
-`r2scan-3c`, `r2scan-3c-rks`, and `r2scan-3c-uks`. Some methods require
-method-specific KS options such as an explicit grid, and unsupported
-backend/model combinations fail closed rather than silently changing methods.
+Run the Python frontend (`python -m vibeqc methods`) for the current MethodIR-aware\ndiscovery set. MethodIR representation is
+not by itself an execution promise: missing primitive lowerers, unsupported
+backends/models, or method-specific requirements such as an explicit hybrid
+grid fail closed. The Python API also accepts the composite selectors
+`r2scan-3c`, `r2scan-3c-rks`, and `r2scan-3c-uks`.
 
 ```bash
-vibeqc methods
-vibeqc methods --json
+python -m vibeqc methods
+python -m vibeqc methods --json
 ```
 
 ## Python API

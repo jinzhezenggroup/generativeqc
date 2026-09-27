@@ -137,6 +137,16 @@ void provider_and_reference() {
   for (std::size_t q = 0; q < values.size(); ++q)
     require(std::abs(exact_values[q] - values[q]) < 1e-11,
             "prepared exact owner changed the MO block");
+  const auto raw_energy =
+      vibeqc::mp2::conventional_energy(ref, source, 256ULL << 20, 1e-10, 1, false, 0);
+  const auto prepared_energy =
+      vibeqc::mp2::conventional_energy(ref, exact_source, 256ULL << 20, 1e-10, 1, false, 0);
+  require(std::abs(prepared_energy.opposite_spin - raw_energy.opposite_spin) < 1e-13 &&
+              std::abs(prepared_energy.same_spin - raw_energy.same_spin) < 1e-13,
+          "prepared exact source changed the conventional MP2 energy");
+  require(prepared_energy.provider_work.source_scans == raw_energy.provider_work.source_scans &&
+              prepared_energy.provider_work.mo_blocks == raw_energy.provider_work.mo_blocks,
+          "prepared exact source changed the conventional MP2 schedule");
 
   auto df_spec = vibeqc::scf::make_hf_fock_spec(vibeqc::scf::FockSpin::Restricted,
                                                 vibeqc::scf::FockApproximation::DensityFitted);

@@ -18,6 +18,7 @@
 #include "generated_rccsdt_cpu.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
+#include "scf/fock_prepared.hpp"
 
 namespace vibeqc::methods::detail {
 namespace {
@@ -106,7 +107,7 @@ class RccsdtPrepared final : public PreparedCalculation {
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
-    auto state = run_rccsd_native_state(execution_, system_, descriptor_);
+    auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_);
     last_ = state.diagnostic;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
@@ -251,6 +252,7 @@ class RccsdtPrepared final : public PreparedCalculation {
   runtime::ExecutionContext execution_;
   core::System system_;
   vibeqc_method_descriptor descriptor_{};
+  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   std::optional<vibeqc_correlation_diagnostic> last_;
   mutable std::mutex mutex_;
 };

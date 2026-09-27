@@ -165,3 +165,19 @@ def test_wb97mv_resident_nonlocal_timers_map_to_vv10_component() -> None:
     assert record["source_component_seconds"][
         "density_and_nuclear_setup"
     ] == pytest.approx(0.07)
+
+
+def test_stationary_split_geometry_phases_preserve_component_attribution() -> None:
+    work = {
+        "endpoint_seconds": 1.0,
+        "timeline": {
+            "endpoint_seconds": 1.0,
+            "exclusive_wall_seconds": {
+                "xc_geometry_enqueue": 0.12,
+                "xc_geometry_drain": 0.08,
+            },
+        },
+    }
+    record = normalize_force_work(work)
+    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.20)
+    assert "semilocal_geometry_response" in record["coverage"]["wall_seconds"]
