@@ -177,21 +177,23 @@ and fallback rationale are recorded in the
 
 ## Methods
 
-The canonical native method names and declared capabilities are generated from
-`manifests/public_methods.json`. Run `vibeqc methods` or see the
-[public method table](docs/public_methods.md) for the current list.
+Stable native ABI IDs, providers and compatibility selectors are generated from
+`manifests/public_methods.json`; see the
+[native ABI registry](docs/public_methods.md). DFT scientific names and
+compositions are discovered from the compiler MethodIR catalog, including
+generated metadata from the pinned Libxc sources. `Calculator(method=...)`
+accepts qualified `<method>-rks` / `<method>-uks` selectors without requiring
+one ABI-manifest row per functional.
 
-DFT selectors exposed through `Calculator(method=...)` currently include
-`lda-rks`, `lda-uks`, `pbe-rks`, `pbe-uks`, `r2scan-rks`,
-`r2scan-uks`, `pbe0-rks`, `pbe0-uks`, `b3lyp-rks`, `b3lyp-uks`,
-and `pbe-d4-rks`. The Python API also accepts the composite selectors
-`r2scan-3c`, `r2scan-3c-rks`, and `r2scan-3c-uks`. Some methods require
-method-specific KS options such as an explicit grid, and unsupported
-backend/model combinations fail closed rather than silently changing methods.
+Run the Python frontend (`python -m vibeqc methods`) for the current MethodIR-aware\ndiscovery set. MethodIR representation is
+not by itself an execution promise: missing primitive lowerers, unsupported
+backends/models, or method-specific requirements such as an explicit hybrid
+grid fail closed. The Python API also accepts the composite selectors
+`r2scan-3c`, `r2scan-3c-rks`, and `r2scan-3c-uks`.
 
 ```bash
-vibeqc methods
-vibeqc methods --json
+python -m vibeqc methods
+python -m vibeqc methods --json
 ```
 
 ## Python API
