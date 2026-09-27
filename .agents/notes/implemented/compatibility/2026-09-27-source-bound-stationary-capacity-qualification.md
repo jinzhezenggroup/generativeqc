@@ -19,12 +19,16 @@ production planners where they exist, compute the remaining deterministic work
 bounds from frozen inputs, and accept copied formulas only after verifying their
 exact production definitions and gate predicates.
 
-Bind the spherical AO term counts through the complete native packing chain and
-bind Python owner functions with hashes of their exact source spans. Do not hash
-`ast.dump()` output: its serialization changes across supported Python versions
-even when the source does not. Every report records the clean Git HEAD, frozen
-input/basis/grid identities, owner hashes, gate order, first blocker, and whether
-the optional packaged AOT is present and valid.
+Bind the spherical AO term counts and AO count through the complete native
+packing chain. Bind grid point counts through the source-only grid constructor,
+generated quadrature layout, native CUDA materializer, backend selector, and
+native point-count publication. Bind the complete public semilocal capability
+predicate/promotion and CUDA force method. Python owner functions use hashes of
+their exact source spans. Do not hash `ast.dump()` output: its serialization
+changes across supported Python versions even when the source does not. Every
+report records the clean Git HEAD, frozen input/basis/grid identities, owner
+hashes, gate order, first blocker, and whether the optional packaged AOT is
+present and valid.
 
 The report output itself may be regenerated inside the checkout and is excluded
 from the clean-tree check. No other dirty path is ignored.
@@ -48,6 +52,8 @@ from the clean-tree check. No other dirty path is ignored.
 
 - Source or predicate drift fails closed before any capacity conclusion is
   emitted.
+- AO and grid counts must agree with the verified native production formulas;
+  source-only construction is not accepted as an independent proxy.
 - Static admission is never reported as scientific qualification.
 - The qualifier does not change caps, tolerances, frozen cases, or losing rows.
 - A report SHA identifies a clean source revision; only its selected output file
@@ -58,8 +64,8 @@ from the clean-tree check. No other dirty path is ignored.
 ## Evidence
 
 - `tests/python/test_dft_mp_v1_capacity.py` mutation-tests the production
-  definitions, predicates, packed AO chain, clean-source binding, and output-path
-  exception.
+  definitions, public capability route, packed AO/count chain, native grid count
+  chain, clean-source binding, and output-path exception.
 - The source-span hashes derive from exact source text rather than interpreter
   serialization; a regression rejects any return to `ast.dump()` fingerprints,
   and repository CI covers Python 3.11 in addition to local Python 3.13.

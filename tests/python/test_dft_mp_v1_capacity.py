@@ -16,6 +16,17 @@ SPD_CONTRACT_FILES = (
     "src/dft/bridge.cpp",
     "python/vibeqc/_stationary_cuda.py",
 )
+PUBLIC_ROUTE_FILES = (
+    "python/vibeqc/calculator.py",
+    "python/vibeqc/batch.py",
+)
+GRID_CONTRACT_FILES = (
+    "python/vibeqc_compiler/dft/grid.py",
+    "python/vibeqc_compiler/xc/quadrature_cuda.py",
+    "src/dft/cuda_quadrature.cu",
+    "src/dft/grid.hpp",
+    "src/methods/dft_method.cpp",
+)
 
 
 def report(*, aot_directory: Path | None = None) -> dict:
@@ -28,6 +39,15 @@ def report(*, aot_directory: Path | None = None) -> dict:
 
 def spd_contract_tree(tmp_path: Path) -> None:
     for relative in SPD_CONTRACT_FILES:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            (ROOT / relative).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+
+def copy_contract_files(tmp_path: Path, files: tuple[str, ...]) -> None:
+    for relative in files:
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
@@ -74,6 +94,40 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["basis"]["stationary_layout_contract_sha256"] == (
         "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
     )
+    assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
+        "23785e9e006f9a100b4fecc690e6936a348581beba073507c154b185564832c6"
+    )
+    assert result["grid"] == {
+        "source_only_molecular_grid_sha256": (
+            "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
+        ),
+        "generated_quadrature_layout_sha256": (
+            "7ad4c84286cce70329233f7aa2dcaf2b934e2e7cf46137cc3ed32cc6076754c3"
+        ),
+        "native_cuda_grid_sha256": (
+            "eed5f5bff7c67622c75fd0d21448b66502b581c102637036a748b459a288a41b"
+        ),
+        "native_cuda_grid_route_sha256": (
+            "cc639c77e261810ff35a30f3bf4967a398b6408e72f86446f94a4d5e760e1a42"
+        ),
+        "native_grid_point_count_sha256": (
+            "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
+        ),
+        "point_count_definition": (
+            "atom_count * radial_points * angular_polar * angular_azimuth"
+        ),
+    }
+    assert result["public_route"] == {
+        "semilocal_force_predicate_sha256": (
+            "069f7414cb61d55c543d5829b5d793aed9b882318fbdeb157f4103c486ea0e71"
+        ),
+        "force_capability_promotion_sha256": (
+            "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
+        ),
+        "cuda_force_method_sha256": (
+            "1d0df874a38441e94168f329e8055f9b9d27e7f26649e15e106db9ab7694c79e"
+        ),
+    }
 
     cases = {item["id"]: item for item in result["cases"]}
     assert set(cases) == {
@@ -476,6 +530,130 @@ def test_spherical_component_count_fails_closed_when_basis_creation_moves(
 
     with pytest.raises(RuntimeError, match="packed-AO contract changed"):
         qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+def test_spherical_ao_count_fails_closed_when_native_count_moves(
+    tmp_path: Path,
+) -> None:
+    spd_contract_tree(tmp_path)
+    target = tmp_path / "src/molecule/basis.cpp"
+    source = target.read_text(encoding="utf-8")
+    old = "? 2 * static_cast<std::size_t>(shell.angular_momentum) + 1"
+    assert old in source
+    target.write_text(source.replace(old, old[:-1] + "2", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="spherical AO count contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+def test_public_capability_fails_closed_when_complete_predicate_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    target = tmp_path / "python/vibeqc/calculator.py"
+    source = target.read_text(encoding="utf-8")
+    old = "self._ks_options.coefficients == (1.0, 1.0, 0.0)"
+    first = source.index(old)
+    semilocal = source.index(old, first + len(old))
+    target.write_text(
+        source[:semilocal] + "False" + source[semilocal + len(old) :],
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="semilocal force predicate changed"):
+        qualify_capacity._source_public_route(tmp_path)
+
+
+def test_public_capability_fails_closed_when_promotion_condition_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    target = tmp_path / "python/vibeqc/calculator.py"
+    source = target.read_text(encoding="utf-8")
+    old = "and self._method in _method_manifest.NATIVE_DFT_METHOD_IDS"
+    assert old in source
+    target.write_text(source.replace(old, "and False", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="force capability promotion changed"):
+        qualify_capacity._source_public_route(tmp_path)
+
+
+def test_public_cuda_force_fails_closed_when_packaged_route_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    target = tmp_path / "python/vibeqc/batch.py"
+    source = target.read_text(encoding="utf-8")
+    old = "and not state._source.method_ir.full_range_exact_exchange"
+    assert old in source
+    target.write_text(source.replace(old, "and False", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="public CUDA force route changed"):
+        qualify_capacity._source_public_route(tmp_path)
+
+
+def test_grid_count_fails_closed_when_native_cuda_shape_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "src/dft/cuda_quadrature.cu"
+    source = target.read_text(encoding="utf-8")
+    old = "q::product(system.atoms.size(), per_atom)"
+    assert old in source
+    target.write_text(
+        source.replace(old, "q::product(system.atoms.size() + 1, per_atom)", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
+        qualify_capacity._grid_count_contract(tmp_path)
+
+
+def test_grid_count_fails_closed_when_source_only_shape_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "python/vibeqc_compiler/dft/grid.py"
+    source = target.read_text(encoding="utf-8")
+    old = "len(atoms) * len(r) * len(angular)"
+    assert old in source
+    target.write_text(source.replace(old, "len(r) * len(angular)", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
+        qualify_capacity._grid_count_contract(tmp_path)
+
+
+def test_grid_count_fails_closed_when_generated_layout_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "python/vibeqc_compiler/xc/quadrature_cuda.py"
+    source = target.read_text(encoding="utf-8")
+    old = "l.points = points;"
+    assert old in source
+    target.write_text(
+        source.replace(old, "l.points = points + 1;", 1), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
+        qualify_capacity._grid_count_contract(tmp_path)
+
+
+def test_grid_count_fails_closed_when_native_backend_route_moves(
+    tmp_path: Path,
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "src/methods/dft_method.cpp"
+    source = target.read_text(encoding="utf-8")
+    old = "return dft::MolecularGrid::from_cuda(system, spec, device);"
+    assert old in source
+    target.write_text(
+        source.replace(old, "return dft::MolecularGrid(system, spec);", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
+        qualify_capacity._grid_count_contract(tmp_path)
 
 
 def test_module_import_binds_helpers_to_the_tool_checkout(tmp_path: Path) -> None:

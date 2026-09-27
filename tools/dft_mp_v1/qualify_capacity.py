@@ -65,6 +65,33 @@ NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256 = (
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
 )
+NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
+    "23785e9e006f9a100b4fecc690e6936a348581beba073507c154b185564832c6"
+)
+PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
+    "069f7414cb61d55c543d5829b5d793aed9b882318fbdeb157f4103c486ea0e71"
+)
+PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
+    "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
+)
+PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
+    "1d0df874a38441e94168f329e8055f9b9d27e7f26649e15e106db9ab7694c79e"
+)
+PYTHON_GRID_CONTRACT_SHA256 = (
+    "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
+)
+QUADRATURE_LAYOUT_CONTRACT_SHA256 = (
+    "7ad4c84286cce70329233f7aa2dcaf2b934e2e7cf46137cc3ed32cc6076754c3"
+)
+NATIVE_CUDA_GRID_CONTRACT_SHA256 = (
+    "eed5f5bff7c67622c75fd0d21448b66502b581c102637036a748b459a288a41b"
+)
+NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
+    "cc639c77e261810ff35a30f3bf4967a398b6408e72f86446f94a4d5e760e1a42"
+)
+NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
+    "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -162,6 +189,21 @@ def _source_node_sha256(source: str, node: ast.AST) -> str:
     if segment is None:
         raise RuntimeError("source contract segment is unavailable")
     return _lf_sha256(segment.encode())
+
+
+def _source_span_sha256(
+    source: str,
+    *,
+    begin: str,
+    end: str,
+    label: str,
+) -> str:
+    try:
+        start = source.index(begin)
+        stop = source.index(end, start)
+    except ValueError as error:
+        raise RuntimeError(f"{label} source contract is missing") from error
+    return _lf_sha256(source[start:stop].encode())
 
 
 def _source_limits(repository: Path) -> dict[str, Any]:
@@ -401,6 +443,15 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     if bridge_digest != AO_PACK_BRIDGE_CONTRACT_SHA256:
         raise RuntimeError("native packed-AO contract changed")
 
+    ao_count_digest = _source_span_sha256(
+        source,
+        begin="std::size_t ao_count(",
+        end="std::size_t cartesian_ao_count(",
+        label="native spherical AO count",
+    )
+    if ao_count_digest != NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native spherical AO count contract changed")
+
     stationary_source = (repository / "python/vibeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
@@ -420,6 +471,7 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
         "spd_expansion_contract_sha256": digest,
         "ao_packer_contract_sha256": packer_digest,
         "ao_pack_bridge_contract_sha256": bridge_digest,
+        "native_spherical_ao_count_contract_sha256": ao_count_digest,
         "stationary_layout_contract_sha256": layout_digest,
         "sparse_spherical_component_terms": {
             "s": SPARSE_SPHERICAL_COMPONENT_TERMS[0],
@@ -662,37 +714,170 @@ def _source_package_inventory(repository: Path) -> None:
         )
 
 
-def _source_public_route(repository: Path) -> None:
+def _source_public_route(repository: Path) -> dict[str, str]:
     """Fail closed if the source predicates supporting the reported route move."""
 
     calculator = (repository / "python/vibeqc/calculator.py").read_text(
         encoding="utf-8"
     )
     batch = (repository / "python/vibeqc/batch.py").read_text(encoding="utf-8")
-    required = {
-        "python/vibeqc/calculator.py": (
-            "semilocal_force = (",
-            "supported_properties=self._capabilities.supported_properties",
-            '| {"forces"}',
-        ),
-        "python/vibeqc/batch.py": (
-            "packaged = (",
-            "not state._source.method_ir.full_range_exact_exchange",
-            "None if packaged else self._stationary_cuda_compiler()",
-            '"aot_directory": native_library.parent if packaged else None',
+    calculator_tree = ast.parse(calculator)
+    calculator_classes = [
+        node
+        for node in calculator_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
+    ]
+    if len(calculator_classes) != 1:
+        raise RuntimeError("public Calculator owner is missing or ambiguous")
+    constructors = [
+        node
+        for node in calculator_classes[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    ]
+    if len(constructors) != 1:
+        raise RuntimeError("public Calculator constructor is missing or ambiguous")
+    semilocal_assignments = [
+        node
+        for node in ast.walk(constructors[0])
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "semilocal_force"
+            for target in node.targets
+        )
+    ]
+    force_promotions = [
+        node
+        for node in constructors[0].body
+        if isinstance(node, ast.If)
+        and any(
+            isinstance(item, ast.Name) and item.id == "semilocal_force"
+            for item in ast.walk(node.test)
+        )
+    ]
+    if len(semilocal_assignments) != 1 or len(force_promotions) != 1:
+        raise RuntimeError("public semilocal force capability owner is ambiguous")
+    semilocal_digest = _source_node_sha256(calculator, semilocal_assignments[0])
+    promotion_digest = _source_node_sha256(calculator, force_promotions[0])
+    if semilocal_digest != PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256:
+        raise RuntimeError("public semilocal force predicate changed")
+    if promotion_digest != PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256:
+        raise RuntimeError("public force capability promotion changed")
+
+    batch_tree = ast.parse(batch)
+    batch_classes = [
+        node
+        for node in batch_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "PreparedBatch"
+    ]
+    if len(batch_classes) != 1:
+        raise RuntimeError("public PreparedBatch owner is missing or ambiguous")
+    force_methods = [
+        node
+        for node in batch_classes[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "_public_dft_cuda_force"
+    ]
+    if len(force_methods) != 1:
+        raise RuntimeError("public CUDA force route is missing or ambiguous")
+    batch_digest = _source_node_sha256(batch, force_methods[0])
+    if batch_digest != PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256:
+        raise RuntimeError("public CUDA force route changed")
+    return {
+        "semilocal_force_predicate_sha256": semilocal_digest,
+        "force_capability_promotion_sha256": promotion_digest,
+        "cuda_force_method_sha256": batch_digest,
+    }
+
+
+def _grid_count_contract(repository: Path) -> dict[str, str]:
+    """Bind the source-only point count to the native CUDA grid owner."""
+
+    python_grid = (repository / "python/vibeqc_compiler/dft/grid.py").read_text(
+        encoding="utf-8"
+    )
+    python_tree = ast.parse(python_grid)
+    grid_classes = [
+        node
+        for node in python_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "MolecularGrid"
+    ]
+    if len(grid_classes) != 1:
+        raise RuntimeError("source-only MolecularGrid owner is missing or ambiguous")
+    post_init = [
+        node
+        for node in grid_classes[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "__post_init__"
+    ]
+    if len(post_init) != 1:
+        raise RuntimeError(
+            "source-only MolecularGrid constructor is missing or ambiguous"
+        )
+    python_digest = _source_node_sha256(python_grid, post_init[0])
+
+    quadrature_source = (
+        repository / "python/vibeqc_compiler/xc/quadrature_cuda.py"
+    ).read_text(encoding="utf-8")
+    quadrature_tree = ast.parse(quadrature_source)
+    layouts = [
+        node
+        for node in quadrature_tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_LAYOUT"
+            for target in node.targets
+        )
+    ]
+    if len(layouts) != 1:
+        raise RuntimeError("generated quadrature layout owner is missing or ambiguous")
+    layout_digest = _source_node_sha256(quadrature_source, layouts[0])
+
+    cuda_source = (repository / "src/dft/cuda_quadrature.cu").read_text(
+        encoding="utf-8"
+    )
+    cuda_digest = _source_span_sha256(
+        cuda_source,
+        begin="MolecularGrid MolecularGrid::from_cuda(",
+        end="}  // namespace vibeqc::dft",
+        label="native CUDA grid",
+    )
+    route_source = (repository / "src/methods/dft_method.cpp").read_text(
+        encoding="utf-8"
+    )
+    route_digest = _source_span_sha256(
+        route_source,
+        begin="dft::MolecularGrid ks_molecular_grid(",
+        end="class KsPreparedCalculation",
+        label="native CUDA grid route",
+    )
+    header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
+    point_count_digest = _source_span_sha256(
+        header_source,
+        begin="  std::size_t point_count()",
+        end="  const std::vector<double>& points()",
+        label="native grid point-count publication",
+    )
+    contracts = {
+        "source_only_molecular_grid_sha256": python_digest,
+        "generated_quadrature_layout_sha256": layout_digest,
+        "native_cuda_grid_sha256": cuda_digest,
+        "native_cuda_grid_route_sha256": route_digest,
+        "native_grid_point_count_sha256": point_count_digest,
+    }
+    expected = {
+        "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
+        "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
+        "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
+        "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
+        "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
+    }
+    moved = [name for name, digest in contracts.items() if digest != expected[name]]
+    if moved:
+        raise RuntimeError("grid point-count contract changed: " + ", ".join(moved))
+    return {
+        **contracts,
+        "point_count_definition": (
+            "atom_count * radial_points * angular_polar * angular_azimuth"
         ),
     }
-    missing = [
-        f"{path}: {token}"
-        for path, tokens in required.items()
-        for token in tokens
-        if token not in (calculator if path.endswith("calculator.py") else batch)
-    ]
-    if missing:
-        raise RuntimeError(
-            "public stationary CUDA route no longer matches the audited predicates: "
-            + "; ".join(missing)
-        )
 
 
 def _artifact_verification(
@@ -773,7 +958,8 @@ def _build_report(
     basis_layout = _basis_layout_contract(repository)
     spd_expansion = _spd_expansion_contract(repository)
     _source_package_inventory(repository)
-    _source_public_route(repository)
+    public_route = _source_public_route(repository)
+    grid_contract = _grid_count_contract(repository)
     grid_spec = _grid_spec(manifest["model"]["grid_spec"])
 
     required_rows = [
@@ -832,6 +1018,22 @@ def _build_report(
             raise ValueError(
                 f"current changed grid identity differs from manifest for {case_name}"
             )
+        native_grid_points = (
+            len(atoms)
+            * grid_spec.radial_points
+            * grid_spec.angular_polar
+            * grid_spec.angular_azimuth
+        )
+        changed_native_grid_points = (
+            len(changed_atoms)
+            * grid_spec.radial_points
+            * grid_spec.angular_polar
+            * grid_spec.angular_azimuth
+        )
+        if grid.npoint != native_grid_points or (
+            changed_grid.npoint != changed_native_grid_points
+        ):
+            raise RuntimeError("source-only grid count disagrees with native contract")
 
         atom_pairs = shape["atom_count"] * (shape["atom_count"] - 1) // 2
         primitive_sum = shape["component_primitive_sum"]
@@ -839,8 +1041,8 @@ def _build_report(
             "primitive_records": primitive_sum**4
             + (shape["atom_count"] + 2) * primitive_sum**2
             + atom_pairs,
-            "grid_points": grid.npoint,
-            "grid_pair_visits": (1 + 2 * grid.npoint) * atom_pairs,
+            "grid_points": native_grid_points,
+            "grid_pair_visits": (1 + 2 * native_grid_points) * atom_pairs,
         }
         method_memory = {}
         method_plans = {}
@@ -869,7 +1071,7 @@ def _build_report(
             "classification": frozen["classification"],
             "charge": value["charge"],
             "multiplicity": value["multiplicity"],
-            "shape": {**shape, "grid_points": grid.npoint},
+            "shape": {**shape, "grid_points": native_grid_points},
             "identities": {
                 "input_sha256": frozen["input_sha256"],
                 "changed_input_sha256": frozen["changed_input_sha256"],
@@ -991,9 +1193,14 @@ def _build_report(
         "python/vibeqc/batch.py",
         "python/vibeqc_compiler/method/stationary_cuda.py",
         "python/vibeqc_compiler/dft/ao.py",
+        "python/vibeqc_compiler/dft/grid.py",
+        "python/vibeqc_compiler/xc/quadrature_cuda.py",
         "src/molecule/basis.cpp",
         "src/dft/ao_grid.cpp",
         "src/dft/bridge.cpp",
+        "src/dft/grid.hpp",
+        "src/dft/cuda_quadrature.cu",
+        "src/methods/dft_method.cpp",
         "cmake/VibeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)
@@ -1024,6 +1231,8 @@ def _build_report(
                 "s=1, p=3, spherical d=8 from src/molecule/basis.cpp"
             ),
         },
+        "grid": grid_contract,
+        "public_route": public_route,
         "admission_limits": limits,
         "aot_binary_directory": None
         if aot_directory is None
