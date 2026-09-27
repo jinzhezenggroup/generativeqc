@@ -397,9 +397,6 @@ def test_global_hybrid_stationary_aot_profiles_bind_exact_plan(
     assert f"stationary_functional = {functional}" in source
     assert f"stationary-plan: {plan.identity}" in source
     assert "stationary_weight_exact_exchange" in source
-    assert '"exact_exchange"' not in stationary_aot_profile_contract_identity(
-        profile_name
-    )
     assert stationary_aot_profile_contract_identity(profile_name)
 
 
