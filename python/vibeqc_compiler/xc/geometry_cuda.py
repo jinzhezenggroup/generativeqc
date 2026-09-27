@@ -8,6 +8,7 @@ from vibeqc_compiler.dft.ao_cuda import emit_grid_policy
 from vibeqc_compiler.integral.expr import AlgebraForm
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
 
+from ._generated_native_semilocal import SEMILOCAL_FAMILY_CODES
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
@@ -16,6 +17,10 @@ from .semilocal_family import energy_expression
 from .spec import WB97MV_COMPONENTS, FunctionalSpec
 from .spec import functional as resolve_functional
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
+
+_REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
+    record["functional_code"] for record in SPLIT_HYBRIDS.values()
+)
 
 
 def _functional_code(functional: typing.Any, pbe: typing.Any) -> int:
@@ -28,14 +33,7 @@ def _functional_code(functional: typing.Any, pbe: typing.Any) -> int:
         return int(pbe)
     if pbe is not None:
         raise ValueError("specify functional or pbe, not both")
-    if type(functional) is not int or functional not in (
-        0,
-        1,
-        2,
-        3,
-        4,
-        *(record["functional_code"] for record in SPLIT_HYBRIDS.values()),
-    ):
+    if type(functional) is not int or functional not in _REGISTERED_STATIONARY_CODES:
         raise ValueError(
             "geometry lowering requires a registered semilocal functional code"
         )
