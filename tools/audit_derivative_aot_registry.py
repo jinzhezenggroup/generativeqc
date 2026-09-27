@@ -15,6 +15,13 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 from vibeqc_compiler.common.provenance import file_hash
 from vibeqc_compiler.integral.derivative_aot_registry import (
     AOT_ANGULAR_DOMAIN,
+    AOT_COMPONENT_CONTRACTION_CONTRACT,
+    AOT_COMPONENT_OUTPUT_CONTRACT,
+    AOT_SPIN_CONTRACT,
+    AOT_WEIGHTED_CONTRACTION_CONTRACT,
+    AOT_WEIGHTED_OUTPUT_CONTRACT,
+    DerivativeAotBundleKey,
+    DerivativeAotPackageKey,
     component_groups,
     make_key,
     radial_inventory_from_payload,
@@ -52,9 +59,20 @@ def _range_programs(
                 )
                 key = make_key(radial, angular, group_index, backend="cpu")
                 sources.append(source)
+                package_key = DerivativeAotPackageKey(
+                    backend="cpu",
+                    target="native-host",
+                    scientific_identity=key.identity,
+                    output_contract=AOT_WEIGHTED_OUTPUT_CONTRACT,
+                    spin_contract=AOT_SPIN_CONTRACT,
+                    contraction_contract=AOT_WEIGHTED_CONTRACTION_CONTRACT,
+                )
                 records.append(
                     {
                         "identity": key.identity,
+                        "identity_payload": key.to_payload(),
+                        "package_identity": package_key.identity,
+                        "package_identity_payload": package_key.to_payload(),
                         "radial": radial.to_payload(),
                         "angular": list(angular),
                         "group_index": group_index,
@@ -86,10 +104,23 @@ def _symbol_status(
             symbol = f"{prefix}_{suffix}"
             if not hasattr(library, symbol):
                 missing.append(symbol)
+    source_identity = None
+    if hasattr(library, "vibeqc_get_source_identity"):
+        library.vibeqc_get_source_identity.argtypes = []
+        library.vibeqc_get_source_identity.restype = ct.c_char_p
+        value = library.vibeqc_get_source_identity()
+        source_identity = None if value is None else value.decode()
+    native_abi = None
+    if hasattr(library, "vibeqc_get_abi_version"):
+        library.vibeqc_get_abi_version.argtypes = []
+        library.vibeqc_get_abi_version.restype = ct.c_uint32
+        native_abi = int(library.vibeqc_get_abi_version())
     return {
         "path": str(library_path),
         "binary_bytes": library_path.stat().st_size,
         "binary_sha256": file_hash(library_path),
+        "native_source_identity": source_identity,
+        "native_abi": native_abi,
         "missing_symbols": sorted(missing),
         "complete": not missing,
     }
@@ -108,6 +139,19 @@ def audit(
     full_units = derivative_cpu_aot_sources()
     full_sources = tuple(source for _, source in full_units)
     range_records, range_sources = _range_programs(radials)
+    full_key = DerivativeAotBundleKey(
+        backend="cpu",
+        radial=CoulombKernel("full_range", 0.0),
+        component_domain=CPU_AOT_COMPONENTS,
+    )
+    full_package_key = DerivativeAotPackageKey(
+        backend="cpu",
+        target="native-host",
+        scientific_identity=full_key.identity,
+        output_contract=AOT_COMPONENT_OUTPUT_CONTRACT,
+        spin_contract=AOT_SPIN_CONTRACT,
+        contraction_contract=AOT_COMPONENT_CONTRACTION_CONTRACT,
+    )
     return {
         "schema": "vibeqc.derivative-aot.audit.v1",
         "provenance": {
@@ -119,6 +163,11 @@ def audit(
         },
         "full_range": {
             "backend": "cpu",
+            "target": "native-host",
+            "identity": full_key.identity,
+            "identity_payload": full_key.to_payload(),
+            "package_identity": full_package_key.identity,
+            "package_identity_payload": full_package_key.to_payload(),
             "radial": {"version": 1, "family": "full_range", "omega": 0.0},
             "component_domain": list(CPU_AOT_COMPONENTS),
             "shards": CPU_AOT_SHARDS,
