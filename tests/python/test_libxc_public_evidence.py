@@ -42,6 +42,5 @@ def test_renderer_rejects_stale_capability_identity(tmp_path: Path) -> None:
         collect_public_evidence(tmp_path)
 
 
-
 def test_empty_generated_inventory_exposes_no_public_functionals() -> None:
     assert installed_public_functionals() == ()

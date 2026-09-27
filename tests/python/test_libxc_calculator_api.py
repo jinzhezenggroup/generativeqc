@@ -5,12 +5,10 @@ from __future__ import annotations
 import typing
 
 import pytest
-
 from vibeqc import Calculator, GridSpec, KsOptions
 from vibeqc._api_types import MethodCapabilities
 from vibeqc_compiler.method import MethodIR, SemilocalXCPrimitive
 from vibeqc_compiler.xc.spec import functional
-
 
 GRID = GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
 
@@ -59,7 +57,7 @@ def test_from_libxc_uses_only_ingredient_carrier(
     spin: str,
     carrier: str,
 ) -> None:
-    import vibeqc.ks as ks
+    from vibeqc import ks
 
     options = _options(name, spin)
     seen: dict[str, object] = {}
@@ -108,7 +106,7 @@ def test_from_libxc_uses_only_ingredient_carrier(
 def test_from_libxc_rejects_unqualified_execution_modes_before_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import vibeqc.ks as ks
+    from vibeqc import ks
 
     monkeypatch.setattr(
         ks,
@@ -144,7 +142,7 @@ def test_generic_libxc_options_never_infer_force_coefficients() -> None:
 def test_available_libxc_functionals_delegates_to_installed_inventory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import vibeqc_compiler.method as method
+    from vibeqc_compiler import method
 
     monkeypatch.setattr(
         method,

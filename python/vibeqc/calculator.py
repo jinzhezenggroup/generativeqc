@@ -136,7 +136,7 @@ class Calculator:
         tile_points: int = 256,
         xc_schedule: str = "host_unfused",
         **kwargs: typing.Any,
-    ) -> "Calculator":
+    ) -> Calculator:
         """Create an evidence-gated automatic Libxc CPU-energy calculator.
 
         Automatic Libxc promotion currently qualifies CPU FP64 energy only.
@@ -146,16 +146,22 @@ class Calculator:
         """
 
         if device != "cpu":
-            raise NotImplementedError("automatic Libxc public execution currently requires CPU")
+            raise NotImplementedError(
+                "automatic Libxc public execution currently requires CPU"
+            )
         density_fitting = kwargs.get("density_fitting", "none")
         if density_fitting not in ("none", False):
             raise NotImplementedError(
                 "automatic Libxc public execution is qualified only for direct Coulomb"
             )
         if kwargs.get("auxiliary_basis") is not None:
-            raise ValueError("automatic Libxc public execution does not accept an auxiliary basis")
+            raise ValueError(
+                "automatic Libxc public execution does not accept an auxiliary basis"
+            )
         if str(kwargs.get("precision", "fp64")).lower() != "fp64":
-            raise NotImplementedError("automatic Libxc public execution requires strict FP64")
+            raise NotImplementedError(
+                "automatic Libxc public execution requires strict FP64"
+            )
 
         from .ks import resolve_public_libxc_ks_options
 
@@ -183,7 +189,9 @@ class Calculator:
             ks_options=options,
             **kwargs,
         )
-        selector = f"libxc:{identifier.upper()}:{'uks' if spin == 'polarized' else 'rks'}"
+        selector = (
+            f"libxc:{identifier.upper()}:{'uks' if spin == 'polarized' else 'rks'}"
+        )
         calculator._capabilities = replace(
             calculator._capabilities,
             method=selector,

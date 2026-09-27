@@ -142,7 +142,9 @@ class KsOptions:
     @property
     def coefficients(self) -> typing.Any:
         """Resolved (semilocal X, semilocal C, raw Fock K) coefficients."""
-        if _is_pbe_d4_composition(self.method_ir) or _bulk_libxc_component(self.method_ir):
+        if _is_pbe_d4_composition(self.method_ir) or _bulk_libxc_component(
+            self.method_ir
+        ):
             return (1.0, 1.0, 0.0)
         return ks_coefficients(self.method_ir)
 
