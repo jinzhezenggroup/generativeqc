@@ -2,8 +2,8 @@
 #include <memory>
 
 #include "cc/solver.hpp"
-#include "methods/method.hpp"
 #include "hf/reference.hpp"
+#include "methods/method.hpp"
 
 namespace vibeqc::methods::detail {
 struct RccsdNativeState {

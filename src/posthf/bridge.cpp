@@ -68,7 +68,7 @@ int guarded(char* error, std::size_t size, F&& fn) noexcept {
   }
 }
 vibeqc::hf::PhysicalReference supplied_reference(const RawSource& source, const double* arrays,
-                                                  std::size_t elements, double energy) {
+                                                 std::size_t elements, double energy) {
   const auto n = source.nbf();
   const auto count = vibeqc::posthf::checked_add(
       vibeqc::posthf::checked_mul(5, vibeqc::posthf::checked_mul(n, n)), n);
