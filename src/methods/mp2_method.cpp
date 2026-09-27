@@ -81,9 +81,9 @@ class Mp2Prepared final : public PreparedCalculation {
       scf::ScfResult hf;
       if (!density_fitted_ && !cuda) {
         if (!cpu_exact_plan_) {
-          const auto strategy = scf::resolve_fock_build(
-              scf::make_hf_fock_spec(scf::FockSpin::Restricted), scf::FockBackend::Cpu,
-              options_.screening_tolerance);
+          const auto strategy =
+              scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
+                                      scf::FockBackend::Cpu, options_.screening_tolerance);
           cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
         }
         prepared_exact = cpu_exact_plan_.get();
@@ -92,10 +92,9 @@ class Mp2Prepared final : public PreparedCalculation {
         hf = scf::run_prepared_fock_strategy(*prepared_exact, execution);
       } else {
         hf = density_fitted_
-                 ? (fitted_cuda_
-                        ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
-                                                            context_.device_id)
-                        : scf::run_rhf_density_fitting(system_, *auxiliary_, options_))
+                 ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
+                                                                     context_.device_id)
+                                 : scf::run_rhf_density_fitting(system_, *auxiliary_, options_))
                  : scf::run_rhf_cuda(system_, options_, context_.device_id);
       }
       if (!hf.converged || !hf.reference)
