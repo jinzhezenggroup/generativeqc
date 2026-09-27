@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import typing
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-import typing
 
 import numpy as np
 import pytest
@@ -88,9 +88,7 @@ class Nonlocal:
 
 
 class Sources:
-    def __init__(
-        self, events: list[tuple[typing.Any, ...]], grid: Grid
-    ) -> None:
+    def __init__(self, events: list[tuple[typing.Any, ...]], grid: Grid) -> None:
         self.events, self.grid = events, grid
         self.finishes = 0
         self.external_weights = []

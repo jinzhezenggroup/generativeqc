@@ -50,9 +50,7 @@ def resident_nonlocal_geometry(
     ):
         raise ValueError("resident geometry and nonlocal grid shapes differ")
     if not callable(getattr(sources, "geometry_external_device", None)):
-        raise TypeError(
-            "resident nonlocal geometry requires the device-seed consumer"
-        )
+        raise TypeError("resident nonlocal geometry requires the device-seed consumer")
 
     diagnostic = nonlocal_owner.diagnostic()
     if diagnostic.executed:
