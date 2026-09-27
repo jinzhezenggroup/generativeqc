@@ -633,6 +633,19 @@ macro(vibeqc_register_cuda_generated_sources target)
     ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMENT "Generating compiler-owned Direct-HF pair/Hermite support")
 
+  set(VIBEQC_DIRECT_ORDER2_SHELL_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_order2_shell.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_order2_shell_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_order2_shell.py"
+    OUTPUTS "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_order2_shell_cuda.py"
+    ARGS --output "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    COMMENT "Generating compiler-owned Direct-HF order-two shell contraction")
+
   set(VIBEQC_B3LYP_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_b3lyp_device.cuh")
   vibeqc_register_generated_sources(

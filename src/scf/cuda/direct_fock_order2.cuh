@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_order2_shell.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_metadata.hpp"
-#include "scf/cuda/direct_native_order2_shell.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"

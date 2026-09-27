@@ -203,7 +203,6 @@ def _direct_cuda_source() -> typing.Any:
             "cuda/direct_native_cartesian.cuh",
             "cuda/direct_native_contraction.cuh",
             "cuda/direct_native_gradient_types.cuh",
-            "cuda/direct_native_order2_shell.cuh",
             "cuda/direct_native_psss.cuh",
             "cuda/eri_tensor_index.cuh",
             "cuda/direct_eri_symmetry.cuh",
