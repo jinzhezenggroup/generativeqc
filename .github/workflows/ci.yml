@@ -660,11 +660,13 @@ jobs:
               'tests/python/test_hessian_analytic.py::test_raw_total_invariants[water]'
               --deselect
               'tests/python/test_hessian_analytic.py::test_three_step_directional_differences_of_native_forces[water]'
-              # The >12-AO two-center RKS HVP oracle performs a complete
-              # second-order evaluation plus independently reconverged analytic
-              # gradient finite differences. Keep the 13-AO resource/admission
-              # gate on routine CI and run this multicenter numerical
-              # qualification on scheduled/manual CI.
+              # Full >12-AO RKS HVP qualifications compile and evaluate the
+              # complete second-order path and are too expensive for routine
+              # hosted feedback. Keep the lightweight synthetic >12-AO/>4-atom
+              # admission/resource contract on every PR, and run both native
+              # large-domain numerical qualifications scheduled/manual.
+              --deselect
+              'tests/python/test_hessian_rks_directional.py::test_rks_hvp_admits_resource_bounded_domain_above_12_aos'
               --deselect
               'tests/python/test_hessian_rks_larger_multicenter.py::test_larger_multicenter_rks_hvp_matches_nonzero_gradient_difference'
               # Au resource-boundary replay is a full qualification loop
