@@ -41,8 +41,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const double* shell_pair_block_bounds, const double* system_density_bounds,
     const std::uint64_t* enabled_mask_pointer, std::uint64_t enabled_mask,
     const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
-    const double* density, const std::uint8_t* active, double* output,
-    unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile) {
+    const double* density, double coulomb_coefficient, double exchange_coefficient,
+    const std::uint8_t* active, double* output, unsigned long long* global_cursor,
+    DeviceShellClassProfileEntry* profile) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
   __shared__ unsigned long long block_quartet;
@@ -150,20 +151,26 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
         if constexpr (Force) {
           if (angular_order == 0U) {
             contract_two_electron_force_ssss_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output);
           } else if (angular_order == 1U) {
             contract_two_electron_force_psss_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output, 0U);
           } else if (angular_order == 2U) {
             contract_two_electron_force_psps_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output, 0U);
             contract_two_electron_force_pair_order2_task<Unrestricted, kPpssShellClass>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output, 0U);
             contract_two_electron_force_pair_order2_task<Unrestricted, kDsssShellClass>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output, 0U);
           } else if (angular_order == 3U) {
             contract_two_electron_force_order3_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output, 0U);
           }
         } else {
           if (angular_order == 0U) {
@@ -172,7 +179,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                 active, output, nullptr, 0U, 0U);
           } else if (angular_order == 2U) {
             contract_fock_direct_order2_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, nullptr);
+                batch, task, screening_tolerance, schwarz_bounds, density, coulomb_coefficient,
+                exchange_coefficient, active, output, nullptr);
           }
         }
       }
@@ -212,7 +220,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             if constexpr (Force) {
               contract_bounded_direct_force_subtile<Unrestricted>(
                   batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                  schwarz_bounds, density, active, output, subtile, lane);
+                  schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active,
+                  output, subtile, lane);
             } else {
               contract_bounded_direct_fock_subtile<Unrestricted>(
                   batch, angular_order, &queue_count, queue + slot, screening_tolerance,
@@ -234,7 +243,8 @@ void launch_bounded_direct_shell_quartet_kernel(
     const std::uint32_t* shell_pair_order, const double* shell_pair_block_bounds,
     const double* system_density_bounds, const std::uint64_t* enabled_mask_pointer,
     std::uint64_t enabled_mask, const std::uint32_t* bounded_generated_overflow,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile) {
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -243,14 +253,16 @@ void launch_bounded_direct_shell_quartet_kernel(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile);
+              density, coulomb_coefficient, exchange_coefficient, active, output, global_cursor,
+              profile);
     } else {
       bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile);
+              density, coulomb_coefficient, exchange_coefficient, active, output, global_cursor,
+              profile);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -259,14 +271,16 @@ void launch_bounded_direct_shell_quartet_kernel(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile);
+              density, coulomb_coefficient, exchange_coefficient, active, output, global_cursor,
+              profile);
     } else {
       bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile);
+              density, coulomb_coefficient, exchange_coefficient, active, output, global_cursor,
+              profile);
     }
   }
 }
@@ -285,15 +299,15 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
-            enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
-            global_cursor, nullptr);
+            enabled_mask, bounded_generated_overflow, schwarz_bounds, density, 1.0,
+            unrestricted ? -1.0 : -0.5, active, fock, global_cursor, nullptr);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
-            enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
-            global_cursor, nullptr);
+            enabled_mask, bounded_generated_overflow, schwarz_bounds, density, 1.0,
+            unrestricted ? -1.0 : -0.5, active, fock, global_cursor, nullptr);
   }
 }
 
