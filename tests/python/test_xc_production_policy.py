@@ -49,9 +49,4 @@ def test_runtime_and_cpu_generator_use_only_the_lightweight_dispatch() -> None:
         for consumer in consumers
         if consumer.path == "python/vibeqc_compiler/xc/expression_dispatch.py"
     }
-    assert bridge == {
-        (
-            "python/vibeqc_compiler/xc/expression_dispatch.py",
-            "vibeqc_compiler.xc.rsh_expressions",
-        ),
-    }
+    assert bridge == set()
