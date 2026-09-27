@@ -122,6 +122,34 @@ class ProgramRegion:
         }
 
 
+def _region_boundary(
+    program: ProgramIR, start: int, end: int
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Derive the exact ordered dataflow boundary from the source graph."""
+    calls = program.calls[start : end + 1]
+    boundary_reads: list[str] = []
+    produced_so_far: set[str] = set()
+    produced_order: list[str] = []
+    for call in calls:
+        for read in call.reads:
+            if read not in produced_so_far and read not in boundary_reads:
+                boundary_reads.append(read)
+        for write in call.writes:
+            produced_so_far.add(write)
+            produced_order.append(write)
+
+    later_reads = {read for call in program.calls[end + 1 :] for read in call.reads}
+    externally_needed = later_reads.union(program.outputs)
+    boundary_writes = tuple(
+        write for write in produced_order if write in externally_needed
+    )
+    internal_buffers = tuple(
+        write for write in produced_order if write not in externally_needed
+    )
+
+    return tuple(boundary_reads), boundary_writes, internal_buffers
+
+
 def derive_program_region(
     program: ProgramIR,
     *,
@@ -163,24 +191,8 @@ def derive_program_region(
                 f"{call.name}: provider {call.provider!r} is not proven pure"
             )
 
-    boundary_reads: list[str] = []
-    produced_so_far: set[str] = set()
-    produced_order: list[str] = []
-    for call in calls:
-        for read in call.reads:
-            if read not in produced_so_far and read not in boundary_reads:
-                boundary_reads.append(read)
-        for write in call.writes:
-            produced_so_far.add(write)
-            produced_order.append(write)
-
-    later_reads = {read for call in program.calls[end + 1 :] for read in call.reads}
-    externally_needed = later_reads.union(program.outputs)
-    boundary_writes = tuple(
-        write for write in produced_order if write in externally_needed
-    )
-    internal_buffers = tuple(
-        write for write in produced_order if write not in externally_needed
+    boundary_reads, boundary_writes, internal_buffers = _region_boundary(
+        program, start, end
     )
 
     return ProgramRegion(
@@ -323,6 +335,13 @@ def apply_program_region_candidate(
     expected = tuple(range(positions[0], positions[0] + len(positions)))
     if positions != expected:
         raise ValueError("ProgramIR region calls are no longer contiguous")
+
+    # ProgramRegion is a public value object: a reconstructed/replaced instance
+    # can keep the source digest while changing its ABI or elimination list.
+    # ProgramIR's SSA check alone cannot detect omitted or reordered inputs.
+    boundary = _region_boundary(program, positions[0], positions[-1])
+    if boundary != (region.reads, region.writes, region.internal_buffers):
+        raise ValueError("ProgramIR region boundary does not match the source graph")
 
     outside_names = set(call_names).difference(region.call_names)
     if candidate.name in outside_names:
