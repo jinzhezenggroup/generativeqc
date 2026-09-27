@@ -150,15 +150,19 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
       oracle.three_center, plan.nbf,
       factor_density_fitting_metric(oracle.metric, plan.naux, cutoff));
   const auto attempt = [&](const CudaDfFinalStateToken& requested, const std::vector<double>& d,
-                           bool expected) {
+                           bool expected, bool expected_fitted_lease = false) {
     std::vector<double> j, k;
     bool used = !expected;
     std::string detail;
-    plan.final_projection_token = token;  // Even rejected calls must revoke stale leases.
+    plan.final_projection_token = token;  // Rejected calls must still revoke stale leases.
     require(try_cuda_density_fitting_final_rhf_jk(&plan, requested, d, j, k, used, detail) ==
                     VIBEQC_STATUS_SUCCESS &&
-                used == expected && !plan.final_projection_token,
+                used == expected &&
+                plan.final_projection_token.has_value() == expected_fitted_lease,
             "single-B final qualification: " + detail);
+    if (expected_fitted_lease)
+      require(*plan.final_projection_token == requested,
+              "single-B final fitted projection published the wrong state token");
     if (used) {
       const auto reference = build_density_fitting_rhf_jk(fitted, d);
       require(j.size() == d.size() && k.size() == d.size(), "single-B final J/K shape");
@@ -170,7 +174,7 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
   };
   for (const char* policy : {"auto", "occupied"}) {
     setenv("VIBEQC_DF_FINAL_EXCHANGE", policy, 1);
-    attempt(token, density, true);
+    attempt(token, density, true, true);
     for (unsigned fault = 0; fault < 10; ++fault) {
       auto stale = token;
       if (fault == 0) ++stale.version;
@@ -283,6 +287,32 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
       cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) == VIBEQC_STATUS_SUCCESS,
       detail);
   if (single) {
+    // One exact final occupied K now publishes a fitted U=B*C lease. The force
+    // response must consume it without claiming raw-A ownership or changing
+    // the independent raw-integral force.
+    std::vector<double> j, k;
+    bool used = false;
+    require(try_cuda_density_fitting_final_rhf_jk(plan.get(), token, density, j, k, used, detail,
+                                                  false) == VIBEQC_STATUS_SUCCESS &&
+                used && plan->final_projection_token &&
+                *plan->final_projection_token == token,
+            "single-B fitted final projection was not retained: " + detail);
+    setenv("VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted", 1);
+    const std::vector<DensityFittingDensityResponse> terms{{density, 1, .25}};
+    const auto reference = build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
+    std::vector<double> derivative;
+    DfGradientResources resources;
+    require(execute_cuda_density_fitting_generated_force_response(
+                plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, 0, derivative,
+                detail, &resources, &token) == VIBEQC_STATUS_SUCCESS,
+            "single-B fitted projection force response: " + detail);
+    require(resources.occupied_response && !plan->final_projection_token,
+            "single-B fitted response did not consume the final projection lease");
+    require(derivative.size() == reference.size(), "single-B fitted projection force shape");
+    for (std::size_t i = 0; i < derivative.size(); ++i)
+      require(std::abs(derivative[i] - reference[i]) < 8e-10,
+              "single-B final projection reuse differs from raw-integral force");
+    setenv("VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE", "auto", 1);
     single_final_exchange(*plan, token, density, oracle, cutoff);
     return;
   }
