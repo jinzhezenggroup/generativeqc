@@ -2,8 +2,8 @@
 
 The native owner evaluates integral derivatives; generated CUDA contracts AO
 jets, semilocal/nonlocal feature adjoints, partition motion and the final sum.
-Host work is explicit snapshot validation, tiling and VV10 active-set packing.
-No CPU derivative evaluator, reference SCF, or finite difference is used here.
+Host work is explicit snapshot validation and bounded tile scheduling. Nonlocal
+features and force seeds remain on the device throughout composition.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-from vibeqc_compiler.dft.cuda import CudaGrid, GridTaskView
+from vibeqc_compiler.dft.cuda import CudaGrid
 from vibeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
     MOLECULAR_VV10_DENSITY_THRESHOLD,
@@ -33,8 +33,9 @@ from vibeqc_compiler.tensor.cuda_plan import plan_cuda
 
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
-from ._stationary_cuda import _DOUBLE, _INT, _CudaSources, _native_grid_artifact, _ptr
-from .nonlocal_runtime import NonlocalFixedGridPlan
+from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
+from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
+from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
 
 class PreparedWb97mvCudaGradient:
@@ -54,6 +55,8 @@ class PreparedWb97mvCudaGradient:
 
     def close(self) -> None:
         if self._nonlocal is not None:
+            # The native nonlocal owner drains its bound stream before freeing
+            # seeds, including a failed downstream geometry enqueue.
             self._nonlocal.close()
             self._nonlocal = None
         self._stack.close()
@@ -102,6 +105,10 @@ class PreparedWb97mvCudaGradient:
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
         """Contract all twelve gradients under the live SCF token and publish forces."""
         started = perf_counter()
+        if not callable(getattr(_CudaSources, "geometry_external_device", None)):
+            raise NotImplementedError(
+                "resident nonlocal force composition requires the stationary seed consumer"
+            )
         contract = StationaryDerivativeContract(state.identity)
         contract.validate(state)
         source = state._source
@@ -143,8 +150,7 @@ class PreparedWb97mvCudaGradient:
             active_ao_capacity=n,
             budget_bytes=max_device_bytes,
         )
-        # The stationary primitive arena is used only for nuclear repulsion;
-        # integral work belongs to the native source, never an AO^4 host loop.
+        # Integral work belongs to the native source, never an AO^4 host loop.
         capacity = 1
         source_bytes = (
             8
@@ -163,9 +169,8 @@ class PreparedWb97mvCudaGradient:
             max_host_bytes // 4,
             max_device_bytes // 4,
         )
-        # Separate upper allowances for the retained native direct source and
-        # its transient one-electron bridge. Both enforce this cap natively;
-        # the matrix term also covers final-state revalidation/export on host.
+        # Keep the existing conservative native/source allowances. This change
+        # does not silently widen any capacity domain while changing residency.
         native_budget = 256 * n * n + 1024 * (
             na + n + basis.nprimitive + len(basis.shells)
         )
@@ -226,18 +231,6 @@ class PreparedWb97mvCudaGradient:
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
-                lib = self.sources.library
-                lib.stationary_geometry_external.argtypes = [
-                    ct.c_void_p,
-                    ct.POINTER(GridTaskView),
-                    _DOUBLE,
-                    _INT,
-                    _DOUBLE,
-                    _DOUBLE,
-                    _DOUBLE,
-                    ct.c_char_p,
-                    ct.c_size_t,
-                ]
                 self.grid = self._stack.enter_context(
                     CudaGrid(
                         basis,
@@ -249,6 +242,18 @@ class PreparedWb97mvCudaGradient:
                         device_id=device,
                         ingredients=("rho", "gradient", "tau"),
                     )
+                )
+                self._nonlocal = _ResidentNonlocalForceOwner(
+                    nlc.spec,
+                    state.grid.points,
+                    state.grid.weights,
+                    coefficient=nlc.coefficient,
+                    tile_points=tile_points,
+                    maximum_bytes=nlc_budget,
+                    density_threshold=float(MOLECULAR_VV10_DENSITY_THRESHOLD),
+                    device_id=device,
+                    context=source._batch._context,
+                    library=source._library,
                 )
                 rp = plan_cuda(
                     plan.reduction_program(atoms=na),
@@ -268,11 +273,8 @@ class PreparedWb97mvCudaGradient:
             except BaseException:
                 self.close()
                 raise
-
         device_bound += self._reduction_device_bytes
         host_bound += self._reduction_host_bytes
-
-        # The native owner keeps the derivative topology across warm replays.
         component_seconds = {"prepare": perf_counter() - started}
         component_start = perf_counter()
         evaluate = source._library.vibeqc_ks_snapshot_cuda_integral_gradient_v1
@@ -319,10 +321,6 @@ class PreparedWb97mvCudaGradient:
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
         for atom in range(na):
             for other in range(atom):
-                # This module contains one raw nuclear primitive (kind zero).
-                # Spherical d AOs select component encoding in the generic
-                # integral consumer, but no AO component tags belong to this
-                # nuclear-only dispatch; integral derivatives are native here.
                 self.sources._call(
                     "stationary_nuclear",
                     self.sources.handle,
@@ -332,95 +330,20 @@ class PreparedWb97mvCudaGradient:
                     float(charges[atom]),
                     float(charges[other]),
                 )
-        ids = np.arange(n, dtype=np.uintp)
-        rho, gradient = np.empty(npnt), np.empty((npnt, 3))
-        for begin in range(0, npnt, tile_points):
-            end = min(begin + tile_points, npnt)
-            points = state.grid.points[begin:end]
-            with self.grid.feature_task_with_features(
-                points, ids, ("rho", "gradient", "tau")
-            ) as (
-                features,
-                task,
-            ):
-                rho[begin:end] = features["rho"].sum(axis=0)
-                gradient[begin:end] = features["gradient"].sum(axis=0)
-                self.sources.geometry(
-                    task,
-                    np.asarray(state.grid.owners[begin:end], dtype=np.int64),
-                    state.grid.weights[begin:end],
-                    source.atomic_weights[begin:end],
-                    functional=4,
-                )
-        local = self.sources.finish()
-        for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear"):
-            components[name] = local[name]
-        component_seconds["semilocal_geometry_and_features"] = (
-            perf_counter() - component_start
+        component_seconds["density_and_nuclear_setup"] = perf_counter() - component_start
+        resident_parts, resident_seconds, resident_work = resident_nonlocal_geometry(
+            grid=self.grid,
+            sources=self.sources,
+            nonlocal_owner=self._nonlocal,
+            state=state,
+            raw_weights=source.atomic_weights,
+            tile_points=tile_points,
+            ao_count=n,
+            functional=4,
+            ingredients=("rho", "gradient", "tau"),
         )
-        component_start = perf_counter()
-
-        # Compact BOTH VV10 domains with the same density policy as SCF.
-        # The derivative is on this fixed active branch; inactive seeds are zero.
-        active = rho >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)
-        count = int(active.sum())
-        seeds = np.zeros((6, npnt))
-        if count:
-            if self._nonlocal is None or self._nonlocal.point_count != count:
-                if self._nonlocal is not None:
-                    self._nonlocal.close()
-                self._nonlocal = NonlocalFixedGridPlan(
-                    nlc.spec,
-                    count,
-                    coefficient=nlc.coefficient,
-                    tile_points=tile_points,
-                    maximum_bytes=nlc_budget,
-                    device="cuda",
-                    device_id=device,
-                    library=source._library,
-                )
-            result = self._nonlocal.execute(
-                state.grid.points[active],
-                state.grid.weights[active],
-                rho[active],
-                gradient[active],
-                geometry=True,
-            )
-            seeds[0, active], seeds[1, active] = result.vrho, result.vsigma
-            seeds[2:5, active] = result.point_derivative.T
-            seeds[5, active] = result.weight_derivative
-        component_seconds["vv10_pairs"] = perf_counter() - component_start
-        component_start = perf_counter()
-        self.sources.reset(
-            source.grid_spec.coincident_tolerance, state.density, state.weighted_density
-        )
-        for begin in range(0, npnt, tile_points):
-            end = min(begin + tile_points, npnt)
-            with self.grid.xc_task(
-                state.grid.points[begin:end], ids, "WB97M-V"
-            ) as task:
-                owners = np.ascontiguousarray(
-                    state.grid.owners[begin:end], dtype=np.int64
-                )
-                weights = np.ascontiguousarray(
-                    state.grid.weights[begin:end] * active[begin:end]
-                )
-                raw = np.ascontiguousarray(source.atomic_weights[begin:end])
-                external = np.ascontiguousarray(seeds[:, begin:end])
-                self.sources._call(
-                    "stationary_geometry_external",
-                    self.sources.handle,
-                    ct.byref(task.view),
-                    task.density_jets(4),
-                    _ptr(owners),
-                    _ptr(weights),
-                    _ptr(raw),
-                    _ptr(external),
-                )
-        nonlocal_parts = self.sources.finish()
-        for suffix in ("ao", "grid", "weight"):
-            components["nonlocal_" + suffix] = nonlocal_parts["xc_" + suffix]
-        component_seconds["nonlocal_geometry"] = perf_counter() - component_start
+        components.update(resident_parts)
+        component_seconds.update(resident_seconds)
         component_start = perf_counter()
         plan.reduction_program(atoms=na, sources=components)
         result = self.reduction.execute(components)
@@ -432,11 +355,8 @@ class PreparedWb97mvCudaGradient:
             "plan_identity": plan.identity,
             "source_names": list(plan.source_names),
             "grid_points": npnt,
-            "ao_collocation_point_visits": 2 * npnt,
-            "geometry_point_visits": 2 * npnt,
+            **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
-            "nonlocal_active_points": count,
-            "nonlocal_pair_evaluations": count**2,
             "symmetry_unique_quartets_per_integral_source": (
                 (n * (n + 1) // 2) * (n * (n + 1) // 2 + 1) // 2
             ),
@@ -467,7 +387,7 @@ class PreparedWb97mvCudaGradient:
             "prepared_execution_reused": reused,
             "execution_index": self.executions,
             "snapshot_export_work": dict(source.export_work),
-            "host_scope": "snapshot validation, tiling, total-feature/active-set packing",
+            "host_scope": "snapshot validation and bounded tile scheduling",
             "endpoint_seconds": perf_counter() - started,
             "component_seconds": component_seconds,
         }
