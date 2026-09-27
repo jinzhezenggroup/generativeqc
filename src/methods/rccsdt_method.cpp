@@ -112,8 +112,7 @@ class RccsdtPrepared final : public PreparedCalculation {
           scf::make_hf_fock_spec(scf::FockSpin::Restricted), scf::FockBackend::Cpu, 0.0);
       cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
     }
-    auto state =
-        run_rccsd_native_state(execution_, system_, descriptor_, cpu_exact_plan_.get());
+    auto state = run_rccsd_native_state(execution_, system_, descriptor_, cpu_exact_plan_.get());
     last_ = state.diagnostic;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
