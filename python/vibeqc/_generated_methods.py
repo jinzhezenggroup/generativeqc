@@ -43,10 +43,7 @@ _METHODS = _PAYLOAD["methods"]
 _COMPOSITES = _PAYLOAD.get("composite_methods", [])
 
 METHOD_CONSTANTS = MappingProxyType(
-    {
-        f"METHOD_{method['symbol']}": int(method["abi_id"])
-        for method in _METHODS
-    }
+    {f"METHOD_{method['symbol']}": int(method["abi_id"]) for method in _METHODS}
 )
 globals().update(METHOD_CONSTANTS)
 
