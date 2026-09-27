@@ -361,6 +361,8 @@ class _CudaSources:
         self.tasks = np.full((records, 9), -1, dtype=np.int64)
         self.charges = np.ones(records)
         self.used = 0
+        self.primitive_pages = 0
+        self.primitive_page_peak_records = 0
         self.device = device
         self.borrowed_streams = set()
         self.centers = np.ascontiguousarray(
@@ -499,6 +501,8 @@ class _CudaSources:
         weighted_density: typing.Any,
     ) -> None:
         self.used = 0
+        self.primitive_pages = 0
+        self.primitive_page_peak_records = 0
         self.borrowed_streams.clear()
         shape = (self.spin_blocks, self.nao, self.nao)
         density = _checked(density, shape)
@@ -523,6 +527,7 @@ class _CudaSources:
                 if self.timeline is not None
                 else nullcontext()
             )
+            page_primitive_records = int(np.sum(tasks[:, 8], dtype=np.int64))
             with phase:
                 self._call(
                     "stationary_tasks",
@@ -531,6 +536,10 @@ class _CudaSources:
                     _ptr(charges),
                     self.used,
                 )
+            self.primitive_pages += 1
+            self.primitive_page_peak_records = max(
+                self.primitive_page_peak_records, page_primitive_records
+            )
             self.used = 0
 
     def integral(
@@ -1759,6 +1768,9 @@ def _complete_rks_cuda_gradient_diagnostic(
                 else _grid_metric_delta(grid_after, grid_before)
             )
             work["borrowed_grid_streams"] = tuple(sorted(sources.borrowed_streams))
+            work["primitive_pages"] = sources.primitive_pages
+            work["primitive_page_peak_records"] = sources.primitive_page_peak_records
+            work["primitive_record_page_budget"] = max_primitive_records
         if work["owned_device_bytes"] != source_bytes:
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
