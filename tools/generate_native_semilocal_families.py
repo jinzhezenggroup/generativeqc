@@ -49,9 +49,7 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
             if not isinstance(component[0], str) or not component[0]:
                 raise ValueError("native semilocal component name must be nonempty")
             Fraction(component[1])
-        if item["exchange_policy"] == "canonical" and not item.get(
-            "canonical_method"
-        ):
+        if item["exchange_policy"] == "canonical" and not item.get("canonical_method"):
             raise ValueError("canonical exchange policy requires canonical_method")
     return families
 
