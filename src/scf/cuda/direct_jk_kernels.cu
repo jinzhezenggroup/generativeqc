@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "generated_direct_contraction.cuh"
 #include "scf/cuda/direct_jk_kernels.hpp"
-#include "scf/cuda/direct_native_contraction.cuh"
 
 namespace vibeqc::scf {
 namespace {

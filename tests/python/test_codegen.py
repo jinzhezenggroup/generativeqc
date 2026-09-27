@@ -200,8 +200,6 @@ def _direct_cuda_source() -> typing.Any:
             "cuda/direct_bounded_tasks.cu",
             "cuda/direct_queue_scan.cu",
             "cuda/direct_queue_diagnostics.cu",
-            "cuda/direct_native_cartesian.cuh",
-            "cuda/direct_native_contraction.cuh",
             "cuda/direct_native_gradient_types.cuh",
             "cuda/direct_native_psss.cuh",
             "cuda/eri_tensor_index.cuh",

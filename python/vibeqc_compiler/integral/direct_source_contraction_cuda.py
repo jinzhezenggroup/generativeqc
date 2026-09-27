@@ -19,7 +19,7 @@ _SOURCE = r"""#pragma once
 #include <type_traits>
 
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_cartesian.cuh"
+#include "generated_direct_cartesian.cuh"
 #include "generated_direct_order2_shell.cuh"
 #include "generated_direct_shell_class.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
