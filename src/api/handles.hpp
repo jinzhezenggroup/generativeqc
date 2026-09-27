@@ -30,6 +30,8 @@ struct vibeqc_calculation {
   vibeqc::scf::PrecisionProvenance precision{};
   /** True only after a run completes and populates \p precision. */
   bool precision_available{false};
+  /** Versioned detailed record for the same completed run. */
+  std::optional<vibeqc::scf::PrecisionWork> precision_work;
   /** Completed-run SCF measures; cleared before a new backend execution. */
   std::optional<vibeqc_scf_diagnostic> scf_diagnostic;
   std::optional<vibeqc::dft::ScfDiagnostic> ks_diagnostic;
@@ -43,6 +45,7 @@ struct vibeqc_batch {
   std::vector<std::uint64_t> last_fock_builds;
   /** Input-ordered completed-run records; invalid/throwing items stay unavailable. */
   std::vector<std::optional<vibeqc::scf::PrecisionProvenance>> precision;
+  std::vector<std::optional<vibeqc::scf::PrecisionWork>> precision_work;
   /** Separate from the fixed-stride legacy batch output array. */
   std::vector<std::optional<vibeqc_scf_diagnostic>> scf_diagnostics;
   std::vector<std::optional<vibeqc::dft::ScfDiagnostic>> ks_diagnostics;
