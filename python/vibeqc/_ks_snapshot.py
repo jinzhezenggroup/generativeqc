@@ -105,6 +105,56 @@ def _scf_xc_points(
     }
 
 
+def _generic_scf_xc_points(
+    library: typing.Any,
+    program: _native.KsSemilocalProgramDescriptor,
+    rho: typing.Any,
+    gradient: typing.Any,
+    tau: typing.Any = None,
+) -> typing.Any:
+    """Evaluate the exact installed generic semilocal point program."""
+
+    raw_rho, raw_gradient = np.asarray(rho), np.asarray(gradient)
+    if (
+        np.iscomplexobj(raw_rho)
+        or np.iscomplexobj(raw_gradient)
+        or raw_rho.ndim != 2
+        or raw_rho.shape[0] != 2
+        or raw_gradient.shape != (2, raw_rho.shape[1], 3)
+        or raw_rho.shape[1] == 0
+    ):
+        raise ValueError("generic SCF point evaluation requires rho[2,n] and gradient[2,n,3]")
+    rho = np.ascontiguousarray(raw_rho, dtype=np.float64)
+    gradient = np.ascontiguousarray(raw_gradient, dtype=np.float64)
+    if tau is None:
+        if program.ingredient_mask & 8:
+            raise ValueError("generic meta-GGA point evaluation requires tau[2,n]")
+        tau = np.zeros_like(rho)
+    raw_tau = np.asarray(tau)
+    if np.iscomplexobj(raw_tau) or raw_tau.shape != rho.shape:
+        raise ValueError("generic SCF point evaluation requires real tau[2,n]")
+    tau = np.ascontiguousarray(raw_tau, dtype=np.float64)
+    output = np.empty((rho.shape[1], 11), dtype=np.float64)
+    _native.check(
+        library,
+        library.vibeqc_libxc_semilocal_program_evaluate_v1(
+            ct.byref(program),
+            rho.ctypes.data_as(ct.POINTER(ct.c_double)),
+            gradient.ctypes.data_as(ct.POINTER(ct.c_double)),
+            tau.ctypes.data_as(ct.POINTER(ct.c_double)),
+            rho.shape[1],
+            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            output.size,
+        ),
+    )
+    return {
+        "energy": immutable(output[:, 0]),
+        "rho": immutable(output[:, 1:3].T),
+        "gradient": immutable(output[:, 3:9].reshape(-1, 2, 3).transpose(1, 0, 2)),
+        "kinetic": immutable(output[:, 9:11].T),
+    }
+
+
 class NativeKsSnapshot:
     """Own one native snapshot and check its current batch before consumption."""
 
@@ -122,6 +172,7 @@ class NativeKsSnapshot:
         "ecp_terms",
         "export_work",
         "functional",
+        "generic_semilocal_program",
         "grid",
         "grid_provenance",
         "grid_spec",
@@ -192,18 +243,37 @@ class NativeKsSnapshot:
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
             method_name = self._batch._calculator._method_name
-            functional_code = native_xc_functional_code(method_name)
-            expected_domain_version = (
-                4
-                if functional_code >= 0x10000
-                else {3: 2, 4: 3}.get(functional_code, 1)
+            options = self._batch._calculator.ks_options
+            generic_registration = (
+                options.generic_libxc_registration if options is not None else None
             )
+            if generic_registration is not None:
+                program = _native.KsSemilocalProgramDescriptor()
+                _native.check(
+                    lib,
+                    lib.vibeqc_libxc_semilocal_program_get(
+                        generic_registration.encode("ascii"), ct.byref(program)
+                    ),
+                    context=batch._context,
+                )
+                self.generic_semilocal_program = program
+                functional_code = 2**32 - 1
+                expected_domain_version = program.domain_version
+            else:
+                self.generic_semilocal_program = None
+                functional_code = native_xc_functional_code(method_name)
+                expected_domain_version = (
+                    4
+                    if functional_code >= 0x10000
+                    else {3: 2, 4: 3}.get(functional_code, 1)
+                )
             if (
                 metadata[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)
+                or metadata[6] != functional_code
                 or metadata[7] != expected_domain_version
             ):
                 raise NotImplementedError(
-                    "unsupported native KS snapshot/domain version"
+                    "unsupported native KS snapshot/functional/domain identity"
                 )
             cpu = metadata[0] in (2, 4, 6, 7)
             if (metadata[12] == 2**64 - 1) != cpu:
@@ -242,7 +312,6 @@ class NativeKsSnapshot:
         from ._dft_gradient import (
             StationaryKsIdentity,
             native_ao_geometry_identity,
-            scf_regularization_identity,
             xc_geometry_topology_identity,
         )
 
@@ -366,16 +435,27 @@ class NativeKsSnapshot:
             tuple(take((3,))) if self.metadata[0] in (6, 7, 8, 9) else (1.0, 1.0, 0.0)
         )
         options = self._batch._calculator.ks_options
+        generic_registration = (
+            options.generic_libxc_registration if options is not None else None
+        )
+        expected_functional = (
+            2**32 - 1
+            if generic_registration is not None
+            else native_xc_functional_code(self._batch._calculator._method_name)
+        )
         if (
             options is None
             or options.coefficients != self.coefficients
-            or functional
-            != native_xc_functional_code(self._batch._calculator._method_name)
+            or functional != expected_functional
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
         full_method_ir = options.method_ir
-        method = self._batch._calculator._method_name
+        method = (
+            f"libxc:{generic_registration}:{'uks' if spins == 2 else 'rks'}"
+            if generic_registration is not None
+            else self._batch._calculator._method_name
+        )
         if method == "pbe-d4-rks":
             from vibeqc_compiler.method import DispersionCorrectionPrimitive
 
@@ -503,7 +583,7 @@ class NativeKsSnapshot:
                 {
                     "native_owner": owner,
                     "functional": spec.identity,
-                    "scf_domain": scf_domain_for_method(method),
+                    "scf_domain": options.scf_domain,
                     "grid": grid.identity,
                     **(
                         {"grid_provenance": dict(self.grid_provenance)}
@@ -536,7 +616,7 @@ class NativeKsSnapshot:
             functional_identity=spec.identity,
             # The derivative bridge consumes this exact SCF point model;
             # interior-v1 remains a separate diagnostic contract.
-            regularization_identity=scf_regularization_identity(method),
+            regularization_identity=canonical_hash({"scf_domain": options.scf_domain}),
             provider_identity=canonical_hash(
                 {
                     "provider": f"native-{self.backend}-exact-{'jk' if self.coefficients[2] else 'j'}-fp64",
@@ -581,10 +661,19 @@ class NativeKsSnapshot:
             raise TypeError("XC point evaluation requires a typed functional")
         if functional.identity != self.functional.identity:
             raise ValueError("XC point functional disagrees with native composition")
-        code = native_xc_functional_code(self._batch._calculator._method_name)
-        values = _scf_xc_points(
-            self._library, code, rho, gradient, tau, scales=self.coefficients[:2]
-        )
+        if self.generic_semilocal_program is not None:
+            values = _generic_scf_xc_points(
+                self._library,
+                self.generic_semilocal_program,
+                rho,
+                gradient,
+                tau,
+            )
+        else:
+            code = native_xc_functional_code(self._batch._calculator._method_name)
+            values = _scf_xc_points(
+                self._library, code, rho, gradient, tau, scales=self.coefficients[:2]
+            )
         self.check_current()
         return values
 
