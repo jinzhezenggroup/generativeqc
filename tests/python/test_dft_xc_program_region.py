@@ -6,13 +6,15 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.program import ProgramIR
 from vibeqc_compiler.dft.xc_program import (
     bind_grid_xc_region_candidates,
     host_unfused_grid_xc_program,
     host_unfused_grid_xc_region,
     select_grid_xc_region_program,
 )
+if typing.TYPE_CHECKING:
+    from vibeqc_compiler.common.program import ProgramIR
+
 from vibeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
