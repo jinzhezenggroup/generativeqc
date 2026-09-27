@@ -616,12 +616,15 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
   task.matrix_order = topology.matrix_order;
   task.shell_pair[0] = shell_pairs[0];
   task.shell_pair[1] = shell_pairs[1];
-  task.reversed_shell_pair_mask =
-      reversed_mask |
-      (topology.fock_consumer ==
-               vibeqc::scf::detail::GeneratedFockConsumer::Coulomb
-           ? kGenerated{class_name}CoulombConsumerBit
-           : 0U);
+  const std::uint32_t consumer_bit =
+      topology.fock_consumer ==
+              vibeqc::scf::detail::GeneratedFockConsumer::Coulomb
+          ? kGenerated{class_name}CoulombConsumerBit
+          : (topology.fock_consumer ==
+                     vibeqc::scf::detail::GeneratedFockConsumer::Exchange
+                 ? kGenerated{class_name}ExchangeConsumerBit
+                 : 0U);
+  task.reversed_shell_pair_mask = reversed_mask | consumer_bit;
 }}
 """
 
