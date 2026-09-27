@@ -234,7 +234,7 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
     result->arena.allocate(result->device, doubles);
     result->errors.allocate(result->device, 3);
     auto* cursor = result->arena.get();
-    const auto take = [&](std::size_t count) mutable {
+    auto take = [&](std::size_t count) {
       auto* pointer = cursor;
       cursor += count;
       return pointer;
