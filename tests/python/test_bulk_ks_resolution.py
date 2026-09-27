@@ -131,7 +131,9 @@ def test_qualification_candidate_can_retest_blacklisted_functional(
         ),
         public_dft=False,
     )
-    monkeypatch.setattr(bulk_ks, "resolve_capability", lambda *args, **kwargs: qualified)
+    monkeypatch.setattr(
+        bulk_ks, "resolve_capability", lambda *args, **kwargs: qualified
+    )
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
     )

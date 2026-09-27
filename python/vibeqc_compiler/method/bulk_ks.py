@@ -120,8 +120,7 @@ def _structural_capability(
     )
     if unsupported:
         raise UnsupportedMethod(
-            "automatic bulk Libxc KS does not support ingredients "
-            f"{unsupported!r}"
+            f"automatic bulk Libxc KS does not support ingredients {unsupported!r}"
         )
 
     if enforce_blacklist:
@@ -200,7 +199,9 @@ def resolve_bulk_ks_candidate(
         evidence=evidence,
     )
     if qualified.identity != capability.identity:
-        raise RuntimeError("bulk Libxc capability identity changed during KS resolution")
+        raise RuntimeError(
+            "bulk Libxc capability identity changed during KS resolution"
+        )
     compiled_cpu = _require_exact_compiled_cpu(capability)
     return _build_resolution(
         qualified,
@@ -234,9 +235,7 @@ def resolve_bulk_ks(
             "automatic bulk Libxc KS resolution currently supports CPU only"
         )
     _ = evidence
-    capability = _structural_capability(
-        name, evidence=None, enforce_blacklist=True
-    )
+    capability = _structural_capability(name, evidence=None, enforce_blacklist=True)
     return _build_resolution(
         capability,
         functional_name=capability.name,
