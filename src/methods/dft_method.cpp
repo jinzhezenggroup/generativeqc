@@ -38,6 +38,10 @@
 namespace vibeqc::methods::detail {
 namespace {
 
+inline constexpr const char* kBulkLibxcProductionScfDomain =
+    "libxc-bulk-production-candidate/v2";
+inline constexpr std::uint32_t kBulkLibxcProductionDomainVersion = 3U;
+
 std::uint64_t next_cpu_ks_owner() {
   static std::atomic<std::uint64_t> next{1};
   auto value = next.load(std::memory_order_relaxed);
@@ -183,6 +187,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
         !*external.expression_identity || !external.native_program ||
         input.semilocal_component_count != 1 || !input.semilocal_components[0].component_id ||
         std::string_view(input.semilocal_components[0].component_id) != external.identifier ||
+        external.domain_version != kBulkLibxcProductionDomainVersion ||
         input.semilocal_components[0].coefficient != 1.0 || input.semilocal_range_omega != 0.0)
       throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
                         "invalid generic semilocal point-program descriptor");
@@ -217,7 +222,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
-  if (plan.generic_semilocal_program) return "libxc-bulk-production-candidate/v2";
+  if (plan.generic_semilocal_program) return kBulkLibxcProductionScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
