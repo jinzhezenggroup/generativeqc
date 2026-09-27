@@ -1,143 +1,94 @@
-"""Generated native ABI/provider identity metadata; do not edit by hand."""
+"""Runtime public-method metadata derived from the audited manifest.
 
-# fmt: off
+This module intentionally keeps the historical import path used by the Python
+API, but it is not a generated source file. Source checkouts read the canonical
+repository manifest directly; installed wheels read the same manifest bundled
+as package data.
+"""
+
+from __future__ import annotations
+
+import json
+from importlib import resources
+from pathlib import Path
 from types import MappingProxyType
+from typing import Any
 
-METHOD_RHF = 1
-METHOD_UHF = 2
-METHOD_WB97M_V = 3
-METHOD_RCCSD_T = 4
-METHOD_MP2 = 5
-METHOD_LDA_RKS = 6
-METHOD_PBE_RKS = 7
-METHOD_LDA_UKS = 8
-METHOD_PBE_UKS = 9
-METHOD_R2SCAN_RKS = 10
-METHOD_R2SCAN_UKS = 11
-METHOD_RCCSD = 12
-METHOD_PBE0_RKS = 13
-METHOD_PBE0_UKS = 14
-METHOD_GFN2_XTB = 15
-METHOD_B3LYP_RKS = 16
-METHOD_B3LYP_UKS = 17
-METHOD_PBE_D4_RKS = 18
-METHOD_WB97M_V_UKS = 19
-METHOD_M06_2X_RKS = 20
-METHOD_M06_2X_UKS = 21
-METHOD_MN15_RKS = 22
-METHOD_MN15_UKS = 23
 
-METHOD_CONSTANTS = MappingProxyType({
-    "METHOD_RHF": METHOD_RHF,
-    "METHOD_UHF": METHOD_UHF,
-    "METHOD_WB97M_V": METHOD_WB97M_V,
-    "METHOD_RCCSD_T": METHOD_RCCSD_T,
-    "METHOD_MP2": METHOD_MP2,
-    "METHOD_LDA_RKS": METHOD_LDA_RKS,
-    "METHOD_PBE_RKS": METHOD_PBE_RKS,
-    "METHOD_LDA_UKS": METHOD_LDA_UKS,
-    "METHOD_PBE_UKS": METHOD_PBE_UKS,
-    "METHOD_R2SCAN_RKS": METHOD_R2SCAN_RKS,
-    "METHOD_R2SCAN_UKS": METHOD_R2SCAN_UKS,
-    "METHOD_RCCSD": METHOD_RCCSD,
-    "METHOD_PBE0_RKS": METHOD_PBE0_RKS,
-    "METHOD_PBE0_UKS": METHOD_PBE0_UKS,
-    "METHOD_GFN2_XTB": METHOD_GFN2_XTB,
-    "METHOD_B3LYP_RKS": METHOD_B3LYP_RKS,
-    "METHOD_B3LYP_UKS": METHOD_B3LYP_UKS,
-    "METHOD_PBE_D4_RKS": METHOD_PBE_D4_RKS,
-    "METHOD_WB97M_V_UKS": METHOD_WB97M_V_UKS,
-    "METHOD_M06_2X_RKS": METHOD_M06_2X_RKS,
-    "METHOD_M06_2X_UKS": METHOD_M06_2X_UKS,
-    "METHOD_MN15_RKS": METHOD_MN15_RKS,
-    "METHOD_MN15_UKS": METHOD_MN15_UKS,
-})
+def _manifest_text() -> str:
+    bundled = resources.files("vibeqc").joinpath("data/public_methods.json")
+    if bundled.is_file():
+        return bundled.read_text(encoding="utf-8")
 
-METHOD_METADATA = MappingProxyType({
-    'rhf': MappingProxyType({"abi_id": 1, "family": 'hartree_fock', "provider": 'hf', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'uhf': MappingProxyType({"abi_id": 2, "family": 'hartree_fock', "provider": 'hf', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'wb97m-v': MappingProxyType({"abi_id": 3, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ('wb97m-v-rks',)}),
-    'rccsd(t)': MappingProxyType({"abi_id": 4, "family": 'coupled_cluster', "provider": 'rccsdt', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ('ccsd(t)',)}),
-    'mp2': MappingProxyType({"abi_id": 5, "family": 'perturbation', "provider": 'mp2', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'lda-rks': MappingProxyType({"abi_id": 6, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'pbe-rks': MappingProxyType({"abi_id": 7, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'lda-uks': MappingProxyType({"abi_id": 8, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'pbe-uks': MappingProxyType({"abi_id": 9, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'r2scan-rks': MappingProxyType({"abi_id": 10, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'r2scan-uks': MappingProxyType({"abi_id": 11, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'rccsd': MappingProxyType({"abi_id": 12, "family": 'coupled_cluster', "provider": 'rccsd', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
-    'pbe0-rks': MappingProxyType({"abi_id": 13, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'pbe0-uks': MappingProxyType({"abi_id": 14, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'gfn2-xtb': MappingProxyType({"abi_id": 15, "family": 'semiempirical', "provider": 'xtb', "properties": ('energy', 'forces'), "supports_batch": False, "aliases": ('gfn2',)}),
-    'b3lyp-rks': MappingProxyType({"abi_id": 16, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'b3lyp-uks': MappingProxyType({"abi_id": 17, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'pbe-d4-rks': MappingProxyType({"abi_id": 18, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'wb97m-v-uks': MappingProxyType({"abi_id": 19, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'm06-2x-rks': MappingProxyType({"abi_id": 20, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'm06-2x-uks': MappingProxyType({"abi_id": 21, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'mn15-rks': MappingProxyType({"abi_id": 22, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-    'mn15-uks': MappingProxyType({"abi_id": 23, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
-})
+    source = Path(__file__).resolve().parents[2] / "manifests/public_methods.json"
+    if source.is_file():
+        return source.read_text(encoding="utf-8")
 
-METHOD_NAME_TO_ID = MappingProxyType({
-    'rhf': METHOD_RHF,
-    'uhf': METHOD_UHF,
-    'wb97m-v': METHOD_WB97M_V,
-    'wb97m-v-rks': METHOD_WB97M_V,
-    'rccsd(t)': METHOD_RCCSD_T,
-    'ccsd(t)': METHOD_RCCSD_T,
-    'mp2': METHOD_MP2,
-    'lda-rks': METHOD_LDA_RKS,
-    'pbe-rks': METHOD_PBE_RKS,
-    'lda-uks': METHOD_LDA_UKS,
-    'pbe-uks': METHOD_PBE_UKS,
-    'r2scan-rks': METHOD_R2SCAN_RKS,
-    'r2scan-uks': METHOD_R2SCAN_UKS,
-    'rccsd': METHOD_RCCSD,
-    'pbe0-rks': METHOD_PBE0_RKS,
-    'pbe0-uks': METHOD_PBE0_UKS,
-    'gfn2-xtb': METHOD_GFN2_XTB,
-    'gfn2': METHOD_GFN2_XTB,
-    'b3lyp-rks': METHOD_B3LYP_RKS,
-    'b3lyp-uks': METHOD_B3LYP_UKS,
-    'pbe-d4-rks': METHOD_PBE_D4_RKS,
-    'wb97m-v-uks': METHOD_WB97M_V_UKS,
-    'm06-2x-rks': METHOD_M06_2X_RKS,
-    'm06-2x-uks': METHOD_M06_2X_UKS,
-    'mn15-rks': METHOD_MN15_RKS,
-    'mn15-uks': METHOD_MN15_UKS,
-})
-METHOD_ID_TO_NAME = MappingProxyType({
-    METHOD_RHF: 'rhf',
-    METHOD_UHF: 'uhf',
-    METHOD_WB97M_V: 'wb97m-v',
-    METHOD_RCCSD_T: 'rccsd(t)',
-    METHOD_MP2: 'mp2',
-    METHOD_LDA_RKS: 'lda-rks',
-    METHOD_PBE_RKS: 'pbe-rks',
-    METHOD_LDA_UKS: 'lda-uks',
-    METHOD_PBE_UKS: 'pbe-uks',
-    METHOD_R2SCAN_RKS: 'r2scan-rks',
-    METHOD_R2SCAN_UKS: 'r2scan-uks',
-    METHOD_RCCSD: 'rccsd',
-    METHOD_PBE0_RKS: 'pbe0-rks',
-    METHOD_PBE0_UKS: 'pbe0-uks',
-    METHOD_GFN2_XTB: 'gfn2-xtb',
-    METHOD_B3LYP_RKS: 'b3lyp-rks',
-    METHOD_B3LYP_UKS: 'b3lyp-uks',
-    METHOD_PBE_D4_RKS: 'pbe-d4-rks',
-    METHOD_WB97M_V_UKS: 'wb97m-v-uks',
-    METHOD_M06_2X_RKS: 'm06-2x-rks',
-    METHOD_M06_2X_UKS: 'm06-2x-uks',
-    METHOD_MN15_RKS: 'mn15-rks',
-    METHOD_MN15_UKS: 'mn15-uks',
-})
+    raise RuntimeError("public method manifest is unavailable")
 
-HF_METHOD_IDS = frozenset((METHOD_RHF, METHOD_UHF,))
-NATIVE_DFT_METHOD_IDS = frozenset((METHOD_WB97M_V, METHOD_LDA_RKS, METHOD_PBE_RKS, METHOD_LDA_UKS, METHOD_PBE_UKS, METHOD_R2SCAN_RKS, METHOD_R2SCAN_UKS, METHOD_PBE0_RKS, METHOD_PBE0_UKS, METHOD_B3LYP_RKS, METHOD_B3LYP_UKS, METHOD_PBE_D4_RKS, METHOD_WB97M_V_UKS, METHOD_M06_2X_RKS, METHOD_M06_2X_UKS, METHOD_MN15_RKS, METHOD_MN15_UKS,))
-COMPOSITE_METHOD_ALIASES = MappingProxyType({
-    'r2scan-3c': ('R2SCAN-3c', 'unpolarized'),
-    'r2scan-3c-rks': ('R2SCAN-3c', 'unpolarized'),
-    'r2scan-3c-uks': ('R2SCAN-3c', 'polarized'),
-})
-# fmt: on
+
+def _load_manifest() -> dict[str, Any]:
+    payload = json.loads(_manifest_text())
+    if payload.get("schema_version") != 2:
+        raise RuntimeError("unsupported public method manifest schema")
+    if not isinstance(payload.get("methods"), list):
+        raise RuntimeError("public method manifest requires methods")
+    if not isinstance(payload.get("composite_methods", []), list):
+        raise RuntimeError("public method manifest composite_methods must be a list")
+    return payload
+
+
+_PAYLOAD = _load_manifest()
+_METHODS = _PAYLOAD["methods"]
+_COMPOSITES = _PAYLOAD.get("composite_methods", [])
+
+METHOD_CONSTANTS = MappingProxyType(
+    {
+        f"METHOD_{method['symbol']}": int(method["abi_id"])
+        for method in _METHODS
+    }
+)
+globals().update(METHOD_CONSTANTS)
+
+METHOD_METADATA = MappingProxyType(
+    {
+        str(method["name"]): MappingProxyType(
+            {
+                "abi_id": int(method["abi_id"]),
+                "family": str(method["family"]),
+                "provider": str(method["provider"]),
+                "properties": tuple(method["properties"]),
+                "supports_batch": bool(method["supports_batch"]),
+                "aliases": tuple(method.get("aliases", [])),
+            }
+        )
+        for method in _METHODS
+    }
+)
+
+_method_name_to_id: dict[str, int] = {}
+for _method in _METHODS:
+    _method_id = int(_method["abi_id"])
+    _method_name_to_id[str(_method["name"])] = _method_id
+    for _alias in _method.get("aliases", []):
+        _method_name_to_id[str(_alias)] = _method_id
+METHOD_NAME_TO_ID = MappingProxyType(_method_name_to_id)
+
+METHOD_ID_TO_NAME = MappingProxyType(
+    {int(method["abi_id"]): str(method["name"]) for method in _METHODS}
+)
+
+HF_METHOD_IDS = frozenset(
+    int(method["abi_id"]) for method in _METHODS if method["provider"] == "hf"
+)
+NATIVE_DFT_METHOD_IDS = frozenset(
+    int(method["abi_id"]) for method in _METHODS if method["provider"] == "dft"
+)
+
+_composite_aliases: dict[str, tuple[str, str]] = {}
+for _method in _COMPOSITES:
+    _target = (str(_method["identifier"]), str(_method["spin"]))
+    _composite_aliases[str(_method["name"])] = _target
+    for _alias in _method.get("aliases", []):
+        _composite_aliases[str(_alias)] = _target
+COMPOSITE_METHOD_ALIASES = MappingProxyType(_composite_aliases)
