@@ -562,7 +562,18 @@ def complete_rks_gradient_diagnostic(
 
     range_native = None
     if plan.range_exchange_primitives:
-        range_native = RangeExchangeExecutor(basis, cache, primitive_tile, compiler)
+        range_native = RangeExchangeExecutor(
+            basis,
+            cache,
+            primitive_tile,
+            compiler,
+            aot_library=state._source._library,
+            component_executor=(
+                native
+                if hasattr(native, "integral_with_dispatch_plan")
+                else None
+            ),
+        )
         try:
             for range_source in plan.range_exchange_sources:
                 primitive = plan.range_exchange_primitive(range_source.name)
@@ -782,6 +793,7 @@ def complete_rks_gradient_diagnostic(
     work["primitive_records"] = primitive_records
     if range_native is not None:
         work["range_exchange_primitive_records"] = range_native.records
+        work.update(range_native.compilation_work)
     return DiagnosticStationaryGradient(
         immutable(gradient),
         MappingProxyType({key: immutable(value) for key, value in components.items()}),
