@@ -406,9 +406,8 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
   });
 }
 int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* view,
-                                const double* work, const int64_t* owners,
-                                const double* weights, const double* raw, char* error,
-                                size_t size) {
+                                const double* work, const int64_t* owners, const double* weights,
+                                const double* raw, char* error, size_t size) {
   using namespace vibeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
@@ -430,9 +429,9 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-        nullptr, p->partial, p->scratch, p->context.error);
+    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, p->centers,
+                                               p->atoms, p->weights, p->raw, nullptr, p->partial,
+                                               p->scratch, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
