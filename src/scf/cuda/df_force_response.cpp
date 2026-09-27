@@ -456,6 +456,26 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
       buffers.occupied_factors[0].coefficients = state->d_final_alpha_coefficients;
     }
   }
+
+  // Single fitted-B plans keep the exact final-K U=B*C in the same projection
+  // allocation. Unlike the raw-projection lease above, this never claims raw A:
+  // the fitted response will finish C^T*U directly and still borrow immutable B
+  // for Coulomb charge/derivative work. Capture the pointer before consuming the
+  // one-shot token; canonical density/factor provenance is revalidated below.
+  const double* final_fitted_projection = nullptr;
+  if ((projection == "reuse" || (projection == "auto" && fitted_occupied_requested)) &&
+      fitted_occupied_requested &&
+      plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+      plan->batch_size == 1 && system == 0 && terms.size() == 1 && final_state &&
+      plan->final_projection_token && *plan->final_projection_token == *final_state &&
+      plan->metric_full_rank[0] && plan->metric_response_valid[0]) {
+    const auto rank = final_state->identity.occupied.empty() ? 0 : final_state->identity.occupied[0];
+    auto* state = static_cast<PersistentScfState*>(plan->persistent_scf_state);
+    if (state && !state->unrestricted && rank && rank <= plan->value_storage.rank_capacity &&
+        plan->naux * rank <= static_cast<std::size_t>(std::numeric_limits<int>::max()))
+      final_fitted_projection = plan->auxiliary_tile_values;
+  }
+
   // A force attempt consumes the exclusive scratch lease. Repeated forces
   // without another final K, errors, and incompatible consumers all fall back.
   plan->final_projection_token.reset();
@@ -501,6 +521,10 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
             *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
         if (corrected != VIBEQC_STATUS_SUCCESS) return corrected;
       }
+      if (streamed_factors.owner_identity && final_fitted_projection &&
+          streamed_factors.factors[0].rank == final_state->identity.occupied[0] &&
+          streamed_factors.factors[0].density_scale == 2.0)
+        streamed_factors.final_fitted_occupied_projection = final_fitted_projection;
       // The explicit fitted experiment projects forward B before applying
       // the second metric root. Preserve the validated view only on that path;
       // legacy source-occupied response continues to read physical raw A.
