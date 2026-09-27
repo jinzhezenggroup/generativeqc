@@ -244,15 +244,16 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   return {};
 }
 
-
 GeneratedExchangePlan::~GeneratedExchangePlan() {
   if (shared && shared->stream) (void)cudaStreamSynchronize(shared->stream);
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
 }
 
-std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
-    const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device,
-    double screening, std::size_t budget) try {
+std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatch& host,
+                                                                  DeviceBatch borrowed,
+                                                                  cudaStream_t stream, int device,
+                                                                  double screening,
+                                                                  std::size_t budget) try {
   auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget);
   if (!shared) return {};
 
@@ -311,8 +312,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
       static_cast<ShellPairDensityBounds*>(allocate(pairs, sizeof(ShellPairDensityBounds)));
   plan->system_density_bounds = doubles(batch);
   plan->system_pair_density_bounds = doubles(product(batch, pair_classes));
-  plan->heads =
-      static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
+  plan->heads = static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
 
   const auto& b = plan->shared->batch;
   const GeneratedShellPairStream topology{
@@ -337,8 +337,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
       nullptr,
       plan->shared->active,
       detail::GeneratedFockConsumer::Exchange};
-  plan->topology =
-      static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
+  plan->topology = static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
   check(cudaStreamSynchronize(stream));
   if (plan->device_bytes != runtime::size_add(plan->shared->device_bytes, additional))
     throw std::logic_error("generated K inventory drift");
@@ -374,28 +373,26 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   const std::size_t rectangular = batch * public_rectangular;
 
   for (std::size_t system = 0; system < batch; ++system) {
-    auto error = cudaMemcpyAsync(
-        p.public_spin + (system * spin_count) * public_matrix,
-        alpha + system * public_matrix, public_matrix * sizeof(double),
-        cudaMemcpyDeviceToDevice, shared.stream);
+    auto error = cudaMemcpyAsync(p.public_spin + (system * spin_count) * public_matrix,
+                                 alpha + system * public_matrix, public_matrix * sizeof(double),
+                                 cudaMemcpyDeviceToDevice, shared.stream);
     if (error != cudaSuccess) return error;
     if (unrestricted) {
-      error = cudaMemcpyAsync(
-          p.public_spin + (system * spin_count + 1U) * public_matrix,
-          beta + system * public_matrix, public_matrix * sizeof(double),
-          cudaMemcpyDeviceToDevice, shared.stream);
+      error = cudaMemcpyAsync(p.public_spin + (system * spin_count + 1U) * public_matrix,
+                              beta + system * public_matrix, public_matrix * sizeof(double),
+                              cudaMemcpyDeviceToDevice, shared.stream);
       if (error != cudaSuccess) return error;
     }
   }
 
   launch_transform_density_to_direct_right_kernel(
       blocks(spin_count * rectangular), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf,
-      b.ao_to_direct_transform, p.public_spin, shared.active, p.density_temporary);
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.public_spin, shared.active, p.density_temporary);
   launch_transform_density_to_direct_left_kernel(
       blocks(spin_count * cartesian), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf,
-      b.ao_to_direct_transform, p.density_temporary, shared.active, p.direct_spin);
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.density_temporary, shared.active, p.direct_spin);
   auto error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
@@ -411,11 +408,10 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
-  error = cudaMemsetAsync(p.direct_exchange, 0,
-                          spin_count * cartesian * sizeof(double), shared.stream);
+  error =
+      cudaMemsetAsync(p.direct_exchange, 0, spin_count * cartesian * sizeof(double), shared.stream);
   if (error != cudaSuccess) return error;
-  error = cudaMemsetAsync(p.heads, 0,
-                          detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
 
@@ -423,14 +419,13 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   const auto* kernels = generated::selected_fock_shell_kernels(count);
   for (std::size_t i = 0; i < count; ++i) {
     const auto cls = kernels[i].shell_class;
-    if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask &
-          (std::uint64_t{1} << cls)))
+    if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
       continue;
     error = generated::launch_shell_class_streaming_fock(
         cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
         b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
-        b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin,
-        p.direct_exchange, p.heads + cls, nullptr, nullptr);
+        b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
+        p.heads + cls, nullptr, nullptr);
     if (error != cudaSuccess) return error;
   }
   if (shared.class_mask & kNativeStreamingFockShellClassMask) {
@@ -442,29 +437,28 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
     if (error != cudaSuccess) return error;
   }
 
-  launch_transform_direct_fock_left_kernel(
-      blocks(spin_count * rectangular), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf,
-      b.ao_to_direct_transform, p.direct_exchange, shared.active, p.fock_temporary);
+  launch_transform_direct_fock_left_kernel(blocks(spin_count * rectangular), 128, 0, shared.stream,
+                                           b.batch_size, static_cast<std::int32_t>(spin_count),
+                                           b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+                                           p.direct_exchange, shared.active, p.fock_temporary);
   launch_transform_direct_fock_right_kernel(
       blocks(spin_count * matrix), 128, 0, shared.stream, b.batch_size,
-      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf,
-      b.ao_to_direct_transform, p.fock_temporary, shared.zero, shared.active,
-      p.public_exchange);
+      static_cast<std::int32_t>(spin_count), b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+      p.fock_temporary, shared.zero, shared.active, p.public_exchange);
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
   for (std::size_t system = 0; system < batch; ++system) {
-    error = cudaMemcpyAsync(
-        alpha_exchange + system * public_matrix,
-        p.public_exchange + (system * spin_count) * public_matrix,
-        public_matrix * sizeof(double), cudaMemcpyDeviceToDevice, shared.stream);
+    error =
+        cudaMemcpyAsync(alpha_exchange + system * public_matrix,
+                        p.public_exchange + (system * spin_count) * public_matrix,
+                        public_matrix * sizeof(double), cudaMemcpyDeviceToDevice, shared.stream);
     if (error != cudaSuccess) return error;
     if (unrestricted) {
-      error = cudaMemcpyAsync(
-          beta_exchange + system * public_matrix,
-          p.public_exchange + (system * spin_count + 1U) * public_matrix,
-          public_matrix * sizeof(double), cudaMemcpyDeviceToDevice, shared.stream);
+      error =
+          cudaMemcpyAsync(beta_exchange + system * public_matrix,
+                          p.public_exchange + (system * spin_count + 1U) * public_matrix,
+                          public_matrix * sizeof(double), cudaMemcpyDeviceToDevice, shared.stream);
       if (error != cudaSuccess) return error;
     }
   }

@@ -375,11 +375,10 @@ static vibeqc_status create_cuda_direct_jk_plan_impl(
             host.primitive_coefficients, host.occupied, host.warm_mask, host.warm_density);
     if (plan->generated_exchange) {
       info.device_bytes += plan->generated_exchange->device_bytes;
-      info.host_bytes +=
-          sizeof(GeneratedExchangePlan) +
-          runtime::vector_bytes(plan->generated_exchange->allocations) +
-          sizeof(GeneratedCoulombPlan) +
-          runtime::vector_bytes(plan->generated_exchange->shared->allocations);
+      info.host_bytes += sizeof(GeneratedExchangePlan) +
+                         runtime::vector_bytes(plan->generated_exchange->allocations) +
+                         sizeof(GeneratedCoulombPlan) +
+                         runtime::vector_bytes(plan->generated_exchange->shared->allocations);
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
       info.schedule = "generated-shell-coulomb+exchange/generic-jk-fallback";
     } else if (plan->generated_coulomb) {
@@ -479,12 +478,11 @@ static vibeqc_status enqueue_cuda_direct_jk_device_impl(CudaDirectJkPlan* plan, 
         direct_jk_check(cudaGetLastError());
       }
     if (spec.coulomb.present || spec.exchange.present) {
-      auto* generated_coulomb =
-          plan->generated_exchange ? plan->generated_exchange->shared.get()
-                                   : plan->generated_coulomb.get();
-      const bool generated_exchange_available =
-          plan->generated_exchange != nullptr && spec.exchange.present &&
-          spec.exchange.op == FockOperator::FullRange;
+      auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                                         : plan->generated_coulomb.get();
+      const bool generated_exchange_available = plan->generated_exchange != nullptr &&
+                                                spec.exchange.present &&
+                                                spec.exchange.op == FockOperator::FullRange;
       const auto dispatch =
           direct_jk_value_dispatch(generated_coulomb != nullptr, generated_exchange_available,
                                    spec.coulomb.present, spec.exchange.present, mixed_j);

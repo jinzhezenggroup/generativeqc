@@ -38,13 +38,10 @@ __device__ __forceinline__ bool direct_shell_quartet_survives_screening(
 
   double fock_density_bound = exchange_only ? 0.0 : fmax(ab.coulomb, cd.coulomb);
   if constexpr (Unrestricted) {
-    const double exchange_bound =
-        fmax(fmax(fmax(ac.exchange_alpha, ac.exchange_beta),
-                  fmax(ad.exchange_alpha, ad.exchange_beta)),
-             fmax(fmax(bc.exchange_alpha, bc.exchange_beta),
-                  fmax(bd.exchange_alpha, bd.exchange_beta)));
-    fock_density_bound =
-        exchange_only ? exchange_bound : fmax(fock_density_bound, exchange_bound);
+    const double exchange_bound = fmax(
+        fmax(fmax(ac.exchange_alpha, ac.exchange_beta), fmax(ad.exchange_alpha, ad.exchange_beta)),
+        fmax(fmax(bc.exchange_alpha, bc.exchange_beta), fmax(bd.exchange_alpha, bd.exchange_beta)));
+    fock_density_bound = exchange_only ? exchange_bound : fmax(fock_density_bound, exchange_bound);
   } else {
     const double exchange_bound = fmax(fmax(ac.exchange_alpha, ad.exchange_alpha),
                                        fmax(bc.exchange_alpha, bd.exchange_alpha));

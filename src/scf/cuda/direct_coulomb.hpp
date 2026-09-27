@@ -69,9 +69,11 @@ struct GeneratedExchangePlan {
 /** Prepare the generated J+full-range-K owner within one explicit budget.
  * Unsupported classes or insufficient optional capacity return null.
  */
-std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
-    const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device,
-    double screening, std::size_t budget);
+std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatch& host,
+                                                                  DeviceBatch borrowed,
+                                                                  cudaStream_t stream, int device,
+                                                                  double screening,
+                                                                  std::size_t budget);
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
