@@ -6,7 +6,7 @@
 namespace vibeqc::scf::detail {
 
 /** Value consumer identity; integral recurrence and quartet symmetry are shared. */
-enum class GeneratedFockConsumer : std::uint32_t { HartreeFock = 0, Coulomb = 1 };
+enum class GeneratedFockConsumer : std::uint32_t { HartreeFock = 0, Coulomb = 1, Exchange = 2 };
 
 /** Stable geometry-cache ABI shared by handwritten and generated kernels. */
 struct GeneratedPrimitivePairData {
