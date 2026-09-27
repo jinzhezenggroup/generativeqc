@@ -34,6 +34,7 @@ from vibeqc_compiler.integral.first_derivative_native import emit_first_derivati
 from vibeqc_compiler.method.nonlocal_correlation import NonlocalCorrelationPrimitive
 from vibeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 from vibeqc_compiler.method.stationary_gradient import (
+    BULK_LIBXC_POINT_MODEL,
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -458,9 +459,14 @@ def complete_rks_gradient_diagnostic(
     plan = StationaryGradientPlan(
         method,
         StationaryMeanField(
-            state._source._batch._calculator._ks_options.scf_domain
-            if state.identity.method.startswith("wb97m-v")
-            else SCF_POINT_MODEL,
+            (
+                BULK_LIBXC_POINT_MODEL
+                if state._source._batch._calculator._ks_options.generic_libxc_registration
+                is not None
+                else state._source._batch._calculator._ks_options.scf_domain
+                if state.identity.method.startswith("wb97m-v")
+                else SCF_POINT_MODEL
+            ),
             hamiltonian=state._source.hamiltonian,
         ),
     )
