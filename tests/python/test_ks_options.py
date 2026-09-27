@@ -31,8 +31,10 @@ from vibeqc_compiler.dft.grid import (
     grid_policy_provenance,
 )
 from vibeqc_compiler.method import (
+    MethodIR,
     MethodSpec,
     SemilocalXCPrimitive,
+    compile_ks_execution_plan,
     original_nonlocal_correlation,
     resolve_method,
 )
