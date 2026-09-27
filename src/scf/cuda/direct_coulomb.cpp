@@ -14,6 +14,7 @@
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/direct_bounded_dddd.hpp"
 #include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -198,6 +199,8 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
         static_cast<const std::uint32_t*>(allocate(order.size(), sizeof(order[0]), order.data()));
     const auto* device_offsets = static_cast<const std::uint32_t*>(
         allocate(offsets.size(), sizeof(offsets[0]), offsets.data()));
+    plan->pair_order = device_order;
+    plan->pair_class_offsets = device_offsets;
     const auto& b = plan->batch;
     const GeneratedShellPairStream topology{b.batch_size,
                                             static_cast<std::uint32_t>(b.direct_nbf),
@@ -210,8 +213,8 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
                                             b.shell_pair_systems,
                                             b.shell_pair_first,
                                             b.shell_pair_second,
-                                            device_order,
-                                            device_offsets,
+                                            plan->pair_order,
+                                            plan->pair_class_offsets,
                                             plan->shell_bounds,
                                             nullptr,
                                             nullptr,
