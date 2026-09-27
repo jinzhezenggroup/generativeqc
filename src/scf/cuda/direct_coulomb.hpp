@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
