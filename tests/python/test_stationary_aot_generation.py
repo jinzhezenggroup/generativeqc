@@ -149,7 +149,6 @@ def test_cmake_build_lowers_each_primitive_request_once(
     assert calls.read_text().splitlines() == expected * 2
 
 
-
 @pytest.mark.parametrize("profile", ["pbe0_rks", "b3lyp_uks"])
 @pytest.mark.parametrize("component_domain", ["sp", "spd"])
 def test_profile_wrapper_generation_uses_exact_profile_emitter(
@@ -166,7 +165,9 @@ def test_profile_wrapper_generation_uses_exact_profile_emitter(
     )
     sp = Mock(return_value=f"// profile-sp {profile}\n")
     spd = Mock(return_value=f"// profile-spd {profile}\n")
-    legacy_sp = Mock(side_effect=AssertionError("profile generation used legacy emitter"))
+    legacy_sp = Mock(
+        side_effect=AssertionError("profile generation used legacy emitter")
+    )
     legacy_spd = Mock(
         side_effect=AssertionError("profile generation used legacy component emitter")
     )

@@ -363,7 +363,6 @@ def test_stationary_split_compile_options_fail_closed(value: str) -> None:
         _split_compile_options({"VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": value})
 
 
-
 @pytest.mark.parametrize(
     ("profile_name", "functional"),
     [
@@ -387,9 +386,10 @@ def test_global_hybrid_stationary_aot_profiles_bind_exact_plan(
     profile = _qualified_aot_profile(profile_name)
     plan = profile.plan
     assert profile.functional == functional
-    assert _profile_stem(
-        _qualified_aot_profile_for_plan(functional, profile.spin, plan)
-    ) == profile_name
+    assert (
+        _profile_stem(_qualified_aot_profile_for_plan(functional, profile.spin, plan))
+        == profile_name
+    )
 
     source = emit_stationary_profile_aot_cuda(
         profile_name, primitive_source="// shared primitive inventory\n"
@@ -412,16 +412,17 @@ def test_pbe_and_pbe0_share_point_code_but_never_package_identity() -> None:
     pbe0 = _qualified_aot_profile("pbe0_rks")
     assert pbe.functional == pbe0.functional == 1
     assert pbe.plan.identity != pbe0.plan.identity
+    assert stationary_aot_profile_contract_identity(
+        "pbe_rks"
+    ) != stationary_aot_profile_contract_identity("pbe0_rks")
     assert (
-        stationary_aot_profile_contract_identity("pbe_rks")
-        != stationary_aot_profile_contract_identity("pbe0_rks")
+        _profile_stem(_qualified_aot_profile_for_plan(1, "unpolarized", pbe.plan))
+        == "pbe_rks"
     )
-    assert _profile_stem(
-        _qualified_aot_profile_for_plan(1, "unpolarized", pbe.plan)
-    ) == "pbe_rks"
-    assert _profile_stem(
-        _qualified_aot_profile_for_plan(1, "unpolarized", pbe0.plan)
-    ) == "pbe0_rks"
+    assert (
+        _profile_stem(_qualified_aot_profile_for_plan(1, "unpolarized", pbe0.plan))
+        == "pbe0_rks"
+    )
 
 
 @pytest.mark.parametrize("profile_name", ["pbe0_rks", "b3lyp_uks"])
