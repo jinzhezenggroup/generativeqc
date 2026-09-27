@@ -49,6 +49,7 @@ def test_curated_selector_reaches_both_geometry_consumers(
         device=0,
         borrowed_streams=set(),
         handle=None,
+        profile_device=False,
         _call=lambda *args: calls.append(args),
     )
     task = SimpleNamespace(
@@ -67,6 +68,18 @@ def test_curated_selector_reaches_both_geometry_consumers(
     assert jets == [1 if expected == 0 else 4]
     assert len(calls) == 1 and calls[0][0] == "stationary_geometry_enqueue"
     assert owner.borrowed_streams == {17}
+
+    calls.clear()
+    owner.profile_device = True
+    _CudaSources.geometry(
+        owner,
+        task,
+        np.array([0, 1], dtype=np.int64),
+        np.ones(2),
+        np.ones(2),
+        functional=code,
+    )
+    assert len(calls) == 1 and calls[0][0] == "stationary_geometry"
 
 
 def test_pbe_d4_selector_also_returns_builtin_integer(
