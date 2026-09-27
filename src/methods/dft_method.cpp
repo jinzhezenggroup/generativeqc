@@ -875,6 +875,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "CUDA integral gradient requires a retained prepared Direct derivative source";
       return VIBEQC_STATUS_NOT_IMPLEMENTED;
     }
+    dft::CudaKsResidentDensityBinding resident_density;
+    status = cuda_->resident_final_density(expected, resident_density, detail);
+    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (!resident_density || resident_density.device_id != derivative_source.device_id ||
+        resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+      detail = "CUDA stationary derivative density is incompatible with the prepared Direct owner";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
+    }
     const auto transfers_after = cuda_->transfers();
     // The Direct source belongs to the already-budgeted SCF owner. Report its
     // retained footprint, but force-time source preparation is now exactly zero.
@@ -916,14 +924,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (status != VIBEQC_STATUS_SUCCESS) return status;
     record_one();
     candidate.insert(candidate.end(), value.begin(), value.end());
-    const std::vector<double> empty;
-    const auto& beta = state.density.size() == 2 ? state.density[1] : empty;
     if (!range_strategy_) {
       detail = "CUDA RSH integral gradient is missing its resolved range correction";
       return VIBEQC_STATUS_INVALID_ARGUMENT;
     }
-    status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives(
-        fock_, *range_strategy_, state.density[0], beta, value, detail);
+    status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+        fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
+        resident_density.matrix_elements, value, detail);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
     candidate.insert(candidate.end(), value.begin(), value.end());
     output = std::move(candidate);
