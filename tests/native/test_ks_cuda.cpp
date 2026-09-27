@@ -98,6 +98,25 @@ void prepared_cuda_fock_seam() {
               binding.source_identity != nullptr,
           "prepared full-range CUDA J/K owner lacks the method-neutral execution binding");
 
+  auto fitted_spec = spec;
+  fitted_spec.exchange.present = false;
+  fitted_spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  const auto fitted_resolved =
+      scf::resolve_fock_build(fitted_spec, scf::FockBackend::Cuda, 1e-12, 1e-10);
+  const scf::PreparedFockPlan fitted(system, &system, fitted_resolved, 0);
+  const auto fitted_binding = scf::prepared_cuda_fock_binding(fitted);
+  require(fitted_binding && fitted_binding.nbf == fitted.one_electron().nbf &&
+              fitted_binding.stream != nullptr && fitted_binding.source_identity != nullptr,
+          "prepared density-fitted CUDA J owner lacks the method-neutral execution binding");
+
+  auto mixed_spec = spec;
+  mixed_spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  const auto mixed_resolved =
+      scf::resolve_fock_build(mixed_spec, scf::FockBackend::Cuda, 1e-12, 1e-10);
+  const scf::PreparedFockPlan mixed(system, &system, mixed_resolved, 0);
+  require(!scf::prepared_cuda_fock_binding(mixed),
+          "mixed exact/fitted CUDA providers leaked through the single-provider binding");
+
   auto range_spec = spec;
   range_spec.coulomb.present = false;
   range_spec.exchange = {true, -0.19, scf::FockOperator::LongRange, 0.33,
