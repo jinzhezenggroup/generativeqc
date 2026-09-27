@@ -4,6 +4,7 @@ import pytest
 from vibeqc_compiler.common.source_reuse import (
     SourceReuseRequest,
     SourceTileCandidate,
+    ordered_prefix_reuse_plan,
     ordered_source_reuse_plan,
     select_source_tile,
     source_reads_per_scan,
@@ -91,3 +92,27 @@ def test_source_tile_selector_uses_peak_only_after_semantic_work() -> None:
     assert plan.axis_tile == 4
     assert plan.source_reads == 16
     assert plan.peak_bytes == 100
+
+
+def test_ordered_prefix_reuse_matches_rccsd_transform_trie() -> None:
+    # o=0 and v=1 encode the seven canonical RCCSD MO-block requests.
+    plan = ordered_prefix_reuse_plan(
+        [
+            (0, 1, 0, 1),
+            (0, 1, 1, 0),
+            (0, 0, 1, 1),
+            (0, 1, 1, 1),
+            (0, 1, 0, 0),
+            (0, 0, 0, 0),
+            (1, 1, 1, 1),
+        ]
+    )
+    assert plan.unique_prefixes == (2, 3, 5, 7)
+    assert plan.transform_stages == 17
+    assert plan.leaders[4][:3] == (0, 0, 0)
+    assert plan.leaders[3][:3] == (0, 0, 1)
+
+
+def test_ordered_prefix_reuse_rejects_non_rank4_requests() -> None:
+    with pytest.raises(ValueError, match="rank-4"):
+        ordered_prefix_reuse_plan([(0, 1, 2)])

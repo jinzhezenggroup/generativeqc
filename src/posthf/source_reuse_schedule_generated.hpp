@@ -1,6 +1,7 @@
 // Generated from vibeqc_compiler.common.source_reuse; do not edit.
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
@@ -114,5 +115,38 @@ inline SourceTilePlan select_source_tile(std::size_t nbf,
     }
   }
   return best;
+}
+
+struct OrderedPrefixReusePlan {
+  std::vector<std::array<std::size_t, 4>> leaders;
+  std::array<std::size_t, 4> unique_prefixes{};
+  std::size_t transform_stages{};
+};
+inline OrderedPrefixReusePlan ordered_prefix_reuse_plan(
+    const std::vector<std::array<std::size_t, 4>>& requests) {
+  if (requests.empty())
+    throw std::invalid_argument("prefix-reuse schedule requires at least one request");
+  OrderedPrefixReusePlan result;
+  result.leaders.resize(requests.size());
+  for (std::size_t request = 0; request < requests.size(); ++request) {
+    for (unsigned axis = 0; axis < 4; ++axis) {
+      std::size_t leader = request;
+      for (std::size_t prior = 0; prior < request; ++prior) {
+        bool same = true;
+        for (unsigned prefix = 0; prefix <= axis; ++prefix)
+          same = same && requests[prior][prefix] == requests[request][prefix];
+        if (same) {
+          leader = prior;
+          break;
+        }
+      }
+      result.leaders[request][axis] = leader;
+      if (leader == request) {
+        ++result.unique_prefixes[axis];
+        ++result.transform_stages;
+      }
+    }
+  }
+  return result;
 }
 }  // namespace vibeqc::posthf::generated
