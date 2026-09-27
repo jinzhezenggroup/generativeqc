@@ -66,10 +66,10 @@ from vibeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILY_CODES
-from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from vibeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILY_CODES
+from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
 from ._dft_gradient import (
     StationaryDerivativeContract,
@@ -588,7 +588,10 @@ class _CudaSources:
             functional = int(pbe)
         elif pbe is not None:
             raise ValueError("specify functional or pbe, not both")
-        if type(functional) is not int or functional not in _REGISTERED_STATIONARY_CODES:
+        if (
+            type(functional) is not int
+            or functional not in _REGISTERED_STATIONARY_CODES
+        ):
             raise ValueError("unsupported stationary semilocal functional")
         work = task.density_jets(4 if functional else 1)
         self._call(

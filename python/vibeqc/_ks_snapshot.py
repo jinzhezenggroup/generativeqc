@@ -49,7 +49,9 @@ def _scf_xc_points(
     if type(functional) is bool:
         functional = int(functional)
     if type(functional) is not int or functional not in SEMILOCAL_FAMILY_CODES:
-        raise TypeError("SCF point evaluator requires a registered curated functional code")
+        raise TypeError(
+            "SCF point evaluator requires a registered curated functional code"
+        )
     raw_rho, raw_gradient = np.asarray(rho), np.asarray(gradient)
     if (
         np.iscomplexobj(raw_rho)
