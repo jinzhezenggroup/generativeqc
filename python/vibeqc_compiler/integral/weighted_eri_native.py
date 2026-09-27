@@ -121,15 +121,12 @@ def emit_weighted_eri_runtime(
         or not entry_prefix.isascii()
         or not (entry_prefix[0].isalpha() or entry_prefix[0] == "_")
         or any(
-            not (character.isalnum() or character == "_")
-            for character in entry_prefix
+            not (character.isalnum() or character == "_") for character in entry_prefix
         )
     ):
         raise ValueError("weighted ERI entry prefix requires a C identifier")
     primitive_name = (
-        "weighted"
-        if entry_prefix == "vibeqc_weighted"
-        else f"{entry_prefix}_weighted"
+        "weighted" if entry_prefix == "vibeqc_weighted" else f"{entry_prefix}_weighted"
     )
     if not kernel.integral.operator.range_separated:
         raise ValueError("the v2 generated runtime requires an explicit range operator")

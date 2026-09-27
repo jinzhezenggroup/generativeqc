@@ -601,9 +601,7 @@ def complete_rks_gradient_diagnostic(
                         )
                         np.add.at(components[range_source.name], owners, values)
         finally:
-            work["range_exchange_packaged_aot_plans"] = (
-                range_native.packaged_aot_plans
-            )
+            work["range_exchange_packaged_aot_plans"] = range_native.packaged_aot_plans
             work["range_exchange_runtime_compilations"] = (
                 range_native.runtime_compilations
             )

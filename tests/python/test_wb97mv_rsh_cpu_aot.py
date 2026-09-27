@@ -60,9 +60,7 @@ def _fake_s_basis() -> SimpleNamespace:
             [-0.21, 0.48, -0.63],
         ]
     )
-    primitives = np.array(
-        [[0.57, 0.83], [0.71, -0.19], [0.89, 0.67], [1.13, 0.42]]
-    )
+    primitives = np.array([[0.57, 0.83], [0.71, -0.19], [0.89, 0.67], [1.13, 0.42]])
     aos = np.zeros((4, 16))
     for index in range(4):
         aos[index, :8] = (index, index, 1, 1, 0, 0, 0, 1)
@@ -88,9 +86,7 @@ def test_wb97mv_rsh_aot_inventory_is_bounded_and_complete() -> None:
             assert len(groups) == (2 if angular == (1, 1, 1, 1) else 1)
             assert all(1 <= len(group) <= 64 for group in groups)
             for group_index, group in enumerate(groups):
-                source, selected, prefix = program_source(
-                    radial, angular, group_index
-                )
+                source, selected, prefix = program_source(radial, angular, group_index)
                 assert selected == group
                 assert f"{prefix}_identity_v2" in source
                 assert f"{prefix}_create_v2" in source
@@ -174,9 +170,7 @@ def test_range_exchange_prefers_packaged_cpu_aot(
         aot_library=library,
     )
     try:
-        owners, values = executor.integral(
-            primitive, (0, 1, 2, 3), 1.0
-        )
+        owners, values = executor.integral(primitive, (0, 1, 2, 3), 1.0)
     finally:
         executor.close()
     assert owners == [0, 1, 2, 3]
@@ -207,10 +201,8 @@ def test_native_library_exports_wb97mv_rsh_aot() -> None:
 
 def test_cmake_packages_all_wb97mv_rsh_programs() -> None:
     root = Path(__file__).resolve().parents[2]
-    cmake = (root / "cmake/VibeQCGeneratedSources.cmake").read_text(
-        encoding="utf-8"
-    )
+    cmake = (root / "cmake/VibeQCGeneratedSources.cmake").read_text(encoding="utf-8")
     assert "VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES" in cmake
     assert "generate_wb97mv_rsh_cpu_aot.py" in cmake
-    assert 'foreach(_vibeqc_rsh_family IN ITEMS sr lr)' in cmake
+    assert "foreach(_vibeqc_rsh_family IN ITEMS sr lr)" in cmake
     assert 'if(_vibeqc_rsh_shell STREQUAL "1111")' in cmake

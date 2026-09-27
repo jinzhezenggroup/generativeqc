@@ -52,8 +52,7 @@ def main() -> None:
         len(primitives) != 2
         or {primitive.operator for primitive in primitives}
         != {"short-range", "long-range"}
-        or {primitive.omega for primitive in primitives}
-        != {primitives[0].omega}
+        or {primitive.omega for primitive in primitives} != {primitives[0].omega}
     ):
         raise RuntimeError("WB97M-V range-exchange MethodIR contract drift")
 
@@ -74,9 +73,7 @@ def main() -> None:
                 )
                 written += 1
     if written != inventory_size():
-        raise RuntimeError(
-            f"WB97M-V CPU RSH AOT inventory drift: {written} programs"
-        )
+        raise RuntimeError(f"WB97M-V CPU RSH AOT inventory drift: {written} programs")
 
 
 if __name__ == "__main__":

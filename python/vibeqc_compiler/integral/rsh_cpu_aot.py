@@ -86,15 +86,11 @@ def program_source(
     if type(group_index) is not int or not 0 <= group_index < len(groups):
         raise ValueError("CPU RSH AOT group index is out of range")
     selected = groups[group_index]
-    integral = build_weighted_eri_ir(
-        angular, operator=four_center_eri_operator(radial)
-    )
+    integral = build_weighted_eri_ir(angular, operator=four_center_eri_operator(radial))
     kernel = build_weighted_eri_kernel(integral, selected)
     prefix = entry_prefix(radial, angular, group_index)
     return (
-        emit_weighted_eri_runtime(
-            kernel, backend="cpu", entry_prefix=prefix
-        ),
+        emit_weighted_eri_runtime(kernel, backend="cpu", entry_prefix=prefix),
         selected,
         prefix,
     )

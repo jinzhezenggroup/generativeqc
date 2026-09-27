@@ -229,7 +229,6 @@ def compile_weighted_eri(
     )
 
 
-
 @lru_cache(maxsize=8)
 def _packaged_library_hash(path: Path) -> str:
     return file_hash(path)
@@ -516,8 +515,7 @@ class PreparedWeightedEri:
     def _call(self, name: typing.Any, *args: typing.Any) -> None:
         error = ct.create_string_buffer(1024)
         mapped = (
-            f"{self.artifact.entry_prefix}_"
-            + name.removeprefix("vibeqc_weighted_")
+            f"{self.artifact.entry_prefix}_" + name.removeprefix("vibeqc_weighted_")
             if name.startswith("vibeqc_weighted_")
             else name
         )
