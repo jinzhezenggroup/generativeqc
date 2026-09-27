@@ -83,7 +83,6 @@ def test_checkout_and_installed_identity_must_match(
     _layout(checkout)
     _layout(installed)
     monkeypatch.setattr(audit, "load_stationary_aot_artifact", _fake_loader)
-    monkeypatch.setattr(audit, "_qualified_aot_plan", lambda functional, spin: object())
 
     left = audit.audit_stationary_aot_directory(checkout, architecture="sm_120")
     right = audit.audit_stationary_aot_directory(installed, architecture="sm_120")
@@ -102,7 +101,6 @@ def test_native_cubin_gate_rejects_ptx_only_package(
     root = tmp_path / "build"
     _layout(root)
     monkeypatch.setattr(audit, "load_stationary_aot_artifact", _fake_loader)
-    monkeypatch.setattr(audit, "_qualified_aot_plan", lambda functional, spin: object())
 
     package = audit.audit_stationary_aot_directory(root, architecture="sm_120")
     changed = list(package.artifacts)
