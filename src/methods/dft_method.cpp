@@ -1663,8 +1663,8 @@ vibeqc_status dft_cuda_integral_gradient_cached(
     std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
-    return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail, &density,
-                                      &weighted_density);
+    return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
+                                      &density, &weighted_density);
   detail = "CUDA integral gradient requires a native KS batch";
   return VIBEQC_STATUS_NOT_IMPLEMENTED;
 }
