@@ -91,3 +91,43 @@ def test_execution_evidence_does_not_retain_coordinate_pages() -> None:
     assert execution.producer_pages == domain.page_count(32)
     assert seen == domain.logical_size
     assert not hasattr(execution, "coordinates")
+
+
+def test_fixed_and_paged_schedules_preserve_domain_result_and_identity() -> None:
+    domain = RuntimeTaskDomain.rectangular((5, 4, 3))
+
+    def run(executor: _BoundedStationaryTaskExecutor) -> tuple[object, int, list[tuple[int, ...]]]:
+        coordinates: list[tuple[int, ...]] = []
+        total = 0
+
+        def submit(coordinate: tuple[int, ...]) -> None:
+            nonlocal total
+            coordinates.append(coordinate)
+            total += 1 + sum((axis + 1) * value for axis, value in enumerate(coordinate))
+
+        execution = executor.execute(domain, submit)
+        return execution, total, coordinates
+
+    fixed, fixed_total, fixed_coordinates = run(
+        _BoundedStationaryTaskExecutor(
+            fixed_capacity=domain.logical_size,
+            resident_capacity=domain.logical_size,
+            page_capacity=domain.logical_size,
+        )
+    )
+    paged, paged_total, paged_coordinates = run(
+        _BoundedStationaryTaskExecutor(
+            fixed_capacity=2,
+            resident_capacity=7,
+            page_capacity=7,
+        )
+    )
+
+    assert fixed.mode == "fixed"
+    assert paged.mode == "paged"
+    assert fixed.domain_identity == paged.domain_identity == domain.identity
+    assert fixed.logical_tasks == paged.logical_tasks == domain.logical_size
+    assert fixed.producer_pages == 1
+    assert paged.producer_pages == domain.page_count(7)
+    assert fixed_coordinates == paged_coordinates == list(domain)
+    assert fixed_total == paged_total
