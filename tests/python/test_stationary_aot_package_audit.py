@@ -12,17 +12,19 @@ def _fake_loader(
     *,
     functional: int,
     spin: str,
+    plan: object,
     component_domain: tuple[str, ...] | None = None,
     **_: object,
 ) -> object:
-    base = {
-        (0, "unpolarized"): "lda_rks",
-        (0, "polarized"): "lda_uks",
-        (1, "unpolarized"): "pbe_rks",
-        (1, "polarized"): "pbe_uks",
-        (2, "unpolarized"): "r2scan_rks",
-        (2, "polarized"): "r2scan_uks",
-    }[(functional, spin)]
+    matches = [
+        profile
+        for profile in audit.QUALIFIED_STATIONARY_AOT_PROFILES
+        if profile.functional == functional
+        and profile.spin == spin
+        and profile.plan.identity == plan.identity
+    ]
+    assert len(matches) == 1
+    base = audit._profile_stem(matches[0])
     name = base if component_domain is None else f"{base}_spd"
     library = directory / f"libvibeqc_stationary_{name}.so"
     metadata = {
@@ -53,20 +55,22 @@ def test_package_audit_reports_complete_legacy_and_component_footprint(
     native = root / "libvibeqc.so"
     native.write_bytes(b"n" * 120)
     monkeypatch.setattr(audit, "load_stationary_aot_artifact", _fake_loader)
-    monkeypatch.setattr(audit, "_qualified_aot_plan", lambda functional, spin: object())
 
     result = audit.audit_stationary_aot_directory(
         root, architecture="sm_120", native_library=native
     )
 
-    assert len(result.artifacts) == 12
-    assert result.aot_binary_bytes == 120
-    assert result.manifest_bytes == 36
-    assert result.aot_package_bytes == 156
+    assert len(result.artifacts) == 20
+    assert result.aot_binary_bytes == 200
+    assert result.manifest_bytes == 60
+    assert result.aot_package_bytes == 260
     assert result.native_library_bytes == 120
-    assert result.aot_to_native_ratio == 1.0
-    assert sum(item.component_domain is None for item in result.artifacts) == 6
-    assert sum(item.component_domain is not None for item in result.artifacts) == 6
+    assert result.aot_to_native_ratio == pytest.approx(200 / 120)
+    assert sum(item.component_domain is None for item in result.artifacts) == 10
+    assert sum(item.component_domain is not None for item in result.artifacts) == 10
+    assert {"pbe0_rks", "pbe0_uks", "b3lyp_rks", "b3lyp_uks"} <= {
+        item.name for item in result.artifacts
+    }
     assert all(item.code_kinds == ("cubin",) for item in result.artifacts)
     assert not any(item.driver_ptx_jit_required for item in result.artifacts)
 
@@ -138,11 +142,16 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
     import json
 
     from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.method.stationary_cuda import stationary_aot_contract_identity
+    from vibeqc_compiler.method.stationary_cuda import (
+        stationary_aot_profile_contract_identity,
+    )
 
     root = tmp_path / "actual-loader"
     root.mkdir()
     for functional, spin, name, component_domain in audit.QUALIFIED_STATIONARY_PACKAGE:
+        profile_name = name.removesuffix("_spd")
+        profile = audit._qualified_aot_profile(profile_name)
+        plan = profile.plan
         library = root / f"libvibeqc_stationary_{name}.so"
         # These bytes are hashed only, never loaded or executed as native code.
         library.write_bytes(f"opaque audit fixture {name}".encode())
@@ -154,12 +163,12 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
             ),
             "functional": functional,
             "spin": spin,
-            "plan_identity": audit._qualified_aot_plan(functional, spin).identity,
+            "plan_identity": plan.identity,
             "partition_iterations": 3,
             "architectures": ["sm_120"],
             "code_objects": [{"architecture": "sm_120", "kind": "cubin"}],
-            "contract_identity": stationary_aot_contract_identity(
-                functional, spin=spin, component_domain=component_domain
+            "contract_identity": stationary_aot_profile_contract_identity(
+                profile_name, component_domain=component_domain
             ),
             "source_identity": f"opaque-fixture-{name}",
             "binary_sha256": file_hash(library),
@@ -176,7 +185,7 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
             )
         (root / f"vibeqc_stationary_{name}.json").write_text(json.dumps(metadata))
     result = audit.audit_stationary_aot_directory(root, architecture="sm_120")
-    assert len(result.artifacts) == 12
+    assert len(result.artifacts) == 20
     audit.assert_native_cubin_path(result)
     library = root / "libvibeqc_stationary_pbe_uks.so"
     original = library.read_bytes()
