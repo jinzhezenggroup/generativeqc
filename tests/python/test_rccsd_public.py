@@ -81,6 +81,16 @@ def test_public_native_rccsd_matches_pinned_pyscf_endpoint(
     assert diag.equation_hash != diag.ccsd_replay_equation_hash
     assert 0 < diag.minimum_absolute_denominator
     assert diag.numeric_capacity_bytes <= 256 << 20
+    assert diag.ccsd_reference_seconds >= 0.0
+    assert diag.ccsd_problem_seconds >= diag.ccsd_provider_seconds >= 0.0
+    assert diag.ccsd_provider_seconds >= diag.ccsd_source_seconds >= 0.0
+    assert diag.ccsd_solver_seconds >= 0.0
+    assert diag.ccsd_source_scans > 0
+    assert diag.ccsd_source_reads > 0
+    assert diag.ccsd_source_values > 0
+    assert diag.ccsd_mo_blocks == 7
+    assert diag.ccsd_iteration_graph_calls >= diag.ccsd_iterations
+    assert diag.ccsd_replay_graph_calls == 1
     if device == "cuda":
         assert diag.correlation_owned_device_bytes > 0
         assert diag.ccsd_setup_h2d_bytes > 0
