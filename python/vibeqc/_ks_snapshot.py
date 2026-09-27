@@ -15,11 +15,25 @@ from types import MappingProxyType
 import numpy as np
 from vibeqc_compiler.common.arrays import immutable
 from vibeqc_compiler.common.provenance import canonical_hash
+from vibeqc_compiler.xc._generated_native_semilocal import (
+    SCF_DOMAIN_BY_VERSION,
+    SEMILOCAL_FAMILIES,
+    SEMILOCAL_FAMILY_CODES,
+)
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
 from .batch import PreparedBatch
-from .ks import native_xc_functional_code, scf_domain_for_method
+from .ks import SPLIT_HYBRID_SCF_DOMAIN, scf_domain_for_method
+
+_SCF_DOMAIN_VERSION_BY_DOMAIN = {
+    domain: version for version, domain in SCF_DOMAIN_BY_VERSION.items()
+}
+_META_GGA_CODES = frozenset(
+    item["code"]
+    for item in SEMILOCAL_FAMILIES
+    if any(name.startswith("MGGA") for name, _ in item["components"])
+)
 
 
 def _scf_xc_points(
@@ -34,8 +48,8 @@ def _scf_xc_points(
     """Evaluate the exact native semilocal SCF point model."""
     if type(functional) is bool:
         functional = int(functional)
-    if type(functional) is not int or functional not in (0, 1, 2, 3, 4):
-        raise TypeError("SCF point evaluator requires functional code 0, 1, 2, 3, or 4")
+    if type(functional) is not int or functional not in SEMILOCAL_FAMILY_CODES:
+        raise TypeError("SCF point evaluator requires a registered curated functional code")
     raw_rho, raw_gradient = np.asarray(rho), np.asarray(gradient)
     if (
         np.iscomplexobj(raw_rho)
@@ -49,7 +63,7 @@ def _scf_xc_points(
     rho = np.ascontiguousarray(raw_rho, dtype=np.float64)
     gradient = np.ascontiguousarray(raw_gradient, dtype=np.float64)
     if tau is None:
-        if functional in (2, 4):
+        if functional in _META_GGA_CODES:
             raise ValueError("meta-GGA point evaluation requires tau[2,n]")
         tau = np.zeros_like(rho)
     raw_tau = np.asarray(tau)
@@ -122,6 +136,7 @@ class NativeKsSnapshot:
         "ecp_terms",
         "export_work",
         "functional",
+        "functional_code",
         "grid",
         "grid_provenance",
         "grid_spec",
@@ -192,14 +207,15 @@ class NativeKsSnapshot:
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
             method_name = self._batch._calculator._method_name
-            functional_code = native_xc_functional_code(method_name)
+            expected_domain = scf_domain_for_method(method_name)
             expected_domain_version = (
                 4
-                if functional_code >= 0x10000
-                else {3: 2, 4: 3}.get(functional_code, 1)
+                if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
+                else _SCF_DOMAIN_VERSION_BY_DOMAIN.get(expected_domain)
             )
             if (
-                metadata[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)
+                expected_domain_version is None
+                or metadata[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)
                 or metadata[7] != expected_domain_version
             ):
                 raise NotImplementedError(
@@ -365,12 +381,11 @@ class NativeKsSnapshot:
         self.coefficients = (
             tuple(take((3,))) if self.metadata[0] in (6, 7, 8, 9) else (1.0, 1.0, 0.0)
         )
+        self.functional_code = int(functional)
         options = self._batch._calculator.ks_options
         if (
             options is None
             or options.coefficients != self.coefficients
-            or functional
-            != native_xc_functional_code(self._batch._calculator._method_name)
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
@@ -581,9 +596,13 @@ class NativeKsSnapshot:
             raise TypeError("XC point evaluation requires a typed functional")
         if functional.identity != self.functional.identity:
             raise ValueError("XC point functional disagrees with native composition")
-        code = native_xc_functional_code(self._batch._calculator._method_name)
         values = _scf_xc_points(
-            self._library, code, rho, gradient, tau, scales=self.coefficients[:2]
+            self._library,
+            self.functional_code,
+            rho,
+            gradient,
+            tau,
+            scales=self.coefficients[:2],
         )
         self.check_current()
         return values
