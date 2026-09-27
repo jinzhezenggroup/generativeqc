@@ -16,18 +16,28 @@ AOT_ANGULAR_DOMAIN = (0, 1)
 AOT_COMPONENT_CAPACITY = 64
 
 
-def component_groups(angular: tuple[int, int, int, int]) -> tuple[tuple[int, ...], ...]:
+def component_groups(
+    angular: tuple[int, int, int, int],
+) -> tuple[tuple[int, ...], ...]:
     """Partition one Cartesian s/p shell class into <=64-component programs."""
 
     if (
         not isinstance(angular, tuple)
         or len(angular) != 4
-        or any(type(value) is not int or value not in AOT_ANGULAR_DOMAIN for value in angular)
+        or any(
+            type(value) is not int or value not in AOT_ANGULAR_DOMAIN
+            for value in angular
+        )
     ):
         raise ValueError("CPU RSH AOT supports four s/p angular orders")
     spec = ShellClassSpec("".join("sp"[value] for value in angular), angular)
     return tuple(
-        tuple(range(begin, min(begin + AOT_COMPONENT_CAPACITY, spec.component_count)))
+        tuple(
+            range(
+                begin,
+                min(begin + AOT_COMPONENT_CAPACITY, spec.component_count),
+            )
+        )
         for begin in range(0, spec.component_count, AOT_COMPONENT_CAPACITY)
     )
 
