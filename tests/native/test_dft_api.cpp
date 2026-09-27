@@ -177,6 +177,10 @@ void ks_short_method_descriptor_rejected() {
 
 void ks_option_snapshot() {
   require(vibeqc_ks_options_version() == 1, "semantic KS option ABI unavailable");
+  vibeqc_ks_semilocal_program unavailable{};
+  require(vibeqc_libxc_semilocal_program_get("NOT_A_LIBXC_REGISTRATION", &unavailable) ==
+              VIBEQC_STATUS_NOT_IMPLEMENTED,
+          "unknown bulk Libxc registration unexpectedly has packaged AOT");
   Fixture fixture;
   auto method = lda_method();
   std::array<double, 119> radii;
