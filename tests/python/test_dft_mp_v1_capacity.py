@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -214,3 +217,61 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
 
     with pytest.raises(RuntimeError, match="whole-force cumulative"):
         qualify_capacity._source_limits(tmp_path)
+
+
+def test_module_import_binds_helpers_to_the_tool_checkout(tmp_path: Path) -> None:
+    environment = {
+        key: value for key, value in os.environ.items() if key != "PYTHONPATH"
+    }
+    environment["PYTHONPATH"] = str(ROOT)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import inspect; "
+                "from tools.dft_mp_v1 import qualify_capacity as q; "
+                "print(inspect.getfile(q.Atom))"
+            ),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert Path(completed.stdout.strip()).resolve().is_relative_to(ROOT / "python")
+
+
+def test_report_rejects_a_helper_imported_outside_the_tool_checkout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qualify_capacity, "Atom", Path)
+    with pytest.raises(RuntimeError, match="outside the tool checkout"):
+        qualify_capacity.build_report(ROOT, source_sha=SOURCE_SHA)
+
+
+def test_malformed_optional_aot_manifest_is_reported_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def malformed_loader(*_: object, **__: object) -> object:
+        raise KeyError("source_identity")
+
+    monkeypatch.setattr(
+        qualify_capacity, "load_stationary_aot_artifact", malformed_loader
+    )
+    result = qualify_capacity._artifact_verification(
+        tmp_path,
+        functional=0,
+        spin="unpolarized",
+        plan=object(),
+    )
+
+    assert result == {
+        "status": "missing_or_invalid",
+        "detail": "missing AOT manifest field: source_identity",
+    }

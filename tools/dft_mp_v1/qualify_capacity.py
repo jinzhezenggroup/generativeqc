@@ -21,9 +21,12 @@ from types import SimpleNamespace
 from typing import Any
 
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
+SOURCE_PYTHON = SOURCE_REPOSITORY / "python"
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(SOURCE_REPOSITORY / "python"))
+source_python = str(SOURCE_PYTHON)
+if source_python in sys.path:
+    sys.path.remove(source_python)
+sys.path.insert(0, source_python)
 
 import numpy as np
 from vibeqc import Atom
@@ -50,6 +53,37 @@ STATIONARY_OWNER = {
     "file": "python/vibeqc/_stationary_cuda.py",
     "function": "_complete_rks_cuda_gradient_diagnostic",
 }
+
+
+def _assert_local_imports() -> None:
+    """Reject helpers already imported from an installed or foreign checkout."""
+
+    helpers = {
+        "Atom": Atom,
+        "generated_methods": generated_methods,
+        "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
+        "resolved_basis_metadata": resolved_basis_metadata,
+        "_named_basis_record": _named_basis_record,
+        "_named_basis_shells": _named_basis_shells,
+        "GridSpec": GridSpec,
+        "MolecularGrid": MolecularGrid,
+        "plan_tiles": plan_tiles,
+        "_qualified_aot_plan": _qualified_aot_plan,
+        "load_stationary_aot_artifact": load_stationary_aot_artifact,
+        "stationary_aot_contract_identity": stationary_aot_contract_identity,
+        "stationary_runtime_sources": stationary_runtime_sources,
+    }
+    foreign = []
+    for name, helper in helpers.items():
+        module = helper if inspect.ismodule(helper) else inspect.getmodule(helper)
+        source = None if module is None else getattr(module, "__file__", None)
+        if source is None or not Path(source).resolve().is_relative_to(SOURCE_PYTHON):
+            foreign.append(name)
+    if foreign:
+        raise RuntimeError(
+            "capacity helper imported outside the tool checkout: "
+            + ", ".join(sorted(foreign))
+        )
 
 
 def _lf_sha256(data: bytes) -> str:
@@ -430,6 +464,12 @@ def _artifact_verification(
         )
     except (FileNotFoundError, NotImplementedError, TypeError, ValueError) as error:
         return {"status": "missing_or_invalid", "detail": str(error)}
+    except KeyError as error:
+        field = error.args[0] if error.args else "unknown"
+        return {
+            "status": "missing_or_invalid",
+            "detail": f"missing AOT manifest field: {field}",
+        }
     return {
         "status": "verified",
         "detail": "packaged s/p/d AOT contract and binary identity verified",
@@ -448,6 +488,7 @@ def build_report(
     aot_directory: Path | None = None,
 ) -> dict[str, Any]:
     repository = Path(repository).resolve()
+    _assert_local_imports()
     if repository != SOURCE_REPOSITORY:
         raise ValueError(
             "capacity report must run against the checkout containing this tool"
