@@ -1,21 +1,24 @@
-"""Bind real grid/XC execution routes to ProgramIR whole-region selection.
+"""Bind native CUDA-KS XC staging routes to ProgramIR region selection.
 
-The host-unfused CUDA path is described explicitly because it is the portable
-fallback: device collocation/features, explicit host staging, generated host
-XC/Vxc, then Vxc upload back to the CUDA SCF owner. The existing native
-device-fused path can replace that whole region only when its DFT schedule
-assessment is legal and measured evidence selects it.
+This module describes the actual `CudaKsPlan::stage_xc` execution boundary.
+The portable host-unfused route downloads the current device density, evaluates
+the audited CPU XC/Vxc implementation, then uploads Vxc plus scalar totals/error
+back to the CUDA KS state. The existing resident CudaXcPlan is an alternate
+implementation of exactly that boundary.
 
-No scientific XC equation is implemented here. Existing DFT schedule admission,
-ProgramIR region legality, and shared measured promotion remain authoritative.
+Scientific admission remains owned by DFT. ProgramIR owns only the replaceable
+execution region, while ScheduleContract remains the shared measured-promotion
+and fallback vocabulary. No XC equation or CUDA kernel is duplicated here.
 """
 
 from __future__ import annotations
 
+import collections.abc
 import math
 import typing
 from dataclasses import dataclass, replace
 
+from vibeqc_compiler.common.gpu_profitability import GpuProfitability
 from vibeqc_compiler.common.liveness import EffectKind
 from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
 from vibeqc_compiler.common.program_region import (
@@ -26,25 +29,20 @@ from vibeqc_compiler.common.program_region import (
     select_program_region_candidate,
 )
 from vibeqc_compiler.common.provenance import canonical_hash
+from vibeqc_compiler.common.resources import byte_product
+from vibeqc_compiler.common.schedule import ScheduleContract, ScheduleResources
 
-from .xc_schedule import (
-    GridXcCandidateAssessment,
-    GridXcCandidateShape,
-    grid_xc_tile_capacities,
-)
-
-if typing.TYPE_CHECKING:
-    import collections.abc
-
-    from vibeqc_compiler.common.schedule import ScheduleContract
+from .xc_schedule import GridXcCandidateAssessment, GridXcCandidateShape
 
 _HOST_REGION_EFFECTS = {
-    "dft.CudaDensityGrid.collocate": EffectKind.PURE,
-    "dft.CudaDensityGrid.features": EffectKind.PURE,
-    "runtime.cuda.download_grid_xc": EffectKind.PURE,
-    "xc.GeneratedHost.grid_xc_vxc": EffectKind.PURE,
-    "runtime.cuda.upload_grid_xc": EffectKind.PURE,
+    "runtime.cuda.ks_xc_density_d2h": EffectKind.PURE,
+    "dft.CudaKsPlan.split_host_spin_density": EffectKind.PURE,
+    "dft.CudaKsPlan.host_unfused_xc": EffectKind.PURE,
+    "runtime.cuda.ks_xc_result_h2d": EffectKind.PURE,
 }
+
+_TOTAL_BYTES = 3 * 8
+_ERROR_BYTES = 4
 
 
 def _text(value: typing.Any, label: str) -> str:
@@ -59,110 +57,139 @@ def _device_space(ordinal: int) -> str:
     return f"device:{ordinal}"
 
 
-def host_unfused_grid_xc_program(
+def _density_bytes(shape: GridXcCandidateShape) -> int:
+    if not isinstance(shape, GridXcCandidateShape):
+        raise TypeError("native KS XC ProgramIR requires GridXcCandidateShape")
+    return byte_product(8, shape.spins, shape.nao, shape.nao)
+
+
+def native_ks_host_unfused_xc_program(
     shape: GridXcCandidateShape,
     *,
-    source_identity: str,
+    density_identity: str,
     host_xc_identity: str,
     transfer_identity: str,
     device_ordinal: int = 0,
 ) -> ProgramIR:
-    """Describe the actual host-unfused CUDA grid/XC lowering boundary."""
+    """Describe the current host-unfused `CudaKsPlan::stage_xc` boundary."""
 
-    if not isinstance(shape, GridXcCandidateShape):
-        raise TypeError("grid/XC ProgramIR requires GridXcCandidateShape")
-    source_identity = _text(source_identity, "grid/XC source identity")
+    density_identity = _text(density_identity, "KS density identity")
     host_xc_identity = _text(host_xc_identity, "host XC identity")
     transfer_identity = _text(transfer_identity, "transfer identity")
     device = _device_space(device_ordinal)
-    capacity = grid_xc_tile_capacities(shape)
+    density_bytes = _density_bytes(shape)
+    matrix_bytes = byte_product(8, shape.nao, shape.nao)
     topology = {
         "npoint": shape.npoint,
         "tile_points": shape.tile_points,
         "nao": shape.nao,
-        "max_active_ao": shape.max_active_ao,
         "spins": shape.spins,
-        "jet_components": shape.jet_components,
     }
 
-    buffers = (
-        # This is an execution dependency token. The real density/grid owner is
-        # already charged by PreparedXCContractions/CudaDensityGrid.
-        ProgramBuffer("density_source", 0, device),
-        ProgramBuffer("ao_jets_device", capacity["ao_jets"], device),
-        ProgramBuffer("density_panel_device", capacity["density_panel"], device),
-        ProgramBuffer("features_device", capacity["features"], device),
-        ProgramBuffer("ao_jets_host", capacity["ao_jets"]),
-        ProgramBuffer("features_host", capacity["features"]),
-        ProgramBuffer("vxc_host", capacity["vxc"]),
-        ProgramBuffer("vxc_device", capacity["vxc"], device),
+    # Device inputs/outputs are boundary tokens. Their physical owners live in
+    # the prepared KS arena, so ProgramIR does not charge those owners again.
+    buffers = [
+        ProgramBuffer("density_device", 0, device),
+        ProgramBuffer("density_host", density_bytes),
+    ]
+    calls = [
+        PlanCall(
+            "download_density",
+            "runtime.cuda.ks_xc_density_d2h",
+            canonical_hash(
+                {
+                    "transfer": transfer_identity,
+                    "direction": "d2h",
+                    "bytes": density_bytes,
+                    "topology": topology,
+                }
+            ),
+            ("density_device",),
+            ("density_host",),
+        )
+    ]
+    host_density_reads: tuple[str, ...] = ("density_host",)
+    if shape.spins == 2:
+        buffers.extend(
+            (
+                ProgramBuffer("alpha_host", matrix_bytes),
+                ProgramBuffer("beta_host", matrix_bytes),
+            )
+        )
+        calls.append(
+            PlanCall(
+                "split_spin_density",
+                "dft.CudaKsPlan.split_host_spin_density",
+                canonical_hash(
+                    {
+                        "density": density_identity,
+                        "topology": topology,
+                    }
+                ),
+                ("density_host",),
+                ("alpha_host", "beta_host"),
+            )
+        )
+        host_density_reads = ("alpha_host", "beta_host")
+
+    buffers.extend(
+        (
+            ProgramBuffer("vxc_host", density_bytes),
+            ProgramBuffer("totals_host", _TOTAL_BYTES),
+            ProgramBuffer("error_host", _ERROR_BYTES),
+            ProgramBuffer("vxc_device", 0, device),
+            ProgramBuffer("totals_device", 0, device),
+            ProgramBuffer("error_device", 0, device),
+        )
     )
-    calls = (
-        PlanCall(
-            "collocate",
-            "dft.CudaDensityGrid.collocate",
-            canonical_hash(
-                {
-                    "source": source_identity,
-                    "stage": "collocate",
-                    "topology": topology,
-                }
+    calls.extend(
+        (
+            PlanCall(
+                "host_xc_vxc",
+                "dft.CudaKsPlan.host_unfused_xc",
+                canonical_hash(
+                    {
+                        "xc": host_xc_identity,
+                        "density": density_identity,
+                        "topology": topology,
+                    }
+                ),
+                host_density_reads,
+                ("vxc_host", "totals_host", "error_host"),
             ),
-            ("density_source",),
-            ("ao_jets_device",),
-        ),
-        PlanCall(
-            "features",
-            "dft.CudaDensityGrid.features",
-            canonical_hash(
-                {
-                    "source": source_identity,
-                    "stage": "features",
-                    "topology": topology,
-                }
+            PlanCall(
+                "upload_xc",
+                "runtime.cuda.ks_xc_result_h2d",
+                canonical_hash(
+                    {
+                        "transfer": transfer_identity,
+                        "direction": "h2d",
+                        "bytes": density_bytes + _TOTAL_BYTES + _ERROR_BYTES,
+                        "topology": topology,
+                    }
+                ),
+                ("vxc_host", "totals_host", "error_host"),
+                ("vxc_device", "totals_device", "error_device"),
             ),
-            ("density_source", "ao_jets_device"),
-            ("density_panel_device", "features_device"),
-        ),
-        PlanCall(
-            "download",
-            "runtime.cuda.download_grid_xc",
-            transfer_identity,
-            ("ao_jets_device", "density_panel_device", "features_device"),
-            ("ao_jets_host", "features_host"),
-        ),
-        PlanCall(
-            "host_xc_vxc",
-            "xc.GeneratedHost.grid_xc_vxc",
-            host_xc_identity,
-            ("ao_jets_host", "features_host"),
-            ("vxc_host",),
-        ),
-        PlanCall(
-            "upload_vxc",
-            "runtime.cuda.upload_grid_xc",
-            transfer_identity,
-            ("vxc_host",),
-            ("vxc_device",),
-        ),
+        )
     )
     return ProgramIR(
-        "grid_xc_host_unfused",
-        buffers,
-        ("density_source",),
-        calls,
-        ("vxc_device",),
+        "cuda_ks_host_unfused_xc",
+        tuple(buffers),
+        ("density_device",),
+        tuple(calls),
+        ("vxc_device", "totals_device", "error_device"),
     )
 
 
-def host_unfused_grid_xc_region(program: ProgramIR) -> ProgramRegion:
-    """Return the exact portable region replaceable by native device fusion."""
+def native_ks_xc_region(program: ProgramIR) -> ProgramRegion:
+    """Return the exact `stage_xc` region replaceable by resident device XC."""
 
     return derive_program_region(
         program,
-        name="grid-xc",
-        start_call="collocate",
-        end_call="upload_vxc",
+        name="cuda-ks-stage-xc",
+        start_call="download_density",
+        end_call="upload_xc",
         effects=_HOST_REGION_EFFECTS,
     )
 
@@ -174,6 +201,8 @@ def _schedule_name(assessment: GridXcCandidateAssessment) -> str:
     name = provenance.get("domain_schedule")
     if name not in ("host_unfused", "device_fused"):
         raise ValueError("grid/XC assessment has an unknown execution schedule")
+    if assessment.legal != assessment.schedule_contract.legal:
+        raise ValueError("grid/XC assessment legality disagrees with ScheduleContract")
     return name
 
 
@@ -194,30 +223,65 @@ def _endpoint_seconds(
     return numeric
 
 
+def _host_region_resources(program: ProgramIR) -> ScheduleResources:
+    """Project only ProgramIR-visible bridge storage, not the prepared KS arena."""
+
+    peaks = program.storage_analysis().peak_by_space
+    host_bytes = peaks.get("pageable", 0) + peaks.get("pinned", 0)
+    device_bytes = sum(
+        value for space, value in peaks.items() if space.startswith("device:")
+    )
+    return ScheduleResources(
+        host_bytes=host_bytes,
+        device_bytes=device_bytes,
+    )
+
+
+def _host_bridge_traffic(program: ProgramIR) -> int:
+    """Exact transfer payload from `stage_xc`, excluding CPU-internal traffic."""
+
+    buffers = {buffer.name: buffer for buffer in program.buffers}
+    return (
+        buffers["density_host"].bytes
+        + buffers["vxc_host"].bytes
+        + buffers["totals_host"].bytes
+        + buffers["error_host"].bytes
+    )
+
+
 def _region_schedule(
     assessment: GridXcCandidateAssessment,
     region: ProgramRegion,
     *,
     endpoint_seconds: float | None,
+    resources: ScheduleResources | None = None,
+    semantic_traffic_bytes: int | None = None,
 ) -> ScheduleContract:
     contract = assessment.schedule_contract
     provenance = dict(contract.provenance)
     provenance["program_region"] = region.identity
     provenance["region_source_consumer"] = contract.consumer
+    profitability = replace(
+        contract.profitability,
+        endpoint_seconds=endpoint_seconds,
+        **(
+            {}
+            if semantic_traffic_bytes is None
+            else {"semantic_traffic_bytes": semantic_traffic_bytes}
+        ),
+    )
     return replace(
         contract,
         consumer=region.consumer,
-        profitability=replace(
-            contract.profitability,
-            endpoint_seconds=endpoint_seconds,
-        ),
+        resources=contract.resources if resources is None else resources,
+        profitability=profitability,
         provenance=tuple(provenance.items()),
     )
 
 
 @dataclass(frozen=True, slots=True)
 class GridXcRegionCandidates:
-    """Original and device-fused implementations of one exact ProgramIR region."""
+    """Host bridge and resident-device implementations of one native KS region."""
 
     region: ProgramRegion
     host_unfused: ProgramRegionCandidate
@@ -234,7 +298,7 @@ class GridXcRegionCandidates:
         return self.host_unfused, self.device_fused
 
 
-def bind_grid_xc_region_candidates(
+def bind_native_ks_xc_region_candidates(
     program: ProgramIR,
     *,
     host_unfused: GridXcCandidateAssessment,
@@ -242,7 +306,7 @@ def bind_grid_xc_region_candidates(
     device_xc_identity: str,
     endpoint_seconds: collections.abc.Mapping[str, float | None] | None = None,
 ) -> GridXcRegionCandidates:
-    """Bind the existing DFT schedule pair to one exact ProgramIR region."""
+    """Bind existing DFT schedule evidence to one exact native KS XC region."""
 
     device_xc_identity = _text(device_xc_identity, "device XC executable identity")
     if _schedule_name(host_unfused) != "host_unfused":
@@ -256,11 +320,13 @@ def bind_grid_xc_region_candidates(
     if not host_unfused.legal:
         raise ValueError("host_unfused fallback must be legal")
 
-    region = host_unfused_grid_xc_region(program)
+    region = native_ks_xc_region(program)
     host_schedule = _region_schedule(
         host_unfused,
         region,
         endpoint_seconds=_endpoint_seconds(endpoint_seconds, "host_unfused"),
+        resources=_host_region_resources(program),
+        semantic_traffic_bytes=_host_bridge_traffic(program),
     )
     device_schedule = _region_schedule(
         device_fused,
@@ -281,11 +347,7 @@ def bind_grid_xc_region_candidates(
         provider="dft.CudaXcPlan.device_fused",
         implementation_identity=device_xc_identity,
     )
-    return GridXcRegionCandidates(
-        region,
-        host_candidate,
-        device_candidate,
-    )
+    return GridXcRegionCandidates(region, host_candidate, device_candidate)
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,7 +358,7 @@ class GridXcRegionSelection:
     program: ProgramIR
 
 
-def select_grid_xc_region_program(
+def select_native_ks_xc_region_program(
     program: ProgramIR,
     *,
     host_unfused: GridXcCandidateAssessment,
@@ -306,9 +368,9 @@ def select_grid_xc_region_program(
     minimum_speedup: float = 1.0,
     endpoint_noise_fraction: float = 0.01,
 ) -> GridXcRegionSelection:
-    """Select and materialize the measured grid/XC implementation plan."""
+    """Select and materialize one measured native-KS XC implementation."""
 
-    candidates = bind_grid_xc_region_candidates(
+    candidates = bind_native_ks_xc_region_candidates(
         program,
         host_unfused=host_unfused,
         device_fused=device_fused,
