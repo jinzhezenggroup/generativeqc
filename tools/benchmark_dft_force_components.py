@@ -51,12 +51,29 @@ def _stationary_records(
         return []
     result: list[dict[str, typing.Any]] = []
     for row in rows:
-        if not isinstance(row, Mapping) or row.get("status") != "ok":
+        if not isinstance(row, Mapping):
+            continue
+        status = str(row.get("status", "unknown"))
+        if status != "ok":
+            result.append(
+                {
+                    "metadata": _metadata(row),
+                    "status": status,
+                    "error_type": row.get("error_type"),
+                    "error": row.get("error"),
+                }
+            )
             continue
         component = row.get("component_breakdown")
         if not isinstance(component, Mapping):
             work = row.get("work")
             if not isinstance(work, Mapping):
+                result.append(
+                    {
+                        "metadata": _metadata(row),
+                        "status": "missing_component_work",
+                    }
+                )
                 continue
             timeline = row.get("timeline")
             state_export_seconds = None
@@ -72,6 +89,7 @@ def _stationary_records(
         result.append(
             {
                 "metadata": _metadata(row),
+                "status": "measured",
                 "components": dict(component),
             }
         )
@@ -81,15 +99,28 @@ def _stationary_records(
 def _wb97mv_records(
     payload: Mapping[str, typing.Any],
 ) -> list[dict[str, typing.Any]]:
+    metadata = _metadata(payload)
+    metadata.setdefault("method", payload.get("method", "WB97M-V/RKS"))
+    status = str(payload.get("status", "unknown"))
     component = payload.get("native_force_components")
     if not isinstance(component, Mapping):
         work = payload.get("native_force_work")
         if work is None:
-            return []
+            return [
+                {
+                    "metadata": metadata,
+                    "status": status,
+                    "error": payload.get("error"),
+                }
+            ]
         component = normalize_force_work(work)
-    metadata = _metadata(payload)
-    metadata.setdefault("method", payload.get("method", "WB97M-V/RKS"))
-    return [{"metadata": metadata, "components": dict(component)}]
+    return [
+        {
+            "metadata": metadata,
+            "status": "measured" if status in {"measured", "complete", "unknown"} else status,
+            "components": dict(component),
+        }
+    ]
 
 
 def _matrix_records(
