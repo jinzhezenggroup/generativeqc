@@ -5,9 +5,9 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
-#include "hf/reference.hpp"
 
 namespace vibeqc::mp2::detail {
 namespace {
