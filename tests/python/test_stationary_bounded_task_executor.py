@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import typing
+
 import pytest
 from vibeqc._stationary_cuda import _BoundedStationaryTaskExecutor
 from vibeqc_compiler.common.provenance import canonical_hash
@@ -143,7 +145,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
     domain = RuntimeTaskDomain.rectangular((3, 2))
 
     class Source:
-        payload = {
+        payload: typing.ClassVar[dict[str, str]] = {
             "schema": "vibeqc.synthetic_stationary_task_source.v1",
             "logical_source": "fixture",
         }
@@ -151,7 +153,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
         logical_size = domain.logical_size
 
         @classmethod
-        def pages(cls, capacity: int):
+        def pages(cls, capacity: int) -> typing.Iterator[RuntimeTaskPage]:
             for page in domain.pages(capacity):
                 yield RuntimeTaskPage(
                     cls.identity,
@@ -177,7 +179,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
 
     class WrongIdentity(Source):
         @classmethod
-        def pages(cls, capacity: int):
+        def pages(cls, capacity: int) -> typing.Iterator[RuntimeTaskPage]:
             first = next(domain.pages(capacity))
             yield RuntimeTaskPage(
                 "0" * 64,
@@ -205,7 +207,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
 
 def test_executor_admits_empty_screened_task_source_without_pages() -> None:
     class EmptySource:
-        payload = {
+        payload: typing.ClassVar[dict[str, str]] = {
             "schema": "vibeqc.synthetic_stationary_task_source.v1",
             "logical_source": "screened-empty",
         }
@@ -213,7 +215,7 @@ def test_executor_admits_empty_screened_task_source_without_pages() -> None:
         logical_size = 0
 
         @staticmethod
-        def pages(_capacity: int):
+        def pages(_capacity: int) -> typing.Iterator[RuntimeTaskPage]:
             return iter(())
 
         @classmethod
