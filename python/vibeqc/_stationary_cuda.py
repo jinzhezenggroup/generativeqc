@@ -661,7 +661,9 @@ class _CudaSources:
         selectors = tuple(self.component_ids[indices[:, axis]] for axis in range(rank))
         kinds = table[selectors]
         if np.any(kinds < 0):
-            raise ValueError("stationary CUDA page requests an unavailable derivative kind")
+            raise ValueError(
+                "stationary CUDA page requests an unavailable derivative kind"
+            )
         primitive_work = np.prod(
             self.aos[indices, 2].astype(np.int64),
             axis=1,
