@@ -466,7 +466,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           (!is_semilocal_family(functional, SemilocalFamily::Wb97mv) ||
            nonlocal_domain != nlc::Vv10DensityDomain::MolecularV1 ||
            nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 ||
-            fitted_coulomb))
+           fitted_coulomb))
         throw std::invalid_argument(
             "device-resident CUDA nonlocal KS is qualified only for WB97M-V MolecularV1");
       if (!device_nonlocal &&
@@ -673,7 +673,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
         !fitted_coulomb && !has_exchange && !has_range_correction && !nonlocal_correlation &&
-        spins == 1 && !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
+        !mixed_j && spins == 1 && !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
         options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
         provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
