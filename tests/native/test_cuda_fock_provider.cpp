@@ -132,6 +132,21 @@ void direct_value_dispatch_selection() {
   const auto pure_k = direct_jk_value_dispatch(true, false, true, false);
   require(!pure_k.generated_coulomb && !pure_k.generic_coulomb && pure_k.generic_exchange,
           "K-only request selected an unrelated Coulomb consumer");
+
+  const auto generated_hybrid = direct_jk_value_dispatch(true, true, true, true, false);
+  require(generated_hybrid.generated_coulomb && generated_hybrid.generated_exchange &&
+              !generated_hybrid.generic_coulomb && !generated_hybrid.generic_exchange,
+          "qualified generated J/K did not stay fully generated");
+
+  const auto generated_k = direct_jk_value_dispatch(true, true, false, true, false);
+  require(!generated_k.generated_coulomb && generated_k.generated_exchange &&
+              !generated_k.generic_coulomb && !generated_k.generic_exchange,
+          "qualified K-only request did not select generated exchange");
+
+  const auto generated_mixed = direct_jk_value_dispatch(true, true, true, true, true);
+  require(!generated_mixed.generated_coulomb && !generated_mixed.generated_exchange &&
+              generated_mixed.generic_coulomb && generated_mixed.generic_exchange,
+          "mixed-J request incorrectly entered generated exchange route");
 }
 
 void device_selection() {
@@ -392,6 +407,19 @@ void direct_providers(bool through_f_response) {
       require((std::string(pure_j_diagnostic.schedule).find("generated-shell") !=
                std::string::npos) == (angular <= 2),
               "generated pure J admission/class fallback mismatch");
+
+      CudaDirectJkPlan* generated_k_raw{};
+      CudaDirectJkDiagnostic generated_k_diagnostic;
+      require(create_cuda_direct_jk_plan_with_generated_exchange(
+                  0, {first, second}, 0, 0.0, 64U * 1024U * 1024U, &generated_k_raw,
+                  generated_k_diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+              detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> generated_k_plan(
+          generated_k_raw, &destroy_cuda_direct_jk_plan);
+      require((std::string(generated_k_diagnostic.schedule).find("coulomb+exchange") !=
+               std::string::npos) == (angular <= 2),
+              "generated exchange admission/class fallback mismatch");
+
       CudaDirectJkPlan* fallback_raw{};
       CudaDirectJkDiagnostic fallback_diagnostic;
       const auto fallback_capacity =
@@ -458,6 +486,9 @@ void direct_providers(bool through_f_response) {
               // numerics when J and K are dispatched through separate sources.
               direct_device(pure_j_plan.get(), spec, packed_a, packed_b, ej, eka, ekb);
               direct_device(fallback_plan.get(), spec, packed_a, packed_b, ej, eka, ekb);
+            }
+            if (angular <= 2 && (j || k)) {
+              direct_device(generated_k_plan.get(), spec, packed_a, packed_b, ej, eka, ekb);
             }
             std::vector<double> actual_gradient;
             if (response || !derivatives) {
