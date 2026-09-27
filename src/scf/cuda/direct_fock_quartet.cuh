@@ -95,13 +95,15 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
       if (integral == 0.0F) return;
       accumulate_direct_fock_integral<Unrestricted, true>(n, physical_offset, spin_offset, density,
                                                           fock, i, j, k, l, integral,
-                                                          coulomb_only,\n exchange_only);
+                                                          coulomb_only,
+                                                          exchange_only);
     } else {
       const double integral = scalar_value(evaluated_integral);
       if (integral == 0.0) return;
       accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock,
                                                     i, j, k, l, integral,
-                                                    coulomb_only,\n exchange_only);
+                                                    coulomb_only,
+                                                          exchange_only);
     }
   }
 }
