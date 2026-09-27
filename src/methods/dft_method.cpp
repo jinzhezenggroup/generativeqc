@@ -918,14 +918,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
             transfers_after.final_state_reads - transfers_before.final_state_reads,
             transfers_after.synchronizations - transfers_before.synchronizations};
     scf::OneElectronGradientResources one;
-    const auto record_one = [&] {
-      work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
-      work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
-      work[4] += one.host_to_device_bytes;
-      work[5] += one.device_to_host_bytes;
-    };
-    // The owner is immutable in geometry; only the freshly verified densities
-    // change on warm replay. No SCF iteration or reference solver runs here.
+    // D and W share immutable geometry/topology. Prepare that metadata once,
+    // launch the two existing generated contractions on one stream, and drain
+    // once while retaining separate hcore and Pulay component outputs.
     auto density = (*cached_density)[0], weighted = (*cached_weighted_density)[0];
     if (cached_density->size() == 2)
       for (std::size_t i = 0; i < density.size(); ++i) {
@@ -935,17 +930,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
     candidate.reserve(5 * nc);
-    std::vector<double> value;
-    status = scf::execute_cuda_one_electron_gradient(device, system_, {}, density, density, 0,
-                                                     bytes, value, detail, &one);
+    std::vector<double> hcore, pulay, value;
+    status = scf::execute_cuda_stationary_one_electron_pair(
+        device, system_, density, weighted, 0, bytes, hcore, pulay, detail, &one);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
-    record_one();
-    candidate.insert(candidate.end(), value.begin(), value.end());
-    status = scf::execute_cuda_one_electron_gradient(device, system_, weighted, {}, {}, 0, bytes,
-                                                     value, detail, &one, -1.0);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
-    record_one();
-    candidate.insert(candidate.end(), value.begin(), value.end());
+    work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
+    work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
+    work[4] += one.host_to_device_bytes;
+    work[5] += one.device_to_host_bytes;
+    candidate.insert(candidate.end(), hcore.begin(), hcore.end());
+    candidate.insert(candidate.end(), pulay.begin(), pulay.end());
     if (!range_strategy_) {
       detail = "CUDA RSH integral gradient is missing its resolved range correction";
       return VIBEQC_STATUS_INVALID_ARGUMENT;
