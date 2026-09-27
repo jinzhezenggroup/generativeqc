@@ -18,7 +18,6 @@ from vibeqc_compiler.integral.ir import four_center_eri_operator
 from vibeqc_compiler.integral.range_separation import CoulombKernel
 from vibeqc_compiler.integral.rsh_cpu_aot import (
     AOT_ANGULAR_DOMAIN,
-    component_group,
     component_groups,
     entry_prefix,
     inventory_size,
