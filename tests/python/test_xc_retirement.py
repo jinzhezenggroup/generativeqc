@@ -40,7 +40,7 @@ def test_xc_retirement_inventory_is_explicit_and_monotone() -> None:
 def test_retired_xc_handwritten_builders_stay_deleted() -> None:
     sources = (
         ROOT / "python/vibeqc_compiler/xc/semilocal_family.py",
-        ROOT / "python/vibeqc_compiler/xc/rsh_expressions.py",
+        ROOT / "python/vibeqc_compiler/xc/expression_dispatch.py",
     )
     function_names = set()
     for source in sources:
