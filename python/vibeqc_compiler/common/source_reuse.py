@@ -216,12 +216,57 @@ def select_source_tile(
     return min(scored, key=lambda item: item[0])[1]
 
 
+@dataclass(frozen=True)
+class OrderedPrefixReusePlan:
+    """Reuse leaders for ordered rank-4 transform prefixes."""
+
+    leaders: tuple[tuple[int, int, int, int], ...]
+    unique_prefixes: tuple[int, int, int, int]
+    transform_stages: int
+
+
+def ordered_prefix_reuse_plan(
+    requests: tuple[tuple[int, int, int, int], ...] | list[tuple[int, int, int, int]],
+) -> OrderedPrefixReusePlan:
+    """Choose the first request that owns each equal transform prefix."""
+
+    normalized = tuple(tuple(request) for request in requests)
+    if not normalized:
+        raise ValueError("prefix-reuse schedule requires at least one request")
+    if any(len(request) != 4 for request in normalized):
+        raise ValueError("prefix-reuse schedule requires rank-4 requests")
+    if any(
+        not isinstance(key, int) or key < 0 for request in normalized for key in request
+    ):
+        raise ValueError("prefix-reuse keys must be nonnegative integers")
+
+    leaders: list[tuple[int, int, int, int]] = []
+    unique = [0, 0, 0, 0]
+    for index, request in enumerate(normalized):
+        row: list[int] = []
+        for axis in range(4):
+            leader = index
+            prefix = request[: axis + 1]
+            for prior in range(index):
+                if normalized[prior][: axis + 1] == prefix:
+                    leader = prior
+                    break
+            row.append(leader)
+            if leader == index:
+                unique[axis] += 1
+        leaders.append((row[0], row[1], row[2], row[3]))
+
+    unique_tuple = (unique[0], unique[1], unique[2], unique[3])
+    return OrderedPrefixReusePlan(tuple(leaders), unique_tuple, sum(unique_tuple))
+
+
 def native_header() -> str:
     """Emit the native runtime transcription of the generic schedule."""
 
     return r"""// Generated from vibeqc_compiler.common.source_reuse; do not edit.
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
@@ -339,6 +384,39 @@ inline SourceTilePlan select_source_tile(
     }
   }
   return best;
+}
+
+struct OrderedPrefixReusePlan {
+  std::vector<std::array<std::size_t, 4>> leaders;
+  std::array<std::size_t, 4> unique_prefixes{};
+  std::size_t transform_stages{};
+};
+inline OrderedPrefixReusePlan ordered_prefix_reuse_plan(
+    const std::vector<std::array<std::size_t, 4>>& requests) {
+  if (requests.empty())
+    throw std::invalid_argument("prefix-reuse schedule requires at least one request");
+  OrderedPrefixReusePlan result;
+  result.leaders.resize(requests.size());
+  for (std::size_t request = 0; request < requests.size(); ++request) {
+    for (unsigned axis = 0; axis < 4; ++axis) {
+      std::size_t leader = request;
+      for (std::size_t prior = 0; prior < request; ++prior) {
+        bool same = true;
+        for (unsigned prefix = 0; prefix <= axis; ++prefix)
+          same = same && requests[prior][prefix] == requests[request][prefix];
+        if (same) {
+          leader = prior;
+          break;
+        }
+      }
+      result.leaders[request][axis] = leader;
+      if (leader == request) {
+        ++result.unique_prefixes[axis];
+        ++result.transform_stages;
+      }
+    }
+  }
+  return result;
 }
 }  // namespace vibeqc::posthf::generated
 """
