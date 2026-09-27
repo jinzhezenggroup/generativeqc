@@ -25,11 +25,12 @@ template <bool Unrestricted, unsigned AngularOrder>
 __global__ void two_electron_force_quartet_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   contract_two_electron_force_quartet_subtile<Unrestricted, AngularOrder>(
       batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
-      schwarz_bounds, density, active, forces, generated_shell_class_mask,
+      schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask,
       static_cast<std::size_t>(blockIdx.x), threadIdx.x);
 }
 
@@ -78,7 +79,8 @@ __launch_bounds__(kResidentPsssThreads, kResidentPsssMinimumBlocksPerSm) void tw
     const std::uint32_t* resident_ket_pairs, std::size_t resident_task_count,
     double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, bool force_density_product_screening,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   extern __shared__ PrimitivePairData resident_first_pairs[];
   const std::size_t task_index = static_cast<std::size_t>(blockIdx.x);
@@ -124,7 +126,7 @@ __launch_bounds__(kResidentPsssThreads, kResidentPsssMinimumBlocksPerSm) void tw
     contract_two_electron_force_psss_task<Unrestricted, true>(
         batch,
         {static_cast<std::uint32_t>(first_pair), static_cast<std::uint32_t>(second_pair), 0U},
-        screening_tolerance, schwarz_bounds, density, active, forces, generated_shell_class_mask,
+        screening_tolerance, schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask,
         resident_first_pairs, bra_primitive_count);
   }
 }
@@ -134,8 +136,8 @@ template <bool Unrestricted>
 __global__ void two_electron_force_psss_persistent_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, std::uint32_t* task_head,
-    double screening_tolerance, const double* schwarz_bounds, const double* density,
-    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
+    double screening_tolerance, const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
   const unsigned lane = threadIdx.x;
   const std::uint32_t work_count = *active_shell_quartet_tile_count;
   while (true) {
@@ -160,7 +162,8 @@ template <bool Unrestricted>
 __global__ void two_electron_force_psps_grid_stride_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   const std::uint32_t work_count = *active_shell_quartet_tile_count;
   const std::uint32_t stride = blockDim.x * gridDim.x;
@@ -177,7 +180,8 @@ template <bool Unrestricted, unsigned TargetShellClass>
 __global__ void two_electron_force_pair_order2_grid_stride_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   static_assert(TargetShellClass == kPpssShellClass || TargetShellClass == kDsssShellClass);
   const std::uint32_t work_count = *active_shell_quartet_tile_count;
@@ -202,7 +206,8 @@ template <bool Unrestricted>
 __global__ void two_electron_force_order3_grid_stride_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   const std::uint32_t work_count = *active_shell_quartet_tile_count;
   const std::uint32_t stride = blockDim.x * gridDim.x;
@@ -218,8 +223,8 @@ template <bool Unrestricted, unsigned AngularOrder>
 __global__ void two_electron_force_quartet_persistent_kernel(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, std::uint32_t* task_head,
-    double screening_tolerance, const double* schwarz_bounds, const double* density,
-    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
+    double screening_tolerance, const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
   const unsigned lane = threadIdx.x % warpSize;
   constexpr std::uint32_t subtiles_per_tile =
@@ -232,7 +237,7 @@ __global__ void two_electron_force_quartet_persistent_kernel(
     if (active_subtile >= work_count) return;
     contract_two_electron_force_quartet_subtile<Unrestricted, AngularOrder>(
         batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask, active_subtile,
+        schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask, active_subtile,
         threadIdx.x);
   }
 }
@@ -249,8 +254,8 @@ void launch_angular_force_quartets(
     const std::uint32_t* psss_resident_ket_pairs, std::size_t psss_resident_task_count,
     std::size_t resident_psss_bra_primitive_pairs, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
-    bool force_density_product_screening, const double* schwarz_bounds, const double* density,
-    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
+    bool force_density_product_screening, const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
   if constexpr (AngularOrder < detail::kDirectQuartetAngularOrderCount) {
     if (capacities[AngularOrder] != 0) {
       const std::uint32_t* order_tile_count = active_tile_counts + AngularOrder;
@@ -269,7 +274,7 @@ void launch_angular_force_quartets(
             <<<std::min(capacity_workers, persistent_worker_blocks), detail::kDirectQuartetThreads,
                0, stream>>>(batch, order_tile_count, order_tiles,
                             persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, forces);
+                            schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces);
       } else if constexpr (AngularOrder == kFusedPsssAngularOrder) {
         if (psss_resident_task_count != 0 && resident_psss_bra_primitive_pairs != 0 &&
             resident_psss_bra_primitive_pairs <= kResidentPsssMaximumBraPrimitivePairs) {
@@ -278,7 +283,7 @@ void launch_angular_force_quartets(
                  resident_psss_bra_primitive_pairs * sizeof(PrimitivePairData), stream>>>(
                   batch, psss_resident_tasks, psss_resident_ket_pairs, psss_resident_task_count,
                   screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-                  force_density_product_screening, schwarz_bounds, density, active, forces,
+                  force_density_product_screening, schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces,
                   generated_shell_class_mask);
         } else {
           const unsigned capacity_workers =
@@ -288,7 +293,7 @@ void launch_angular_force_quartets(
               <<<std::min(capacity_workers, persistent_worker_blocks),
                  detail::kDirectQuartetThreads, 0, stream>>>(
                   batch, order_tile_count, order_tiles, persistent_task_heads + AngularOrder,
-                  screening_tolerance, schwarz_bounds, density, active, forces,
+                  screening_tolerance, schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces,
                   generated_shell_class_mask);
         }
       } else if constexpr (AngularOrder == kFusedOrderTwoAngularOrder) {
@@ -298,15 +303,15 @@ void launch_angular_force_quartets(
         two_electron_force_psps_grid_stride_kernel<Unrestricted>
             <<<std::min(capacity_workers, persistent_worker_blocks), detail::kDirectQuartetThreads,
                0, stream>>>(batch, order_tile_count, order_tiles, screening_tolerance,
-                            schwarz_bounds, density, active, forces, generated_shell_class_mask);
+                            schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
         two_electron_force_pair_order2_grid_stride_kernel<Unrestricted, kPpssShellClass>
             <<<std::min(capacity_workers, persistent_worker_blocks), detail::kDirectQuartetThreads,
                0, stream>>>(batch, order_tile_count, order_tiles, screening_tolerance,
-                            schwarz_bounds, density, active, forces, generated_shell_class_mask);
+                            schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
         two_electron_force_pair_order2_grid_stride_kernel<Unrestricted, kDsssShellClass>
             <<<std::min(capacity_workers, persistent_worker_blocks), detail::kDirectQuartetThreads,
                0, stream>>>(batch, order_tile_count, order_tiles, screening_tolerance,
-                            schwarz_bounds, density, active, forces, generated_shell_class_mask);
+                            schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
 
         // Exact shell workers own all three order-two classes unless an
         // enabled generated kernel already consumed one. The generic launch
@@ -320,7 +325,7 @@ void launch_angular_force_quartets(
             <<<std::min(capacity_blocks, persistent_worker_blocks), detail::kDirectQuartetThreads,
                0, stream>>>(batch, order_tile_count, order_tiles,
                             persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, forces, generic_shell_class_mask);
+                            schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generic_shell_class_mask);
       } else if constexpr (AngularOrder == 3U) {
         const unsigned capacity_workers =
             static_cast<unsigned>((capacities[AngularOrder] + detail::kDirectQuartetThreads - 1) /
@@ -337,7 +342,7 @@ void launch_angular_force_quartets(
             <<<std::min(capacity_blocks, persistent_worker_blocks), detail::kDirectQuartetThreads,
                0, stream>>>(batch, order_tile_count, order_tiles,
                             persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, forces, generated_shell_class_mask);
+                            schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
       } else {
         two_electron_force_quartet_kernel<Unrestricted, AngularOrder>
             <<<static_cast<unsigned>(capacities[AngularOrder] *
@@ -353,7 +358,7 @@ void launch_angular_force_quartets(
         persistent_worker_blocks, psss_resident_tasks, psss_resident_ket_pairs,
         psss_resident_task_count, resident_psss_bra_primitive_pairs, screening_tolerance,
         shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask);
+        schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   }
 }
 
@@ -363,18 +368,19 @@ void launch_two_electron_force_psss_resident_bra_kernel(
     const std::uint32_t* resident_ket_pairs, std::size_t resident_task_count,
     double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, bool force_density_product_screening,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask) {
   if (unrestricted == true) {
     two_electron_force_psss_resident_bra_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
         shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask);
+        schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   } else {
     two_electron_force_psss_resident_bra_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
         shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask);
+        schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   }
 }
 
@@ -389,8 +395,8 @@ void dispatch_angular_force_quartets(
     const std::uint32_t* psss_resident_ket_pairs, std::size_t psss_resident_task_count,
     std::size_t resident_psss_bra_primitive_pairs, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
-    bool force_density_product_screening, const double* schwarz_bounds, const double* density,
-    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
+    bool force_density_product_screening, const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask) {
   if (unrestricted) {
     launch_angular_force_quartets<true>(
         stream, capacities, offsets, batch, active_tile_counts, active_tiles,
@@ -398,7 +404,7 @@ void dispatch_angular_force_quartets(
         persistent_worker_blocks, psss_resident_tasks, psss_resident_ket_pairs,
         psss_resident_task_count, resident_psss_bra_primitive_pairs, screening_tolerance,
         shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask);
+        schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   } else {
     launch_angular_force_quartets<false>(
         stream, capacities, offsets, batch, active_tile_counts, active_tiles,
@@ -406,7 +412,7 @@ void dispatch_angular_force_quartets(
         persistent_worker_blocks, psss_resident_tasks, psss_resident_ket_pairs,
         psss_resident_task_count, resident_psss_bra_primitive_pairs, screening_tolerance,
         shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask);
+        schwarz_bounds, density, coulomb_coefficient, exchange_coefficient, active, forces, generated_shell_class_mask);
   }
 }
 
