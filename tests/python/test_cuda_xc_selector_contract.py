@@ -33,7 +33,7 @@ class _View(ct.Structure):
 def test_curated_selector_reaches_both_geometry_consumers(
     method: str, spin: str, expected: int
 ) -> None:
-    code = ks._native_semilocal_family(resolve_method(method, spin=spin))
+    code = ks._native_semilocal_code(resolve_method(method, spin=spin))
     assert type(code) is int
     assert code == expected
     assert _functional_code(code, None) == expected
@@ -150,7 +150,7 @@ def test_pbe_d4_selector_also_returns_builtin_integer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(ks, "_is_pbe_d4_composition", lambda _: True)
-    code = ks._native_semilocal_family(object())
+    code = ks._native_semilocal_code(object())
     assert type(code) is int and code == 1
     assert _functional_code(code, None) == 1
 
