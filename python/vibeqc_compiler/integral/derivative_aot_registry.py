@@ -109,7 +109,7 @@ class DerivativeAotKey:
 
 @dataclass(frozen=True, slots=True)
 class PackagedDerivativeAot:
-    """Resolved package entry; method coefficients are deliberately absent."""
+    """Resolved shell-program entry; method coefficients are deliberately absent."""
 
     key: DerivativeAotKey
     entry_prefix: str
@@ -117,6 +117,47 @@ class PackagedDerivativeAot:
     @property
     def component_indices(self) -> tuple[int, ...]:
         return self.key.component_indices
+
+
+@dataclass(frozen=True, slots=True)
+class DerivativeAotBundleKey:
+    """Identity for a packaged derivative inventory shared by many consumers."""
+
+    backend: str
+    radial: CoulombKernel
+    component_domain: tuple[str, ...]
+    derivative_order: int = AOT_DERIVATIVE_ORDER
+
+    def __post_init__(self) -> None:
+        if self.backend not in ("cpu", "cuda"):
+            raise ValueError("derivative AOT backend must be cpu or cuda")
+        if not isinstance(self.radial, CoulombKernel):
+            raise TypeError("derivative AOT requires an explicit CoulombKernel")
+        if not self.component_domain or tuple(sorted(set(self.component_domain))) != self.component_domain:
+            raise ValueError("derivative AOT component domain must be sorted and unique")
+        if self.derivative_order != AOT_DERIVATIVE_ORDER:
+            raise ValueError("derivative AOT currently packages first derivatives only")
+
+    def to_payload(self) -> dict[str, typing.Any]:
+        return {
+            "version": 1,
+            "backend": self.backend,
+            "derivative_order": self.derivative_order,
+            "radial": self.radial.to_payload(),
+            "component_domain": list(self.component_domain),
+        }
+
+    @property
+    def identity(self) -> str:
+        return canonical_hash(self.to_payload())
+
+
+@dataclass(frozen=True, slots=True)
+class PackagedDerivativeAotBundle:
+    """Resolved fixed derivative inventory and its native entry symbols."""
+
+    key: DerivativeAotBundleKey
+    symbols: tuple[typing.Any, ...]
 
 
 def _family_tag(family: CoulombKernelFamily) -> str:
@@ -162,6 +203,45 @@ def make_key(
         angular=angular,
         group_index=group_index,
     )
+
+
+def select_packaged_component_derivative_aot(
+    library: typing.Any,
+    *,
+    backend: str,
+    radial: CoulombKernel,
+) -> PackagedDerivativeAotBundle | None:
+    """Resolve the shared full-range component inventory through this registry.
+
+    The current component bundle is the packaged CPU s/p/d first-derivative
+    inventory. CUDA stationary artifacts package equivalent derivative objects
+    behind a different library contract, so this selector deliberately returns
+    no CUDA bundle until that native package boundary is exported.
+    """
+
+    if library is None or backend != "cpu":
+        return None
+    full = CoulombKernel(CoulombKernelFamily.FULL_RANGE, 0.0)
+    if radial != full:
+        return None
+    from .first_derivative_schedule import (
+        COMPONENT_LABELS,
+        CPU_AOT_SHARDS,
+        cpu_aot_symbol,
+    )
+
+    symbols = []
+    for shard in range(CPU_AOT_SHARDS):
+        try:
+            symbols.append(getattr(library, cpu_aot_symbol(shard)))
+        except AttributeError:
+            return None
+    key = DerivativeAotBundleKey(
+        backend=backend,
+        radial=radial,
+        component_domain=COMPONENT_LABELS,
+    )
+    return PackagedDerivativeAotBundle(key=key, symbols=tuple(symbols))
 
 
 def select_packaged_derivative_aot(
