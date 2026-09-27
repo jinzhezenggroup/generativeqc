@@ -138,27 +138,28 @@ template<class T> void finished(T&,void*) {
 
 MAIN = r"""
 int main() {
-  Owner p; p.atoms=2; p.aos=2; p.spin_blocks=1; p.task_capacity=1; p.max_page_primitive_work=7;
+  Owner p; p.atoms=2; p.aos=2; p.spin_blocks=1; p.task_capacity=1;
+  p.max_page_primitive_work=16000000;
   p.topology_ready=true;
   double xyz[6]{0,0,0,1,0,0}, density[4]{}, weighted[4]{}, charges[1]{1}; char error[256]{};
-  int64_t task[9]{0,0,2,-1,0,1,-1,-1,7};
+  int64_t task[9]{0,0,2,-1,0,1,-1,-1,9000000};
   auto reset=[&](){return stationary_reset(&p,xyz,density,weighted,0,error,sizeof(error));};
   auto page=[&](){return stationary_tasks(&p,task,charges,1,error,sizeof(error));};
   if(reset() || page() || page()) {
     std::fprintf(stderr,"legal bounded pages rejected: %s\n",error); return 1;
   }
-  if(p.primitive_count!=14) return 2;
-  task[8]=8;
-  if(page()==0 || !p.failed || p.primitive_count!=14) return 3;
+  if(p.primitive_count!=18000000) return 2;
+  task[8]=16000001;
+  if(page()==0 || !p.failed || p.primitive_count!=18000000) return 3;
   task[8]=3; fail_finish=true;
   if(reset()) return 4;
-  if(page()==0 || !p.failed || p.primitive_count!=14) return 5;
-  task[8]=7;
-  if(reset() || page() || p.primitive_count!=21) return 6;
+  if(page()==0 || !p.failed || p.primitive_count!=18000003) return 5;
+  task[8]=9000000;
+  if(reset() || page() || p.primitive_count!=27000003) return 6;
   if(reset()) return 7;
   for(int i=0;i<8;++i)
     if(stationary_nuclear(&p,0,0,1,1,1,error,sizeof(error))) return 8;
-  if(p.primitive_count!=29) return 9;
+  if(p.primitive_count!=27000011) return 9;
   p.primitive_count=std::numeric_limits<uint64_t>::max()-1;
   if(reset()) return 10;
   task[8]=2;
