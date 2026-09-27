@@ -235,7 +235,9 @@ def resolve_public_bulk_ks(
         evidence=evidence,
     )
     if not endpoint.public_dft:
-        raise RuntimeError("public bulk Libxc endpoint resolved without public admission")
+        raise RuntimeError(
+            "public bulk Libxc endpoint resolved without public admission"
+        )
 
     resolved = _resolve_bulk_ks(
         name,
@@ -250,5 +252,7 @@ def resolve_public_bulk_ks(
             "bulk Libxc endpoint identity changed during public KS resolution"
         )
     if resolved.method.spin != endpoint.spin:
-        raise RuntimeError("bulk Libxc endpoint spin changed during public KS resolution")
+        raise RuntimeError(
+            "bulk Libxc endpoint spin changed during public KS resolution"
+        )
     return resolved
