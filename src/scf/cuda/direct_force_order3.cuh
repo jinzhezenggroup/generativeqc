@@ -11,6 +11,7 @@
 #include "scf/cuda/cartesian_angular.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_force_density.cuh"
+#include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
@@ -24,50 +25,6 @@ namespace order3_detail {
 
 __device__ inline unsigned cartesian_component_count(unsigned angular) {
   return (angular + 1U) * (angular + 2U) / 2U;
-}
-
-__device__ inline unsigned pair_class(unsigned first, unsigned second) {
-  if (first < second) {
-    const unsigned swap = first;
-    first = second;
-    second = swap;
-  }
-  return first * (first + 1U) / 2U + second;
-}
-
-__device__ inline void canonicalize_shell_slots(const DeviceBatch& batch,
-                                                const std::int32_t (&raw_shell)[4],
-                                                unsigned (&canonical_raw_slot)[4]) {
-  canonical_raw_slot[0] = 0U;
-  canonical_raw_slot[1] = 1U;
-  canonical_raw_slot[2] = 2U;
-  canonical_raw_slot[3] = 3U;
-  if (batch.shell_angular[raw_shell[canonical_raw_slot[0]]] <
-      batch.shell_angular[raw_shell[canonical_raw_slot[1]]]) {
-    const unsigned swap = canonical_raw_slot[0];
-    canonical_raw_slot[0] = canonical_raw_slot[1];
-    canonical_raw_slot[1] = swap;
-  }
-  if (batch.shell_angular[raw_shell[canonical_raw_slot[2]]] <
-      batch.shell_angular[raw_shell[canonical_raw_slot[3]]]) {
-    const unsigned swap = canonical_raw_slot[2];
-    canonical_raw_slot[2] = canonical_raw_slot[3];
-    canonical_raw_slot[3] = swap;
-  }
-  const unsigned first_pair_class =
-      pair_class(batch.shell_angular[raw_shell[canonical_raw_slot[0]]],
-                 batch.shell_angular[raw_shell[canonical_raw_slot[1]]]);
-  const unsigned second_pair_class =
-      pair_class(batch.shell_angular[raw_shell[canonical_raw_slot[2]]],
-                 batch.shell_angular[raw_shell[canonical_raw_slot[3]]]);
-  if (first_pair_class < second_pair_class) {
-    const unsigned first_swap = canonical_raw_slot[0];
-    canonical_raw_slot[0] = canonical_raw_slot[2];
-    canonical_raw_slot[2] = first_swap;
-    const unsigned second_swap = canonical_raw_slot[1];
-    canonical_raw_slot[1] = canonical_raw_slot[3];
-    canonical_raw_slot[3] = second_swap;
-  }
 }
 
 }  // namespace order3_detail
@@ -153,7 +110,8 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
       batch.shell_pair_second[second_pair],
   };
   unsigned canonical_raw_slot[4];
-  order3_detail::canonicalize_shell_slots(batch, raw_shell, canonical_raw_slot);
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
       raw_shell[canonical_raw_slot[1]],
@@ -165,16 +123,15 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
       canonical_raw_slot[2] < 2U ? first_pair : second_pair,
   };
 
+  const std::int32_t canonical_center_atoms[4] = {
+      batch.shell_atoms[canonical_shell[0]],
+      batch.shell_atoms[canonical_shell[1]],
+      batch.shell_atoms[canonical_shell[2]],
+      batch.shell_atoms[canonical_shell[3]],
+  };
   std::int32_t unique_center_atoms[4];
-  unsigned unique_center_count = 0;
-  for (unsigned center = 0; center < 4; ++center) {
-    const std::int32_t atom = batch.shell_atoms[canonical_shell[center]];
-    bool duplicate_center = false;
-    for (unsigned previous = 0; previous < unique_center_count; ++previous) {
-      duplicate_center = duplicate_center || atom == unique_center_atoms[previous];
-    }
-    if (!duplicate_center) unique_center_atoms[unique_center_count++] = atom;
-  }
+  const unsigned unique_center_count =
+      direct_force_unique_center_atoms(canonical_center_atoms, unique_center_atoms);
   if (unique_center_count == 1) return;
 
   const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
@@ -227,11 +184,9 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
                             component[3];
     if (output >= 27U) return;
 
-    const double angular_coefficient = batch.direct_ao_coefficients[system_ao_begin + raw_ao[0]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[1]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[2]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[3]];
-    component_weight[output] += density_coefficient * angular_coefficient;
+    component_weight[output] +=
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
     any_component = true;
   }
   if (!any_component) return;
@@ -241,33 +196,8 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
           batch, canonical_pair[0], canonical_pair[1], canonical_shell[0], canonical_shell[1],
           canonical_shell[2], canonical_shell[3], component_weight);
 
-  double derivative_sum[3]{};
-  for (unsigned atom = 0; atom + 1 < unique_center_count; ++atom) {
-    const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[atom]) * 3;
-    for (unsigned axis = 0; axis < 3; ++axis) {
-      double derivative = 0.0;
-      double fourth_derivative = 0.0;
-      for (unsigned canonical = 0; canonical < 3; ++canonical) {
-        const double value = gradient.center[canonical][axis];
-        fourth_derivative -= value;
-        if (batch.shell_atoms[canonical_shell[canonical]] == unique_center_atoms[atom]) {
-          derivative += value;
-        }
-      }
-      if (batch.shell_atoms[canonical_shell[3]] == unique_center_atoms[atom]) {
-        derivative += fourth_derivative;
-      }
-      derivative_sum[axis] += derivative;
-      if (derivative != 0.0) atomicAdd(forces + coordinate + axis, -derivative);
-    }
-  }
-  const std::int64_t final_coordinate =
-      static_cast<std::int64_t>(unique_center_atoms[unique_center_count - 1]) * 3;
-  for (unsigned axis = 0; axis < 3; ++axis) {
-    if (derivative_sum[axis] != 0.0) {
-      atomicAdd(forces + final_coordinate + axis, derivative_sum[axis]);
-    }
-  }
+  scatter_direct_force_independent_gradient(canonical_center_atoms, unique_center_atoms,
+                                            unique_center_count, gradient, forces);
 }
 
 template <bool Unrestricted>

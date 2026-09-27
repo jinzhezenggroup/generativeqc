@@ -28,6 +28,52 @@ from .weighted_eri import (
 )
 
 
+def emit_direct_shell_canonicalization_helper() -> str:
+    """Emit stable ERI pair-symmetry ordering without runtime/batch dependencies.
+
+    The result maps canonical shell slots back to the caller's original slots.
+    Equal angular momenta and equal pair classes retain their input ordering;
+    this is part of the component-weight and recovered-center contract.
+    """
+    return r"""/** Stable shell-slot ordering under the eight ERI pair symmetries. */
+template <class ShellAngular, class ShellIndex>
+__device__ __forceinline__ void canonicalize_direct_shell_slots(
+    const ShellAngular* shell_angular, const ShellIndex (&raw_shell)[4],
+    unsigned (&canonical_raw_slot)[4]) {
+  canonical_raw_slot[0] = 0U;
+  canonical_raw_slot[1] = 1U;
+  canonical_raw_slot[2] = 2U;
+  canonical_raw_slot[3] = 3U;
+  if (shell_angular[raw_shell[canonical_raw_slot[0]]] <
+      shell_angular[raw_shell[canonical_raw_slot[1]]]) {
+    const unsigned swap = canonical_raw_slot[0];
+    canonical_raw_slot[0] = canonical_raw_slot[1];
+    canonical_raw_slot[1] = swap;
+  }
+  if (shell_angular[raw_shell[canonical_raw_slot[2]]] <
+      shell_angular[raw_shell[canonical_raw_slot[3]]]) {
+    const unsigned swap = canonical_raw_slot[2];
+    canonical_raw_slot[2] = canonical_raw_slot[3];
+    canonical_raw_slot[3] = swap;
+  }
+  const unsigned first_high = shell_angular[raw_shell[canonical_raw_slot[0]]];
+  const unsigned first_low = shell_angular[raw_shell[canonical_raw_slot[1]]];
+  const unsigned second_high = shell_angular[raw_shell[canonical_raw_slot[2]]];
+  const unsigned second_low = shell_angular[raw_shell[canonical_raw_slot[3]]];
+  const unsigned first_pair_class = first_high * (first_high + 1U) / 2U + first_low;
+  const unsigned second_pair_class = second_high * (second_high + 1U) / 2U + second_low;
+  if (first_pair_class < second_pair_class) {
+    const unsigned first_swap = canonical_raw_slot[0];
+    canonical_raw_slot[0] = canonical_raw_slot[2];
+    canonical_raw_slot[2] = first_swap;
+    const unsigned second_swap = canonical_raw_slot[1];
+    canonical_raw_slot[1] = canonical_raw_slot[3];
+    canonical_raw_slot[3] = second_swap;
+  }
+}
+"""
+
+
 def emit_direct_cached_geometry_helper() -> str:
     """Lower cached Direct primitive-pair geometry from the shared geometry IR."""
 
@@ -337,6 +383,7 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
         full[: -len(marker)]
         + specialized_result
         + emit_direct_cached_geometry_helper()
+        + emit_direct_shell_canonicalization_helper()
         + psss_force
         + ssss_force
         + order2_force

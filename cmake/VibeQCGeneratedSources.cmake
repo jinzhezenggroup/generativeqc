@@ -4,6 +4,75 @@ include_guard(GLOBAL)
 # live in VibeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(vibeqc_register_host_generated_sources target)
+  if(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(VIBEQC_STATIONARY_CPU_AOT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_derivatives")
+    set(VIBEQC_STATIONARY_CPU_AOT_SOURCES)
+    foreach(_vibeqc_stationary_cpu_shard RANGE 0 45)
+      list(APPEND VIBEQC_STATIONARY_CPU_AOT_SOURCES
+           "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}/vibeqc_stationary_cpu_derivative_${_vibeqc_stationary_cpu_shard}.cpp")
+    endforeach()
+    vibeqc_register_generated_sources(
+      NAME vibeqc_stationary_cpu_derivatives_codegen
+      TARGET ${target}
+      ADD_TO_TARGET
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_derivative_aot.py"
+      OUTPUTS ${VIBEQC_STATIONARY_CPU_AOT_SOURCES}
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/expr.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_schedule.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/one_electron_derivatives.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/range_separation.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/scalar_c.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/shell_spec.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_native.py"
+      ARGS --output-directory "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}"
+      COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+      COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
+  endif()
+
+  if(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/wb97mv_rsh_cpu")
+    set(VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES)
+    foreach(_vibeqc_rsh_family IN ITEMS sr lr)
+      foreach(_a RANGE 0 1)
+        foreach(_b RANGE 0 1)
+          foreach(_c RANGE 0 1)
+            foreach(_d RANGE 0 1)
+              set(_vibeqc_rsh_shell "${_a}${_b}${_c}${_d}")
+              list(APPEND VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES
+                   "${VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY}/vibeqc_wb97mv_rsh_${_vibeqc_rsh_family}_${_vibeqc_rsh_shell}_0.cpp")
+              if(_vibeqc_rsh_shell STREQUAL "1111")
+                list(APPEND VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES
+                     "${VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY}/vibeqc_wb97mv_rsh_${_vibeqc_rsh_family}_1111_1.cpp")
+              endif()
+            endforeach()
+          endforeach()
+        endforeach()
+      endforeach()
+    endforeach()
+    vibeqc_register_generated_sources(
+      NAME vibeqc_wb97mv_rsh_cpu_aot_codegen
+      TARGET ${target}
+      ADD_TO_TARGET
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_wb97mv_rsh_cpu_aot.py"
+      OUTPUTS ${VIBEQC_WB97MV_RSH_CPU_AOT_SOURCES}
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/rsh_cpu_aot.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/spec.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/_generated_libxc_methods.py"
+      ARGS --output-directory "${VIBEQC_WB97MV_RSH_CPU_AOT_DIRECTORY}"
+      COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+      COMMENT "Generating packaged WB97M-V CPU SR/LR derivative programs")
+  endif()
+
   set(VIBEQC_QUADRATURE_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_quadrature.cuh")
   vibeqc_register_generated_sources(
@@ -589,6 +658,90 @@ macro(vibeqc_register_cuda_generated_sources target)
     ARGS --output "${VIBEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF high-order pair-gradient helper")
 
+  set(VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_source_contraction.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_source_contraction_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_source_contraction.py"
+    OUTPUTS "${VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_source_contraction_cuda.py"
+    ARGS --output "${VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
+    COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
+
+  set(VIBEQC_DIRECT_RECURRENCE_HEADERS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_order2.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_order3.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_order4.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_shell_class.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_recurrence_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_recurrence.py"
+    OUTPUTS ${VIBEQC_DIRECT_RECURRENCE_HEADERS}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_recurrence_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMENT "Generating compiler-owned Direct-HF primitive recurrence support")
+
+  set(VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_pair_order2.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_pair_order3.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_shell_pair_hermite.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_pair_support_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_pair_support.py"
+    OUTPUTS ${VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_pair_support_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMENT "Generating compiler-owned Direct-HF pair/Hermite support")
+
+  set(VIBEQC_DIRECT_ORDER2_SHELL_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_order2_shell.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_order2_shell_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_order2_shell.py"
+    OUTPUTS "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_order2_shell_cuda.py"
+    ARGS --output "${VIBEQC_DIRECT_ORDER2_SHELL_HEADER}"
+    COMMENT "Generating compiler-owned Direct-HF order-two shell contraction")
+
+  set(VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_cartesian.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_contraction.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_cartesian_contraction_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_cartesian_contraction.py"
+    OUTPUTS ${VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMENT "Generating compiler-owned Direct-HF Cartesian/contraction support")
+
+  set(VIBEQC_DIRECT_PAIR_CACHE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_pair_cache.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_pair_cache_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_pair_cache.py"
+    OUTPUTS "${VIBEQC_DIRECT_PAIR_CACHE_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_pair_cache_cuda.py"
+    ARGS --output "${VIBEQC_DIRECT_PAIR_CACHE_HEADER}"
+    COMMENT "Generating compiler-owned Direct-HF primitive-pair cache geometry")
+
   set(VIBEQC_B3LYP_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_b3lyp_device.cuh")
   vibeqc_register_generated_sources(
@@ -723,6 +876,8 @@ macro(vibeqc_register_cuda_generated_sources target)
   file(GLOB VIBEQC_MP2_GENERATOR_INPUTS CONFIGURE_DEPENDS
        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/tensor/*.py"
        "python/vibeqc_compiler/common/cuda_target.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/common/source_reuse.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/mp2_schedule.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/vibeqc_mp2/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/vibeqc_posthf/*.py")
   vibeqc_register_generated_sources(

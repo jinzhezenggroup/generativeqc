@@ -13,14 +13,33 @@ def emit_fock_accumulation_cuda(
     density_offset: str,
     spin_offset: str,
     description: str,
-    coulomb_only: str,
+    coulomb_scale: str,
+    restricted_exchange_scale: str,
+    unrestricted_exchange_scale: str,
     unroll_permutations: bool = True,
 ) -> str:
-    """Emit one canonical-ERI-to-Fock scatter with shared spin semantics."""
+    """Emit one canonical-ERI scatter with shared J/K spin semantics."""
 
     unroll_directive = "#pragma unroll\n" if unroll_permutations else ""
-    return f"""/** {description} */
-template <bool Unrestricted>
+    contribution_name = f"{function_name}_contribution"
+    return f"""/** Scale one density-by-integral product into a Fock contribution.
+ *
+ * MixedProduct narrows only the density-by-integral product. Scale evaluation,
+ * density storage, the returned contribution, and global Fock accumulation
+ * remain FP64 so the mixed candidate does not widen its numerical scope.
+ */
+template <bool MixedProduct, typename Integral>
+__device__ __forceinline__ double {contribution_name}(
+    double scale, double density_value, Integral integral) {{
+  if constexpr (MixedProduct) {{
+    return scale * static_cast<double>(
+        static_cast<float>(density_value) * static_cast<float>(integral));
+  }}
+  return scale * density_value * static_cast<double>(integral);
+}}
+
+/** {description} */
+template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>
 __device__ __forceinline__ void {function_name}(
 {parameters}) {{
 {setup}
@@ -30,39 +49,42 @@ __device__ __forceinline__ void {function_name}(
     const std::size_t ac = {matrix_index}(a, c, n);
     const std::size_t cd = {matrix_index}(c, d, n);
     const std::size_t bd = {matrix_index}(b, d, n);
+    const double j_scale = {coulomb_scale};
     if constexpr (Unrestricted) {{
+      const double k_scale = {unrestricted_exchange_scale};
       const double alpha_cd = density[{spin_offset} + cd];
       const double beta_cd = density[{spin_offset} + matrix_size + cd];
       const double total_cd = alpha_cd + beta_cd;
-      if (total_cd != 0.0) {{
-        atomicAdd(fock + {spin_offset} + ab, total_cd * integral);
+      if (j_scale != 0.0 && total_cd != 0.0) {{
+        atomicAdd(fock + {spin_offset} + ab, {contribution_name}<MixedProduct>(j_scale, total_cd, integral));
         atomicAdd(
             fock + {spin_offset} + matrix_size + ab,
-            total_cd * integral);
+            {contribution_name}<MixedProduct>(j_scale, total_cd, integral));
       }}
-      if (!({coulomb_only})) {{
+      if (k_scale != 0.0) {{
         const double alpha_bd = density[{spin_offset} + bd];
         const double beta_bd = density[{spin_offset} + matrix_size + bd];
         if (alpha_bd != 0.0) {{
-          atomicAdd(fock + {spin_offset} + ac, -alpha_bd * integral);
+          atomicAdd(fock + {spin_offset} + ac, {contribution_name}<MixedProduct>(k_scale, alpha_bd, integral));
         }}
         if (beta_bd != 0.0) {{
           atomicAdd(
               fock + {spin_offset} + matrix_size + ac,
-              -beta_bd * integral);
+              {contribution_name}<MixedProduct>(k_scale, beta_bd, integral));
         }}
       }}
     }} else {{
+      const double k_scale = {restricted_exchange_scale};
       const double density_cd = density[{density_offset} + cd];
-      if (density_cd != 0.0) {{
-        atomicAdd(fock + {density_offset} + ab, density_cd * integral);
+      if (j_scale != 0.0 && density_cd != 0.0) {{
+        atomicAdd(fock + {density_offset} + ab, {contribution_name}<MixedProduct>(j_scale, density_cd, integral));
       }}
-      if (!({coulomb_only})) {{
+      if (k_scale != 0.0) {{
         const double density_bd = density[{density_offset} + bd];
         if (density_bd != 0.0) {{
           atomicAdd(
               fock + {density_offset} + ac,
-              -0.5 * density_bd * integral);
+              {contribution_name}<MixedProduct>(k_scale, density_bd, integral));
         }}
       }}
     }}
@@ -115,16 +137,38 @@ __device__ __forceinline__ double direct_force_density_coefficient(
 """
 
 
+def emit_direct_force_component_weight() -> str:
+    """Emit normalized Direct-force external component weights."""
+
+    return """__device__ __forceinline__ double direct_force_component_weight(
+    const double* ao_coefficients, std::size_t system_ao_begin,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    double density_coefficient) {
+  return density_coefficient *
+         ao_coefficients[system_ao_begin + i] *
+         ao_coefficients[system_ao_begin + j] *
+         ao_coefficients[system_ao_begin + k] *
+         ao_coefficients[system_ao_begin + l];
+}
+"""
+
+
 def emit_generated_shell_fock_accumulation() -> str:
     """Emit the scatter helper embedded in compiler-generated shell kernels."""
 
+    exchange_only = (
+        "(task.reversed_shell_pair_mask & kGeneratedDpppExchangeConsumerBit) != 0U"
+    )
+    coulomb_only = (
+        "(task.reversed_shell_pair_mask & kGeneratedDpppCoulombConsumerBit) != 0U"
+    )
     return emit_fock_accumulation_cuda(
         function_name="generated_dppp_accumulate_fock",
         parameters="""    const GeneratedDpppShellTask& task,
     const double* density,
     double* fock,
     std::size_t i, std::size_t j, std::size_t k, std::size_t l,
-    double integral""",
+    Integral integral""",
         setup="""  const std::size_t n = static_cast<std::size_t>(task.matrix_order);
   const std::size_t matrix_size = n * n;""",
         permutation_setup="""    std::size_t a = 0, b = 0, c = 0, d = 0;
@@ -135,9 +179,15 @@ def emit_generated_shell_fock_accumulation() -> str:
         matrix_index="generated_dppp_matrix_index",
         density_offset="task.density_offset",
         spin_offset="task.spin_offset",
-        coulomb_only="(task.reversed_shell_pair_mask & kGeneratedDpppCoulombConsumerBit) != 0U",
+        coulomb_scale=f"({exchange_only} ? 0.0 : 1.0)",
+        restricted_exchange_scale=(
+            f"({coulomb_only} ? 0.0 : ({exchange_only} ? 1.0 : -0.5))"
+        ),
+        unrestricted_exchange_scale=(
+            f"({coulomb_only} ? 0.0 : ({exchange_only} ? 1.0 : -1.0))"
+        ),
         description=(
-            "Scatter one canonical integral using VIBEQC's existing RHF/UHF convention."
+            "Scatter one canonical integral using VIBEQC's shared HF/J-only/K-only convention."
         ),
     ).rstrip("\n")
 
@@ -149,7 +199,8 @@ def emit_direct_fock_accumulation_header() -> str:
         function_name="accumulate_direct_fock_integral",
         parameters="""    std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
     const double* density, double* fock, std::size_t i, std::size_t j,
-    std::size_t k, std::size_t l, double integral, bool coulomb_only = false""",
+    std::size_t k, std::size_t l, Integral integral, bool coulomb_only = false,
+    bool exchange_only = false""",
         setup="  const std::size_t matrix_size = n * n;",
         permutation_setup="""    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) {
       continue;
@@ -162,8 +213,14 @@ def emit_direct_fock_accumulation_header() -> str:
         matrix_index="matrix_index",
         density_offset="physical_offset",
         spin_offset="spin_offset",
-        coulomb_only="coulomb_only",
-        description="Scatter one symmetry-canonical ERI into the direct RHF/UHF Fock matrix.",
+        coulomb_scale="exchange_only ? 0.0 : 1.0",
+        restricted_exchange_scale=("coulomb_only ? 0.0 : (exchange_only ? 1.0 : -0.5)"),
+        unrestricted_exchange_scale=(
+            "coulomb_only ? 0.0 : (exchange_only ? 1.0 : -1.0)"
+        ),
+        description=(
+            "Scatter one symmetry-canonical ERI into HF, Coulomb-only, or exchange-only matrices."
+        ),
         unroll_permutations=False,
     )
     return f"""#pragma once
@@ -182,5 +239,6 @@ namespace vibeqc::scf::cuda_execution {{
 
 {function}
 {emit_direct_force_density_coefficient()}
+{emit_direct_force_component_weight()}
 }}  // namespace vibeqc::scf::cuda_execution
 """

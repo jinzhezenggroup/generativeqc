@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "api/handles.hpp"
+#include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/cuda_derivative.hpp"
@@ -66,15 +67,15 @@ int guarded(char* error, std::size_t size, F&& fn) noexcept {
     return 1;
   }
 }
-vibeqc::scf::PhysicalReference supplied_reference(const RawSource& source, const double* arrays,
-                                                  std::size_t elements, double energy) {
+vibeqc::hf::PhysicalReference supplied_reference(const RawSource& source, const double* arrays,
+                                                 std::size_t elements, double energy) {
   const auto n = source.nbf();
   const auto count = vibeqc::posthf::checked_add(
       vibeqc::posthf::checked_mul(5, vibeqc::posthf::checked_mul(n, n)), n);
   if (!arrays || count != elements || !std::isfinite(energy) ||
       source.orbital().multiplicity != 1 || source.orbital().electron_count % 2)
     throw std::invalid_argument("invalid supplied reference");
-  vibeqc::scf::PhysicalReference ref;
+  vibeqc::hf::PhysicalReference ref;
   ref.nbf = n;
   ref.nocc = source.orbital().electron_count / 2;
   ref.energy = energy;

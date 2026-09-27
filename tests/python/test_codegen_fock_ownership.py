@@ -8,6 +8,7 @@ from pathlib import Path
 
 from vibeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
+    emit_direct_force_component_weight,
     emit_direct_force_density_coefficient,
     emit_generated_shell_fock_accumulation,
 )
@@ -29,12 +30,19 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
         REPOSITORY_ROOT / "python/vibeqc_compiler/integral/lowering/fock.py"
     ).read_text(encoding="utf-8")
 
-    assert "-0.5 * density_bd * integral" in shared
-    assert "total_cd * integral" in shared
-    assert "-0.5 * density_bd * integral" not in native
-    assert "total_cd * integral" not in native
-    assert "-0.5 * density_bd * integral" not in shell_lowering
-    assert "total_cd * integral" not in shell_lowering
+    assert "restricted_exchange_scale" in shared
+    assert "unrestricted_exchange_scale" in shared
+    assert 'contribution_name = f"{function_name}_contribution"' in shared
+    assert "static_cast<float>(density_value) * static_cast<float>(integral)" in shared
+    assert "return scale * density_value * static_cast<double>(integral);" in shared
+    assert (
+        "static_cast<float>(density_value) * static_cast<float>(integral)" not in native
+    )
+    assert "return scale * density_value * static_cast<double>(integral);" not in native
+    assert (
+        "static_cast<float>(density_value) * static_cast<float>(integral)"
+        not in shell_lowering
+    )
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
 
 
@@ -56,6 +64,25 @@ def test_direct_force_density_has_one_compiler_equation_owner() -> None:
     assert "direct_force_density_coefficient" in emit_direct_fock_accumulation_header()
 
 
+def test_direct_force_component_normalization_has_one_compiler_owner() -> None:
+    """Keep Direct-force Cartesian AO normalization out of native adapters."""
+
+    generated = emit_direct_force_component_weight()
+    assert "ao_coefficients[system_ao_begin + i]" in generated
+    assert "density_coefficient *" in generated
+    assert "direct_force_component_weight" in emit_direct_fock_accumulation_header()
+
+    for name in (
+        "direct_force_low_order.cuh",
+        "direct_force_order2.cuh",
+        "direct_force_order3.cuh",
+        "direct_native_psss.cuh",
+    ):
+        source = (REPOSITORY_ROOT / "src/scf/cuda" / name).read_text(encoding="utf-8")
+        assert "angular_coefficient" not in source
+        assert "s_angular_coefficient" not in source
+
+
 def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
     """Render both adapters from the same compiler-owned contraction."""
 
@@ -63,12 +90,30 @@ def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
     generated = emit_generated_shell_fock_accumulation()
     for equation in (
         "const double total_cd = alpha_cd + beta_cd;",
-        "-alpha_bd * integral",
-        "-beta_bd * integral",
-        "-0.5 * density_bd * integral",
+        "<MixedProduct>(j_scale, total_cd, integral)",
+        "<MixedProduct>(k_scale, alpha_bd, integral)",
+        "<MixedProduct>(k_scale, beta_bd, integral)",
+        "<MixedProduct>(k_scale, density_bd, integral)",
+        "static_cast<float>(density_value) * static_cast<float>(integral)",
+        "return scale * density_value * static_cast<double>(integral);",
     ):
         assert equation in native
         assert equation in generated
+    assert (
+        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>"
+        in native
+    )
+    assert (
+        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>"
+        in generated
+    )
+    for coefficient in (
+        "exchange_only ? 1.0 : -0.5",
+        "exchange_only ? 1.0 : -1.0",
+    ):
+        assert coefficient in native
+    assert "? 1.0 : -0.5" in generated
+    assert "? 1.0 : -1.0" in generated
 
 
 def test_direct_fock_scatter_cli_is_deterministic(tmp_path: Path) -> None:

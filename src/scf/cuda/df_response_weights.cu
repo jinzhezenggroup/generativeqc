@@ -18,6 +18,21 @@ namespace {
 constexpr unsigned threads = 128;
 unsigned blocks(std::size_t size) { return static_cast<unsigned>((size + threads - 1) / threads); }
 
+/** The final-K projection has Q fastest, while response panels store each
+ * occupied matrix column-major within Q. Preserve that orientation even for
+ * diagnostic fitted tensors that are not exactly symmetric in AO indices.
+ */
+__global__ void gather_final_fitted_projection(std::size_t auxiliary, std::size_t rank,
+                                               const double* pair_major, double* projected) {
+  const auto element = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
+  const auto rr = rank * rank;
+  if (element >= auxiliary * rr) return;
+  const auto q = element / rr;
+  const auto i = element % rank;
+  const auto j = (element / rank) % rank;
+  projected[element] = pair_major[(i * rank + j) * auxiliary + q];
+}
+
 /** Scalar kernels preserve their original per-output summation order. The
  * exchange metric dot uses the plan's cuBLAS GEMV below, with this scalar
  * kernel retained for ablation. Both routes use the same bounded raw panel;
@@ -616,6 +631,10 @@ static cudaError_t contract_occupied_response(
         "VIBEQC_DF_OCCUPIED_METRIC must be auto, spectral or retained-root");
   const bool retained_root = fitted_occupied && metric.full_rank && metric.inverse_square_root &&
                              metric_policy != "spectral";
+  const auto* final_fitted_projection = buffers.final_fitted_occupied_projection;
+  const bool reuse_final_fitted_projection =
+      final_fitted_projection && retained_root && terms.size() == 1 &&
+      buffers.occupied_factors[0].rank && buffers.occupied_factors[0].density_scale == 2.0;
   const auto ni = static_cast<int>(n), ai = static_cast<int>(a), mi = static_cast<int>(matrix);
   const double one = 1, zero = 0;
   const auto checked = [](cublasStatus_t status) {
@@ -665,33 +684,40 @@ static cudaError_t contract_occupied_response(
       checked(generated::df_rhf_charge_contract(
           blas, mi, ai, static_cast<int>(begin), static_cast<int>(count),
           static_cast<int>(terms.size()), densities, panels, charges));
-      std::size_t offset = 0;
-      for (std::size_t t = 0; t < terms.size(); ++t) {
-        const auto& factor = buffers.occupied_factors[t];
-        const auto rank = factor.rank;
-        if (!rank || terms[t].exchange_coefficient == 0) continue;
-        checked(generated::df_occupied_project_panel(
-            blas, ni, static_cast<int>(rank), ai, static_cast<int>(begin), static_cast<int>(count),
-            factor.coefficients, panels, panel_temporary, transformed_projected + offset));
-        offset += a * rank * rank;
-        runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 2);
-        runtime::cuda_trace::trace_counter("response_occupied_projection_products", 2 * count);
-      }
-      runtime::cuda_trace::trace_counter(fitted_occupied
-                                             ? "response_retained_fitted_projection_panels"
-                                             : "response_batched_raw_projection_panels",
+      runtime::cuda_trace::trace_counter(fitted_occupied ? "response_retained_fitted_charge_panels"
+                                                         : "response_batched_raw_charge_panels",
                                          1);
-      runtime::cuda_trace::trace_counter(fitted_occupied
-                                             ? "response_retained_fitted_projection_columns"
-                                             : "response_batched_raw_projection_columns",
-                                         count);
+      std::size_t offset = 0;
+      if (!reuse_final_fitted_projection) {
+        for (std::size_t t = 0; t < terms.size(); ++t) {
+          const auto& factor = buffers.occupied_factors[t];
+          const auto rank = factor.rank;
+          if (!rank || terms[t].exchange_coefficient == 0) continue;
+          checked(generated::df_occupied_project_panel(
+              blas, ni, static_cast<int>(rank), ai, static_cast<int>(begin),
+              static_cast<int>(count), factor.coefficients, panels, panel_temporary,
+              transformed_projected + offset));
+          offset += a * rank * rank;
+          runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 2);
+          runtime::cuda_trace::trace_counter("response_occupied_projection_products", 2 * count);
+        }
+        runtime::cuda_trace::trace_counter(fitted_occupied
+                                               ? "response_retained_fitted_projection_panels"
+                                               : "response_batched_raw_projection_panels",
+                                           1);
+        runtime::cuda_trace::trace_counter(fitted_occupied
+                                               ? "response_retained_fitted_projection_columns"
+                                               : "response_batched_raw_projection_columns",
+                                           count);
+      }
       runtime::cuda_trace::trace_counter(fitted_occupied
                                              ? "response_retained_fitted_charge_blas_calls"
                                              : "response_batched_raw_charge_blas_calls",
                                          1);
     }
     if (fitted_occupied) {
-      runtime::cuda_trace::trace_counter("response_retained_fitted_projection_passes", 1);
+      if (!reuse_final_fitted_projection)
+        runtime::cuda_trace::trace_counter("response_retained_fitted_projection_passes", 1);
       runtime::cuda_trace::trace_counter("response_retained_fitted_occupied_bytes",
                                          fitted_occupied->pair_count * a * sizeof(double));
     } else {
@@ -779,7 +805,21 @@ static cudaError_t contract_occupied_response(
         terms[t].exchange_coefficient * factor.density_scale * factor.density_scale;
     {
       runtime::cuda_trace::TraceRegion products("exchange_response_occupied_products", stream);
-      if (read_values) {
+      if (reuse_final_fitted_projection) {
+        if (t != 0) return cudaErrorInvalidValue;
+        checked(generated::df_occupied_finish_projection(
+            blas, ni, ri, ai, factor.coefficients, final_fitted_projection, transformed_projected));
+        gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
+            a, r, transformed_projected, projected);
+        error = cudaGetLastError();
+        if (error != cudaSuccess) return error;
+        runtime::cuda_trace::trace_counter("response_final_fitted_projection_reused", 1);
+        runtime::cuda_trace::trace_counter("response_final_fitted_projection_bytes",
+                                           n * a * r * sizeof(double));
+        runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 1);
+        runtime::cuda_trace::trace_counter("response_occupied_projection_products", a);
+        runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
+      } else if (read_values) {
         // Keep the existing eigenfactor inverse ordering. Its input and output
         // alternate between these disjoint intervals; previous spin factors
         // remain below retained while the reusable projection is overwritten.
@@ -869,7 +909,7 @@ static cudaError_t contract_occupied_response(
           runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 2);
           runtime::cuda_trace::trace_counter("response_occupied_projection_products", 2);
         }
-      if (!buffers.final_occupied_projection) {
+      if (!buffers.final_occupied_projection && !reuse_final_fitted_projection) {
         runtime::cuda_trace::trace_counter("response_final_projection_reconstructed", 1);
         runtime::cuda_trace::trace_counter("response_occupied_projection_flops",
                                            2 * a * (n * n * r + n * rr));
@@ -1115,8 +1155,8 @@ cudaError_t contract_cuda_df_response_weights(
     if (!metric.full_rank || borrowed || read_fitted || packed_pairs || single_fitted_tensor ||
         !read_values || !streamed_occupied->occupied_response)
       return cudaErrorInvalidValue;
-    if (const auto* forward = streamed_occupied->fitted_occupied_source;
-        forward &&
+    const auto* forward = streamed_occupied->fitted_occupied_source;
+    if (forward &&
         (!forward->data || !forward->packed_pairs || forward->nbf != n || forward->naux != a ||
          forward->pair_count != n * (n + 1) / 2 ||
          forward->owner_identity != metric.owner_identity || !forward->metric.full_rank ||
@@ -1124,6 +1164,10 @@ cudaError_t contract_cuda_df_response_weights(
          forward->metric.eigenvectors != metric.eigenvectors ||
          forward->metric.eigenvalues != metric.eigenvalues ||
          forward->metric.relative_threshold != metric.relative_threshold))
+      return cudaErrorInvalidValue;
+    if (streamed_occupied->final_fitted_occupied_projection &&
+        (!forward || terms.size() != 1 || !streamed_occupied->occupied_factors[0].rank ||
+         streamed_occupied->occupied_factors[0].density_scale != 2.0))
       return cudaErrorInvalidValue;
     return contract_occupied_response(n, a, terms, densities, metric, tile, workspace, stream, blas,
                                       *streamed_occupied, {}, consume, false, {}, packed_block_rows,

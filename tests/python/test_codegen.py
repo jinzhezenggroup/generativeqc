@@ -200,19 +200,8 @@ def _direct_cuda_source() -> typing.Any:
             "cuda/direct_bounded_tasks.cu",
             "cuda/direct_queue_scan.cu",
             "cuda/direct_queue_diagnostics.cu",
-            "cuda/direct_native_cartesian.cuh",
-            "cuda/direct_native_contraction.cuh",
-            "cuda/direct_native_eri_order2.cuh",
-            "cuda/direct_native_eri_order3.cuh",
-            "cuda/direct_native_eri_order4.cuh",
-            "cuda/direct_native_gradient_types.cuh",
-            "cuda/direct_native_order2_shell.cuh",
-            "cuda/direct_native_pair_order2.cuh",
-            "cuda/direct_native_pair_order3.cuh",
+            "cuda/direct_gradient_types.cuh",
             "cuda/direct_native_psss.cuh",
-            "cuda/direct_native_shell_class.cuh",
-            "cuda/direct_native_shell_pair_hermite.cuh",
-            "cuda/direct_native_source_contraction.cuh",
             "cuda/eri_tensor_index.cuh",
             "cuda/direct_eri_symmetry.cuh",
             "cuda/direct_fock_accumulation.cuh",
@@ -2202,7 +2191,7 @@ def test_ssss_force_retires_handwritten_math_and_selector() -> None:
     assert KernelConsumer.FORCE in ssss.consumers
 
     types_source = (
-        REPOSITORY_ROOT / "src/scf/cuda/direct_native_gradient_types.cuh"
+        REPOSITORY_ROOT / "src/scf/cuda/direct_gradient_types.cuh"
     ).read_text(encoding="utf-8")
     low_order_source = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_force_low_order.cuh"

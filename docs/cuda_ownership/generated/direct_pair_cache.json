@@ -1,0 +1,7 @@
+{
+  "name": "direct_pair_cache",
+  "outputs": [
+    "generated/generated_direct_pair_cache.cuh"
+  ],
+  "owner": "python/vibeqc_compiler/integral/direct_pair_cache_cuda.py"
+}

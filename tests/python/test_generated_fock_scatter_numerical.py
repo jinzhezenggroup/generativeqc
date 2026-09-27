@@ -49,25 +49,64 @@ int main() {
       density[spin+p+q*n]=.04*(p+2*q+1);
       density[spin+m+p+q*n]=-.01*(2*p+q+2);
     }
-    for(bool unrestricted : {false,true}) for(bool coulomb_only : {false,true}) {
+    for(bool unrestricted : {false,true}) for(unsigned mode : {0U,1U,2U}) {
+      const bool coulomb_only=mode==1U, exchange_only=mode==2U;
       std::vector<double> actual(100), expected(100);
-      if(unrestricted) accumulate_direct_fock_integral<true>(n,off,spin,density.data(),actual.data(),i,j,k,l,value,coulomb_only);
-      else accumulate_direct_fock_integral<false>(n,off,spin,density.data(),actual.data(),i,j,k,l,value,coulomb_only);
+      if(unrestricted) accumulate_direct_fock_integral<true>(
+          n,off,spin,density.data(),actual.data(),i,j,k,l,value,coulomb_only,exchange_only);
+      else accumulate_direct_fock_integral<false>(
+          n,off,spin,density.data(),actual.data(),i,j,k,l,value,coulomb_only,exchange_only);
       for(size_t p=0;p<n;++p) for(size_t q=0;q<n;++q)
       for(size_t r=0;r<n;++r) for(size_t s=0;s<n;++s) {
-        double J=eri[index(p,q,r,s)], K=eri[index(p,r,q,s)];
-        if(coulomb_only) K=0;
+        const double J=eri[index(p,q,r,s)], K=eri[index(p,r,q,s)];
         if(unrestricted) {
-          double a=density[spin+r+s*n], b=density[spin+m+r+s*n];
-          expected[spin+p+q*n]+=(a+b)*J-a*K;
-          expected[spin+m+p+q*n]+=(a+b)*J-b*K;
-        } else expected[off+p+q*n]+=density[off+r+s*n]*(J-.5*K);
+          const double a=density[spin+r+s*n], b=density[spin+m+r+s*n];
+          if(exchange_only) {
+            expected[spin+p+q*n]+=a*K;
+            expected[spin+m+p+q*n]+=b*K;
+          } else {
+            expected[spin+p+q*n]+=(a+b)*J-(coulomb_only?0.0:a*K);
+            expected[spin+m+p+q*n]+=(a+b)*J-(coulomb_only?0.0:b*K);
+          }
+        } else if(exchange_only) {
+          expected[off+p+q*n]+=density[off+r+s*n]*K;
+        } else {
+          expected[off+p+q*n]+=density[off+r+s*n]*(J-(coulomb_only?0.0:.5*K));
+        }
       }
       for(size_t a=0;a<actual.size();++a) if(std::abs(actual[a]-expected[a])>2e-13) return 1;
       ++cases;
     }
   }
-  if(cases!=220) return 2;
+  if(cases!=330) return 2;
+  {
+    constexpr float mixed_value = 0.9876543F;
+    std::vector<double> density(100), actual(100);
+    density[off] = 0.123456789123;
+    accumulate_direct_fock_integral<false, true>(
+        1, off, spin, density.data(), actual.data(), 0, 0, 0, 0,
+        mixed_value, true);
+    const double expected = static_cast<double>(
+        static_cast<float>(density[off]) * mixed_value);
+    if(std::abs(actual[off]-expected)>1e-15) return 3;
+    if(std::abs(actual[off]-density[off]*static_cast<double>(mixed_value))<1e-10) return 4;
+  }
+  {
+    std::vector<double> density(100), actual(100);
+    density[off + 1 + 1*n] = 1e308;
+    density[off + 1 + 3*n] = 1e308;
+    density[off + 3 + 1*n] = 1e308;
+    density[off + 3 + 3*n] = 1e308;
+    accumulate_direct_fock_integral<false>(
+        n, off, spin, density.data(), actual.data(), 3, 2, 1, 0,
+        2.0, false);
+    bool saw_finite_exchange = false;
+    for(double value : actual) {
+      if(!std::isfinite(value)) return 5;
+      if(value != 0.0) saw_finite_exchange = true;
+    }
+    if(!saw_finite_exchange) return 6;
+  }
   std::cout<<cases<<" independent dense RHF/UHF scatter comparisons passed\n";
 }
 """

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_scatter.cuh",
+  "role": "scientific",
+  "subsystem": "direct_integrals",
+  "reason": "Shared Direct-force center composition: preserves unique-atom ordering, recovers the omitted fourth shell-center derivative by translational invariance, and accumulates atom forces for generated independent-center gradients.",
+  "regions": []
+}

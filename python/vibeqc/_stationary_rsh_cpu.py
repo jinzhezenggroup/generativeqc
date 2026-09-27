@@ -8,11 +8,13 @@ from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from vibeqc_compiler.integral.ir import four_center_eri_operator
 from vibeqc_compiler.integral.range_separation import CoulombKernel
+from vibeqc_compiler.integral.rsh_cpu_aot import component_group, entry_prefix
 from vibeqc_compiler.integral.shell_spec import cartesian_components
 from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 from vibeqc_compiler.integral.weighted_eri_execute import (
     PreparedWeightedEri,
     compile_weighted_eri,
+    packaged_weighted_eri,
 )
 from vibeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 
@@ -36,6 +38,7 @@ class RangeExchangeExecutor:
         compiler: typing.Any,
         *,
         device_id: int = 0,
+        aot_library: typing.Any = None,
     ) -> None:
         if isinstance(compiler, CppCompilerAdapter):
             backend = "cpu"
@@ -68,8 +71,11 @@ class RangeExchangeExecutor:
         self.compiler = compiler
         self.backend = backend
         self.device_id = device_id
+        self.aot_library = aot_library
         self._plans: dict[tuple[typing.Any, ...], PreparedWeightedEri] = {}
         self.records = 0
+        self.packaged_aot_plans = 0
+        self.runtime_compilations = 0
 
     @staticmethod
     def _kernel(primitive: typing.Any) -> CoulombKernel:
@@ -115,18 +121,43 @@ class RangeExchangeExecutor:
             )
         )
         radial = self._kernel(primitive)
-        key = (radial.family.value, radial.omega, angular, component)
+        aot_selection = None
+        if self.backend == "cpu" and self.aot_library is not None:
+            group_index, selected = component_group(angular, component)
+            prefix = entry_prefix(radial, angular, group_index)
+            try:
+                getattr(self.aot_library, f"{prefix}_identity_v2")
+            except AttributeError:
+                pass
+            else:
+                aot_selection = (group_index, selected, prefix)
+        key = (
+            (radial.family.value, radial.omega, angular, "aot", aot_selection[0])
+            if aot_selection is not None
+            else (radial.family.value, radial.omega, angular, "jit", component)
+        )
         plan = self._plans.get(key)
         if plan is None:
             integral = build_weighted_eri_ir(
                 angular, operator=four_center_eri_operator(radial)
             )
-            artifact = compile_weighted_eri(
-                integral,
-                self.compiler,
-                self.cache,
-                component_indices=(component,),
-            )
+            if aot_selection is not None:
+                _, selected, prefix = aot_selection
+                artifact = packaged_weighted_eri(
+                    integral,
+                    self.aot_library,
+                    component_indices=selected,
+                    entry_prefix=prefix,
+                )
+                self.packaged_aot_plans += 1
+            else:
+                artifact = compile_weighted_eri(
+                    integral,
+                    self.compiler,
+                    self.cache,
+                    component_indices=(component,),
+                )
+                self.runtime_compilations += 1
             if artifact.backend != self.backend:
                 raise ValueError("range exchange compiled backend identity mismatch")
             plan = PreparedWeightedEri(

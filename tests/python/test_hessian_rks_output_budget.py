@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+import tools.vibeqc_hessian.analytic as hessian_analytic
 from tools.vibeqc_hessian import rks_molecular
 
 
@@ -104,6 +105,45 @@ def test_one_byte_short_output_budget_refuses_before_block_work(
         )
 
 
+def test_weighted_provider_admission_has_no_legacy_size_cap(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: typing.Any
+) -> None:
+    """Keep the removed 12-AO/four-atom gate covered without a native HVP."""
+    atoms = tuple(
+        SimpleNamespace(atomic_number=2, position=(float(index), 0.0, 0.0))
+        for index in range(5)
+    )
+    shells = tuple(
+        SimpleNamespace(
+            angular_momentum=0,
+            atom_index=index % len(atoms),
+            primitives=(SimpleNamespace(exponent=1.0 + 0.01 * index, coefficient=1.0),),
+        )
+        for index in range(13)
+    )
+    source = SimpleNamespace(
+        _check_open=lambda: None,
+        representation="cartesian",
+        auxiliary_shells=(),
+        nbf=13,
+        atoms=atoms,
+        shells=shells,
+        shell_sizes=(1,) * len(shells),
+    )
+    sentinel = object()
+    monkeypatch.setattr(
+        hessian_analytic,
+        "_checked_second_hvp_options",
+        lambda *args: (sentinel, 0, sentinel),
+    )
+
+    data = hessian_analytic._provider_data_from_source(source, tmp_path)
+
+    assert data["state"].nat == 5
+    assert len(data["shells"]) == 13
+    assert data["output_accumulator_bytes"] == 5 * 3 * np.dtype(np.float64).itemsize
+
+
 @pytest.mark.parametrize(
     ("budget", "error_type"),
     [
@@ -123,7 +163,9 @@ def test_integral_budget_refuses_before_dense_output_allocation(
     operator = _stub_operator(monkeypatch)
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
-        raise AssertionError("dense allocation or HVP started before integral admission")
+        raise AssertionError(
+            "dense allocation or HVP started before integral admission"
+        )
 
     monkeypatch.setattr(rks_molecular.np, "empty", forbidden)
     monkeypatch.setattr(rks_molecular, "rks_hvp_many", forbidden)
