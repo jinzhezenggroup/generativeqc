@@ -5,9 +5,11 @@ The bulk Libxc importer has a machine-readable qualification layer in
 
 It separates **representation** from optional **runtime qualification**.
 User-facing automatic semilocal admission is intentionally a different policy:
-supported imported registrations are default-allow and only explicit known
-functional-specific defects are blacklisted. Every imported registration starts
-with two intrinsic claims:
+supported imported registrations are default-allow. The explicit negative
+exception hook is empty today and is reserved only for genuinely functional-
+specific defects. Shared zero-spin, zero-gradient, density-tail, sigma, and tau
+boundaries are compiler-owned work-domain semantics, not name-based exclusions.
+Every imported registration starts with two intrinsic claims:
 
 - `graph-imported`: the pinned Libxc Maple owner lowers to the canonical Graph;
 - `pointwise-validated`: polarized and unpolarized energy, `vxc`, and packed
@@ -24,8 +26,18 @@ from identity-bound evidence envelopes and a fail-closed dependency DAG, but
 they do **not** decide whether an otherwise structurally supported automatic
 semilocal functional is user-accessible. The public resolver checks imported
 Graph support, required ingredients, backend support, and the explicit negative
-blacklist instead. New representable registrations therefore do not need a
+exception hook instead. New representable registrations therefore do not need a
 positive per-functional admission record.
+
+Automatic native execution uses the distinct `libxc-7.0/work-semilocal-v1`
+compiler domain. The imported Maple Graph remains the interior mathematical
+kernel; the compiler constructs Libxc work coordinates before invoking that
+kernel. Density screening and spin-density/sigma/tau floors are generic, with
+cross-spin sigma and meta-GGA Fermi-hole-curvature constraints applied where
+required. E/vxc roots are differentiated inside the work boundary and evaluated
+at those work coordinates; clipping/floor operations are deliberately not part
+of automatic differentiation. Energy density is reweighted by the caller's
+original total density, matching Libxc worker semantics.
 
 The evidence DAG remains useful for CI diagnostics and for proving stronger
 claims:
@@ -223,8 +235,13 @@ stage; the current B1 campaign explicitly records the shared array-Graph
 executor rather than pretending that interpreted evidence is a compiled-CPU or
 CUDA result.
 
-The B1 campaign uses the explicit
-`libxc-bulk-production-candidate/v2` runtime domain. It keeps the v1
+The B1 diagnostic campaign uses the explicit
+`libxc-bulk-production-candidate/v2` runtime domain. This is intentionally
+different from the automatic native work domain: the diagnostic candidate
+exposes raw endpoint failures, while production execution applies the generic
+compiler-owned work transformation before the interior Graph.
+
+The v2 diagnostic domain It keeps the v1
 zero-gradient expansion and additionally admits nonnegative rho/tau for
 qualification. Exact total-density rows below the pinned registration's Libxc
 `p_a_dens_threshold` are screened to zero before Graph evaluation, matching the
