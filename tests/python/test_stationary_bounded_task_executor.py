@@ -96,14 +96,18 @@ def test_execution_evidence_does_not_retain_coordinate_pages() -> None:
 def test_fixed_and_paged_schedules_preserve_domain_result_and_identity() -> None:
     domain = RuntimeTaskDomain.rectangular((5, 4, 3))
 
-    def run(executor: _BoundedStationaryTaskExecutor) -> tuple[object, int, list[tuple[int, ...]]]:
+    def run(
+        executor: _BoundedStationaryTaskExecutor,
+    ) -> tuple[object, int, list[tuple[int, ...]]]:
         coordinates: list[tuple[int, ...]] = []
         total = 0
 
         def submit(coordinate: tuple[int, ...]) -> None:
             nonlocal total
             coordinates.append(coordinate)
-            total += 1 + sum((axis + 1) * value for axis, value in enumerate(coordinate))
+            total += 1 + sum(
+                (axis + 1) * value for axis, value in enumerate(coordinate)
+            )
 
         execution = executor.execute(domain, submit)
         return execution, total, coordinates
