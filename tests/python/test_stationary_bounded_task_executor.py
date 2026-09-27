@@ -23,19 +23,27 @@ def test_executor_classifies_and_covers_runtime_domain(
 ) -> None:
     domain = RuntimeTaskDomain.rectangular(extents)
     executor = _BoundedStationaryTaskExecutor(
-        page_capacity=page_capacity,
+        fixed_capacity=page_capacity,
         resident_capacity=resident_capacity,
+        page_capacity=resident_capacity,
     )
     seen: list[tuple[int, ...]] = []
+    page_finishes = 0
 
-    execution = executor.execute(domain, seen.append)
+    def finish_page() -> None:
+        nonlocal page_finishes
+        page_finishes += 1
+
+    execution = executor.execute(domain, seen.append, finish_page=finish_page)
 
     assert execution.mode == mode
     assert execution.domain_identity == domain.identity
     assert execution.logical_tasks == domain.logical_size
-    assert execution.page_capacity == page_capacity
+    assert execution.fixed_capacity == page_capacity
+    assert execution.page_capacity == resident_capacity
     assert execution.resident_capacity == resident_capacity
-    assert execution.pages == domain.page_count(page_capacity)
+    assert execution.pages == domain.page_count(resident_capacity)
+    assert page_finishes == execution.pages
     assert seen == list(domain)
 
 
@@ -48,13 +56,16 @@ def test_executor_rejects_invalid_capacities(
 ) -> None:
     with pytest.raises(ValueError):
         _BoundedStationaryTaskExecutor(
-            page_capacity=page_capacity,  # type: ignore[arg-type]
+            fixed_capacity=page_capacity,  # type: ignore[arg-type]
             resident_capacity=resident_capacity,  # type: ignore[arg-type]
+            page_capacity=resident_capacity,  # type: ignore[arg-type]
         )
 
 
 def test_executor_rejects_non_domain_or_non_callback() -> None:
-    executor = _BoundedStationaryTaskExecutor(page_capacity=2, resident_capacity=4)
+    executor = _BoundedStationaryTaskExecutor(
+        fixed_capacity=2, resident_capacity=4, page_capacity=4
+    )
     domain = RuntimeTaskDomain.rectangular((2,))
 
     with pytest.raises(TypeError, match="RuntimeTaskDomain"):
@@ -65,7 +76,9 @@ def test_executor_rejects_non_domain_or_non_callback() -> None:
 
 def test_execution_evidence_does_not_retain_coordinate_pages() -> None:
     domain = RuntimeTaskDomain.rectangular((17, 19))
-    executor = _BoundedStationaryTaskExecutor(page_capacity=7, resident_capacity=32)
+    executor = _BoundedStationaryTaskExecutor(
+        fixed_capacity=7, resident_capacity=32, page_capacity=32
+    )
     seen = 0
 
     def count(_coordinate: tuple[int, ...]) -> None:
@@ -75,6 +88,6 @@ def test_execution_evidence_does_not_retain_coordinate_pages() -> None:
     execution = executor.execute(domain, count)
 
     assert execution.mode == "paged"
-    assert execution.pages == domain.page_count(7)
+    assert execution.pages == domain.page_count(32)
     assert seen == domain.logical_size
     assert not hasattr(execution, "coordinates")
