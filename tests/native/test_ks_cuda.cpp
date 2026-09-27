@@ -944,7 +944,7 @@ vibeqc_method_descriptor public_wb97mv_descriptor(const vibeqc_ks_options& ks) {
   vibeqc_method_descriptor method{};
   method.struct_size = sizeof(method);
   method.abi_version = VIBEQC_ABI_VERSION;
-  method.method = ks.spin_channels == 2 ? VIBEQC_METHOD_WB97M_V_UKS : VIBEQC_METHOD_WB97M_V;
+  method.method = ks.spin_channels == 2 ? VIBEQC_METHOD_PBE_UKS : VIBEQC_METHOD_PBE_RKS;
   method.max_iterations = 250;
   method.diis_history = 8;
   method.energy_tolerance = 1e-10;
