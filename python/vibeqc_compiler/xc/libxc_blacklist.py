@@ -1,9 +1,9 @@
 """Explicit functional-specific exceptions to default-allow Libxc admission.
 
 Automatic semilocal admission is structural. Shared numerical boundary classes
-such as zero-spin channels, zero gradients, density tails, and Libxc work-domain
-regularization are compiler/runtime policy and must not be encoded as a list of
-functional names.
+such as zero-spin channels, zero gradients, density tails, and work-domain
+regularization must be handled by generic runtime/domain policy, not by naming
+every affected functional here.
 
 Keep this map empty unless a reproducible defect is genuinely specific to one
 functional and cannot be expressed as a generic capability or domain rule.

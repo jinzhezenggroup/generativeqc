@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 
@@ -11,6 +12,8 @@
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
+#include "scf/fock_prepared.hpp"
+#include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
 #if VIBEQC_HAS_CUDA
 #include <cuda_runtime_api.h>
@@ -74,32 +77,62 @@ class Mp2Prepared final : public PreparedCalculation {
       if (execution_cuda)
         throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
 #endif
-      auto hf = density_fitted_
-                    ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
-                                          system_, *auxiliary_, options_, context_.device_id)
-                                    : scf::run_rhf_density_fitting(system_, *auxiliary_, options_))
-                    : (cuda ? scf::run_rhf_cuda(system_, options_, context_.device_id)
-                            : scf::run_rhf(system_, options_));
+      scf::PreparedFockPlan* prepared_exact = nullptr;
+      scf::ScfResult hf;
+      if (!density_fitted_ && !cuda) {
+        if (!cpu_exact_plan_) {
+          const auto strategy =
+              scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
+                                      scf::FockBackend::Cpu, options_.screening_tolerance);
+          cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
+        }
+        prepared_exact = cpu_exact_plan_.get();
+        auto execution = options_;
+        execution.resolved_fock_build = prepared_exact->strategy();
+        hf = scf::run_prepared_fock_strategy(*prepared_exact, execution);
+      } else {
+        hf = density_fitted_
+                 ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
+                                                                     context_.device_id)
+                                 : scf::run_rhf_density_fitting(system_, *auxiliary_, options_))
+                 : scf::run_rhf_cuda(system_, options_, context_.device_id);
+      }
       if (!hf.converged || !hf.reference)
         throw MethodError(VIBEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
       const auto& ref = *hf.reference;
-      // The HF source/iteration work has been released. Only its owned
-      // physical reference enters the correlation phase.
+      // Release the iterative density. The exact CPU prepared owner remains
+      // alive when present so correlation can borrow its already-built ERIs.
       hf.density.clear();
       hf.density.shrink_to_fit();
-      posthf::RawSource source(system_, auxiliary_ ? &*auxiliary_ : nullptr);
+      std::unique_ptr<posthf::RawSource> raw_source;
+      if (!prepared_exact || density_fitted_)
+        raw_source =
+            std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
+      std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
+      const integrals::ElectronInteractionSource* conventional_source = raw_source.get();
+      if (prepared_exact) {
+        prepared_source.emplace(*prepared_exact);
+        conventional_source = &*prepared_source;
+      }
       const auto corr =
-          density_fitted_ ? mp2::density_fitted_energy(ref, source, budget_, threshold_,
+          density_fitted_ ? mp2::density_fitted_energy(ref, *raw_source, budget_, threshold_,
                                                        options_.density_fitting_relative_threshold,
                                                        8, fitted_cuda_, context_.device_id)
-                          : mp2::conventional_energy(ref, source, budget_, threshold_, 8, cuda,
-                                                     context_.device_id);
+                          : mp2::conventional_energy(ref, *conventional_source, budget_, threshold_,
+                                                     8, cuda, context_.device_id);
       Result result;
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
       if (compute_forces) {
+        // The compatibility force planner does not borrow the prepared ERIs.
+        // Retire its view before its owner and create RawSource only afterward.
+        prepared_source.reset();
+        cpu_exact_plan_.reset();
+        if (!raw_source)
+          raw_source =
+              std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
         response::GmresOptions response_options;
         response_options.relative_tolerance = 1e-10;
         response_options.absolute_tolerance = 1e-12;
@@ -108,12 +141,12 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.max_workspace_bytes = budget_;
         force_diagnostic =
             density_fitted_
-                ? mp2::density_fitted_force_cpu(ref, source, budget_, threshold_,
+                ? mp2::density_fitted_force_cpu(ref, *raw_source, budget_, threshold_,
                                                 options_.density_fitting_relative_threshold, 1e-10,
                                                 response_options)
-                : (cuda ? mp2::conventional_force_cuda(ref, source, budget_, threshold_, 1e-10,
+                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, budget_, threshold_, 1e-10,
                                                        response_options, context_.device_id)
-                        : mp2::conventional_force_cpu(ref, source, budget_, threshold_, 1e-10,
+                        : mp2::conventional_force_cpu(ref, *raw_source, budget_, threshold_, 1e-10,
                                                       response_options));
         result.forces = force_diagnostic->forces;
       }
@@ -186,6 +219,7 @@ class Mp2Prepared final : public PreparedCalculation {
   double threshold_;
   bool density_fitted_{};
   bool fitted_cuda_{};
+  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   std::optional<vibeqc_correlation_diagnostic> last_;
   mutable std::mutex mutex_;
 };
