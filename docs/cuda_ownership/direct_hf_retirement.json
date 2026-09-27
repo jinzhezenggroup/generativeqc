@@ -106,9 +106,9 @@
     {
       "id": "shared-native-recurrence-support",
       "status": "unsupported-fallback",
-      "capability": "Shared native Cartesian, Hermite, pair and contraction helpers still needed by retained Direct scientific consumers; order-2/3/4 primitive recurrence and shell-class dispatch are compiler-generated.",
+      "capability": "Shared native Cartesian, contraction, gradient-type and order-two shell helpers plus primitive-pair cache still needed by retained Direct scientific consumers. Pair-order-2/3 and shell-pair Hermite recurrence are compiler-generated.",
       "current_selector": "These helpers are reached through retained native Direct families; they are not independently selected as a second public method path.",
-      "generated_alternative": "Common IntegralIR/compiler recurrence ownership now covers order-2/3/4 primitive recurrence and shell dispatch. Remaining native pair/Hermite/cartesian helpers retire only when every dependent production consumer has equivalent qualified lowering.",
+      "generated_alternative": "Compiler ownership now covers primitive order-2/3/4 recurrence, shell-class dispatch, low-order pair expansions and exact shell-pair Hermite recurrence. Remaining native helpers retire only when every dependent production consumer has equivalent qualified lowering.",
       "schedule_requirements": "Keep recurrence mathematics separate from queue/runtime plumbing, preserve shell symmetry and pair reuse, and avoid deleting shared helpers while any qualified fallback still depends on them.",
       "resource_profile": "Compact pair geometry and bounded local intermediates are part of the existing performance envelope; a generated replacement must not multiply recurrence work or unbound local storage.",
       "evidence": [
@@ -126,9 +126,6 @@
         "src/scf/cuda/direct_native_contraction.cuh",
         "src/scf/cuda/direct_native_gradient_types.cuh",
         "src/scf/cuda/direct_native_order2_shell.cuh",
-        "src/scf/cuda/direct_native_pair_order2.cuh",
-        "src/scf/cuda/direct_native_pair_order3.cuh",
-        "src/scf/cuda/direct_native_shell_pair_hermite.cuh",
         "src/scf/cuda/direct_pair_cache.cu"
       ]
     },

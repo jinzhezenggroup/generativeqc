@@ -618,6 +618,21 @@ macro(vibeqc_register_cuda_generated_sources target)
     ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMENT "Generating compiler-owned Direct-HF primitive recurrence support")
 
+  set(VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_pair_order2.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_pair_order3.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_shell_pair_hermite.cuh")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_direct_pair_support_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_pair_support.py"
+    OUTPUTS ${VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/direct_pair_support_cuda.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMENT "Generating compiler-owned Direct-HF pair/Hermite support")
+
   set(VIBEQC_B3LYP_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_b3lyp_device.cuh")
   vibeqc_register_generated_sources(
