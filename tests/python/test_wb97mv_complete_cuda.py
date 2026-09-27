@@ -7,9 +7,21 @@ VV10 are all included in both engines; no component-only success promotes API.
 
 import os
 import typing
+from pathlib import Path
 
 import numpy as np
 import pytest
+
+
+def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
+    ).read_text(encoding="utf-8")
+    begin = source.index("vibeqc_status cuda_integral_gradient(")
+    end = source.index("Result execute(bool compute_forces)", begin)
+    bridge = source[begin:end]
+    assert "execute_cuda_stationary_one_electron_pair(" in bridge
+    assert "execute_cuda_one_electron_gradient(" not in bridge
 
 
 @pytest.mark.parametrize(
@@ -73,6 +85,10 @@ def test_complete_cuda_force_matches_independent_engine(
         assert work["ao_collocation_point_visits"] == 2 * work["grid_points"]
         assert work["nonlocal_pair_evaluations"] > 0
         assert len(work["source_names"]) == 12
+        native = work["native_integral_resources"]
+        assert native["final_state_export_d2h_bytes"] == 0
+        assert native["final_state_export_reads"] == 0
+        assert native["final_state_export_synchronizations"] == 0
         energy_only = batch.execute(strict=True, properties=("energy",)).items[0]
         assert cold.executed_backend == warm.executed_backend == "cuda"
         assert energy_only.forces is None

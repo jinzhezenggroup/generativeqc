@@ -35,6 +35,15 @@ vibeqc_status execute_cuda_one_electron_gradient(int device_id, const core::Syst
                                                  OneElectronGradientResources* resources = nullptr,
                                                  double overlap_scale = 1.0);
 
+/** Evaluate the stationary hcore and overlap/Pulay sources under one prepared
+ * topology/metadata upload and one stream drain. The two scientific outputs
+ * remain separate: hcore uses D for T/V, while Pulay uses -W for S. */
+vibeqc_status execute_cuda_stationary_one_electron_pair(
+    int device_id, const core::System& system, std::span<const double> density,
+    std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
+    std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    OneElectronGradientResources* resources = nullptr);
+
 }  // namespace vibeqc::scf
 
 #endif

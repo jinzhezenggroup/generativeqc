@@ -626,6 +626,54 @@ vibeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan* plan,
                                                      detail);
 }
 
+vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail) {
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan != nullptr && plan->diagnostic.batch_size == 1,
+                      "resident fused RSH derivative requires one prepared item");
+    direct_jk_require(
+        std::isfinite(coulomb_coefficient) && std::isfinite(short_exchange_coefficient) &&
+            std::isfinite(long_exchange_coefficient) && std::isfinite(omega) && omega >= 0.0,
+        "nonfinite resident fused RSH derivative coefficient");
+    direct_jk_require(plan->diagnostic.derivative_order >= 1,
+                      "direct J/K first derivatives were not retained");
+    const auto n = plan->diagnostic.nbf;
+    direct_jk_require(density != nullptr && matrix_elements == n * n,
+                      "resident fused RSH derivative density shape is invalid");
+    const bool unrestricted = spin == FockSpin::Unrestricted;
+    direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
+                      "resident fused RSH derivative spin storage is invalid");
+
+    const auto coordinates = plan->coordinates_per_item;
+    std::vector<double> result(3 * coordinates);
+    if (coulomb_coefficient != 0.0 || short_exchange_coefficient != 0.0 ||
+        long_exchange_coefficient != 0.0) {
+      direct_jk_check(cudaSetDevice(plan->device_id));
+      DirectJkDownloadFence fence{plan->stream};
+      for (unsigned source = 0; source < 3; ++source)
+        direct_jk_check(cudaMemsetAsync(plan->derivative + source * plan->coordinate_elements, 0,
+                                        coordinates * sizeof(double), plan->stream));
+      launch_independent_rsh_derivative_kernel(
+          static_cast<unsigned>(coordinates), kIndependentJkThreads, 0, plan->stream, plan->batch,
+          coordinates, 0, plan->coordinate_elements, coulomb_coefficient,
+          short_exchange_coefficient, long_exchange_coefficient, unrestricted, omega,
+          plan->screening_tolerance, plan->bounds, density, beta, plan->derivative);
+      direct_jk_check(cudaGetLastError());
+      for (unsigned source = 0; source < 3; ++source)
+        direct_jk_check(cudaMemcpyAsync(result.data() + source * coordinates,
+                                        plan->derivative + source * plan->coordinate_elements,
+                                        coordinates * sizeof(double), cudaMemcpyDeviceToHost,
+                                        plan->stream));
+      fence.complete();
+      direct_jk_finite_result(result);
+    }
+    derivatives = std::move(result);
+  });
+}
+
 vibeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
     CudaDirectJkPlan* plan, std::size_t item, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
