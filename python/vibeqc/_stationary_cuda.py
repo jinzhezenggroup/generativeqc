@@ -1635,9 +1635,15 @@ def _complete_rks_cuda_gradient_diagnostic(
             domain = RuntimeTaskDomain.rectangular((n,) * rank)
             source_index = source_names.index(source)
 
-            def submit(indices: tuple[int, ...]) -> None:
-                sources.integral(source_index, operator, indices)
-                if source == "one_electron":
+            def submit(
+                indices: tuple[int, ...],
+                *,
+                _source_index: int = source_index,
+                _operator: str = operator,
+                _source: str = source,
+            ) -> None:
+                sources.integral(_source_index, _operator, indices)
+                if _source == "one_electron":
                     for atom in range(na):
                         sources.integral(
                             0,
