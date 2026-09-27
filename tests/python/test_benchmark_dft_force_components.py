@@ -95,7 +95,10 @@ def test_extract_wb97mv_uses_latest_cumulative_force_work() -> None:
     assert rows[0]["components"]["endpoint_seconds"] == 5.0
     assert rows[0]["components"]["wall_seconds"]["vv10_rvv10"] == 0.9
     assert rows[0]["comparison"]["boundary"] == "scf_energy_plus_force"
-    assert "does not expose a compatible" in rows[0]["comparison"]["reference_component_attribution"]
+    assert (
+        "does not expose a compatible"
+        in rows[0]["comparison"]["reference_component_attribution"]
+    )
 
 
 def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
