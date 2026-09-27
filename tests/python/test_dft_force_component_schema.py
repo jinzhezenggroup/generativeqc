@@ -13,7 +13,9 @@ from benchmarks.dft_force_components import (
 )
 
 
-def test_stationary_timeline_normalizes_without_zero_filling_missing_components() -> None:
+def test_stationary_timeline_normalizes_without_zero_filling_missing_components() -> (
+    None
+):
     work = {
         "endpoint_seconds": 2.0,
         "timeline": {
@@ -55,9 +57,7 @@ def test_stationary_timeline_normalizes_without_zero_filling_missing_components(
     assert record["wall_seconds"]["stationary_integral_derivatives"] == pytest.approx(
         0.5
     )
-    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(
-        0.3
-    )
+    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.3)
     assert record["profiled_ms"]["stationary_integral_derivatives"] == pytest.approx(
         5.0
     )
@@ -97,9 +97,7 @@ def test_wb97mv_component_seconds_map_to_same_schema() -> None:
     assert record["wall_seconds"]["stationary_integral_derivatives"] == pytest.approx(
         2.0
     )
-    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(
-        1.0
-    )
+    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(1.0)
     assert record["wall_seconds"]["vv10_rvv10"] == pytest.approx(0.9)
     assert record["attributed_wall_seconds"] == pytest.approx(5.0)
     assert record["unattributed_wall_seconds"] == pytest.approx(0.0)

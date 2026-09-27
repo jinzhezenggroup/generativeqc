@@ -44,22 +44,16 @@ def _mapping(value: typing.Any) -> Mapping[str, typing.Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _sum_present(
-    values: Sequence[typing.Any], *, field: str
-) -> float | None:
+def _sum_present(values: Sequence[typing.Any], *, field: str) -> float | None:
     present = [
-        _finite_nonnegative(value, field=field)
-        for value in values
-        if value is not None
+        _finite_nonnegative(value, field=field) for value in values if value is not None
     ]
     if not present:
         return None
-    return sum(typing.cast(list[float], present))
+    return sum(typing.cast("list[float]", present))
 
 
-def _value(
-    mapping: Mapping[str, typing.Any], key: str, *, field: str
-) -> float | None:
+def _value(mapping: Mapping[str, typing.Any], key: str, *, field: str) -> float | None:
     return _finite_nonnegative(mapping.get(key), field=field)
 
 
@@ -108,7 +102,7 @@ def select_force_work(raw: typing.Any, *, index: int = 0) -> Mapping[str, typing
             raise ValueError(f"no force-work record for index {index}")
         # Prepared-batch resource diagnostics are cumulative. The last matching
         # record is the latest force execution for this item.
-        return typing.cast(Mapping[str, typing.Any], candidates[-1]["work"])
+        return typing.cast("Mapping[str, typing.Any]", candidates[-1]["work"])
     raise TypeError("force work must be a mapping or indexed diagnostic sequence")
 
 
@@ -124,9 +118,7 @@ def _coverage(
         "profiled_ms": [
             name for name, value in profiled_ms.items() if value is not None
         ],
-        "missing_wall_seconds": [
-            name for name, value in wall.items() if value is None
-        ],
+        "missing_wall_seconds": [name for name, value in wall.items() if value is None],
     }
 
 
@@ -168,12 +160,8 @@ def _normalize_wb97mv(
     native = _mapping(work.get("native_integral_resources"))
     snapshot = _mapping(work.get("snapshot_export_work"))
     traffic = {
-        "one_electron_h2d_bytes": _int_or_none(
-            native.get("one_electron_h2d_bytes")
-        ),
-        "one_electron_d2h_bytes": _int_or_none(
-            native.get("one_electron_d2h_bytes")
-        ),
+        "one_electron_h2d_bytes": _int_or_none(native.get("one_electron_h2d_bytes")),
+        "one_electron_d2h_bytes": _int_or_none(native.get("one_electron_d2h_bytes")),
         "final_state_export_d2h_bytes": _int_or_none(
             native.get("final_state_export_d2h_bytes")
         ),

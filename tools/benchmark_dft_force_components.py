@@ -117,7 +117,7 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
     missing_names: set[str] = set()
     routes: set[str] = set()
     for row in records:
-        components = typing.cast(Mapping[str, typing.Any], row["components"])
+        components = typing.cast("Mapping[str, typing.Any]", row["components"])
         routes.add(str(components.get("source_route")))
         coverage = components.get("coverage")
         if isinstance(coverage, Mapping):
