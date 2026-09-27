@@ -30,7 +30,9 @@ def test_grid_feature_inventory_is_ingredient_driven() -> None:
     assert r2scan.grid_features == ("rho", "gradient", "tau")
 
 
-def test_nonlocal_composition_reuses_density_features_without_named_method_node() -> None:
+def test_nonlocal_composition_reuses_density_features_without_named_method_node() -> (
+    None
+):
     method = MethodSpec(
         "arbitrary-pbe-vv10-alias",
         (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
