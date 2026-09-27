@@ -45,14 +45,6 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
                                          unsigned derivative_order, double screening_tolerance,
                                          std::size_t device_budget_bytes, CudaDirectJkPlan** output,
                                          CudaDirectJkDiagnostic& diagnostic, std::string& detail);
-/** Experimental prepared value route that additionally admits the compiler-generated
- * full-range raw-K consumer. The ordinary create API remains the production
- * default; this seam exists for independent numerical/resource qualification.
- */
-vibeqc_status create_cuda_direct_jk_plan_with_generated_exchange(
-    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
-    double screening_tolerance, std::size_t device_budget_bytes, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string& detail);
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept;
 /** Null handles return an empty diagnostic. */
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept;
