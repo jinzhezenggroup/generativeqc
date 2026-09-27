@@ -578,7 +578,8 @@ def main() -> None:
             "unsupported": (
                 "unsupported functional/provider combinations are retained as records"
             ),
-            "qualification_preset": args.qualification,\n        },
+            "qualification_preset": args.qualification,
+        },
         "records": records,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
