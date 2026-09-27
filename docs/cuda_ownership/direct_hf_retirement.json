@@ -82,9 +82,9 @@
     {
       "id": "native-low-order-force",
       "status": "performance-exception",
-      "capability": "AO/component normalization, shell canonicalization, coordinate recovery and atom accumulation remain native in the low-order Direct-force adapters. Cached-pair Gaussian geometry, exact RHF/UHF density coefficients and order-0/1/2/3 scalar force roots are compiler-owned.",
-      "current_selector": "Order-0/1/2/3 exact shell workers call compiler-generated cached-pair geometry and Weighted IntegralIR force roots. Their exact symmetry-reduced RHF/UHF density coefficient is emitted by the shared Direct Fock/force contraction owner. Boys evaluation remains shared numerical policy; component composition, canonicalization and coordinate recovery/scatter remain tracked scientific code.",
-      "generated_alternative": "Shared compiler owners now cover cached Gaussian geometry, the exact RHF/UHF density coefficient and low-order force roots. Remaining retirement work is AO/component normalization, shell/component canonicalization and coordinate recovery/scatter.",
+      "capability": "AO/component normalization and shell canonicalization remain native in the low-order Direct-force adapters. Cached-pair Gaussian geometry, exact RHF/UHF density coefficients and order-0/1/2/3 scalar force roots are compiler-owned. Unique-center collection, translational fourth-center recovery and atom accumulation now have one shared Direct-force scientific owner.",
+      "current_selector": "Order-0/1/2/3 exact shell workers call compiler-generated cached-pair geometry and Weighted IntegralIR force roots, then delegate common center recovery/atom scatter to direct_force_scatter.cuh. Boys evaluation remains shared numerical policy; adapter-specific component composition and shell canonicalization remain tracked scientific code.",
+      "generated_alternative": "Shared compiler owners cover cached Gaussian geometry, the exact RHF/UHF density coefficient and low-order force roots. Shared Direct-force code now owns coordinate recovery/scatter. Remaining adapter-specific retirement work is AO/component normalization and shell/component canonicalization.",
       "schedule_requirements": "Preserve symmetry-reduced density folding, center recovery, screening domain, bounded quartet traversal and single-counted atom scatter while keeping scheduler-only plumbing runtime-owned.",
       "resource_profile": "Promotion must preserve the current bounded queue/tile memory profile and complete force endpoint behavior; ownership changes must not introduce materialized whole-quartet derivative tensors.",
       "evidence": [
@@ -96,12 +96,13 @@
         "#832 profitability/resource planning",
         "#833 reusable schedule vocabulary"
       ],
-      "retirement_condition": "Retire or narrowly reclassify the remaining native adapters after component normalization, canonicalization and coordinate-recovery/scatter semantics gain qualified generated/shared owners. Cached geometry, density coefficients and scalar force roots are no longer native blockers; generic queueing and transport may remain runtime.",
+      "retirement_condition": "Retire or narrowly reclassify the remaining native adapters after component normalization and shell/component canonicalization gain qualified generated/shared owners. Cached geometry, density coefficients, scalar force roots and coordinate recovery/scatter are no longer duplicated native blockers; generic queueing and transport may remain runtime.",
       "files": [
         "src/scf/cuda/direct_force_low_order.cuh",
         "src/scf/cuda/direct_force_order2.cuh",
         "src/scf/cuda/direct_force_order3.cuh",
         "src/scf/cuda/direct_force_quartet.cuh",
+        "src/scf/cuda/direct_force_scatter.cuh",
         "src/scf/cuda/direct_native_psss.cuh"
       ]
     },

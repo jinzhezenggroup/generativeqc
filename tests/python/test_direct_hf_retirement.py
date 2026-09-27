@@ -129,6 +129,43 @@ def test_direct_cached_geometry_is_generated_from_shared_ir() -> None:
     assert "return boys_argument;" in source
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "direct_force_low_order.cuh",
+        "direct_force_order2.cuh",
+        "direct_force_order3.cuh",
+        "direct_force_quartet.cuh",
+    ],
+)
+def test_direct_force_unique_center_collection_has_one_shared_owner(name: str) -> None:
+    """Keep unique-center ordering in one shared Direct-force owner."""
+    source = (ROOT / "src/scf/cuda" / name).read_text(encoding="utf-8")
+    assert '#include "scf/cuda/direct_force_scatter.cuh"' in source
+    assert "direct_force_unique_center_atoms" in source
+    assert "duplicate_center" not in source
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "direct_force_low_order.cuh",
+        "direct_force_order2.cuh",
+        "direct_force_order3.cuh",
+    ],
+)
+def test_low_order_force_recovery_and_scatter_have_one_shared_owner(name: str) -> None:
+    """Keep translational recovery and atom scatter out of low-order adapters."""
+    source = (ROOT / "src/scf/cuda" / name).read_text(encoding="utf-8")
+    assert "scatter_direct_force_independent_gradient" in source
+    assert "double derivative_sum[3]{};" not in source
+    assert "fourth_derivative" not in source
+
+    shared = (ROOT / "src/scf/cuda/direct_force_scatter.cuh").read_text(encoding="utf-8")
+    assert "fourth_derivative -= value" in shared
+    assert "atomicAdd(forces + final_coordinate + axis, derivative_sum[axis])" in shared
+
+
 def test_generated_low_order_force_roots_remain_in_use() -> None:
     """Preserve generated force roots while tracking their native inputs honestly."""
     assert not (ROOT / "src/scf/cuda/direct_native_pair_order2_gradient.cuh").exists()
