@@ -8,6 +8,7 @@ from pathlib import Path
 
 from vibeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
+    emit_direct_force_component_weight,
     emit_direct_force_density_coefficient,
     emit_generated_shell_fock_accumulation,
 )
@@ -54,6 +55,25 @@ def test_direct_force_density_has_one_compiler_equation_owner() -> None:
         assert equation not in native
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
     assert "direct_force_density_coefficient" in emit_direct_fock_accumulation_header()
+
+
+def test_direct_force_component_normalization_has_one_compiler_owner() -> None:
+    """Keep Direct-force Cartesian AO normalization out of native adapters."""
+
+    generated = emit_direct_force_component_weight()
+    assert "ao_coefficients[system_ao_begin + i]" in generated
+    assert "density_coefficient *" in generated
+    assert "direct_force_component_weight" in emit_direct_fock_accumulation_header()
+
+    for name in (
+        "direct_force_low_order.cuh",
+        "direct_force_order2.cuh",
+        "direct_force_order3.cuh",
+        "direct_native_psss.cuh",
+    ):
+        source = (REPOSITORY_ROOT / "src/scf/cuda" / name).read_text(encoding="utf-8")
+        assert "angular_coefficient" not in source
+        assert "s_angular_coefficient" not in source
 
 
 def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:

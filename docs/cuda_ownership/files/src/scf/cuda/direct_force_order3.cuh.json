@@ -2,6 +2,6 @@
   "path": "src/scf/cuda/direct_force_order3.cuh",
   "role": "scientific",
   "subsystem": "direct_integrals",
-  "reason": "Order-three Direct-force adapters consume compiler-generated cached-pair Gaussian geometry and Weighted IntegralIR force roots. Native component-weight formation and shell canonicalization remain scientific composition; unique-center recovery and atom scatter are delegated to direct_force_scatter.cuh.",
+  "reason": "Order-three Direct-force adapters consume compiler-generated density coefficients and Cartesian AO-normalized component weights plus generated cached geometry and Weighted IntegralIR roots. Native shell/component canonicalization remains scientific composition; center recovery and atom scatter are shared.",
   "regions": []
 }

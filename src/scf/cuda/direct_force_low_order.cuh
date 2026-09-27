@@ -117,11 +117,9 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task(
   const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
       n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3]);
   if (density_coefficient == 0.0) return;
-  const double component_weight = density_coefficient *
-                                  batch.direct_ao_coefficients[system_ao_begin + ao[0]] *
-                                  batch.direct_ao_coefficients[system_ao_begin + ao[1]] *
-                                  batch.direct_ao_coefficients[system_ao_begin + ao[2]] *
-                                  batch.direct_ao_coefficients[system_ao_begin + ao[3]];
+  const double component_weight = direct_force_component_weight(
+      batch.direct_ao_coefficients, system_ao_begin, ao[0], ao[1], ao[2], ao[3],
+      density_coefficient);
   const auto gradient = contracted_eri_cartesian_source_ssss_generated_weighted_gradient(
       batch, first_pair, second_pair, shells[0], shells[1], shells[2], shells[3], component_weight);
 
@@ -191,7 +189,7 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task(
       static_cast<std::size_t>(batch.shell_direct_ao_offsets[raw_shell[3]]) - system_ao_begin,
   };
   const std::size_t p_ao_begin = raw_ao[p_slot];
-  double density_coefficient[3]{};
+  double component_weight[3]{};
   for (unsigned axis = 0; axis < 3; ++axis) {
     raw_ao[p_slot] = p_ao_begin + axis;
     if (schwarz_bounds[physical_offset + matrix_index(raw_ao[0], raw_ao[1], n)] *
@@ -199,11 +197,14 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task(
         screening_tolerance) {
       continue;
     }
-    density_coefficient[axis] = direct_force_density_coefficient<Unrestricted>(
+    const double density_coefficient = direct_force_density_coefficient<Unrestricted>(
         n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3]);
+    component_weight[axis] = direct_force_component_weight(
+        batch.direct_ao_coefficients, system_ao_begin, raw_ao[0], raw_ao[1], raw_ao[2],
+        raw_ao[3], density_coefficient);
   }
-  if (density_coefficient[0] == 0.0 && density_coefficient[1] == 0.0 &&
-      density_coefficient[2] == 0.0) {
+  if (component_weight[0] == 0.0 && component_weight[1] == 0.0 &&
+      component_weight[2] == 0.0) {
     return;
   }
 
@@ -233,7 +234,7 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task(
   const PsssWeightedGradient gradient =
       contracted_eri_cartesian_source_psss_weighted_gradient<ResidentBra>(
           batch, canonical_pair[0], canonical_pair[1], slots[0], slots[1], slots[2], slots[3],
-          density_coefficient, resident_first_pairs, resident_first_pair_count);
+          component_weight, resident_first_pairs, resident_first_pair_count);
   const std::int32_t canonical_center_atoms[4] = {
       batch.shell_atoms[slots[0]],
       batch.shell_atoms[slots[1]],
