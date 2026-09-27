@@ -12,7 +12,7 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "response/solve.hpp"
-#include "scf/types.hpp"
+#include "hf/reference.hpp"
 
 namespace vibeqc::mp2 {
 namespace {
@@ -24,7 +24,7 @@ std::vector<std::size_t> range(std::size_t begin, std::size_t end) {
   return result;
 }
 
-std::vector<double> hcore_mo(const scf::PhysicalReference& reference) {
+std::vector<double> hcore_mo(const hf::PhysicalReference& reference) {
   const auto n = reference.nbf;
   if (reference.hcore.size() != square(n) || reference.coefficients.size() != square(n))
     throw std::invalid_argument("MP2 force reference has inconsistent one-electron data");
@@ -38,7 +38,7 @@ std::vector<double> hcore_mo(const scf::PhysicalReference& reference) {
   return result;
 }
 
-EnergyAdjoint energy_adjoint(const scf::PhysicalReference& reference,
+EnergyAdjoint energy_adjoint(const hf::PhysicalReference& reference,
                              const posthf::MOBlockProvider& provider, double denominator_threshold,
                              bool cuda, int device_id) {
   const auto no = reference.nocc, n = reference.nbf, nv = n - no;
@@ -54,7 +54,7 @@ EnergyAdjoint energy_adjoint(const scf::PhysicalReference& reference,
   return canonical_energy_adjoint(ordered, reference.orbital_energies, no, denominator_threshold);
 }
 
-response::LinearResponseProblem response_problem(const scf::PhysicalReference& reference,
+response::LinearResponseProblem response_problem(const hf::PhysicalReference& reference,
                                                  const posthf::MOBlockProvider& provider, bool cuda,
                                                  int device_id) {
   const auto no = reference.nocc, n = reference.nbf, nv = n - no;
@@ -86,7 +86,7 @@ response::LinearResponseProblem response_problem(const scf::PhysicalReference& r
 }
 
 ConventionalForceResult conventional_force_impl(
-    const scf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const posthf::RawSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, bool cuda, int device_id) {
 #if !VIBEQC_HAS_CUDA
@@ -156,7 +156,7 @@ ConventionalForceResult conventional_force_impl(
 }
 }  // namespace
 
-ConventionalForceResult conventional_force_cpu(const scf::PhysicalReference& reference,
+ConventionalForceResult conventional_force_cpu(const hf::PhysicalReference& reference,
                                                const posthf::RawSource& source,
                                                std::size_t budget_bytes,
                                                double denominator_threshold,
@@ -167,7 +167,7 @@ ConventionalForceResult conventional_force_cpu(const scf::PhysicalReference& ref
 }
 
 ConventionalForceResult conventional_force_cuda(
-    const scf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const posthf::RawSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, int device_id) {
   return conventional_force_impl(reference, source, budget_bytes, denominator_threshold,
@@ -175,7 +175,7 @@ ConventionalForceResult conventional_force_cuda(
 }
 
 ConventionalForceResult density_fitted_force_cpu(
-    const scf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const posthf::RawSource& source,
     std::size_t budget_bytes, double denominator_threshold, double metric_relative_threshold,
     double same_space_threshold, const response::GmresOptions& response_options) {
   if (!reference.nocc || reference.nocc >= reference.nbf || source.nbf() != reference.nbf ||
