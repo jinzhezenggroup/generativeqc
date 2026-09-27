@@ -168,9 +168,8 @@ std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
 }
 
 cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
-                          const hf::PhysicalReference& ref,
-                          const cc::SolverOptions& options, bool cuda, int device,
-                          posthf::ProviderWork& provider_work,
+                          const hf::PhysicalReference& ref, const cc::SolverOptions& options,
+                          bool cuda, int device, posthf::ProviderWork& provider_work,
                           vibeqc_tensor::Metrics& provider_metrics) {
   cc::Problem p;
   p.nocc = ref.nocc;
