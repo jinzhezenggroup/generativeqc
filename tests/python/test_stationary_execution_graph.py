@@ -2,8 +2,14 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.method import MethodSpec, original_nonlocal_correlation, resolve_method
-from vibeqc_compiler.method.stationary_execution import compile_stationary_execution_graph
+from vibeqc_compiler.method import (
+    MethodSpec,
+    original_nonlocal_correlation,
+    resolve_method,
+)
+from vibeqc_compiler.method.stationary_execution import (
+    compile_stationary_execution_graph,
+)
 from vibeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
