@@ -92,6 +92,66 @@ def _wb97mv_records(
     return [{"metadata": metadata, "components": dict(component)}]
 
 
+
+def _matrix_records(
+    payload: Mapping[str, typing.Any],
+) -> list[dict[str, typing.Any]]:
+    rows = payload.get("records")
+    if not isinstance(rows, list):
+        return []
+    result: list[dict[str, typing.Any]] = []
+    for case in rows:
+        if not isinstance(case, Mapping) or case.get("status") != "measured":
+            continue
+        base = {
+            key: case[key]
+            for key in (
+                "method",
+                "selector",
+                "system",
+                "atoms",
+                "basis",
+                "density_fitting",
+            )
+            if key in case
+        }
+        samples: list[Mapping[str, typing.Any]] = []
+        for key in ("cold", "priming", "changed_geometry"):
+            value = case.get(key)
+            if isinstance(value, Mapping):
+                samples.append(value)
+        warm = case.get("warm")
+        if isinstance(warm, list):
+            samples.extend(value for value in warm if isinstance(value, Mapping))
+        for sample in samples:
+            components = sample.get("force_components")
+            if not isinstance(components, Mapping):
+                continue
+            metadata = {**base, **_metadata(sample)}
+            metadata["scenario"] = sample.get("scenario")
+            result.append(
+                {
+                    "metadata": metadata,
+                    "components": dict(components),
+                }
+            )
+        scf_profile = case.get("scf_profile")
+        if (
+            isinstance(scf_profile, Mapping)
+            and scf_profile.get("status") == "measured"
+            and isinstance(scf_profile.get("profile"), Mapping)
+        ):
+            result.append(
+                {
+                    "metadata": {**base, "scenario": "diagnostic_scf_profile"},
+                    "scf_profile": dict(
+                        typing.cast("Mapping[str, typing.Any]", scf_profile["profile"])
+                    ),
+                    "trace": scf_profile.get("trace"),
+                }
+            )
+    return result
+
 def extract_records(
     payload: Mapping[str, typing.Any],
 ) -> list[dict[str, typing.Any]]:
@@ -116,21 +176,37 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
     component_names: set[str] = set()
     missing_names: set[str] = set()
     routes: set[str] = set()
+    scf_profiled: set[str] = set()
+    scf_missing: set[str] = set()
     for row in records:
-        components = typing.cast("Mapping[str, typing.Any]", row["components"])
-        routes.add(str(components.get("source_route")))
-        coverage = components.get("coverage")
-        if isinstance(coverage, Mapping):
-            component_names.update(
-                str(name) for name in coverage.get("wall_seconds", ())
-            )
-            missing_names.update(
-                str(name) for name in coverage.get("missing_wall_seconds", ())
+        components = row.get("components")
+        if isinstance(components, Mapping):
+            routes.add(str(components.get("source_route")))
+            coverage = components.get("coverage")
+            if isinstance(coverage, Mapping):
+                component_names.update(
+                    str(name) for name in coverage.get("wall_seconds", ())
+                )
+                missing_names.update(
+                    str(name) for name in coverage.get("missing_wall_seconds", ())
+                )
+        scf_profile = row.get("scf_profile")
+        if isinstance(scf_profile, Mapping):
+            measured = scf_profile.get("profiled_ms")
+            if isinstance(measured, Mapping):
+                scf_profiled.update(
+                    str(name) for name, value in measured.items() if value is not None
+                )
+            scf_missing.update(
+                str(name)
+                for name in scf_profile.get("missing_expected_components", ())
             )
     return {
         "source_routes": sorted(routes),
         "wall_components_observed": sorted(component_names),
         "wall_components_missing_in_at_least_one_record": sorted(missing_names),
+        "scf_profiled_components_observed": sorted(scf_profiled),
+        "scf_expected_components_missing_in_at_least_one_record": sorted(scf_missing),
     }
 
 
