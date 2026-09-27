@@ -59,6 +59,15 @@ for functional in (0,1,2):
     for scientific in ('__global__ void task_kernel', '__global__ void geometry_kernel'):
         assert scientific in s
         assert s.index(scientific) > include
+    geometry=s.split('__global__ void geometry_kernel',1)[1].split(
+        '}  // namespace vibeqc_stationary_cuda',1
+    )[0]
+    assert '__global__ void geometry_reduce' not in geometry
+    assert '__syncthreads();' in geometry
+    assert 'for (size_t source_lane = 0; source_lane < workers; ++source_lane)' in geometry
+    assert 'output[i] = finite(output[i] + sum, error, 0);' in geometry
+    before_barrier=geometry.split('__syncthreads();',1)[0]
+    assert 'return;' not in before_barrier
     assert f'stationary_functional = {functional}' in s
     assert 'stationary_records' not in s
     assert s == emit_stationary_cuda(primitive,functional=functional,plan=plan)
@@ -69,6 +78,8 @@ assert 'stationary_tasks' in template
 assert 'stationary_topology' in template
 assert 'stationary_geometry_enqueue' in template
 assert 'stationary_geometry_drain' in template
+assert '__global__ void geometry_reduce' not in template
+assert template.count('p->launches += 1;') >= 2
 deferred=template.split('int stationary_geometry_enqueue',1)[1].split('int stationary_geometry(',1)[0]
 assert 'finished(*p, stream)' not in deferred
 assert 'p->geometry_pending = true' in deferred
