@@ -73,7 +73,10 @@ def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
         )[0]
     )
     assert "rho < threshold" in kernel
-    assert "effective_weights[i] = inactive ? 0.0 : weight" in kernel
+    assert (
+        "effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight)"
+        in kernel
+    )
     assert "effective_density[i] = inactive ? 1.0 : rho" in kernel
     assert "inactive ? 0.0 : gx" in kernel
     assert "if (!valid) atomicExch(failed, 1)" in kernel

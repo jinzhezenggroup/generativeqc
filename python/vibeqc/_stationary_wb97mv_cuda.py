@@ -220,7 +220,10 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
-                        work_budget=max(1, na * (na - 1) // 2),
+                        # This retained owner executes one nuclear primitive per
+                        # native call. Total pair coverage is bounded separately
+                        # by the admitted atom domain and explicit pair loop.
+                        page_work_budget=1,
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0

@@ -97,4 +97,14 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivatives, std::string& detail);
+
+/** Single-item fused RSH derivative borrowing already-resident row-major
+ * densities on the Direct owner's device. The caller owns both pointers and
+ * must keep them live through completion. Qualified native KS final-state
+ * publication establishes the physical symmetric-density precondition. */
+vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail);
 }  // namespace vibeqc::scf

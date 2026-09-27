@@ -260,4 +260,137 @@ vibeqc_status execute_cuda_one_electron_gradient(
     return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
 }
+
+vibeqc_status execute_cuda_stationary_one_electron_pair(
+    int device_id, const core::System& system, std::span<const double> density,
+    std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
+    std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    OneElectronGradientResources* resources) {
+  if (resources) *resources = {};
+  const std::size_t n = molecule::ao_count(system), atoms = system.atoms.size();
+  if (device_id < 0 || schedule > 3 || !maximum_bytes || !n || !atoms ||
+      atoms > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
+      n > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
+      n > std::numeric_limits<std::size_t>::max() / n || system.shells.size() > n) {
+    detail = "invalid paired one-electron gradient dimensions or budget";
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  }
+  for (auto weights : {density, weighted_density})
+    if (weights.size() != n * n || !std::all_of(weights.begin(), weights.end(), [](double value) {
+          return std::isfinite(value);
+        })) {
+      detail = "paired stationary D/W must be finite full public-AO matrices";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
+    }
+
+  long double primitives = 0;
+  for (const auto& shell : system.shells) primitives += shell.primitives.size();
+  constexpr long double per_ao =
+      2 * sizeof(std::int32_t) + 2 * sizeof(std::int64_t) + sizeof(std::uint8_t) +
+      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+  constexpr long double per_atom = sizeof(std::int32_t) + 6 * sizeof(double);
+  const long double host_bound =
+      2 * (per_ao * n + per_atom * atoms + 2 * sizeof(double) * primitives +
+           sizeof(std::int32_t) * static_cast<long double>(n) * (n + 1) +
+           4 * sizeof(std::int64_t)) +
+      6 * sizeof(double) * atoms;
+  if (host_bound > maximum_bytes) {
+    detail = "paired one-electron host staging exceeds maximum_bytes";
+    return VIBEQC_STATUS_OUT_OF_MEMORY;
+  }
+
+  try {
+    const auto host = pack(system, schedule);
+    std::vector<double> hcore_result(3 * atoms), pulay_result(3 * atoms);
+    DeviceGuard device_guard;
+    check(cudaSetDevice(device_id));
+    Arena arena(maximum_bytes);
+    check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
+    runtime::cuda_trace::TraceOperation trace("one_electron_stationary_pair", arena.stream,
+                                              {1, n, 0, false, false});
+    runtime::cuda_trace::TraceRegion preparation("one_electron_pair_allocation_and_uploads",
+                                                 arena.stream);
+    OneElectronDeviceView view{1,
+                               static_cast<std::int32_t>(n),
+                               host.shell_first.size(),
+                               arena.upload(host.atom_offsets),
+                               arena.upload(host.atomic_numbers),
+                               arena.upload(host.positions),
+                               arena.upload(host.shell_atoms),
+                               arena.upload(host.ao_offsets),
+                               arena.upload(host.primitive_offsets),
+                               arena.upload(host.shell_first),
+                               arena.upload(host.shell_second),
+                               arena.upload(host.ao_shells),
+                               arena.upload(host.term_counts),
+                               arena.upload(host.term_angular),
+                               arena.upload(host.term_coefficients),
+                               arena.upload(host.exponents),
+                               arena.upload(host.coefficients)};
+    const auto* first = arena.upload(host.pair_first);
+    const auto* second = arena.upload(host.pair_second);
+    const auto* d_device = arena.upload(density);
+    const auto* w_device = arena.upload(weighted_density);
+    OneElectronWeightView hcore_weights{nullptr, d_device, d_device};
+    OneElectronWeightView pulay_weights{w_device, nullptr, nullptr};
+    pulay_weights.overlap_scale = -1.0;
+    auto* hcore_output = static_cast<double*>(arena.allocate(3 * atoms * sizeof(double)));
+    auto* pulay_output = static_cast<double*>(arena.allocate(3 * atoms * sizeof(double)));
+    check(cudaMemsetAsync(hcore_output, 0, 3 * atoms * sizeof(double), arena.stream));
+    check(cudaMemsetAsync(pulay_output, 0, 3 * atoms * sizeof(double), arena.stream));
+    runtime::cuda_trace::trace_counter("response_scratch_bytes", arena.stats.device_bytes);
+    runtime::cuda_trace::trace_counter("host_to_device_bytes", arena.stats.host_to_device_bytes);
+    runtime::cuda_trace::trace_counter("synchronous_uploads", arena.stats.synchronous_uploads);
+    runtime::cuda_trace::trace_counter("atom_coordinates", 3 * atoms);
+    preparation.finish();
+
+    runtime::cuda_trace::TraceRegion derivatives("one_electron_pair_derivatives", arena.stream);
+    check(launch_generated_one_electron_gradient(view, first, second, n * (n + 1) / 2,
+                                                 hcore_weights, nullptr, schedule, 1.0,
+                                                 hcore_output, arena.stream));
+    check(launch_generated_one_electron_gradient(view, first, second, n * (n + 1) / 2,
+                                                 pulay_weights, nullptr, schedule, 1.0,
+                                                 pulay_output, arena.stream));
+    derivatives.finish();
+
+    runtime::cuda_trace::TraceRegion output_transfer("one_electron_pair_output_and_drain",
+                                                     arena.stream);
+    arena.stats.host_numeric_bytes +=
+        (hcore_result.capacity() + pulay_result.capacity()) * sizeof(double);
+    check(cudaMemcpyAsync(hcore_result.data(), hcore_output, 3 * atoms * sizeof(double),
+                          cudaMemcpyDeviceToHost, arena.stream));
+    check(cudaMemcpyAsync(pulay_result.data(), pulay_output, 3 * atoms * sizeof(double),
+                          cudaMemcpyDeviceToHost, arena.stream));
+    arena.stats.device_to_host_bytes = 6 * atoms * sizeof(double);
+    check(cudaStreamSynchronize(arena.stream));
+    arena.completed = true;
+    arena.stats.stream_synchronizations = 1;
+    runtime::cuda_trace::trace_counter("device_to_host_bytes", arena.stats.device_to_host_bytes);
+    runtime::cuda_trace::trace_counter("stream_synchronizations",
+                                       arena.stats.stream_synchronizations);
+    const auto finite = [](const auto& values) {
+      return std::all_of(values.begin(), values.end(),
+                         [](double value) { return std::isfinite(value); });
+    };
+    if (!finite(hcore_result) || !finite(pulay_result)) {
+      detail = "nonfinite paired generated one-electron gradient";
+      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    hcore_gradient.swap(hcore_result);
+    pulay_gradient.swap(pulay_result);
+    if (resources) *resources = arena.stats;
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (const CudaFailure& failure) {
+    detail = std::string("paired generated one-electron CUDA failure: ") +
+             cudaGetErrorString(failure.status);
+    return failure.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
+                                                       : VIBEQC_STATUS_NUMERICAL_FAILURE;
+  } catch (const std::bad_alloc&) {
+    detail = "paired generated one-electron gradient exceeded its allocation budget";
+    return VIBEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  }
+}
 }  // namespace vibeqc::scf

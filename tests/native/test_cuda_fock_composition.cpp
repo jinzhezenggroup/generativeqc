@@ -352,6 +352,32 @@ void retained_direct_derivative_reuse() {
   require(std::all_of(response.begin(), response.end(),
                       [](double value) { return std::isfinite(value); }),
           "prepared fused RSH derivative returned nonfinite values");
+
+  double* device_density = nullptr;
+  require(cudaMalloc(reinterpret_cast<void**>(&device_density), density.size() * sizeof(double)) ==
+              cudaSuccess,
+          "device density allocation failed");
+  require(cudaMemcpyAsync(device_density, density.data(), density.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, derivative.stream) == cudaSuccess,
+          "device density upload failed");
+  int device_count = 0;
+  require(cudaGetDeviceCount(&device_count) == cudaSuccess && device_count > 0,
+          "CUDA device count query failed");
+  if (device_count > 1) {
+    const int alternate_device = derivative.device_id == 0 ? 1 : 0;
+    require(cudaSetDevice(alternate_device) == cudaSuccess,
+            "alternate CUDA device selection failed");
+  }
+  std::vector<double> resident_response;
+  require(execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+              plan, correction, device_density, nullptr, density.size(), resident_response,
+              detail) == VIBEQC_STATUS_SUCCESS,
+          detail.c_str());
+  int current_device = -1;
+  require(cudaGetDevice(&current_device) == cudaSuccess && current_device == derivative.device_id,
+          "resident prepared fused RSH derivative did not select the owning device");
+  require(cudaFree(device_density) == cudaSuccess, "device density free failed");
+  matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
 void independent_reference_export() {

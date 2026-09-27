@@ -23,6 +23,8 @@ _INTEGRAL_SOURCES = (
     "exchange_short_range",
     "exchange_long_range",
     "overlap_pulay",
+    "ecp_local",
+    "ecp_nonlocal",
     "nuclear",
 )
 _SEMILOCAL_SOURCES = ("xc_ao", "xc_grid", "xc_weight")
