@@ -1,4 +1,4 @@
-#include "api/error.hpp"
+#include <cmath>\n#include <cstring>\n#include <limits>\n\n#include "api/error.hpp"
 #include "generated_libxc_public_cpu.hpp"
 #include "methods/method.hpp"
 #include "vibeqc/vibeqc.h"
@@ -19,6 +19,50 @@ vibeqc_status vibeqc_libxc_semilocal_program_get(const char* component_id,
   program->domain_version = native->domain_version;
   program->native_program = native;
   return VIBEQC_STATUS_SUCCESS;
+}
+
+vibeqc_status vibeqc_libxc_semilocal_program_evaluate_v1(
+    const vibeqc_ks_semilocal_program* program, const double* rho, const double* gradient,
+    const double* tau, std::size_t point_count, double* values, std::size_t value_count) {
+  constexpr std::size_t stride = 11;
+  if (program == nullptr || program->identifier == nullptr || *program->identifier == '\0' ||
+      program->expression_identity == nullptr || *program->expression_identity == '\0' ||
+      program->native_program == nullptr || rho == nullptr || gradient == nullptr || tau == nullptr ||
+      values == nullptr || point_count == 0 ||
+      point_count > std::numeric_limits<std::size_t>::max() / stride ||
+      value_count != stride * point_count)
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+
+  const auto* native = vibeqc::dft::bulk_public::find(program->identifier);
+  if (native == nullptr) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  if (native != program->native_program || native->ingredient_mask != program->ingredient_mask ||
+      native->domain_version != program->domain_version ||
+      std::strcmp(native->expression_identity, program->expression_identity) != 0)
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+
+  try {
+    vibeqc::dft::validate_semilocal_point_program(*native);
+    for (std::size_t point = 0; point < point_count; ++point) {
+      double local_rho[2]{rho[point], rho[point_count + point]};
+      double local_gradient[2][3]{};
+      double local_tau[2]{tau[point], tau[point_count + point]};
+      for (std::size_t spin = 0; spin < 2; ++spin)
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          local_gradient[spin][axis] = gradient[(spin * point_count + point) * 3 + axis];
+
+      const auto xc = native->evaluate(local_rho, local_gradient, local_tau);
+      double packed[stride]{xc.energy, xc.rho[0], xc.rho[1],
+                            xc.gradient[0][0], xc.gradient[0][1], xc.gradient[0][2],
+                            xc.gradient[1][0], xc.gradient[1][1], xc.gradient[1][2],
+                            xc.kinetic[0], xc.kinetic[1]};
+      for (double value : packed)
+        if (!std::isfinite(value)) return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      std::copy(std::begin(packed), std::end(packed), values + stride * point);
+    }
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+  }
 }
 
 uint32_t vibeqc_get_abi_version(void) { return VIBEQC_ABI_VERSION; }
