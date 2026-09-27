@@ -85,8 +85,17 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
     detail = "prepared density-fitted CUDA Fock does not support mixed Coulomb precision";
     return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
-  if (matrix_elements != binding.nbf * binding.nbf || numerical_error == nullptr) {
-    detail = "prepared density-fitted CUDA Fock buffers or dimensions are invalid";
+  const auto& spec = plan.strategy().spec;
+  const bool unrestricted = spec.spin == FockSpin::Unrestricted;
+  const bool valid_outputs =
+      (spec.coulomb.present ? coulomb != nullptr : coulomb == nullptr) &&
+      (spec.exchange.present ? alpha_exchange != nullptr : alpha_exchange == nullptr) &&
+      (spec.exchange.present && unrestricted ? beta_exchange != nullptr
+                                             : beta_exchange == nullptr);
+  if (matrix_elements != binding.nbf * binding.nbf || numerical_error == nullptr ||
+      density == nullptr || (unrestricted ? beta == nullptr : beta != nullptr) ||
+      !valid_outputs) {
+    detail = "prepared density-fitted CUDA Fock buffers, spin or dimensions are invalid";
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto reset = cudaMemsetAsync(numerical_error, 0, sizeof(*numerical_error), binding.stream);
@@ -96,7 +105,6 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
     return cuda_execution::source_cuda_status(reset);
   }
 
-  const auto& spec = plan.strategy().spec;
   const JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
   return spec.spin == FockSpin::Unrestricted
              ? execute_cuda_density_fitting_uhf_jk_device(
