@@ -43,8 +43,10 @@ def _scalar_function(
     )
 
 
-@lru_cache(maxsize=4)
-def emit_first_derivative_cpu(requests: typing.Any) -> typing.Any:
+@lru_cache(maxsize=64)
+def emit_first_derivative_cpu(
+    requests: typing.Any, *, symbol: str = "vibeqc_first_derivative_cpu"
+) -> typing.Any:
     """Emit ordered ``(operator, components)`` kernels and a checked dispatcher.
 
     S/T/V use ordinary unnormalized primitives; attraction has unit positive
@@ -52,10 +54,10 @@ def emit_first_derivative_cpu(requests: typing.Any) -> typing.Any:
     repulsion uses e[0:2] as charges. ERIs use full-range Coulomb and unit graph
     weights. The runtime record weight is the sole external multiplicity.
     """
-    return _emit_first_derivative(requests, backend="cpu")
+    return _emit_first_derivative(requests, backend="cpu", symbol=symbol)
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=64)
 def emit_first_derivative_cuda(
     requests: typing.Any, *, symbol: str = "first_derivative"
 ) -> typing.Any:
@@ -73,17 +75,23 @@ def _emit_first_derivative(
     requests = tuple(requests)
     if not requests or len(requests) != len(set(requests)):
         raise ValueError("first derivative kernels require unique nonempty requests")
-    if backend == "cuda" and (
+    if (
         type(symbol) is not str
         or not symbol
         or not symbol.isascii()
         or not (symbol[0].isalpha() or symbol[0] == "_")
         or any(not (character.isalnum() or character == "_") for character in symbol)
     ):
-        raise ValueError("CUDA first derivative dispatcher requires a C identifier")
+        raise ValueError("first derivative dispatcher requires a C identifier")
     qualifier = "static" if backend == "cpu" else "__device__ __noinline__"
-    primitive_prefix = "" if symbol == "first_derivative" else f"{symbol}_"
-    parts = [
+    default_symbol = (
+        "vibeqc_first_derivative_cpu" if backend == "cpu" else "first_derivative"
+    )
+    primitive_prefix = "" if symbol == default_symbol else f"{symbol}_"
+    parts = []
+    if backend == "cpu" and symbol != default_symbol:
+        parts.append('#include "vibeqc/vibeqc.h"')
+    parts += [
         (
             '#include "integrals/first_derivative_runtime.hpp"'
             if backend == "cpu"
@@ -179,13 +187,18 @@ def _emit_first_derivative(
             "}",
         ]
         return "\n".join(parts) + "\n"
+    api = "VIBEQC_API " if symbol != default_symbol else ""
     parts += [
-        'extern "C" int vibeqc_first_derivative_cpu(unsigned kind, const double* records,',
+        f'extern "C" {api}int {symbol}(unsigned kind, const double* records,',
         "    std::size_t count, double* output) {",
         "  switch (kind) {",
     ]
     parts += [
-        f"case {i}: return vibeqc::integrals::first_derivative_records(records, count, output, primitive_{i});"
+        (
+            "case "
+            f"{i}: return vibeqc::integrals::first_derivative_records("
+            f"records, count, output, {primitive_prefix}primitive_{i});"
+        )
         for i in range(len(requests))
     ]
     parts += ["default: return 1;", "}", "}"]

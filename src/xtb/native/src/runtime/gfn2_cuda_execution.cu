@@ -59,8 +59,6 @@
 #include "runtime/nvidia_host_api.h"
 
 namespace vibeqc::xtb::detail {
-enum class Gfn2CudaSccStartMode : std::uint32_t { kFresh = 1u, kWarm = 2u };
-
 namespace {
 
 using namespace vibeqc::xtb::detail::cuda;
@@ -76,13 +74,6 @@ constexpr std::size_t kArenaAlignment = 256u;
  * inclusive 25/30-bohr predicates and never infer physical membership solely
  * from list presence. */
 constexpr double kD4PairlistBuilderCutoffBohr = 50.0;
-
-Gfn2CudaSccStartMode public_scc_start_mode(const vibeqc_xtb_compute_options_t& options) noexcept {
-  return options.struct_size >= VIBEQC_XTB_COMPUTE_OPTIONS_V2_SIZE &&
-                 options.scc_start_mode == VIBEQC_XTB_SCC_START_WARM
-             ? Gfn2CudaSccStartMode::kWarm
-             : Gfn2CudaSccStartMode::kFresh;
-}
 
 /* ABI-v3 mixer and reproducibility controls form one complete suffix. A
  * caller that supplies only a prefix of the suffix receives the established
@@ -429,42 +420,6 @@ class ArenaLayout {
   std::size_t bytes_ = 0u;
   bool valid_ = true;
 };
-
-struct InteractionStagingLayout {
-  std::size_t descriptor_offset = 0u;
-  std::size_t payload_offset = 0u;
-  std::size_t descriptor_snapshot_offset = 0u;
-  std::size_t descriptor_capacity_bytes = 0u;
-  std::size_t payload_capacity_bytes = 0u;
-  std::size_t arena_bytes = 0u;
-  bool valid = false;
-};
-
-InteractionStagingLayout make_interaction_staging_layout(
-    std::size_t descriptor_capacity_bytes, std::size_t payload_capacity_bytes) noexcept {
-  ArenaLayout layout;
-  InteractionStagingLayout result{};
-  constexpr std::size_t kPayloadAlignmentSlack = alignof(double) - 1u;
-  if (payload_capacity_bytes >
-      std::numeric_limits<std::size_t>::max() - 2u * kPayloadAlignmentSlack) {
-    return result;
-  }
-  result.descriptor_offset = layout.append<std::byte>(descriptor_capacity_bytes);
-  /* Reverse-mixed staging preserves the caller payload base modulo double
-   * alignment. Reserve the maximum displacement without increasing the
-   * released one-block-per-system capacity reported to callers. */
-  result.payload_offset =
-      layout.append<std::byte>(payload_capacity_bytes + 2u * kPayloadAlignmentSlack);
-  /* Device-descriptor/host-payload submissions need a bounded D2H snapshot
-   * before the caller's host payload may be released.  Keep that readback
-   * image separate from the compact descriptor image built for the H2D. */
-  result.descriptor_snapshot_offset = layout.append<std::byte>(descriptor_capacity_bytes);
-  result.descriptor_capacity_bytes = descriptor_capacity_bytes;
-  result.payload_capacity_bytes = payload_capacity_bytes;
-  result.arena_bytes = layout.bytes();
-  result.valid = layout.valid();
-  return result;
-}
 
 template <typename T>
 T* arena_pointer(void* arena, std::size_t offset) noexcept {
@@ -1033,85 +988,6 @@ __global__ void commit_gfn2_numerical_refresh_kernel(NumericalRefreshDeviceBindi
     }
   }
   if (threadIdx.x == 0) binding.committed_generations[system] = generation;
-}
-
-/*
- * Warm execution reuses the device wavefunction and published multipoles.
- * Same-epoch reuse also retains modified-Broyden history, while predecessor-
- * epoch migration starts a new mixer history window for the refreshed
- * operator. The driver-visible terminal trace belongs to one inference
- * attempt and must always be restarted or the bounded loop would treat the
- * prior converged state as inactive.
- */
-struct WarmSccResetDeviceBinding {
-  std::int64_t batch_size = 0;
-  std::uint64_t plan_token = 0u;
-  Gfn2GeometryEpochDevice geometry_epoch{};
-  const std::uint8_t* eligible = nullptr;
-  const std::uint64_t* committed_generations = nullptr;
-  const std::uint64_t* refresh_predecessor_generations = nullptr;
-  std::uint64_t* warm_checkpoint_generations = nullptr;
-  const std::uint8_t* committed_field_attached = nullptr;
-  const double* committed_field_vectors = nullptr;
-  const std::uint8_t* checkpoint_field_attached = nullptr;
-  const double* checkpoint_field_vectors = nullptr;
-  std::uint32_t* request_error = nullptr;
-  const std::uint32_t* interaction_error = nullptr;
-  Gfn2SccMixerDeviceState mixer{};
-  Gfn2SccDeviceState scc{};
-};
-
-static_assert(std::is_trivially_copyable_v<WarmSccResetDeviceBinding>);
-
-__global__ void reset_gfn2_warm_scc_trace_kernel(WarmSccResetDeviceBinding binding) {
-  const std::int64_t system = static_cast<std::int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (system >= binding.batch_size) return;
-  const Gfn2DeviceAdmission admission{binding.interaction_error, 1, binding.plan_token};
-  if (!gfn2_request_mutation_allowed(admission)) return;
-  const std::uint64_t epoch = *binding.geometry_epoch.value;
-  const std::uint64_t checkpoint = atomicAdd(
-      reinterpret_cast<unsigned long long*>(binding.warm_checkpoint_generations + system), 0ULL);
-  const std::uint64_t predecessor = binding.refresh_predecessor_generations[system];
-  const bool same_field =
-      binding.committed_field_attached[system] == binding.checkpoint_field_attached[system] &&
-      binding.committed_field_vectors[3 * system] == binding.checkpoint_field_vectors[3 * system] &&
-      binding.committed_field_vectors[3 * system + 1] ==
-          binding.checkpoint_field_vectors[3 * system + 1] &&
-      binding.committed_field_vectors[3 * system + 2] ==
-          binding.checkpoint_field_vectors[3 * system + 2];
-  const bool compatible = epoch != 0u && checkpoint != 0u && binding.eligible[system] == 1u &&
-                          binding.committed_generations[system] == epoch &&
-                          (checkpoint == epoch || checkpoint == predecessor) && same_field;
-  if (!same_field) return;
-  atomicExch(reinterpret_cast<unsigned long long*>(binding.warm_checkpoint_generations + system),
-             0ULL);
-  const bool migrated = compatible && checkpoint != epoch && checkpoint == predecessor;
-
-  /* A geometry-epoch migration keeps the converged multipoles/wavefunction
-   * but starts a new Broyden history window. The old finite-difference basis
-   * belongs to the predecessor operator and can be substantially worse than
-   * simple damping after even a small coordinate change. Setting iteration
-   * zero makes subsequent slots overwrite old history before it can be read. */
-  if (migrated) {
-    binding.mixer.residual_rms[system] = 0.0;
-    binding.mixer.residual_maximum[system] = 0.0;
-    binding.mixer.iterations[system] = 0u;
-    binding.mixer.system_statuses[system] = VIBEQC_XTB_STATUS_SUCCESS;
-    binding.mixer.residual_converged[system] = 0u;
-  }
-
-  /* iteration==0 deliberately seeds the first warm energy delta from zero,
-   * matching fresh driver accounting while retaining the expensive electronic
-   * checkpoint and, for same-epoch reuse, the mixer history. */
-  binding.scc.free_energies[system] = 0.0;
-  binding.scc.previous_free_energies[system] = 0.0;
-  binding.scc.free_energy_changes[system] = 0.0;
-  binding.scc.residual_rms[system] = 0.0;
-  binding.scc.iterations[system] = 0u;
-  binding.scc.converged[system] = 0u;
-  binding.scc.system_statuses[system] = compatible || binding.eligible[system] == 0u
-                                            ? VIBEQC_XTB_STATUS_SUCCESS
-                                            : VIBEQC_XTB_STATUS_INTERNAL_ERROR;
 }
 
 struct WarmCheckpointPublicationDeviceBinding {
@@ -1833,53 +1709,18 @@ struct NumericalRefreshState {
   Gfn2ElectricFieldDevicePotentialView field_potential_view{};
 
   double* host_positions = nullptr;
-  double* host_point_positions = nullptr;
-  double* host_point_values = nullptr;
-  double* host_point_gammas = nullptr;
-  double* host_periodic_shifts = nullptr;
-  double* host_periodic_response = nullptr;
-  std::uint8_t* host_requested = nullptr;
-  vibeqc_xtb_interaction_t* host_interaction_descriptors = nullptr;
-  std::byte* host_interaction_payload = nullptr;
 
   /*
-   * Host submissions first copy synchronously into this packed, pinned image.
-   * The fixed device staging leaves above are then populated asynchronously,
-   * so no queued CUDA work retains a caller-owned host pointer after return.
+   * Host position submissions first copy synchronously into this pinned image.
+   * The device staging leaf is then populated asynchronously, so queued CUDA
+   * work never retains a caller-owned host pointer after return.
    */
   double* owned_host_positions = nullptr;
-  double* owned_host_point_positions = nullptr;
-  double* owned_host_point_values = nullptr;
-  double* owned_host_point_gammas = nullptr;
-  double* owned_host_periodic_shifts = nullptr;
-  double* owned_host_periodic_response = nullptr;
-  std::uint8_t* owned_host_requested = nullptr;
-  vibeqc_xtb_interaction_t* owned_host_interaction_descriptors = nullptr;
-  std::byte* owned_host_interaction_payload = nullptr;
-  vibeqc_xtb_interaction_t* owned_host_interaction_descriptor_snapshot = nullptr;
-
-  std::size_t interaction_descriptor_capacity_bytes = 0u;
-  std::size_t interaction_payload_capacity_bytes = 0u;
 
   bool host_staging_poisoned = false;
 
   bool ready = false;
 };
-
-void project_interaction_staging(const InteractionStagingLayout& layout, void* device_arena,
-                                 void* host_arena, NumericalRefreshState& state) noexcept {
-  state.host_interaction_descriptors = reinterpret_cast<vibeqc_xtb_interaction_t*>(
-      static_cast<std::byte*>(device_arena) + layout.descriptor_offset);
-  state.host_interaction_payload = static_cast<std::byte*>(device_arena) + layout.payload_offset;
-  state.owned_host_interaction_descriptors = reinterpret_cast<vibeqc_xtb_interaction_t*>(
-      static_cast<std::byte*>(host_arena) + layout.descriptor_offset);
-  state.owned_host_interaction_payload =
-      static_cast<std::byte*>(host_arena) + layout.payload_offset;
-  state.owned_host_interaction_descriptor_snapshot = reinterpret_cast<vibeqc_xtb_interaction_t*>(
-      static_cast<std::byte*>(host_arena) + layout.descriptor_snapshot_offset);
-  state.interaction_descriptor_capacity_bytes = layout.descriptor_capacity_bytes;
-  state.interaction_payload_capacity_bytes = layout.payload_capacity_bytes;
-}
 
 /*
  * The host-owned pinned snapshot is a single-flight resource.  A host function
@@ -2052,8 +1893,6 @@ struct Gfn2CudaExecutionCache::Impl {
     DeviceArena eigensolver_setup_arena;
     PinnedArena provider_host_workspace;
     PinnedArena numerical_host_staging_arena;
-    DeviceArena interaction_device_staging_arena;
-    PinnedArena interaction_host_staging_arena;
     CudaStream numerical_host_completion_stream;
     CudaEvent numerical_host_upload_complete;
     CudaEvent numerical_host_release_complete;
@@ -2142,7 +1981,6 @@ struct Gfn2CudaExecutionCache::Impl {
     if (reject_arena("SCC iteration", candidate.iteration_arena) ||
         reject_arena("eigensolver cache", candidate.eigensolver_setup_arena) ||
         reject_arena("numerical refresh", candidate.numerical_refresh_arena) ||
-        reject_arena("interaction staging", candidate.interaction_device_staging_arena) ||
         reject_arena("energy/force execution", candidate.force_execution_arena) ||
         reject_arena("inference", candidate.inference_arena)) {
       return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
@@ -2624,13 +2462,7 @@ struct Gfn2CudaExecutionCache::Impl {
       std::size_t candidate_periodic_shifts = 0u;
       std::size_t candidate_periodic_response = 0u;
       std::size_t host_positions = 0u;
-      std::size_t host_point_positions = 0u;
-      std::size_t host_point_values = 0u;
-      std::size_t host_point_gammas = 0u;
-      std::size_t host_periodic_shifts = 0u;
-      std::size_t host_periodic_response = 0u;
       std::size_t requested = 0u;
-      std::size_t host_requested = 0u;
       std::size_t eligible = 0u;
       std::size_t committed_generations = 0u;
       std::size_t refresh_predecessor_generations = 0u;
@@ -2725,12 +2557,6 @@ struct Gfn2CudaExecutionCache::Impl {
 
     struct HostStagingOffsets {
       std::size_t positions = 0u;
-      std::size_t point_positions = 0u;
-      std::size_t point_values = 0u;
-      std::size_t point_gammas = 0u;
-      std::size_t periodic_shifts = 0u;
-      std::size_t periodic_response = 0u;
-      std::size_t requested = 0u;
     } host_offset;
 
     ArenaLayout layout;
@@ -2765,9 +2591,7 @@ struct Gfn2CudaExecutionCache::Impl {
     append_numerical(offset.candidate_positions, offset.candidate_point_positions,
                      offset.candidate_point_values, offset.candidate_point_gammas,
                      offset.candidate_periodic_shifts, offset.candidate_periodic_response);
-    append_numerical(offset.host_positions, offset.host_point_positions, offset.host_point_values,
-                     offset.host_point_gammas, offset.host_periodic_shifts,
-                     offset.host_periodic_response);
+    offset.host_positions = layout.append<double>(coordinates);
     offset.committed_field_attached = layout.append<std::uint8_t>(batch);
     offset.committed_field_vectors = layout.append<double>(3 * batch);
     offset.candidate_field_attached = layout.append<std::uint8_t>(batch);
@@ -2780,7 +2604,6 @@ struct Gfn2CudaExecutionCache::Impl {
     offset.field_plan_error = layout.append<std::uint32_t>(1);
     offset.interaction_request_error = layout.append<std::uint32_t>(1);
     offset.requested = layout.append<std::uint8_t>(batch);
-    offset.host_requested = layout.append<std::uint8_t>(batch);
     offset.eligible = layout.append<std::uint8_t>(batch);
     offset.committed_generations = layout.append<std::uint64_t>(batch);
     offset.refresh_predecessor_generations = layout.append<std::uint64_t>(batch);
@@ -2888,30 +2711,8 @@ struct Gfn2CudaExecutionCache::Impl {
 
     ArenaLayout host_layout;
     host_offset.positions = host_layout.append<double>(coordinates);
-    host_offset.point_positions = host_layout.append<double>(point_coordinates);
-    host_offset.point_values = host_layout.append<double>(points);
-    host_offset.point_gammas = host_layout.append<double>(points);
-    host_offset.periodic_shifts =
-        host_layout.append<double>(candidate.host.periodic_enabled ? atoms : 0);
-    host_offset.periodic_response =
-        host_layout.append<double>(candidate.host.periodic_enabled ? response : 0);
-    host_offset.requested = host_layout.append<std::uint8_t>(batch);
     if (!host_layout.valid()) {
       error = "numerical host-staging arena layout overflows size_t";
-      return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
-    }
-
-    std::size_t interaction_descriptor_capacity = 0u;
-    std::size_t interaction_payload_capacity = 0u;
-    if (!checked_bytes(batch, sizeof(vibeqc_xtb_interaction_t), interaction_descriptor_capacity) ||
-        !checked_bytes(batch, 32u, interaction_payload_capacity)) {
-      error = "released interaction staging capacity overflows size_t";
-      return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
-    }
-    const InteractionStagingLayout interaction_layout = make_interaction_staging_layout(
-        interaction_descriptor_capacity, interaction_payload_capacity);
-    if (!interaction_layout.valid) {
-      error = "released interaction staging layout overflows size_t";
       return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
     }
 
@@ -2923,16 +2724,6 @@ struct Gfn2CudaExecutionCache::Impl {
     cuda_status = candidate.numerical_host_staging_arena.allocate(host_layout.bytes());
     if (cuda_status != cudaSuccess) {
       error = cuda_error_message("CUDA numerical pinned host-staging allocation", cuda_status);
-      return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
-    }
-    cuda_status =
-        candidate.interaction_device_staging_arena.allocate(interaction_layout.arena_bytes);
-    if (cuda_status == cudaSuccess) {
-      cuda_status =
-          candidate.interaction_host_staging_arena.allocate(interaction_layout.arena_bytes);
-    }
-    if (cuda_status != cudaSuccess) {
-      error = cuda_error_message("CUDA released interaction staging allocation", cuda_status);
       return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
     }
     cuda_status = candidate.numerical_host_completion_stream.create(cudaStreamNonBlocking);
@@ -3017,31 +2808,8 @@ struct Gfn2CudaExecutionCache::Impl {
     auto& numerical = candidate.numerical;
     numerical = {};
     numerical.host_positions = arena_pointer<double>(arena, offset.host_positions);
-    numerical.host_point_positions =
-        arena_pointer_if<double>(arena, offset.host_point_positions, point_coordinates);
-    numerical.host_point_values = arena_pointer_if<double>(arena, offset.host_point_values, points);
-    numerical.host_point_gammas = arena_pointer_if<double>(arena, offset.host_point_gammas, points);
-    numerical.host_periodic_shifts = arena_pointer_if<double>(
-        arena, offset.host_periodic_shifts, candidate.host.periodic_enabled ? atoms : 0);
-    numerical.host_periodic_response = arena_pointer_if<double>(
-        arena, offset.host_periodic_response, candidate.host.periodic_enabled ? response : 0);
-    numerical.host_requested = arena_pointer<std::uint8_t>(arena, offset.host_requested);
     void* const host_arena = candidate.numerical_host_staging_arena.get();
     numerical.owned_host_positions = arena_pointer<double>(host_arena, host_offset.positions);
-    numerical.owned_host_point_positions =
-        arena_pointer_if<double>(host_arena, host_offset.point_positions, point_coordinates);
-    numerical.owned_host_point_values =
-        arena_pointer_if<double>(host_arena, host_offset.point_values, points);
-    numerical.owned_host_point_gammas =
-        arena_pointer_if<double>(host_arena, host_offset.point_gammas, points);
-    numerical.owned_host_periodic_shifts = arena_pointer_if<double>(
-        host_arena, host_offset.periodic_shifts, candidate.host.periodic_enabled ? atoms : 0);
-    numerical.owned_host_periodic_response = arena_pointer_if<double>(
-        host_arena, host_offset.periodic_response, candidate.host.periodic_enabled ? response : 0);
-    numerical.owned_host_requested = arena_pointer<std::uint8_t>(host_arena, host_offset.requested);
-    project_interaction_staging(interaction_layout,
-                                candidate.interaction_device_staging_arena.get(),
-                                candidate.interaction_host_staging_arena.get(), numerical);
     auto& binding = numerical.preprocessing;
     binding = {};
     binding.plan.abi_version = kGfn2PreprocessingAbiVersion;
@@ -6410,8 +6178,7 @@ struct Gfn2CudaExecutionCache::Impl {
     return VIBEQC_XTB_STATUS_SUCCESS;
   }
 
-  vibeqc_xtb_status_t execute_inference_locked(Prepared& current, Gfn2CudaSccStartMode mode,
-                                               std::string& error) {
+  vibeqc_xtb_status_t execute_inference_locked(Prepared& current, std::string& error) {
     if (!current.inference.ready || !current.numerical.ready) {
       error = "CUDA GFN2 inference requires a prepared numerical/runtime binding";
       return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
@@ -6422,15 +6189,7 @@ struct Gfn2CudaExecutionCache::Impl {
       error = "CUDA GFN2 inference has an incomplete warm-checkpoint binding";
       return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
     }
-    if (mode != Gfn2CudaSccStartMode::kFresh && mode != Gfn2CudaSccStartMode::kWarm) {
-      error = "CUDA GFN2 inference received an unknown SCC start mode";
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
-    }
     auto& inference = current.inference;
-    if (mode == Gfn2CudaSccStartMode::kWarm && !inference.warm_checkpoint_ready) {
-      error = "CUDA GFN2 warm inference requires a previously submitted checkpoint";
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
-    }
 
     cudaError_t cuda_status = cudaSetDevice(device_id);
     if (cuda_status != cudaSuccess) {
@@ -6438,66 +6197,37 @@ struct Gfn2CudaExecutionCache::Impl {
       return VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     }
 
-    if (mode == Gfn2CudaSccStartMode::kFresh) {
-      /* A fresh attempt consumes every old checkpoint before any state image
-       * is restored. If a later enqueue fails, no stale warm token can survive
-       * and masquerade as the failed attempt's checkpoint. */
-      const auto checkpoint_elements = current.host.basis.batch_size;
-      constexpr int kInvalidateThreads = 256;
-      const auto invalidate_blocks = static_cast<unsigned int>(
-          (static_cast<std::uint64_t>(checkpoint_elements) + kInvalidateThreads - 1u) /
-          kInvalidateThreads);
-      invalidate_gfn2_warm_checkpoint_if_admitted_kernel<<<invalidate_blocks, kInvalidateThreads, 0,
-                                                           stream>>>(
-          inference.warm_checkpoint_generations, checkpoint_elements,
-          current.public_result.request_topology_error);
-      cuda_status = cudaPeekAtLastError();
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA fresh warm-checkpoint invalidation", cuda_status);
-        return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
-      }
-      current.submitted = true;
-      inference.warm_checkpoint_ready = false;
-      const auto diagnostic = current.initializer.upload_if_admitted_async(
-          current.iteration_arena.get(), current.iteration_arena.bytes(), current.ready,
-          current.public_result.request_topology_error, stream);
-      if (!diagnostic.success()) {
-        error = setup_error_message("CUDA SCC fresh-state restore", diagnostic.status,
-                                    static_cast<std::uint32_t>(diagnostic.error),
-                                    static_cast<std::uint32_t>(diagnostic.field), diagnostic.index);
-        return diagnostic.status;
-      }
-      current.submitted = true;
-    } else {
-      const WarmSccResetDeviceBinding warm{
-          current.host.basis.batch_size,
-          current.host.plan_token,
-          inference.epoch_consumer.epoch,
-          inference.epoch_consumer.eligible_mask,
-          inference.epoch_consumer.committed_generations,
-          current.numerical.device.refresh_predecessor_generations,
-          inference.warm_checkpoint_generations,
-          current.numerical.device.committed_field_attached,
-          current.numerical.device.committed_field_vectors,
-          inference.warm_checkpoint_field_attached,
-          inference.warm_checkpoint_field_vectors,
-          current.public_result.request_topology_error,
-          current.public_result.request_topology_error,
-          current.state_seed.mixer,
-          current.state_seed.scc,
-      };
-      constexpr int kThreads = 256;
-      const auto blocks = static_cast<unsigned int>(
-          (static_cast<std::uint64_t>(warm.batch_size) + kThreads - 1u) / kThreads);
-      reset_gfn2_warm_scc_trace_kernel<<<blocks, kThreads, 0, stream>>>(warm);
-      cuda_status = cudaPeekAtLastError();
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA warm SCC trace reset", cuda_status);
-        return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
-      }
-      current.submitted = true;
-      inference.warm_checkpoint_ready = false;
+    /*
+     * Public admission requires FRESH SCC. Invalidate every old checkpoint
+     * before restoring the canonical fresh state so a failed attempt cannot
+     * leave a stale warm token associated with the new request.
+     */
+    const auto checkpoint_elements = current.host.basis.batch_size;
+    constexpr int kInvalidateThreads = 256;
+    const auto invalidate_blocks = static_cast<unsigned int>(
+        (static_cast<std::uint64_t>(checkpoint_elements) + kInvalidateThreads - 1u) /
+        kInvalidateThreads);
+    invalidate_gfn2_warm_checkpoint_if_admitted_kernel<<<invalidate_blocks, kInvalidateThreads, 0,
+                                                         stream>>>(
+        inference.warm_checkpoint_generations, checkpoint_elements,
+        current.public_result.request_topology_error);
+    cuda_status = cudaPeekAtLastError();
+    if (cuda_status != cudaSuccess) {
+      error = cuda_error_message("CUDA fresh warm-checkpoint invalidation", cuda_status);
+      return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
     }
+    current.submitted = true;
+    inference.warm_checkpoint_ready = false;
+    const auto diagnostic = current.initializer.upload_if_admitted_async(
+        current.iteration_arena.get(), current.iteration_arena.bytes(), current.ready,
+        current.public_result.request_topology_error, stream);
+    if (!diagnostic.success()) {
+      error = setup_error_message("CUDA SCC fresh-state restore", diagnostic.status,
+                                  static_cast<std::uint32_t>(diagnostic.error),
+                                  static_cast<std::uint32_t>(diagnostic.field), diagnostic.index);
+      return diagnostic.status;
+    }
+    current.submitted = true;
 
     const vibeqc_xtb_status_t body_status = execute_inference_body_locked(current, error);
     if (body_status != VIBEQC_XTB_STATUS_SUCCESS) return body_status;
@@ -7029,20 +6759,6 @@ vibeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCache& ca
     Gfn2CudaExecutionCache::Impl::Prepared* working = implementation.prepared.get();
     const bool reuse_runtime =
         working != nullptr && topology_snapshot_matches(*topology, options, working->host.key);
-    const Gfn2CudaSccStartMode start_mode = public_scc_start_mode(options);
-    if (start_mode == Gfn2CudaSccStartMode::kWarm) {
-      if (!reuse_runtime) {
-        abort_topology_candidate();
-        error =
-            "CUDA strict WARM SCC start requires the existing compatible fixed-topology runtime";
-        return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
-      if (!working->inference.warm_checkpoint_ready) {
-        abort_topology_candidate();
-        error = "CUDA strict WARM SCC start requires a preceding successful public checkpoint";
-        return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
-    }
     std::unique_ptr<Gfn2CudaExecutionCache::Impl::Prepared> candidate;
     if (!reuse_runtime) {
       TopologyKey key;
@@ -7092,7 +6808,7 @@ vibeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCache& ca
     const bool prior_warm_checkpoint_ready = working->inference.warm_checkpoint_ready;
     status = implementation.refresh_numerical_locked(*working, batch.positions, error);
     if (status != VIBEQC_XTB_STATUS_SUCCESS) return fail_working_transaction(status);
-    status = implementation.execute_inference_locked(*working, start_mode, error);
+    status = implementation.execute_inference_locked(*working, error);
     if (status != VIBEQC_XTB_STATUS_SUCCESS) return fail_working_transaction(status);
     /* Public synchronous readiness is finalized only after the completion
      * event and aggregate bridge diagnostics are known to have succeeded. */

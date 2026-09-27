@@ -1137,20 +1137,40 @@ def test_cpu_diagnostic_bounds_and_late_provider_failure(
             complete_rks_gradient_diagnostic(
                 state, basis, cache=tmp_path, execution=execution, compiler=object()
             )
-        original = module._PrimitiveExecutor._run
         calls = 0
-
-        def fail_late(
-            self: typing.Any, kind: typing.Any, count: typing.Any
-        ) -> typing.Any:
-            nonlocal calls
-            calls += 1
-            if calls == 3:
-                raise ArithmeticError("injected late primitive failure")
-            return original(self, kind, count)
-
         with monkeypatch.context() as patch:
-            patch.setattr(module._PrimitiveExecutor, "_run", fail_late)
+            if execution == "native":
+                from vibeqc import _stationary_cpu_streaming as streaming
+
+                original_integral = streaming.CompiledComponentExecutor.integral
+
+                def fail_late_integral(
+                    self: typing.Any, *args: typing.Any, **kwargs: typing.Any
+                ) -> typing.Any:
+                    nonlocal calls
+                    calls += 1
+                    if calls == 3:
+                        raise ArithmeticError("injected late primitive failure")
+                    return original_integral(self, *args, **kwargs)
+
+                patch.setattr(
+                    streaming.CompiledComponentExecutor,
+                    "integral",
+                    fail_late_integral,
+                )
+            else:
+                original_run = module._PrimitiveExecutor._run
+
+                def fail_late_run(
+                    self: typing.Any, kind: typing.Any, count: typing.Any
+                ) -> typing.Any:
+                    nonlocal calls
+                    calls += 1
+                    if calls == 3:
+                        raise ArithmeticError("injected late primitive failure")
+                    return original_run(self, kind, count)
+
+                patch.setattr(module._PrimitiveExecutor, "_run", fail_late_run)
             with pytest.raises(ArithmeticError, match="late primitive"):
                 complete_rks_gradient_diagnostic(
                     state, basis, cache=tmp_path, execution=execution, compiler=compiler

@@ -16,10 +16,12 @@ from vibeqc_compiler.xc.capability_resolution import (
     resolve_capability,
 )
 from vibeqc_compiler.xc.compiled_cpu_evidence import validate_qualification
+from vibeqc_compiler.xc.endpoint_capability import resolve_endpoint_capability
 from vibeqc_compiler.xc.libxc_bulk_capabilities import (
     BulkFunctionalCapability,
     functional_capability,
 )
+from vibeqc_compiler.xc.molecular_scf_evidence import validate_stage_qualification
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 
 from .ks_execution import KsExecutionPlan, compile_ks_execution_plan
@@ -28,6 +30,7 @@ from .spec import MethodIR, SemilocalXCPrimitive, UnsupportedMethod
 BULK_KS_RESOLUTION_SCHEMA = "vibeqc.bulk-libxc-ks-resolution.v2"
 _CPU_EXECUTION_STAGES = ("compiled-cpu", "production-domain")
 _CPU_PROMOTION_STAGES = (*_CPU_EXECUTION_STAGES, "molecular-scf")
+_CPU_PUBLIC_STAGES = (*_CPU_PROMOTION_STAGES, "public-method")
 _SUPPORTED_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
 
 
@@ -92,6 +95,27 @@ def _require_exact_compiled_cpu(
         ) from exc
 
 
+def _require_exact_molecular_scf(capability: BulkFunctionalCapability) -> str:
+    stage = next(
+        (
+            item
+            for item in capability.stage_evidence
+            if item.stage == "molecular-scf" and item.status == "pass"
+        ),
+        None,
+    )
+    if stage is None:
+        raise UnsupportedMethod(
+            "automatic bulk Libxc KS requires passing molecular-SCF evidence"
+        )
+    try:
+        return validate_stage_qualification(stage.qualification, stage.evidence)
+    except (TypeError, ValueError) as exc:
+        raise UnsupportedMethod(
+            "automatic bulk Libxc KS requires exact molecular-SCF qualification"
+        ) from exc
+
+
 def _resolve_bulk_ks(
     name: str,
     *,
@@ -134,6 +158,8 @@ def _resolve_bulk_ks(
             "bulk Libxc capability identity changed during KS resolution"
         )
     compiled_cpu = _require_exact_compiled_cpu(capability)
+    if "molecular-scf" in required_stages:
+        _require_exact_molecular_scf(capability)
 
     functional_spec = functional(capability.name, spin=spin)
     method = MethodIR(
@@ -206,3 +232,51 @@ def resolve_bulk_ks(
         identifier=identifier,
         required_stages=_CPU_PROMOTION_STAGES,
     )
+
+
+def resolve_public_bulk_ks(
+    name: str,
+    *,
+    spin: str = "unpolarized",
+    backend: str = "cpu",
+    evidence: typing.Mapping[str, typing.Any] | None = None,
+    identifier: str | None = None,
+) -> BulkKsResolution:
+    """Resolve one exact public CPU-energy bulk Libxc endpoint into a KS plan.
+
+    Public routing is stricter than ordinary promoted execution: the retained
+    public-method receipt must validate for this exact backend/product/spin
+    endpoint. The returned KS resolution still revalidates exact compiled-CPU
+    qualification, so public evidence cannot bypass the executable artifact
+    identity owned by this module.
+    """
+    endpoint = resolve_endpoint_capability(
+        name,
+        backend=backend,
+        product="energy",
+        spin=spin,
+        require_public=True,
+        evidence=evidence,
+    )
+    if not endpoint.public_dft:
+        raise RuntimeError(
+            "public bulk Libxc endpoint resolved without public admission"
+        )
+
+    resolved = _resolve_bulk_ks(
+        name,
+        spin=spin,
+        backend=backend,
+        evidence=evidence,
+        identifier=identifier,
+        required_stages=_CPU_PUBLIC_STAGES,
+    )
+    if resolved.capability.identity != endpoint.identity:
+        raise RuntimeError(
+            "bulk Libxc endpoint identity changed during public KS resolution"
+        )
+    if resolved.method.spin != endpoint.spin:
+        raise RuntimeError(
+            "bulk Libxc endpoint spin changed during public KS resolution"
+        )
+    return resolved

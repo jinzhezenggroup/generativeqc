@@ -21,13 +21,13 @@ permissions:
 env:
   CCACHE_VERSION: "4.14"
 
-# Coalesce superseded PR and merge-group runs by their logical ref. A refreshed
-# merge-group ref cancels the stale run immediately; deleted queue refs are also
-# screened by the liveness job below. Master still keeps the active run and only
-# replaces the older pending run with the newest push.
+# Coalesce superseded PR and merge-group runs by their logical ref. Keep the
+# active run; GitHub concurrency retains at most one running plus one pending
+# run per group and replaces an older pending run with the newest one. Deleted
+# queue refs are still screened by the liveness job below.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.event_name == 'push' || github.event_name == 'merge_group') && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+  cancel-in-progress: false
 
 jobs:
   merge_queue_liveness:
@@ -636,6 +636,14 @@ jobs:
               'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape0-oh-doublet-uks]'
               --deselect
               'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-water-rks]'
+              # The remaining production-grid OH UKS replay is still a full
+              # seven-point reconverged finite-difference qualification. Hosted
+              # runners measured it at 355-508 s by itself, making one test the
+              # routine core critical path. Public WB97M-V live-state/analytic
+              # gradient, semilocal RKS/UKS, Maple/Libxc, and generated-code
+              # contracts remain on every PR; keep this full FD replay nightly.
+              --deselect
+              'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-oh-doublet-uks]'
               # The module-scoped analytic Hessian fixture computes a complete
               # water Hessian before the first parametrized check. On hosted
               # runners that setup alone is ~27 minutes, so keep the H2 path
@@ -652,6 +660,15 @@ jobs:
               'tests/python/test_hessian_analytic.py::test_raw_total_invariants[water]'
               --deselect
               'tests/python/test_hessian_analytic.py::test_three_step_directional_differences_of_native_forces[water]'
+              # Full >12-AO RKS HVP qualifications compile and evaluate the
+              # complete second-order path and are too expensive for routine
+              # hosted feedback. Keep the lightweight synthetic >12-AO/>4-atom
+              # admission/resource contract on every PR, and run both native
+              # large-domain numerical qualifications scheduled/manual.
+              --deselect
+              'tests/python/test_hessian_rks_directional.py::test_rks_hvp_admits_resource_bounded_domain_above_12_aos'
+              --deselect
+              'tests/python/test_hessian_rks_larger_multicenter.py::test_larger_multicenter_rks_hvp_matches_nonzero_gradient_difference'
               # Au resource-boundary replay is a full qualification loop
               # (multiple converged displaced calculations) and currently
               # costs another ~7-10 minutes per spin case. The ordinary Au

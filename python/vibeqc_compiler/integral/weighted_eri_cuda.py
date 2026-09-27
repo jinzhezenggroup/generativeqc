@@ -11,13 +11,151 @@ from __future__ import annotations
 import typing
 
 from .cuda import CudaEmitter
-from .expr import AlgebraForm, AlgebraFusion, AlgebraOrdering, RematerializationPolicy
+from .expr import (
+    AlgebraForm,
+    AlgebraFusion,
+    AlgebraOrdering,
+    PowerLowering,
+    RematerializationPolicy,
+)
 from .range_separation import CoulombKernelFamily
+from .shell_class import build_packed_force_geometry_algebra
+from .shell_spec import AXES
 from .weighted_eri import (
     WeightedEriKernel,
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
+
+
+def emit_direct_shell_canonicalization_helper() -> str:
+    """Emit stable ERI pair-symmetry ordering without runtime/batch dependencies.
+
+    The result maps canonical shell slots back to the caller's original slots.
+    Equal angular momenta and equal pair classes retain their input ordering;
+    this is part of the component-weight and recovered-center contract.
+    """
+    return r"""/** Stable shell-slot ordering under the eight ERI pair symmetries. */
+template <class ShellAngular, class ShellIndex>
+__device__ __forceinline__ void canonicalize_direct_shell_slots(
+    const ShellAngular* shell_angular, const ShellIndex (&raw_shell)[4],
+    unsigned (&canonical_raw_slot)[4]) {
+  canonical_raw_slot[0] = 0U;
+  canonical_raw_slot[1] = 1U;
+  canonical_raw_slot[2] = 2U;
+  canonical_raw_slot[3] = 3U;
+  if (shell_angular[raw_shell[canonical_raw_slot[0]]] <
+      shell_angular[raw_shell[canonical_raw_slot[1]]]) {
+    const unsigned swap = canonical_raw_slot[0];
+    canonical_raw_slot[0] = canonical_raw_slot[1];
+    canonical_raw_slot[1] = swap;
+  }
+  if (shell_angular[raw_shell[canonical_raw_slot[2]]] <
+      shell_angular[raw_shell[canonical_raw_slot[3]]]) {
+    const unsigned swap = canonical_raw_slot[2];
+    canonical_raw_slot[2] = canonical_raw_slot[3];
+    canonical_raw_slot[3] = swap;
+  }
+  const unsigned first_high = shell_angular[raw_shell[canonical_raw_slot[0]]];
+  const unsigned first_low = shell_angular[raw_shell[canonical_raw_slot[1]]];
+  const unsigned second_high = shell_angular[raw_shell[canonical_raw_slot[2]]];
+  const unsigned second_low = shell_angular[raw_shell[canonical_raw_slot[3]]];
+  const unsigned first_pair_class = first_high * (first_high + 1U) / 2U + first_low;
+  const unsigned second_pair_class = second_high * (second_high + 1U) / 2U + second_low;
+  if (first_pair_class < second_pair_class) {
+    const unsigned first_swap = canonical_raw_slot[0];
+    canonical_raw_slot[0] = canonical_raw_slot[2];
+    canonical_raw_slot[2] = first_swap;
+    const unsigned second_swap = canonical_raw_slot[1];
+    canonical_raw_slot[1] = canonical_raw_slot[3];
+    canonical_raw_slot[3] = second_swap;
+  }
+}
+"""
+
+
+def emit_direct_cached_geometry_helper() -> str:
+    """Lower cached Direct primitive-pair geometry from the shared geometry IR."""
+
+    algebra = build_packed_force_geometry_algebra()
+    centers = ("first", "second", "third", "fourth")
+    variable_code = {
+        "p": "first_pair.exponent_sum",
+        "q": "second_pair.exponent_sum",
+        "first_reduced_exponent": "first_pair.reduced_exponent",
+        "second_reduced_exponent": "second_pair.reduced_exponent",
+        "first_weighted_coefficient": "first_pair.weighted_coefficient",
+        "second_weighted_coefficient": "second_pair.weighted_coefficient",
+    }
+    for center in centers:
+        for axis in AXES:
+            variable_code[f"{center}_coordinate_{axis}"] = f"{center}.{axis}"
+    for axis in AXES:
+        variable_code[f"product_p_{axis}"] = f"first_pair.product_center.{axis}"
+        variable_code[f"product_q_{axis}"] = f"second_pair.product_center.{axis}"
+
+    source_roots = (
+        algebra.rho,
+        algebra.inverse_two_p,
+        algebra.inverse_two_q,
+        *(item for center in algebra.pair_shifts for item in center),
+        *algebra.difference,
+        *(item for center in algebra.decay_gradients for item in center),
+        algebra.boys_argument,
+        algebra.prefactor * algebra.primitive_coefficient,
+    )
+    field_targets = (
+        "geometry.rho",
+        "geometry.inverse_two_p",
+        "geometry.inverse_two_q",
+        *(
+            f"geometry.shifts[{center}][{axis}]"
+            for center in range(4)
+            for axis in range(3)
+        ),
+        *(f"geometry.difference[{axis}]" for axis in range(3)),
+        *(
+            f"geometry.decay[{center}][{axis}]"
+            for center in range(4)
+            for axis in range(3)
+        ),
+        "boys_argument",
+        "geometry.prefactor",
+    )
+    graph, roots = algebra.graph.apply_algebra_form(
+        source_roots,
+        AlgebraForm.BINARY,
+        PowerLowering.SMALL_INTEGER,
+    )
+    emitter = CudaEmitter(graph, variable_code)
+    emitter.lines.append("  double boys_argument;")
+    for root, target in zip(roots, field_targets, strict=True):
+        emitter.emit_assignment(root, target)
+    body = "\n".join(emitter.lines)
+    return f"""/**
+ * Compiler-owned Gaussian geometry over the Direct primitive-pair cache.
+ *
+ * Pair orientation remains caller metadata. Boys evaluation stays in the
+ * native numerical-policy owner; this helper returns its generated argument.
+ */
+template <class PrimitivePair, class Position>
+__device__ __forceinline__ double make_direct_cached_geometry(
+    const PrimitivePair& first_pair, const PrimitivePair& second_pair,
+    bool first_pair_reversed, bool second_pair_reversed,
+    const Position& first, const Position& second,
+    const Position& third, const Position& fourth, Geometry& geometry) {{
+  geometry.product_scales[0] = first_pair_reversed
+      ? first_pair.second_product_scale : first_pair.first_product_scale;
+  geometry.product_scales[1] = first_pair_reversed
+      ? first_pair.first_product_scale : first_pair.second_product_scale;
+  geometry.product_scales[2] = second_pair_reversed
+      ? second_pair.second_product_scale : second_pair.first_product_scale;
+  geometry.product_scales[3] = second_pair_reversed
+      ? second_pair.first_product_scale : second_pair.second_product_scale;
+{body}
+  return boys_argument;
+}}
+"""
 
 
 def emit_weighted_eri_function(
@@ -244,6 +382,8 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
     return (
         full[: -len(marker)]
         + specialized_result
+        + emit_direct_cached_geometry_helper()
+        + emit_direct_shell_canonicalization_helper()
         + psss_force
         + ssss_force
         + order2_force

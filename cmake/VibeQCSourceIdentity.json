@@ -82,6 +82,8 @@
     "tools/xtb/scipy_openblas32_manifest.json",
     "tools/generate_scf_density_cuda.py",
     "tools/generate_stationary_force_aot.py",
+    "tools/generate_stationary_cpu_derivative_aot.py",
+    "tools/generate_wb97mv_rsh_cpu_aot.py",
     "tools/write_stationary_aot_manifest.py"
   ]
 }

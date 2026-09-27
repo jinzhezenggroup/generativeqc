@@ -359,6 +359,36 @@ def validate_result(name: str, result: Mapping[str, Any]) -> dict[str, Any]:
     return {**payload, "identity": result["identity"]}
 
 
+def validate_stage_qualification(
+    qualification: Mapping[str, Any] | None,
+    evidence: str | None,
+) -> str:
+    """Validate the exact passing stage receipt metadata emitted by this owner."""
+    if not isinstance(qualification, Mapping):
+        raise TypeError("molecular-SCF qualification must be a mapping")
+    if qualification.get("schema") != ENDPOINT_COVERAGE_SCHEMA:
+        raise ValueError("molecular-SCF endpoint coverage schema mismatch")
+    expected_coverage = [
+        {"backend": "cpu", "spin": spin, "products": ["energy"]}
+        for spin in SPIN_LAYOUTS
+    ]
+    if qualification.get("coverage") != expected_coverage:
+        raise ValueError("molecular-SCF coverage is not exact dual-spin CPU energy")
+    if qualification.get("result_schema") != RESULT_SCHEMA:
+        raise ValueError("molecular-SCF result schema mismatch")
+    if qualification.get("qualification_schema") != QUALIFICATION_SCHEMA:
+        raise ValueError("molecular-SCF qualification schema mismatch")
+    result_identity = _sha(
+        qualification.get("result_identity"),
+        "molecular-SCF result identity",
+    )
+    if not isinstance(evidence, str) or not evidence.strip().endswith(
+        f"#sha256={result_identity}"
+    ):
+        raise ValueError("molecular-SCF evidence result identity mismatch")
+    return result_identity
+
+
 def stage_evidence(name: str, result: Mapping[str, Any]) -> dict[str, Any]:
     """Convert one receipt into fail-closed molecular-SCF stage evidence."""
     normalized_result = validate_result(name, result)
@@ -429,4 +459,5 @@ __all__ = [
     "required_matrix",
     "stage_evidence",
     "validate_result",
+    "validate_stage_qualification",
 ]

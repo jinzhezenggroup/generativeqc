@@ -14,6 +14,7 @@
 #include "scf/cuda/cartesian_angular.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_force_density.cuh"
+#include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_native_gradient_types.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -60,81 +61,14 @@ contracted_eri_cartesian_source_order2_generated_weighted_gradient(
   for (std::int64_t first_primitive = first_pair_begin; first_primitive < first_pair_end;
        ++first_primitive) {
     const PrimitivePairData first_pair = batch.shell_primitive_pairs[first_primitive];
-    const double p = first_pair.exponent_sum;
-    const double mu = first_pair.reduced_exponent;
-    const Vec3<double> product_p = first_pair.product_center;
-    const double first_product_scale = first_pair_matches_canonical_order
-                                           ? first_pair.first_product_scale
-                                           : first_pair.second_product_scale;
-    const double second_product_scale = first_pair_matches_canonical_order
-                                            ? first_pair.second_product_scale
-                                            : first_pair.first_product_scale;
     for (std::int64_t second_primitive = second_pair_begin; second_primitive < second_pair_end;
          ++second_primitive) {
       const PrimitivePairData second_pair = batch.shell_primitive_pairs[second_primitive];
-      const double q = second_pair.exponent_sum;
-      const double nu = second_pair.reduced_exponent;
-      const Vec3<double> product_q = second_pair.product_center;
-      const double third_product_scale = second_pair_matches_canonical_order
-                                             ? second_pair.first_product_scale
-                                             : second_pair.second_product_scale;
-
       generated_weighted_eri::Geometry geometry;
-      geometry.inverse_two_p = 0.5 / p;
-      if constexpr (TargetShellClass == kPspsShellClass) {
-        geometry.inverse_two_q = 0.5 / q;
-      }
-      geometry.rho = p * q / (p + q);
-      geometry.prefactor = first_pair.weighted_coefficient * second_pair.weighted_coefficient *
-                           2.0 * pow(kPi, 2.5) / (p * q * sqrt(p + q));
-      geometry.product_scales[0] = first_product_scale;
-      geometry.product_scales[1] = second_product_scale;
-      geometry.product_scales[2] = third_product_scale;
-
-      const Vec3<double> difference{
-          product_p.x - product_q.x,
-          product_p.y - product_q.y,
-          product_p.z - product_q.z,
-      };
-      const Vec3<double> pa{
-          product_p.x - first.x,
-          product_p.y - first.y,
-          product_p.z - first.z,
-      };
-      Vec3<double> pb{};
-      Vec3<double> qc{};
-      if constexpr (TargetShellClass == kPpssShellClass) {
-        pb = {
-            product_p.x - second.x,
-            product_p.y - second.y,
-            product_p.z - second.z,
-        };
-      } else if constexpr (TargetShellClass == kPspsShellClass) {
-        qc = {
-            product_q.x - third.x,
-            product_q.y - third.y,
-            product_q.z - third.z,
-        };
-      }
-
-      boys_values<3>(
-          geometry.rho * distance_squared(first_pair.product_center, second_pair.product_center),
-          geometry.boys);
-#pragma unroll
-      for (unsigned axis = 0; axis < 3; ++axis) {
-        geometry.difference[axis] = vec_axis(difference, axis);
-        geometry.shifts[0][axis] = vec_axis(pa, axis);
-        if constexpr (TargetShellClass == kPpssShellClass) {
-          geometry.shifts[1][axis] = vec_axis(pb, axis);
-        } else if constexpr (TargetShellClass == kPspsShellClass) {
-          geometry.shifts[2][axis] = vec_axis(qc, axis);
-        }
-        const double first_separation = vec_axis(first, axis) - vec_axis(second, axis);
-        const double second_separation = vec_axis(third, axis) - vec_axis(fourth, axis);
-        geometry.decay[0][axis] = -2.0 * mu * first_separation;
-        geometry.decay[1][axis] = -geometry.decay[0][axis];
-        geometry.decay[2][axis] = -2.0 * nu * second_separation;
-      }
+      const double boys_argument = generated_weighted_eri::make_direct_cached_geometry(
+          first_pair, second_pair, !first_pair_matches_canonical_order,
+          !second_pair_matches_canonical_order, first, second, third, fourth, geometry);
+      boys_values<3>(boys_argument, geometry.boys);
 
       generated_weighted_eri::IndependentGradient primitive{};
       if constexpr (TargetShellClass == kPspsShellClass) {
@@ -160,7 +94,7 @@ contracted_eri_cartesian_source_order2_generated_weighted_gradient(
  * Evaluate one exact order-two AO-quartet gradient through compiler-owned force roots.
  *
  * The generic force fallback supplies a one-hot Cartesian component weight. Shell/pair
- * canonicalization remains runtime plumbing; all ERI/derivative algebra is shared with the
+ * canonicalization and ERI/derivative algebra use the same compiler-owned helpers as the
  * generated PSPS/PPSS/DSSS production consumers above.
  */
 __device__ inline CartesianQuartetGradient
@@ -186,45 +120,13 @@ contracted_eri_cartesian_source_order2_generated_gradient(const DeviceBatch& bat
       batch.shell_angular[raw_shell[0]], batch.shell_angular[raw_shell[1]],
       batch.shell_angular[raw_shell[2]], batch.shell_angular[raw_shell[3]]);
 
-  unsigned canonical_raw_slot[4]{};
-  if (shell_class == kPspsShellClass) {
-    unsigned first_p_slot = 4U;
-    unsigned second_p_slot = 4U;
-    for (unsigned slot = 0; slot < 2; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 1U) first_p_slot = slot;
-    }
-    for (unsigned slot = 2; slot < 4; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 1U) second_p_slot = slot;
-    }
-    if (first_p_slot >= 2U || second_p_slot < 2U || second_p_slot >= 4U) return {};
-    canonical_raw_slot[0] = first_p_slot;
-    canonical_raw_slot[1] = 1U - first_p_slot;
-    canonical_raw_slot[2] = second_p_slot;
-    canonical_raw_slot[3] = 5U - second_p_slot;
-  } else if (shell_class == kPpssShellClass) {
-    const bool first_pair_is_pp =
-        batch.shell_angular[raw_shell[0]] == 1U && batch.shell_angular[raw_shell[1]] == 1U;
-    const unsigned pair_begin = first_pair_is_pp ? 0U : 2U;
-    const unsigned other_pair_begin = first_pair_is_pp ? 2U : 0U;
-    canonical_raw_slot[0] = pair_begin;
-    canonical_raw_slot[1] = pair_begin + 1U;
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  } else if (shell_class == kDsssShellClass) {
-    unsigned d_slot = 4U;
-    for (unsigned slot = 0; slot < 4; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 2U) d_slot = slot;
-    }
-    if (d_slot >= 4U) return {};
-    const unsigned pair_begin = d_slot < 2U ? 0U : 2U;
-    const unsigned other_pair_begin = pair_begin == 0U ? 2U : 0U;
-    canonical_raw_slot[0] = d_slot;
-    canonical_raw_slot[1] = pair_begin + (d_slot == pair_begin ? 1U : 0U);
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  } else {
+  if (shell_class != kPspsShellClass && shell_class != kPpssShellClass &&
+      shell_class != kDsssShellClass) {
     return {};
   }
+  unsigned canonical_raw_slot[4];
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
 
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
@@ -259,12 +161,10 @@ contracted_eri_cartesian_source_order2_generated_gradient(const DeviceBatch& bat
     return {};
   }
 
-  const double angular_coefficient = batch.direct_ao_coefficients[system_ao_begin + raw_ao[0]] *
-                                     batch.direct_ao_coefficients[system_ao_begin + raw_ao[1]] *
-                                     batch.direct_ao_coefficients[system_ao_begin + raw_ao[2]] *
-                                     batch.direct_ao_coefficients[system_ao_begin + raw_ao[3]];
   double component_weight[9]{};
-  component_weight[output] = angular_coefficient;
+  component_weight[output] =
+      direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                    raw_ao[1], raw_ao[2], raw_ao[3], 1.0);
 
   generated_weighted_eri::IndependentGradient gradient{};
   if (shell_class == kPspsShellClass) {
@@ -324,21 +224,9 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
     return;
   }
 
-  unsigned first_p_slot = 4;
-  unsigned second_p_slot = 4;
-  for (unsigned slot = 0; slot < 2; ++slot) {
-    if (batch.shell_angular[raw_shell[slot]] == 1U) first_p_slot = slot;
-  }
-  for (unsigned slot = 2; slot < 4; ++slot) {
-    if (batch.shell_angular[raw_shell[slot]] == 1U) second_p_slot = slot;
-  }
-  if (first_p_slot >= 2 || second_p_slot < 2 || second_p_slot >= 4) return;
-  const unsigned canonical_raw_slot[4] = {
-      first_p_slot,
-      1U - first_p_slot,
-      second_p_slot,
-      5U - second_p_slot,
-  };
+  unsigned canonical_raw_slot[4];
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
       raw_shell[canonical_raw_slot[1]],
@@ -346,18 +234,15 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
       raw_shell[canonical_raw_slot[3]],
   };
 
+  const std::int32_t canonical_center_atoms[4] = {
+      batch.shell_atoms[canonical_shell[0]],
+      batch.shell_atoms[canonical_shell[1]],
+      batch.shell_atoms[canonical_shell[2]],
+      batch.shell_atoms[canonical_shell[3]],
+  };
   std::int32_t unique_center_atoms[4];
-  unsigned unique_center_count = 0;
-  for (unsigned center = 0; center < 4; ++center) {
-    const std::int32_t atom = batch.shell_atoms[canonical_shell[center]];
-    bool duplicate_center = false;
-    for (unsigned previous = 0; previous < unique_center_count; ++previous) {
-      duplicate_center = duplicate_center || atom == unique_center_atoms[previous];
-    }
-    if (!duplicate_center) {
-      unique_center_atoms[unique_center_count++] = atom;
-    }
-  }
+  const unsigned unique_center_count =
+      direct_force_unique_center_atoms(canonical_center_atoms, unique_center_atoms);
   if (unique_center_count == 1) return;
 
   const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
@@ -391,11 +276,9 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
     const unsigned second_axis =
         static_cast<unsigned>(raw_ao[canonical_raw_slot[2]] - second_p_ao_begin);
     if (first_axis >= 3 || second_axis >= 3) return;
-    const double angular_coefficient = batch.direct_ao_coefficients[system_ao_begin + raw_ao[0]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[1]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[2]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[3]];
-    component_weight[first_axis * 3 + second_axis] += density_coefficient * angular_coefficient;
+    component_weight[first_axis * 3 + second_axis] +=
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
     any_component = true;
   }
   if (!any_component) return;
@@ -404,35 +287,8 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task(
       contracted_eri_cartesian_source_order2_generated_weighted_gradient<kPspsShellClass>(
           batch, first_pair, second_pair, canonical_shell[0], canonical_shell[1],
           canonical_shell[2], canonical_shell[3], component_weight);
-  double derivative_sum[3]{};
-  for (unsigned atom = 0; atom + 1 < unique_center_count; ++atom) {
-    const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[atom]) * 3;
-    for (unsigned axis = 0; axis < 3; ++axis) {
-      double derivative = 0.0;
-      double fourth_derivative = 0.0;
-      for (unsigned canonical = 0; canonical < 3; ++canonical) {
-        const double value = gradient.center[canonical][axis];
-        fourth_derivative -= value;
-        if (batch.shell_atoms[canonical_shell[canonical]] == unique_center_atoms[atom]) {
-          derivative += value;
-        }
-      }
-      if (batch.shell_atoms[canonical_shell[3]] == unique_center_atoms[atom]) {
-        derivative += fourth_derivative;
-      }
-      derivative_sum[axis] += derivative;
-      if (derivative != 0.0) {
-        atomicAdd(forces + coordinate + axis, -derivative);
-      }
-    }
-  }
-  const std::int64_t final_coordinate =
-      static_cast<std::int64_t>(unique_center_atoms[unique_center_count - 1]) * 3;
-  for (unsigned axis = 0; axis < 3; ++axis) {
-    if (derivative_sum[axis] != 0.0) {
-      atomicAdd(forces + final_coordinate + axis, derivative_sum[axis]);
-    }
-  }
+  scatter_direct_force_independent_gradient(canonical_center_atoms, unique_center_atoms,
+                                            unique_center_count, gradient, forces);
 }
 
 /** Evaluate one closed ppss or dsss shell task over its exact AO domain. */
@@ -463,28 +319,8 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
   }
 
   unsigned canonical_raw_slot[4];
-  if constexpr (TargetShellClass == kPpssShellClass) {
-    const bool first_pair_is_pp =
-        batch.shell_angular[raw_shell[0]] == 1U && batch.shell_angular[raw_shell[1]] == 1U;
-    const unsigned pair_begin = first_pair_is_pp ? 0U : 2U;
-    const unsigned other_pair_begin = first_pair_is_pp ? 2U : 0U;
-    canonical_raw_slot[0] = pair_begin;
-    canonical_raw_slot[1] = pair_begin + 1U;
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  } else {
-    unsigned d_slot = 4U;
-    for (unsigned slot = 0; slot < 4; ++slot) {
-      if (batch.shell_angular[raw_shell[slot]] == 2U) d_slot = slot;
-    }
-    if (d_slot >= 4U) return;
-    const unsigned pair_begin = d_slot < 2U ? 0U : 2U;
-    const unsigned other_pair_begin = pair_begin == 0U ? 2U : 0U;
-    canonical_raw_slot[0] = d_slot;
-    canonical_raw_slot[1] = pair_begin + (d_slot == pair_begin ? 1U : 0U);
-    canonical_raw_slot[2] = other_pair_begin;
-    canonical_raw_slot[3] = other_pair_begin + 1U;
-  }
+  generated_weighted_eri::canonicalize_direct_shell_slots(batch.shell_angular, raw_shell,
+                                                          canonical_raw_slot);
   const std::int32_t canonical_shell[4] = {
       raw_shell[canonical_raw_slot[0]],
       raw_shell[canonical_raw_slot[1]],
@@ -496,18 +332,15 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
       canonical_raw_slot[2] < 2U ? first_pair : second_pair,
   };
 
+  const std::int32_t canonical_center_atoms[4] = {
+      batch.shell_atoms[canonical_shell[0]],
+      batch.shell_atoms[canonical_shell[1]],
+      batch.shell_atoms[canonical_shell[2]],
+      batch.shell_atoms[canonical_shell[3]],
+  };
   std::int32_t unique_center_atoms[4];
-  unsigned unique_center_count = 0;
-  for (unsigned center = 0; center < 4; ++center) {
-    const std::int32_t atom = batch.shell_atoms[canonical_shell[center]];
-    bool duplicate_center = false;
-    for (unsigned previous = 0; previous < unique_center_count; ++previous) {
-      duplicate_center = duplicate_center || atom == unique_center_atoms[previous];
-    }
-    if (!duplicate_center) {
-      unique_center_atoms[unique_center_count++] = atom;
-    }
-  }
+  const unsigned unique_center_count =
+      direct_force_unique_center_atoms(canonical_center_atoms, unique_center_atoms);
   if (unique_center_count == 1) return;
 
   const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
@@ -547,11 +380,9 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
     } else if (first_component >= 6U) {
       return;
     }
-    const double angular_coefficient = batch.direct_ao_coefficients[system_ao_begin + raw_ao[0]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[1]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[2]] *
-                                       batch.direct_ao_coefficients[system_ao_begin + raw_ao[3]];
-    component_weight[output] += density_coefficient * angular_coefficient;
+    component_weight[output] +=
+        direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, raw_ao[0],
+                                      raw_ao[1], raw_ao[2], raw_ao[3], density_coefficient);
     any_component = true;
   }
   if (!any_component) return;
@@ -561,35 +392,8 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
           batch, canonical_pair[0], canonical_pair[1], canonical_shell[0], canonical_shell[1],
           canonical_shell[2], canonical_shell[3], component_weight);
 
-  double derivative_sum[3]{};
-  for (unsigned atom = 0; atom + 1 < unique_center_count; ++atom) {
-    const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[atom]) * 3;
-    for (unsigned axis = 0; axis < 3; ++axis) {
-      double derivative = 0.0;
-      double fourth_derivative = 0.0;
-      for (unsigned canonical = 0; canonical < 3; ++canonical) {
-        const double value = gradient.center[canonical][axis];
-        fourth_derivative -= value;
-        if (batch.shell_atoms[canonical_shell[canonical]] == unique_center_atoms[atom]) {
-          derivative += value;
-        }
-      }
-      if (batch.shell_atoms[canonical_shell[3]] == unique_center_atoms[atom]) {
-        derivative += fourth_derivative;
-      }
-      derivative_sum[axis] += derivative;
-      if (derivative != 0.0) {
-        atomicAdd(forces + coordinate + axis, -derivative);
-      }
-    }
-  }
-  const std::int64_t final_coordinate =
-      static_cast<std::int64_t>(unique_center_atoms[unique_center_count - 1]) * 3;
-  for (unsigned axis = 0; axis < 3; ++axis) {
-    if (derivative_sum[axis] != 0.0) {
-      atomicAdd(forces + final_coordinate + axis, derivative_sum[axis]);
-    }
-  }
+  scatter_direct_force_independent_gradient(canonical_center_atoms, unique_center_atoms,
+                                            unique_center_count, gradient, forces);
 }
 
 }  // namespace vibeqc::scf::cuda_execution

@@ -96,12 +96,13 @@ vibeqc_status OrdinaryStreamEigensolver::launch(int batch, double* matrices,
   auto error = cudaGetDevice(&device);
   if (error != cudaSuccess) return cuda_status(error);
   if (device != device_) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  const auto family = n_ <= kSmallEigensolverLimit ? CudaEigensolverFamily::small_native
+                                                   : CudaEigensolverFamily::xsyevd;
   cudaStreamCaptureStatus capture{};
   error = cudaStreamIsCapturing(resources_.stream_, &capture);
   if (error != cudaSuccess) return cuda_status(error);
-  if (capture != cudaStreamCaptureStatusNone) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  const auto family = n_ <= kSmallEigensolverLimit ? CudaEigensolverFamily::small_native
-                                                   : CudaEigensolverFamily::xsyevd;
+  if (capture != cudaStreamCaptureStatusNone && family != CudaEigensolverFamily::small_native)
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
   return launch_solver(resources_, family, n_, batch, matrices, native_workspace, eigenvalues, 0,
                        info, active);
 }

@@ -1,6 +1,7 @@
 #include "methods/rccsd_method.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -8,16 +9,19 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "cc/rccsdt_force.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
+#include "posthf/source_reuse_schedule_generated.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/mean_field.hpp"
 
@@ -132,7 +136,7 @@ void validate_descriptor(const vibeqc_method_descriptor& d,
                       "RCCSD requires an explicit CPU or CUDA backend");
 }
 
-std::vector<double> fock_mo(const scf::PhysicalReference& ref) {
+std::vector<double> fock_mo(const hf::PhysicalReference& ref) {
   const auto n = ref.nbf;
   std::vector<double> scratch(n * n), result(n * n);
   for (std::size_t mu = 0; mu < n; ++mu)
@@ -153,7 +157,7 @@ std::vector<double> fock_mo(const scf::PhysicalReference& ref) {
   return result;
 }
 
-std::size_t retained_reference_bytes(const scf::PhysicalReference& ref) {
+std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
   std::size_t result = 0;
   const std::vector<double>* arrays[] = {
       &ref.overlap, &ref.hcore,           &ref.fock, &ref.coefficients, &ref.orbital_energies,
@@ -163,8 +167,10 @@ std::size_t retained_reference_bytes(const scf::PhysicalReference& ref) {
   return result;
 }
 
-cc::Problem build_problem(const core::System& system, const scf::PhysicalReference& ref,
-                          const cc::SolverOptions& options, bool cuda, int device) {
+cc::Problem build_problem(const core::System& system, const hf::PhysicalReference& ref,
+                          const cc::SolverOptions& options, bool cuda, int device,
+                          posthf::ProviderWork& provider_work,
+                          vibeqc_tensor::Metrics& provider_metrics) {
   cc::Problem p;
   p.nocc = ref.nocc;
   p.reference_retained_bytes = retained_reference_bytes(ref);
@@ -214,31 +220,95 @@ cc::Problem build_problem(const core::System& system, const scf::PhysicalReferen
 
   p.minimum_absolute_denominator = minimum;
   posthf::RawSource source(system);
-  posthf::NativeBlockProvider provider(source, ref, options.max_bytes, 2);
   const auto occ = range(0, o), vir = range(o, n);
-  std::size_t retained = 0, peak = p.reference_retained_bytes;
-  auto fetch = [&](posthf::MOSlots slots, std::array<std::size_t, 4> shape) {
-    const auto plan = provider.plan(shape, cuda);
-    auto live = posthf::checked_add(
-        p.reference_retained_bytes,
-        posthf::checked_add(retained, posthf::checked_add(plan.host_bytes, plan.device_bytes)));
-    peak = std::max(peak, live);
-    if (peak > options.max_bytes)
-      throw std::length_error(
-          "RCCSD reference, MO provider, and retained blocks exceed memory budget");
-    auto values = provider.get(slots, cuda, device);
-    retained = posthf::checked_add(retained, posthf::checked_mul(values.size(), sizeof(double)));
-    peak = std::max(peak, posthf::checked_add(p.reference_retained_bytes, retained));
-    return values;
+  const std::array<posthf::MOSlots, 7> requests{{
+      {occ, vir, occ, vir},
+      {occ, vir, vir, occ},
+      {occ, occ, vir, vir},
+      {occ, vir, vir, vir},
+      {occ, vir, occ, occ},
+      {occ, occ, occ, occ},
+      {vir, vir, vir, vir},
+  }};
+  const std::array<std::array<std::size_t, 4>, 7> shapes{{
+      {o, v, o, v},
+      {o, v, v, o},
+      {o, o, v, v},
+      {o, v, v, v},
+      {o, v, o, o},
+      {o, o, o, o},
+      {v, v, v, v},
+  }};
+  const std::array<std::vector<double>*, 7> targets{&p.ovov, &p.ovvo, &p.oovv, &p.ovvv,
+                                                    &p.ovoo, &p.oooo, &p.vvvv};
+
+  auto schedule_for = [&](const posthf::NativeBlockProvider& candidate) {
+    const auto common_bytes = candidate.batch_bytes(shapes.front(), 0, cuda);
+    std::vector<posthf::generated::SourceReuseRequest> schedule_requests;
+    schedule_requests.reserve(requests.size());
+    for (const auto& shape : shapes) {
+      const auto single_bytes = candidate.batch_bytes(shape, 1, cuda);
+      if (single_bytes < common_bytes)
+        throw std::logic_error("RCCSD provider request accounting underflow");
+      std::size_t output_elements = 1;
+      for (const auto extent : shape)
+        output_elements = posthf::checked_mul(output_elements, extent);
+      schedule_requests.push_back(
+          {single_bytes - common_bytes, posthf::checked_mul(output_elements, sizeof(double))});
+    }
+    return posthf::generated::ordered_source_reuse_plan(common_bytes, p.reference_retained_bytes,
+                                                        options.max_bytes, schedule_requests);
   };
-  p.ovov = fetch({occ, vir, occ, vir}, {o, v, o, v});
-  p.ovvo = fetch({occ, vir, vir, occ}, {o, v, v, o});
-  p.oovv = fetch({occ, occ, vir, vir}, {o, o, v, v});
-  p.ovvv = fetch({occ, vir, vir, vir}, {o, v, v, v});
-  p.ovoo = fetch({occ, vir, occ, occ}, {o, v, o, o});
-  p.oooo = fetch({occ, occ, occ, occ}, {o, o, o, o});
-  p.vvvv = fetch({vir, vir, vir, vir}, {v, v, v, v});
-  p.provider_peak_bytes = peak;
+
+  posthf::NativeBlockProvider widest_provider(source, ref, options.max_bytes,
+                                              std::numeric_limits<unsigned>::max());
+  const auto maximum_axis_tile = widest_provider.tile_shape()[0];
+  std::vector<posthf::generated::SourceTileCandidate> tile_candidates;
+  tile_candidates.reserve(maximum_axis_tile);
+  for (std::size_t axis_tile = 1; axis_tile <= maximum_axis_tile; ++axis_tile) {
+    try {
+      posthf::NativeBlockProvider candidate(source, ref, options.max_bytes,
+                                            static_cast<unsigned>(axis_tile));
+      const auto candidate_reuse = schedule_for(candidate);
+      tile_candidates.push_back(
+          {candidate.tile_shape()[0], candidate_reuse.batches.size(), candidate_reuse.peak_bytes});
+    } catch (const std::length_error&) {
+      continue;
+    }
+  }
+  if (tile_candidates.empty())
+    throw std::length_error("RCCSD MO provider exceeds numeric memory budget");
+  const auto source_tile_plan = posthf::generated::select_source_tile(n, tile_candidates);
+  posthf::NativeBlockProvider provider(source, ref, options.max_bytes,
+                                       static_cast<unsigned>(source_tile_plan.axis_tile));
+  const auto reuse = schedule_for(provider);
+
+  std::size_t retained = 0;
+  for (const auto& batch : reuse.batches) {
+    std::vector<posthf::MOSlots> batch_requests;
+    batch_requests.reserve(batch.end - batch.begin);
+    for (std::size_t request = batch.begin; request < batch.end; ++request)
+      batch_requests.push_back(requests[request]);
+    auto outputs =
+        provider.get_many(batch_requests, cuda, device, &provider_metrics, &provider_work);
+    if (outputs.size() != batch_requests.size())
+      throw std::runtime_error("RCCSD MO provider returned an invalid batch");
+    for (std::size_t local = 0; local < outputs.size(); ++local) {
+      const auto request = batch.begin + local;
+      retained =
+          posthf::checked_add(retained, posthf::checked_mul(outputs[local].size(), sizeof(double)));
+      *targets[request] = std::move(outputs[local]);
+    }
+  }
+  if (provider_work.source_scans != reuse.batches.size() ||
+      provider_work.source_reads != source_tile_plan.source_reads)
+    throw std::logic_error("RCCSD source-reuse execution disagrees with compiler schedule");
+  const auto ao2 = posthf::checked_mul(n, n);
+  const auto ao4 = posthf::checked_mul(ao2, ao2);
+  const auto expected_source_values = posthf::checked_mul(ao4, provider_work.source_scans);
+  if (provider_work.source_values != expected_source_values)
+    throw std::logic_error("RCCSD AO source value count disagrees with compiler schedule");
+  p.provider_peak_bytes = reuse.peak_bytes;
   p.provider_host_bytes = retained;
 
   p.initial_t1.assign(o * v, 0.0);
@@ -280,7 +350,10 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
                        reference->orbital_energies.begin() + static_cast<std::ptrdiff_t>(o));
     state.eps_v.assign(reference->orbital_energies.begin() + static_cast<std::ptrdiff_t>(o),
                        reference->orbital_energies.end());
-    state.problem = build_problem(system, *reference, solver_options, cuda, execution.device_id());
+    posthf::ProviderWork provider_work;
+    vibeqc_tensor::Metrics provider_metrics{};
+    state.problem = build_problem(system, *reference, solver_options, cuda, execution.device_id(),
+                                  provider_work, provider_metrics);
     allocation_stage = "CC resident solve";
     state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
                         : cc::solve_cpu(state.problem, solver_options);
@@ -293,12 +366,18 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     diagnostic.reference_residual = reference->commutator_residual;
     diagnostic.minimum_absolute_denominator = state.problem.minimum_absolute_denominator;
     diagnostic.numeric_capacity_bytes =
-        std::max(reference_capacity, state.solved.diagnostic.numeric_capacity_bytes);
+        std::max({reference_capacity, state.problem.provider_peak_bytes,
+                  state.solved.diagnostic.numeric_capacity_bytes});
     diagnostic.mo_host_staging = cuda ? 1 : 0;
-    diagnostic.correlation_owned_device_bytes = state.solved.diagnostic.owned_device_bytes;
+    diagnostic.correlation_owned_device_bytes = std::max<std::size_t>(
+        provider_metrics.owned_device_bytes, state.solved.diagnostic.owned_device_bytes);
     diagnostic.correlation_provider_retained_bytes = state.problem.provider_host_bytes;
-    diagnostic.mo_transfer_bytes = 0;
-    diagnostic.tensor_kernel_ms = 0.0;
+    diagnostic.mo_transfer_bytes =
+        posthf::checked_add(provider_work.h2d_bytes, provider_work.d2h_bytes);
+    diagnostic.host_to_device_ms = provider_metrics.input_ms;
+    diagnostic.device_to_host_ms = provider_metrics.output_ms;
+    diagnostic.transform_library_ms = provider_metrics.library_ms;
+    diagnostic.tensor_kernel_ms = provider_metrics.kernel_ms;
     std::copy_n(cc::generated::iteration_equation_hash,
                 std::min<std::size_t>(64, std::strlen(cc::generated::iteration_equation_hash)),
                 diagnostic.equation_hash);
@@ -371,14 +450,68 @@ class RccsdPrepared final : public PreparedCalculation {
   Result execute(bool compute_forces) override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
-    if (compute_forces)
+    if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
-                        "RCCSD exposes energy only; analytic forces are not implemented");
+                        "native RCCSD forces are qualified only through 12 AOs");
     auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
                                         reference_capacity_);
     last_ = state.diagnostic;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
+    if (!state.solved.converged() || !compute_forces) return state.result;
+    if (!state.reference)
+      throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE,
+                        "RCCSD force owner lost the converged RHF reference");
+
+    constexpr std::size_t kCudaDerivativeStageBudget = 64ULL << 20;
+    auto force =
+        execution_.cuda_requested()
+            ? cc::rccsd_force_cuda(system_, *state.reference, state.problem, state.solved,
+                                   state.eps_o, state.eps_v, state.budget, execution_.device_id(),
+                                   std::min(state.budget, kCudaDerivativeStageBudget))
+            : cc::rccsd_force_cpu(system_, *state.reference, state.problem, state.solved,
+                                  state.eps_o, state.eps_v, state.budget);
+    auto diagnostic = state.diagnostic;
+    if (execution_.cuda_requested()) {
+      if (!force.lambda.cuda_actions || !force.lambda.owned_device_bytes)
+        throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE,
+                          "RCCSD CUDA force did not execute generated Lambda actions on device");
+      if (!force.cuda_response_actions || !force.response_owned_device_bytes)
+        throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE,
+                          "RCCSD CUDA force replayed Hamiltonian/orbital response on host");
+      execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
+                                      force.lambda.owned_device_bytes);
+      execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
+                                      force.response_owned_device_bytes);
+      diagnostic.correlation_owned_device_bytes =
+          std::max<std::uint64_t>(diagnostic.correlation_owned_device_bytes,
+                                  std::max<std::uint64_t>(force.lambda.owned_device_bytes,
+                                                          force.response_owned_device_bytes));
+    }
+    state.result.forces = std::move(force.forces);
+    diagnostic.response_iterations = force.orbital_response.iterations;
+    diagnostic.response_restarts = force.orbital_response.restarts;
+    diagnostic.response_absolute_residual =
+        std::max(force.orbital_response.residual_norm, force.independent_orbital_residual);
+    diagnostic.response_relative_residual = force.orbital_response.relative_residual;
+    diagnostic.response_workspace_bytes = force.orbital_response.workspace_bytes;
+    diagnostic.measured_response_workspace_peak_bytes =
+        force.orbital_response.measured_workspace_peak_bytes;
+    diagnostic.response_workspace_allocation_count =
+        force.orbital_response.workspace_allocation_count;
+    diagnostic.planned_endpoint_peak_bytes =
+        std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force.numeric_capacity_bytes);
+    diagnostic.force_provenance_flags = execution_.cuda_requested() ? 0xf : 0x7;
+    diagnostic.numeric_capacity_bytes =
+        std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force.numeric_capacity_bytes);
+    execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Host,
+                                    force.numeric_capacity_bytes);
+    execution_.observe_workspace_peak(runtime::ExecutionMemorySpace::Host,
+                                      force.orbital_response.workspace_bytes);
+    std::copy_n(force.response_operator_hash.c_str(),
+                std::min<std::size_t>(64, force.response_operator_hash.size()),
+                diagnostic.response_operator_hash);
+    last_ = diagnostic;
     return state.result;
   }
 
@@ -419,9 +552,6 @@ class RccsdPreparedBatch final : public PreparedBatch {
   std::vector<BatchItemResult> execute(const Coordinates& coordinates,
                                        bool compute_forces) override {
     invalidate_result();
-    if (compute_forces)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
-                        "RCCSD batch exposes energy only; forces are unsupported");
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("RCCSD batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
@@ -444,7 +574,7 @@ class RccsdPreparedBatch final : public PreparedBatch {
           owners_[index] = std::move(candidate);
           owner_coordinates_[index] = std::move(target_coordinates);
         }
-        result.calculation = owners_[index]->execute(false);
+        result.calculation = owners_[index]->execute(compute_forces);
         result.status = result.calculation.convergence.converged ? VIBEQC_STATUS_SUCCESS
                                                                  : VIBEQC_STATUS_NOT_CONVERGED;
       } catch (...) {
