@@ -42,8 +42,8 @@ def test_executor_classifies_and_covers_runtime_domain(
     assert execution.fixed_capacity == page_capacity
     assert execution.page_capacity == resident_capacity
     assert execution.resident_capacity == resident_capacity
-    assert execution.pages == domain.page_count(resident_capacity)
-    assert page_finishes == execution.pages
+    assert execution.producer_pages == domain.page_count(resident_capacity)
+    assert page_finishes == execution.producer_pages
     assert seen == list(domain)
 
 
@@ -88,6 +88,6 @@ def test_execution_evidence_does_not_retain_coordinate_pages() -> None:
     execution = executor.execute(domain, count)
 
     assert execution.mode == "paged"
-    assert execution.pages == domain.page_count(32)
+    assert execution.producer_pages == domain.page_count(32)
     assert seen == domain.logical_size
     assert not hasattr(execution, "coordinates")
