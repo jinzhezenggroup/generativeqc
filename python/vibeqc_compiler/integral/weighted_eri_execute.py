@@ -415,7 +415,7 @@ class PreparedWeightedEri:
                 self.resource_plan.diagnostic or "weighted ERI resource budget exceeded"
             )
         if (
-            file_hash(artifact.native.library)
+            _packaged_library_hash(Path(artifact.native.library).resolve())
             != artifact.native.metadata["binary_sha256"]
         ):
             raise ValueError("weighted ERI binary hash mismatch")
