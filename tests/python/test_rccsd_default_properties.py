@@ -47,7 +47,9 @@ def selector(request: pytest.FixtureRequest) -> typing.Any:
     wrapper = ast.parse("def select(self, properties):\n    return properties\n")
     wrapper.body[0].body.insert(0, guard)
     namespace = {"_native": NATIVE}
-    exec(compile(ast.fix_missing_locations(wrapper), filename, "exec"), namespace)
+    # Only checked-in repository code is compiled; no external payload is read.
+    code = compile(ast.fix_missing_locations(wrapper), filename, "exec")
+    exec(code, namespace)  # noqa: S102
     return batched, namespace["select"]
 
 
