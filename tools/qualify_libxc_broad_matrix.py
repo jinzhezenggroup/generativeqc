@@ -89,11 +89,11 @@ def candidate_inventory(
         if len(groups[family]) < requested[family]
     }
     if shortages:
-        raise ValueError(f"insufficient broad-matrix candidate inventory: {shortages!r}")
+        raise ValueError(
+            f"insufficient broad-matrix candidate inventory: {shortages!r}"
+        )
     return tuple(
-        capability
-        for family in _FAMILY_ORDER
-        for capability in groups[family]
+        capability for family in _FAMILY_ORDER for capability in groups[family]
     )
 
 
@@ -302,9 +302,7 @@ def run_matrix(
         "schema": MATRIX_SCHEMA,
         "quotas": requested,
         "complete": complete,
-        "attempted_counts": {
-            family: attempted[family] for family in _FAMILY_ORDER
-        },
+        "attempted_counts": {family: attempted[family] for family in _FAMILY_ORDER},
         "production_pass_counts": {
             family: production_passed[family] for family in _FAMILY_ORDER
         },
