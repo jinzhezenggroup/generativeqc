@@ -186,8 +186,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
         input.semilocal_components[0].coefficient != 1.0 || input.semilocal_range_omega != 0.0)
       throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
                         "invalid generic semilocal point-program descriptor");
-    const auto* program =
-        static_cast<const dft::SemilocalPointProgram*>(external.native_program);
+    const auto* program = static_cast<const dft::SemilocalPointProgram*>(external.native_program);
     dft::validate_semilocal_point_program(*program);
     if (std::string_view(program->identifier) != external.identifier ||
         std::string_view(program->expression_identity) != external.expression_identity ||
@@ -933,11 +932,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     invalidate_final_state();
     const char* method_name = semilocal_family_name(execution_plan_);
     if (compute_forces) {
-      const char* issue = execution_plan_.generic_semilocal_program
-                              ? "#1122"
-                              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan
-                                     ? "#164"
-                                     : "#163");
+      const char* issue =
+          execution_plan_.generic_semilocal_program
+              ? "#1122"
+              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
+                                                                                  : "#163");
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);

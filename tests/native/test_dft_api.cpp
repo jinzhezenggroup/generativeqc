@@ -102,8 +102,9 @@ struct Fixture {
   }
 };
 
-vibeqc::dft::SemilocalPointValue test_generic_lda_exchange(
-    const double rho[2], const double (&)[2][3], const double[2]) {
+vibeqc::dft::SemilocalPointValue test_generic_lda_exchange(const double rho[2],
+                                                           const double (&)[2][3],
+                                                           const double[2]) {
   constexpr double pi = 3.141592653589793238462643383279502884;
   const double cx = 0.375 * std::cbrt(3.0 / pi) * std::pow(4.0, 2.0 / 3.0);
   vibeqc::dft::SemilocalPointValue value;
@@ -118,11 +119,7 @@ vibeqc::dft::SemilocalPointValue test_generic_lda_exchange(
 }
 
 const vibeqc::dft::SemilocalPointProgram kTestGenericLdaProgram{
-    "LDA_X_TEST_GENERIC",
-    "test-generic-lda-exchange/v1",
-    1U,
-    2U,
-    &test_generic_lda_exchange,
+    "LDA_X_TEST_GENERIC", "test-generic-lda-exchange/v1", 1U, 2U, &test_generic_lda_exchange,
 };
 
 vibeqc_method_descriptor lda_method() {
@@ -271,7 +268,7 @@ void generic_semilocal_point_program_cpu() {
 
   vibeqc_calculation* calculation = nullptr;
   require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
-              VIBEQC_STATUS_SUCCESS &&
+                  VIBEQC_STATUS_SUCCESS &&
               calculation != nullptr,
           "generic semilocal point-program CPU preparation failed");
   vibeqc_result_descriptor result{
@@ -299,7 +296,7 @@ void generic_semilocal_point_program_cpu() {
   options.semilocal_program = &mismatched;
   calculation = nullptr;
   require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
-              VIBEQC_STATUS_INVALID_ARGUMENT &&
+                  VIBEQC_STATUS_INVALID_ARGUMENT &&
               calculation == nullptr,
           "generic semilocal point-program accepted component identity drift");
 }
