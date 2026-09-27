@@ -129,6 +129,7 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         }
 
     monkeypatch.setattr(matrix, "_clean_sample", sample)
+
     def fail_trace(*_args: typing.Any, **_kwargs: typing.Any) -> typing.NoReturn:
         raise RuntimeError("trace failed")
 
