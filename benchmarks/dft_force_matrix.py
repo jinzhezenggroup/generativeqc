@@ -37,6 +37,7 @@ DEFAULT_METHODS = (
     "wb97m-v",
 )
 DEFAULT_SYSTEMS = ("water-3", "formaldehyde")
+QUALIFICATION_SYSTEMS = ("water-3", "water-6", "water-12", "formaldehyde")
 FORMALDEHYDE = (
     ("C", (0.0, 0.0, 0.0)),
     ("O", (0.0, 0.0, 2.28)),
@@ -491,12 +492,19 @@ def main() -> None:
         default="none",
     )
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument(
+        "--qualification",
+        action="store_true",
+        help="run the full water-3/6/12 plus non-water qualification system set",
+    )
     parser.add_argument("--trace-directory", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     if args.repeats < 1:
         parser.error("--repeats must be positive")
+    if args.qualification and args.repeats < 3:
+        parser.error("--qualification requires at least three repeats")
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("run requires a finite Slurm GPU allocation")
     if os.environ.get("VIBEQC_DF_TRACE"):
@@ -513,7 +521,10 @@ def main() -> None:
         angular_azimuth=args.grid[2],
     )
     methods = tuple(args.methods or DEFAULT_METHODS)
-    systems = tuple(args.systems or DEFAULT_SYSTEMS)
+    systems = tuple(
+        args.systems
+        or (QUALIFICATION_SYSTEMS if args.qualification else DEFAULT_SYSTEMS)
+    )
     unknown_methods = set(methods) - set(DEFAULT_METHODS)
     unknown_systems = set(systems) - {
         "water-3",
@@ -567,7 +578,7 @@ def main() -> None:
             "unsupported": (
                 "unsupported functional/provider combinations are retained as records"
             ),
-        },
+            "qualification_preset": args.qualification,\n        },
         "records": records,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
