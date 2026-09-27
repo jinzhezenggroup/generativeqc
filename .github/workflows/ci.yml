@@ -660,6 +660,13 @@ jobs:
               'tests/python/test_hessian_analytic.py::test_raw_total_invariants[water]'
               --deselect
               'tests/python/test_hessian_analytic.py::test_three_step_directional_differences_of_native_forces[water]'
+              # The >12-AO two-center RKS HVP oracle performs a complete
+              # second-order evaluation plus independently reconverged analytic
+              # gradient finite differences. Keep the 13-AO resource/admission
+              # gate on routine CI and run this multicenter numerical
+              # qualification on scheduled/manual CI.
+              --deselect
+              'tests/python/test_hessian_rks_larger_multicenter.py::test_larger_multicenter_rks_hvp_matches_nonzero_gradient_difference'
               # Au resource-boundary replay is a full qualification loop
               # (multiple converged displaced calculations) and currently
               # costs another ~7-10 minutes per spin case. The ordinary Au
