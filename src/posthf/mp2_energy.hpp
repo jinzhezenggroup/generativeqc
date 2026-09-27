@@ -12,7 +12,8 @@ struct Energy {
   posthf::ProviderWork provider_work;
   std::size_t mo_transfer_bytes{};
 };
-Energy conventional_energy(const hf::PhysicalReference& reference, const posthf::RawSource& source,
+Energy conventional_energy(const hf::PhysicalReference& reference,
+                           const integrals::ElectronInteractionSource& source,
                            std::size_t budget, double denominator_threshold,
                            unsigned virtual_tile = 8, bool cuda = false, int device = 0);
 Energy density_fitted_energy(const hf::PhysicalReference& reference,

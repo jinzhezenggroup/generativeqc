@@ -49,7 +49,8 @@ unsigned resolved_tile(std::size_t virtuals, unsigned requested) {
 }
 }  // namespace
 
-Energy conventional_energy(const hf::PhysicalReference& ref, const posthf::RawSource& source,
+Energy conventional_energy(const hf::PhysicalReference& ref,
+                           const integrals::ElectronInteractionSource& source,
                            std::size_t budget, double threshold, unsigned requested_tile, bool cuda,
                            int device) {
   validate_reference(ref, threshold, requested_tile);

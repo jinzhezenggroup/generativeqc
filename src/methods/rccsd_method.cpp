@@ -167,7 +167,8 @@ std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
   return result;
 }
 
-cc::Problem build_problem(const core::System& system, const hf::PhysicalReference& ref,
+cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
+                          const hf::PhysicalReference& ref,
                           const cc::SolverOptions& options, bool cuda, int device,
                           posthf::ProviderWork& provider_work,
                           vibeqc_tensor::Metrics& provider_metrics) {
@@ -219,7 +220,6 @@ cc::Problem build_problem(const core::System& system, const hf::PhysicalReferenc
         }
 
   p.minimum_absolute_denominator = minimum;
-  posthf::RawSource source(system);
   const auto occ = range(0, o), vir = range(o, n);
   const std::array<posthf::MOSlots, 7> requests{{
       {occ, vir, occ, vir},
@@ -352,7 +352,8 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
                        reference->orbital_energies.end());
     posthf::ProviderWork provider_work;
     vibeqc_tensor::Metrics provider_metrics{};
-    state.problem = build_problem(system, *reference, solver_options, cuda, execution.device_id(),
+    posthf::RawSource source(system);
+    state.problem = build_problem(source, *reference, solver_options, cuda, execution.device_id(),
                                   provider_work, provider_metrics);
     allocation_stage = "CC resident solve";
     state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
