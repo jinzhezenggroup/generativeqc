@@ -26,13 +26,11 @@ struct PairKernelValues {
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
-                                               double kj, double row_alpha,
-                                               double row_inverse_kappa) {
+                                               double kj, double row_inverse_kappa) {
   PairKernelValues result{};
   if constexpr (Variant == Vv10Variant::rvv10) {
-    const double aj = wj / kj;
-    const double zi = row_alpha * r2 + 1.0;
-    const double zj = aj * r2 + 1.0;
+    const double zi = wi * r2 + 1.0;
+    const double zj = wj * r2 + 1.0;
     const double kappa_product = ki * kj;
     result.phi =
         -1.5 / (kappa_product * sqrt(kappa_product) * zi * zj * (zi + zj));
@@ -43,8 +41,7 @@ __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, 
           result.phi * row_inverse_kappa * (-1.5 + (zi - 1.0) * factor_z);
     }
     if constexpr (Geometry) {
-      const double logarithmic =
-          row_alpha / zi + aj / zj + (row_alpha + aj) / (zi + zj);
+      const double logarithmic = wi / zi + wj / zj + (wi + wj) / (zi + zj);
       result.dphi_dr2 = -result.phi * logarithmic;
     }
   } else {
@@ -71,7 +68,7 @@ unsigned launch_blocks(std::size_t count, unsigned threads) {
   return static_cast<unsigned>(blocks);
 }
 
-template <bool Features>
+template <Vv10Variant Variant, bool Features>
 __global__ void local_scales_kernel(std::size_t npoint, double b, double c, const double* weights,
                                     const double* density, const double* gradient, double* omega,
                                     double* kappa, double* domega_drho, double* domega_dsigma,
@@ -98,6 +95,10 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
     if (!isfinite(domega_drho[i]) || !isfinite(domega_dsigma[i]) || !isfinite(dkappa_drho[i]))
       atomicExch(failed, 1);
   }
+  // rVV10 pair algebra depends on alpha=omega/kappa rather than omega itself.
+  // Once local feature derivatives are materialized, reuse the same O(N)
+  // workspace slot for alpha so the O(N^2) pair loop performs no alpha divide.
+  if constexpr (Variant == Vv10Variant::rvv10) omega[i] /= kappa[i];
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
@@ -127,11 +128,7 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
   const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
   const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
   double row_inverse_kappa = 0.0;
-  double row_alpha = 0.0;
-  if constexpr (Variant == Vv10Variant::rvv10) {
-    row_inverse_kappa = 1.0 / ki;
-    row_alpha = wi * row_inverse_kappa;
-  }
+  if constexpr (Variant == Vv10Variant::rvv10) row_inverse_kappa = 1.0 / ki;
 
   double sum_phi = 0.0;
   double sum_rho = 0.0;
@@ -143,7 +140,7 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
     const double dz = points[3 * j + 2] - zi;
     const double r2 = dx * dx + dy * dy + dz * dz;
     const auto pair = pair_kernel_values<Variant, Features, Geometry>(
-        r2, wi, omega[j], ki, kappa[j], row_alpha, row_inverse_kappa);
+        r2, wi, omega[j], ki, kappa[j], row_inverse_kappa);
     const double factor = weighted_density[j];
     sum_phi += factor * pair.phi;
     if constexpr (Features) {
@@ -324,14 +321,24 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   runtime::cuda_resource_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), stream));
   constexpr unsigned threads = 128;
   const auto blocks = launch_blocks(npoint, threads);
-  if (layout.features) {
-    local_scales_kernel<true><<<blocks, threads, 0, stream>>>(
-        npoint, parameters.b, parameters.c, weights, density, density_gradient, omega, kappa,
-        domega_drho, domega_dsigma, dkappa_drho, weighted_density, numerical_error);
+  if (parameters.variant == Vv10Variant::rvv10) {
+    if (layout.features)
+      local_scales_kernel<Vv10Variant::rvv10, true><<<blocks, threads, 0, stream>>>(
+          npoint, parameters.b, parameters.c, weights, density, density_gradient, omega, kappa,
+          domega_drho, domega_dsigma, dkappa_drho, weighted_density, numerical_error);
+    else
+      local_scales_kernel<Vv10Variant::rvv10, false><<<blocks, threads, 0, stream>>>(
+          npoint, parameters.b, parameters.c, weights, density, density_gradient, omega, kappa,
+          domega_drho, domega_dsigma, dkappa_drho, weighted_density, numerical_error);
   } else {
-    local_scales_kernel<false><<<blocks, threads, 0, stream>>>(
-        npoint, parameters.b, parameters.c, weights, density, density_gradient, omega, kappa,
-        domega_drho, domega_dsigma, dkappa_drho, weighted_density, numerical_error);
+    if (layout.features)
+      local_scales_kernel<Vv10Variant::vv10, true><<<blocks, threads, 0, stream>>>(
+          npoint, parameters.b, parameters.c, weights, density, density_gradient, omega, kappa,
+          domega_drho, domega_dsigma, dkappa_drho, weighted_density, numerical_error);
+    else
+      local_scales_kernel<Vv10Variant::vv10, false><<<blocks, threads, 0, stream>>>(
+          npoint, parameters.b, parameters.c, weights, density, density_gradient, omega, kappa,
+          domega_drho, domega_dsigma, dkappa_drho, weighted_density, numerical_error);
   }
   runtime::cuda_resource_check(cudaGetLastError());
   const double beta = std::pow(3.0 / (parameters.b * parameters.b), 0.75) / 32.0;
