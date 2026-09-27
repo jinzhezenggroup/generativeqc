@@ -51,7 +51,7 @@ SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
 SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
 SPD_EXPANSION_CONTRACT_SHA256 = (
-    "82ee0e49a850b8bb47e7f1cfff450c5fc8b8890800dfbe12b37c836d4b3a99cc"
+    "f0d9be746f30067f6dba8293bcc35a9dc06db74037a6c76d322d21051bc61334"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -327,7 +327,7 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
 
     source = (repository / "src/molecule/basis.cpp").read_text(encoding="utf-8")
     try:
-        begin = source.index("std::vector<AoExpansion> ao_expansions")
+        begin = source.index("std::vector<CartesianComponent> cartesian_components")
         end = source.index("  if (l == 3)", begin)
     except ValueError as error:
         raise RuntimeError("native s/p/d expansion owner is missing") from error
@@ -341,7 +341,9 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
             "p": SPARSE_SPHERICAL_COMPONENT_TERMS[1],
             "d": SPARSE_SPHERICAL_COMPONENT_TERMS[2],
         },
-        "spd_expansion_owner": "src/molecule/basis.cpp::ao_expansions",
+        "spd_expansion_owner": (
+            "src/molecule/basis.cpp::cartesian_components+ao_expansions"
+        ),
     }
 
 

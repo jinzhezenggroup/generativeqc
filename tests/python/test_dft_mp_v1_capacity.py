@@ -40,7 +40,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "32 * len(self.shells) + 16 * self.nprimitive"
     )
     assert result["basis"]["spd_expansion_contract_sha256"] == (
-        "82ee0e49a850b8bb47e7f1cfff450c5fc8b8890800dfbe12b37c836d4b3a99cc"
+        "f0d9be746f30067f6dba8293bcc35a9dc06db74037a6c76d322d21051bc61334"
     )
     assert result["basis"]["sparse_spherical_component_terms"] == {
         "s": 1,
@@ -303,6 +303,20 @@ def test_spherical_component_count_fails_closed_when_d_expansion_moves(
     target = tmp_path / "src/molecule/basis.cpp"
     target.parent.mkdir(parents=True)
     target.write_text(source.replace(old, "", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+def test_spherical_component_count_fails_closed_when_cartesian_generator_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "src/molecule/basis.cpp").read_text(encoding="utf-8")
+    old = "components.push_back({static_cast<unsigned>(lx), ly, lz});"
+    assert old in source
+    target = tmp_path / "src/molecule/basis.cpp"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "components.push_back({0, ly, lz});", 1))
 
     with pytest.raises(RuntimeError, match="s/p/d expansion contract changed"):
         qualify_capacity._spd_expansion_contract(tmp_path)
