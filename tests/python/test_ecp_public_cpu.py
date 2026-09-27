@@ -219,6 +219,11 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         assert [item["index"] for item in work] == [0, 1]
         assert work[0]["work"]["ecp_quadrature_pair_samples"] > 0
         assert work[1]["work"]["ecp_quadrature_pair_samples"] == 0
+        for item in work:
+            generated = item["work"]
+            assert generated["primitive_packaged_aot"] == 1
+            assert generated["primitive_runtime_compilations"] == 0
+            assert generated["component_contract_runtime_compilations"] == 0
         if d_shell:
             schedule = work[0]["work"]
             assert schedule["primitive_compiled_kernels"] == 362
