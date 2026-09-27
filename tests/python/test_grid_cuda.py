@@ -70,7 +70,7 @@ def test_all_jets_features_partial_tiles_and_resident_density(
             cuda.evaluate(arrays["points"][:1])
 
 
-def test_xc_task_with_features_reuses_one_evaluated_tile(
+def test_feature_task_with_features_reuses_one_evaluated_tile(
     artifact: typing.Any,
 ) -> None:
     meta, arrays = load_fixture("water")
@@ -85,10 +85,13 @@ def test_xc_task_with_features_reuses_one_evaluated_tile(
             ingredients=("rho", "gradient", "tau"),
         ) as cuda:
             cuda.set_density(arrays["density"])
-            with cuda.xc_task_with_features(arrays["points"][:7], ids, "WB97M-V") as (
+            with cuda.feature_task_with_features(
+                arrays["points"][:7], ids, ("rho", "gradient", "tau")
+            ) as (
                 features,
                 task,
             ):
+                assert set(features) == {"rho", "gradient", "tau"}
                 check(features["rho"], arrays["rho"][:, :7])
                 check(features["gradient"], arrays["gradient"][:, :7])
                 check(features["tau"], arrays["tau"][:, :7])
@@ -96,6 +99,23 @@ def test_xc_task_with_features_reuses_one_evaluated_tile(
                 assert task.view.nactive == basis.nao
             with pytest.raises(RuntimeError, match="expired"):
                 _ = task.view
+
+            # The legacy functional wrapper is only a compatibility adapter;
+            # publication remains backed by the same generic resident lease.
+            with cuda.xc_task_with_features(arrays["points"][:3], ids, "PBE") as (
+                pbe_features,
+                pbe_task,
+            ):
+                assert set(pbe_features) == {"rho", "gradient"}
+                check(pbe_features["rho"], arrays["rho"][:, :3])
+                check(pbe_features["gradient"], arrays["gradient"][:, :3])
+                assert pbe_task.view.npoint == 3
+
+            with pytest.raises(ValueError, match="ingredient contract"):
+                with cuda.feature_task_with_features(
+                    arrays["points"][:1], ids, ("gradient",)
+                ):
+                    pass
 
 
 def test_orders_zero_to_three_and_budget_rejection(artifact: typing.Any) -> None:
