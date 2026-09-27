@@ -23,7 +23,7 @@ struct GridPlan {
   size_t natom{}, nprimitive{}, nao{}, capacity{}, jets{}, packed_size{};
   size_t active_capacity{}, last_points{}, last_active{};
   std::uint64_t generation{};
-  bool local = false, view_ready = false, features_ready = false;
+  bool local = false, view_ready = false, features_ready = false, last_identity_map = false;
   bool orbital_enabled = false, orbital_ready = false, use_orbitals = false;
   size_t orbital_capacity[2]{}, orbital_count[2]{}, orbital_tile{};
   unsigned feature_mask = 15;
@@ -70,7 +70,9 @@ __global__ void gather_density(const double* global, const size_t* ids, I nao, I
   for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < 2 * active * active;
        i += I(blockDim.x) * gridDim.x) {
     const I spin = i / (active * active), row = i / active % active, col = i % active;
-    local[i] = global[(spin * nao + ids[row]) * nao + ids[col]];
+    const I global_row = ids ? ids[row] : row;
+    const I global_col = ids ? ids[col] : col;
+    local[i] = global[(spin * nao + global_row) * nao + global_col];
   }
 }
 
@@ -94,7 +96,9 @@ __global__ void scatter_matrix(const double* local, const size_t* ids, I nao, I 
     const I spin = i / (active * active), row = i / active % active, col = i % active;
     const I transpose = (spin * active + col) * active + row;
     const double value = 0.5 * local[i] + 0.5 * local[transpose];
-    const I destination = (spin * nao + ids[row]) * nao + ids[col];
+    const I global_row = ids ? ids[row] : row;
+    const I global_col = ids ? ids[col] : col;
+    const I destination = (spin * nao + global_row) * nao + global_col;
     global[destination] = finite(global[destination] + value, error, 2);
   }
 }
@@ -340,13 +344,18 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     ctx.check_device();
     p.view_ready = p.density_jets_ready = false;
     ++p.generation;
+    bool identity_map = false;
     if (!p.local) {
       if (ao_ids) throw std::invalid_argument("dense plan does not own AO gather buffers");
       active = p.nao;
     } else {
-      if (active > p.active_capacity || (active && !ao_ids))
+      if (active > p.active_capacity)
         throw std::invalid_argument("selected AO map exceeds capacity");
-      for (size_t i = 0; i < active; ++i)
+      identity_map = !ao_ids && active == p.nao;
+      if (active && !ao_ids && !identity_map)
+        throw std::invalid_argument(
+            "selected AO map requires explicit IDs or the full identity map");
+      for (size_t i = 0; ao_ids && i < active; ++i)
         if (ao_ids[i] >= p.nao || (i && ao_ids[i] <= ao_ids[i - 1]))
           throw std::invalid_argument("selected AO map must be sorted unique and in range");
     }
@@ -359,6 +368,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           "deferred CUDA grid errors require a device-only local feature lease");
     p.last_points = npoint;
     p.last_active = active;
+    p.last_identity_map = identity_map;
     p.features_ready = features != 0;
     // A nonempty borrowed feature lease has no host numerical output. Avoid
     // turning every input/kernel/library subsection into a host fence merely
@@ -375,7 +385,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
       cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
       if (features) cuda_check(cudaMemsetAsync(p.features, 0, 13 * npoint * 8, ctx.stream));
-      if (p.local && active)
+      if (p.local && active && !identity_map)
         cuda_check(cudaMemcpyAsync(p.ao_ids, ao_ids, active * sizeof(size_t),
                                    cudaMemcpyHostToDevice, ctx.stream));
     });
@@ -389,7 +399,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
       ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
         ao_kernel<<<blocks(p.jets * npoint * active, 128), 128, 0, ctx.stream>>>(
             p.basis, p.natom, p.nprimitive, active, p.points, npoint, p.jets, p.ao, ctx.error,
-            p.local ? p.ao_ids : nullptr);
+            p.local && !identity_map ? p.ao_ids : nullptr);
         cuda_check(cudaGetLastError());
       });
     if (features && p.use_orbitals) {
@@ -399,8 +409,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           const size_t width = std::min(p.orbital_tile, p.orbital_count[spin] - begin);
           ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
             gather_factor<<<blocks(active * width, 128), 128, 0, ctx.stream>>>(
-                p.factors[spin], p.local ? p.ao_ids : nullptr, active, p.orbital_count[spin], begin,
-                width, p.factor_panel);
+                p.factors[spin], p.local && !identity_map ? p.ao_ids : nullptr, active,
+                p.orbital_count[spin], begin, width, p.factor_panel);
             cuda_check(cudaGetLastError());
           });
           const I psi_stride = npoint * width;
@@ -425,7 +435,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         });
     } else if (features) {
       const I stride = npoint * active;
-      if (p.local && active)
+      if (p.local && active && !identity_map)
         ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
           gather_density<<<blocks(2 * active * active, 128), 128, 0, ctx.stream>>>(
               p.density, p.ao_ids, p.nao, active, p.local_density);
@@ -433,7 +443,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         });
       if (active)
         ctx.section(detailed_profile, ctx.metrics.library_ms, [&] {
-          const double* density = p.local ? p.local_density : p.density;
+          const double* density = p.local && !identity_map ? p.local_density : p.density;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
           for (int spin = 0; spin < 2; ++spin)
@@ -505,7 +515,7 @@ int grid_cuda_view_v1(void* pointer, vibeqc::dft::GridTaskView* output, char* er
                p.nao,
                p.last_active,
                p.jets,
-               p.ao_ids,
+               p.last_identity_map ? nullptr : p.ao_ids,
                p.points,
                p.ao,
                p.features_ready ? p.features : nullptr,
@@ -629,7 +639,8 @@ int grid_cuda_scatter_v1(void* pointer, std::uint64_t generation, const double* 
     if (count)
       ctx.section(true, ctx.metrics.packing_ms, [&] {
         scatter_matrix<<<blocks(count, 128), 128, 0, ctx.stream>>>(
-            p.local_potential, p.ao_ids, p.nao, p.last_active, p.potential, ctx.error);
+            p.local_potential, p.last_identity_map ? nullptr : p.ao_ids, p.nao, p.last_active,
+            p.potential, ctx.error);
         cuda_check(cudaGetLastError());
       });
     int failure = 0;

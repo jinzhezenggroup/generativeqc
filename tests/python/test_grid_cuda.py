@@ -120,6 +120,38 @@ def test_feature_task_with_features_reuses_one_evaluated_tile(
                 pass
 
 
+def test_full_identity_map_matches_explicit_local_map(artifact: typing.Any) -> None:
+    meta, arrays = load_fixture("water")
+    with NativeAO(**basis_arguments(meta)) as basis:
+        ids = np.arange(basis.nao, dtype=np.uintp)
+        points = arrays["points"][:7]
+        weights = np.ones(len(points))
+        with CudaGrid(
+            basis,
+            artifact,
+            order=1,
+            tile_points=7,
+            active_ao_capacity=basis.nao,
+            ingredients=("rho", "gradient"),
+        ) as cuda:
+            cuda.set_density(arrays["density"])
+            with cuda.xc_task(points, ids, "PBE") as explicit:
+                explicit_integrals, explicit_potential = explicit.xc(
+                    weights, "PBE", reset=True, download=True
+                )
+                assert explicit.view.ao_ids
+
+            with cuda.xc_task(points, None, "PBE") as identity:
+                identity_integrals, identity_potential = identity.xc(
+                    weights, "PBE", reset=True, download=True
+                )
+                assert not identity.view.ao_ids
+                assert identity.view.nactive == basis.nao
+
+            check(identity_integrals, explicit_integrals)
+            check(identity_potential, explicit_potential)
+
+
 def test_orders_zero_to_three_and_budget_rejection(artifact: typing.Any) -> None:
     meta, arrays = load_fixture("f_spherical")
     with NativeAO(**basis_arguments(meta)) as basis:

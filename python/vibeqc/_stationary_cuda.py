@@ -2016,7 +2016,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 end = min(begin + tile_points, len(grid.points))
                 with ao.feature_task(
                     grid.points[begin:end],
-                    np.arange(n, dtype=np.uintp),
+                    None,
                     ingredients,
                     defer_error_to_consumer=True,
                 ) as task:
