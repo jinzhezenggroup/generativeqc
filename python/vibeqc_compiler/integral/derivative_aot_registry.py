@@ -22,6 +22,12 @@ from .weighted_eri_native import emit_weighted_eri_runtime
 AOT_ANGULAR_DOMAIN = (0, 1)
 AOT_COMPONENT_CAPACITY = 64
 AOT_DERIVATIVE_ORDER = 1
+AOT_GENERATOR_ABI = 1
+AOT_SPIN_CONTRACT = "spin-neutral"
+AOT_WEIGHTED_OUTPUT_CONTRACT = "weighted-eri-value-center-gradient-v2"
+AOT_WEIGHTED_CONTRACTION_CONTRACT = "packed-component-weights-v1"
+AOT_COMPONENT_OUTPUT_CONTRACT = "primitive-center-gradient-v1"
+AOT_COMPONENT_CONTRACTION_CONTRACT = "record-scalar-weight-v1"
 
 
 DERIVATIVE_AOT_RADIAL_MANIFEST_SCHEMA = "vibeqc.derivative-aot.radials.v1"
@@ -130,11 +136,61 @@ class DerivativeAotKey:
         return {
             "version": 1,
             "backend": self.backend,
+            "generator_abi": AOT_GENERATOR_ABI,
             "derivative_order": self.derivative_order,
+            "output_contract": AOT_WEIGHTED_OUTPUT_CONTRACT,
+            "spin_contract": AOT_SPIN_CONTRACT,
+            "contraction_contract": AOT_WEIGHTED_CONTRACTION_CONTRACT,
             "radial": self.radial.to_payload(),
             "angular": list(self.angular),
             "group_index": self.group_index,
             "component_indices": list(self.component_indices),
+        }
+
+    @property
+    def identity(self) -> str:
+        return canonical_hash(self.to_payload())
+
+
+@dataclass(frozen=True, slots=True)
+class DerivativeAotPackageKey:
+    """Target/package identity layered over one scientific derivative identity."""
+
+    backend: str
+    target: str
+    scientific_identity: str
+    output_contract: str
+    spin_contract: str
+    contraction_contract: str
+    generator_abi: int = AOT_GENERATOR_ABI
+
+    def __post_init__(self) -> None:
+        if self.backend not in ("cpu", "cuda"):
+            raise ValueError("derivative AOT package backend must be cpu or cuda")
+        if not isinstance(self.target, str) or not self.target:
+            raise ValueError("derivative AOT package target must be nonempty")
+        if not isinstance(self.scientific_identity, str) or not self.scientific_identity:
+            raise ValueError("derivative AOT package scientific identity must be nonempty")
+        if self.generator_abi != AOT_GENERATOR_ABI:
+            raise ValueError("derivative AOT package generator ABI mismatch")
+        for value, label in (
+            (self.output_contract, "output"),
+            (self.spin_contract, "spin"),
+            (self.contraction_contract, "contraction"),
+        ):
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"derivative AOT {label} contract must be nonempty")
+
+    def to_payload(self) -> dict[str, typing.Any]:
+        return {
+            "version": 1,
+            "backend": self.backend,
+            "target": self.target,
+            "scientific_identity": self.scientific_identity,
+            "generator_abi": self.generator_abi,
+            "output_contract": self.output_contract,
+            "spin_contract": self.spin_contract,
+            "contraction_contract": self.contraction_contract,
         }
 
     @property
@@ -148,10 +204,22 @@ class PackagedDerivativeAot:
 
     key: DerivativeAotKey
     entry_prefix: str
+    target: str
 
     @property
     def component_indices(self) -> tuple[int, ...]:
         return self.key.component_indices
+
+    @property
+    def package_key(self) -> DerivativeAotPackageKey:
+        return DerivativeAotPackageKey(
+            backend=self.key.backend,
+            target=self.target,
+            scientific_identity=self.key.identity,
+            output_contract=AOT_WEIGHTED_OUTPUT_CONTRACT,
+            spin_contract=AOT_SPIN_CONTRACT,
+            contraction_contract=AOT_WEIGHTED_CONTRACTION_CONTRACT,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +250,11 @@ class DerivativeAotBundleKey:
         return {
             "version": 1,
             "backend": self.backend,
+            "generator_abi": AOT_GENERATOR_ABI,
             "derivative_order": self.derivative_order,
+            "output_contract": AOT_COMPONENT_OUTPUT_CONTRACT,
+            "spin_contract": AOT_SPIN_CONTRACT,
+            "contraction_contract": AOT_COMPONENT_CONTRACTION_CONTRACT,
             "radial": self.radial.to_payload(),
             "component_domain": list(self.component_domain),
         }
@@ -198,6 +270,18 @@ class PackagedDerivativeAotBundle:
 
     key: DerivativeAotBundleKey
     symbols: tuple[typing.Any, ...]
+    target: str
+
+    @property
+    def package_key(self) -> DerivativeAotPackageKey:
+        return DerivativeAotPackageKey(
+            backend=self.key.backend,
+            target=self.target,
+            scientific_identity=self.key.identity,
+            output_contract=AOT_COMPONENT_OUTPUT_CONTRACT,
+            spin_contract=AOT_SPIN_CONTRACT,
+            contraction_contract=AOT_COMPONENT_CONTRACTION_CONTRACT,
+        )
 
 
 def _family_tag(family: CoulombKernelFamily) -> str:
@@ -250,6 +334,7 @@ def select_packaged_component_derivative_aot(
     *,
     backend: str,
     radial: CoulombKernel,
+    target: str | None = None,
 ) -> PackagedDerivativeAotBundle | None:
     """Resolve the shared full-range component inventory through this registry.
 
@@ -261,6 +346,9 @@ def select_packaged_component_derivative_aot(
 
     if library is None or backend != "cpu":
         return None
+    selected_target = "native-host" if target is None else target
+    if not isinstance(selected_target, str) or not selected_target:
+        raise ValueError("derivative AOT package target must be nonempty")
     full = CoulombKernel(CoulombKernelFamily.FULL_RANGE, 0.0)
     if radial != full:
         return None
@@ -281,7 +369,9 @@ def select_packaged_component_derivative_aot(
         radial=radial,
         component_domain=COMPONENT_LABELS,
     )
-    return PackagedDerivativeAotBundle(key=key, symbols=tuple(symbols))
+    return PackagedDerivativeAotBundle(
+        key=key, symbols=tuple(symbols), target=selected_target
+    )
 
 
 def select_packaged_derivative_aot(
@@ -291,6 +381,7 @@ def select_packaged_derivative_aot(
     radial: CoulombKernel,
     angular: tuple[int, int, int, int],
     component: int,
+    target: str | None = None,
 ) -> PackagedDerivativeAot | None:
     """Resolve a packaged program without consulting a method/function name."""
 
@@ -299,11 +390,18 @@ def select_packaged_derivative_aot(
     prefix = entry_prefix_for_key(key)
     if library is None:
         return None
+    selected_target = "native-host" if backend == "cpu" and target is None else target
+    if selected_target is None:
+        return None
+    if not isinstance(selected_target, str) or not selected_target:
+        raise ValueError("derivative AOT package target must be nonempty")
     try:
         getattr(library, f"{prefix}_identity_v2")
     except AttributeError:
         return None
-    return PackagedDerivativeAot(key=key, entry_prefix=prefix)
+    return PackagedDerivativeAot(
+        key=key, entry_prefix=prefix, target=selected_target
+    )
 
 
 def program_source(
