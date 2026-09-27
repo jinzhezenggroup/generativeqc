@@ -10,6 +10,8 @@ from vibeqc_compiler.xc.endpoint_capability import (
 )
 from vibeqc_compiler.xc.molecular_scf_evidence import (
     QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
     RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
 )
 
