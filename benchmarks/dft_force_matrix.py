@@ -23,7 +23,11 @@ from time import perf_counter
 import numpy as np
 
 from benchmarks.df_component_ledger import read_trace, trace_identity
-from benchmarks.dft_force_components import normalize_force_work, normalize_scf_trace
+from benchmarks.dft_force_components import (
+    expected_scf_components,
+    normalize_force_work,
+    normalize_scf_trace,
+)
 
 DEFAULT_METHODS = (
     "pbe-rks",
@@ -123,6 +127,14 @@ def _exchange_operators(calculator: typing.Any) -> tuple[str, ...]:
     if options is None:
         return ()
     return tuple(term.operator for term in options.execution_plan.exchange)
+
+
+def _has_nonlocal_correlation(calculator: typing.Any) -> bool:
+    options = calculator.ks_options
+    return bool(
+        options is not None
+        and options.execution_plan.nonlocal_correlation is not None
+    )
 
 
 def _force_diagnostic(
@@ -295,6 +307,8 @@ def _scf_trace_profile(
     cupy_module: typing.Any,
     path: Path,
     exchange_operators: tuple[str, ...],
+    *,
+    nonlocal_correlation: bool,
 ) -> dict[str, typing.Any]:
     if path.exists():
         raise FileExistsError(f"refusing to append prior SCF trace: {path}")
@@ -319,6 +333,12 @@ def _scf_trace_profile(
             "status": "unavailable",
             "reason": "selected SCF provider emitted no VIBEQC_DF_TRACE roots",
             "expected_exchange_operators": list(exchange_operators),
+            "expected_components": list(
+                expected_scf_components(
+                    exchange_operators,
+                    nonlocal_correlation=nonlocal_correlation,
+                )
+            ),
         }
     records = read_trace(path)
     return {
@@ -327,6 +347,7 @@ def _scf_trace_profile(
         "profile": normalize_scf_trace(
             records,
             exchange_operators=exchange_operators,
+            nonlocal_correlation=nonlocal_correlation,
         ),
     }
 
@@ -371,6 +392,7 @@ def benchmark_case(
         calculator = _calculator(method, grid, basis, density_fitting)
         library = Path(str(calculator._library._name)).resolve()
         exchange_operators = _exchange_operators(calculator)
+        nonlocal_correlation = _has_nonlocal_correlation(calculator)
         started = perf_counter()
         batch = calculator.prepare_batch([atoms], warm_start=True)
         prepare_seconds = perf_counter() - started
@@ -394,6 +416,7 @@ def benchmark_case(
                 cupy_module,
                 trace_directory / f"{method}-{system}.jsonl",
                 exchange_operators,
+                nonlocal_correlation=nonlocal_correlation,
             )
         changed_atoms, coordinates = _changed_atoms(atoms)
         changed = _clean_sample(
@@ -411,6 +434,7 @@ def benchmark_case(
                 "method_identity": calculator.method_ir.identity,
                 "execution_plan": calculator.ks_options.execution_plan.to_payload(),
                 "exchange_operators": list(exchange_operators),
+                "nonlocal_correlation": nonlocal_correlation,
                 "system": system,
                 "atoms": len(atoms),
                 "basis": basis,
