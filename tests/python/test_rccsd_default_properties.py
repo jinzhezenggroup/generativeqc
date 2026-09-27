@@ -28,9 +28,7 @@ def selector(request: pytest.FixtureRequest) -> typing.Any:
         if batched
         else ("calculator.py", "Calculator", "singlepoint")
     )
-    tree = ast.parse(
-        (ROOT / "python/vibeqc" / filename).read_text(encoding="utf-8")
-    )
+    tree = ast.parse((ROOT / "python/vibeqc" / filename).read_text(encoding="utf-8"))
     cls = next(
         node
         for node in tree.body
