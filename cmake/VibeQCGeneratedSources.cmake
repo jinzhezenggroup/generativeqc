@@ -164,6 +164,24 @@ macro(vibeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/semilocal_codegen.py"
     ARGS --output "${VIBEQC_XC_CPU_HEADER}")
 
+  file(GLOB_RECURSE VIBEQC_LIBXC_PUBLIC_CPU_GENERATOR_INPUTS CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/common/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/*.py")
+  set(VIBEQC_LIBXC_PUBLIC_CPU_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_libxc_public_cpu.hpp")
+  vibeqc_register_generated_sources(
+    NAME vibeqc_libxc_public_cpu_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_public_cpu_registry.py"
+    OUTPUTS "${VIBEQC_LIBXC_PUBLIC_CPU_HEADER}"
+    DEPENDS
+      ${VIBEQC_LIBXC_PUBLIC_CPU_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_public_cpu_registry.py"
+    ARGS --output "${VIBEQC_LIBXC_PUBLIC_CPU_HEADER}"
+    COMMENT "Generating evidence-admitted bulk Libxc CPU registry")
+
   set(VIBEQC_SCF_ARRAY_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_array_native.hpp")
   vibeqc_register_generated_sources(
