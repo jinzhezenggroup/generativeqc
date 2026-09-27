@@ -34,7 +34,10 @@ def radial_inventory_from_payload(
 
     if backend not in ("cpu", "cuda"):
         raise ValueError("derivative AOT backend must be cpu or cuda")
-    if not isinstance(payload, dict) or payload.get("schema") != DERIVATIVE_AOT_RADIAL_MANIFEST_SCHEMA:
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema") != DERIVATIVE_AOT_RADIAL_MANIFEST_SCHEMA
+    ):
         raise ValueError("invalid derivative AOT radial manifest schema")
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:

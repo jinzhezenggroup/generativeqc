@@ -177,9 +177,7 @@ def test_radial_inventory_rejects_undeclared_schema_or_entry_shape() -> None:
     import pytest
 
     with pytest.raises(ValueError, match="schema"):
-        radial_inventory_from_payload(
-            {"schema": "other", "entries": []}, backend="cpu"
-        )
+        radial_inventory_from_payload({"schema": "other", "entries": []}, backend="cpu")
     with pytest.raises(ValueError, match="entry"):
         radial_inventory_from_payload(
             {

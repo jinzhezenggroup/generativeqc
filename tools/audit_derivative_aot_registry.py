@@ -114,8 +114,7 @@ def audit(
             "radial_manifest": str(radial_manifest),
             "radial_manifest_sha256": file_hash(radial_manifest),
             "registry_sha256": file_hash(
-                ROOT
-                / "python/vibeqc_compiler/integral/derivative_aot_registry.py"
+                ROOT / "python/vibeqc_compiler/integral/derivative_aot_registry.py"
             ),
         },
         "full_range": {

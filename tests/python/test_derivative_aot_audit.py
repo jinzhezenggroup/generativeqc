@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tools import audit_derivative_aot_registry as audit
 from vibeqc_compiler.integral.range_separation import CoulombKernel
+
+from tools import audit_derivative_aot_registry as audit
 
 
 def test_source_statistics_report_translation_units_and_bytes() -> None:
