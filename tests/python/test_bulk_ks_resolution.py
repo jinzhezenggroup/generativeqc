@@ -9,7 +9,12 @@ from vibeqc_compiler.xc.capability_resolution import (
     CapabilityNotQualified,
     CapabilityResolution,
 )
+from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from vibeqc_compiler.xc.molecular_scf_evidence import (
+    QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+    RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
+)
 
 
 def _qualified_resolution(name: str) -> tuple[object, CapabilityResolution]:
@@ -411,14 +416,14 @@ def test_public_bulk_ks_rejects_endpoint_identity_drift(
 def test_bulk_ks_requires_exact_molecular_scf_qualification() -> None:
     result_identity = "c" * 64
     qualification = {
-        "schema": bulk_ks.ENDPOINT_COVERAGE_SCHEMA,
+        "schema": ENDPOINT_COVERAGE_SCHEMA,
         "coverage": [
             {"backend": "cpu", "spin": spin, "products": ["energy"]}
             for spin in ("polarized", "unpolarized")
         ],
-        "result_schema": bulk_ks.MOLECULAR_SCF_RESULT_SCHEMA,
+        "result_schema": MOLECULAR_SCF_RESULT_SCHEMA,
         "result_identity": result_identity,
-        "qualification_schema": bulk_ks.MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+        "qualification_schema": MOLECULAR_SCF_QUALIFICATION_SCHEMA,
     }
     stage = SimpleNamespace(
         stage="molecular-scf",
