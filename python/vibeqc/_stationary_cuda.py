@@ -328,7 +328,7 @@ class _CudaSources:
             ct.c_double,
             *tail,
         ]
-        lib.stationary_geometry.argtypes = [
+        geometry_args = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
             _DOUBLE,
@@ -337,6 +337,9 @@ class _CudaSources:
             _DOUBLE,
             *tail,
         ]
+        lib.stationary_geometry.argtypes = geometry_args
+        lib.stationary_geometry_enqueue.argtypes = geometry_args
+        lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
         lib.stationary_finish_reduced.argtypes = [
             ct.c_void_p,
@@ -569,7 +572,7 @@ class _CudaSources:
             raise ValueError("unsupported stationary semilocal functional")
         work = task.density_jets(4 if functional else 1)
         self._call(
-            "stationary_geometry",
+            "stationary_geometry_enqueue",
             self.handle,
             ct.byref(view),
             work,
@@ -577,6 +580,10 @@ class _CudaSources:
             _ptr(weights),
             _ptr(raw),
         )
+
+    def drain_geometry(self) -> None:
+        """Complete all queued semilocal geometry tiles with one error/sync gate."""
+        self._call("stationary_geometry_drain", self.handle)
 
     def finish(self) -> typing.Any:
         self.flush()
@@ -1571,7 +1578,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 sources.nuclear(atom, other, charges)
         sources.flush()
         grid = state.grid
-        with timeline.phase("xc_geometry_and_sync"):
+        with timeline.phase("xc_geometry_enqueue"):
             for begin in range(0, len(grid.points), tile_points):
                 end = min(begin + tile_points, len(grid.points))
                 with ao.feature_task(
@@ -1586,6 +1593,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                         state._source.atomic_weights[begin:end],
                         functional=functional,
                     )
+        with timeline.phase("xc_geometry_drain"):
+            sources.drain_geometry()
         with timeline.phase("source_d2h_publication"):
             components = sources.finish()
         if ecp:
