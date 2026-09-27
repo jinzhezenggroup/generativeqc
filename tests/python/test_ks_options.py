@@ -17,7 +17,12 @@ from vibeqc import (
     ResourceBudget,
     estimate_ks_resources,
 )
-from vibeqc.ks import (\n    BULK_LIBXC_SCF_DOMAIN,\n    native_ks_options,\n    resolve_ks_options,\n    resolve_public_libxc_ks_options,\n)
+from vibeqc.ks import (
+    BULK_LIBXC_SCF_DOMAIN,
+    native_ks_options,
+    resolve_ks_options,
+    resolve_public_libxc_ks_options,
+)
 from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.dft.grid import (
     GRID_POLICY_RADII_SOURCE,
