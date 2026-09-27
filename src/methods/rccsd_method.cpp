@@ -496,7 +496,7 @@ class RccsdPreparedBatch final : public PreparedBatch {
           owners_[index] = std::move(candidate);
           owner_coordinates_[index] = std::move(target_coordinates);
         }
-        result.calculation = owners_[index]->execute(false);
+        result.calculation = owners_[index]->execute(compute_forces);
         result.status = result.calculation.convergence.converged ? VIBEQC_STATUS_SUCCESS
                                                                  : VIBEQC_STATUS_NOT_CONVERGED;
       } catch (...) {
