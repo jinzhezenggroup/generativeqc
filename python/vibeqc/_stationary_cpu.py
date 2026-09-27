@@ -562,7 +562,13 @@ def complete_rks_gradient_diagnostic(
 
     range_native = None
     if plan.range_exchange_primitives:
-        range_native = RangeExchangeExecutor(basis, cache, primitive_tile, compiler)
+        range_native = RangeExchangeExecutor(
+            basis,
+            cache,
+            primitive_tile,
+            compiler,
+            aot_library=state._source._library,
+        )
         try:
             for range_source in plan.range_exchange_sources:
                 primitive = plan.range_exchange_primitive(range_source.name)
@@ -595,6 +601,10 @@ def complete_rks_gradient_diagnostic(
                         )
                         np.add.at(components[range_source.name], owners, values)
         finally:
+            work["range_exchange_packaged_aot_plans"] = range_native.packaged_aot_plans
+            work["range_exchange_runtime_compilations"] = (
+                range_native.runtime_compilations
+            )
             range_native.close()
     for a in range(natom):
         for b in range(a):
