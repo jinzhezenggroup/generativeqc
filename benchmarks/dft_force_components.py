@@ -63,8 +63,33 @@ def _value(
     return _finite_nonnegative(mapping.get(key), field=field)
 
 
+def _int_or_none(value: typing.Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("work counter must not be bool")
+    result = int(value)
+    if result < 0:
+        raise ValueError("work counter must be nonnegative")
+    return result
+
+
+def _first_present(*values: typing.Any) -> typing.Any:
+    return next((value for value in values if value is not None), None)
+
+
+def _unattributed(endpoint: float | None, attributed: float) -> float | None:
+    if endpoint is None:
+        return None
+    remainder = endpoint - attributed
+    tolerance = max(1.0e-9, 1.0e-6 * max(endpoint, 1.0))
+    if remainder < -tolerance:
+        raise ValueError("component wall timings exceed measured endpoint")
+    return max(0.0, remainder)
+
+
 def select_force_work(raw: typing.Any, *, index: int = 0) -> Mapping[str, typing.Any]:
-    """Select one force-work mapping from public-batch diagnostics or direct work."""
+    """Select the latest force-work mapping for one prepared-batch item."""
 
     if isinstance(raw, Mapping):
         nested = raw.get("work")
@@ -79,11 +104,11 @@ def select_force_work(raw: typing.Any, *, index: int = 0) -> Mapping[str, typing
             and int(entry.get("index", index)) == index
             and isinstance(entry.get("work"), Mapping)
         ]
-        if len(candidates) != 1:
-            raise ValueError(
-                f"expected one force-work record for index {index}, got {len(candidates)}"
-            )
-        return typing.cast(Mapping[str, typing.Any], candidates[0]["work"])
+        if not candidates:
+            raise ValueError(f"no force-work record for index {index}")
+        # Prepared-batch resource diagnostics are cumulative. The last matching
+        # record is the latest force execution for this item.
+        return typing.cast(Mapping[str, typing.Any], candidates[-1]["work"])
     raise TypeError("force work must be a mapping or indexed diagnostic sequence")
 
 
@@ -106,7 +131,7 @@ def _coverage(
 
 
 def _normalize_wb97mv(
-    work: Mapping[str, typing.Any], *, state_export_seconds: float
+    work: Mapping[str, typing.Any], *, state_export_seconds: float | None
 ) -> dict[str, typing.Any]:
     component = _mapping(work.get("component_seconds"))
     wall = _empty_components()
@@ -137,32 +162,35 @@ def _normalize_wb97mv(
         "reduction_and_validation",
         field="component_seconds.reduction_and_validation",
     )
-    if state_export_seconds:
+    if state_export_seconds is not None:
         wall["host_packing"] = state_export_seconds
 
     native = _mapping(work.get("native_integral_resources"))
     snapshot = _mapping(work.get("snapshot_export_work"))
     traffic = {
-        "one_electron_h2d_bytes": int(native.get("one_electron_h2d_bytes", 0)),
-        "one_electron_d2h_bytes": int(native.get("one_electron_d2h_bytes", 0)),
-        "final_state_export_d2h_bytes": int(
-            native.get("final_state_export_d2h_bytes", 0)
+        "one_electron_h2d_bytes": _int_or_none(
+            native.get("one_electron_h2d_bytes")
         ),
-        "snapshot_export_d2h_bytes": int(snapshot.get("d2h_bytes", 0)),
-        "final_state_export_synchronizations": int(
-            native.get("final_state_export_synchronizations", 0)
+        "one_electron_d2h_bytes": _int_or_none(
+            native.get("one_electron_d2h_bytes")
         ),
-        "snapshot_export_synchronizations": int(
-            snapshot.get("synchronizations", 0)
+        "final_state_export_d2h_bytes": _int_or_none(
+            native.get("final_state_export_d2h_bytes")
+        ),
+        "snapshot_export_d2h_bytes": _int_or_none(snapshot.get("d2h_bytes")),
+        "final_state_export_synchronizations": _int_or_none(
+            native.get("final_state_export_synchronizations")
+        ),
+        "snapshot_export_synchronizations": _int_or_none(
+            snapshot.get("synchronizations")
         ),
     }
     endpoint = _finite_nonnegative(
         work.get("endpoint_seconds"), field="endpoint_seconds"
     )
-    if endpoint is not None:
+    if endpoint is not None and state_export_seconds is not None:
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
-    unattributed = None if endpoint is None else max(0.0, endpoint - attributed)
     return {
         "schema": "vibeqc.dft-force-components.v1",
         "source_route": "wb97mv-component-seconds",
@@ -171,7 +199,7 @@ def _normalize_wb97mv(
         "traffic": traffic,
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
-        "unattributed_wall_seconds": unattributed,
+        "unattributed_wall_seconds": _unattributed(endpoint, attributed),
         "coverage": _coverage(wall, profiled_ms),
         "notes": {
             "semilocal_geometry_response": (
@@ -184,7 +212,7 @@ def _normalize_wb97mv(
 
 
 def _normalize_stationary(
-    work: Mapping[str, typing.Any], *, state_export_seconds: float
+    work: Mapping[str, typing.Any], *, state_export_seconds: float | None
 ) -> dict[str, typing.Any]:
     timeline = _mapping(work.get("timeline"))
     phases = _mapping(timeline.get("exclusive_wall_seconds"))
@@ -205,7 +233,11 @@ def _normalize_stationary(
         field="timeline.xc_geometry_and_sync",
     )
     wall["host_packing"] = _sum_present(
-        (state_export_seconds, phases.get("python_packing")),
+        tuple(
+            value
+            for value in (state_export_seconds, phases.get("python_packing"))
+            if value is not None
+        ),
         field="timeline.host_packing",
     )
     wall["compile_aot_cache_setup"] = _sum_present(
@@ -247,22 +279,31 @@ def _normalize_stationary(
     )
 
     traffic = {
-        "source_h2d_bytes": int(transfer.get("source_h2d_bytes", work.get("h2d_bytes", 0))),
-        "source_d2h_bytes": int(transfer.get("source_d2h_bytes", work.get("d2h_bytes", 0))),
-        "source_h2d_calls": int(transfer.get("source_h2d_calls", work.get("h2d_calls", 0))),
-        "source_d2h_calls": int(transfer.get("source_d2h_calls", work.get("d2h_calls", 0))),
-        "source_synchronizations": int(work.get("synchronizations", 0)),
-        "tensor_h2d_numeric_bytes": int(transfer.get("tensor_h2d_numeric_bytes", 0)),
-        "tensor_d2h_bytes": int(transfer.get("tensor_d2h_bytes", 0)),
+        "source_h2d_bytes": _int_or_none(
+            _first_present(transfer.get("source_h2d_bytes"), work.get("h2d_bytes"))
+        ),
+        "source_d2h_bytes": _int_or_none(
+            _first_present(transfer.get("source_d2h_bytes"), work.get("d2h_bytes"))
+        ),
+        "source_h2d_calls": _int_or_none(
+            _first_present(transfer.get("source_h2d_calls"), work.get("h2d_calls"))
+        ),
+        "source_d2h_calls": _int_or_none(
+            _first_present(transfer.get("source_d2h_calls"), work.get("d2h_calls"))
+        ),
+        "source_synchronizations": _int_or_none(work.get("synchronizations")),
+        "tensor_h2d_numeric_bytes": _int_or_none(
+            transfer.get("tensor_h2d_numeric_bytes")
+        ),
+        "tensor_d2h_bytes": _int_or_none(transfer.get("tensor_d2h_bytes")),
     }
     endpoint = _finite_nonnegative(
-        work.get("endpoint_seconds", timeline.get("endpoint_seconds")),
+        _first_present(work.get("endpoint_seconds"), timeline.get("endpoint_seconds")),
         field="endpoint_seconds",
     )
-    if endpoint is not None:
+    if endpoint is not None and state_export_seconds is not None:
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
-    unattributed = None if endpoint is None else max(0.0, endpoint - attributed)
     return {
         "schema": "vibeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
@@ -271,7 +312,7 @@ def _normalize_stationary(
         "traffic": traffic,
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
-        "unattributed_wall_seconds": unattributed,
+        "unattributed_wall_seconds": _unattributed(endpoint, attributed),
         "coverage": _coverage(wall, profiled_ms),
         "notes": {
             "profiled_ms": (
@@ -284,14 +325,18 @@ def _normalize_stationary(
 
 
 def normalize_force_work(
-    raw: typing.Any, *, index: int = 0, state_export_seconds: float = 0.0
+    raw: typing.Any,
+    *,
+    index: int = 0,
+    state_export_seconds: float | None = None,
 ) -> dict[str, typing.Any]:
     """Return one schema across semilocal/hybrid stationary and WB97M-V work."""
 
-    state_export = _finite_nonnegative(
-        state_export_seconds, field="state_export_seconds"
+    state_export = (
+        None
+        if state_export_seconds is None
+        else _finite_nonnegative(state_export_seconds, field="state_export_seconds")
     )
-    assert state_export is not None
     work = select_force_work(raw, index=index)
     if isinstance(work.get("component_seconds"), Mapping) or str(
         work.get("execution", "")
