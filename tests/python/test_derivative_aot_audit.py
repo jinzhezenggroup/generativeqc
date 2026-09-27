@@ -67,6 +67,9 @@ def test_audit_schema_keeps_radial_identity_and_provenance(
     assert result["schema"] == "vibeqc.derivative-aot.audit.v1"
     assert result["provenance"]["radial_manifest_sha256"] == "hash:radials.json"
     assert result["full_range"]["translation_units"] == 2
+    assert result["full_range"]["target"] == "native-host"
+    assert result["full_range"]["package_identity"]
+    assert result["full_range"]["package_identity_payload"]["spin_contract"] == "spin-neutral"
     assert result["full_range"]["generated_source_bytes"] == len("full-a") + len(
         "full-bb"
     )
