@@ -110,9 +110,10 @@ print(json.dumps({name: hashlib.sha256(emit_split_hybrid_device(name).encode()).
         [sys.executable, "-c", script],
         cwd=tmp_path,
         env={**os.environ, "PYTHONPATH": str(tmp_path)},
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=60,
     )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
     assert json.loads(completed.stdout) == expected
