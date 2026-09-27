@@ -105,7 +105,7 @@ void finished(Owner& p, cudaStream_t stream) {
 }
 void drain_geometry(Owner& p) {
   if (!p.geometry_pending) return;
-  auto* stream = p.geometry_stream;
+  auto stream = p.geometry_stream;
   p.geometry_pending = false;
   p.geometry_stream = nullptr;
   finished(p, stream);
@@ -424,6 +424,9 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
       p->geometry_stream = stream;
       p->geometry_pending = true;
     }
+    // The borrowed task pointers are consumed only by work enqueued here.
+    // Later grid tiles reuse the same buffers on the same stream, so CUDA
+    // stream order protects their lifetime without a per-tile host fence.
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
