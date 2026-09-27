@@ -572,7 +572,7 @@ class _CudaSources:
             raise ValueError("unsupported stationary semilocal functional")
         work = task.density_jets(4 if functional else 1)
         self._call(
-            "stationary_geometry_enqueue",
+            "stationary_geometry" if self.profile_device else "stationary_geometry_enqueue",
             self.handle,
             ct.byref(view),
             work,
