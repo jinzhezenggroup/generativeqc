@@ -14,10 +14,14 @@ not add per-functional scientific branches or runtime Libxc dependencies.
 from __future__ import annotations
 
 import argparse
+import sys
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 from vibeqc_compiler.common.provenance import atomic_json
 from vibeqc_compiler.xc.libxc_bulk_capabilities import (
