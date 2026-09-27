@@ -48,6 +48,7 @@ Extending the shared facade to fitted providers remains a separate follow-up.
 
 The integration gate runs both the native conventional KS endpoint/state tests
 and the public DF KS suite with independent PySCF references through Slurm.
+
 ## Shared fitted facade completion (2026-09-27)
 
 The prepared execution seam now admits a single resident density-fitted owner in
