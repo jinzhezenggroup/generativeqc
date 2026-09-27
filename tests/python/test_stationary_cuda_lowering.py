@@ -67,6 +67,16 @@ assert '__global__ void primitive_kernel' not in template
 assert '__global__ void task_kernel' in template
 assert 'stationary_tasks' in template
 assert 'stationary_topology' in template
+assert 'stationary_geometry_enqueue' in template
+assert 'stationary_geometry_drain' in template
+deferred=template.split('int stationary_geometry_enqueue',1)[1].split('int stationary_geometry(',1)[0]
+assert 'finished(*p, stream)' not in deferred
+assert 'p->geometry_pending = true' in deferred
+for name in ('stationary_finish(', 'stationary_finish_reduced('):
+    section=template.split('int '+name,1)[1].split('\n}',1)[0]
+    assert 'drain_geometry(*p);' in section
+destroy=template.split('void stationary_destroy',1)[1]
+assert 'cudaStreamSynchronize(p->geometry_stream)' in destroy
 assert 'stationary_records' not in template
 assert 'for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < count' not in template
 assert 'for (size_t linear = 0; linear < primitive_work; ++linear)' not in template
@@ -80,6 +90,9 @@ driver=open('python/vibeqc/_stationary_cuda.py').read()
 assert 'stationary_records' not in driver
 assert 'for ids in product(*ranges)' not in driver
 assert '"stationary_tasks"' in driver
+assert '"stationary_geometry_enqueue"' in driver
+assert '"stationary_geometry_drain"' in driver
+assert '"xc_geometry_drain"' in driver
 assert 'np.lexsort' in driver
 """
     subprocess.run(
