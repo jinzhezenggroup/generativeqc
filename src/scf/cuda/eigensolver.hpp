@@ -46,10 +46,11 @@ bool provider_eigensolver(CudaEigensolverFamily family);
 
 /** Prepared ordinary-stream eigensolver with explicit numeric workspace.
  * Borrows its owner's stream and matrix/eigenvalue buffers. Small matrices
- * retain the native path; larger matrices reuse the existing Xsyevd dispatch.
- * Graph capture is rejected explicitly instead of silently substituting an
- * unbounded maximum-pivot solve. Construction queries and charges workspace
- * once; repeated solves and serialized spin states allocate no numeric buffers.
+ * retain the capture-safe native path; larger matrices reuse the existing
+ * Xsyevd dispatch. Graph capture is rejected explicitly for provider-backed
+ * solves instead of silently substituting an unbounded maximum-pivot solve.
+ * Construction queries and charges workspace once; repeated solves and
+ * serialized spin states allocate no numeric buffers.
  */
 class OrdinaryStreamEigensolver {
  public:

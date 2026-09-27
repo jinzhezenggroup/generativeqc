@@ -511,10 +511,10 @@
     "sm_90/vibeqc_generated_shell_sm90_shard_1.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
     "sm_90/vibeqc_generated_shell_sm90_shard_2.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
     "sm_90/vibeqc_generated_shell_sm90_shard_3.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
-    "sm_120/vibeqc_generated_shell_sm120_shard_0.cu": "dd60b25d4070f1599e4ea40c2706b300ddb952972d84de090aedd5ba3835c4ce",
-    "sm_120/vibeqc_generated_shell_sm120_shard_1.cu": "3bb2efc3c3a9e6eb6471359c117649d9d8d94605aea38f4d1ed793162d3ab814",
-    "sm_120/vibeqc_generated_shell_sm120_shard_2.cu": "7628a114ca54e6aa416b7436ac6edb58dd48b1fe630e7658bf824f89f2ab8a0a",
-    "sm_120/vibeqc_generated_shell_sm120_shard_3.cu": "d8f869ddc5e335af5ad6704bac8b720c44b849b90219c0decbe3deb561042e30",
+    "sm_120/vibeqc_generated_shell_sm120_shard_0.cu": "2bad5ce81c20f7b0396ed395630c1c61b04471cdee6c62b2b2c991ac24492a07",
+    "sm_120/vibeqc_generated_shell_sm120_shard_1.cu": "e1391bd3f76271b3d48efad0ba63952addd56e0369caa2d5de07733c8eedb7ba",
+    "sm_120/vibeqc_generated_shell_sm120_shard_2.cu": "e86865c7298919b9f4e1d319504ace14db0efea1e67873c6e0e4a3c3317d6d23",
+    "sm_120/vibeqc_generated_shell_sm120_shard_3.cu": "aa876bfab9372d2d3b8b084da4a7a913b08557d3bf5f4b612a6b6a111dd9c49f",
     "vibeqc_generated_shell_registry.hpp": "a6aa314c13d80edc4c3d5cc0df7db25236efa9779bdd20b505ee6f5d68f41bcf",
     "vibeqc_generated_shell_registry.cu": "e4c5bda3269b46d4f0c785c81b3c704fd09875d689ac9d8ee0f450b257ad2c78"
   },
@@ -588,6 +588,16 @@
       "issue": 1358,
       "source_revision": "5f9aa5d7944f1af39bc1e8f0e67923d0e9dd3d13",
       "reason": "Binary-search the monotonic Schwarz/density tail once per streaming row instead of linearly probing screened ket blocks. The four tuned sm_120 shards change intentionally; portable sm_90 shards, registry artifacts, manifest and shell catalog remain byte-identical.",
+      "paths": [
+        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 1187,
+      "reason": "Add a typed full-range Exchange value consumer beside existing HartreeFock/Coulomb generated shell consumers. The four tuned sm_120 shards change intentionally because shared scatter and streaming task emission now carry K-only semantics; portable sm_90 shards, registry artifacts, manifest and shell catalog remain unchanged. Independent dense RHF/UHF HF/J-only/K-only contractions and CUDA AOT compilation are required gates.",
       "paths": [
         "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
         "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",

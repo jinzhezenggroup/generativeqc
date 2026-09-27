@@ -4,6 +4,36 @@ include_guard(GLOBAL)
 # live in VibeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(vibeqc_register_host_generated_sources target)
+  if(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(VIBEQC_STATIONARY_CPU_AOT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_derivatives")
+    set(VIBEQC_STATIONARY_CPU_AOT_SOURCES)
+    foreach(_vibeqc_stationary_cpu_shard RANGE 0 45)
+      list(APPEND VIBEQC_STATIONARY_CPU_AOT_SOURCES
+           "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}/vibeqc_stationary_cpu_derivative_${_vibeqc_stationary_cpu_shard}.cpp")
+    endforeach()
+    vibeqc_register_generated_sources(
+      NAME vibeqc_stationary_cpu_derivatives_codegen
+      TARGET ${target}
+      ADD_TO_TARGET
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_derivative_aot.py"
+      OUTPUTS ${VIBEQC_STATIONARY_CPU_AOT_SOURCES}
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/expr.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_schedule.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/one_electron_derivatives.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/range_separation.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/scalar_c.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/shell_spec.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/weighted_eri_native.py"
+      ARGS --output-directory "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}"
+      COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+      COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
+  endif()
+
   set(VIBEQC_QUADRATURE_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_quadrature.cuh")
   vibeqc_register_generated_sources(
@@ -723,6 +753,8 @@ macro(vibeqc_register_cuda_generated_sources target)
   file(GLOB VIBEQC_MP2_GENERATOR_INPUTS CONFIGURE_DEPENDS
        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/tensor/*.py"
        "python/vibeqc_compiler/common/cuda_target.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/common/source_reuse.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/mp2_schedule.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/vibeqc_mp2/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/vibeqc_posthf/*.py")
   vibeqc_register_generated_sources(

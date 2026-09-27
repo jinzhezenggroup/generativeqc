@@ -26,7 +26,6 @@
 #include "scf/cuda/scf_density_kernels.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
-#include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
@@ -196,7 +195,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
   const MolecularGrid& grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
-  scf::CudaDensityFittingJkPlan* fitted{};
   cudaStream_t stream{};
   int device{};
   std::size_t n{}, matrix{}, elements{};
@@ -226,6 +224,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
+  bool fitted_coulomb{};
   bool mixed_j{}, strict_refinement{}, pending_mixed_j{}, mixed_j_executed{}, device_nonlocal{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
@@ -422,22 +421,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
       scf::validate_resolved_fock_build(*range_correction);
       range_exchange_coefficient = range_correction->spec.exchange.coefficient;
     }
+    fitted_coulomb = strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     fock_binding = scf::prepared_cuda_fock_binding(provider);
-    fitted = provider.cuda_fitted_source();
     if (!owner || strategy.backend != scf::FockBackend::Cuda ||
         strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
         strategy.spec.coulomb.coefficient != 1.0 ||
-        (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact &&
-         strategy.spec.coulomb.approximation != scf::FockApproximation::DensityFitted) ||
+        (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact && !fitted_coulomb) ||
         (has_exchange && (strategy.spec.exchange.approximation != scf::FockApproximation::Exact ||
                           strategy.spec.exchange.op != scf::FockOperator::FullRange)) ||
-        (has_exchange && fitted) || (!fock_binding && !fitted) || (fock_binding && fitted))
+        (has_exchange && fitted_coulomb) || !fock_binding)
       throw std::invalid_argument(
-          "CUDA KS requires prepared Coulomb and optional exact full-range exchange");
+          "CUDA KS requires one prepared Coulomb provider and optional exact full-range exchange");
     if (has_range_correction) {
       const auto& correction = *range_correction;
       const auto& spec = correction.spec;
-      if (fitted || !fock_binding || correction.backend != scf::FockBackend::Cuda ||
+      if (fitted_coulomb || !fock_binding || correction.backend != scf::FockBackend::Cuda ||
           spec.spin != strategy.spec.spin || spec.derivative_order != 0 || spec.coulomb.present ||
           !spec.exchange.present || spec.exchange.approximation != scf::FockApproximation::Exact ||
           spec.exchange.op != scf::FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
@@ -451,7 +449,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
          *options.precision_mode != VIBEQC_PRECISION_AUTO))
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
     mixed_j = options.precision_mode && *options.precision_mode == VIBEQC_PRECISION_AUTO;
-    if (mixed_j && fitted) throw std::invalid_argument("CUDA fitted KS requires strict FP64");
+    if (mixed_j && fitted_coulomb)
+      throw std::invalid_argument("CUDA fitted KS requires strict FP64");
     if (mixed_j && (has_exchange || has_range_correction))
       throw std::invalid_argument("CUDA exact-exchange KS currently requires strict FP64");
     if (mixed_j && (is_semilocal_family(functional, SemilocalFamily::R2scan) ||
@@ -468,7 +467,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (device_nonlocal &&
           (!is_semilocal_family(functional, SemilocalFamily::Wb97mv) ||
            nonlocal_domain != nlc::Vv10DensityDomain::MolecularV1 ||
-           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 || fitted))
+           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 || fitted_coulomb))
         throw std::invalid_argument(
             "device-resident CUDA nonlocal KS is qualified only for WB97M-V MolecularV1");
       if (!device_nonlocal &&
@@ -504,8 +503,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !std::all_of(integrals.hcore.begin(), integrals.hcore.end(), finite))
       throw std::runtime_error("nonfinite CUDA KS one-electron or nuclear energy");
     history = std::max(1U, options.diis_history);
-    device = fitted ? scf::cuda_density_fitting_device(fitted) : fock_binding.device_id;
-    stream = fitted ? scf::cuda_density_fitting_stream(fitted) : fock_binding.stream;
+    device = fock_binding.device_id;
+    stream = fock_binding.stream;
     if (nonlocal_correlation &&
         (nonlocal_correlation->backend() != VIBEQC_BACKEND_CUDA ||
          nonlocal_correlation->device_id() != device ||
@@ -674,8 +673,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // bypassed by an opt-in two-iteration device chunk.
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-        !fitted && !has_exchange && !has_range_correction && !nonlocal_correlation && !mixed_j &&
-        spins == 1 && !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
+        !fitted_coulomb && !has_exchange && !has_range_correction && !nonlocal_correlation &&
+        !mixed_j && spins == 1 && !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
         options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
         provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
@@ -733,11 +732,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return 1;
   }
 
+  bool configured_replay_enabled() const noexcept {
+    const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
+    if (selection == nullptr) return false;
+    return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "on") == 0 ||
+           std::strcmp(selection, "true") == 0 || std::strcmp(selection, "small-native") == 0;
+  }
+
   runtime::SolverRegionCudaBinding solver_region_binding() const {
-    return {{"cuda-ks-rks-solver-region-v1", device, stream, arena, fock_binding.source_identity},
-            kCudaKsChunkCapacity,
-            runtime::SolverRegionCompletionMode::Scalar,
-            false};
+    const bool replay_functional = is_semilocal_family(functional, SemilocalFamily::Lda) ||
+                                   is_semilocal_family(functional, SemilocalFamily::Pbe);
+    const bool replay = configured_replay_enabled() && replay_functional &&
+                        n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
+    auto graph = device_chunk_binding();
+    graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
+    return {std::move(graph), kCudaKsChunkCapacity, runtime::SolverRegionCompletionMode::Scalar,
+            replay};
   }
 
   unsigned submission_width() const noexcept {
@@ -757,8 +767,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void enqueue_one(unsigned slot) {
     if (slot >= kCudaKsChunkCapacity) throw std::logic_error("CUDA KS chunk slot overflow");
-    if (generation == std::numeric_limits<std::uint64_t>::max())
-      throw std::overflow_error("CUDA KS density generation exhausted");
     std::string detail;
     check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange, nullptr,
                                           jk_error, false, detail),
@@ -768,10 +776,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                                            nullptr, matrix, range_exchange, nullptr,
                                                            range_jk_error, detail),
             detail);
-    xc->enqueue(density, elements, ++generation);
-    pending_generations[slot] = generation;
-    ++movement.submitted_iterations;
-    const auto potential = xc->view(generation);
+    const auto potential = xc->enqueue_replay_body(density, elements);
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
                                   enabled, fock);
@@ -825,12 +830,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       const unsigned width = submission_width();
       const unsigned remaining = options.max_iterations - output.iterations;
+      if (generation > std::numeric_limits<std::uint64_t>::max() - width)
+        throw std::overflow_error("CUDA KS density generation exhausted");
       pending_iterations =
           solver_region_executor.submit(solver_region_binding(), width, remaining, false,
                                         [&](unsigned slot) { enqueue_one(slot); });
+      movement.submitted_iterations += pending_iterations;
+      // The replay body has no host publication side effects. Publish exactly
+      // once for the physical warmup/capture/replay/fallback selected by the
+      // shared runtime, even when capture internally probes the body twice.
+      for (unsigned slot = 0; slot < pending_iterations; ++slot) {
+        const auto submitted_generation = ++generation;
+        xc->publish_submitted_generation(submitted_generation);
+        pending_generations[slot] = submitted_generation;
+      }
     } catch (...) {
       cudaStreamSynchronize(stream);
       ++movement.synchronizations;
+      solver_region_executor.invalidate();
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
@@ -854,6 +871,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       cudaStreamSynchronize(stream);
+      solver_region_executor.invalidate();
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
@@ -870,6 +888,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_pending = is_active = false;
       is_failed = true;
       pending_iterations = 0;
+      solver_region_executor.invalidate();
       device_chunk_region.mark_failure("CUDA KS device chunk returned an invalid iteration count");
       throw std::runtime_error("CUDA KS device chunk returned an invalid iteration count");
     }
@@ -1050,21 +1069,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       std::string detail;
       pending_mixed_j = mixed_j && !strict_refinement;
-      // DF retains its qualified resident adapter until the prepared execution
-      // seam supports fitted providers. Both routes use their owner's stream;
-      // the exact route never exposes its concrete Direct-J/K handle here.
-      if (fitted) check(cudaMemsetAsync(jk_error, 0, sizeof(*jk_error), stream));
-      const auto jk_status =
-          fitted ? (spins == 2 ? scf::execute_cuda_density_fitting_uhf_jk_device(
-                                     fitted, density, density + matrix, j, nullptr, nullptr, detail,
-                                     {true, false}, scf::FockMatrixLayout::RowMajor)
-                               : scf::execute_cuda_density_fitting_rhf_jk_device(
-                                     fitted, density, j, nullptr, detail, {true, false},
-                                     scf::FockMatrixLayout::RowMajor))
-                 : scf::enqueue_prepared_cuda_fock(
-                       provider, density, spins == 2 ? density + matrix : nullptr, matrix, j,
-                       exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error,
-                       pending_mixed_j, detail);
+      // Provider selection stays inside the prepared Fock facade: KS supplies
+      // resident densities and raw output buffers without knowing whether J is
+      // exact or density fitted.
+      const auto jk_status = scf::enqueue_prepared_cuda_fock(
+          provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
+          has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
+          detail);
       check(jk_status, detail);
       if (has_range_correction)
         check(scf::enqueue_prepared_cuda_exchange_correction(
@@ -1557,6 +1568,10 @@ CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   out.execution_region_executions = region.executions;
   out.execution_region_failures = region.failures;
   out.execution_region_recoveries = region.recoveries;
+  const auto& replay = impl_->solver_region_executor.replay_metrics();
+  out.execution_region_captures = replay.captures;
+  out.execution_region_replays = replay.replays;
+  out.execution_region_fallbacks = replay.fallbacks;
   if (impl_->xc) {
     const auto& xc = impl_->xc->transfers();
     out.setup_h2d_bytes += xc.setup_h2d_bytes;

@@ -217,18 +217,11 @@ __device__ bool evaluate_d4_pair_geometry(Gfn2D4DeviceBatch batch,
         parameters.elements[batch.atomic_numbers[first] - 1];
     const Gfn2D4DeviceElementData second_element =
         parameters.elements[batch.atomic_numbers[second] - 1];
-    const double rrij = 3.0 * first_element.r4r2 * second_element.r4r2;
-    const double r0 = kDispersionA1 * sqrt(rrij) + kDispersionA2;
-    const double r2_squared = values->distance_squared * values->distance_squared;
-    const double r2_cubed = r2_squared * values->distance_squared;
-    const double r0_squared = r0 * r0;
-    const double r0_fourth = r0_squared * r0_squared;
-    const double r0_sixth = r0_fourth * r0_squared;
-    const double t6 = 1.0 / (r2_cubed + r0_sixth);
-    const double t8 = 1.0 / (r2_squared * r2_squared + r0_fourth * r0_fourth);
-    values->damping = kDispersionS6 * t6 + kDispersionS8 * rrij * t8;
-    values->damping_derivative = kDispersionS6 * (-6.0 * r2_squared * t6 * t6) +
-                                 kDispersionS8 * rrij * (-8.0 * r2_cubed * t8 * t8);
+    const auto damping = d4_math::pair_damping(
+        first_element, second_element, values->distance_squared, kDispersionS6, kDispersionS8,
+        kDispersionA1, kDispersionA2);
+    values->damping = damping.value;
+    values->damping_derivative = damping.derivative;
   }
   return isfinite(values->damping) && isfinite(values->damping_derivative) &&
          values->damping >= 0.0;
@@ -1700,7 +1693,6 @@ __global__ void atm_energy_kernel(Gfn2D4DeviceBatch batch, Gfn2D4DeviceParameter
   }
   const std::int64_t begin = batch.atom_offsets[system];
   const std::int64_t end = batch.atom_offsets[system + 1];
-  constexpr double exponent_third = kAtmExponent / 3.0;
   double energy = 0.0;
   std::int64_t outer_pair = 0;
   for (std::int64_t i = begin + 2; i < end; ++i) {
@@ -1730,17 +1722,10 @@ __global__ void atm_energy_kernel(Gfn2D4DeviceBatch batch, Gfn2D4DeviceParameter
         const double r0ij = pair_damping_radius(batch, parameters, j, i);
         const double r0ik = pair_damping_radius(batch, parameters, k, i);
         const double r0jk = pair_damping_radius(batch, parameters, k, j);
-        const double r2_product = r2ij * r2ik * r2jk;
-        const double r1_product = sqrt(r2_product);
-        const double r3_product = r2_product * r1_product;
-        const double r5_product = r3_product * r2_product;
-        const double damping =
-            1.0 / (1.0 + 6.0 * pow((r0ij * r0ik * r0jk) / r1_product, exponent_third));
-        const double angle = 0.375 * (r2ij + r2jk - r2ik) * (r2ij - r2jk + r2ik) *
-                                 (-r2ij + r2jk + r2ik) / r5_product +
-                             1.0 / r3_product;
-        const double c9 = -kDispersionS9 * sqrt(fabs(c6ij.c6 * c6ik.c6 * c6jk.c6));
-        energy -= angle * damping * c9;
+        const auto atm = d4_math::atm_terms<true>(
+            r2ij, r2ik, r2jk, r0ij, r0ik, r0jk, c6ij.c6, c6ik.c6,
+            c6jk.c6, kDispersionS9, kAtmExponent);
+        energy -= atm.energy;
       }
     }
   }
@@ -1801,15 +1786,8 @@ __device__ void atm_distance_gradient(double target, double other_first, double 
                                       const double* vector, double r5_product, double c9,
                                       double angle, double damping, double damping_derivative,
                                       double* output) {
-  const double angle_derivative =
-      -0.375 *
-      (target * target * target + target * target * (other_first + other_second) +
-       target * (3.0 * other_first * other_first + 2.0 * other_first * other_second +
-                 3.0 * other_second * other_second) -
-       5.0 * (other_first - other_second) * (other_first - other_second) *
-           (other_first + other_second)) /
-      r5_product;
-  const double scale = c9 * (-angle_derivative * damping + angle * damping_derivative) / target;
+  const double scale = d4_math::atm_radial(target, other_first, other_second, r5_product, damping,
+                                            angle, damping_derivative, c9);
   for (int axis = 0; axis < 3; ++axis) {
     output[axis] = scale * vector[axis];
   }
@@ -1825,7 +1803,6 @@ __global__ void atm_gradient_kernel(Gfn2D4DeviceBatch batch, Gfn2D4DeviceParamet
   }
   const std::int64_t begin = batch.atom_offsets[system];
   const std::int64_t end = batch.atom_offsets[system + 1];
-  constexpr double exponent_third = kAtmExponent / 3.0;
   std::int64_t outer_pair = 0;
   for (std::int64_t i = begin + 2; i < end; ++i) {
     for (std::int64_t j = begin + 1; j < i; ++j) {
@@ -1858,34 +1835,24 @@ __global__ void atm_gradient_kernel(Gfn2D4DeviceBatch batch, Gfn2D4DeviceParamet
         const double r0ij = pair_damping_radius(batch, parameters, j, i);
         const double r0ik = pair_damping_radius(batch, parameters, k, i);
         const double r0jk = pair_damping_radius(batch, parameters, k, j);
-        const double r2_product = r2ij * r2ik * r2jk;
-        const double r1_product = sqrt(r2_product);
-        const double r3_product = r2_product * r1_product;
-        const double r5_product = r3_product * r2_product;
-        const double ratio = (r0ij * r0ik * r0jk) / r1_product;
-        const double ratio_power = pow(ratio, exponent_third);
-        const double damping = 1.0 / (1.0 + 6.0 * ratio_power);
-        const double angle = 0.375 * (r2ij + r2jk - r2ik) * (r2ij - r2jk + r2ik) *
-                                 (-r2ij + r2jk + r2ik) / r5_product +
-                             1.0 / r3_product;
-        const double c9 = -kDispersionS9 * sqrt(c6ij.c6 * c6ik.c6 * c6jk.c6);
-        const double rr = angle * damping;
-        const double damping_derivative = -2.0 * kAtmExponent * ratio_power * damping * damping;
+        const auto atm = d4_math::atm_terms(
+            r2ij, r2ik, r2jk, r0ij, r0ik, r0jk, c6ij.c6, c6ik.c6,
+            c6jk.c6, kDispersionS9, kAtmExponent);
         double dgij[3];
         double dgik[3];
         double dgjk[3];
-        atm_distance_gradient(r2ij, r2jk, r2ik, vij, r5_product, c9, angle, damping,
-                              damping_derivative, dgij);
-        atm_distance_gradient(r2ik, r2jk, r2ij, vik, r5_product, c9, angle, damping,
-                              damping_derivative, dgik);
-        atm_distance_gradient(r2jk, r2ik, r2ij, vjk, r5_product, c9, angle, damping,
-                              damping_derivative, dgjk);
+        atm_distance_gradient(r2ij, r2jk, r2ik, vij, atm.r5_product, atm.c9,
+                              atm.angle, atm.damping, atm.damping_derivative, dgij);
+        atm_distance_gradient(r2ik, r2jk, r2ij, vik, atm.r5_product, atm.c9,
+                              atm.angle, atm.damping, atm.damping_derivative, dgik);
+        atm_distance_gradient(r2jk, r2ik, r2ij, vjk, atm.r5_product, atm.c9,
+                              atm.angle, atm.damping, atm.damping_derivative, dgjk);
         const double i_adjoint =
-            -0.5 * rr * c9 * (c6ij.first_cn / c6ij.c6 + c6ik.first_cn / c6ik.c6);
+            d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6ik.c6, c6ij.first_cn, c6ik.first_cn);
         const double j_adjoint =
-            -0.5 * rr * c9 * (c6ij.second_cn / c6ij.c6 + c6jk.first_cn / c6jk.c6);
+            d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6jk.c6, c6ij.second_cn, c6jk.first_cn);
         const double k_adjoint =
-            -0.5 * rr * c9 * (c6ik.second_cn / c6ik.c6 + c6jk.second_cn / c6jk.c6);
+            d4_math::atm_cn_adjoint(atm.energy, c6ik.c6, c6jk.c6, c6ik.second_cn, c6jk.second_cn);
         if (!isfinite(dgij[0]) || !isfinite(dgij[1]) || !isfinite(dgij[2]) || !isfinite(dgik[0]) ||
             !isfinite(dgik[1]) || !isfinite(dgik[2]) || !isfinite(dgjk[0]) || !isfinite(dgjk[1]) ||
             !isfinite(dgjk[2]) || !isfinite(i_adjoint) || !isfinite(j_adjoint) ||
@@ -1956,7 +1923,6 @@ __global__ void atm_energy_split_kernel(Gfn2D4DeviceBatch batch, Gfn2D4DevicePar
   const std::int64_t pair_count = atom_count >= 3 ? (atom_count - 1) * (atom_count - 2) / 2 : 0;
   const std::int64_t slice_start = pair_count * slice / slices;
   const std::int64_t slice_end = pair_count * (slice + 1) / slices;
-  constexpr double exponent_third = kAtmExponent / 3.0;
   double energy = 0.0;
   for (std::int64_t pair = slice_start + threadIdx.x; pair < slice_end; pair += blockDim.x) {
     std::int64_t j = 0;
@@ -1983,17 +1949,10 @@ __global__ void atm_energy_split_kernel(Gfn2D4DeviceBatch batch, Gfn2D4DevicePar
       const double r0ij = pair_damping_radius(batch, parameters, j, i);
       const double r0ik = pair_damping_radius(batch, parameters, k, i);
       const double r0jk = pair_damping_radius(batch, parameters, k, j);
-      const double r2_product = r2ij * r2ik * r2jk;
-      const double r1_product = sqrt(r2_product);
-      const double r3_product = r2_product * r1_product;
-      const double r5_product = r3_product * r2_product;
-      const double damping =
-          1.0 / (1.0 + 6.0 * pow((r0ij * r0ik * r0jk) / r1_product, exponent_third));
-      const double angle =
-          0.375 * (r2ij + r2jk - r2ik) * (r2ij - r2jk + r2ik) * (-r2ij + r2jk + r2ik) / r5_product +
-          1.0 / r3_product;
-      const double c9 = -kDispersionS9 * sqrt(fabs(c6ij.c6 * c6ik.c6 * c6jk.c6));
-      energy -= angle * damping * c9;
+      const auto atm = d4_math::atm_terms<true>(
+          r2ij, r2ik, r2jk, r0ij, r0ik, r0jk, c6ij.c6, c6ik.c6,
+          c6jk.c6, kDispersionS9, kAtmExponent);
+      energy -= atm.energy;
     }
   }
   if (!isfinite(energy)) {
@@ -2077,7 +2036,6 @@ __global__ void atm_gradient_split_kernel(Gfn2D4DeviceBatch batch,
   const std::int64_t pair_count = atom_count >= 3 ? (atom_count - 1) * (atom_count - 2) / 2 : 0;
   const std::int64_t slice_start = pair_count * slice / slices;
   const std::int64_t slice_end = pair_count * (slice + 1) / slices;
-  constexpr double exponent_third = kAtmExponent / 3.0;
   for (std::int64_t pair = slice_start + threadIdx.x; pair < slice_end; pair += blockDim.x) {
     std::int64_t j = 0;
     std::int64_t i = 0;
@@ -2107,33 +2065,24 @@ __global__ void atm_gradient_split_kernel(Gfn2D4DeviceBatch batch,
       const double r0ij = pair_damping_radius(batch, parameters, j, i);
       const double r0ik = pair_damping_radius(batch, parameters, k, i);
       const double r0jk = pair_damping_radius(batch, parameters, k, j);
-      const double r2_product = r2ij * r2ik * r2jk;
-      const double r1_product = sqrt(r2_product);
-      const double r3_product = r2_product * r1_product;
-      const double r5_product = r3_product * r2_product;
-      const double ratio = (r0ij * r0ik * r0jk) / r1_product;
-      const double ratio_power = pow(ratio, exponent_third);
-      const double damping = 1.0 / (1.0 + 6.0 * ratio_power);
-      const double angle =
-          0.375 * (r2ij + r2jk - r2ik) * (r2ij - r2jk + r2ik) * (-r2ij + r2jk + r2ik) / r5_product +
-          1.0 / r3_product;
-      const double c9 = -kDispersionS9 * sqrt(c6ij.c6 * c6ik.c6 * c6jk.c6);
-      const double rr = angle * damping;
-      const double damping_derivative = -2.0 * kAtmExponent * ratio_power * damping * damping;
+      const auto atm = d4_math::atm_terms(
+          r2ij, r2ik, r2jk, r0ij, r0ik, r0jk, c6ij.c6, c6ik.c6,
+          c6jk.c6, kDispersionS9, kAtmExponent);
       double dgij[3];
       double dgik[3];
       double dgjk[3];
-      atm_distance_gradient(r2ij, r2jk, r2ik, vij, r5_product, c9, angle, damping,
-                            damping_derivative, dgij);
-      atm_distance_gradient(r2ik, r2jk, r2ij, vik, r5_product, c9, angle, damping,
-                            damping_derivative, dgik);
-      atm_distance_gradient(r2jk, r2ik, r2ij, vjk, r5_product, c9, angle, damping,
-                            damping_derivative, dgjk);
-      const double i_adjoint = -0.5 * rr * c9 * (c6ij.first_cn / c6ij.c6 + c6ik.first_cn / c6ik.c6);
+      atm_distance_gradient(r2ij, r2jk, r2ik, vij, atm.r5_product, atm.c9,
+                            atm.angle, atm.damping, atm.damping_derivative, dgij);
+      atm_distance_gradient(r2ik, r2jk, r2ij, vik, atm.r5_product, atm.c9,
+                            atm.angle, atm.damping, atm.damping_derivative, dgik);
+      atm_distance_gradient(r2jk, r2ik, r2ij, vjk, atm.r5_product, atm.c9,
+                            atm.angle, atm.damping, atm.damping_derivative, dgjk);
+      const double i_adjoint =
+          d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6ik.c6, c6ij.first_cn, c6ik.first_cn);
       const double j_adjoint =
-          -0.5 * rr * c9 * (c6ij.second_cn / c6ij.c6 + c6jk.first_cn / c6jk.c6);
+          d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6jk.c6, c6ij.second_cn, c6jk.first_cn);
       const double k_adjoint =
-          -0.5 * rr * c9 * (c6ik.second_cn / c6ik.c6 + c6jk.second_cn / c6jk.c6);
+          d4_math::atm_cn_adjoint(atm.energy, c6ik.c6, c6jk.c6, c6ik.second_cn, c6jk.second_cn);
       if (!isfinite(dgij[0]) || !isfinite(dgij[1]) || !isfinite(dgij[2]) || !isfinite(dgik[0]) ||
           !isfinite(dgik[1]) || !isfinite(dgik[2]) || !isfinite(dgjk[0]) || !isfinite(dgjk[1]) ||
           !isfinite(dgjk[2]) || !isfinite(i_adjoint) || !isfinite(j_adjoint) ||
@@ -2172,7 +2121,6 @@ __global__ void pairlist_atm_energy_kernel(
       !d4_pairlist_role_active(cache.atm_pairs, system)) {
     return;
   }
-  constexpr double exponent_third = kAtmExponent / 3.0;
   const std::int64_t pair_begin = cache.atm_pairs.pair_offsets[system];
   const std::int64_t pair_count = cache.atm_pairs.pair_counts[system];
   /* Form floor(pair_count * slice / slices) without overflowing the signed
@@ -2233,19 +2181,10 @@ __global__ void pairlist_atm_energy_kernel(
       const double r0ij = pair_damping_radius(batch, parameters, j, i);
       const double r0ik = pair_damping_radius(batch, parameters, k, i);
       const double r0jk = pair_damping_radius(batch, parameters, k, j);
-      const double r2_product = ij.distance_squared * ik.distance_squared * jk.distance_squared;
-      const double r1_product = sqrt(r2_product);
-      const double r3_product = r2_product * r1_product;
-      const double r5_product = r3_product * r2_product;
-      const double damping =
-          1.0 / (1.0 + 6.0 * pow((r0ij * r0ik * r0jk) / r1_product, exponent_third));
-      const double angle =
-          0.375 * (ij.distance_squared + jk.distance_squared - ik.distance_squared) *
-              (ij.distance_squared - jk.distance_squared + ik.distance_squared) *
-              (-ij.distance_squared + jk.distance_squared + ik.distance_squared) / r5_product +
-          1.0 / r3_product;
-      const double c9 = -kDispersionS9 * sqrt(fabs(c6ij.c6 * c6ik.c6 * c6jk.c6));
-      energy -= angle * damping * c9;
+      const auto atm = d4_math::atm_terms<true>(
+          ij.distance_squared, ik.distance_squared, jk.distance_squared, r0ij, r0ik, r0jk,
+          c6ij.c6, c6ik.c6, c6jk.c6, kDispersionS9, kAtmExponent);
+      energy -= atm.energy;
       if (!isfinite(energy)) {
         record_system_error(workspace, system, Gfn2D4DeviceError::kNonfiniteArithmetic);
         energy = 0.0;
@@ -2284,7 +2223,6 @@ __global__ void pairlist_atm_gradient_kernel(
       !d4_pairlist_role_active(cache.atm_pairs, system)) {
     return;
   }
-  constexpr double exponent_third = kAtmExponent / 3.0;
   const std::int64_t pair_begin = cache.atm_pairs.pair_offsets[system];
   const std::int64_t pair_count = cache.atm_pairs.pair_counts[system];
   const std::int64_t pairs_per_slice = pair_count / slices;
@@ -2344,35 +2282,27 @@ __global__ void pairlist_atm_gradient_kernel(
       const double r0ij = pair_damping_radius(batch, parameters, j, i);
       const double r0ik = pair_damping_radius(batch, parameters, k, i);
       const double r0jk = pair_damping_radius(batch, parameters, k, j);
-      const double r2_product = ij.distance_squared * ik.distance_squared * jk.distance_squared;
-      const double r1_product = sqrt(r2_product);
-      const double r3_product = r2_product * r1_product;
-      const double r5_product = r3_product * r2_product;
-      const double ratio = (r0ij * r0ik * r0jk) / r1_product;
-      const double ratio_power = pow(ratio, exponent_third);
-      const double damping = 1.0 / (1.0 + 6.0 * ratio_power);
-      const double angle =
-          0.375 * (ij.distance_squared + jk.distance_squared - ik.distance_squared) *
-              (ij.distance_squared - jk.distance_squared + ik.distance_squared) *
-              (-ij.distance_squared + jk.distance_squared + ik.distance_squared) / r5_product +
-          1.0 / r3_product;
-      const double c9 = -kDispersionS9 * sqrt(c6ij.c6 * c6ik.c6 * c6jk.c6);
-      const double rr = angle * damping;
-      const double damping_derivative = -2.0 * kAtmExponent * ratio_power * damping * damping;
+      const auto atm = d4_math::atm_terms(
+          ij.distance_squared, ik.distance_squared, jk.distance_squared, r0ij, r0ik, r0jk,
+          c6ij.c6, c6ik.c6, c6jk.c6, kDispersionS9, kAtmExponent);
       double dgij[3];
       double dgik[3];
       double dgjk[3];
       atm_distance_gradient(ij.distance_squared, jk.distance_squared, ik.distance_squared,
-                            ij.vector, r5_product, c9, angle, damping, damping_derivative, dgij);
+                            ij.vector, atm.r5_product, atm.c9, atm.angle, atm.damping,
+                            atm.damping_derivative, dgij);
       atm_distance_gradient(ik.distance_squared, jk.distance_squared, ij.distance_squared,
-                            ik.vector, r5_product, c9, angle, damping, damping_derivative, dgik);
+                            ik.vector, atm.r5_product, atm.c9, atm.angle, atm.damping,
+                            atm.damping_derivative, dgik);
       atm_distance_gradient(jk.distance_squared, ik.distance_squared, ij.distance_squared,
-                            jk.vector, r5_product, c9, angle, damping, damping_derivative, dgjk);
-      const double i_adjoint = -0.5 * rr * c9 * (c6ij.first_cn / c6ij.c6 + c6ik.first_cn / c6ik.c6);
+                            jk.vector, atm.r5_product, atm.c9, atm.angle, atm.damping,
+                            atm.damping_derivative, dgjk);
+      const double i_adjoint =
+          d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6ik.c6, c6ij.first_cn, c6ik.first_cn);
       const double j_adjoint =
-          -0.5 * rr * c9 * (c6ij.second_cn / c6ij.c6 + c6jk.first_cn / c6jk.c6);
+          d4_math::atm_cn_adjoint(atm.energy, c6ij.c6, c6jk.c6, c6ij.second_cn, c6jk.first_cn);
       const double k_adjoint =
-          -0.5 * rr * c9 * (c6ik.second_cn / c6ik.c6 + c6jk.second_cn / c6jk.c6);
+          d4_math::atm_cn_adjoint(atm.energy, c6ik.c6, c6jk.c6, c6ik.second_cn, c6jk.second_cn);
       if (!isfinite(dgij[0]) || !isfinite(dgij[1]) || !isfinite(dgij[2]) || !isfinite(dgik[0]) ||
           !isfinite(dgik[1]) || !isfinite(dgik[2]) || !isfinite(dgjk[0]) || !isfinite(dgjk[1]) ||
           !isfinite(dgjk[2]) || !isfinite(i_adjoint) || !isfinite(j_adjoint) ||
