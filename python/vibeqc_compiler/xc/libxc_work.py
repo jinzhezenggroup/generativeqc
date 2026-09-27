@@ -132,11 +132,7 @@ def automatic_work_policy(name: str) -> LibxcWorkPolicy:
                     if family != "lda"
                     else ()
                 ),
-                *(
-                    ("floor-tau", "fermi-hole-curvature")
-                    if family == "mgga"
-                    else ()
-                ),
+                *(("floor-tau", "fermi-hole-curvature") if family == "mgga" else ()),
                 "raw-vxc-at-work-inputs",
                 "original-density-energy-weight",
             ),
