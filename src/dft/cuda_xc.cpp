@@ -235,13 +235,6 @@ void CudaXcPlan::enqueue(const double* density, std::size_t elements, std::uint6
   enqueue_impl(density, nullptr, elements, generation, precision);
 }
 
-CudaXcView CudaXcPlan::enqueue_replay_body(const double* density, std::size_t elements,
-                                           CudaXcDensityPrecision precision) {
-  if (layout_.response) throw std::invalid_argument("XC response plan requires a direction");
-  enqueue_impl(density, nullptr, elements, 0, precision, nullptr, nullptr, false);
-  return {0, layout_.nao, layout_.spins, potential_, totals_, error_, stream_};
-}
-
 void CudaXcPlan::enqueue_density_features(const double* density, std::size_t elements,
                                           std::uint64_t generation, double* total_density,
                                           double* total_gradient) {
@@ -257,6 +250,13 @@ void CudaXcPlan::enqueue_response(const double* density, const double* direction
                                   std::size_t elements, std::uint64_t generation) {
   if (!layout_.response) throw std::invalid_argument("XC plan was not prepared for response");
   enqueue_impl(density, direction, elements, generation, CudaXcDensityPrecision::Fp64);
+}
+
+CudaXcView CudaXcPlan::enqueue_replay_body(const double* density, std::size_t elements,
+                                           CudaXcDensityPrecision precision) {
+  if (layout_.response) throw std::invalid_argument("XC response plan requires a direction");
+  enqueue_impl(density, nullptr, elements, 0, precision, nullptr, nullptr, false);
+  return {0, layout_.nao, layout_.spins, potential_, totals_, error_, stream_};
 }
 
 void CudaXcPlan::publish_submitted_generation(std::uint64_t generation) {
