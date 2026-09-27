@@ -201,3 +201,32 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
 
     with pytest.raises(ValueError, match="identity/payload mismatch"):
         executor.execute(WrongPayload(), lambda _coordinate: None)
+
+
+def test_executor_admits_empty_screened_task_source_without_pages() -> None:
+    class EmptySource:
+        payload = {
+            "schema": "vibeqc.synthetic_stationary_task_source.v1",
+            "logical_source": "screened-empty",
+        }
+        identity = canonical_hash(payload)
+        logical_size = 0
+
+        @staticmethod
+        def pages(_capacity: int):
+            return iter(())
+
+        @classmethod
+        def to_payload(cls) -> dict[str, object]:
+            return dict(cls.payload)
+
+    executor = _BoundedStationaryTaskExecutor(
+        fixed_capacity=2, resident_capacity=4, page_capacity=4
+    )
+    seen: list[tuple[int, ...]] = []
+    execution = executor.execute(EmptySource(), seen.append)
+
+    assert execution.mode == "empty"
+    assert execution.logical_tasks == 0
+    assert execution.producer_pages == 0
+    assert seen == []
