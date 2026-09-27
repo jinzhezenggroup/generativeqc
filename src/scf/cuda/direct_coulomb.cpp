@@ -269,12 +269,12 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatc
   const auto charge = [&](std::size_t count, std::size_t width) {
     additional = runtime::size_add(additional, product(count, width));
   };
-  charge(2 * matrix, sizeof(double));       // Interleaved public alpha/beta input.
-  charge(2 * cartesian, sizeof(double));    // Direct alpha/beta density.
-  charge(2 * cartesian, sizeof(double));    // Direct raw K output.
-  charge(2 * rectangular, sizeof(double));  // Density transform scratch.
-  charge(2 * rectangular, sizeof(double));  // Fock transform scratch.
-  charge(2 * matrix, sizeof(double));       // Interleaved public raw K.
+  charge(product(2, matrix), sizeof(double));       // Interleaved public alpha/beta input.
+  charge(product(2, cartesian), sizeof(double));    // Direct alpha/beta density.
+  charge(product(2, cartesian), sizeof(double));    // Direct raw K output.
+  charge(product(2, rectangular), sizeof(double));  // Density transform scratch.
+  charge(product(2, rectangular), sizeof(double));  // Fock transform scratch.
+  charge(product(2, matrix), sizeof(double));       // Interleaved public raw K.
   charge(pairs, sizeof(ShellPairDensityBounds));
   charge(batch, sizeof(double));
   charge(product(batch, pair_classes), sizeof(double));
@@ -302,12 +302,12 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatc
   auto doubles = [&](std::size_t count) {
     return static_cast<double*>(allocate(count, sizeof(double)));
   };
-  plan->public_spin = doubles(2 * matrix);
-  plan->direct_spin = doubles(2 * cartesian);
-  plan->direct_exchange = doubles(2 * cartesian);
-  plan->density_temporary = doubles(2 * rectangular);
-  plan->fock_temporary = doubles(2 * rectangular);
-  plan->public_exchange = doubles(2 * matrix);
+  plan->public_spin = doubles(product(2, matrix));
+  plan->direct_spin = doubles(product(2, cartesian));
+  plan->direct_exchange = doubles(product(2, cartesian));
+  plan->density_temporary = doubles(product(2, rectangular));
+  plan->fock_temporary = doubles(product(2, rectangular));
+  plan->public_exchange = doubles(product(2, matrix));
   plan->shell_pair_density_bounds =
       static_cast<ShellPairDensityBounds*>(allocate(pairs, sizeof(ShellPairDensityBounds)));
   plan->system_density_bounds = doubles(batch);
