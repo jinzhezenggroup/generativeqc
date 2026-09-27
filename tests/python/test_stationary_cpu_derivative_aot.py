@@ -7,6 +7,7 @@ import os
 import typing
 from pathlib import Path
 
+import numpy as np
 import pytest
 from vibeqc import _stationary_cpu_components as components
 from vibeqc_compiler.integral import first_derivative_schedule as schedule
@@ -114,7 +115,7 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
         natom=1,
         nprimitive=len(labels),
         shells=(SimpleNamespace(angular_momentum=2),),
-        packed=__import__("numpy").asarray(
+        packed=np.asarray(
             [0.0, 0.0, 0.0, *primitive_rows, *aos], dtype=float
         ),
     )
