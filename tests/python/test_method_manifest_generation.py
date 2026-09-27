@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from vibeqc import _generated_methods, _native
 from vibeqc.ks import resolve_ks_method
-from vibeqc_compiler.method import compile_ks_execution_plan, resolve_method
+from vibeqc_compiler.method import compile_ks_execution_plan
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_ABI_IDS = {
@@ -71,43 +71,53 @@ def test_public_method_provider_sets_are_generated() -> None:
     )
 
 
-def test_public_dft_bindings_resolve_through_current_method_ir() -> None:
+def test_public_dft_abi_rows_do_not_own_scientific_composition() -> None:
     payload = json.loads(
         (ROOT / "manifests/public_methods.json").read_text(encoding="utf-8")
     )
-    manifest_bindings = {
-        entry["name"]: (entry["compiler_method"], entry["spin"])
-        for entry in payload["methods"]
-        if entry["provider"] == "dft"
-    }
-    generated_bindings = {
-        name: (metadata["compiler_method"], metadata["spin"])
-        for name, metadata in _generated_methods.METHOD_METADATA.items()
+    dft_rows = [entry for entry in payload["methods"] if entry["provider"] == "dft"]
+    assert dft_rows
+    assert all(
+        "compiler_method" not in entry and "spin" not in entry for entry in dft_rows
+    )
+
+    for entry in dft_rows:
+        runtime_method, runtime_functional = resolve_ks_method(entry["name"])
+        plan = compile_ks_execution_plan(runtime_method)
+        assert plan.method.identity == runtime_method.identity
+        assert runtime_functional.spin == runtime_method.spin
+
+    generated_dft = [
+        metadata
+        for metadata in _generated_methods.METHOD_METADATA.values()
         if metadata["provider"] == "dft"
-    }
-    assert generated_bindings == manifest_bindings
-
-    for name, (identifier, spin) in manifest_bindings.items():
-        compiler_method = resolve_method(identifier, spin=spin)
-        plan = compile_ks_execution_plan(compiler_method)
-        runtime_method, runtime_functional = resolve_ks_method(name)
-        assert plan.method.identity == compiler_method.identity
-        assert runtime_method.identity == compiler_method.identity
-        assert runtime_functional.spin == spin
+    ]
+    assert generated_dft
+    assert all(
+        "compiler_method" not in metadata and "spin" not in metadata
+        for metadata in generated_dft
+    )
 
 
-def test_manifest_requires_explicit_compiler_binding_for_dft(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "field,value",
+    (("compiler_method", "PBE"), ("spin", "unpolarized")),
+)
+def test_manifest_rejects_reintroduced_dft_scientific_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
 ) -> None:
     from tools import generate_method_manifest as generator
 
     payload = json.loads(generator.MANIFEST.read_text())
     entry = next(method for method in payload["methods"] if method["provider"] == "dft")
-    entry.pop("compiler_method")
+    entry[field] = value
     path = tmp_path / "invalid.json"
     path.write_text(json.dumps(payload))
     monkeypatch.setattr(generator, "MANIFEST", path)
-    with pytest.raises(ValueError, match="compiler_method"):
+    with pytest.raises(ValueError, match="unknown method manifest fields"):
         generator.load_manifest()
 
 

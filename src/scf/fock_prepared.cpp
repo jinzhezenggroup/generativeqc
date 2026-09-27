@@ -1,5 +1,6 @@
 #include "scf/fock_prepared.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
@@ -122,7 +123,7 @@ struct PreparedFockPlan::Impl {
   }
 
   Impl(const core::System& system, const core::System* aux, ResolvedFockBuild strategy, int device,
-       std::size_t budget)
+       std::size_t budget, unsigned retained_direct_derivative_order)
       : orbital(system),
         device_id(strategy.backend == FockBackend::Cuda ? device : -1),
         requested_budget(strategy.backend == FockBackend::Cuda ? budget : 0) {
@@ -137,6 +138,13 @@ struct PreparedFockPlan::Impl {
     diagnostic.variant = execution_variant(strategy);
     const bool has_df = needs(strategy.spec, FockApproximation::DensityFitted);
     const bool has_exact = needs(strategy.spec, FockApproximation::Exact);
+    if (retained_direct_derivative_order > 1)
+      throw std::invalid_argument("prepared Direct Fock derivative capability exceeds first order");
+    if (retained_direct_derivative_order && (strategy.backend != FockBackend::Cuda || !has_exact))
+      throw std::invalid_argument(
+          "retained Direct derivative capability requires an exact CUDA provider");
+    const auto direct_derivative_order =
+        std::max<unsigned>(strategy.spec.derivative_order, retained_direct_derivative_order);
     const bool range_exact = strategy.spec.exchange.present &&
                              strategy.spec.exchange.approximation == FockApproximation::Exact &&
                              strategy.spec.exchange.op != FockOperator::FullRange;
@@ -229,7 +237,7 @@ struct PreparedFockPlan::Impl {
       const auto direct_budget = has_df ? available / 2 : available;
       if (!direct_budget) throw std::bad_alloc();
       CudaDirectJkPlan* raw{};
-      checked(create_cuda_direct_jk_plan(device, {system}, strategy.spec.derivative_order,
+      checked(create_cuda_direct_jk_plan(device, {system}, direct_derivative_order,
                                          strategy.screening_tolerance, direct_budget, &raw,
                                          diagnostic.direct, detail),
               detail);
@@ -309,8 +317,10 @@ struct PreparedFockPlan::Impl {
 };
 
 PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::System* auxiliary,
-                                   ResolvedFockBuild strategy, int device, std::size_t budget)
-    : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget)) {}
+                                   ResolvedFockBuild strategy, int device, std::size_t budget,
+                                   unsigned retained_direct_derivative_order)
+    : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget,
+                                   retained_direct_derivative_order)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
@@ -392,8 +402,13 @@ std::vector<double> PreparedFockPlan::energy_derivative(const std::vector<double
                          : impl_->cuda_view->energy_derivative(density, beta);
 }
 bool PreparedFockPlan::matches(const core::System& orbital, const core::System* auxiliary,
-                               const ResolvedFockBuild& strategy, int device,
-                               std::size_t budget) const noexcept {
+                               const ResolvedFockBuild& strategy, int device, std::size_t budget,
+                               unsigned minimum_direct_derivative_order) const noexcept {
+  if (minimum_direct_derivative_order > 1 ||
+      (minimum_direct_derivative_order &&
+       (!impl_->cuda_exact ||
+        impl_->diagnostic.direct.derivative_order < minimum_direct_derivative_order)))
+    return false;
   if (impl_->diagnostic.strategy != strategy || !same_system(impl_->orbital, orbital)) return false;
   try {
     if (strategy.backend == FockBackend::Cuda &&

@@ -26,17 +26,15 @@ from typing import Any
 
 from vibeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_COMPONENTS,
-    _qualified_aot_plan,
+    QUALIFIED_STATIONARY_AOT_PROFILES,
+    _profile_stem,
+    _qualified_aot_profile,
     load_stationary_aot_artifact,
 )
 
-QUALIFIED_STATIONARY_AOT = (
-    (0, "unpolarized", "lda_rks"),
-    (0, "polarized", "lda_uks"),
-    (1, "unpolarized", "pbe_rks"),
-    (1, "polarized", "pbe_uks"),
-    (2, "unpolarized", "r2scan_rks"),
-    (2, "polarized", "r2scan_uks"),
+QUALIFIED_STATIONARY_AOT = tuple(
+    (profile.functional, profile.spin, _profile_stem(profile))
+    for profile in QUALIFIED_STATIONARY_AOT_PROFILES
 )
 
 QUALIFIED_STATIONARY_PACKAGE = tuple(
@@ -101,7 +99,8 @@ def audit_stationary_aot_directory(
     records = []
     manifest_bytes = 0
     for functional, spin, name, component_domain in QUALIFIED_STATIONARY_PACKAGE:
-        plan = _qualified_aot_plan(functional, spin)
+        profile_name = name.removesuffix("_spd")
+        plan = _qualified_aot_profile(profile_name).plan
         artifact = load_stationary_aot_artifact(
             directory,
             functional=functional,

@@ -2,7 +2,7 @@
 
 Do not maintain handwritten copies of generated capability tables.
 
-The canonical public method registry is `manifests/public_methods.json`; tooling generates [the public method table](../public_methods.md).
+The canonical native ABI/provider registry is `manifests/public_methods.json`; tooling generates [the native ABI table](../public_methods.md). DFT scientific discovery instead comes from the compiler MethodIR catalog and generated pinned-Libxc metadata, with native lowerer gates deciding whether each RKS/UKS selector is executable.
 
 Compiler shell/code-generation capability evidence is tracked in `docs/codegen_capabilities.json`. CUDA semantic ownership is tracked in `docs/cuda_ownership/`.
 

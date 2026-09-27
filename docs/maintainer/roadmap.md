@@ -1,10 +1,10 @@
 # Implementation roadmap
 
 VibeQC's long-term goal is broad quantum-chemistry coverage behind one
-accelerator-native interface. The generated
-[public method table](../public_methods.md) and
-[methods guide](../user/methods.md) are authoritative for capabilities that are
-actually exposed today. This page records development directions only; it does
+accelerator-native interface. The [methods guide](../user/methods.md) describes
+current public discovery and qualification; the generated
+[native ABI registry](../public_methods.md) records stable provider IDs and
+compatibility selectors. This page records development directions only; it does
 not promote a method, backend, derivative, or performance claim.
 
 The roadmap intentionally avoids issue-by-issue history, one-off benchmark

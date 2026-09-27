@@ -31,7 +31,7 @@ def test_source_identity_tracks_incremental_inventory_changes(
     # Native test/benchmark assets are unnecessary for this codegen-only target.
     source = tmp_path / "source"
     source.mkdir()
-    for directory in ("cmake", "src", "include", "python", "tools"):
+    for directory in ("cmake", "src", "include", "python", "tools", "manifests"):
         shutil.copytree(
             ROOT / directory,
             source / directory,

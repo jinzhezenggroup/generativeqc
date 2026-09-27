@@ -13,6 +13,10 @@
 #include <cuda_runtime_api.h>
 #endif
 
+namespace vibeqc::dft {
+struct GridTaskView;
+}
+
 namespace vibeqc::dft::nlc {
 
 enum class Vv10Variant : std::int32_t { vv10 = 1, rvv10 = 2 };
@@ -78,6 +82,7 @@ struct Vv10CudaDeviceLayout {
   std::size_t workspace_bytes{};
   bool features{};
   bool geometry{};
+  bool mask_zero_weight_rows{};
 };
 
 /** Exact caller-owned workspace for resident CUDA VV10/rVV10 execution.
@@ -85,7 +90,8 @@ struct Vv10CudaDeviceLayout {
  * not included in workspace_bytes.
  */
 Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_t tile_points,
-                                             bool features, bool geometry);
+                                             bool features, bool geometry,
+                                             bool mask_zero_weight_rows = false);
 
 /** Enqueue one resident fixed-grid evaluation on the caller stream.
  * All scientific inputs and outputs are device-resident. No allocation,
@@ -110,6 +116,27 @@ void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_c
                                         const double* density, const double* density_gradient,
                                         double* effective_weights, double* effective_density,
                                         double* effective_density_gradient, int* numerical_error);
+
+/** Gather total rho and grad-rho from one resident GridTaskView tile.
+ * The tile is written into [offset, offset+npoint) of caller-owned full-grid
+ * buffers on the borrowed stream. No allocation, transfer or fence occurs.
+ */
+void enqueue_vv10_collect_total_features_cuda(cudaStream_t stream,
+                                              const vibeqc::dft::GridTaskView& view,
+                                              std::size_t offset, std::size_t total_points,
+                                              double* density, double* density_gradient,
+                                              int* numerical_error);
+
+/** Pack point derivatives into the shared [6,N] stationary seed layout.
+ * vrho/vsigma/weight derivatives already occupy seed rows 0,1,5. This fills
+ * x/y/z rows 2,3,4 from the native AoS point derivative and poisons all seed
+ * rows with NaN when any upstream asynchronous error flag is set.
+ */
+void enqueue_vv10_pack_force_seeds_cuda(cudaStream_t stream, std::size_t point_count,
+                                        const double* effective_weights,
+                                        const double* point_derivative, double* seeds,
+                                        const int* collect_error, const int* domain_error,
+                                        const int* pair_error);
 
 void execute_vv10_cuda(const double* coordinates, const double* weights, const double* density,
                        const double* density_gradient, std::size_t point_count,

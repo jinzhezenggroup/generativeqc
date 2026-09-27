@@ -23,6 +23,8 @@ from vibeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
 from vibeqc_compiler.method import (
+    METHOD_ALIASES,
+    METHOD_CATALOG,
     D4Spec,
     DispersionCorrectionPrimitive,
     MethodIR,
@@ -32,8 +34,6 @@ from vibeqc_compiler.method import (
 )
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
-
-from ._generated_methods import METHOD_METADATA
 
 SCF_DOMAIN = "semilocal-scaled-v1/pbe-spin-c2-1e-18"
 B3LYP_SCF_DOMAIN = "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18"
@@ -59,13 +59,51 @@ _NATIVE_CURATED_SCF_DOMAINS = {
     _NativeSemilocalFamily.WB97MV: WB97MV_SCF_DOMAIN,
 }
 
-# Manifest aliases share exactly the canonical method/spin binding.
-_NATIVE_KS_METHODS = {
-    selector: (metadata["compiler_method"], metadata["spin"])
-    for name, metadata in METHOD_METADATA.items()
-    if metadata["provider"] == "dft"
-    for selector in (name, *metadata["aliases"])
+# DFT scientific identity belongs to the compiler catalog, not the native ABI
+# manifest.  Keep only genuine compatibility spellings here; ordinary
+# <MethodIR-name>-rks/-uks selectors are discovered from METHOD_CATALOG.
+_LEGACY_KS_SELECTORS = {
+    "lda-rks": ("LDA_XC_PW", "unpolarized"),
+    "lda-uks": ("LDA_XC_PW", "polarized"),
+    "pbe-d4-rks": ("PBE-D4(BJ-EEQ-ATM)", "unpolarized"),
+    "wb97m-v": ("WB97M-V", "unpolarized"),
+    "wb97m-v-rks": ("WB97M-V", "unpolarized"),
 }
+
+
+def _public_dft_identifier_index() -> dict[str, str]:
+    result = {identifier.lower(): identifier for identifier in METHOD_CATALOG}
+    for alias, canonical in METHOD_ALIASES.items():
+        key = alias.lower()
+        existing = result.get(key)
+        if existing is not None and existing != canonical:
+            raise RuntimeError(f"ambiguous public DFT selector {alias!r}")
+        # Preserve the requested alias in MethodIR provenance; resolve_method()
+        # still maps it to the canonical mathematical specification.
+        result[key] = alias
+    return result
+
+
+_PUBLIC_DFT_IDENTIFIERS = _public_dft_identifier_index()
+
+
+def _public_dft_binding(method: typing.Any) -> tuple[str, str]:
+    if not isinstance(method, str):
+        raise TypeError("KS options require a string RKS/UKS method selector")
+    selector = method.lower()
+    legacy = _LEGACY_KS_SELECTORS.get(selector)
+    if legacy is not None:
+        return legacy
+    if selector.endswith("-rks"):
+        spin, stem = "unpolarized", selector[:-4]
+    elif selector.endswith("-uks"):
+        spin, stem = "polarized", selector[:-4]
+    else:
+        raise ValueError("KS options require an explicit RKS/UKS method selector")
+    identifier = _PUBLIC_DFT_IDENTIFIERS.get(stem)
+    if identifier is None:
+        raise ValueError(f"unknown DFT method selector {method!r}")
+    return identifier, spin
 
 
 @dataclass(frozen=True)
@@ -451,14 +489,13 @@ def ks_range_exchange_parameters(method_ir: typing.Any) -> typing.Any:
 
 
 def resolve_ks_method(method: typing.Any) -> typing.Any:
-    """Resolve a public native KS selector through its generated MethodIR binding."""
-    if method not in _NATIVE_KS_METHODS:
-        raise ValueError("KS options require a supported native RKS/UKS method")
-    identifier, spin = _NATIVE_KS_METHODS[method]
+    """Resolve a public KS selector from the compiler-owned MethodIR catalog."""
+    identifier, spin = _public_dft_binding(method)
     method_ir = resolve_method(identifier, spin=spin)
 
-    # MethodIR is authoritative for scientific composition.  The public
-    # manifest owns only the stable name -> compiler-method/spin binding.
+    # MethodIR is authoritative for scientific composition.  The native ABI
+    # registry owns stable provider IDs only and is deliberately not a DFT
+    # discovery whitelist.
     # Catalog-backed primitives retain their qualified native projection and
     # declaration identity. Discover them from the existing catalog, not a
     # second hand-maintained public-name or coefficient table.
@@ -483,6 +520,29 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
     semilocal = _native_semilocal(method_ir)
     ks_coefficients(method_ir)
     return method_ir, semilocal
+
+
+def public_dft_selectors() -> tuple[str, ...]:
+    """Enumerate compiler-owned DFT selectors that pass current native lowerer gates."""
+    selectors = set(_LEGACY_KS_SELECTORS)
+    for identifier in METHOD_CATALOG:
+        stem = identifier.lower()
+        for suffix in ("rks", "uks"):
+            selector = f"{stem}-{suffix}"
+            try:
+                resolve_ks_method(selector)
+            except (ValueError, NotImplementedError):
+                continue
+            selectors.add(selector)
+    return tuple(sorted(selectors))
+
+
+def native_dft_carrier(method: typing.Any) -> str:
+    """Return the stable native provider carrier for one compiler-resolved DFT selector."""
+    method_ir, _ = resolve_ks_method(method)
+    if _is_pbe_d4_composition(method_ir):
+        return "pbe-d4-rks"
+    return "pbe-uks" if method_ir.spin == "polarized" else "pbe-rks"
 
 
 def _scf_domain_for_ir(method_ir: typing.Any) -> str:
