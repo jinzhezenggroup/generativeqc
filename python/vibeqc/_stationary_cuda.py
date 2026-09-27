@@ -168,19 +168,29 @@ class _BoundedStationaryTaskExecutor:
             or len(identity) != 64
             or any(char not in "0123456789abcdef" for char in identity)
         ):
-            raise ValueError("stationary derivative task source requires a SHA-256 identity")
+            raise ValueError(
+                "stationary derivative task source requires a SHA-256 identity"
+            )
         if type(logical_tasks) is not int or logical_tasks < 0:
-            raise ValueError("stationary derivative task source requires nonnegative logical size")
+            raise ValueError(
+                "stationary derivative task source requires nonnegative logical size"
+            )
         if not callable(page_source) or not callable(payload_source):
-            raise TypeError("stationary derivative task source requires bounded pages/payload")
+            raise TypeError(
+                "stationary derivative task source requires bounded pages/payload"
+            )
         payload = payload_source()
         if not isinstance(payload, dict) or type(payload.get("schema")) is not str:
-            raise ValueError("stationary derivative task source requires a versioned schema")
+            raise ValueError(
+                "stationary derivative task source requires a versioned schema"
+            )
         source_schema = payload["schema"]
         if not source_schema.startswith("vibeqc.") or not source_schema.endswith(".v1"):
             raise ValueError("unsupported stationary derivative task-source schema")
         if canonical_hash(payload) != identity:
-            raise ValueError("stationary derivative task-source identity/payload mismatch")
+            raise ValueError(
+                "stationary derivative task-source identity/payload mismatch"
+            )
         if not callable(submit_page):
             raise TypeError("stationary derivative producer requires a page callback")
         if finish_page is not None and not callable(finish_page):
@@ -193,9 +203,7 @@ class _BoundedStationaryTaskExecutor:
                 "fixed"
                 if logical_tasks <= self.fixed_capacity
                 else (
-                    "resident"
-                    if logical_tasks <= self.resident_capacity
-                    else "paged"
+                    "resident" if logical_tasks <= self.resident_capacity else "paged"
                 )
             )
         )
@@ -203,20 +211,26 @@ class _BoundedStationaryTaskExecutor:
         page_rank: int | None = None
         for page in page_source(self.page_capacity):
             if not isinstance(page, RuntimeTaskPage):
-                raise TypeError("stationary derivative task source yielded an invalid page")
+                raise TypeError(
+                    "stationary derivative task source yielded an invalid page"
+                )
             if (
                 page.domain_identity != identity
                 or page.ordinal != pages
                 or page.offset != submitted
                 or page.capacity != self.page_capacity
             ):
-                raise RuntimeError("stationary derivative task page identity/order mismatch")
+                raise RuntimeError(
+                    "stationary derivative task page identity/order mismatch"
+                )
             if page.count > self.page_capacity:
                 raise RuntimeError("stationary task producer exceeded page capacity")
             if page_rank is None:
                 page_rank = page.rank
             elif page.rank != page_rank:
-                raise RuntimeError("stationary derivative task source changed page rank")
+                raise RuntimeError(
+                    "stationary derivative task source changed page rank"
+                )
             submit_page(page)
             if finish_page is not None:
                 finish_page()
