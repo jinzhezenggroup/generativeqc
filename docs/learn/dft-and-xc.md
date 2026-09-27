@@ -38,7 +38,7 @@ E_\mathrm{H}[n]
 \,d\mathbf r\,d\mathbf r'.
 $$
 
-Variation of the energy gives the Kohn-Sham equations,
+Variation of the energy gives the ordinary Kohn-Sham equations,
 
 $$
 \left[
@@ -62,6 +62,8 @@ v_\mathrm{xc}(\mathbf r)
 =
 \frac{\delta E_\mathrm{xc}}{\delta n(\mathbf r)}.
 $$
+
+This displayed multiplicative-potential form is the ordinary KS form. When orbital-dependent ingredients such as exact exchange or kinetic-energy-density dependence are treated directly, generalized-KS implementations can instead contain nonlocal or differential XC operators.
 
 The functional is part of the method identity. Broad semilocal families differ in which density features enter the XC energy. Schematically,
 
