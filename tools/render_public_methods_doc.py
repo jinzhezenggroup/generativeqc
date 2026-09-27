@@ -229,5 +229,14 @@ def render_public_methods_markdown() -> str:
     return "\n".join(lines)
 
 
+def render_public_methods_source(app: Any, docname: str, source: list[str]) -> None:
+    """Populate the public-method page and register every source dependency."""
+    if docname != "public_methods":
+        return
+    for dependency in public_method_doc_dependencies():
+        app.env.note_dependency(str(dependency))
+    source[0] = render_public_methods_markdown()
+
+
 if __name__ == "__main__":
     print(render_public_methods_markdown())
