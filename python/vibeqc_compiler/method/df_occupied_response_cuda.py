@@ -61,7 +61,7 @@ inline cublasStatus_t df_occupied_project_panel(
 /** Finish the exact fitted occupied projection from the final-K linear
  * factor U[(Q,i),mu]=sum_nu B[Q,mu,nu] C[nu,i].  The Q blocks are
  * interleaved in the leading dimension of U, so a strided batched GEMM emits
- * S[Q,i,j]=sum_mu U[(Q,i),mu] C[mu,j] directly in Q-major rank-squared layout.
+ * S[Q,i,j]=sum_mu C[mu,i] U[(Q,j),mu] directly in Q-major rank-squared layout.
  * This is the second half of df_occupied_project_panel(), reused without
  * rereading the immutable fitted tensor B.
  */
