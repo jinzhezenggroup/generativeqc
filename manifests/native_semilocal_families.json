@@ -41,7 +41,7 @@
       ],
       "range_omega": "0",
       "coefficient_policy": "native-scales",
-      "exchange_policy": "full-range-optional"
+      "exchange_policy": "any"
     },
     {
       "symbol": "R2scan",
@@ -91,7 +91,7 @@
       ],
       "range_omega": "0",
       "coefficient_policy": "exact",
-      "exchange_policy": "full-range-optional"
+      "exchange_policy": "any"
     },
     {
       "symbol": "Wb97mv",
