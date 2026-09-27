@@ -122,7 +122,7 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     body = re.sub(r"<<<.*?>>>", "", source[begin:end], flags=re.DOTALL)
     directory = tmp_path_factory.mktemp("grid-publication")
     path, executable = directory / "probe.cpp", directory / "probe"
-    path.write_text("\n".join((PREFIX, body, MAIN)))
+    path.write_text(f"{PREFIX}\n{body}\n{MAIN}")
     compiled = subprocess.run(
         [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
         capture_output=True,
