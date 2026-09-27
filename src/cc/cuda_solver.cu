@@ -79,7 +79,7 @@ struct Layout {
   std::array<std::size_t, 14> inputs{};
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
   std::size_t gram{}, system{}, coefficients{}, r1_partials{}, r2_partials{}, scalars{};
-  std::size_t status{}, arithmetic{}, total{};
+  std::size_t status{}, generated_error{}, arithmetic{}, total{};
 };
 
 std::size_t reserve(Layout& layout, std::size_t& cursor, std::size_t bytes) {
@@ -140,7 +140,10 @@ struct Owner {
     layout.r1_partials = reserve(layout, cursor, checked_mul(partial1, sizeof(double)));
     layout.r2_partials = reserve(layout, cursor, checked_mul(partial2, sizeof(double)));
     layout.scalars = reserve(layout, cursor, 2 * sizeof(double));
-    layout.status = reserve(layout, cursor, sizeof(int));
+    // Pack the generated-tensor error beside DIIS status so separating
+    // generated and DIIS arithmetic state does not increase the aligned arena.
+    layout.status = reserve(layout, cursor, 2 * sizeof(int));
+    layout.generated_error = checked_add(layout.status, sizeof(int));
     layout.arithmetic = reserve(layout, cursor, sizeof(int));
     layout.total = align256(cursor);
 
@@ -170,7 +173,7 @@ struct Owner {
       state.stream = stream;
       state.iteration_arena = reinterpret_cast<double*>(base + layout.iteration);
       state.replay_arena = reinterpret_cast<double*>(base + layout.replay);
-      state.error = reinterpret_cast<int*>(base + layout.arithmetic);
+      state.error = reinterpret_cast<int*>(base + layout.generated_error);
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
       vectors = reinterpret_cast<double*>(base + layout.vectors);
@@ -284,6 +287,13 @@ void run_diis(Owner& s, const SolverOptions& options,
                              s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
   cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.elements + s.n1, trial.r2,
                              s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
+  if (count == 1) {
+    s.check_generated_error();
+    s.history = 1;
+    return;
+  }
+  bool generated_error_checked = false;
+  int generated_error = 0;
   while (count > 1) {
     gram_kernel<<<count * count, 256, 0, s.stream>>>(s.errors, s.elements, count, s.gram);
     vibeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system, s.coefficients,
@@ -303,13 +313,23 @@ void run_diis(Owner& s, const SolverOptions& options,
         static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
         s.state.t2, s.arithmetic);
     int host_status = 1, arithmetic = 0;
+    if (!generated_error_checked)
+      cuda_check(cudaMemcpyAsync(&generated_error, s.state.error, sizeof(int),
+                                 cudaMemcpyDeviceToHost, s.stream));
     cuda_check(
         cudaMemcpyAsync(&host_status, s.status, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
     cuda_check(
         cudaMemcpyAsync(&arithmetic, s.arithmetic, sizeof(int), cudaMemcpyDeviceToHost, s.stream));
     cuda_check(cudaStreamSynchronize(s.stream));
-    s.diagnostic.scalar_d2h_bytes += 2 * sizeof(int);
+    s.diagnostic.scalar_d2h_bytes +=
+        (generated_error_checked ? 2 : 3) * sizeof(int);
     ++s.diagnostic.synchronizations;
+    if (!generated_error_checked) {
+      generated_error_checked = true;
+      if (generated_error)
+        throw std::runtime_error("nonfinite RCCSD generated CUDA tensor at node " +
+                                 std::to_string(std::abs(generated_error)));
+    }
     if (host_status == 2) break;
     if (host_status == 0) {
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
@@ -372,7 +392,6 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       owner.check_generated_error();
       if (options.diis_size) {
         const auto trial = generated::run_iteration_cuda(owner.state);
-        owner.check_generated_error();
         run_diis(owner, options, trial);
       }
       previous = status[0];
