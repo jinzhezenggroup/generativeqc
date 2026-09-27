@@ -24,10 +24,14 @@ from vibeqc_compiler.dft.plan import plan_tiles
 from vibeqc_compiler.integral.first_derivative_native import emit_first_derivative_cuda
 from vibeqc_compiler.method.nonlocal_correlation import NonlocalCorrelationPrimitive
 from vibeqc_compiler.method.stationary_cuda import compile_stationary_cuda
+from vibeqc_compiler.method.stationary_feature_lease import (
+    plan_stationary_feature_leases,
+)
 from vibeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from vibeqc_compiler.method.stationary_prepared import compile_stationary_prepared_plan
 from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from vibeqc_compiler.tensor.cuda_plan import plan_cuda
 
@@ -130,6 +134,13 @@ class PreparedWb97mvCudaGradient:
             source.method_ir,
             StationaryMeanField("libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"),
         )
+        prepared_plan = compile_stationary_prepared_plan(plan)
+        feature_plan = plan_stationary_feature_leases(prepared_plan)
+        grid_features = feature_plan.features
+        if "rho" not in grid_features or "gradient" not in grid_features:
+            raise RuntimeError(
+                "stationary execution planner omitted nonlocal density features"
+            )
         nlc = next(
             p
             for p in source.method_ir.primitives
@@ -186,7 +197,8 @@ class PreparedWb97mvCudaGradient:
         identity = (
             basis.identity,
             state.identity.geometry_identity,
-            plan.identity,
+            prepared_plan.identity,
+            feature_plan.identity,
             source.grid_spec,
             device,
             tile_points,
@@ -220,10 +232,7 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
-                        # This retained owner executes one nuclear primitive per
-                        # native call. Total pair coverage is bounded separately
-                        # by the admitted atom domain and explicit pair loop.
-                        page_work_budget=1,
+                        work_budget=max(1, na * (na - 1) // 2),
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
@@ -248,7 +257,7 @@ class PreparedWb97mvCudaGradient:
                         active_ao_capacity=n,
                         budget_bytes=gp.peak_bytes,
                         device_id=device,
-                        ingredients=("rho", "gradient", "tau"),
+                        ingredients=grid_features,
                     )
                 )
                 rp = plan_cuda(
@@ -338,9 +347,7 @@ class PreparedWb97mvCudaGradient:
         for begin in range(0, npnt, tile_points):
             end = min(begin + tile_points, npnt)
             points = state.grid.points[begin:end]
-            with self.grid.feature_task_with_features(
-                points, ids, ("rho", "gradient", "tau")
-            ) as (
+            with self.grid.feature_task_with_features(points, ids, grid_features) as (
                 features,
                 task,
             ):
@@ -431,6 +438,12 @@ class PreparedWb97mvCudaGradient:
         work = {
             "execution": "cuda-complete-wb97mv",
             "plan_identity": plan.identity,
+            "prepared_plan_identity": prepared_plan.identity,
+            "execution_graph_identity": prepared_plan.graph.identity,
+            "lifetime_plan_identity": prepared_plan.lifetimes.identity,
+            "feature_lease_identity": feature_plan.identity,
+            "grid_features": list(feature_plan.features),
+            "retained_grid_features": list(feature_plan.retained_features),
             "source_names": list(plan.source_names),
             "grid_points": npnt,
             "ao_collocation_point_visits": 2 * npnt,
