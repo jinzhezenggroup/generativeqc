@@ -160,6 +160,9 @@ def run_matrix(
     requested = _validate_quotas(quotas)
     if not isinstance(evidence_prefix, str) or not evidence_prefix.strip():
         raise ValueError("broad matrix requires a nonempty evidence prefix")
+    names = [capability.name for capability in capabilities]
+    if len(names) != len(set(names)):
+        raise ValueError("broad matrix requires unique functional names")
     prefix = evidence_prefix.rstrip("/")
     output.mkdir(parents=True, exist_ok=True)
 
