@@ -355,9 +355,17 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
     p.last_points = npoint;
     p.last_active = active;
     p.features_ready = features != 0;
+    // A nonempty borrowed feature lease has no host numerical output. Avoid
+    // turning every input/kernel/library subsection into a host fence merely
+    // to collect detailed timings; the final error publication below remains
+    // the single correctness synchronization for this tile. Explicit host
+    // outputs, empty publication, and non-feature consumers retain detailed
+    // section timing.
+    const bool detailed_profile =
+        !(npoint && features && !feature_output && !jet_output);
     for (size_t i = 0; i < 3 * npoint; ++i)
       if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
-    ctx.section(true, ctx.metrics.input_ms, [&] {
+    ctx.section(detailed_profile, ctx.metrics.input_ms, [&] {
       cuda_check(
           cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
       cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
@@ -373,7 +381,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
       return;
     }
     if (active)
-      ctx.section(true, ctx.metrics.kernel_ms, [&] {
+      ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
         ao_kernel<<<blocks(p.jets * npoint * active, 128), 128, 0, ctx.stream>>>(
             p.basis, p.natom, p.nprimitive, active, p.points, npoint, p.jets, p.ao, ctx.error,
             p.local ? p.ao_ids : nullptr);
@@ -384,7 +392,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
       for (int spin = 0; spin < 2; ++spin) {
         for (size_t begin = 0; active && begin < p.orbital_count[spin]; begin += p.orbital_tile) {
           const size_t width = std::min(p.orbital_tile, p.orbital_count[spin] - begin);
-          ctx.section(true, ctx.metrics.packing_ms, [&] {
+          ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
             gather_factor<<<blocks(active * width, 128), 128, 0, ctx.stream>>>(
                 p.factors[spin], p.local ? p.ao_ids : nullptr, active, p.orbital_count[spin], begin,
                 width, p.factor_panel);
@@ -393,11 +401,11 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
           const I psi_stride = npoint * width;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 14) ? 4 - first : 1;
-          ctx.section(true, ctx.metrics.library_ms, [&] {
+          ctx.section(detailed_profile, ctx.metrics.library_ms, [&] {
             gemm(ctx, 'N', 'N', npoint, width, active, p.ao + first * ao_stride, p.factor_panel,
                  p.psi + first * psi_stride, ao_stride, 0, psi_stride, count, 0);
           });
-          ctx.section(true, ctx.metrics.packing_ms, [&] {
+          ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
             orbital_feature_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
                 p.psi, npoint, width, spin, p.features, ctx.error, p.feature_mask);
             cuda_check(cudaGetLastError());
@@ -405,7 +413,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
         }
       }
       if (p.feature_mask & 4)
-        ctx.section(true, ctx.metrics.packing_ms, [&] {
+        ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
           finish_orbital_sigma<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(p.features, npoint,
                                                                             ctx.error);
           cuda_check(cudaGetLastError());
@@ -413,13 +421,13 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
     } else if (features) {
       const I stride = npoint * active;
       if (p.local && active)
-        ctx.section(true, ctx.metrics.packing_ms, [&] {
+        ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
           gather_density<<<blocks(2 * active * active, 128), 128, 0, ctx.stream>>>(
               p.density, p.ao_ids, p.nao, active, p.local_density);
           cuda_check(cudaGetLastError());
         });
       if (active)
-        ctx.section(true, ctx.metrics.library_ms, [&] {
+        ctx.section(detailed_profile, ctx.metrics.library_ms, [&] {
           const double* density = p.local ? p.local_density : p.density;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
@@ -428,7 +436,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
                  static_cast<int>(active), p.ao + first * stride, density + spin * active * active,
                  p.work + (spin * 4 + first) * stride, stride, 0, stride, count, 0);
         });
-      ctx.section(true, ctx.metrics.packing_ms, [&] {
+      ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
         feature_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
             p.ao, p.work, npoint, active, p.features, ctx.error, p.feature_mask);
         cuda_check(cudaGetLastError());
