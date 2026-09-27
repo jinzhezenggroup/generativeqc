@@ -12,7 +12,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
-PYTHON_OUTPUT = ROOT / "python/vibeqc/_generated_semilocal_families.py"
+PYTHON_OUTPUT = ROOT / "python/vibeqc_compiler/xc/_generated_native_semilocal.py"
 SCHEMA = "vibeqc.native-semilocal-families.v1"
 
 
