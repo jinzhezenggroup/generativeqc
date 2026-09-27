@@ -31,8 +31,7 @@ __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, 
   if constexpr (Variant == Vv10Variant::rvv10) {
     const double zi = wi * r2 + 1.0;
     const double zj = wj * r2 + 1.0;
-    const double kappa_product = ki * kj;
-    result.phi = -1.5 / (kappa_product * sqrt(kappa_product) * zi * zj * (zi + zj));
+    result.phi = -1.5 / (ki * kj * zi * zj * (zi + zj));
     if constexpr (Features) {
       const double factor_z = 1.0 / zi + 1.0 / (zi + zj);
       result.dphi_domega = -result.phi * r2 * row_inverse_kappa * factor_z;
@@ -93,10 +92,15 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
     if (!isfinite(domega_drho[i]) || !isfinite(domega_dsigma[i]) || !isfinite(dkappa_drho[i]))
       atomicExch(failed, 1);
   }
-  // rVV10 pair algebra depends on alpha=omega/kappa rather than omega itself.
-  // Once local feature derivatives are materialized, reuse the same O(N)
-  // workspace slot for alpha so the O(N^2) pair loop performs no alpha divide.
-  if constexpr (Variant == Vv10Variant::rvv10) omega[i] /= kappa[i];
+  // rVV10 pair algebra depends on alpha=omega/kappa and kappa^(3/2).
+  // Once local feature derivatives are materialized, reuse the existing
+  // omega/kappa workspace slots for those pair invariants so the O(N^2)
+  // loop performs neither alpha division nor a per-pair square root.
+  if constexpr (Variant == Vv10Variant::rvv10) {
+    omega[i] /= kappa[i];
+    kappa[i] *= sqrt(kappa[i]);
+    if (!isfinite(omega[i]) || !isfinite(kappa[i])) atomicExch(failed, 1);
+  }
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
@@ -126,7 +130,8 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t tile_poi
   const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
   const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
   double row_inverse_kappa = 0.0;
-  if constexpr (Variant == Vv10Variant::rvv10) row_inverse_kappa = 1.0 / ki;
+  if constexpr (Variant == Vv10Variant::rvv10 && Features)
+    row_inverse_kappa = 1.0 / (6.0 * rhoi * dkappa_rhoi);
 
   double sum_phi = 0.0;
   double sum_rho = 0.0;
