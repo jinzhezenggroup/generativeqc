@@ -130,8 +130,9 @@ __global__ void validate_centers(const double* centers, size_t na, double tolera
 __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
-                                const double* raw, const double* external, double* partial,
-                                double* scratch, int* error);
+                                const double* raw, const double* external, size_t external_stride,
+                                size_t external_offset, double* partial, double* scratch,
+                                int* error);
 __global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
 }  // namespace vibeqc_stationary_cuda
@@ -376,7 +377,7 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
       profile_record(*p, p->stage1, stream);
       geometry_kernel<<<1, workers, 0, stream>>>(
           *view, work, p->ao_atoms, p->point_atoms, p->centers, p->atoms, p->weights, p->raw,
-          seeds.get(), p->partial, p->scratch, p->context.error);
+          seeds.get(), view->npoint, 0, p->partial, p->scratch, p->context.error);
       profile_record(*p, p->stage2, stream);
       geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
           p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
@@ -405,6 +406,100 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
     }
   });
 }
+int stationary_geometry_external_device(void* pointer, const vibeqc::dft::GridTaskView* view,
+                                        const double* work, const int64_t* owners,
+                                        const double* weights, const double* raw,
+                                        const double* external_device, size_t external_stride,
+                                        size_t external_offset, char* error, size_t size) {
+  using namespace vibeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+        view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
+        !view->ao_ids || !view->ao || !view->points || !external_device ||
+        external_stride < external_offset || view->npoint > external_stride - external_offset)
+      throw std::invalid_argument("invalid resident nonlocal geometry seed lease");
+    check(*p);
+    drain_geometry(*p);
+    auto stream = view->stream;
+    // external_device is caller-owned device memory. The caller guarantees
+    // readiness on this borrowed stream and retains the allocation until this
+    // synchronous gate returns. The kernel validates all six seed fields.
+    try {
+      profile_record(*p, p->stage0, stream);
+      upload(*p, p->point_atoms, owners, view->npoint, stream);
+      upload(*p, p->weights, weights, view->npoint, stream);
+      upload(*p, p->raw, raw, view->npoint, stream);
+      profile_record(*p, p->stage1, stream);
+      geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms,
+                                                 p->centers, p->atoms, p->weights, p->raw,
+                                                 external_device, external_stride, external_offset,
+                                                 p->partial, p->scratch, p->context.error);
+      profile_record(*p, p->stage2, stream);
+      geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
+          p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+      profile_record(*p, p->stage3, stream);
+      p->launches += 2;
+      p->point_count += view->npoint;
+      p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+      ++p->geometry_batches;
+      finished(*p, stream);
+      profile_elapsed(*p, p->geometry_h2d_ms, p->stage0, p->stage1);
+      profile_elapsed(*p, p->geometry_kernel_ms, p->stage1, p->stage2);
+      profile_elapsed(*p, p->geometry_reduction_ms, p->stage2, p->stage3);
+    } catch (...) {
+      const auto sync_begin = std::chrono::steady_clock::now();
+      if (cudaStreamSynchronize(stream) == cudaSuccess) {
+        if (p->profile) {
+          p->synchronization_wait_ms += std::chrono::duration<double, std::milli>(
+                                            std::chrono::steady_clock::now() - sync_begin)
+                                            .count();
+        }
+        ++p->synchronizations;
+      }
+      throw;
+    }
+  });
+}
+int stationary_geometry_external_device_enqueue(
+    void* pointer, const vibeqc::dft::GridTaskView* view, const double* work, const int64_t* owners,
+    const double* weights, const double* raw, const double* external_device, size_t external_stride,
+    size_t external_offset, char* error, size_t size) {
+  using namespace vibeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+        view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
+        !view->ao_ids || !view->ao || !view->points || !external_device ||
+        external_stride < external_offset || view->npoint > external_stride - external_offset)
+      throw std::invalid_argument("invalid deferred resident nonlocal geometry seed lease");
+    check(*p);
+    auto stream = view->stream;
+    if (p->geometry_pending && p->geometry_stream != stream)
+      throw std::invalid_argument("stationary deferred geometry stream changed before drain");
+    if (!p->geometry_pending) {
+      p->geometry_stream = stream;
+      p->geometry_pending = true;
+    }
+    // The caller retains the full-grid seed owner until drain_geometry().
+    // Stream order protects both the borrowed GridTaskView and device seeds.
+    upload(*p, p->point_atoms, owners, view->npoint, stream);
+    upload(*p, p->weights, weights, view->npoint, stream);
+    upload(*p, p->raw, raw, view->npoint, stream);
+    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, p->centers,
+                                               p->atoms, p->weights, p->raw, external_device,
+                                               external_stride, external_offset, p->partial,
+                                               p->scratch, p->context.error);
+    geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
+        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+    cuda_check(cudaGetLastError());
+    p->launches += 2;
+    p->point_count += view->npoint;
+    p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    ++p->geometry_batches;
+  });
+}
+
 int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* view,
                                 const double* work, const int64_t* owners, const double* weights,
                                 const double* raw, char* error, size_t size) {
@@ -430,8 +525,8 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
     geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, p->centers,
-                                               p->atoms, p->weights, p->raw, nullptr, p->partial,
-                                               p->scratch, p->context.error);
+                                               p->atoms, p->weights, p->raw, nullptr, 0, 0,
+                                               p->partial, p->scratch, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
