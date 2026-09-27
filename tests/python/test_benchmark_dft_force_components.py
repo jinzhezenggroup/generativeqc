@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tools.benchmark_dft_force_components import extract_records
+from tools.benchmark_dft_force_components import _coverage, extract_records
 
 
 def test_extract_stationary_record_uses_normalized_component_schema() -> None:
@@ -191,3 +191,22 @@ def test_extract_matrix_retains_case_and_force_negative_evidence() -> None:
     assert rows[1]["metadata"]["scenario"] == "cold"
     assert rows[2]["status"] == "unavailable"
     assert rows[2]["metadata"]["scenario"] == "diagnostic_scf_profile"
+
+
+def test_report_coverage_counts_negative_outcomes() -> None:
+    coverage = _coverage(
+        [
+            {"status": "measured"},
+            {"status": "measured"},
+            {"status": "unsupported"},
+            {"status": "failed"},
+            {"status": "unavailable"},
+        ]
+    )
+
+    assert coverage["outcomes"] == {
+        "failed": 1,
+        "measured": 2,
+        "unavailable": 1,
+        "unsupported": 1,
+    }
