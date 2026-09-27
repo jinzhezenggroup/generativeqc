@@ -1534,6 +1534,35 @@ vibeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
 }
+vibeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateToken& expected,
+                                                  CudaKsResidentDensityBinding& binding,
+                                                  std::string& detail) const {
+  binding = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS resident-density token has stale owner, epoch, generation or model");
+    if (!impl_->density || !impl_->matrix || (impl_->spins != 1 && impl_->spins != 2))
+      throw std::logic_error("CUDA KS resident-density storage is unavailable");
+    binding = {impl_->device,
+               impl_->density,
+               impl_->spins == 2 ? impl_->density + impl_->matrix : nullptr,
+               impl_->matrix,
+               impl_->spins,
+               impl_->owner,
+               impl_->solve_epoch,
+               impl_->final_generation};
+    return VIBEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
 vibeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& expected,
                                            bool compute_weighted_density,
                                            VerifiedKsFinalState& state, std::string& detail) {
