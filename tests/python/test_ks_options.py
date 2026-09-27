@@ -348,6 +348,7 @@ def test_semantic_ks_abi_lowers_pbe0_primitives_directly() -> None:
     native = native_ks_options(resolve_ks_options("pbe0-rks", KsOptions(grid=CUSTOM)))
     assert native.struct_size == ctypes.sizeof(_native.KsOptionsDescriptor)
     assert native.spin_channels == 1
+    assert not native.semilocal_program
     assert [
         (
             native.semilocal_components[i].component_id.decode(),
