@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
 
 from tools import generate_libxc_public_cpu_registry as registry
+
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_empty_public_registry_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
