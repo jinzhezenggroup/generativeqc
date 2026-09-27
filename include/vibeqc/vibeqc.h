@@ -686,6 +686,15 @@ typedef struct vibeqc_ks_options {
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
 VIBEQC_API uint32_t vibeqc_ks_options_version(void);
 
+/** Resolve one build-time AOT bulk Libxc point program admitted by exact public evidence.
+ *
+ * The returned descriptor and native_program pointer are owned by libvibeqc and
+ * remain valid for the library lifetime. Unknown, stale or non-admitted
+ * registrations return VIBEQC_STATUS_NOT_IMPLEMENTED.
+ */
+VIBEQC_API vibeqc_status vibeqc_libxc_semilocal_program_get(
+    const char* component_id, vibeqc_ks_semilocal_program* program);
+
 /** Current method preparation descriptor. Callers must provide this complete layout. */
 typedef struct vibeqc_method_descriptor {
   uint32_t struct_size;
