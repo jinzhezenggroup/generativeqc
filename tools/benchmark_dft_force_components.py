@@ -114,10 +114,13 @@ def _wb97mv_records(
                 }
             ]
         component = normalize_force_work(work)
+    normalized_status = (
+        "measured" if status in {"measured", "complete", "unknown"} else status
+    )
     return [
         {
             "metadata": metadata,
-            "status": (\n                "measured"\n                if status in {"measured", "complete", "unknown"}\n                else status\n            ),
+            "status": normalized_status,
             "components": dict(component),
         }
     ]
