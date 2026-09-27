@@ -6,7 +6,7 @@
 #include "integrals/electron_interaction_source.hpp"
 #include "posthf/block_capacity_generated.hpp"
 #include "posthf/raw_source.hpp"
-#include "scf/types.hpp"
+#include "hf/reference.hpp"
 #include "tensor/metrics.hpp"
 
 namespace vibeqc::posthf {
@@ -37,7 +37,7 @@ class MOBlockProvider {
   virtual std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
                                   vibeqc_tensor::Metrics* metrics = nullptr) const = 0;
   virtual std::size_t provider_bytes() const noexcept = 0;
-  virtual const scf::PhysicalReference& reference() const noexcept = 0;
+  virtual const hf::PhysicalReference& reference() const noexcept = 0;
 };
 
 /** Native consumer adapter of CG10's cyclic staged transformation. A private
@@ -45,7 +45,7 @@ class MOBlockProvider {
 class NativeBlockProvider final : public MOBlockProvider {
  public:
   NativeBlockProvider(const integrals::ElectronInteractionSource& source,
-                      const scf::PhysicalReference& reference, std::size_t budget,
+                      const hf::PhysicalReference& reference, std::size_t budget,
                       unsigned axis_tile = 2);
   NumericBlockPlan plan(const std::array<std::size_t, 4>& shape, bool cuda = false) const;
   std::size_t batch_bytes(const std::array<std::size_t, 4>& shape, std::size_t requests,
@@ -65,13 +65,13 @@ class NativeBlockProvider final : public MOBlockProvider {
   std::size_t reference_bytes() const noexcept { return reference_bytes_; }
   std::size_t provider_bytes() const noexcept override { return source_bytes_ + reference_bytes_; }
   const std::array<std::size_t, 4>& tile_shape() const noexcept { return tile_; }
-  const scf::PhysicalReference& reference() const noexcept override { return ref_; }
+  const hf::PhysicalReference& reference() const noexcept override { return ref_; }
   const integrals::ElectronInteractionSource& source() const noexcept { return source_; }
 
  private:
   std::size_t common_host_bytes() const;
   const integrals::ElectronInteractionSource& source_;
-  const scf::PhysicalReference& ref_;
+  const hf::PhysicalReference& ref_;
   std::size_t budget_, source_bytes_, reference_bytes_;
   std::array<std::size_t, 4> tile_;
 };
@@ -86,12 +86,12 @@ class NativeBlockProvider final : public MOBlockProvider {
  */
 class DensityFittedBlockProvider final : public MOBlockProvider {
  public:
-  DensityFittedBlockProvider(const RawSource& source, const scf::PhysicalReference& reference,
+  DensityFittedBlockProvider(const RawSource& source, const hf::PhysicalReference& reference,
                              std::size_t budget, double relative_threshold = 1.0e-10);
   std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
                           vibeqc_tensor::Metrics* metrics = nullptr) const override;
   std::size_t provider_bytes() const noexcept override { return provider_bytes_; }
-  const scf::PhysicalReference& reference() const noexcept override { return ref_; }
+  const hf::PhysicalReference& reference() const noexcept override { return ref_; }
   const RawSource& source() const noexcept { return source_; }
   std::size_t auxiliary_count() const noexcept { return naux_; }
   double relative_threshold() const noexcept { return relative_threshold_; }
@@ -102,7 +102,7 @@ class DensityFittedBlockProvider final : public MOBlockProvider {
 
  private:
   const RawSource& source_;
-  const scf::PhysicalReference& ref_;
+  const hf::PhysicalReference& ref_;
   std::size_t budget_{}, n_{}, naux_{}, provider_bytes_{};
   double relative_threshold_{};
   std::vector<double> metric_, inverse_square_root_, transformed_, whitened_;
