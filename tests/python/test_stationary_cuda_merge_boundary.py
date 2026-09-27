@@ -265,12 +265,12 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         "h2d_bytes": 0,
         "d2h_bytes": 0,
         "launches": 1,
-        "primitive_records": owner.integral.call_count,
+        "primitive_records": owner.integral_page.call_count,
         "xc_points": 0,
         "grid_pair_visits": 0,
         "stream": 0,
-        "task_descriptors": owner.integral.call_count,
-        "task_batches": owner.integral.call_count,
+        "task_descriptors": owner.integral_page.call_count,
+        "task_batches": owner.integral_page.call_count,
     }
 
     grid_owner = MagicMock()
@@ -330,11 +330,11 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
     assert admitted["spin_blocks"] == 1
-    assert owner.integral.call_args_list == [
-        call(0, "kinetic", (0, 0)),
-        call(0, "nuclear_attraction", (0, 0), 0, 1),
-        call(5, "overlap", (0, 0)),
-        call(1, "four_center_eri", (0, 0, 0, 0)),
+    assert owner.integral_page.call_args_list == [
+        call(0, "kinetic", ((0, 0),)),
+        call(0, "nuclear_attraction", ((0, 0),), 0, 1),
+        call(5, "overlap", ((0, 0),)),
+        call(1, "four_center_eri", ((0, 0, 0, 0),)),
     ]
     owner.reduced.assert_called_once_with()
     assert result.work["tensor_executions"] == 0
