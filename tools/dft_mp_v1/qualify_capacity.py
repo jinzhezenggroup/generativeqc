@@ -58,6 +58,26 @@ PRIMITIVE_RECORDS_DEFINITION = (
     "(1 + int(has_exchange)) * primitive_sum ** 4 + "
     "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
 )
+GRID_PAIR_VISITS_DEFINITION = "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
+SOURCE_BYTES_DEFINITION = (
+    "8 * (22 * primitive_tile + 2 * basis.nprimitive + 4 * n + "
+    "(579 + 3 * len(source_names)) * na + 3 * tile_points + "
+    "2 * plan.spin_blocks * n * n) + 256"
+)
+HOST_BOUND_DEFINITION = (
+    "grid_plan.host_bytes + 8 * (34 * primitive_tile + "
+    "4 * plan.spin_blocks * n * n + 120 * na + "
+    "12 * (len(source_names) - len(_SOURCE_NAMES)) * na + "
+    "26 * integral_terms + 3 * tile_points + 2 * basis.nprimitive + "
+    "4 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
+)
+BASIS_PACKED_CAPACITY_DEFINITION = (
+    "np.empty(3 * self.natom + 2 * self.nprimitive + 16 * self.nao)"
+)
+BASIS_NUMERIC_CAPACITY_DEFINITION = (
+    "2 * self.packed.nbytes + 32 * self.natom + "
+    "32 * len(self.shells) + 16 * self.nprimitive"
+)
 STATIONARY_OWNER = {
     "file": "python/vibeqc/_stationary_cuda.py",
     "function": "_complete_rks_cuda_gradient_diagnostic",
@@ -135,32 +155,60 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if len(functions) != 1:
         raise RuntimeError("stationary CUDA admission owner is missing or ambiguous")
     owner = functions[0]
-    definitions = {
-        target.id: ast.unparse(node.value)
-        for node in owner.body
-        if isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance((target := node.targets[0]), ast.Name)
-        and target.id in ("primitive_sum", "records")
-    }
-    if definitions.get("primitive_sum") != PRIMITIVE_SUM_DEFINITION:
-        raise RuntimeError("stationary CUDA primitive-sum definition changed")
-    if definitions.get("records") != PRIMITIVE_RECORDS_DEFINITION:
-        raise RuntimeError("stationary CUDA primitive-record definition changed")
-    whole_force_primitive_budget = next(
-        (
+    definition_nodes = {
+        name: [
             node
             for node in owner.body
-            if isinstance(node, ast.If)
-            and ast.unparse(node.test) == "records > max_primitive_records"
-        ),
-        None,
-    )
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name
+        ]
+        for name in (
+            "primitive_sum",
+            "records",
+            "pair_visits",
+            "source_bytes",
+            "host_bound",
+        )
+    }
+    if any(len(nodes) != 1 for nodes in definition_nodes.values()):
+        raise RuntimeError(
+            "stationary CUDA capacity definitions are missing or ambiguous"
+        )
+    definitions = {
+        name: ast.unparse(nodes[0].value) for name, nodes in definition_nodes.items()
+    }
+    expected_definitions = {
+        "primitive_sum": PRIMITIVE_SUM_DEFINITION,
+        "records": PRIMITIVE_RECORDS_DEFINITION,
+        "pair_visits": GRID_PAIR_VISITS_DEFINITION,
+        "source_bytes": SOURCE_BYTES_DEFINITION,
+        "host_bound": HOST_BOUND_DEFINITION,
+    }
+    definition_labels = {
+        "primitive_sum": "primitive-sum",
+        "records": "primitive-record",
+        "pair_visits": "grid-pair-visits",
+        "source_bytes": "source-bytes",
+        "host_bound": "host-bound",
+    }
+    for name, expected in expected_definitions.items():
+        if definitions[name] != expected:
+            raise RuntimeError(
+                f"stationary CUDA {definition_labels[name]} definition changed"
+            )
+    whole_force_primitive_budgets = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "records > max_primitive_records"
+    ]
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"
         )
-    if whole_force_primitive_budget is None:
+    if len(whole_force_primitive_budgets) != 1:
         raise RuntimeError(
             "capacity qualifier requires a source-verified whole-force cumulative "
             "primitive-record admission gate"
@@ -198,6 +246,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_records_scope": "whole_force_cumulative",
         "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
         "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
+        "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
+        "source_bytes_definition": SOURCE_BYTES_DEFINITION,
+        "host_bound_definition": HOST_BOUND_DEFINITION,
+        "tile_points": default("tile_points"),
+        "primitive_tile": default("primitive_tile"),
+        "integral_terms": default("integral_terms"),
         "grid_points": default("max_grid_points"),
         "grid_pair_visits": default("max_grid_pair_visits"),
         "additional_device_bytes": default("max_device_bytes"),
@@ -220,6 +274,51 @@ def _grid_spec(payload: dict[str, Any]) -> GridSpec:
     return GridSpec(**values)
 
 
+def _basis_layout_contract(repository: Path) -> dict[str, str]:
+    source = (repository / "python/vibeqc_compiler/dft/ao.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "NativeAO"
+    ]
+    if len(classes) != 1:
+        raise RuntimeError("NativeAO capacity owner is missing or ambiguous")
+    constructors = [
+        node
+        for node in classes[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    ]
+    if len(constructors) != 1:
+        raise RuntimeError("NativeAO capacity constructor is missing or ambiguous")
+    packed = [
+        ast.unparse(node.value)
+        for node in ast.walk(constructors[0])
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "packed"
+    ]
+    numeric = [
+        ast.unparse(node.value)
+        for node in ast.walk(constructors[0])
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Attribute)
+        and ast.unparse(node.targets[0]) == "self.numeric_bytes"
+    ]
+    if packed != [BASIS_PACKED_CAPACITY_DEFINITION]:
+        raise RuntimeError("NativeAO packed capacity definition changed")
+    if numeric != [BASIS_NUMERIC_CAPACITY_DEFINITION]:
+        raise RuntimeError("NativeAO numeric capacity definition changed")
+    return {
+        "packed_capacity_definition": packed[0],
+        "numeric_capacity_definition": numeric[0],
+    }
+
+
 def _basis_shape(
     atoms: tuple[Atom, ...], charge: int, multiplicity: int
 ) -> tuple[dict[str, Any], Any]:
@@ -237,19 +336,16 @@ def _basis_shape(
         len(shell.primitives) * SPARSE_SPHERICAL_COMPONENT_TERMS[shell.angular_momentum]
         for shell in shells
     )
-    packed_elements = 3 * len(atoms) + 2 * primitive_count + 16 * ao_count
+    packed = np.empty(3 * len(atoms) + 2 * primitive_count + 16 * ao_count)
     numeric_bytes = (
-        2 * 8 * packed_elements
-        + 32 * len(atoms)
-        + 32 * len(shells)
-        + 16 * primitive_count
+        2 * packed.nbytes + 32 * len(atoms) + 32 * len(shells) + 16 * primitive_count
     )
     synthetic = SimpleNamespace(
         nao=ao_count,
         natom=len(atoms),
         nprimitive=primitive_count,
         numeric_bytes=numeric_bytes,
-        packed=np.empty(packed_elements),
+        packed=packed,
     )
     record = _named_basis_record("def2-svp", "spherical")
     metadata = resolved_basis_metadata(
@@ -282,11 +378,14 @@ def _method_resources(
 ) -> tuple[dict[str, Any], Any]:
     plan = _qualified_aot_plan(functional, spin)
     source_names = stationary_runtime_sources(plan)
+    tile_points = limits["tile_points"]
+    primitive_tile = limits["primitive_tile"]
+    integral_terms = limits["integral_terms"]
     grid_plan = plan_tiles(
         basis,
         backend="cuda",
         order=1 if functional == 0 else 2,
-        tile_points=256,
+        tile_points=tile_points,
         active_ao_capacity=basis.nao,
         # Estimate even a losing case so the report cannot hide it by raising
         # from the live budget gate before recording the required bytes.
@@ -295,23 +394,23 @@ def _method_resources(
     source_bytes = (
         8
         * (
-            22 * 4096
+            22 * primitive_tile
             + 2 * basis.nprimitive
             + 4 * basis.nao
             + (579 + 3 * len(source_names)) * atom_count
-            + 3 * 256
+            + 3 * tile_points
             + 2 * plan.spin_blocks * basis.nao * basis.nao
         )
         + 256
     )
     device_bound = grid_plan.peak_bytes + source_bytes
     host_bound = grid_plan.host_bytes + 8 * (
-        34 * 4096
+        34 * primitive_tile
         + 4 * plan.spin_blocks * basis.nao * basis.nao
         + 120 * atom_count
         + 12 * (len(source_names) - len(STATIONARY_RUNTIME_SOURCE_NAMES)) * atom_count
-        + 26 * 32
-        + 3 * 256
+        + 26 * integral_terms
+        + 3 * tile_points
         + 2 * basis.nprimitive
         + 4 * basis.nao
         + 80
@@ -554,6 +653,7 @@ def build_report(
         )
 
     limits = _source_limits(repository)
+    basis_layout = _basis_layout_contract(repository)
     _source_package_inventory(repository)
     _source_public_route(repository)
     grid_spec = _grid_spec(manifest["model"]["grid_spec"])
@@ -795,6 +895,7 @@ def build_report(
             "basis_pack_sha256": basis_pack_sha,
             "basis_pack_sha256_match": basis_pack_matches,
             "manifest_ao_counts_match": ao_counts_match,
+            **basis_layout,
             "component_primitive_sum_derivation": (
                 "sum(shell primitive count * sparse public-AO Cartesian term count); "
                 "s=1, p=3, spherical d=8 from src/molecule/basis.cpp"

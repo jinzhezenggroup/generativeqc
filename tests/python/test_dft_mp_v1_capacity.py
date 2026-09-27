@@ -32,6 +32,13 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     }
     assert result["basis"]["manifest_ao_counts_match"] is True
     assert result["basis"]["basis_pack_sha256_match"] is True
+    assert result["basis"]["packed_capacity_definition"] == (
+        "np.empty(3 * self.natom + 2 * self.nprimitive + 16 * self.nao)"
+    )
+    assert result["basis"]["numeric_capacity_definition"] == (
+        "2 * self.packed.nbytes + 32 * self.natom + "
+        "32 * len(self.shells) + 16 * self.nprimitive"
+    )
 
     cases = {item["id"]: item for item in result["cases"]}
     assert set(cases) == {
@@ -87,6 +94,18 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "(1 + int(has_exchange)) * primitive_sum ** 4 + "
         "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
     )
+    assert result["admission_limits"]["grid_pair_visits_definition"] == (
+        "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
+    )
+    assert result["admission_limits"]["source_bytes_definition"].startswith(
+        "8 * (22 * primitive_tile"
+    )
+    assert result["admission_limits"]["host_bound_definition"].startswith(
+        "grid_plan.host_bytes + 8 * (34 * primitive_tile"
+    )
+    assert result["admission_limits"]["tile_points"] == 256
+    assert result["admission_limits"]["primitive_tile"] == 4096
+    assert result["admission_limits"]["integral_terms"] == 32
     assert result["admission_limits"]["grid_points"] == 1_000_000
     assert result["admission_limits"]["grid_pair_visits"] == 100_000_000
 
@@ -235,6 +254,36 @@ def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
 
     with pytest.raises(RuntimeError, match="primitive-record definition"):
         qualify_capacity._source_limits(tmp_path)
+
+
+def test_memory_bounds_fail_closed_when_production_definition_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "22 * primitive_tile"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "23 * primitive_tile", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="source-bytes definition"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc_compiler/dft/ao.py").read_text(encoding="utf-8")
+    old = "2 * self.packed.nbytes"
+    assert old in source
+    target = tmp_path / "python/vibeqc_compiler/dft/ao.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source.replace(old, "3 * self.packed.nbytes", 1), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="numeric capacity definition"):
+        qualify_capacity._basis_layout_contract(tmp_path)
 
 
 def test_module_import_binds_helpers_to_the_tool_checkout(tmp_path: Path) -> None:
