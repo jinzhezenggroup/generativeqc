@@ -120,6 +120,12 @@ class CudaXcPlan {
   CudaXcGridView grid_view() const;
   void enqueue(const double* density, std::size_t elements, std::uint64_t generation,
                CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
+  /** Enqueue only the stable device body for a shared replay region. The caller
+   * must publish exactly one logical generation per physically submitted body
+   * after the runtime chooses warmup/capture/replay/fallback. */
+  CudaXcView enqueue_replay_body(
+      const double* density, std::size_t elements,
+      CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
   /** Execute the ordinary physical XC evaluation while also publishing total
    * rho and grad-rho to caller-owned full-grid device buffers. This adds no
    * plan-owned storage and is admitted only for GGA/meta-GGA ingredient sets. */
@@ -136,10 +142,9 @@ class CudaXcPlan {
    * matrix assembly. Signed directions use the same input layout as density. */
   void enqueue_response(const double* density, const double* direction, std::size_t elements,
                         std::uint64_t generation);
-  /** Publish the next logical generation after the shared runtime successfully
-   * submits a cached replay of this plan's already-captured device work. This
-   * performs no numerical launch or transfer. */
-  void publish_replayed_generation(std::uint64_t generation);
+  /** Publish host generation/accounting after a replay-runtime body has been
+   * physically submitted. This performs no numerical launch or transfer. */
+  void publish_submitted_generation(std::uint64_t generation);
   CudaXcView view(std::uint64_t generation) const;
   CudaXcScalars read_scalars(std::uint64_t generation);
   /** Explicit user/reference matrix export, never called by enqueue. */
@@ -149,7 +154,8 @@ class CudaXcPlan {
   void check_device() const;
   void enqueue_impl(const double* density, const double* direction, std::size_t elements,
                     std::uint64_t generation, CudaXcDensityPrecision precision,
-                    double* total_density = nullptr, double* total_gradient = nullptr);
+                    double* total_density = nullptr, double* total_gradient = nullptr,
+                    bool publish_generation = true);
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
   CudaXcTransfers transfers_;
