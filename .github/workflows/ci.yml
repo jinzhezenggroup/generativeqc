@@ -684,24 +684,16 @@ jobs:
               'tests/python/test_dft_complete_cpu.py::test_production_grid_open_shell_converges_against_independent_dense_quadrature[lda-uks-tight]'
               --deselect
               'tests/python/test_dft_complete_cpu.py::test_production_grid_open_shell_converges_against_independent_dense_quadrature[pbe-uks-tight]'
-              # Closed-shell SPD ECP reconverged finite differences are
-              # qualification-scale on hosted runners. The two LDA-UKS
-              # reconverged finite-difference cases are also ~9 minutes each.
-              # Keep the much faster PBE-UKS complete-force checks plus paired
-              # and budgeted ECP contracts on routine CI; run the redundant
-              # RKS/LDA qualification matrix on scheduled/manual CI.
+              # The LDA-RKS SPD ECP reconverged finite differences remain
+              # qualification-scale (~505 s each in scheduled CI run 6250).
+              # PBE-RKS and LDA-UKS now take only ~12.5-13.0 s each in that
+              # same run, comparable to routine PBE-UKS, so keep those four
+              # cases on routine CI and defer only the still-expensive LDA-RKS
+              # pair to scheduled/manual qualification.
               --deselect
               'tests/python/test_ecp_spd_cartesian_cpu.py::test_spd_force_analytic_and_reconverged_fd[lda-rks]'
               --deselect
               'tests/python/test_ecp_spd_spherical_cpu.py::test_spd_force_analytic_and_reconverged_fd[lda-rks]'
-              --deselect
-              'tests/python/test_ecp_spd_cartesian_cpu.py::test_spd_force_analytic_and_reconverged_fd[pbe-rks]'
-              --deselect
-              'tests/python/test_ecp_spd_spherical_cpu.py::test_spd_force_analytic_and_reconverged_fd[pbe-rks]'
-              --deselect
-              'tests/python/test_ecp_spd_cartesian_cpu.py::test_spd_force_analytic_and_reconverged_fd[lda-uks]'
-              --deselect
-              'tests/python/test_ecp_spd_spherical_cpu.py::test_spd_force_analytic_and_reconverged_fd[lda-uks]'
             )
           fi
           # Keep every routine Python test on every PR, but remove the single
