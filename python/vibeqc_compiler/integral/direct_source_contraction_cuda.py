@@ -21,7 +21,7 @@ _SOURCE = r"""#pragma once
 #include "scf/cuda/cartesian_angular.cuh"
 #include "scf/cuda/direct_native_cartesian.cuh"
 #include "scf/cuda/direct_native_order2_shell.cuh"
-#include "scf/cuda/direct_native_shell_class.cuh"
+#include "generated_direct_shell_class.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"

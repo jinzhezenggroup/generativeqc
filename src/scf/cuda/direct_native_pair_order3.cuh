@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_eri_order2.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_eri_order2.cuh"
 #include "scf/cuda/direct_native_pair_order2.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
