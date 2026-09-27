@@ -355,13 +355,15 @@ if(VIBEQC_BUILD_TESTS)
              COMMAND vibeqc_cli methods --json)
     set_tests_properties(vibeqc_cli_methods PROPERTIES
                          PASS_REGULAR_EXPRESSION "gfn2-xtb")
-    add_test(NAME vibeqc_cli_gfn2_cpu
-             COMMAND vibeqc_cli run
-                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/gfn2_h3_plus.xyz"
-                     --method gfn2-xtb --backend cpu --charge 1 --units bohr
-                     --forces --json)
-    set_tests_properties(vibeqc_cli_gfn2_cpu PROPERTIES
-                         PASS_REGULAR_EXPRESSION "energy_hartree")
+    if(VIBEQC_XTB_CPU_LINALG_LIBRARY OR VIBEQC_BUNDLE_XTB_OPENBLAS)
+      add_test(NAME vibeqc_cli_gfn2_cpu
+               COMMAND vibeqc_cli run
+                       "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/gfn2_h3_plus.xyz"
+                       --method gfn2-xtb --backend cpu --charge 1 --units bohr
+                       --forces --json)
+      set_tests_properties(vibeqc_cli_gfn2_cpu PROPERTIES
+                           PASS_REGULAR_EXPRESSION "energy_hartree")
+    endif()
   endif()
 endif()
 
