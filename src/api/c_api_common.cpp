@@ -1,4 +1,4 @@
-#include <cmath>\n#include <cstring>\n#include <limits>\n\n#include "api/error.hpp"
+#include <cmath>\n#include <cstddef>\n#include <cstring>\n#include <limits>\n\n#include "api/error.hpp"
 #include "generated_libxc_public_cpu.hpp"
 #include "methods/method.hpp"
 #include "vibeqc/vibeqc.h"
@@ -57,7 +57,7 @@ vibeqc_status vibeqc_libxc_semilocal_program_evaluate_v1(
                             xc.kinetic[0], xc.kinetic[1]};
       for (double value : packed)
         if (!std::isfinite(value)) return VIBEQC_STATUS_NUMERICAL_FAILURE;
-      std::copy(std::begin(packed), std::end(packed), values + stride * point);
+      for (std::size_t i = 0; i < stride; ++i) values[stride * point + i] = packed[i];
     }
     return VIBEQC_STATUS_SUCCESS;
   } catch (...) {
