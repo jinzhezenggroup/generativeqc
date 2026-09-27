@@ -1,0 +1,85 @@
+name: Scratch Libxc broad qualification
+
+on:
+  push:
+    branches:
+      - scratch/libxc-broad-matrix-run
+
+permissions:
+  contents: read
+
+jobs:
+  broad-libxc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      NUMEXPR_NUM_THREADS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Prepare CPU linear algebra runtime
+        run: |
+          uv venv --python 3.11 .venv-gfn2-build
+          uv pip install --python .venv-gfn2-build/bin/python scipy
+          xtb_linalg="$(
+            .venv-gfn2-build/bin/python - <<'PY_INNER'
+          from pathlib import Path
+          import scipy
+          site = Path(scipy.__file__).resolve().parent.parent
+          matches = sorted((site / "scipy.libs").glob("libscipy_openblas*.so"))
+          if len(matches) != 1:
+              raise SystemExit(f"expected one SciPy OpenBLAS runtime, found {matches}")
+          print(matches[0])
+          PY_INNER
+          )"
+          echo "VIBEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
+      - name: Build CPU native library
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DVIBEQC_ENABLE_CUDA=OFF \
+            -DVIBEQC_BUILD_TESTS=OFF \
+            -DVIBEQC_XTB_CPU_LINALG_LIBRARY="$VIBEQC_XTB_CPU_LINALG_LIBRARY" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+      - name: Install Python package and pinned reference stack
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python --editable '.[test,reference-test]'
+          .venv/bin/python - <<'PY_INNER'
+          import pyscf
+          from pyscf.dft import libxc
+          assert pyscf.__version__ == "2.14.0", pyscf.__version__
+          assert libxc.__version__ == "7.0.0", libxc.__version__
+          PY_INNER
+      - name: Run broad Libxc CPU promotion matrix
+        run: |
+          .venv/bin/python tools/qualify_libxc_broad_matrix.py \
+            --output .artifacts/libxc-broad-matrix \
+            --evidence-prefix artifact://github-actions/${GITHUB_RUN_ID}/libxc-broad-matrix \
+            --build-dir build \
+            --require-pass
+      - name: Show broad matrix summary
+        if: always()
+        run: |
+          if [[ -f .artifacts/libxc-broad-matrix/summary.json ]]; then
+            cat .artifacts/libxc-broad-matrix/summary.json
+          fi
+      - name: Preserve broad qualification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: libxc-broad-matrix-${{ github.run_id }}
+          path: .artifacts/libxc-broad-matrix
+          if-no-files-found: warn
+          retention-days: 14
