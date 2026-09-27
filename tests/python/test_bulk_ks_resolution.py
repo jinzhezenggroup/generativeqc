@@ -128,6 +128,9 @@ def test_bulk_ks_requires_exact_cpu_stages_and_builds_pure_plan(
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
     )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
+    )
 
     result = bulk_ks.resolve_bulk_ks(
         capability.name,
@@ -165,6 +168,9 @@ def test_bulk_ks_descriptive_identifier_does_not_change_semantic_plan(
     )
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
+    )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
     )
 
     first = bulk_ks.resolve_bulk_ks(capability.name, identifier="candidate-a")
@@ -323,11 +329,16 @@ def test_public_bulk_ks_requires_exact_public_endpoint_before_routing(
         return public
 
     evidence = {"public-method": {"sentinel": True}}
-    monkeypatch.setattr(bulk_ks, "functional_capability", lambda *args, **kwargs: capability)
+    monkeypatch.setattr(
+        bulk_ks, "functional_capability", lambda *args, **kwargs: capability
+    )
     monkeypatch.setattr(bulk_ks, "resolve_endpoint_capability", fake_endpoint)
     monkeypatch.setattr(bulk_ks, "resolve_capability", fake_resolve)
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
+    )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
     )
 
     result = bulk_ks.resolve_public_bulk_ks(
@@ -373,7 +384,9 @@ def test_public_bulk_ks_rejects_endpoint_identity_drift(
         qualified_stages=("public-method",),
         public_dft=True,
     )
-    monkeypatch.setattr(bulk_ks, "functional_capability", lambda *args, **kwargs: capability)
+    monkeypatch.setattr(
+        bulk_ks, "functional_capability", lambda *args, **kwargs: capability
+    )
     monkeypatch.setattr(
         bulk_ks,
         "resolve_endpoint_capability",
@@ -386,6 +399,9 @@ def test_public_bulk_ks_rejects_endpoint_identity_drift(
     monkeypatch.setattr(bulk_ks, "resolve_capability", lambda *args, **kwargs: public)
     monkeypatch.setattr(
         bulk_ks, "_require_exact_compiled_cpu", lambda capability: _compiled_cpu()
+    )
+    monkeypatch.setattr(
+        bulk_ks, "_require_exact_molecular_scf", lambda capability: "c" * 64
     )
 
     with pytest.raises(RuntimeError, match="endpoint identity changed"):
