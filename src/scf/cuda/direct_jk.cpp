@@ -479,11 +479,20 @@ static vibeqc_status enqueue_cuda_direct_jk_device_impl(CudaDirectJkPlan* plan, 
         direct_jk_check(cudaGetLastError());
       }
     if (spec.coulomb.present || spec.exchange.present) {
-      const auto dispatch = direct_jk_value_dispatch(
-          plan->generated_coulomb != nullptr, spec.coulomb.present, spec.exchange.present, mixed_j);
+      auto* generated_coulomb =
+          plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                   : plan->generated_coulomb.get();
+      const bool generated_exchange_available =
+          plan->generated_exchange != nullptr && spec.exchange.present &&
+          spec.exchange.op == FockOperator::FullRange;
+      const auto dispatch =
+          direct_jk_value_dispatch(generated_coulomb != nullptr, generated_exchange_available,
+                                   spec.coulomb.present, spec.exchange.present, mixed_j);
       if (dispatch.generated_coulomb)
-        direct_jk_check(
-            enqueue_generated_coulomb(*plan->generated_coulomb, density, beta, coulomb));
+        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+      if (dispatch.generated_exchange)
+        direct_jk_check(enqueue_generated_exchange(*plan->generated_exchange, unrestricted, density,
+                                                   beta, alpha_exchange, beta_exchange));
       if (dispatch.generic_coulomb || dispatch.generic_exchange) {
         launch_independent_jk_kernel(
             static_cast<unsigned>(elements), kIndependentJkThreads, 0, plan->stream, plan->batch, 0,
