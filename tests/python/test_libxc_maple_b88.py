@@ -14,7 +14,9 @@ from vibeqc_compiler.integral.cuda import CudaEmitter
 from vibeqc_compiler.integral.expr import Graph
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
 from vibeqc_compiler.xc.libxc_maple import import_maple_source
-from vibeqc_compiler.xc.expression_dispatch import build_energy_expression as energy_expression
+from vibeqc_compiler.xc.expression_dispatch import (
+    build_energy_expression as energy_expression,
+)
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
