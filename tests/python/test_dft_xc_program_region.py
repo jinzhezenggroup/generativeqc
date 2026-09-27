@@ -145,7 +145,7 @@ def test_host_region_cost_counts_exact_cuda_ks_bridge_payload() -> None:
     profitability = candidates.host_unfused.schedule.profitability
     assert profitability.semantic_traffic_bytes == expected
     assert expected == 2 * (2 * 7 * 7 * 8) + 24 + 4
-    assert candidates.host_unfused.schedule.resources.host_bytes > expected
+    assert candidates.host_unfused.schedule.resources.host_bytes == expected
 
 
 def test_measured_device_fused_route_replaces_complete_host_region() -> None:
