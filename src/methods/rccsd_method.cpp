@@ -417,6 +417,7 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     performance.source_reads = provider_work.source_reads;
     performance.source_values = provider_work.source_values;
     performance.transform_fmas = provider_work.transform_fmas;
+    performance.transform_stages = provider_work.transform_stages;
     performance.mo_blocks = provider_work.mo_blocks;
     performance.cuda_transform_calls = provider_work.cuda_transform_calls;
     performance.cuda_batch_calls = provider_work.cuda_batch_calls;

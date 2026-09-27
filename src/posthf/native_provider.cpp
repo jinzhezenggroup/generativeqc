@@ -263,9 +263,11 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
                 const auto ao = work_shape[0];
                 const auto rest = work_elements / ao;
                 const auto columns = state.shape[k];
-                if (!cuda || prefix_reuse.leaders[request][k] == request)
+                if (!cuda || prefix_reuse.leaders[request][k] == request) {
                   work->transform_fmas = checked_add(work->transform_fmas,
                                                      checked_mul(checked_mul(rest, ao), columns));
+                  work->transform_stages = checked_add(work->transform_stages, 1);
+                }
                 work_elements = checked_mul(rest, columns);
                 for (unsigned j = 0; j < 3; ++j) work_shape[j] = work_shape[j + 1];
                 work_shape[3] = columns;

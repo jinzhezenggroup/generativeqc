@@ -18,6 +18,7 @@ struct ProviderWork {
   std::size_t source_reads{};
   std::size_t source_values{};
   std::size_t transform_fmas{};
+  std::size_t transform_stages{};
   std::size_t mo_blocks{};
   std::size_t cuda_transform_calls{};
   std::size_t cuda_batch_calls{};

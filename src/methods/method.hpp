@@ -70,6 +70,7 @@ struct CcPerformanceDiagnostic {
   std::uint64_t source_reads{};
   std::uint64_t source_values{};
   std::uint64_t transform_fmas{};
+  std::uint64_t transform_stages{};
   std::uint64_t mo_blocks{};
   std::uint64_t cuda_transform_calls{};
   std::uint64_t cuda_batch_calls{};
