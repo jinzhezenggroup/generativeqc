@@ -162,6 +162,6 @@ def test_wb97mv_resident_nonlocal_timers_map_to_vv10_component() -> None:
     assert record["wall_seconds"]["vv10_rvv10"] == pytest.approx(0.70)
     assert "vv10_rvv10" in record["coverage"]["wall_seconds"]
     assert record["source_component_seconds"]["nonlocal_reset"] == pytest.approx(0.01)
-    assert record["source_component_seconds"]["density_and_nuclear_setup"] == pytest.approx(
-        0.07
-    )
+    assert record["source_component_seconds"][
+        "density_and_nuclear_setup"
+    ] == pytest.approx(0.07)
