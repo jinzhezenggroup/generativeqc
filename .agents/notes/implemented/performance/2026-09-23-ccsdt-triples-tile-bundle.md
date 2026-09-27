@@ -35,7 +35,7 @@ independent gradient oracle. A failed prewarm must not publish tile results.
 
 `tests/python/test_cc_triples_response.py` checks that the prewarmed set is
 exactly the executed set and that all returned cotangents match the interpreter.
-The complete cold/warm endpoint comparator and CI artifact procedure are in
+The complete cold/warm endpoint comparator and manual qualification procedure are in
 `tools/benchmark_ccsdt_cpu_bundles.py` and
 `docs/maintainer/ccsdt_cpu_bundle_qualification.md`.
 The comparator supplies one fixed RHF generation ID to all independent child

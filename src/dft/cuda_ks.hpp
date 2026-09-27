@@ -48,6 +48,9 @@ struct CudaKsTransfers {
   std::uint64_t execution_region_bindings{}, execution_region_invalidations{};
   std::uint64_t execution_region_executions{}, execution_region_failures{};
   std::uint64_t execution_region_recoveries{};
+  /** Shared CUDA-Graph lifecycle evidence for the bounded solver region. */
+  std::uint64_t execution_region_captures{}, execution_region_replays{};
+  std::uint64_t execution_region_fallbacks{};
   /** Explicit host-unfused XC staging, separate from ordinary setup/seed movement. */
   std::uint64_t xc_host_d2h_bytes{}, xc_host_h2d_bytes{}, xc_host_synchronizations{};
 };

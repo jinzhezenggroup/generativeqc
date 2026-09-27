@@ -10,6 +10,7 @@ capability inferred.
 
 from __future__ import annotations
 
+import time
 import typing
 from copy import deepcopy
 from dataclasses import dataclass
@@ -35,8 +36,10 @@ from .first_order import (
     generated_weighted_first_integral_gradient,
 )
 from .rks_directional import (
+    DirectionalRKSBatchResponse,
     DirectionalRKSResponse,
     directional_rks_response,
+    directional_rks_responses,
     native_rks_xc_hvp_components,
 )
 from .stationary_executor import (
@@ -56,6 +59,36 @@ class RKSHVPResult:
     components: typing.Mapping[str, np.ndarray]
     directional_response: DirectionalRKSResponse
     plan_identity: str
+    identity: str
+    _diagnostics: typing.Mapping[str, typing.Any]
+
+    @property
+    def diagnostics(self) -> dict[str, typing.Any]:
+        return deepcopy(dict(self._diagnostics))
+
+
+@dataclass(frozen=True, eq=False)
+class RKSHVPBatchResult:
+    """Detached complete HVPs assembled from one shared RKS multi-RHS solve."""
+
+    directions: np.ndarray
+    values: np.ndarray
+    results: tuple[RKSHVPResult, ...]
+    directional_responses: DirectionalRKSBatchResponse
+    plan_identity: str
+    identity: str
+    _diagnostics: typing.Mapping[str, typing.Any]
+
+    @property
+    def diagnostics(self) -> dict[str, typing.Any]:
+        return deepcopy(dict(self._diagnostics))
+
+
+@dataclass(frozen=True, eq=False)
+class RKSHessianResult:
+    """Raw bounded Cartesian RKS Hessian assembled from complete block HVPs."""
+
+    matrix: np.ndarray
     identity: str
     _diagnostics: typing.Mapping[str, typing.Any]
 
@@ -239,27 +272,20 @@ def _xc_hvp_components(
     return {name: getattr(sources, name) for name in ("xc_ao", "xc_grid", "xc_weight")}
 
 
-def rks_hvp(
-    operator: typing.Any,
-    direction: typing.Any,
+def _rks_hvp_with_response(
+    operator: NativeRKSResponse,
+    vector: np.ndarray,
+    directional: DirectionalRKSResponse,
     *,
-    cache: typing.Any = ".artifacts",
-    solver_options: typing.Any = None,
+    plan: StationaryHVPPlan,
+    cache: Path,
+    response_driver_identity: str,
+    nuclear_response_solves: int,
+    execution: str,
 ) -> RKSHVPResult:
-    """Apply the complete bounded direct LDA/PBE RKS molecular Hessian once.
-
-    The MethodIR-derived plan owns source inventory and integral weights. Exactly
-    one real nuclear CPKS solve supplies D'(v)/W'(v). Integral contributors use
-    generated first/second derivative providers, while XC contributors reuse the
-    native SCF point response plus analytic AO/grid/Becke mixed directions.
-    """
-    if not isinstance(operator, NativeRKSResponse):
-        raise TypeError("RKS molecular HVP requires NativeRKSResponse")
-    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
-        raise TypeError("solver_options must be GMRESOptions")
-    plan = _checked_plan(operator)
-    vector = checked_direction(direction, operator.xc_kernel.basis.natom)
-    cache = Path(cache)
+    """Assemble one complete HVP from an already solved directional response."""
+    if not np.array_equal(directional.direction, vector):
+        raise ValueError("RKS HVP direction does not match the supplied response")
     provider_diagnostics: dict[str, typing.Any] = {}
     xc_cache: dict[str, np.ndarray] = {}
 
@@ -287,6 +313,12 @@ def rks_hvp(
             return xc_cache[source_name]
 
         return evaluate
+
+    def reuse_response(value: typing.Any) -> DirectionalRKSResponse:
+        candidate = checked_direction(value, operator.xc_kernel.basis.natom)
+        if not np.array_equal(candidate, directional.direction):
+            raise ValueError("stationary executor requested a different RKS direction")
+        return directional
 
     contributors = (
         StationaryHVPContributor(
@@ -329,21 +361,15 @@ def rks_hvp(
             lambda value: immutable(np.asarray(value, dtype=np.float64)),
         ),
         response=StationaryResponseDriver(
-            "native-rks-shared-cpks-direction-v1",
-            lambda value: directional_rks_response(
-                operator,
-                value,
-                cache=cache,
-                solver_options=solver_options,
-            ),
+            response_driver_identity,
+            reuse_response,
         ),
         contributors=contributors,
     )
     executed = executor.apply(vector)
     operator.validate_current()
-    directional = executed.response
-    if not isinstance(directional, DirectionalRKSResponse):
-        raise TypeError("RKS HVP response driver returned an invalid response")
+    if executed.response is not directional:
+        raise RuntimeError("RKS HVP executor did not reuse the supplied response")
     identity = canonical_hash(
         {
             "schema": "vibeqc.rks-hvp/v1",
@@ -358,14 +384,14 @@ def rks_hvp(
             **dict(executed.diagnostics),
             "molecular_hvp": True,
             "method": operator.state.identity.method,
-            "nuclear_response_solves": 1,
+            "nuclear_response_solves": nuclear_response_solves,
             "response_iterations": directional.response.solve_result.iterations,
             "response_residual_norm": directional.response.solve_result.residual_norm,
             "integral_providers": deepcopy(provider_diagnostics),
             "xc_second_order": "native-scf-point-response/analytic-grid-mixed",
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
-            "execution": "bounded-cpu-native-rks-hvp-v2",
+            "execution": execution,
         }
     )
     return RKSHVPResult(
@@ -377,3 +403,232 @@ def rks_hvp(
         identity=identity,
         _diagnostics=diagnostics,
     )
+
+
+def rks_hvp(
+    operator: typing.Any,
+    direction: typing.Any,
+    *,
+    cache: typing.Any = ".artifacts",
+    solver_options: typing.Any = None,
+) -> RKSHVPResult:
+    """Apply the complete bounded direct LDA/PBE RKS molecular Hessian once."""
+    if not isinstance(operator, NativeRKSResponse):
+        raise TypeError("RKS molecular HVP requires NativeRKSResponse")
+    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
+        raise TypeError("solver_options must be GMRESOptions")
+    plan = _checked_plan(operator)
+    vector = checked_direction(direction, operator.xc_kernel.basis.natom)
+    cache_path = Path(cache)
+    directional = directional_rks_response(
+        operator,
+        vector,
+        cache=cache_path,
+        solver_options=solver_options,
+    )
+    return _rks_hvp_with_response(
+        operator,
+        vector,
+        directional,
+        plan=plan,
+        cache=cache_path,
+        response_driver_identity="native-rks-shared-cpks-direction-v1",
+        nuclear_response_solves=1,
+        execution="bounded-cpu-native-rks-hvp-v2",
+    )
+
+
+def rks_hvp_many(
+    operator: typing.Any,
+    directions: typing.Any,
+    *,
+    cache: typing.Any = ".artifacts",
+    strategy: str = "recycled",
+    solver_options: typing.Any = None,
+) -> RKSHVPBatchResult:
+    """Apply complete RKS HVPs after one shared sequential/blocked/recycled solve."""
+    if not isinstance(operator, NativeRKSResponse):
+        raise TypeError("RKS molecular HVP block requires NativeRKSResponse")
+    if strategy not in ("sequential", "blocked", "recycled"):
+        raise ValueError("strategy must be sequential, blocked or recycled")
+    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
+        raise TypeError("solver_options must be GMRESOptions")
+    plan = _checked_plan(operator)
+    natom = operator.xc_kernel.basis.natom
+    raw = np.asarray(directions)
+    if (
+        raw.ndim != 3
+        or raw.shape[0] < 1
+        or raw.shape[1:] != (natom, 3)
+        or raw.dtype.kind not in "iuf"
+        or np.iscomplexobj(raw)
+        or not np.isfinite(raw).all()
+    ):
+        raise ValueError(
+            "RKS HVP block directions must be finite real with shape (nrhs, natoms, 3)"
+        )
+    vectors = tuple(checked_direction(item, natom) for item in raw)
+    cache_path = Path(cache)
+    directional = directional_rks_responses(
+        operator,
+        np.stack(vectors),
+        cache=cache_path,
+        strategy=strategy,
+        solver_options=solver_options,
+    )
+    results = tuple(
+        _rks_hvp_with_response(
+            operator,
+            vector,
+            response,
+            plan=plan,
+            cache=cache_path,
+            response_driver_identity="native-rks-shared-cpks-multi-rhs-v1",
+            nuclear_response_solves=0,
+            execution="bounded-cpu-native-rks-hvp-multi-rhs-v1",
+        )
+        for vector, response in zip(vectors, directional.responses, strict=True)
+    )
+    values = immutable(np.stack([item.value for item in results]))
+    published_directions = immutable(np.stack(vectors))
+    identity = canonical_hash(
+        {
+            "schema": "vibeqc.rks-hvp-batch/v1",
+            "state": operator.state.identity.to_payload(),
+            "plan": plan.identity,
+            "strategy": strategy,
+            "directional_response_batch": directional.identity,
+            "results": tuple(item.identity for item in results),
+        }
+    )
+    diagnostics = MappingProxyType(
+        {
+            "molecular_hvp": True,
+            "nrhs": len(results),
+            "strategy": strategy,
+            "multi_rhs_calls": 1,
+            "response_operator_actions": directional.solve_result.operator_actions,
+            "response_peak_workspace_bytes": (
+                directional.solve_result.peak_workspace_bytes
+            ),
+            "rhs_rank": directional.solve_result.rhs_rank,
+            "rank_deficient_rhs": directional.solve_result.rank_deficient_rhs,
+            "full_molecular_hessian_allocated": False,
+            "full_ao_rank_four_weights": False,
+            "execution": "bounded-cpu-native-rks-hvp-multi-rhs-v1",
+        }
+    )
+    return RKSHVPBatchResult(
+        directions=published_directions,
+        values=values,
+        results=results,
+        directional_responses=directional,
+        plan_identity=plan.identity,
+        identity=identity,
+        _diagnostics=diagnostics,
+    )
+
+
+def rks_hessian(
+    operator: typing.Any,
+    *,
+    block_size: int | None = None,
+    cache: typing.Any = ".artifacts",
+    strategy: str = "recycled",
+    output_budget_bytes: int = 64 << 20,
+    solver_options: typing.Any = None,
+) -> RKSHessianResult:
+    """Assemble the raw bounded semilocal RKS Hessian from block HVP columns.
+
+    The output is never symmetrized. output_budget_bytes covers the dense
+    result plus its final immutable publication; response/provider work keeps
+    the existing independently bounded contracts and is reported per block.
+    """
+    if not isinstance(operator, NativeRKSResponse):
+        raise TypeError("RKS Hessian requires NativeRKSResponse")
+    _checked_plan(operator)
+    if strategy not in ("sequential", "blocked", "recycled"):
+        raise ValueError("strategy must be sequential, blocked or recycled")
+    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
+        raise TypeError("solver_options must be GMRESOptions")
+    if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
+        raise ValueError("output_budget_bytes must be a positive int64 byte count")
+
+    natom = operator.xc_kernel.basis.natom
+    coordinates = 3 * natom
+    if block_size is None:
+        block_size = min(4, coordinates)
+    if type(block_size) is not int or not 1 <= block_size <= coordinates:
+        raise ValueError("block_size must be between 1 and 3*natoms")
+
+    output_bytes = coordinates * coordinates * np.dtype(np.float64).itemsize
+    output_peak_bound = 2 * output_bytes
+    if output_peak_bound > output_budget_bytes:
+        raise ValueError(
+            "full RKS Hessian output and immutable publication exceed "
+            "output_budget_bytes"
+        )
+
+    matrix = np.empty((coordinates, coordinates), dtype=np.float64)
+    cache_path = Path(cache)
+    blocks: list[dict[str, typing.Any]] = []
+    started = time.perf_counter()
+    for begin in range(0, coordinates, block_size):
+        end = min(coordinates, begin + block_size)
+        directions = np.zeros((end - begin, coordinates), dtype=np.float64)
+        for local, column in enumerate(range(begin, end)):
+            directions[local, column] = 1.0
+        result = rks_hvp_many(
+            operator,
+            directions.reshape(end - begin, natom, 3),
+            cache=cache_path,
+            strategy=strategy,
+            solver_options=solver_options,
+        )
+        matrix[:, begin:end] = result.values.reshape(end - begin, coordinates).T
+        blocks.append(
+            {
+                "begin": begin,
+                "end": end,
+                "identity": result.identity,
+                "diagnostics": result.diagnostics,
+            }
+        )
+        del result, directions
+
+    operator.validate_current()
+    if not np.isfinite(matrix).all():
+        raise FloatingPointError("nonfinite RKS Hessian; no result published")
+    # Keep at most one additional dense array alive. The nested expression
+    # abs(matrix - matrix.T) would allocate two and violate the output peak.
+    symmetry_scratch = matrix - matrix.T
+    np.abs(symmetry_scratch, out=symmetry_scratch)
+    symmetry_error = float(np.max(symmetry_scratch, initial=0.0))
+    del symmetry_scratch
+    identity = canonical_hash(
+        {
+            "schema": "vibeqc.rks-hessian-block/v1",
+            "state": operator.state.identity.to_payload(),
+            "block_size": block_size,
+            "strategy": strategy,
+            "blocks": tuple(item["identity"] for item in blocks),
+        }
+    )
+    diagnostics = MappingProxyType(
+        {
+            "method": operator.state.identity.method,
+            "block_size": block_size,
+            "block_count": len(blocks),
+            "strategy": strategy,
+            "output_bytes": output_bytes,
+            "output_peak_bound_bytes": output_peak_bound,
+            "output_budget_bytes": output_budget_bytes,
+            "raw_symmetry_error": symmetry_error,
+            "posthoc_symmetrization": False,
+            "blocks": tuple(blocks),
+            "seconds": time.perf_counter() - started,
+            "public_calculator_endpoint": False,
+            "complete_resource_bound": False,
+        }
+    )
+    return RKSHessianResult(immutable(matrix), identity, diagnostics)
