@@ -431,7 +431,7 @@ def benchmark_case(
                 "method": method,
                 "selector": calculator._method_name,
                 "method_identity": calculator.method_ir.identity,
-                "execution_plan": calculator.ks_options.execution_plan.to_payload(),
+                "ks_options_identity": calculator.ks_options.identity,\n                "execution_plan": calculator.ks_options.execution_plan.to_payload(),
                 "exchange_operators": list(exchange_operators),
                 "nonlocal_correlation": nonlocal_correlation,
                 "system": system,
