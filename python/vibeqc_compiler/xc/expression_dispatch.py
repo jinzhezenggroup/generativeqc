@@ -65,7 +65,9 @@ def build_energy_expression(
         name = next(iter(automatic))
         reason = blacklist_reason(name)
         if reason is not None:
-            raise UnsupportedXC(f"automatic Libxc functional {name} is blacklisted: {reason}")
+            raise UnsupportedXC(
+                f"automatic Libxc functional {name} is blacklisted: {reason}"
+            )
         return build_pointwise_energy_expression(spec)
     if active & set(WB97MV_COMPONENTS):
         if not active <= set(WB97MV_COMPONENTS):
