@@ -1,4 +1,4 @@
-"""Generate stable native ABI/provider metadata from one audited manifest."""
+"""Generate native provider-carrier metadata from one audited manifest."""
 
 from __future__ import annotations
 
@@ -221,11 +221,11 @@ def emit_markdown(methods: list[dict]) -> str:
         "",
         "# Native method ABI registry",
         "",
-        "This table is generated from `manifests/public_methods.json`. It owns stable",
-        "native ABI IDs, providers, declared properties, and compatibility aliases.",
+        "This table is generated from `manifests/public_methods.json`. It owns native",
+        "provider carrier IDs, declared properties, and compatibility aliases.",
         "DFT scientific names and compositions are resolved from the compiler MethodIR",
         "catalog (including pinned Libxc metadata), not from this ABI registry.",
-        "DFT rows below remain native compatibility selectors/carriers; they are not",
+        "DFT rows below are native execution carriers; they are not",
         "a user-facing functional whitelist. Execution still fails closed when a",
         "backend, basis, grid, spin, or primitive lowerer is not qualified.",
         "",
