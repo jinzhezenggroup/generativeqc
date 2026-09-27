@@ -372,7 +372,9 @@ void bind_generated_df(DensityFittingScfData& data, const core::System& orbital,
     // Do not build complete raw metric/three-center tensors just to discard
     // them before plan creation; retaining only dimensions and one-electron
     // response data keeps setup peak bounded by the resolved resource envelope.
-    if (data.resolved_budget.value_bytes != 0U || df_packed_pairs(requested_df_pair_storage())) {
+    const auto storage_request = requested_df_pair_storage_request();
+    const auto requested_storage = requested_df_pair_storage();
+    if (data.resolved_budget.value_bytes != 0U || df_packed_pairs(requested_storage)) {
       integrals::DensityFittingIntegralData metadata;
       metadata.nbf = molecule::ao_count(system);
       metadata.naux = molecule::ao_count(auxiliary_system);
@@ -381,7 +383,8 @@ void bind_generated_df(DensityFittingScfData& data, const core::System& orbital,
       data = assemble_density_fitting_metadata(std::move(data.one_electron), std::move(metadata),
                                                relative_threshold);
       data.resolved_budget = resolved_budget;
-      data.value_storage = requested_df_pair_storage();
+      data.value_storage_request = storage_request;
+      data.value_storage = requested_storage;
       if (include_derivatives) {
         bind_generated_one_electron(data, system, cuda_device_id);
         bind_generated_df(data, system, auxiliary_system, cuda_device_id);
@@ -1267,12 +1270,9 @@ DensityFittingTilePlan plan_cuda_density_fitting_tiles(
     throw std::bad_alloc();
   fixed_device_bytes += diis_bytes;
   try {
-    if (generated_source && df_packed_pairs(requested_df_pair_storage()))
-      return plan_packed_density_fitting_tiles(batch, nbf, naux, occupied, budget,
-                                               fixed_device_bytes, automatic_rhf_rank,
-                                               df_retains_packed_raw(requested_df_pair_storage()));
-    return plan_density_fitting_tiles(batch, nbf, naux, occupied, budget, fixed_device_bytes,
-                                      generated_source, automatic_rhf_rank);
+    return plan_requested_density_fitting_tiles(
+        requested_df_pair_storage_request(), batch, nbf, naux, occupied, occupied, budget,
+        fixed_device_bytes, generated_source, automatic_rhf_rank);
   } catch (const DensityFittingBudgetError&) {
     throw std::bad_alloc();
   }
@@ -1571,6 +1571,7 @@ std::vector<std::optional<DensityFittingScfData>> prepare_cuda_density_fitting_b
     const std::vector<core::System>& systems, const std::optional<core::System>& auxiliary_template,
     double relative_threshold, std::size_t output_budget_bytes, int device_id,
     std::vector<vibeqc_status>& statuses, bool include_derivatives, unsigned diis_history = 0U) {
+  const auto pair_storage_request = requested_df_pair_storage_request();
   const auto pair_storage = requested_df_pair_storage();
   const std::size_t count = systems.size();
   statuses.assign(count, VIBEQC_STATUS_INTERNAL_ERROR);
@@ -1848,6 +1849,7 @@ std::vector<std::optional<DensityFittingScfData>> prepare_cuda_density_fitting_b
   }
   for (std::size_t source = 0; source < count; ++source) {
     if (!prepared[source]) continue;
+    prepared[source]->value_storage_request = pair_storage_request;
     prepared[source]->value_storage = pair_storage;
     if (!include_derivatives) continue;
     try {
@@ -2175,12 +2177,14 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
 
   std::vector<vibeqc_status> preparation_status;
   std::vector<std::optional<DensityFittingScfData>> batched_prepared;
+  const auto current_storage_request = requested_df_pair_storage_request();
   const bool cached_data_complete =
       prepared_cache != nullptr && prepared_cache->size() == systems.size() &&
       std::all_of(
-          prepared_cache->begin(), prepared_cache->end(), [&options, device_id](const auto& item) {
+          prepared_cache->begin(), prepared_cache->end(),
+          [&options, device_id, current_storage_request](const auto& item) {
             return item.has_value() &&
-                   (device_id < 0 || item->value_storage == requested_df_pair_storage()) &&
+                   (device_id < 0 || item->value_storage_request == current_storage_request) &&
                    one_electron_response_policy_matches(*item,
                                                         options.density_fitting_memory_budget_bytes,
                                                         options.compute_forces && device_id >= 0) &&
@@ -2190,7 +2194,7 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           });
   if (cached_plan != nullptr && *cached_plan != nullptr &&
       (!cached_data_complete ||
-       cuda_density_fitting_pair_storage(*cached_plan) != requested_df_pair_storage() ||
+       cuda_density_fitting_pair_storage(*cached_plan) != (*prepared_cache)[0]->value_storage ||
        cuda_density_fitting_scf_value_budget(*cached_plan) !=
            (*prepared_cache)[0]->resolved_budget.value_bytes ||
        cuda_density_fitting_scf_diis_history(*cached_plan) != options.diis_history)) {
@@ -2349,6 +2353,11 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
     return true;
   };
   if (!ensure_plan()) return outputs;
+  const auto resolved_storage = cuda_density_fitting_pair_storage(plan);
+  for (auto& item : data) {
+    item.value_storage_request = current_storage_request;
+    item.value_storage = resolved_storage;
+  }
   std::vector<std::size_t> survivors;
   survivors.reserve(data.size());
   for (std::size_t slot = 0; slot < data.size(); ++slot) {
