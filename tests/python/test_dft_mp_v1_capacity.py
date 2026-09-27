@@ -83,6 +83,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["primitive_records_scope"] == (
         "whole_force_cumulative"
     )
+    assert result["admission_limits"]["primitive_records_definition"] == (
+        "(1 + int(has_exchange)) * primitive_sum ** 4 + "
+        "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
+    )
     assert result["admission_limits"]["grid_points"] == 1_000_000
     assert result["admission_limits"]["grid_pair_visits"] == 100_000_000
 
@@ -216,6 +220,20 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
     target.write_text(source.replace(whole_force_gate, ""), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="whole-force cumulative"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "(1 + int(has_exchange)) * primitive_sum**4"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "primitive_sum**3", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="primitive-record definition"):
         qualify_capacity._source_limits(tmp_path)
 
 

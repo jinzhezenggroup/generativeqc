@@ -10,6 +10,7 @@ scientific qualification.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import inspect
 import json
@@ -49,6 +50,14 @@ from vibeqc_compiler.method.stationary_cuda import (
 SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
 SPARSE_SPHERICAL_COMPONENT_TERMS = {0: 1, 1: 3, 2: 8}
+PRIMITIVE_SUM_DEFINITION = (
+    "sum((int(row[2]) * len(expansion) for row, expansion in "
+    "zip(aos, expansions, strict=True)))"
+)
+PRIMITIVE_RECORDS_DEFINITION = (
+    "(1 + int(has_exchange)) * primitive_sum ** 4 + "
+    "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
+)
 STATIONARY_OWNER = {
     "file": "python/vibeqc/_stationary_cuda.py",
     "function": "_complete_rks_cuda_gradient_diagnostic",
@@ -116,10 +125,36 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         r'raise ValueError\("CUDA diagnostic primitive-topology cap exceeded"\)',
         source,
     )
-    whole_force_primitive_budget = re.search(
-        r"if records > max_primitive_records:\s+"
-        r'raise ValueError\("primitive work budget exceeded"\)',
-        source,
+    tree = ast.parse(source)
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == STATIONARY_OWNER["function"]
+    ]
+    if len(functions) != 1:
+        raise RuntimeError("stationary CUDA admission owner is missing or ambiguous")
+    owner = functions[0]
+    definitions = {
+        target.id: ast.unparse(node.value)
+        for node in owner.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance((target := node.targets[0]), ast.Name)
+        and target.id in ("primitive_sum", "records")
+    }
+    if definitions.get("primitive_sum") != PRIMITIVE_SUM_DEFINITION:
+        raise RuntimeError("stationary CUDA primitive-sum definition changed")
+    if definitions.get("records") != PRIMITIVE_RECORDS_DEFINITION:
+        raise RuntimeError("stationary CUDA primitive-record definition changed")
+    whole_force_primitive_budget = next(
+        (
+            node
+            for node in owner.body
+            if isinstance(node, ast.If)
+            and ast.unparse(node.test) == "records > max_primitive_records"
+        ),
+        None,
     )
     if small is None or primitives is None:
         raise RuntimeError(
@@ -161,6 +196,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "basis_primitive_count": int(primitives.group("primitives")),
         "primitive_records": default("max_primitive_records"),
         "primitive_records_scope": "whole_force_cumulative",
+        "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
+        "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
         "grid_points": default("max_grid_points"),
         "grid_pair_visits": default("max_grid_pair_visits"),
         "additional_device_bytes": default("max_device_bytes"),
