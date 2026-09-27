@@ -8,7 +8,7 @@
 namespace vibeqc::posthf {
 class RawSource;
 }
-namespace vibeqc::scf {
+namespace vibeqc::hf {
 struct PhysicalReference;
 }
 
@@ -29,7 +29,7 @@ struct ConventionalForceResult {
  * The result is unpublished. The caller remains responsible for transactionally
  * copying it only after the full energy/force endpoint succeeds.
  */
-ConventionalForceResult conventional_force_cpu(const scf::PhysicalReference& reference,
+ConventionalForceResult conventional_force_cpu(const hf::PhysicalReference& reference,
                                                const posthf::RawSource& source,
                                                std::size_t budget_bytes,
                                                double denominator_threshold,
@@ -38,7 +38,7 @@ ConventionalForceResult conventional_force_cpu(const scf::PhysicalReference& ref
 
 /** Complete conventional canonical RHF-MP2 analytic force on CUDA. */
 ConventionalForceResult conventional_force_cuda(
-    const scf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const posthf::RawSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, int device_id);
 
@@ -49,7 +49,7 @@ ConventionalForceResult conventional_force_cuda(
  * consumed by the bounded generated DF derivative path.
  */
 ConventionalForceResult density_fitted_force_cpu(
-    const scf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const posthf::RawSource& source,
     std::size_t budget_bytes, double denominator_threshold, double metric_relative_threshold,
     double same_space_threshold, const response::GmresOptions& response_options);
 

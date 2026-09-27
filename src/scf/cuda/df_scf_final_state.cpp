@@ -391,13 +391,25 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
   trace_counter("explicit_synchronizations", 1);
   // The projection and final coefficients refer to precisely this density
   // generation. Publishing after the successful drain excludes partial K.
-  if (!plan->streamed && !single_fitted && plan->resident_exchange_enabled &&
-      (plan->resident_raw_valid || (packed && plan->packed_raw)) &&
+  //
+  // A single fitted-B owner may publish the same linear U=B*C lifetime without
+  // pretending that it owns raw A. The response adapter distinguishes that
+  // fitted lease from the older raw-projection lease by the value-storage
+  // representation before consuming auxiliary_tile_values.
+  const bool raw_projection_owner =
+      !single_fitted && (plan->resident_raw_valid || (packed && plan->packed_raw));
+  const bool fitted_projection_owner = single_fitted && plan->three_center;
+  if (!plan->streamed && plan->resident_exchange_enabled &&
+      (raw_projection_owner || fitted_projection_owner) &&
       (!packed || current.identity.occupied[0] <= plan->value_storage.rank_capacity) &&
       plan->metric_full_rank[0] && current.identity.occupied[0] &&
       plan->naux * current.identity.occupied[0] <=
-          static_cast<std::size_t>(std::numeric_limits<int>::max()))
+          static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     plan->final_projection_token = current;
+    trace_counter("final_projection_fitted", fitted_projection_owner);
+    trace_counter("final_projection_bytes",
+                  plan->nbf * plan->naux * current.identity.occupied[0] * sizeof(double));
+  }
   trace_counter("accepted", 1);
   runtime::df_progress::label("final_exchange_fallback", "none");
   used = true;

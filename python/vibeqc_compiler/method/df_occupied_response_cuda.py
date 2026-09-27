@@ -58,6 +58,25 @@ inline cublasStatus_t df_occupied_project_panel(
       projected + static_cast<std::size_t>(begin) * rr, rank, rr, count);
 }
 
+/** Finish the exact fitted occupied projection from the final-K linear
+ * factor U[mu,j,Q]=sum_nu B[Q,mu,nu] C[nu,j]. The packed K kernel stores Q
+ * fastest, so one GEMM contracts C over mu into [i,j,Q] order. The caller
+ * gathers that result into [Q,i,j]; treating U as Q-major GEMM batches reads
+ * unrelated occupied/auxiliary elements once rank or auxiliary exceeds one.
+ */
+inline cublasStatus_t df_occupied_finish_projection(
+    cublasHandle_t blas, int n, int rank, int auxiliary,
+    const double* coefficients, const double* linear, double* pair_major) {
+  if (n <= 0 || rank <= 0 || rank > n || auxiliary <= 0 ||
+      auxiliary > std::numeric_limits<int>::max() / rank ||
+      !coefficients || !linear || !pair_major)
+    return CUBLAS_STATUS_INVALID_VALUE;
+  const int ar = auxiliary * rank;
+  const double one = 1, zero = 0;
+  return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ar, rank, n, &one,
+                     linear, ar, coefficients, n, &zero, pair_major, ar);
+}
+
 inline cublasStatus_t df_occupied_to_metric_eigenbasis(
     cublasHandle_t blas, int auxiliary, int rank_squared,
     const double* eigenvectors, const double* projected, double* eigenfactors) {

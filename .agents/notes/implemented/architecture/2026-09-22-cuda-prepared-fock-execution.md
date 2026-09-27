@@ -48,3 +48,25 @@ Extending the shared facade to fitted providers remains a separate follow-up.
 
 The integration gate runs both the native conventional KS endpoint/state tests
 and the public DF KS suite with independent PySCF references through Slurm.
+
+## Shared fitted facade completion (2026-09-27)
+
+The prepared execution seam now admits a single resident density-fitted owner in
+addition to the exact Direct owner. `PreparedCudaFockBinding` supplies the same
+opaque device/stream/source identity for either implementation, and
+`enqueue_prepared_cuda_fock` dispatches strict-FP64 DF J/K behind that boundary.
+Mixed exact/DF provider compositions still fail closed.
+
+CUDA KS no longer stores or borrows a `CudaDensityFittingJkPlan*`, includes DF
+device helpers, or branches to DF-specific J calls in its iteration loop. It
+requests raw J/K from the prepared facade and keeps only the mathematical
+`FockBuildSpec` distinction needed for capability gates such as mixed
+precision, solver-region qualification, range correction and nonlocal XC.
+
+This completes the fitted-provider follow-up left by the initial seam and the
+temporary #1073 integration. Future HF/DF provider scheduling and resident
+execution changes can therefore reach semilocal KS through the same prepared
+Fock boundary instead of a DFT-specific adapter.
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol

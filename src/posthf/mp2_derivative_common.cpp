@@ -5,9 +5,9 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
-#include "scf/types.hpp"
 
 namespace vibeqc::mp2::detail {
 namespace {
@@ -41,7 +41,7 @@ std::vector<double> pullback_matrix(std::span<const double> coefficients,
   return ao;
 }
 
-void transform_remaining_shells(const core::System& system, const scf::PhysicalReference& reference,
+void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
                                 const std::vector<std::size_t>& offsets, std::size_t si,
                                 std::span<const double> first,
                                 const EriShellDerivativeContract& eri_shell,
@@ -97,7 +97,7 @@ void transform_remaining_shells(const core::System& system, const scf::PhysicalR
 }  // namespace
 
 std::vector<double> conventional_derivative(const core::System& system,
-                                            const scf::PhysicalReference& reference,
+                                            const hf::PhysicalReference& reference,
                                             const LagrangianWeights& weights,
                                             const OneElectronDerivativeContract& one_electron,
                                             const EriShellDerivativeContract& eri_shell) {

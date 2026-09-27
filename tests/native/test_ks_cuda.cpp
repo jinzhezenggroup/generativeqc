@@ -36,6 +36,12 @@ bool expect_iteration_chunking() {
   const char* selection = std::getenv("VIBEQC_CUDA_KS_CHUNK");
   return selection != nullptr && std::string(selection) == "2";
 }
+bool expect_iteration_replay() {
+  const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
+  if (selection == nullptr) return false;
+  const std::string value(selection);
+  return value == "1" || value == "on" || value == "true" || value == "small-native";
+}
 core::System hydrogens(unsigned count, bool restricted, double shift = 0.0) {
   core::System system;
   system.multiplicity = restricted ? 1 : 2;
@@ -46,6 +52,24 @@ core::System hydrogens(unsigned count, bool restricted, double shift = 0.0) {
         {i,
          0,
          {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}});
+  }
+  std::string detail;
+  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  return system;
+}
+core::System water() {
+  auto system = hydrogens(2, true);
+  system.atoms = {
+      {8, {0, 0, 0}}, {1, {0, -1.43233673, 1.10715266}}, {1, {0, 1.43233673, 1.10715266}}};
+  auto hydrogen = system.shells.front();
+  system.shells = {
+      {0, 0, {{130.70932, 0.15432897}, {23.808861, 0.53532814}, {6.4436083, 0.44463454}}},
+      {0, 0, {{5.0331513, -0.09996723}, {1.1695961, 0.39951283}, {0.3803890, 0.70011547}}},
+      {0, 1, {{5.0331513, 0.15591627}, {1.1695961, 0.60768372}, {0.3803890, 0.39195739}}},
+  };
+  for (unsigned atom : {1U, 2U}) {
+    hydrogen.atom_index = atom;
+    system.shells.push_back(hydrogen);
   }
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
@@ -97,6 +121,25 @@ void prepared_cuda_fock_seam() {
   require(binding && binding.nbf == hybrid.one_electron().nbf && binding.stream != nullptr &&
               binding.source_identity != nullptr,
           "prepared full-range CUDA J/K owner lacks the method-neutral execution binding");
+
+  auto fitted_spec = spec;
+  fitted_spec.exchange.present = false;
+  fitted_spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  const auto fitted_resolved =
+      scf::resolve_fock_build(fitted_spec, scf::FockBackend::Cuda, 1e-12, 1e-10);
+  const scf::PreparedFockPlan fitted(system, &system, fitted_resolved, 0);
+  const auto fitted_binding = scf::prepared_cuda_fock_binding(fitted);
+  require(fitted_binding && fitted_binding.nbf == fitted.one_electron().nbf &&
+              fitted_binding.stream != nullptr && fitted_binding.source_identity != nullptr,
+          "prepared density-fitted CUDA J owner lacks the method-neutral execution binding");
+
+  auto mixed_spec = spec;
+  mixed_spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  const auto mixed_resolved =
+      scf::resolve_fock_build(mixed_spec, scf::FockBackend::Cuda, 1e-12, 1e-10);
+  const scf::PreparedFockPlan mixed(system, &system, mixed_resolved, 0);
+  require(!scf::prepared_cuda_fock_binding(mixed),
+          "mixed exact/fitted CUDA providers leaked through the single-provider binding");
 
   auto range_spec = spec;
   range_spec.coulomb.present = false;
@@ -459,7 +502,7 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
 }
 
 void compare_rks_chunk_history(bool pbe) {
-  const auto system = hydrogens(2, true);
+  const auto system = water();
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
@@ -502,6 +545,13 @@ void compare_rks_chunk_history(bool pbe) {
   require(ordinary.second.iteration_synchronizations == ordinary.second.iterations &&
               chunked.second.iteration_synchronizations < chunked.second.iterations,
           "CUDA RKS history comparison did not exercise both fence cadences");
+  if (expect_iteration_replay()) {
+    require(
+        chunked.second.execution_region_captures >= 1 &&
+            chunked.second.execution_region_replays > chunked.second.execution_region_captures &&
+            chunked.second.execution_region_fallbacks == 0,
+        "CUDA RKS qualification did not reach a cached shared-region replay");
+  }
   require(::setenv("VIBEQC_CUDA_KS_CHUNK", "2", 1) == 0,
           "could not restore CUDA RKS chunk qualification");
 }
@@ -1101,10 +1151,14 @@ int main() {
     if (std::getenv("VIBEQC_CUDA_KS_CHUNK") == nullptr) {
       require(::setenv("VIBEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");
+      require(::setenv("VIBEQC_CUDA_KS_REPLAY", "1", 1) == 0,
+              "could not enable CUDA RKS replay qualification");
       for (bool pbe : {false, true}) {
         compare_rks_chunk_history(pbe);
         run_case(2, true, pbe);
       }
+      require(::unsetenv("VIBEQC_CUDA_KS_REPLAY") == 0,
+              "could not restore CUDA KS replay baseline");
       require(::unsetenv("VIBEQC_CUDA_KS_CHUNK") == 0,
               "could not restore CUDA KS synchronization baseline");
     }

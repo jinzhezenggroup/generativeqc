@@ -10,7 +10,7 @@ namespace vibeqc::posthf {
 class MOBlockProvider;
 class DensityFittedBlockProvider;
 }  // namespace vibeqc::posthf
-namespace vibeqc::scf {
+namespace vibeqc::hf {
 struct PhysicalReference;
 }
 
@@ -82,7 +82,7 @@ EnergyAdjoint canonical_energy_adjoint(std::span<const double> integrals_iajb,
                                        std::size_t occupied, double denominator_threshold);
 OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<const double> eri_mo,
                                  const EnergyAdjoint& adjoint, double same_space_threshold);
-OrbitalRhs canonical_orbital_rhs_streamed(const scf::PhysicalReference& reference,
+OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference,
                                           std::span<const double> hcore_mo,
                                           const posthf::MOBlockProvider& provider,
                                           const EnergyAdjoint& adjoint, double same_space_threshold,
@@ -92,7 +92,7 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
                                                const EnergyAdjoint& adjoint,
                                                std::span<const double> response,
                                                double same_space_threshold);
-LagrangianWeights canonical_lagrangian_weights_streamed(const scf::PhysicalReference& reference,
+LagrangianWeights canonical_lagrangian_weights_streamed(const hf::PhysicalReference& reference,
                                                         std::span<const double> hcore_mo,
                                                         const posthf::MOBlockProvider& provider,
                                                         const EnergyAdjoint& adjoint,
@@ -106,7 +106,7 @@ LagrangianWeights canonical_lagrangian_weights_streamed(const scf::PhysicalRefer
  * shared fixed-rank symmetric inverse-square-root rule (#466).
  */
 DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
-    const scf::PhysicalReference& reference, const posthf::DensityFittedBlockProvider& provider,
+    const hf::PhysicalReference& reference, const posthf::DensityFittedBlockProvider& provider,
     const LagrangianWeights& weights, std::size_t maximum_bytes);
 
 GradientResourcePlan conventional_gradient_plan(

@@ -35,9 +35,12 @@ After each child completes, the JSON report is atomically checkpointed. If a
 later child or the final qualification gate fails, the report retains completed
 measurements with `qualified=false` and the failing phase and diagnostics.
 
-The [PR evidence workflow](../../.github/workflows/ccsdt-cpu-bundle-evidence.yml)
-runs H2O and NH3 with a clean cache for each route and retains the JSON reports.
-Measured RSS includes Python, loaded libraries, source generation and the native
-endpoint; the reported logical reservation remains the separate numeric-buffer
-contract. Artifact construction wall time includes source emission and cache
-integrity/load work, so it is not interchangeable with compiler/linker duration.
+This comparator is intentionally not part of pull-request CI. Run it manually
+when changing triples-response bundling, cache behavior, or compiler artifact
+policy. For acceptance evidence, qualify both H2O and NH3 with fresh cache and
+output paths and retain the resulting JSON reports with the review record as
+appropriate. Measured RSS includes Python, loaded libraries, source generation
+and the native endpoint; the reported logical reservation remains the separate
+numeric-buffer contract. Artifact construction wall time includes source
+emission and cache integrity/load work, so it is not interchangeable with
+compiler/linker duration.

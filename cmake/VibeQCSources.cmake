@@ -115,6 +115,7 @@ function(vibeqc_add_integrals_scf_sources target)
     src/integrals/density_fitting_metric.cpp
     src/integrals/generated_df_cpu.cpp
     src/integrals/ecp.cpp
+    src/integrals/stationary_component_contract.cpp
     src/methods/hf_method.cpp
     src/molecule/basis.cpp
     src/scf/density_fitting.cpp

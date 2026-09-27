@@ -17,7 +17,8 @@ The following directories are method-neutral owners:
 They may depend on other shared chemistry, integral and runtime primitives, but
 must not include concrete method implementation headers from:
 
-- `src/scf/`
+- `src/scf/` (legacy mixed SCF/HF execution while the split is in progress)
+- `src/hf/`
 - `src/dft/`
 - `src/posthf/`
 - `src/cc/`
@@ -40,8 +41,8 @@ silently exempted:
 They may disappear without a coordinated baseline edit; any additional
 shared-to-method edge fails the check.
 
-Post-HF still has 20 direct dependencies on SCF-owned driver, derivative,
-provider and type headers. Those exact edges are also explicit shrink-only debt:
+Post-HF still has 16 direct dependencies on SCF-owned driver, derivative, and
+provider headers. Those exact edges are also explicit shrink-only debt:
 removing one is accepted, while any new `src/posthf/ -> src/scf/` edge fails at
 the include location. This prevents the shared-reference migration from moving
 backward without pretending the current migration is already complete.
@@ -49,6 +50,18 @@ backward without pretending the current migration is already complete.
 This cross-method gate complements, rather than replaces, the more detailed
 `tools/check_scf_structure.py` and `tools/check_compiler_structure.py`
 ownership checks.
+
+### HF reference ownership
+
+The first explicit HF owner is `src/hf/reference.hpp`. The canonical restricted
+HF reference consumed by MP2/CC is method state, not SCF solver state. Legacy
+`scf::PhysicalReference` remains a compatibility alias while callers migrate,
+but new post-HF interfaces should name `hf::PhysicalReference` directly.
+
+The architecture checker treats `src/hf/` as a concrete method area. The
+remaining `src/scf/` tree is tracked as transitional ownership rather than
+being counted as HF-only; later slices can move concrete RHF/UHF execution out
+without changing the shared solver contracts.
 
 The current Infrastructure A--F boundary mapping is:
 

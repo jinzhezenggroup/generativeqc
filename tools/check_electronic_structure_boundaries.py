@@ -22,7 +22,7 @@ SHARED_OWNERS = ("core", "runtime", "tensor", "solver", "response")
 SHARED_CONTRACTS = {
     "integrals/electron_interaction_source.hpp": "provider contract",
 }
-METHOD_PREFIXES = ("scf/", "dft/", "posthf/", "cc/")
+METHOD_PREFIXES = ("scf/", "hf/", "dft/", "posthf/", "cc/")
 
 # Current reverse edges are explicit debt ceilings, not approved design. The
 # check allows them to disappear but rejects any new shared -> method edge.
@@ -44,17 +44,13 @@ KNOWN_POSTHF_SCF_EDGES = {
     ("posthf/bridge.cpp", "scf/proposals.hpp"),
     ("posthf/cuda_derivative.cpp", "scf/cuda_weighted_eri.hpp"),
     ("posthf/df_bridge.cu", "scf/cuda_density_fitting.hpp"),
-    ("posthf/mp2_derivative_common.cpp", "scf/types.hpp"),
     ("posthf/mp2_derivative_cuda.cpp", "scf/cuda/rhf_policy.hpp"),
     ("posthf/mp2_derivative_cuda.cpp", "scf/cuda_one_electron_gradient.hpp"),
     ("posthf/mp2_energy.cpp", "scf/cuda_density_fitting_integrals.hpp"),
     ("posthf/mp2_energy.cpp", "scf/density_fitting.hpp"),
-    ("posthf/mp2_force.cpp", "scf/types.hpp"),
-    ("posthf/native_provider.hpp", "scf/types.hpp"),
     ("posthf/ri_mp2_cuda.cu", "scf/cuda/df_plan_internal.hpp"),
     ("posthf/ri_mp2_cuda.cu", "scf/cuda_density_fitting.hpp"),
     ("posthf/ri_mp2_cuda.cu", "scf/cuda_density_fitting_eigen.hpp"),
-    ("posthf/ri_mp2_cuda.hpp", "scf/mean_field.hpp"),
 }
 
 # Host bounded iteration, DIIS, and its dense solve moved to src/solver in
@@ -300,8 +296,10 @@ def _ownership_metrics(root: Path) -> dict[str, dict[str, int]]:
         area = relative.parts[0]
         if area in SHARED_OWNERS or spelling in SHARED_CONTRACTS:
             return "shared"
-        if area == "scf":
+        if area == "hf":
             return "hf_only"
+        if area == "scf":
+            return "scf_transition"
         if area == "dft":
             return "dft_only"
         if area == "cc":

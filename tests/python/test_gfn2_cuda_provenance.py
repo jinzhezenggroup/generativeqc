@@ -55,6 +55,9 @@ def test_gfn2_cuda_d4_reuses_shared_scalar_math() -> None:
         "d4_math::coordination_pair",
         "d4_math::pair_damping",
         "d4_math::damping_radius",
+        "d4_math::atm_terms",
+        "d4_math::atm_cn_adjoint",
+        "d4_math::atm_radial",
     ):
         assert helper in source
     for retired in (
@@ -65,8 +68,23 @@ def test_gfn2_cuda_d4_reuses_shared_scalar_math() -> None:
         "kEnK4",
         "kEnK5",
         "kEnK6",
+        "const double angle_derivative =",
+        "ratio_power = pow",
+        "const double r2_product =",
     ):
         assert retired not in source
+
+
+def test_shared_d4_cpu_and_cuda_use_one_scalar_owner() -> None:
+    reference = (ROOT / "src/dft/dispersion/d4_reference.hpp").read_text(
+        encoding="utf-8"
+    )
+    cuda = (ROOT / "src/dft/dispersion/d4_cuda.cu").read_text(encoding="utf-8")
+
+    for source in (reference, cuda):
+        assert "math::pair_damping" in source
+        assert "math::atm_terms" in source
+        assert "math::atm_cn_adjoint" in source
 
 
 def test_gfn2_cuda_kernels_do_not_take_reference_parameters() -> None:
@@ -82,3 +100,32 @@ def test_gfn2_cuda_kernels_do_not_take_reference_parameters() -> None:
                 offenders.append(relpath)
                 break
     assert offenders == []
+
+
+def test_gfn2_cuda_dense_d4_cache_api_is_retired() -> None:
+    source = (RUNTIME / "src/backends/cuda/gfn2_d4.cu").read_text(encoding="utf-8")
+    header = (RUNTIME / "src/backends/cuda/gfn2_d4.cuh").read_text(encoding="utf-8")
+    retired = (
+        "update_gfn2_d4_geometry_cache_cuda",
+        "evaluate_gfn2_d4_two_body_cuda",
+        "evaluate_gfn2_d4_scc_potential_cuda",
+        "evaluate_gfn2_d4_scc_energy_cuda",
+        "add_gfn2_d4_two_body_gradient_cuda",
+        "evaluate_gfn2_d4_atm_cuda",
+        "add_gfn2_d4_atm_gradient_cuda",
+    )
+    for symbol in retired:
+        assert symbol not in source
+        assert symbol not in header
+    assert "Gfn2D4DeviceCache" not in source
+    assert "Gfn2D4DeviceCache" not in header
+    for retained in (
+        "evaluate_gfn2_d4_two_body_pairlist_cuda",
+        "evaluate_gfn2_d4_scc_potential_pairlist_cuda",
+        "evaluate_gfn2_d4_scc_energy_pairlist_cuda",
+        "add_gfn2_d4_two_body_gradient_pairlist_cuda",
+        "evaluate_gfn2_d4_atm_pairlist_cuda",
+        "add_gfn2_d4_atm_gradient_pairlist_cuda",
+    ):
+        assert retained in source
+        assert retained in header

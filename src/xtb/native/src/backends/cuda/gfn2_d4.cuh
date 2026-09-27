@@ -15,7 +15,6 @@
 namespace vibeqc::xtb::detail::cuda {
 
 inline constexpr std::int64_t kGfn2D4MaximumReferences = 7;
-inline constexpr std::int64_t kGfn2D4PairDataElements = 5;
 inline constexpr double kGfn2D4CoordinationCutoffBohr = 30.0;
 inline constexpr double kGfn2D4TwoBodyCutoffBohr = 50.0;
 inline constexpr double kGfn2D4AtmCutoffBohr = 25.0;
@@ -80,14 +79,6 @@ struct Gfn2D4DeviceBatch {
  * Same packed pair/CN layout as gfn2::D4GeometryCache, but device-resident.
  * pair_data may be NULL exactly when pair_data_elements is zero.
  */
-struct Gfn2D4DeviceCache {
-  const double* pair_data = nullptr;
-  std::int64_t pair_data_elements = 0;
-  const double* coordination_numbers = nullptr;
-  std::int64_t coordination_elements = 0;
-  std::uint64_t geometry_generation = 0;
-  std::uint64_t plan_token = 0;
-};
 
 /*
  * Production D4 geometry view over one committed physical 50-bohr pair-list
@@ -140,7 +131,7 @@ struct Gfn2D4DeviceWorkspace {
 
   /*
    * Unpublished changed-geometry state. These fields are used only by
-   * update_gfn2_d4_geometry_cache_cuda; the energy/gradient launchers above
+   * retired dense-cache updater; the energy/gradient launchers above
    * neither require nor inspect them. Keeping the storage caller-owned makes
    * repeated refreshes allocation-free and CUDA Graph capture safe.
    */
@@ -152,7 +143,7 @@ struct Gfn2D4DeviceWorkspace {
   /*
    * geometry_generations is published per system after its pair and CN slices
    * have committed. A failed peer therefore retains both its old numerical
-   * cache and its old generation even though Gfn2D4DeviceCache keeps the
+   * cache and its old generation even though retired dense-cache descriptor keeps the
    * legacy scalar generation required by existing consumers.
    */
   std::uint64_t* geometry_generations = nullptr;
@@ -218,7 +209,6 @@ static_assert(std::is_trivially_copyable_v<Gfn2D4DeviceReferenceData>);
 static_assert(std::is_standard_layout_v<Gfn2D4DeviceReferenceData>);
 static_assert(std::is_trivially_copyable_v<Gfn2D4DeviceParameters>);
 static_assert(std::is_trivially_copyable_v<Gfn2D4DeviceBatch>);
-static_assert(std::is_trivially_copyable_v<Gfn2D4DeviceCache>);
 static_assert(std::is_trivially_copyable_v<Gfn2D4PairListDeviceCache>);
 static_assert(std::is_standard_layout_v<Gfn2D4PairListDeviceCache>);
 static_assert(std::is_trivially_copyable_v<Gfn2D4DeviceWorkspace>);
@@ -227,27 +217,6 @@ static_assert(std::is_trivially_copyable_v<Gfn2D4DeviceWorkspace>);
 cudaError_t reset_gfn2_d4_device_errors_cuda(std::int64_t batch_size, std::uint32_t* system_errors,
                                              std::uint32_t* device_error,
                                              cudaStream_t stream = nullptr) noexcept;
-
-/*
- * Rebuild the D4 pair/CN cache directly from atom-major device positions in
- * bohr. cache.geometry_generation is the requested nonzero generation and
- * must already be bound to the generation argument used by downstream D4
- * consumers. The cache retains its legacy read-only pointer view; setup must
- * bind those pointers to writable CUDA allocations for this update call.
- *
- * Publication is transactional per ragged system. Pair data and coordination
- * numbers are first formed in workspace scratch, healthy peers then publish
- * their numerical slices, and only a later kernel publishes their entry in
- * workspace.geometry_generations. A peer-local numerical failure leaves all
- * three old slices unchanged; immutable topology/parameter failure closes the
- * whole sequence through device_error. The launcher allocates, transfers,
- * polls, and synchronizes nowhere and is safe on custom streams and in CUDA
- * Graph capture.
- */
-cudaError_t update_gfn2_d4_geometry_cache_cuda(
-    const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
-    const double* positions, const Gfn2D4DeviceCache& cache, const Gfn2D4DeviceWorkspace& workspace,
-    std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
 
 /*
  * Refresh only D4 coordination numbers from the committed D4-CN role view.
@@ -287,40 +256,6 @@ cudaError_t evaluate_gfn2_d4_two_body_pairlist_cuda(
     const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error,
     cudaStream_t stream = nullptr) noexcept;
 
-/*
- * Overwrite one two-body energy per system and dE_D4/dq per atom. Inputs,
- * outputs, topology, parameters, and scratch remain on device. The launch is
- * allocation-free, synchronization-free, custom-stream safe, and suitable for
- * CUDA Graph capture. Numerical failures are sticky per system: healthy peers
- * publish normally, while a failed member keeps its previous outputs.
- * Topology/provenance failures use device_error and disable the whole
- * sequence. Every writable range must be disjoint from every input and every
- * other writable range; read-only input ranges may alias one another.
- */
-cudaError_t evaluate_gfn2_d4_two_body_cuda(
-    const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
-    const Gfn2D4DeviceCache& cache, const double* atomic_charges, double* energies,
-    double* atomic_potentials, const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error,
-    cudaStream_t stream = nullptr) noexcept;
-
-/*
- * Evaluate only the self-consistent D4 charge derivative used by the SCC
- * Hamiltonian. The weights are prepared from mixed_atomic_charges; no energy
- * is formed or published. Inactive systems are skipped before cache or charge
- * values are read. A stale scalar cache generation is a plan failure only
- * when at least one system is active.
- *
- * Only workspace.weights, workspace.weight_charge_derivatives,
- * workspace.atom_scratch, and workspace.system_errors are required or
- * accessed. The other workspace fields may be null with zero extents.
- */
-cudaError_t evaluate_gfn2_d4_scc_potential_cuda(
-    const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
-    const Gfn2D4DeviceCache& cache, std::uint64_t expected_geometry_generation,
-    const double* mixed_atomic_charges, const Gfn2SccIterationDeviceActivity& activity,
-    double* atomic_potentials, const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error,
-    cudaStream_t stream = nullptr) noexcept;
-
 cudaError_t evaluate_gfn2_d4_scc_potential_pairlist_cuda(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
     std::uint64_t expected_geometry_generation, const Gfn2D4PairListDeviceCache& cache,
@@ -349,22 +284,6 @@ cudaError_t validate_gfn2_d4_scc_potential_pairlist_cuda(
     double* atomic_potentials, const Gfn2D4DeviceWorkspace& workspace,
     std::uint32_t* device_error) noexcept;
 
-/*
- * Evaluate only the pure self-consistent D4 two-body energy used by the final
- * SCC functional. The weights are prepared from raw_atomic_charges; charge
- * derivatives and atomic potentials are neither computed nor inspected.
- *
- * Only workspace.weights, workspace.batch_scratch, and
- * workspace.system_errors are required or accessed. The other workspace
- * fields may be null with zero extents.
- */
-cudaError_t evaluate_gfn2_d4_scc_energy_cuda(
-    const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
-    const Gfn2D4DeviceCache& cache, std::uint64_t expected_geometry_generation,
-    const double* raw_atomic_charges, const Gfn2SccIterationDeviceActivity& activity,
-    double* energies, const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error,
-    cudaStream_t stream = nullptr) noexcept;
-
 cudaError_t evaluate_gfn2_d4_scc_energy_pairlist_cuda(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
     std::uint64_t expected_geometry_generation, const Gfn2D4PairListDeviceCache& cache,
@@ -379,20 +298,6 @@ cudaError_t evaluate_gfn2_d4_scc_energy_pairlist_cuda(
     double* energies, const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error,
     cudaStream_t stream = nullptr) noexcept;
 
-/*
- * Accumulate the complete self-consistent two-body coordinate derivative at
- * fixed charges. The unpublished gradient delta and CN adjoints live in the
- * caller-owned workspace, so a failed member leaves its gradient slice
- * unchanged without suppressing healthy peers.
- */
-cudaError_t add_gfn2_d4_two_body_gradient_cuda(const Gfn2D4DeviceBatch& batch,
-                                               const Gfn2D4DeviceParameters& parameters,
-                                               const Gfn2D4DeviceCache& cache,
-                                               const double* atomic_charges, double* gradients,
-                                               const Gfn2D4DeviceWorkspace& workspace,
-                                               std::uint32_t* device_error,
-                                               cudaStream_t stream = nullptr) noexcept;
-
 cudaError_t add_gfn2_d4_two_body_gradient_pairlist_cuda(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
     std::uint64_t expected_geometry_generation, const Gfn2D4PairListDeviceCache& cache,
@@ -404,17 +309,6 @@ cudaError_t add_gfn2_d4_two_body_gradient_pairlist_cuda(
     const Gfn2GeometryEpochDevice& geometry_epoch, const Gfn2D4PairListDeviceCache& cache,
     const double* atomic_charges, double* gradients, const Gfn2D4DeviceWorkspace& workspace,
     std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
-
-/*
- * Overwrite one q=0 Axilrod--Teller--Muto energy per system. This is the GFN2
- * non-self-consistent three-body term and deliberately has no charge VJP.
- */
-cudaError_t evaluate_gfn2_d4_atm_cuda(const Gfn2D4DeviceBatch& batch,
-                                      const Gfn2D4DeviceParameters& parameters,
-                                      const Gfn2D4DeviceCache& cache, double* energies,
-                                      const Gfn2D4DeviceWorkspace& workspace,
-                                      std::uint32_t* device_error,
-                                      cudaStream_t stream = nullptr) noexcept;
 
 cudaError_t evaluate_gfn2_d4_atm_pairlist_cuda(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
@@ -437,14 +331,6 @@ cudaError_t validate_gfn2_d4_atm_pairlist_cuda(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,
     const Gfn2GeometryEpochDevice& geometry_epoch, const Gfn2D4PairListDeviceCache& cache,
     double* energies, const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error) noexcept;
-
-/* Accumulate the analytic ATM coordinate derivative, including its CN VJP. */
-cudaError_t add_gfn2_d4_atm_gradient_cuda(const Gfn2D4DeviceBatch& batch,
-                                          const Gfn2D4DeviceParameters& parameters,
-                                          const Gfn2D4DeviceCache& cache, double* gradients,
-                                          const Gfn2D4DeviceWorkspace& workspace,
-                                          std::uint32_t* device_error,
-                                          cudaStream_t stream = nullptr) noexcept;
 
 cudaError_t add_gfn2_d4_atm_gradient_pairlist_cuda(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceParameters& parameters,

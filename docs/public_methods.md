@@ -21,7 +21,7 @@ additional fail-closed constraints at execution time.
 |`pbe-uks` | density functional | `energy` | yes | — | available |
 |`r2scan-rks` | density functional | `energy` | yes | — | available |
 |`r2scan-uks` | density functional | `energy` | yes | — | available |
-|`rccsd` | coupled cluster | `energy` | yes | — | available |
+|`rccsd` | coupled cluster | `energy`, `forces` | yes | — | available |
 |`pbe0-rks` | density functional | `energy` | yes | — | available |
 |`pbe0-uks` | density functional | `energy` | yes | — | available |
 |`gfn2-xtb` | semiempirical | `energy`, `forces` | no | `gfn2` | available |

@@ -1,5 +1,7 @@
 #include "scf/cuda_fock_execution.hpp"
 
+#include "scf/cuda/metadata_upload.hpp"
+#include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 
 namespace vibeqc::scf {
@@ -18,20 +20,34 @@ bool exact_value_exchange(const FockTermSpec& term) noexcept {
          term.omega >= 0.0;
 }
 
+bool fitted_full_range(const FockTermSpec& term) noexcept {
+  return !term.present || (term.approximation == FockApproximation::DensityFitted &&
+                           term.op == FockOperator::FullRange);
+}
+
 }  // namespace
 
 PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan) noexcept {
   const auto& strategy = plan.strategy();
-  if (strategy.backend != FockBackend::Cuda || strategy.spec.derivative_order != 0 ||
-      !exact_full_range(strategy.spec.coulomb) || !exact_value_exchange(strategy.spec.exchange))
-    return {};
+  if (strategy.backend != FockBackend::Cuda || strategy.spec.derivative_order != 0) return {};
 
-  auto* source = plan.cuda_direct_source();
-  if (!source) return {};
-  const auto diagnostic = cuda_direct_jk_plan_diagnostic(source);
-  if (!diagnostic.nbf) return {};
+  const bool exact =
+      exact_full_range(strategy.spec.coulomb) && exact_value_exchange(strategy.spec.exchange);
+  if (exact) {
+    auto* source = plan.cuda_direct_source();
+    if (!source) return {};
+    const auto diagnostic = cuda_direct_jk_plan_diagnostic(source);
+    if (!diagnostic.nbf) return {};
+    return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf};
+  }
 
-  return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf};
+  const bool fitted =
+      fitted_full_range(strategy.spec.coulomb) && fitted_full_range(strategy.spec.exchange);
+  if (!fitted) return {};
+  auto* source = plan.cuda_fitted_source();
+  if (!source || !plan.diagnostic().nbf) return {};
+  return {cuda_density_fitting_device(source), cuda_density_fitting_stream(source), source,
+          plan.diagnostic().nbf};
 }
 
 vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
@@ -45,18 +61,55 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
     return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
 
-  auto* source = plan.cuda_direct_source();
-  if (!source) {
+  auto* exact = plan.cuda_direct_source();
+  auto* fitted = plan.cuda_fitted_source();
+  if (exact) {
+    if (fitted) {
+      detail = "prepared CUDA Fock facade refuses mixed resident providers";
+      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    return mixed_coulomb ? enqueue_cuda_direct_jk_device_mixed_j(
+                               exact, plan.strategy().spec, density, beta, matrix_elements, coulomb,
+                               alpha_exchange, beta_exchange, numerical_error, detail)
+                         : enqueue_cuda_direct_jk_device(exact, plan.strategy().spec, density, beta,
+                                                         matrix_elements, coulomb, alpha_exchange,
+                                                         beta_exchange, numerical_error, detail);
+  }
+
+  if (!fitted) {
     detail = "prepared CUDA Fock source became unavailable";
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
+  if (mixed_coulomb) {
+    detail = "prepared density-fitted CUDA Fock does not support mixed Coulomb precision";
+    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto& spec = plan.strategy().spec;
+  const bool unrestricted = spec.spin == FockSpin::Unrestricted;
+  const bool valid_outputs =
+      (spec.coulomb.present ? coulomb != nullptr : coulomb == nullptr) &&
+      (spec.exchange.present ? alpha_exchange != nullptr : alpha_exchange == nullptr) &&
+      (spec.exchange.present && unrestricted ? beta_exchange != nullptr : beta_exchange == nullptr);
+  if (matrix_elements != binding.nbf * binding.nbf || numerical_error == nullptr ||
+      density == nullptr || (unrestricted ? beta == nullptr : beta != nullptr) || !valid_outputs) {
+    detail = "prepared density-fitted CUDA Fock buffers, spin or dimensions are invalid";
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto reset = cudaMemsetAsync(numerical_error, 0, sizeof(*numerical_error), binding.stream);
+  if (reset != cudaSuccess) {
+    detail =
+        std::string("reset prepared density-fitted CUDA Fock status: ") + cudaGetErrorString(reset);
+    return cuda_execution::source_cuda_status(reset);
+  }
 
-  return mixed_coulomb ? enqueue_cuda_direct_jk_device_mixed_j(
-                             source, plan.strategy().spec, density, beta, matrix_elements, coulomb,
-                             alpha_exchange, beta_exchange, numerical_error, detail)
-                       : enqueue_cuda_direct_jk_device(source, plan.strategy().spec, density, beta,
-                                                       matrix_elements, coulomb, alpha_exchange,
-                                                       beta_exchange, numerical_error, detail);
+  const JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
+  return spec.spin == FockSpin::Unrestricted
+             ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb,
+                                                          alpha_exchange, beta_exchange, detail,
+                                                          terms, FockMatrixLayout::RowMajor)
+             : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, alpha_exchange,
+                                                          detail, terms,
+                                                          FockMatrixLayout::RowMajor);
 }
 
 vibeqc_status enqueue_prepared_cuda_exchange_correction(
@@ -64,22 +117,18 @@ vibeqc_status enqueue_prepared_cuda_exchange_correction(
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, std::string& detail) {
   const auto binding = prepared_cuda_fock_binding(plan);
+  auto* source = plan.cuda_direct_source();
   const auto& primary = plan.strategy();
   const auto& spec = correction.spec;
-  if (!binding || correction.backend != FockBackend::Cuda || spec.derivative_order != 0 ||
-      spec.spin != primary.spec.spin || spec.coulomb.present || !spec.exchange.present ||
-      spec.exchange.approximation != FockApproximation::Exact ||
+  if (!binding || !source || correction.backend != FockBackend::Cuda ||
+      spec.derivative_order != 0 || spec.spin != primary.spec.spin || spec.coulomb.present ||
+      !spec.exchange.present || spec.exchange.approximation != FockApproximation::Exact ||
       spec.exchange.op != FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
       correction.screening_tolerance != primary.screening_tolerance) {
     detail = "CUDA range correction is incompatible with the prepared primary Fock owner";
     return VIBEQC_STATUS_NOT_IMPLEMENTED;
   }
 
-  auto* source = plan.cuda_direct_source();
-  if (!source) {
-    detail = "prepared CUDA Fock source became unavailable";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
-  }
   return enqueue_cuda_direct_jk_device(source, spec, density, beta, matrix_elements, nullptr,
                                        alpha_exchange, beta_exchange, numerical_error, detail);
 }

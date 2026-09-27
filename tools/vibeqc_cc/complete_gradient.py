@@ -4,9 +4,10 @@ The source, HF export and dense MO/AO weights are explicit <=12-AO validation
 boundaries. Generated derivative mathematics and shared solvers are reused.
 The CPU derivative backend retains the dense native derivative oracle; the CUDA
 backend contracts the same AO weights with bounded generated derivative consumers
-without materializing coordinate-by-AO derivative tensors. Neither enables the
-native/public force API, resident GPU response, frozen-core/open-shell/ECP, DF or
-(T) gradients.
+without materializing coordinate-by-AO derivative tensors. The native/public RCCSD
+owner now reuses the same relaxed-response mathematics inside this qualified domain;
+resident GPU response, frozen-core/open-shell/ECP, DF and (T) gradients remain
+separate capabilities.
 """
 
 from __future__ import annotations
@@ -56,12 +57,12 @@ if typing.TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CCSDGradientCapabilities:
-    """Explicit internal complete-gradient boundary; not native method registration."""
+    """Internal validation boundary mirrored by the qualified native RCCSD force owner."""
 
     method: str = "rccsd"
     family: str = "coupled_cluster"
     available: bool = True
-    public_calculator: bool = False
+    public_calculator: bool = True
     max_ao: int = 12
     supported_properties: frozenset = frozenset({"energy", "forces"})
     derivative_backends: frozenset = frozenset({"cpu", "cuda"})
@@ -75,7 +76,7 @@ class CCSDGradientCapabilities:
 
 
 def gradient_capabilities() -> CCSDGradientCapabilities:
-    """Describe the validated internal endpoint without widening Calculator claims."""
+    """Describe the validated endpoint and its matching public Calculator promotion."""
     return CCSDGradientCapabilities()
 
 

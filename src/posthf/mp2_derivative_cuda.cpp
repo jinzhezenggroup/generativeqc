@@ -45,7 +45,7 @@ void add_nuclear_repulsion_gradient(const core::System& system, std::vector<doub
 #endif
 
 std::vector<double> conventional_derivative_cuda(const core::System& system,
-                                                 const scf::PhysicalReference& reference,
+                                                 const hf::PhysicalReference& reference,
                                                  const LagrangianWeights& weights, int device_id,
                                                  std::size_t stage_budget) {
 #if !VIBEQC_HAS_CUDA
