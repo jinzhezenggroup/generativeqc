@@ -206,6 +206,7 @@ struct AutomaticLibxcEntry {
   constexpr explicit operator bool() const noexcept { return program != nullptr; }
 };
 AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept;
+AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept;
 }  // namespace vibeqc::dft::generated
 """
 
@@ -246,6 +247,12 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
 
 
 def emit_registry() -> str:
+    code_cases = "\n".join(
+        [
+            f'    case 0x{entry.code:x}U: return automatic_libxc_entry("{entry.name}");'
+            for entry in registry_entries()
+        ]
+    )
     declarations = "\n".join(
         f"AutomaticLibxcEntry automatic_libxc_entry_shard_{index}(std::string_view) noexcept;"
         for index in range(SHARD_COUNT)
@@ -267,6 +274,13 @@ def emit_registry() -> str:
             "AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept {",
             calls,
             "  return {};",
+            "}",
+            "",
+            "AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept {",
+            "  switch (functional_code) {",
+            code_cases,
+            "    default: return {};",
+            "  }",
             "}",
             "}  // namespace vibeqc::dft::generated",
             "",
