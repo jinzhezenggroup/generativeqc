@@ -79,6 +79,7 @@ class StationaryMeanField:
         if self.point_model not in (
             "interior-v1",
             SCF_POINT_MODEL,
+            BULK_LIBXC_POINT_MODEL,
             "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
         ):
             raise UnsupportedMethod("unsupported XC point-model contract")
