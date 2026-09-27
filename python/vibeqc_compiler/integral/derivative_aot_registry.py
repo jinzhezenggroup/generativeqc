@@ -24,6 +24,38 @@ AOT_COMPONENT_CAPACITY = 64
 AOT_DERIVATIVE_ORDER = 1
 
 
+DERIVATIVE_AOT_RADIAL_MANIFEST_SCHEMA = "vibeqc.derivative-aot.radials.v1"
+
+
+def radial_inventory_from_payload(
+    payload: typing.Any, *, backend: str
+) -> tuple[CoulombKernel, ...]:
+    """Validate and return the packaged radial inventory for one backend."""
+
+    if backend not in ("cpu", "cuda"):
+        raise ValueError("derivative AOT backend must be cpu or cuda")
+    if not isinstance(payload, dict) or payload.get("schema") != DERIVATIVE_AOT_RADIAL_MANIFEST_SCHEMA:
+        raise ValueError("invalid derivative AOT radial manifest schema")
+    entries = payload.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("derivative AOT radial manifest requires entries")
+    selected: list[CoulombKernel] = []
+    seen: set[tuple[str, float]] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"backend", "family", "omega"}:
+            raise ValueError("invalid derivative AOT radial manifest entry")
+        if entry["backend"] not in ("cpu", "cuda"):
+            raise ValueError("invalid derivative AOT radial manifest backend")
+        kernel = CoulombKernel(entry["family"], entry["omega"])
+        identity = (kernel.family.value, kernel.omega)
+        if entry["backend"] == backend:
+            if identity in seen:
+                raise ValueError("duplicate derivative AOT radial manifest entry")
+            seen.add(identity)
+            selected.append(kernel)
+    return tuple(selected)
+
+
 def component_groups(
     angular: tuple[int, int, int, int],
 ) -> tuple[tuple[int, ...], ...]:
