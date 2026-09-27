@@ -84,9 +84,13 @@ See the [preparation decision](../../.agents/notes/implemented/numerics/2026-09-
 
 ## Bounded resources and failure
 
-Preparation admits at most 32 atoms, 128 AOs, 4096 points per tile, 4096 primitive
-records per tile, and 128 source-weight terms. Defaults cap total primitive work
-at 16,000,000 records, grid points at 1,000,000 and grid pair visits at 100,000,000.
+Preparation admits at most 32 atoms, 128 AOs, 4096 points per tile, 4096 task
+descriptors per resident/native page, and 128 source-weight terms. The default
+`max_primitive_records=16,000,000` is a **per-native-page primitive-work budget**,
+not a cap on the total logical force traversal. Any number of individually admitted
+pages may contribute to one force execution; cumulative `primitive_records` remains
+an exact coverage metric and is checked against the analytically expected total.
+Grid points remain capped at 1,000,000 and grid pair visits at 100,000,000.
 For `A` atoms, `N` AOs, point capacity `P` and primitive capacity `R`, the new
 source arena owns exactly
 `8*(22*R + 2*Kp + 4*N + (579+3*S)*A + 3*P + 2*Ns*N*N) + 256`
@@ -114,7 +118,8 @@ must match the current CUDA device and borrowed owner. No visibility override is
 used. A native failure poisons the source transaction; reads fail until reset.
 The public diagnostic discards the owner and publishes no partial result.
 
-`result.work` records exact source launches, primitive/point/pair counts,
+`result.work` records exact source launches, cumulative primitive/point/pair counts,
+bounded primitive-page count and peak page work,
 source H2D/D2H bytes and call counts, explicit source-stream synchronization
 counts, snapshot export counters, streams, grid allocation/timing metrics,
 TensorIR execution/transfer totals, declared numeric bounds, endpoint time and
