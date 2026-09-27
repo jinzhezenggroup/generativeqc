@@ -26,7 +26,7 @@ SEMILOCAL_FAMILIES = (
         "components": (('GGA_X_PBE', '1'), ('GGA_C_PBE', '1')),
         "range_omega": '0',
         "coefficient_policy": 'native-scales',
-        "exchange_policy": 'full-range-optional',
+        "exchange_policy": 'any',
     },
     {
         "symbol": 'R2scan',
@@ -50,7 +50,7 @@ SEMILOCAL_FAMILIES = (
         "components": (('LDA_X', '2/25'), ('GGA_X_B88', '18/25'), ('LDA_C_VWN_RPA', '19/100'), ('GGA_C_LYP', '81/100')),
         "range_omega": '0',
         "coefficient_policy": 'exact',
-        "exchange_policy": 'full-range-optional',
+        "exchange_policy": 'any',
     },
     {
         "symbol": 'Wb97mv',
