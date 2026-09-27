@@ -35,12 +35,9 @@ def test_native_force_contractions_expose_scaled_entry_points() -> None:
 
 def test_bounded_native_launchers_forward_explicit_force_coefficients() -> None:
     expected = {
-        "src/scf/cuda/direct_bounded_exact_force.hpp":
-            "launch_contract_bounded_exact_low_order_force_page_kernel_scaled",
-        "src/scf/cuda/direct_bounded_fallback.hpp":
-            "launch_bounded_direct_shell_quartet_kernel_scaled",
-        "src/scf/cuda/direct_bounded_dddd.hpp":
-            "launch_bounded_direct_dddd_streaming_kernel_scaled",
+        "src/scf/cuda/direct_bounded_exact_force.hpp": "launch_contract_bounded_exact_low_order_force_page_kernel_scaled",
+        "src/scf/cuda/direct_bounded_fallback.hpp": "launch_bounded_direct_shell_quartet_kernel_scaled",
+        "src/scf/cuda/direct_bounded_dddd.hpp": "launch_bounded_direct_dddd_streaming_kernel_scaled",
     }
     for path, symbol in expected.items():
         source = _source(path)

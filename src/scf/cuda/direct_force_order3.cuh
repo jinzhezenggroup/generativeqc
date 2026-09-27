@@ -92,8 +92,8 @@ contracted_eri_cartesian_source_order3_generated_weighted_gradient(
 template <bool Unrestricted, unsigned TargetShellClass>
 __device__ inline __noinline__ void contract_two_electron_force_order3_class_task_scaled(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active,
-    double* forces, double coulomb_coefficient, double exchange_coefficient) {
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    double coulomb_coefficient, double exchange_coefficient) {
   static_assert(TargetShellClass == kPppsShellClass || TargetShellClass == kDspsShellClass ||
                 TargetShellClass == kDpssShellClass || TargetShellClass == kFsssShellClass);
   if (task.tile != 0U) return;

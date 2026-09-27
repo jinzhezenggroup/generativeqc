@@ -62,7 +62,7 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
   case order:                                                                                   \
     contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order>(                    \
         batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
-        0U, coulomb_coefficient, exchange_coefficient, subtile, lane);                           \
+        0U, coulomb_coefficient, exchange_coefficient, subtile, lane);                          \
     break
   // Total order 0/1 is consumed by the generated ssss/psss exact-shell
   // tasks before generic bounded dispatch. Do not reinstantiate retired math.

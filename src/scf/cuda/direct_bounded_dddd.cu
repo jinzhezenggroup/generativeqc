@@ -34,8 +34,7 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
     DeviceBatch batch, const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
-    unsigned long long* fp64_work_count, double coulomb_coefficient,
-    double exchange_coefficient) {
+    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient) {
   static_assert(detail::kDirectQuartetThreads == 32);
   constexpr std::uint32_t kSkip = 0U;
   constexpr std::uint32_t kConsume = 1U;
@@ -140,22 +139,21 @@ void launch_bounded_direct_dddd_streaming_kernel_scaled(
     const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
-    unsigned long long* fp64_work_count, double coulomb_coefficient,
-    double exchange_coefficient) {
+    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient) {
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
       if (force == false) {
         bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Fock, false>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count, coulomb_coefficient,
-                                                    exchange_coefficient);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       } else {
         bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Fock, true>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count, coulomb_coefficient,
-                                                    exchange_coefficient);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       }
     } else {
       bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Force, true>
@@ -169,14 +167,14 @@ void launch_bounded_direct_dddd_streaming_kernel_scaled(
         bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Fock, false>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count, coulomb_coefficient,
-                                                    exchange_coefficient);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       } else {
         bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Fock, true>
             <<<grid, block, shared_bytes, stream>>>(batch, topology_pointer, screening_tolerance,
                                                     schwarz_bounds, density, active, output,
-                                                    bra_head, profile, fp64_work_count, coulomb_coefficient,
-                                                    exchange_coefficient);
+                                                    bra_head, profile, fp64_work_count,
+                                                    coulomb_coefficient, exchange_coefficient);
       }
     } else {
       bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Force, true>

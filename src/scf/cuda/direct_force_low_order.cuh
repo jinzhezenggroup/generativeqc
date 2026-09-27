@@ -67,8 +67,8 @@ contracted_eri_cartesian_source_ssss_generated_weighted_gradient(
 template <bool Unrestricted>
 __device__ __forceinline__ void contract_two_electron_force_ssss_task_scaled(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active,
-    double* forces, double coulomb_coefficient, double exchange_coefficient) {
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    double coulomb_coefficient, double exchange_coefficient) {
   // Every s shell contains one Cartesian AO, so a valid ssss shell quartet
   // occupies exactly the first compact tile and needs no AO-pair decoding.
   if (task.tile != 0U) return;
@@ -115,8 +115,8 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task_scaled(
     return;
   }
   const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
-      n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3],
-      coulomb_coefficient, exchange_coefficient);
+      n, physical_offset, spin_offset, density, ao[0], ao[1], ao[2], ao[3], coulomb_coefficient,
+      exchange_coefficient);
   if (density_coefficient == 0.0) return;
   const double component_weight =
       direct_force_component_weight(batch.direct_ao_coefficients, system_ao_begin, ao[0], ao[1],
@@ -134,9 +134,9 @@ __device__ __forceinline__ void contract_two_electron_force_ssss_task(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
     double* forces) {
   constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;
-  contract_two_electron_force_ssss_task_scaled<Unrestricted>(
-      batch, task, screening_tolerance, schwarz_bounds, density, active, forces, 1.0,
-      exchange_coefficient);
+  contract_two_electron_force_ssss_task_scaled<Unrestricted>(batch, task, screening_tolerance,
+                                                             schwarz_bounds, density, active,
+                                                             forces, 1.0, exchange_coefficient);
 }
 
 /** Evaluate and write one complete density-weighted psss force shell task. */

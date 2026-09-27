@@ -20,8 +20,7 @@ void launch_contract_bounded_exact_low_order_force_page_kernel_scaled(
     std::uint64_t page_begin, std::uint32_t page_capacity, std::uint32_t bra_ordinal_begin,
     std::uint32_t bra_ordinal_end, bool same_pair_class, const double* schwarz_bounds,
     const double* density, double* forces, std::uint32_t* bra_head,
-    DeviceShellClassProfileEntry* profile, double coulomb_coefficient,
-    double exchange_coefficient);
+    DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient);
 
 void launch_contract_bounded_exact_low_order_force_page_kernel(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
