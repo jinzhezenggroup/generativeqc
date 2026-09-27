@@ -114,9 +114,9 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
         ],
     )
     np.testing.assert_allclose(owner.charges[:2], 2.5)
-    assert owner.scalar_task_descriptors == 1
-    assert owner.bulk_task_pages == 1
-    assert owner.bulk_task_descriptors == 2
+    assert owner.scalar_packed_descriptors == 1
+    assert owner.bulk_pack_chunks == 1
+    assert owner.bulk_packed_descriptors == 2
 
 
 @pytest.mark.parametrize("aot", (False, True))
