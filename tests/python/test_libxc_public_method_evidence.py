@@ -13,6 +13,8 @@ from vibeqc_compiler.xc.endpoint_capability import (
 )
 from vibeqc_compiler.xc.molecular_scf_evidence import (
     QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
     RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
 )
 from vibeqc_compiler.xc.public_method_evidence import (
@@ -215,7 +217,9 @@ def test_public_endpoint_rejects_forged_generic_coverage_without_exact_admission
     )
 
 
-def test_public_admission_rejects_generic_molecular_coverage_without_exact_receipt() -> None:
+def test_public_admission_rejects_generic_molecular_coverage_without_exact_receipt() -> (
+    None
+):
     prerequisites = _prerequisites()
     molecular = prerequisites["molecular-scf"]
     molecular["qualification"] = _coverage("polarized", "unpolarized")

@@ -13,6 +13,8 @@ from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from vibeqc_compiler.xc.molecular_scf_evidence import (
     QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
+)
+from vibeqc_compiler.xc.molecular_scf_evidence import (
     RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
 )
 
