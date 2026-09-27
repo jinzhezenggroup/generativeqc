@@ -19,6 +19,9 @@ Expose a separate version-1, two-call C query for single calculations and
 original-index batch items. Its fixed summary and row descriptors carry ordered
 events, returned-state identity, operator identity, four dtype roles, arithmetic
 mode, and counts. The legacy aggregate descriptor and its layout are unchanged.
+The returned-state identity is a process-local execution token and remains
+separate from the portable scientific state label used for independent-oracle
+root matching.
 
 The internal `scf::PrecisionWork` sidecar travels through the method-neutral
 result and API handles without being embedded in `scf::PrecisionProvenance`.

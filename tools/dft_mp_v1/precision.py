@@ -17,7 +17,10 @@ def require_public_precision(value: object) -> dict[str, Any]:
         raise ValueError("public precision work is incomplete")
     if value.get("operator_inventory_complete") is not True:
         raise ValueError("partial operator census")
-    if type(value.get("returned_state")) is not str or not value["returned_state"]:
+    if (
+        type(value.get("returned_state_identity")) is not str
+        or not value["returned_state_identity"]
+    ):
         raise ValueError("public precision returned-state identity missing")
     native = value.get("native_provenance")
     if (

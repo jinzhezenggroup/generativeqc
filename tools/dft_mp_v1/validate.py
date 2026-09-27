@@ -455,10 +455,6 @@ def _check_run(
         require_public_precision(precision)
     except ValueError as error:
         raise InvalidEvidence(str(error)) from error
-    require(
-        precision["returned_state"] == run["attained_state"],
-        "public precision returned-state mismatch",
-    )
     native = precision["native_provenance"]
     require(
         native.get("operator_work_counters_valid") is True,
@@ -549,8 +545,8 @@ def _check_run(
         fock_indices
         and final_audits
         and final_audits[-1]["sequence"] > max(fock_indices)
-        and final_audits[-1]["state"] == run["attained_state"],
-        "final physical audit must follow refinement/Fock on returned state",
+        and final_audits[-1]["state"] == precision["returned_state_identity"],
+        "final physical audit must follow refinement/Fock on returned native state",
     )
     for operator in precision["operators"]:
         require(type(operator) is dict, "malformed operator record")

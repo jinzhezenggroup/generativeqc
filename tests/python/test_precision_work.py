@@ -67,7 +67,7 @@ def test_decoder_preserves_execution_rows_without_certifying_them() -> None:
     assert precision["detail_version"] == 1
     assert precision["complete"] is False
     assert precision["operator_inventory_complete"] is False
-    assert precision["returned_state"] == "cuda-ks:9:8:7"
+    assert precision["returned_state_identity"] == "cuda-ks:9:8:7"
     assert precision["scf_fock_timeline"] == [
         {
             "kind": "strict_fock",

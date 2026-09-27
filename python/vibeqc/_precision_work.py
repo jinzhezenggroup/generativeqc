@@ -69,7 +69,7 @@ def _unsupported() -> dict[str, Any]:
         "operator_inventory_complete": False,
         "conversion_count": None,
         "fallback_count": None,
-        "returned_state": None,
+        "returned_state_identity": None,
         "scf_fock_timeline": [],
         "operators": [],
     }
@@ -131,7 +131,7 @@ def query_precision_work(
         int(detail.returned_solve_epoch),
         int(detail.returned_state_generation),
     )
-    returned_state = (
+    returned_state_identity = (
         f"cuda-ks:{identity[0]}:{identity[1]}:{identity[2]}" if all(identity) else None
     )
     timeline = [
@@ -177,7 +177,7 @@ def query_precision_work(
         "operator_inventory_complete": bool(detail.operator_inventory_complete),
         "conversion_count": int(detail.conversion_count),
         "fallback_count": int(detail.fallback_count),
-        "returned_state": returned_state,
+        "returned_state_identity": returned_state_identity,
         "scf_fock_timeline": timeline,
         "operators": census,
     }

@@ -418,7 +418,7 @@ def _run_record(tmp_path: Path, contract: dict, row: dict, campaign: dict) -> di
         "precision": {
             "detail_version": 1,
             "complete": True,
-            "returned_state": "state-1",
+            "returned_state_identity": "cuda-ks:17:3:6",
             "requested_mode": "auto",
             "operator_inventory_complete": True,
             "mixed_stage_fock_builds": 2,
@@ -445,7 +445,7 @@ def _run_record(tmp_path: Path, contract: dict, row: dict, campaign: dict) -> di
                     "count": 1,
                     "sequence": index,
                     "iteration": index,
-                    "state": "state-1",
+                    "state": "cuda-ks:17:3:6",
                     "phase": "refinement" if kind == "strict_fock" else "scf",
                 }
                 for index, kind in enumerate(
@@ -528,8 +528,10 @@ def test_mixed_numerical_oracle_and_work_negative_controls(
             lambda x: x["precision"].update(operator_inventory_complete=False),
         ),
         (
-            "wrong public state",
-            lambda x: x["precision"].update(returned_state="other-owner"),
+            "wrong public state identity",
+            lambda x: x["precision"].update(
+                returned_state_identity="cuda-ks:other-owner"
+            ),
         ),
         ("no events", lambda x: x["precision"].update(scf_fock_timeline=[])),
         ("no operators", lambda x: x["precision"].update(operators=[])),
