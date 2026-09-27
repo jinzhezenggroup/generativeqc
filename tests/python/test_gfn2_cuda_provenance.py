@@ -101,6 +101,7 @@ def test_gfn2_cuda_kernels_do_not_take_reference_parameters() -> None:
                 break
     assert offenders == []
 
+
 def test_gfn2_cuda_dense_d4_cache_api_is_retired() -> None:
     source = (RUNTIME / "src/backends/cuda/gfn2_d4.cu").read_text(encoding="utf-8")
     header = (RUNTIME / "src/backends/cuda/gfn2_d4.cuh").read_text(encoding="utf-8")
@@ -128,4 +129,3 @@ def test_gfn2_cuda_dense_d4_cache_api_is_retired() -> None:
     ):
         assert retained in source
         assert retained in header
-
