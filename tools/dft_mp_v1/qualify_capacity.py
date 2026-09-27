@@ -1034,6 +1034,10 @@ def _public_selector_contract(
         failures.append("family/provider")
     if metadata["abi_id"] != expected_abi:
         failures.append("native ABI ID")
+    if expected_abi not in generated_methods.NATIVE_DFT_METHOD_IDS:
+        failures.append("native DFT eligibility")
+    if not metadata["supports_batch"] or "energy" not in metadata["properties"]:
+        failures.append("batch/energy registry eligibility")
     if method_ir.spin != expected_spin or functional.spin != expected_spin:
         failures.append("spin")
     if options.coefficients != (1.0, 1.0, 0.0):
@@ -1055,6 +1059,8 @@ def _public_selector_contract(
     return {
         "selector": selector,
         "native_abi_id": expected_abi,
+        "native_dft_eligible": True,
+        "supports_batch": True,
         "spin": expected_spin,
         "coefficients": list(options.coefficients),
         "method_ir_identity": method_ir.identity,

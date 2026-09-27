@@ -415,6 +415,24 @@ def test_public_selector_contract_rejects_changed_semilocal_coefficients(
         )
 
 
+def test_public_selector_contract_rejects_removed_native_eligibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        qualify_capacity.generated_methods,
+        "NATIVE_DFT_METHOD_IDS",
+        qualify_capacity.generated_methods.NATIVE_DFT_METHOD_IDS - {7},
+    )
+    plan = qualify_capacity._qualified_aot_plan(1, "unpolarized")
+
+    with pytest.raises(RuntimeError, match="native DFT eligibility"):
+        qualify_capacity._public_selector_contract(
+            "pbe-rks",
+            expected_spin="unpolarized",
+            stationary_plan=plan,
+        )
+
+
 def test_machine_readable_report_round_trips_without_nonfinite_values() -> None:
     result = report()
     encoded = json.dumps(result, allow_nan=False, sort_keys=True)
