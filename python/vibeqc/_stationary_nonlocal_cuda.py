@@ -51,7 +51,9 @@ def resident_nonlocal_geometry(
     if diagnostic.executed:
         nonlocal_owner.reset()
     elif diagnostic.collected_points:
-        raise ValueError("resident nonlocal owner contains an incomplete previous collection")
+        raise ValueError(
+            "resident nonlocal owner contains an incomplete previous collection"
+        )
     reset_seconds = perf_counter() - began
     began = perf_counter()
     for begin in range(0, count, tile_points):
@@ -68,7 +70,9 @@ def resident_nonlocal_geometry(
                 functional=functional,
             )
     local = sources.finish()
-    components = {name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")}
+    components = {
+        name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+    }
     seconds = {
         "nonlocal_reset": reset_seconds,
         "semilocal_geometry_and_features": perf_counter() - began,
@@ -84,7 +88,12 @@ def resident_nonlocal_geometry(
     )
     began = perf_counter()
     seeds = nonlocal_owner.execute()
-    if not seeds.pointer or seeds.stride != count or not seeds.stream or seeds.generation <= 0:
+    if (
+        not seeds.pointer
+        or seeds.stride != count
+        or not seeds.stream
+        or seeds.generation <= 0
+    ):
         raise ValueError("resident nonlocal producer returned an invalid seed lease")
     seconds["vv10_pair_enqueue"] = perf_counter() - began
     began = perf_counter()

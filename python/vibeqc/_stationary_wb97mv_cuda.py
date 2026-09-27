@@ -330,7 +330,9 @@ class PreparedWb97mvCudaGradient:
                     float(charges[atom]),
                     float(charges[other]),
                 )
-        component_seconds["density_and_nuclear_setup"] = perf_counter() - component_start
+        component_seconds["density_and_nuclear_setup"] = (
+            perf_counter() - component_start
+        )
         resident_parts, resident_seconds, resident_work = resident_nonlocal_geometry(
             grid=self.grid,
             sources=self.sources,

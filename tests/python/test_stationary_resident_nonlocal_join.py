@@ -55,10 +55,14 @@ def fixture(stream: int = 31, seed_stream: int = 31):
         point_count = 5
         executed = False
         collected_points = 0
-        seeds = SimpleNamespace(pointer=4096, stride=5, stream=seed_stream, generation=7)
+        seeds = SimpleNamespace(
+            pointer=4096, stride=5, stream=seed_stream, generation=7
+        )
 
         def diagnostic(self):
-            return SimpleNamespace(executed=self.executed, collected_points=self.collected_points)
+            return SimpleNamespace(
+                executed=self.executed, collected_points=self.collected_points
+            )
 
         def reset(self):
             assert self.executed, "native reset rejects a never-executed owner"
@@ -82,10 +86,14 @@ def fixture(stream: int = 31, seed_stream: int = 31):
             assert task.alive and functional == 4
             events.append(("local", len(owners)))
 
-        def geometry_external_device(self, task, owners, weights, raw, pointer, stride, begin):
+        def geometry_external_device(
+            self, task, owners, weights, raw, pointer, stride, begin
+        ):
             assert task.alive
             assert (pointer, stride) == (4096, 5)
-            np.testing.assert_array_equal(weights, state.grid.weights[begin : begin + len(owners)])
+            np.testing.assert_array_equal(
+                weights, state.grid.weights[begin : begin + len(owners)]
+            )
             events.append(("external", begin))
 
         def reset(self, *args):
@@ -96,12 +104,20 @@ def fixture(stream: int = 31, seed_stream: int = 31):
             self.finishes += 1
             return {
                 key: np.full((2, 3), self.finishes + index, dtype=float)
-                for index, key in enumerate(("xc_ao", "xc_grid", "xc_weight", "nuclear"))
+                for index, key in enumerate(
+                    ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+                )
             }
 
     args = dict(
-        grid=Grid(), sources=Sources(), nonlocal_owner=Nonlocal(), state=state,
-        raw_weights=np.ones(5), tile_points=2, ao_count=2, functional=4,
+        grid=Grid(),
+        sources=Sources(),
+        nonlocal_owner=Nonlocal(),
+        state=state,
+        raw_weights=np.ones(5),
+        tile_points=2,
+        ao_count=2,
+        functional=4,
         ingredients=("rho", "gradient", "tau"),
     )
     return args, events
@@ -111,14 +127,23 @@ def test_complete_join_uses_leases_and_resets_before_pair_enqueue():
     args, events = fixture()
     components, seconds, work = MODULE.resident_nonlocal_geometry(**args)
     assert set(components) == {
-        "xc_ao", "xc_grid", "xc_weight", "nuclear",
-        "nonlocal_ao", "nonlocal_grid", "nonlocal_weight",
+        "xc_ao",
+        "xc_grid",
+        "xc_weight",
+        "nuclear",
+        "nonlocal_ao",
+        "nonlocal_grid",
+        "nonlocal_weight",
     }
     assert [event for event in events if event[0] == "collect"] == [
-        ("collect", 0), ("collect", 2), ("collect", 4)
+        ("collect", 0),
+        ("collect", 2),
+        ("collect", 4),
     ]
     assert [event for event in events if event[0] == "external"] == [
-        ("external", 0), ("external", 2), ("external", 4)
+        ("external", 0),
+        ("external", 2),
+        ("external", 4),
     ]
     assert events.index(("source_reset",)) < events.index(("pairs",))
     assert events[-1] == ("finish",)
@@ -130,7 +155,9 @@ def test_complete_join_uses_leases_and_resets_before_pair_enqueue():
     np.testing.assert_array_equal(components["nonlocal_ao"], np.full((2, 3), 2.0))
 
 
-@pytest.mark.parametrize("field,value", [("pointer", 0), ("stride", 4), ("stream", 0), ("generation", 0)])
+@pytest.mark.parametrize(
+    "field,value", [("pointer", 0), ("stride", 4), ("stream", 0), ("generation", 0)]
+)
 def test_invalid_seed_view_never_reaches_geometry(field, value):
     args, events = fixture()
     setattr(args["nonlocal_owner"].seeds, field, value)
@@ -168,7 +195,12 @@ def test_production_driver_uses_resident_join_not_host_seed_staging():
     driver = (ROOT / "python/vibeqc/_stationary_wb97mv_cuda.py").read_text()
     assert "resident_nonlocal_geometry(" in driver
     assert "_ResidentNonlocalForceOwner(" in driver
-    for retired in ("NonlocalFixedGridPlan", "feature_task_with_features(", "rho[active]", "seeds[:, begin:end]"):
+    for retired in (
+        "NonlocalFixedGridPlan",
+        "feature_task_with_features(",
+        "rho[active]",
+        "seeds[:, begin:end]",
+    ):
         assert retired not in driver
 
 
