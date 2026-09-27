@@ -11,7 +11,7 @@ from vibeqc_compiler.common.array_graph import evaluate_array_graph
 from vibeqc_compiler.integral.cuda import CudaEmitter
 from vibeqc_compiler.integral.expr import Expr, Graph
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.xc import rsh_expressions
+from vibeqc_compiler.xc import expression_dispatch
 from vibeqc_compiler.xc.libxc_maple import (
     IMPORTER_SEMANTICS,
     MapleModule,
@@ -19,7 +19,7 @@ from vibeqc_compiler.xc.libxc_maple import (
 )
 from vibeqc_compiler.xc.program import build_program
 from vibeqc_compiler.xc.pw91_maple import pw91_component, pw91_maple_provenance
-from vibeqc_compiler.xc.rsh_expressions import energy_expression
+from vibeqc_compiler.xc.expression_dispatch import build_energy_expression as energy_expression
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -277,7 +277,7 @@ def test_rsh_production_dispatch_calls_pw91_maple_adapter(
         ((name, Fraction(1)),),
         spin="unpolarized",
     )
-    graph, energy, _ = rsh_expressions.energy_expression(spec)
+    graph, energy, _ = expression_dispatch.energy_expression(spec)
     assert called
     assert graph.node(energy).operation == "constant"
 
