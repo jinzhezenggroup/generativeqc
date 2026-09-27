@@ -31,13 +31,12 @@ from vibeqc_compiler.method import (
     compile_ks_execution_plan,
     resolve_method,
 )
-from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
-from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
-
 from vibeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
 )
+from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
 
 SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
 B3LYP_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[2]
@@ -353,9 +352,7 @@ def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
 
 
 def _record_components(record: typing.Mapping[str, typing.Any]) -> dict[str, Fraction]:
-    return {
-        name: Fraction(coefficient) for name, coefficient in record["components"]
-    }
+    return {name: Fraction(coefficient) for name, coefficient in record["components"]}
 
 
 def _curated_semilocal_record(
@@ -377,9 +374,7 @@ def _curated_semilocal_record(
         if plan is not None:
             policy = record["exchange_policy"]
             if policy == "none" and plan.exchange:
-                raise NotImplementedError(
-                    "unsupported native KS semilocal composition"
-                )
+                raise NotImplementedError("unsupported native KS semilocal composition")
             if policy == "canonical":
                 if method_ir is None:
                     continue
@@ -620,9 +615,10 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if "tau" in expected.ingredients and not compile_ks_execution_plan(
-            named_ir
-        ).exchange:
+        if (
+            "tau" in expected.ingredients
+            and not compile_ks_execution_plan(named_ir).exchange
+        ):
             # The v2 policy has no qualified pure meta-GGA profile. Preserve
             # the existing explicit v1 default rather than assigning a GGA grid.
             if options.grid_accuracy != "standard":
