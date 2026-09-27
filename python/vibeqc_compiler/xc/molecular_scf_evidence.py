@@ -365,7 +365,7 @@ def validate_stage_qualification(
 ) -> str:
     """Validate the exact passing stage receipt metadata emitted by this owner."""
     if not isinstance(qualification, Mapping):
-        raise ValueError("molecular-SCF qualification must be a mapping")
+        raise TypeError("molecular-SCF qualification must be a mapping")
     if qualification.get("schema") != ENDPOINT_COVERAGE_SCHEMA:
         raise ValueError("molecular-SCF endpoint coverage schema mismatch")
     expected_coverage = [
