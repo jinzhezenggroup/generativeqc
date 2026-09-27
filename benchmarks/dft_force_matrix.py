@@ -22,6 +22,11 @@ from time import perf_counter
 
 import numpy as np
 
+try:
+    from _support import raw_output_path
+except ModuleNotFoundError:
+    from benchmarks._support import raw_output_path
+
 from benchmarks.df_component_ledger import read_trace, trace_identity
 from benchmarks.dft_force_components import (
     expected_scf_components,
@@ -498,7 +503,7 @@ def main() -> None:
         help="run the full water-3/6/12 plus non-water qualification system set",
     )
     parser.add_argument("--trace-directory", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
 
     if args.repeats < 1:
