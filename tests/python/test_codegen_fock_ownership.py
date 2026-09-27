@@ -28,12 +28,14 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
         REPOSITORY_ROOT / "python/vibeqc_compiler/integral/lowering/fock.py"
     ).read_text(encoding="utf-8")
 
-    assert "-0.5 * density_bd * integral" in shared
-    assert "total_cd * integral" in shared
-    assert "-0.5 * density_bd * integral" not in native
-    assert "total_cd * integral" not in native
-    assert "-0.5 * density_bd * integral" not in shell_lowering
-    assert "total_cd * integral" not in shell_lowering
+    assert "restricted_exchange_scale" in shared
+    assert "unrestricted_exchange_scale" in shared
+    assert "j_scale * total_cd * integral" in shared
+    assert "k_scale * density_bd * integral" in shared
+    assert "j_scale * total_cd * integral" not in native
+    assert "k_scale * density_bd * integral" not in native
+    assert "j_scale * total_cd * integral" not in shell_lowering
+    assert "k_scale * density_bd * integral" not in shell_lowering
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
 
 
@@ -44,12 +46,20 @@ def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
     generated = emit_generated_shell_fock_accumulation()
     for equation in (
         "const double total_cd = alpha_cd + beta_cd;",
-        "-alpha_bd * integral",
-        "-beta_bd * integral",
-        "-0.5 * density_bd * integral",
+        "j_scale * total_cd * integral",
+        "k_scale * alpha_bd * integral",
+        "k_scale * beta_bd * integral",
+        "k_scale * density_bd * integral",
     ):
         assert equation in native
         assert equation in generated
+    for coefficient in (
+        "exchange_only ? 1.0 : -0.5",
+        "exchange_only ? 1.0 : -1.0",
+    ):
+        assert coefficient in native
+    assert "? 1.0 : -0.5" in generated
+    assert "? 1.0 : -1.0" in generated
 
 
 def test_direct_fock_scatter_cli_is_deterministic(tmp_path: Path) -> None:
