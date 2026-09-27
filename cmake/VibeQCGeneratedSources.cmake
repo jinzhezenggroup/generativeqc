@@ -24,6 +24,29 @@ macro(vibeqc_register_host_generated_sources target)
       ARGS --output-directory "${VIBEQC_STATIONARY_CPU_AOT_DIRECTORY}"
       COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
       COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
+
+    set(VIBEQC_STATIONARY_CPU_RSH_AOT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_rsh_derivatives")
+    set(VIBEQC_STATIONARY_CPU_RSH_AOT_SOURCES)
+    foreach(_vibeqc_rsh_family IN ITEMS short_range long_range)
+      foreach(_vibeqc_rsh_shard RANGE 0 3)
+        list(APPEND VIBEQC_STATIONARY_CPU_RSH_AOT_SOURCES
+             "${VIBEQC_STATIONARY_CPU_RSH_AOT_DIRECTORY}/vibeqc_wb97mv_${_vibeqc_rsh_family}_cpu_derivative_${_vibeqc_rsh_shard}.cpp")
+      endforeach()
+    endforeach()
+    vibeqc_register_generated_sources(
+      NAME vibeqc_stationary_cpu_rsh_derivatives_codegen
+      TARGET ${target}
+      ADD_TO_TARGET
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_rsh_aot.py"
+      OUTPUTS ${VIBEQC_STATIONARY_CPU_RSH_AOT_SOURCES}
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/first_derivative_schedule.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/integral/range_separation.py"
+      ARGS --output-directory "${VIBEQC_STATIONARY_CPU_RSH_AOT_DIRECTORY}"
+      COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
+      COMMENT "Generating packaged WB97M-V CPU SR/LR derivative inventory")
   endif()
 
   set(VIBEQC_QUADRATURE_HEADER
