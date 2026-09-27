@@ -1,0 +1,70 @@
+name: Libxc public qualification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/libxc-public-qualification.yml"
+      - "python/vibeqc_compiler/common/**"
+      - "python/vibeqc_compiler/integral/**"
+      - "python/vibeqc_compiler/xc/**"
+      - "python/vibeqc_compiler/method/bulk_ks.py"
+      - "src/dft/**"
+      - "src/scf/**"
+      - "tools/qualify_libxc_*.py"
+      - "manifests/libxc/**"
+      - "upstream/libxc/**"
+      - "upstream/libxc-fulltree/**"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  broad-cpu-public:
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'chatgpt/libxc-public-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      NUMEXPR_NUM_THREADS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Build CPU library
+        run: |
+          cmake -S . -B build-libxc-public -G Ninja \
+            -DVIBEQC_ENABLE_CUDA=OFF \
+            -DVIBEQC_BUILD_TESTS=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-libxc-public --target vibeqc --parallel 2
+      - name: Install qualification dependencies
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python --editable '.[reference-test]'
+      - name: Run broad public-method qualification
+        run: |
+          .venv/bin/python tools/qualify_libxc_broad_matrix.py \
+            --output libxc-public-evidence \
+            --evidence-prefix "github://${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --build-dir build-libxc-public \
+            --timeout 180 \
+            --require-pass
+      - name: Retain exact public evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libxc-public-evidence-${{ github.sha }}
+          path: libxc-public-evidence
+          if-no-files-found: error
+          retention-days: 30
