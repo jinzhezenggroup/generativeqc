@@ -128,7 +128,10 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
   const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
   const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
   if constexpr (MaskZeroRows) {
-    if (weighted_i == 0.0) {
+    // MolecularV1-inactive rows are marked by negative zero. A physically
+    // active quadrature point may legitimately have +0.0 integration weight;
+    // its rho/sigma/weight derivatives must still be evaluated.
+    if (signbit(weighted_i)) {
       energy_terms[i] = 0.0;
       if constexpr (Features) {
         vrho[i] = 0.0;
@@ -259,7 +262,10 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
                        isfinite(gz) && isfinite(weight);
     if (!valid) atomicExch(failed, 1);
     const bool inactive = !valid || rho < threshold;
-    effective_weights[i] = inactive ? 0.0 : weight;
+    // Preserve the distinction between a screened-out density row and a
+    // physically active point whose quadrature weight is exactly zero without
+    // allocating another N-sized mask. Normalize active signed zero to +0.0.
+    effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight);
     effective_density[i] = inactive ? 1.0 : rho;
     effective_gradient[3 * i] = inactive ? 0.0 : gx;
     effective_gradient[3 * i + 1] = inactive ? 0.0 : gy;
@@ -319,7 +325,9 @@ __global__ void pack_force_seeds_kernel(std::size_t npoint, const double* effect
     for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = poison;
     return;
   }
-  if (effective_weights[i] == 0.0) {
+  // Only MolecularV1-inactive rows carry the negative-zero marker. Do not
+  // erase vrho/vsigma/dweight for an active +0.0 quadrature-weight point.
+  if (signbit(effective_weights[i])) {
     for (std::size_t row = 0; row < 6; ++row) seeds[row * npoint + i] = 0.0;
     return;
   }

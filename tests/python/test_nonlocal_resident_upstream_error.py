@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
   std::array<double, n> weights;
   std::array<double, 3 * n> point_derivative;
   std::array<double, 6 * n> seeds;
-  weights.fill(mode == 5 ? 0.0 : 1.0);
+  weights.fill(mode == 5 ? 0.0 : (mode == 7 ? -0.0 : 1.0));
   point_derivative.fill(3.0);
   seeds.fill(2.0);
   for (std::size_t lane = 0; lane < n; ++lane) {
@@ -115,8 +115,11 @@ int main(int argc, char** argv) {
       if (expected_failure) {
         if (!std::isnan(value)) return 10;
       } else if (mode == 5) {
-        if (value != 0.0) return 11;
-      } else if (value != (row >= 2 && row <= 4 ? 3.0 : 2.0)) return 12;
+        const double expected = row >= 2 && row <= 4 ? 3.0 : 2.0;
+        if (value != expected) return 11;
+      } else if (mode == 7) {
+        if (value != 0.0) return 12;
+      } else if (value != (row >= 2 && row <= 4 ? 3.0 : 2.0)) return 13;
     }
 }
 """
@@ -151,7 +154,7 @@ def error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("mode", range(7))
+@pytest.mark.parametrize("mode", range(8))
 def test_resident_collection_preserves_producer_error(
     error_probe: Path, mode: int
 ) -> None:
@@ -168,3 +171,10 @@ def test_resident_collection_preserves_producer_error(
         result.stdout,
         result.stderr,
     )
+
+
+def test_zero_weight_row_mask_distinguishes_active_from_density_inactive() -> None:
+    source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
+    assert "effective_weights[i] = inactive ? -0.0" in source
+    assert "if (signbit(weighted_i))" in source
+    assert "if (signbit(effective_weights[i]))" in source
