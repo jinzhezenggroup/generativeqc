@@ -20,7 +20,7 @@ _SOURCES = {
 
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_pair_order2.cuh"
+#include "generated_direct_pair_order2.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
@@ -204,8 +204,8 @@ __device__ __forceinline__ Angular order2_shell_component(unsigned component) {
 
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_pair_order2.cuh"
-#include "scf/cuda/direct_native_pair_order3.cuh"
+#include "generated_direct_pair_order2.cuh"
+#include "generated_direct_pair_order3.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
@@ -350,7 +350,7 @@ __device__ inline Scalar primitive_eri_order3(
 
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
-#include "scf/cuda/direct_native_pair_order3.cuh"
+#include "generated_direct_pair_order3.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
@@ -650,7 +650,7 @@ __device__ inline Scalar primitive_eri_order4(
 #include "generated_direct_eri_order2.cuh"
 #include "generated_direct_eri_order3.cuh"
 #include "generated_direct_eri_order4.cuh"
-#include "scf/cuda/direct_native_shell_pair_hermite.cuh"
+#include "generated_direct_shell_pair_hermite.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/integral_limits.hpp"
 #include "scf/cuda/packed_basis.hpp"
