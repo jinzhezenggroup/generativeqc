@@ -11,16 +11,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
+from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
 from vibeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
     automatic_functional_code,
 )
-from vibeqc_compiler.xc.bulk_runtime import (
-    PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
-    build_bulk_runtime_program,
+from vibeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
+from vibeqc_compiler.xc.libxc_work import (
+    LIBXC_WORK_DOMAIN_VERSION,
+    automatic_work_policy,
+    polarized_work_setup,
 )
-from vibeqc_compiler.xc.libxc_blacklist import blacklist_reason
 from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
@@ -52,12 +54,10 @@ class RegistryEntry:
 
 
 def registry_entries() -> tuple[RegistryEntry, ...]:
-    """Return every structurally supported non-blacklisted automatic component."""
+    """Return every structurally supported automatic component."""
     result = []
     codes = set()
     for name in sorted(AUTO_BULK_COMPONENTS):
-        if blacklist_reason(name) is not None:
-            continue
         capability = functional_capability(name)
         if set(capability.required_ingredients) - {"rho", "sigma", "tau"}:
             continue
@@ -76,7 +76,6 @@ def _point_program_source(entry: RegistryEntry) -> str:
         entry.name,
         spin="polarized",
         order=1,
-        domain=PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     )
     features = program.spec.features
     try:
@@ -85,19 +84,24 @@ def _point_program_source(entry: RegistryEntry) -> str:
         raise ValueError(
             f"unsupported automatic Libxc point layout for {entry.name}: {features!r}"
         ) from exc
-    if program.spec.density_threshold is None:
-        raise ValueError(
-            f"automatic Libxc program omitted density threshold: {entry.name}"
-        )
-
     expected_outputs = ((), *((i,) for i in range(len(features))))
     if program.outputs != expected_outputs:
         raise ValueError(f"automatic Libxc E/vxc output layout changed: {entry.name}")
 
-    variables = {name: name for name in features}
+    policy = automatic_work_policy(entry.name)
+    work_lines, work_arguments = polarized_work_setup(policy, features)
+    variables = dict(zip(features, work_arguments, strict=True))
     emitter = ScalarCEmitter(program.graph, variables)
     emitter.emit(program.roots)
     refs = [emitter.reference(root) for root in program.roots]
+    expression_identity = canonical_hash(
+        {
+            "schema": "vibeqc.automatic-libxc-work-point.v1",
+            "interior_expression": program.expression_hash,
+            "work_policy": policy.to_payload(),
+            "features": features,
+        }
+    )
     stem = entry.stem
     lines = [
         f"SemilocalPointValue automatic_{stem}_point(",
@@ -105,10 +109,8 @@ def _point_program_source(entry: RegistryEntry) -> str:
         "  if (!std::isfinite(rho[0]) || !std::isfinite(rho[1]) ||",
         "      rho[0] < 0.0 || rho[1] < 0.0)",
         f'    throw std::domain_error("{entry.name} requires finite nonnegative density");',
-        "  const double total_density = rho[0] + rho[1];",
-        "  if (!std::isfinite(total_density))",
+        "  if (!std::isfinite(rho[0] + rho[1]))",
         f'    throw std::domain_error("{entry.name} total density is nonfinite");',
-        f"  if (total_density < {float(program.spec.density_threshold).hex()}) return {{}};",
         "  const double rho_a = rho[0];",
         "  const double rho_b = rho[1];",
     ]
@@ -142,11 +144,13 @@ def _point_program_source(entry: RegistryEntry) -> str:
     elif ingredient_mask == 7:
         lines.append("  (void)tau;")
 
+    lines.extend(work_lines)
+
     lines.extend(emitter.lines)
     lines.extend(
         [
             "  SemilocalPointValue out{};",
-            f"  out.energy = {refs[0]};",
+            f"  out.energy = {refs[0]} * total_density / (work_rho_a + work_rho_b);",
             f"  out.rho[0] = {refs[1]};",
             f"  out.rho[1] = {refs[2]};",
         ]
@@ -183,10 +187,10 @@ def _point_program_source(entry: RegistryEntry) -> str:
             "  }",
             "  return out;",
             "}",
-            f'inline constexpr const char* kAutomatic_{stem}_ExpressionIdentity = "{program.expression_hash}";',
+            f'inline constexpr const char* kAutomatic_{stem}_ExpressionIdentity = "{expression_identity}";',
             f"const SemilocalPointProgram kAutomatic_{stem}_Program{{",
             f'    "{entry.name}", kAutomatic_{stem}_ExpressionIdentity, {ingredient_mask}U,',
-            f"    3U, automatic_{stem}_point}};",
+            f"    {LIBXC_WORK_DOMAIN_VERSION}U, automatic_{stem}_point}};",
             "",
         ]
     )
