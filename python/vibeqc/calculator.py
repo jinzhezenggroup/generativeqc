@@ -704,10 +704,31 @@ class Calculator:
             and self._ks_options.xc_schedule == "device_fused"
             and cuda_global_hybrid_force_eligible(self._ks_options.method_ir)
         )
+        cuda_wb97mv_force = (
+            self._device_name == "cuda"
+            and self._method_name.startswith("wb97m-v")
+            and not basis_has_ecp
+            and self._precision_mode == _native.PRECISION_FP64
+            and self._ks_options is not None
+            and (
+                self._basis in ("sto-3g", "def2-svp")
+                if isinstance(self._basis, str)
+                else all(
+                    shell.angular_momentum <= 2
+                    for element in self._basis.elements
+                    for shell in element.shells
+                )
+            )
+        )
         if (
             self._capabilities.family == "density_functional"
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
-            and (semilocal_force or named_cpu_all_electron_force or cuda_hybrid_force)
+            and (
+                semilocal_force
+                or named_cpu_all_electron_force
+                or cuda_hybrid_force
+                or cuda_wb97mv_force
+            )
             and not (
                 self._device_name == "cuda"
                 and basis_has_ecp
