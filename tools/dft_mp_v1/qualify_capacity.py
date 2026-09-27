@@ -177,6 +177,11 @@ PRIMITIVE_RECORDS_DEFINITION = (
     "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
 )
 GRID_PAIR_VISITS_DEFINITION = "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
+NEEDS_FIRST_DEFINITION = "functional != 0"
+GRID_PLAN_DEFINITION = (
+    "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
+    "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
+)
 SOURCE_BYTES_DEFINITION = (
     "8 * (22 * primitive_tile + 2 * basis.nprimitive + 4 * n + "
     "(579 + 3 * len(source_names)) * na + 3 * tile_points + "
@@ -326,6 +331,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "primitive_sum",
             "records",
             "pair_visits",
+            "needs_first",
+            "grid_plan",
             "source_bytes",
             "available",
             "host_bound",
@@ -342,6 +349,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_sum": PRIMITIVE_SUM_DEFINITION,
         "records": PRIMITIVE_RECORDS_DEFINITION,
         "pair_visits": GRID_PAIR_VISITS_DEFINITION,
+        "needs_first": NEEDS_FIRST_DEFINITION,
+        "grid_plan": GRID_PLAN_DEFINITION,
         "source_bytes": SOURCE_BYTES_DEFINITION,
         "available": AVAILABLE_DEVICE_BYTES_DEFINITION,
         "host_bound": HOST_BOUND_DEFINITION,
@@ -350,6 +359,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_sum": "primitive-sum",
         "records": "primitive-record",
         "pair_visits": "grid-pair-visits",
+        "needs_first": "grid derivative-order",
+        "grid_plan": "grid-plan input",
         "source_bytes": "source-bytes",
         "available": "available-device-bytes",
         "host_bound": "host-bound",
@@ -411,6 +422,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
         "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
         "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
+        "grid_derivative_order_definition": NEEDS_FIRST_DEFINITION,
+        "grid_plan_definition": GRID_PLAN_DEFINITION,
         "source_bytes_definition": SOURCE_BYTES_DEFINITION,
         "host_bound_definition": HOST_BOUND_DEFINITION,
         "available_device_bytes_definition": AVAILABLE_DEVICE_BYTES_DEFINITION,

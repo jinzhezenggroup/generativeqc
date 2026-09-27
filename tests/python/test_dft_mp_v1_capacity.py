@@ -194,6 +194,14 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["grid_pair_visits_definition"] == (
         "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
     )
+    assert result["admission_limits"]["grid_derivative_order_definition"] == (
+        "functional != 0"
+    )
+    assert result["admission_limits"]["grid_plan_definition"] == (
+        "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
+        "tile_points=tile_points, active_ao_capacity=n, "
+        "budget_bytes=max_device_bytes)"
+    )
     assert result["admission_limits"]["source_bytes_definition"].startswith(
         "8 * (22 * primitive_tile"
     )
@@ -570,6 +578,24 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
     target.write_text(source.replace(old, "23 * primitive_tile", 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="source-bytes definition"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_grid_memory_fails_closed_when_production_plan_inputs_move(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "order=2 if needs_first else 1"
+    first = source.index(old)
+    production = source.index(old, first + len(old))
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source[:production] + "order=1" + source[production + len(old) :],
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="grid-plan input definition changed"):
         qualify_capacity._source_limits(tmp_path)
 
 

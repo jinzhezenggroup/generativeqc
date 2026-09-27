@@ -76,6 +76,8 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
   order, including shape, topology, work, device, and host gates.
 - AO and grid counts must agree with the verified native production formulas;
   source-only construction is not accepted as an independent proxy.
+- Grid memory uses the verified production derivative-order and `plan_tiles`
+  inputs before any copied byte bound is accepted.
 - Static admission is never reported as scientific qualification.
 - The qualifier does not change caps, tolerances, frozen cases, or losing rows.
 - A report SHA identifies a clean source revision; only the writing CLI's
