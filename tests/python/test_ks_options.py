@@ -17,7 +17,7 @@ from vibeqc import (
     ResourceBudget,
     estimate_ks_resources,
 )
-from vibeqc.ks import native_ks_options, resolve_ks_options
+from vibeqc.ks import BULK_LIBXC_SCF_DOMAIN, native_ks_options, resolve_ks_options
 from vibeqc_compiler.common.provenance import canonical_hash
 from vibeqc_compiler.dft.grid import (
     GRID_POLICY_RADII_SOURCE,
@@ -661,3 +661,61 @@ def test_semantic_abi_serializes_range_exchange_without_named_method_branch() ->
     assert (short.fock_coefficient, long.fock_coefficient) == pytest.approx(
         (-0.1, -0.4)
     )
+
+
+
+def test_bulk_libxc_native_plan_binds_installed_aot_program() -> None:
+    import ctypes
+
+    from vibeqc import _native
+
+    name = "GGA_X_PBE_SOL"
+    spec = functional(name, spin="unpolarized")
+    ir = MethodIR(
+        identifier=f"LIBXC:{name}",
+        spin="unpolarized",
+        primitives=(SemilocalXCPrimitive(spec),),
+    )
+    options = KsOptions(
+        functional=spec,
+        grid=CUSTOM,
+        scf_domain=BULK_LIBXC_SCF_DOMAIN,
+    )
+    object.__setattr__(options, "_method_ir", ir)
+
+    class Lookup:
+        def __call__(self, component: bytes, output: typing.Any) -> int:
+            assert component == name.encode("ascii")
+            descriptor = output._obj
+            descriptor.identifier = component
+            descriptor.expression_identity = b"expression-identity"
+            descriptor.ingredient_mask = 7
+            descriptor.domain_version = 3
+            descriptor.native_program = 1
+            return _native.STATUS_SUCCESS
+
+    library = typing.cast(
+        typing.Any,
+        type("Library", (), {"vibeqc_libxc_semilocal_program_get": Lookup()})(),
+    )
+    native = native_ks_options(options, library=library)
+    assert native.semilocal_program
+    program = native.semilocal_program.contents
+    assert program.identifier.decode("ascii") == name
+    assert program.ingredient_mask == 7
+    assert program.domain_version == 3
+    assert program.native_program == 1
+
+
+def test_bulk_libxc_native_plan_requires_exact_production_domain() -> None:
+    name = "GGA_X_PBE_SOL"
+    spec = functional(name, spin="unpolarized")
+    ir = MethodIR(
+        identifier=f"LIBXC:{name}",
+        spin="unpolarized",
+        primitives=(SemilocalXCPrimitive(spec),),
+    )
+    options = KsOptions(functional=spec, grid=CUSTOM)
+    object.__setattr__(options, "_method_ir", ir)
+    with pytest.raises(ValueError, match="bulk production SCF domain"):
+        native_ks_options(options, library=object())
