@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from vibeqc_compiler.common.cuda_target import cuda_target_info
 from vibeqc_compiler.integral.lowering.dispatch import emit_shell_class_fused_cuda
 from vibeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_force_density_coefficient,
 )
 from vibeqc_compiler.integral.shell_spec import DPPP_SPEC
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _function(source: str, name: str) -> str:
@@ -38,7 +42,7 @@ def coefficient_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "direct_force_density_coefficient_scaled",
     )
     exact = _function(
-        emit_shell_class_fused_cuda(DPPP_SPEC),
+        emit_shell_class_fused_cuda(DPPP_SPEC, target=cuda_target_info("sm_120")),
         "generated_dppp_density_coefficient_scaled",
     )
     source = (
