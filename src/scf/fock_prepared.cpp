@@ -1,5 +1,6 @@
 #include "scf/fock_prepared.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
