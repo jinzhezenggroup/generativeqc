@@ -35,13 +35,27 @@ def test_required_merge_group_jobs_use_the_liveness_gate() -> None:
             assert "always()" not in job_header
 
 
-def test_merge_group_concurrency_cancels_superseded_same_ref_runs() -> None:
+def test_merge_group_concurrency_preserves_running_same_ref_runs() -> None:
     for filename in ("ci.yml", "cumetal-cuda.yml"):
         source = (WORKFLOWS / filename).read_text(encoding="utf-8")
         concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
         assert "github.event_name == 'merge_group'" in concurrency
         assert "&& github.ref" in concurrency
-        assert "cancel-in-progress:" in concurrency
+        assert "cancel-in-progress: false" in concurrency
+
+
+def test_pr_concurrency_preserves_running_and_replaces_only_pending_runs() -> None:
+    for filename in (
+        "ci.yml",
+        "cumetal-cuda.yml",
+        "pre-commit.yml",
+        "pr-overlap.yml",
+        "ccsdt-cpu-bundle-evidence.yml",
+    ):
+        source = (WORKFLOWS / filename).read_text(encoding="utf-8")
+        concurrency = source.split("concurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
+        assert "github.event.pull_request.number" in concurrency
+        assert "cancel-in-progress: false" in concurrency
 
 
 def test_ci_aggregate_accepts_only_explicitly_confirmed_orphans() -> None:

@@ -21,13 +21,13 @@ permissions:
 env:
   CCACHE_VERSION: "4.14"
 
-# Coalesce superseded PR and merge-group runs by their logical ref. A refreshed
-# merge-group ref cancels the stale run immediately; deleted queue refs are also
-# screened by the liveness job below. Master still keeps the active run and only
-# replaces the older pending run with the newest push.
+# Coalesce superseded PR and merge-group runs by their logical ref. Keep the
+# active run; GitHub concurrency retains at most one running plus one pending
+# run per group and replaces an older pending run with the newest one. Deleted
+# queue refs are still screened by the liveness job below.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.event_name == 'push' || github.event_name == 'merge_group') && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+  cancel-in-progress: false
 
 jobs:
   merge_queue_liveness:
