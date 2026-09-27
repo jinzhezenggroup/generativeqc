@@ -16,23 +16,41 @@ from tools import qualify_libxc_broad_matrix as matrix
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _payload(stage: str) -> dict:
+def _payload(stage: str, *, status: str = "pass", reason: str | None = None) -> dict:
     return {
         "stage_evidence": {
             "stage": stage,
-            "status": "pass",
+            "status": status,
+            "reason": reason,
         }
     }
 
 
-def test_default_representatives_cover_required_noncurated_families() -> None:
-    selected = matrix.select_representatives()
-    counts = Counter(item.family for item in selected)
+def _candidate(name: str, family: str) -> SimpleNamespace:
+    ingredients = {
+        "lda": ("rho",),
+        "gga": ("rho", "sigma"),
+        "mgga": ("rho", "sigma", "tau"),
+    }[family]
+    return SimpleNamespace(
+        name=name,
+        family=family,
+        required_ingredients=ingredients,
+        identity=(name.encode().hex() + "0" * 64)[:64],
+        production_domain_profile=SimpleNamespace(eligible=True),
+    )
 
-    assert counts == Counter(matrix.DEFAULT_QUOTAS)
-    assert len({item.name for item in selected}) == sum(matrix.DEFAULT_QUOTAS.values())
-    assert all(item.name in AUTO_BULK_COMPONENTS for item in selected)
-    assert all(item.production_domain_profile.eligible for item in selected)
+
+def test_candidate_inventory_can_supply_required_noncurated_families() -> None:
+    inventory = matrix.candidate_inventory()
+    counts = Counter(item.family for item in inventory)
+
+    assert all(
+        counts[family] >= quota for family, quota in matrix.DEFAULT_QUOTAS.items()
+    )
+    assert len({item.name for item in inventory}) == len(inventory)
+    assert all(item.name in AUTO_BULK_COMPONENTS for item in inventory)
+    assert all(item.production_domain_profile.eligible for item in inventory)
     assert all(
         item.required_ingredients
         == {
@@ -40,29 +58,24 @@ def test_default_representatives_cover_required_noncurated_families() -> None:
             "gga": ("rho", "sigma"),
             "mgga": ("rho", "sigma", "tau"),
         }[item.family]
-        for item in selected
+        for item in inventory
     )
 
 
-def test_broad_matrix_runs_full_chain_without_per_functional_dispatch(
+def test_broad_matrix_runs_admitted_candidate_through_full_chain(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    capability = SimpleNamespace(
-        name="GGA_X_PBE_SOL",
-        family="gga",
-        required_ingredients=("rho", "sigma"),
-        identity="a" * 64,
-    )
+    capability = _candidate("candidate-gga", "gga")
     calls: list[str] = []
-
-    def compiled(name: str, **kwargs: object) -> dict:
-        calls.append(f"compiled:{name}")
-        return _payload("compiled-cpu")
 
     def production(name: str, **kwargs: object) -> dict:
         calls.append(f"production:{name}")
         return _payload("production-domain")
+
+    def compiled(name: str, **kwargs: object) -> dict:
+        calls.append(f"compiled:{name}")
+        return _payload("compiled-cpu")
 
     def molecular(name: str, **kwargs: object) -> dict:
         calls.append(f"molecular:{name}")
@@ -72,8 +85,9 @@ def test_broad_matrix_runs_full_chain_without_per_functional_dispatch(
         calls.append(f"public:{name}")
         return _payload("public-method")
 
-    monkeypatch.setattr(matrix, "qualify_compiled_cpu", compiled)
+    monkeypatch.setattr(matrix, "_eligible", lambda capability: True)
     monkeypatch.setattr(matrix, "qualify_functional", production)
+    monkeypatch.setattr(matrix, "qualify_compiled_cpu", compiled)
     monkeypatch.setattr(matrix, "qualify_molecular_scf", molecular)
     monkeypatch.setattr(matrix, "qualify_public_method", public)
 
@@ -84,66 +98,85 @@ def test_broad_matrix_runs_full_chain_without_per_functional_dispatch(
         build_dir=tmp_path,
         pyscf_version="2.14.0",
         libxc=SimpleNamespace(__version__="7.0.0"),
+        quotas={"lda": 1, "gga": 1, "mgga": 1},
     )
 
     assert calls == [
-        "compiled:GGA_X_PBE_SOL",
-        "production:GGA_X_PBE_SOL",
-        "molecular:GGA_X_PBE_SOL",
-        "public:GGA_X_PBE_SOL",
+        "production:candidate-gga",
+        "compiled:candidate-gga",
+        "molecular:candidate-gga",
+        "public:candidate-gga",
     ]
-    assert summary["public_pass_counts"] == {"gga": 1}
+    assert summary["attempted_counts"]["gga"] == 1
+    assert summary["production_pass_counts"]["gga"] == 1
+    assert summary["public_pass_counts"]["gga"] == 1
     assert summary["functionals"][0]["status"] == "pass"
-    assert (tmp_path / "GGA_X_PBE_SOL" / "public-method.json").is_file()
+    assert (tmp_path / "candidate-gga" / "public-method.json").is_file()
     assert (tmp_path / "summary.json").is_file()
 
 
-def test_broad_matrix_stops_endpoint_promotion_after_failed_prerequisite(
+def test_production_blocker_is_retained_and_next_candidate_fills_quota(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    capability = SimpleNamespace(
-        name="GGA_X_PBE_SOL",
-        family="gga",
-        required_ingredients=("rho", "sigma"),
-        identity="a" * 64,
-    )
-    monkeypatch.setattr(
-        matrix,
-        "qualify_compiled_cpu",
-        lambda *args, **kwargs: _payload("compiled-cpu"),
-    )
-    monkeypatch.setattr(
-        matrix,
-        "qualify_functional",
-        lambda *args, **kwargs: {
-            "stage_evidence": {"stage": "production-domain", "status": "fail"}
-        },
-    )
-    monkeypatch.setattr(
-        matrix,
-        "qualify_molecular_scf",
-        lambda *args, **kwargs: pytest.fail("molecular SCF must remain gated"),
-    )
-    monkeypatch.setattr(
-        matrix,
-        "qualify_public_method",
-        lambda *args, **kwargs: pytest.fail("public promotion must remain gated"),
-    )
+    blocked = _candidate("blocked-gga", "gga")
+    admitted = _candidate("admitted-gga", "gga")
+    calls: list[str] = []
+
+    def production(name: str, **kwargs: object) -> dict:
+        calls.append(f"production:{name}")
+        if name == blocked.name:
+            return _payload(
+                "production-domain",
+                status="fail",
+                reason="zero-spin boundary is unsupported",
+            )
+        return _payload("production-domain")
+
+    def compiled(name: str, **kwargs: object) -> dict:
+        calls.append(f"compiled:{name}")
+        return _payload("compiled-cpu")
+
+    def molecular(name: str, **kwargs: object) -> dict:
+        calls.append(f"molecular:{name}")
+        return _payload("molecular-scf")
+
+    def public(name: str, **kwargs: object) -> dict:
+        calls.append(f"public:{name}")
+        return _payload("public-method")
+
+    monkeypatch.setattr(matrix, "_eligible", lambda capability: True)
+    monkeypatch.setattr(matrix, "qualify_functional", production)
+    monkeypatch.setattr(matrix, "qualify_compiled_cpu", compiled)
+    monkeypatch.setattr(matrix, "qualify_molecular_scf", molecular)
+    monkeypatch.setattr(matrix, "qualify_public_method", public)
 
     summary = matrix.run_matrix(
-        (capability,),
+        (blocked, admitted),
         output=tmp_path,
         evidence_prefix="test://broad-matrix",
         build_dir=tmp_path,
         pyscf_version="2.14.0",
         libxc=SimpleNamespace(__version__="7.0.0"),
+        quotas={"lda": 1, "gga": 1, "mgga": 1},
     )
 
-    row = summary["functionals"][0]
-    assert row["stages"]["molecular-scf"] == "not-run"
-    assert row["stages"]["public-method"] == "not-run"
-    assert row["status"] == "fail"
+    assert calls == [
+        "production:blocked-gga",
+        "production:admitted-gga",
+        "compiled:admitted-gga",
+        "molecular:admitted-gga",
+        "public:admitted-gga",
+    ]
+    assert summary["attempted_counts"]["gga"] == 2
+    assert summary["production_pass_counts"]["gga"] == 1
+    assert summary["public_pass_counts"]["gga"] == 1
+    first, second = summary["functionals"]
+    assert first["status"] == "blocked"
+    assert first["blocker_stage"] == "production-domain"
+    assert first["blocker"] == "zero-spin boundary is unsupported"
+    assert first["stages"]["compiled-cpu"] == "not-run"
+    assert second["status"] == "pass"
 
 
 def test_broad_matrix_cli_imports_outside_repository(tmp_path: Path) -> None:
