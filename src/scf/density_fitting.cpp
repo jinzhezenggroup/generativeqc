@@ -1302,8 +1302,8 @@ DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std:
 
 DensityFittingTilePlan plan_requested_density_fitting_tiles(
     DfPairStorageRequest request, std::size_t batch, std::size_t nbf, std::size_t naux,
-    std::size_t occupied, std::size_t packed_rank_capacity, std::size_t budget,
-    std::size_t fixed, bool generated_source, std::size_t automatic_rhf_rank) {
+    std::size_t occupied, std::size_t packed_rank_capacity, std::size_t budget, std::size_t fixed,
+    bool generated_source, std::size_t automatic_rhf_rank) {
   const auto dense = [&] {
     return plan_density_fitting_tiles(batch, nbf, naux, occupied, budget, fixed, generated_source,
                                       automatic_rhf_rank);

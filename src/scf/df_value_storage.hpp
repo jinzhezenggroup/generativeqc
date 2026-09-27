@@ -35,8 +35,7 @@ inline DfPairStorageRequest requested_df_pair_storage_request() {
   if (!value || std::strcmp(value, "auto") == 0) return DfPairStorageRequest::Automatic;
   if (std::strcmp(value, "dense") == 0) return DfPairStorageRequest::Dense;
   if (std::strcmp(value, "packed") == 0) return DfPairStorageRequest::SymmetricLower;
-  if (std::strcmp(value, "packed-single") == 0)
-    return DfPairStorageRequest::SymmetricLowerSingle;
+  if (std::strcmp(value, "packed-single") == 0) return DfPairStorageRequest::SymmetricLowerSingle;
   throw std::invalid_argument(
       "VIBEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single");
 }
