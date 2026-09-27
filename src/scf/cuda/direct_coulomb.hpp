@@ -5,11 +5,12 @@
 #include <memory>
 #include <vector>
 
-#include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
 namespace vibeqc::scf::cuda_execution {
+
+struct ShellPairDensityBounds;
 
 /** Optional geometry owner for the generated pure-J consumer. It borrows the
  * direct provider's stream and public basis metadata, and owns bounded shell
