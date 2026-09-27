@@ -123,6 +123,9 @@ def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
                 "atoms": 3,
                 "basis": "def2-svp",
                 "density_fitting": "none",
+                "method_identity": "method-identity",
+                "ks_options_identity": "ks-identity",
+                "library_sha256": "library-sha",
                 "cold": {
                     "scenario": "cold",
                     "force_components": force_components,
@@ -141,6 +144,9 @@ def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
 
     assert len(rows) == 2
     assert rows[0]["metadata"]["scenario"] == "cold"
+    assert rows[0]["metadata"]["method_identity"] == "method-identity"
+    assert rows[0]["metadata"]["ks_options_identity"] == "ks-identity"
+    assert rows[0]["metadata"]["library_sha256"] == "library-sha"
     assert rows[0]["components"]["schema"] == "vibeqc.dft-force-components.v1"
     assert rows[1]["metadata"]["scenario"] == "diagnostic_scf_profile"
     assert rows[1]["scf_profile"]["profiled_ms"]["scf_fock_j"] == 2.0
