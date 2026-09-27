@@ -732,14 +732,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
     if (selection == nullptr) return false;
     return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "on") == 0 ||
-           std::strcmp(selection, "true") == 0 ||
-           std::strcmp(selection, "small-native") == 0;
+           std::strcmp(selection, "true") == 0 || std::strcmp(selection, "small-native") == 0;
   }
 
   runtime::SolverRegionCudaBinding solver_region_binding() const {
-    const bool replay =
-        configured_replay_enabled() &&
-        n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
+    const bool replay = configured_replay_enabled() &&
+                        n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
     graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
     return {std::move(graph), kCudaKsChunkCapacity, runtime::SolverRegionCompletionMode::Scalar,

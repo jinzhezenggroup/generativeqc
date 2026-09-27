@@ -527,11 +527,11 @@ void compare_rks_chunk_history(bool pbe) {
               chunked.second.iteration_synchronizations < chunked.second.iterations,
           "CUDA RKS history comparison did not exercise both fence cadences");
   if (expect_iteration_replay()) {
-    require(chunked.second.execution_region_captures >= 1 &&
-                chunked.second.execution_region_replays >
-                    chunked.second.execution_region_captures &&
-                chunked.second.execution_region_fallbacks == 0,
-            "CUDA RKS qualification did not reach a cached shared-region replay");
+    require(
+        chunked.second.execution_region_captures >= 1 &&
+            chunked.second.execution_region_replays > chunked.second.execution_region_captures &&
+            chunked.second.execution_region_fallbacks == 0,
+        "CUDA RKS qualification did not reach a cached shared-region replay");
   }
   require(::setenv("VIBEQC_CUDA_KS_CHUNK", "2", 1) == 0,
           "could not restore CUDA RKS chunk qualification");
