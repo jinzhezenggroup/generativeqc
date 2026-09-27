@@ -606,6 +606,27 @@ typedef struct vibeqc_ks_semilocal_component {
   double coefficient;
 } vibeqc_ks_semilocal_component;
 
+/** Backend-neutral value returned by one compiler-owned semilocal point program. */
+typedef struct vibeqc_ks_semilocal_point_value {
+  double energy;
+  double rho[2];
+  double gradient[2][3];
+  double kinetic[2];
+} vibeqc_ks_semilocal_point_value;
+
+/** C-callable evaluator owned by one compiled semilocal artifact. */
+typedef vibeqc_ks_semilocal_point_value (*vibeqc_ks_semilocal_point_evaluator)(
+    const double* rho, const double* gradient, const double* tau);
+
+/** Optional generic semilocal point program carried by the compiler KS plan. */
+typedef struct vibeqc_ks_semilocal_program {
+  const char* identifier;
+  const char* expression_identity;
+  uint32_t ingredient_mask;
+  uint32_t domain_version;
+  vibeqc_ks_semilocal_point_evaluator evaluate;
+} vibeqc_ks_semilocal_program;
+
 /** Exact-exchange operator carried by one KS execution-plan contribution. */
 typedef int32_t vibeqc_ks_exchange_operator;
 enum {
@@ -655,6 +676,8 @@ typedef struct vibeqc_ks_options {
   uint32_t semilocal_component_count;
   /** Semilocal range parameter in bohr^-1, or zero when absent. */
   double semilocal_range_omega;
+  /** Optional compiler-owned generic point program; NULL keeps curated/native routing. */
+  const vibeqc_ks_semilocal_program* semilocal_program;
   const vibeqc_ks_exchange_term* exchange_terms;
   uint32_t exchange_term_count;
   /** 0/1 optional MethodIR NonlocalCorrelation contribution. */
