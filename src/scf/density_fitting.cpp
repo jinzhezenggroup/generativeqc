@@ -1300,6 +1300,58 @@ DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std:
   }
 }
 
+DensityFittingTilePlan plan_requested_density_fitting_tiles(
+    DfPairStorageRequest request, std::size_t batch, std::size_t nbf, std::size_t naux,
+    std::size_t occupied, std::size_t packed_rank_capacity, std::size_t budget, std::size_t fixed,
+    bool generated_source, std::size_t automatic_rhf_rank) {
+  const auto dense = [&] {
+    return plan_density_fitting_tiles(batch, nbf, naux, occupied, budget, fixed, generated_source,
+                                      automatic_rhf_rank);
+  };
+  const auto packed = [&](bool retain_raw) {
+    if (!generated_source)
+      throw std::invalid_argument("packed DF storage requires a physical generated source");
+    return plan_packed_density_fitting_tiles(batch, nbf, naux, packed_rank_capacity, budget, fixed,
+                                             automatic_rhf_rank, retain_raw);
+  };
+
+  switch (request) {
+    case DfPairStorageRequest::Dense:
+      return dense();
+    case DfPairStorageRequest::SymmetricLower:
+      return packed(true);
+    case DfPairStorageRequest::SymmetricLowerSingle:
+      return packed(false);
+    case DfPairStorageRequest::Automatic:
+      break;
+  }
+
+  // Current promoted evidence covers the physical singleton RHF route. Keep
+  // batch/UHF/general-density callers on the existing dense policy until they
+  // have their own endpoint qualification.
+  if (!generated_source || batch != 1 || automatic_rhf_rank == 0) return dense();
+
+  try {
+    auto dense_plan = dense();
+    if (dense_plan.stores_full_three_center) return dense_plan;
+    try {
+      auto packed_plan = packed(false);
+      // Automatic packing is a capacity crossover, not a memory-only preference:
+      // promote only when it converts a streamed dense plan into one persistent
+      // fitted value owner under the exact same value allowance.
+      if (packed_plan.stores_full_three_center) return packed_plan;
+    } catch (const DensityFittingBudgetError&) {
+      // The bounded dense/source plan remains the safe executable fallback.
+    }
+    return dense_plan;
+  } catch (const DensityFittingBudgetError&) {
+    // A packed owner can require less persistent storage than even the smallest
+    // dense streamed tile. Give the qualified singleton-RHF representation one
+    // chance before reporting the original resource failure.
+    return packed(false);
+  }
+}
+
 std::size_t density_fitting_scf_diis_device_bytes(std::size_t batch, std::size_t nbf,
                                                   unsigned history) noexcept {
   if (history < 2) return 0;

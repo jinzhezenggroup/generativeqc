@@ -45,9 +45,15 @@ def cuda_df_candidates(
     ``recomputed`` mode describes that complete policy, not every forward tile.
     """
     storage = os.environ.get("VIBEQC_DF_VALUE_STORAGE", "auto")
-    if storage not in ("auto", "dense", "packed"):
-        raise ValueError("VIBEQC_DF_VALUE_STORAGE must be auto, dense or packed")
-    packed_values = storage == "packed"
+    if storage not in ("auto", "dense", "packed", "packed-single"):
+        raise ValueError(
+            "VIBEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single"
+        )
+    packed_values = storage in ("packed", "packed-single")
+    # The shape-only packed ABI conservatively charges raw + fitted factors.
+    # packed-single therefore receives a safe upper bound here; the native
+    # executable planner owns its lower single-factor allocation and auto
+    # promotion. Small inventory-v1 auto workloads remain dense/resident.
     pair_storage = "packed" if packed_values else "dense"
     occupied_exchange = os.environ.get("VIBEQC_DF_EXCHANGE") == "occupied"
     buckets = {}
