@@ -82,6 +82,7 @@ struct Vv10CudaDeviceLayout {
   std::size_t workspace_bytes{};
   bool features{};
   bool geometry{};
+  bool mask_zero_weight_rows{};
 };
 
 /** Exact caller-owned workspace for resident CUDA VV10/rVV10 execution.
@@ -89,7 +90,8 @@ struct Vv10CudaDeviceLayout {
  * not included in workspace_bytes.
  */
 Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_t tile_points,
-                                             bool features, bool geometry);
+                                             bool features, bool geometry,
+                                             bool mask_zero_weight_rows = false);
 
 /** Enqueue one resident fixed-grid evaluation on the caller stream.
  * All scientific inputs and outputs are device-resident. No allocation,
