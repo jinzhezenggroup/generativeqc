@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include "scf/fock_prepared.hpp"
 
@@ -34,11 +35,43 @@ struct PreparedCudaFockBinding {
  * provider. The value seam covers exact full-range Coulomb plus exact full-/
  * short-/long-range exchange, and full-range density-fitted J/K when every
  * requested term shares the fitted owner. Qualified exact SR/LR value
- * execution may reuse the owner's conservative full-range Schwarz screening;
- * derivatives remain a separate capability. Mixed-provider compositions fail
- * closed rather than selecting or staging a different source.
+ * execution may reuse the owner's conservative full-range Schwarz screening.
+ * Derivatives use the separate capability binding below so value identity does
+ * not become derivative identity. Mixed-provider compositions fail closed
+ * rather than selecting or staging a different source.
  */
 PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan) noexcept;
+
+/** Borrow the exact Direct source only when this prepared owner retained
+ * first-derivative capability. The binding is an execution capability, not a
+ * second scientific/provider owner; source_identity therefore matches the
+ * ordinary value binding for exact plans.
+ */
+struct PreparedCudaDirectDerivativeBinding {
+  int device_id{-1};
+  cudaStream_t stream{};
+  const void* source_identity{};
+  std::size_t nbf{}, coordinates_per_item{}, retained_device_bytes{};
+  unsigned maximum_derivative_order{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && stream != nullptr && source_identity != nullptr && nbf != 0 &&
+           coordinates_per_item != 0 && maximum_derivative_order >= 1;
+  }
+};
+
+PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
+    const PreparedFockPlan& plan) noexcept;
+
+/** Execute the fused fixed-density J'/SR-K'/LR-K' derivative through the
+ * retained Direct owner. This host-facing bridge preserves the existing
+ * derivative implementation while removing duplicate plan/topology ownership.
+ */
+vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
+    const PreparedFockPlan& plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const std::vector<double>& density, const std::vector<double>& beta,
+    std::vector<double>& derivatives, std::string& detail);
 
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.

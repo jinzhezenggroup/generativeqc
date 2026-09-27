@@ -50,6 +50,44 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
           plan.diagnostic().nbf};
 }
 
+PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
+    const PreparedFockPlan& plan) noexcept {
+  const auto& strategy = plan.strategy();
+  if (strategy.backend != FockBackend::Cuda || strategy.spec.derivative_order != 0) return {};
+  auto* source = plan.cuda_direct_source();
+  if (!source) return {};
+  const auto diagnostic = cuda_direct_jk_plan_diagnostic(source);
+  if (!diagnostic.nbf || !diagnostic.coordinates_per_item || diagnostic.derivative_order < 1)
+    return {};
+  return {cuda_direct_jk_device(source),
+          cuda_direct_jk_stream(source),
+          source,
+          diagnostic.nbf,
+          diagnostic.coordinates_per_item,
+          diagnostic.device_bytes,
+          diagnostic.derivative_order};
+}
+
+vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
+    const PreparedFockPlan& plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const std::vector<double>& density, const std::vector<double>& beta,
+    std::vector<double>& derivatives, std::string& detail) {
+  const auto binding = prepared_cuda_direct_derivative_binding(plan);
+  auto* source = plan.cuda_direct_source();
+  if (!binding || !source) {
+    detail = "prepared CUDA Fock owner did not retain Direct first-derivative capability";
+    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  if (spin != plan.strategy().spec.spin) {
+    detail = "prepared CUDA Direct derivative spin differs from the owner";
+    return VIBEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return execute_cuda_direct_rsh_energy_derivatives_item(
+      source, 0, spin, coulomb_coefficient, short_exchange_coefficient,
+      long_exchange_coefficient, omega, density, beta, derivatives, detail);
+}
+
 vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
                                          const double* beta, std::size_t matrix_elements,
                                          double* coulomb, double* alpha_exchange,
