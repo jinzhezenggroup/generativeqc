@@ -121,6 +121,7 @@ using std::size_t;
 namespace vibeqc_stationary_cuda {}
 constexpr size_t task_stride=9;
 using cudaEvent_t = void*;
+using cudaStream_t = void*;
 struct Context { void* stream{}; int* error{}; void check_device() {} };
 void error_text(char* out,size_t size,const char* message) {
   if(out && size) std::snprintf(out,size,"%s",message);
@@ -131,6 +132,7 @@ bool fail_finish=false;
 template<class T> void profile_record(T&,cudaEvent_t,void*) {}
 template<class T> void profile_elapsed(T&,double&,cudaEvent_t,cudaEvent_t) {}
 template<class T, class... A> void upload(T&,A...) {}
+template<class T> void drain_geometry(T&) {}
 template<class T> void finished(T&,void*) {
   if(fail_finish) {fail_finish=false; throw std::runtime_error("injected completion failure");}
 }
