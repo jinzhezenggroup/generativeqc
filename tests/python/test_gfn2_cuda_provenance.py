@@ -76,7 +76,9 @@ def test_gfn2_cuda_d4_reuses_shared_scalar_math() -> None:
 
 
 def test_shared_d4_cpu_and_cuda_use_one_scalar_owner() -> None:
-    reference = (ROOT / "src/dft/dispersion/d4_reference.hpp").read_text(encoding="utf-8")
+    reference = (ROOT / "src/dft/dispersion/d4_reference.hpp").read_text(
+        encoding="utf-8"
+    )
     cuda = (ROOT / "src/dft/dispersion/d4_cuda.cu").read_text(encoding="utf-8")
 
     for source in (reference, cuda):

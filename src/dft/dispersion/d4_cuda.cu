@@ -324,27 +324,24 @@ __global__ void atm_kernel(D4CudaBatch batch, D4Parameters parameters, D4Tables 
       record_status(result.statuses, system, D4Status::numerical_failure);
       continue;
     }
-    const auto atm = math::atm_terms(
-        a, b, c, d4_detail::radius(first, second, z, tables, parameters),
-        d4_detail::radius(first, third, z, tables, parameters),
-        d4_detail::radius(second, third, z, tables, parameters), c12.c6, c13.c6, c23.c6,
-        parameters.s9);
+    const auto atm =
+        math::atm_terms(a, b, c, d4_detail::radius(first, second, z, tables, parameters),
+                        d4_detail::radius(first, third, z, tables, parameters),
+                        d4_detail::radius(second, third, z, tables, parameters), c12.c6, c13.c6,
+                        c23.c6, parameters.s9);
     atomic_add_fp64(result.energies + 2 * system + 1, -atm.energy);
-    add_pair_gradient_atomic(
-        first, second, first_second,
-        d4_detail::atm_radial(a, c, b, atm.r5_product, atm.damping, atm.angle,
-                              atm.damping_derivative, atm.c9),
-        gradient);
-    add_pair_gradient_atomic(
-        first, third, first_third,
-        d4_detail::atm_radial(b, c, a, atm.r5_product, atm.damping, atm.angle,
-                              atm.damping_derivative, atm.c9),
-        gradient);
-    add_pair_gradient_atomic(
-        second, third, second_third,
-        d4_detail::atm_radial(c, b, a, atm.r5_product, atm.damping, atm.angle,
-                              atm.damping_derivative, atm.c9),
-        gradient);
+    add_pair_gradient_atomic(first, second, first_second,
+                             d4_detail::atm_radial(a, c, b, atm.r5_product, atm.damping, atm.angle,
+                                                   atm.damping_derivative, atm.c9),
+                             gradient);
+    add_pair_gradient_atomic(first, third, first_third,
+                             d4_detail::atm_radial(b, c, a, atm.r5_product, atm.damping, atm.angle,
+                                                   atm.damping_derivative, atm.c9),
+                             gradient);
+    add_pair_gradient_atomic(second, third, second_third,
+                             d4_detail::atm_radial(c, b, a, atm.r5_product, atm.damping, atm.angle,
+                                                   atm.damping_derivative, atm.c9),
+                             gradient);
     atomic_add_fp64(coordination_adjoints + first,
                     math::atm_cn_adjoint(atm.energy, c12.c6, c13.c6, c12.ci, c13.ci));
     atomic_add_fp64(coordination_adjoints + second,
