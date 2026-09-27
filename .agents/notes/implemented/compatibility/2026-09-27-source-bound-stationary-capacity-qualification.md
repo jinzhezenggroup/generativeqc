@@ -23,9 +23,11 @@ Bind the spherical AO term counts and AO count through the complete native
 packing chain. Bind grid point counts through the source-only grid constructor,
 public and native GridSpec ABI lowering, generated quadrature layout, native
 CUDA materializer, backend selector, and native point-count publication. Bind
-the complete public semilocal capability
-predicate/promotion and CUDA force method. Python owner functions use hashes of
-their exact source spans. Do not hash `ast.dump()` output: its serialization
+the complete public semilocal capability predicate/promotion, CUDA force method,
+and stationary packaged-AOT CMake loop. Compute admission for each method/spin
+row with its own memory plan, and verify all seven production gates in source
+order. Python owner functions use hashes of their exact source spans. Do not
+hash `ast.dump()` output: its serialization
 changes across supported Python versions even when the source does not. Every
 report records the clean Git HEAD, frozen input/basis/grid identities, owner
 hashes, gate order, first blocker, and whether the optional packaged AOT is
@@ -55,6 +57,10 @@ file. No other dirty path is ignored.
 
 - Source or predicate drift fails closed before any capacity conclusion is
   emitted.
+- Row admission uses that row's method/spin memory plan; a conservative
+  case-level maximum cannot be propagated to every row.
+- The reported first blocker follows the verified complete production gate
+  order, including shape, topology, work, device, and host gates.
 - AO and grid counts must agree with the verified native production formulas;
   source-only construction is not accepted as an independent proxy.
 - Static admission is never reported as scientific qualification.

@@ -98,6 +98,9 @@ PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "0fa29ffe02ff05df801d8986d06ba03cd492f73d6f621543a96c3f8fc79700af"
 )
+STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
+    "c35064b2f437a6fb5bbce301b90e92c806c718b469d9ab539d8ae83237b8cd49"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -309,17 +312,19 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         return value
 
     messages = (
+        "CUDA diagnostic small-domain atom/AO cap exceeded",
+        "CUDA diagnostic primitive-topology cap exceeded",
         "primitive work budget exceeded",
         "grid point work budget exceeded",
         "grid work budget exceeded",
-        "stationary additional-host byte budget exceeded",
         "stationary additional-device budget exceeded",
+        "stationary additional-host byte budget exceeded",
     )
     positions = [source.find(message) for message in messages]
     if any(position < 0 for position in positions):
         raise RuntimeError("stationary CUDA admission messages are incomplete")
-    if positions[:3] != sorted(positions[:3]):
-        raise RuntimeError("stationary CUDA scalar work-gate order changed")
+    if positions != sorted(positions):
+        raise RuntimeError("stationary CUDA admission gate order changed")
 
     return {
         "owner": STATIONARY_OWNER,
@@ -705,7 +710,19 @@ def _case_failures(
     return failures
 
 
-def _source_package_inventory(repository: Path) -> None:
+def _admission_record(failures: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "outcome": "blocked" if failures else "passes_static_stationary_caps",
+        "first_blocker": failures[0] if failures else None,
+        "failures": failures,
+        "scope": (
+            "static source/resource preflight only; no SCF, CUDA execution, "
+            "AOT binary, numerical, or performance qualification"
+        ),
+    }
+
+
+def _source_package_inventory(repository: Path) -> dict[str, Any]:
     cmake = (repository / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
     names = ("lda_rks", "lda_uks", "pbe_rks", "pbe_uks", "r2scan_rks", "r2scan_uks")
     required = (
@@ -718,6 +735,19 @@ def _source_package_inventory(repository: Path) -> None:
         raise RuntimeError(
             "stationary s/p/d package declaration is incomplete: " + ", ".join(missing)
         )
+    contract_digest = _source_span_sha256(
+        cmake,
+        begin=("    # Component-expanded s/p/d derivatives are shared compiler output"),
+        end=("  if(VIBEQC_PYTHON_WHEEL)\n    vibeqc_attach_cuda_implib(${target})"),
+        label="stationary packaged-AOT CMake",
+    )
+    if contract_digest != STATIONARY_AOT_CMAKE_CONTRACT_SHA256:
+        raise RuntimeError("stationary packaged-AOT CMake contract changed")
+    return {
+        "cmake_contract_sha256": contract_digest,
+        "profiles": list(names),
+        "component_domain": "spd",
+    }
 
 
 def _source_public_route(repository: Path) -> dict[str, str]:
@@ -984,7 +1014,7 @@ def _build_report(
     limits = _source_limits(repository)
     basis_layout = _basis_layout_contract(repository)
     spd_expansion = _spd_expansion_contract(repository)
-    _source_package_inventory(repository)
+    source_package = _source_package_inventory(repository)
     public_route = _source_public_route(repository)
     grid_contract = _grid_count_contract(repository)
     grid_spec = _grid_spec(manifest["model"]["grid_spec"])
@@ -1084,6 +1114,10 @@ def _build_report(
                     spin=spin,
                     limits=limits,
                 )
+        admission_by_method_spin = {
+            key: _admission_record(_case_failures(shape, requirements, memory, limits))
+            for key, memory in method_memory.items()
+        }
         maximum_memory = {
             "additional_device_peak_bound": max(
                 item["additional_device_peak_bound"] for item in method_memory.values()
@@ -1115,21 +1149,15 @@ def _build_report(
             "requested_rows": sorted(
                 row["id"] for row in rows_by_case.get(case_name, ())
             ),
-            "admission": {
-                "outcome": "blocked" if failures else "passes_static_stationary_caps",
-                "first_blocker": failures[0] if failures else None,
-                "failures": failures,
-                "scope": (
-                    "static source/resource preflight only; no SCF, CUDA execution, "
-                    "AOT binary, numerical, or performance qualification"
-                ),
-            },
+            "admission": _admission_record(failures),
+            "admission_by_method_spin": admission_by_method_spin,
         }
         cases.append(record)
         case_work[case_name] = {
             "basis": basis,
             "plans": method_plans,
             "memory": method_memory,
+            "admission_by_method_spin": admission_by_method_spin,
             "record": record,
         }
 
@@ -1210,7 +1238,9 @@ def _build_report(
                     ),
                     "binary_verification": artifact_cache[aot_key],
                 },
-                "admission": case_work[frozen_row["case"]]["record"]["admission"],
+                "admission": case_work[frozen_row["case"]]["admission_by_method_spin"][
+                    method_key
+                ],
             }
         )
 
@@ -1261,6 +1291,7 @@ def _build_report(
         },
         "grid": grid_contract,
         "public_route": public_route,
+        "stationary_aot_source_package": source_package,
         "admission_limits": limits,
         "aot_binary_directory": None
         if aot_directory is None

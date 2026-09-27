@@ -205,6 +205,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["additional_device_admission"] == (
         "additional_device_peak_bound < additional_device_budget"
     )
+    assert result["admission_limits"]["gate_order"] == [
+        "small_domain_atom_ao_cap",
+        "primitive_topology_cap",
+        "primitive_work_budget",
+        "grid_point_work_budget",
+        "grid_pair_work_budget",
+        "additional_device_budget",
+        "additional_host_budget",
+    ]
     assert result["admission_limits"]["gate_predicates"] == {
         "primitive_records": "records > max_primitive_records",
         "grid_points": "len(state.grid.points) > max_grid_points",
@@ -279,6 +288,20 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
         for row in rows
     )
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
+    assert result["stationary_aot_source_package"] == {
+        "cmake_contract_sha256": (
+            "c35064b2f437a6fb5bbce301b90e92c806c718b469d9ab539d8ae83237b8cd49"
+        ),
+        "profiles": [
+            "lda_rks",
+            "lda_uks",
+            "pbe_rks",
+            "pbe_uks",
+            "r2scan_rks",
+            "r2scan_uks",
+        ],
+        "component_domain": "spd",
+    }
     assert all(
         row["packaged_aot"]["binary_verification"]["status"] == "not_checked"
         for row in rows
@@ -319,6 +342,45 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
         in row["packaged_aot"]["binary_verification"]["detail"]
         for row in missing_rows
     )
+
+
+def test_each_row_uses_its_own_method_memory_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = qualify_capacity._method_resources
+
+    def method_resources(
+        basis: object,
+        *,
+        atom_count: int,
+        functional: int,
+        spin: str,
+        limits: dict,
+    ) -> tuple[dict, object]:
+        memory, plan = original(
+            basis,
+            atom_count=atom_count,
+            functional=functional,
+            spin=spin,
+            limits=limits,
+        )
+        memory = dict(memory)
+        if functional == qualify_capacity.SEMILOCAL_FUNCTIONALS["pbe"]:
+            memory["additional_device_peak_bound"] = limits["additional_device_bytes"]
+        return memory, plan
+
+    monkeypatch.setattr(qualify_capacity, "_method_resources", method_resources)
+    rows = {row["id"]: row for row in report()["rows"]}
+
+    assert rows["lda/rks/water/fp64_energy_forces"]["admission"]["outcome"] == (
+        "passes_static_stationary_caps"
+    )
+    assert rows["r2scan/rks/water/fp64_energy_forces"]["admission"]["outcome"] == (
+        "passes_static_stationary_caps"
+    )
+    pbe = rows["pbe/rks/water/fp64_energy_forces"]["admission"]
+    assert pbe["outcome"] == "blocked"
+    assert pbe["first_blocker"]["gate"] == "additional_device_budget"
 
 
 def test_machine_readable_report_round_trips_without_nonfinite_values() -> None:
@@ -471,6 +533,69 @@ def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="additional-host predicate"):
         qualify_capacity._source_limits(tmp_path)
+
+
+def test_admission_gate_order_fails_closed_when_leading_gates_move(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    small = (
+        "    if not 1 <= na <= 32 or not 1 <= n <= 128:\n"
+        '        raise ValueError("CUDA diagnostic small-domain atom/AO cap exceeded")\n'
+    )
+    primitives = (
+        "    if not 1 <= basis.nprimitive <= 4096:\n"
+        '        raise ValueError("CUDA diagnostic primitive-topology cap exceeded")\n'
+    )
+    assert small + primitives in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source.replace(small + primitives, primitives + small, 1), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="admission gate order changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_admission_gate_order_fails_closed_when_memory_gates_move(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    device = (
+        "    if available <= 0:\n"
+        '        raise ValueError("stationary additional-device budget exceeded")\n'
+    )
+    host = (
+        "    if host_bound > max_host_bytes:\n"
+        '        raise ValueError("stationary additional-host byte budget exceeded")\n'
+    )
+    assert device in source and host in source
+    swapped = source.replace(device, "    # swapped-memory-gate\n", 1)
+    swapped = swapped.replace(host, device, 1)
+    swapped = swapped.replace("    # swapped-memory-gate\n", host, 1)
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(swapped, encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="admission gate order changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
+    old = "          --component-domain spd"
+    assert old in source
+    target = tmp_path / "cmake/VibeQCCuda.cmake"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source.replace(old, "          --component-domain sp", 1), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="packaged-AOT CMake contract changed"):
+        qualify_capacity._source_package_inventory(tmp_path)
 
 
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
