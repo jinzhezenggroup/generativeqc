@@ -77,9 +77,12 @@ assert '__global__ void task_kernel' in template
 assert 'stationary_tasks' in template
 assert 'stationary_topology' in template
 assert 'stationary_geometry_enqueue' in template
+assert 'stationary_geometry_external_device' in template
+assert 'stationary_geometry_external_device_enqueue' in template
 assert 'stationary_geometry_drain' in template
 assert '__global__ void geometry_reduce' not in template
-assert template.count('p->launches += 1;') >= 2
+assert template.count('p->launches += 1;') >= 4
+assert 'external_stride' in template and 'external_offset' in template
 deferred=template.split('int stationary_geometry_enqueue',1)[1].split('int stationary_geometry(',1)[0]
 assert 'finished(*p, stream)' not in deferred
 assert 'p->geometry_pending = true' in deferred
@@ -102,6 +105,8 @@ assert 'stationary_records' not in driver
 assert 'for ids in product(*ranges)' not in driver
 assert '"stationary_tasks"' in driver
 assert '"stationary_geometry_enqueue"' in driver
+assert '"stationary_geometry_external_device"' in driver
+assert '"stationary_geometry_external_device_enqueue"' in driver
 assert '"stationary_geometry_drain"' in driver
 assert '"xc_geometry_drain"' in driver
 assert 'np.lexsort' in driver

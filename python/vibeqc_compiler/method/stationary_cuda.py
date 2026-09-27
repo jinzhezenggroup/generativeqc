@@ -351,6 +351,7 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external,
+                                size_t external_stride, size_t external_offset,
                                 double* partial, double* scratch, double* output, int* error) {
   const size_t lane = threadIdx.x;
   const size_t np = view.npoint, n = view.nactive, stride = np * n;
@@ -376,16 +377,34 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
     StationaryPointValue xc;
     if (external) {
       // Nonlocal E supplies partials in total rho/sigma, explicit pair
-      // coordinates and both weight legs. The existing AO/Becke pullbacks
-      // consume these seeds just like semilocal partials; tau is absent.
-      xc.energy = external[5 * np + p];
+      // coordinates and both weight legs. Device-resident callers may lend a
+      // full-grid [6,stride] seed owner and select one tile by offset, avoiding
+      // any host or device repack. Validate all six borrowed values before use.
+      if (external_stride < external_offset ||
+          np > external_stride - external_offset) {
+        atomicExch(error, 1);
+        lane_valid = false;
+        break;
+      }
+      const size_t ep = external_offset + p;
+      double seed[6];
+      for (size_t k = 0; k < 6; ++k) {
+        seed[k] = external[k * external_stride + ep];
+        if (!isfinite(seed[k])) {
+          atomicExch(error, 1);
+          lane_valid = false;
+          break;
+        }
+      }
+      if (!lane_valid) break;
+      xc.energy = seed[5];
       for (size_t s = 0; s < 2; ++s) {
-        xc.rho[s] = external[p];
+        xc.rho[s] = seed[0];
         for (size_t k = 0; k < 3; ++k)
-          xc.gradient[s][k] = 2.0 * external[np + p] * (g[0][k] + g[1][k]);
+          xc.gradient[s][k] = 2.0 * seed[1] * (g[0][k] + g[1][k]);
       }
       for (size_t k = 0; k < 3; ++k)
-        grad[3 * na + 3 * owners[p] + k] += external[(2 + k) * np + p];
+        grad[3 * na + 3 * owners[p] + k] += seed[2 + k];
     } else {
       xc = stationary_evaluate_point(rho, g, tau);
     }
