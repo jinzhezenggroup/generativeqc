@@ -15,9 +15,11 @@ namespace vibeqc::scf::cuda_execution {
 __device__ __forceinline__ bool direct_ao_quartet_survives_schwarz(
     const double* schwarz_bounds, std::size_t physical_offset, std::size_t n, std::size_t i,
     std::size_t j, std::size_t k, std::size_t l, double screening_tolerance) {
-  return schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
-             schwarz_bounds[physical_offset + matrix_index(k, l, n)] >=
-         screening_tolerance;
+  const double quartet_bound = schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
+                               schwarz_bounds[physical_offset + matrix_index(k, l, n)];
+  // Reject only an ordered bound below the threshold, as the original consumers
+  // did. NaN (including 0 * infinity) must not silently screen away invalid data.
+  return !(quartet_bound < screening_tolerance);
 }
 
 /** Apply the shell-level Schwarz and density gate for one direct consumer. */
