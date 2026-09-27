@@ -18,8 +18,11 @@ from vibeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_AOT_SHARD_WIDTH,
     QUALIFIED_SPD_AOT_SHARDS,
     QUALIFIED_SPD_COMPONENTS,
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     emit_stationary_aot_cuda,
     emit_stationary_component_aot_wrapper_cuda,
+    emit_stationary_profile_aot_cuda,
+    emit_stationary_profile_component_aot_wrapper_cuda,
     qualified_sp_requests,
 )
 
@@ -46,6 +49,7 @@ def main() -> None:
     )
     parser.add_argument("--functional", type=int, choices=(0, 1, 2))
     parser.add_argument("--spin", choices=("unpolarized", "polarized"))
+    parser.add_argument("--profile", choices=QUALIFIED_STATIONARY_AOT_PROFILE_NAMES)
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--component-domain", choices=("sp", "spd"), default="sp")
     parser.add_argument("--shard-index", type=int)
@@ -62,10 +66,11 @@ def main() -> None:
             or args.shard_index is not None
             or args.functional is not None
             or args.spin is not None
+            or args.profile is not None
         ):
             parser.error(
                 "--all-shards requires --component-domain spd without "
-                "--shard-index, --functional, or --spin"
+                "--shard-index, --functional, --spin, or --profile"
             )
         # CMake owns all outputs in one command so the full inventory is lowered
         # once, with the existing per-unit and aggregate source budgets intact.
@@ -79,29 +84,55 @@ def main() -> None:
     if args.component_domain == "sp":
         if args.shard_index is not None:
             parser.error("--shard-index requires --component-domain spd")
-        if args.functional is None or args.spin is None:
-            parser.error("--functional and --spin are required for stationary wrappers")
+        if args.profile is None and (args.functional is None or args.spin is None):
+            parser.error("--profile or --functional/--spin is required for stationary wrappers")
+        if args.profile is not None and (
+            args.functional is not None or args.spin is not None
+        ):
+            parser.error("--profile cannot be combined with --functional/--spin")
         primitive_source = emit_first_derivative_cuda(qualified_sp_requests())
-        source = emit_stationary_aot_cuda(
-            args.functional,
-            primitive_source=primitive_source,
-            spin=args.spin,
-            iterations=args.iterations,
+        source = (
+            emit_stationary_profile_aot_cuda(
+                args.profile,
+                primitive_source=primitive_source,
+                iterations=args.iterations,
+            )
+            if args.profile is not None
+            else emit_stationary_aot_cuda(
+                args.functional,
+                primitive_source=primitive_source,
+                spin=args.spin,
+                iterations=args.iterations,
+            )
         )
     elif args.shard_index is not None:
-        if args.functional is not None or args.spin is not None:
+        if (
+            args.functional is not None
+            or args.spin is not None
+            or args.profile is not None
+        ):
             parser.error(
-                "component primitive shards are shared across functionals/spins"
+                "component primitive shards are shared across functionals/spins/profiles"
             )
         if not 0 <= args.shard_index < QUALIFIED_SPD_AOT_SHARDS:
             parser.error(f"--shard-index must be in [0,{QUALIFIED_SPD_AOT_SHARDS - 1}]")
         sources = _component_aot_sources()
         source = sources[args.shard_index]
     else:
-        if args.functional is None or args.spin is None:
-            parser.error("--functional and --spin are required for stationary wrappers")
-        source = emit_stationary_component_aot_wrapper_cuda(
-            args.functional, spin=args.spin, iterations=args.iterations
+        if args.profile is None and (args.functional is None or args.spin is None):
+            parser.error("--profile or --functional/--spin is required for stationary wrappers")
+        if args.profile is not None and (
+            args.functional is not None or args.spin is not None
+        ):
+            parser.error("--profile cannot be combined with --functional/--spin")
+        source = (
+            emit_stationary_profile_component_aot_wrapper_cuda(
+                args.profile, iterations=args.iterations
+            )
+            if args.profile is not None
+            else emit_stationary_component_aot_wrapper_cuda(
+                args.functional, spin=args.spin, iterations=args.iterations
+            )
         )
 
     write_if_changed(args.output, source)
