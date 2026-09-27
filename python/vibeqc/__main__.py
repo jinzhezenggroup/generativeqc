@@ -59,6 +59,40 @@ def _public_method_rows() -> tuple[dict[str, object], ...]:
     return tuple(rows)
 
 
+def _automatic_libxc_method_rows() -> tuple[dict[str, object], ...]:
+    """Return default-allow automatic Libxc selectors from structural policy."""
+    from vibeqc_compiler.xc.automatic_semilocal import automatic_functional_code
+    from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+
+    rows = []
+    for name in sorted(AUTO_BULK_COMPONENTS):
+        try:
+            automatic_functional_code(name)
+        except ValueError:
+            continue
+        rows.extend(
+            (
+                {
+                    "name": f"libxc:{name}",
+                    "family": "density_functional",
+                    "properties": ("energy",),
+                    "supports_batch": True,
+                    "aliases": (f"libxc-rks:{name}",),
+                    "status": "available",
+                },
+                {
+                    "name": f"libxc-uks:{name}",
+                    "family": "density_functional",
+                    "properties": ("energy",),
+                    "supports_batch": True,
+                    "aliases": (),
+                    "status": "available",
+                },
+            )
+        )
+    return tuple(rows)
+
+
 def parser() -> argparse.ArgumentParser:
     """Expose stable quick/full, diagnostic, and cluster installation commands."""
     root = argparse.ArgumentParser(prog="vibeqc")
@@ -68,6 +102,11 @@ def parser() -> argparse.ArgumentParser:
     )
     methods.add_argument(
         "--json", action="store_true", help="emit the catalog as machine-readable JSON"
+    )
+    methods.add_argument(
+        "--libxc",
+        action="store_true",
+        help="also list default-allow automatic Libxc semilocal selectors",
     )
     resources = commands.add_parser(
         "resources",
@@ -181,6 +220,8 @@ def main() -> int:
     try:
         if args.command == "methods":
             rows = _public_method_rows()
+            if args.libxc:
+                rows += _automatic_libxc_method_rows()
             if args.json:
                 print(json.dumps(rows, indent=2))
             else:
