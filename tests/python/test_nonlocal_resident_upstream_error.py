@@ -189,8 +189,7 @@ def _two_point_vv10_energy(weight0: float) -> float:
     beta = (3.0 / (b * b)) ** 0.75 / 32.0
     omega = tuple(math.sqrt((4.0 * math.pi / 3.0) * value) for value in rho)
     kappa = tuple(
-        b * 1.5 * math.pi * (value / (9.0 * math.pi)) ** (1.0 / 6.0)
-        for value in rho
+        b * 1.5 * math.pi * (value / (9.0 * math.pi)) ** (1.0 / 6.0) for value in rho
     )
     total = 0.0
     for i in range(2):
@@ -213,9 +212,7 @@ def test_density_active_zero_weight_has_nonzero_weight_derivative() -> None:
     kappa0 = b * 1.5 * math.pi * (rho0 / (9.0 * math.pi)) ** (1.0 / 6.0)
     kappa1 = b * 1.5 * math.pi * (rho1 / (9.0 * math.pi)) ** (1.0 / 6.0)
     phi01 = -1.5 / (
-        (omega0 + kappa0)
-        * (omega1 + kappa1)
-        * (omega0 + kappa0 + omega1 + kappa1)
+        (omega0 + kappa0) * (omega1 + kappa1) * (omega0 + kappa0 + omega1 + kappa1)
     )
     expected = rho0 * (beta + rho1 * phi01)
     assert expected != 0.0
