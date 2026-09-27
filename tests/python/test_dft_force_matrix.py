@@ -10,6 +10,7 @@ from benchmarks.dft_force_matrix import (
     _atoms,
     _changed_atoms,
     _method_configuration,
+    QUALIFICATION_SYSTEMS,
 )
 
 
@@ -61,3 +62,12 @@ def test_unknown_matrix_method_and_system_fail_closed() -> None:
         _method_configuration("unknown-rks", grid)
     with pytest.raises(ValueError, match="unknown benchmark system"):
         _atoms("unknown-system")
+
+
+def test_qualification_system_set_covers_scaling_and_holdout() -> None:
+    assert QUALIFICATION_SYSTEMS == (
+        "water-3",
+        "water-6",
+        "water-12",
+        "formaldehyde",
+    )
