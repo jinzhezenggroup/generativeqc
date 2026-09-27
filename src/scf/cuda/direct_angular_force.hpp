@@ -18,7 +18,8 @@ void launch_two_electron_force_psss_resident_bra_kernel(
     const std::uint32_t* resident_ket_pairs, std::size_t resident_task_count,
     double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, bool force_density_product_screening,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    const double* schwarz_bounds, const double* density, double coulomb_coefficient,
+    double exchange_coefficient, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask);
 
 /** Resolve host spin/precision while retaining compile-time angular dispatch. */
@@ -34,6 +35,7 @@ void dispatch_angular_force_quartets(
     std::size_t resident_psss_bra_primitive_pairs, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
     bool force_density_product_screening, const double* schwarz_bounds, const double* density,
-    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask);
+    double coulomb_coefficient, double exchange_coefficient, const std::uint8_t* active,
+    double* forces, std::uint64_t generated_shell_class_mask);
 
 }  // namespace vibeqc::scf::cuda_execution
