@@ -752,7 +752,7 @@ void streamed_projected_exchange(bool ragged) {
           cudaGraph_t graph{};
           check(cudaStreamEndCapture(plan->stream, &graph));
           cudaGraphExec_t executable{};
-          check(cudaGraphInstantiate(&executable, graph, nullptr, nullptr, 0));
+          check(cudaGraphInstantiate(&executable, graph, 0));
           check(cudaGraphLaunch(executable, plan->stream));
           compare(1);
           for (auto& value : input) value *= .8;
