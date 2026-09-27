@@ -47,7 +47,7 @@ def radial_inventory_from_payload(
         if entry["backend"] not in ("cpu", "cuda"):
             raise ValueError("invalid derivative AOT radial manifest backend")
         kernel = CoulombKernel(entry["family"], entry["omega"])
-        identity = (kernel.family.value, kernel.omega)
+        identity = (CoulombKernelFamily(kernel.family).value, kernel.omega)
         if entry["backend"] == backend:
             if identity in seen:
                 raise ValueError("duplicate derivative AOT radial manifest entry")
