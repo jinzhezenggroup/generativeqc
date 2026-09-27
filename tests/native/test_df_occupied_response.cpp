@@ -301,8 +301,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
               "single-B fitted final projection was not retained");
       setenv("VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted", 1);
       const std::vector<DensityFittingDensityResponse> terms{{density, 1, .25}};
-      const auto reference =
-          build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
+      const auto reference = build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
       std::vector<double> derivative;
       DfGradientResources resources;
       require(execute_cuda_density_fitting_generated_force_response(

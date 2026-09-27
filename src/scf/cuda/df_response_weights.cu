@@ -669,9 +669,8 @@ static cudaError_t contract_occupied_response(
       checked(generated::df_rhf_charge_contract(
           blas, mi, ai, static_cast<int>(begin), static_cast<int>(count),
           static_cast<int>(terms.size()), densities, panels, charges));
-      runtime::cuda_trace::trace_counter(fitted_occupied
-                                             ? "response_retained_fitted_charge_panels"
-                                             : "response_batched_raw_charge_panels",
+      runtime::cuda_trace::trace_counter(fitted_occupied ? "response_retained_fitted_charge_panels"
+                                                         : "response_batched_raw_charge_panels",
                                          1);
       std::size_t offset = 0;
       if (!reuse_final_fitted_projection) {
@@ -793,15 +792,14 @@ static cudaError_t contract_occupied_response(
       runtime::cuda_trace::TraceRegion products("exchange_response_occupied_products", stream);
       if (reuse_final_fitted_projection) {
         if (t != 0) return cudaErrorInvalidValue;
-        checked(generated::df_occupied_finish_projection(
-            blas, ni, ri, ai, factor.coefficients, final_fitted_projection, projected));
+        checked(generated::df_occupied_finish_projection(blas, ni, ri, ai, factor.coefficients,
+                                                         final_fitted_projection, projected));
         runtime::cuda_trace::trace_counter("response_final_fitted_projection_reused", 1);
         runtime::cuda_trace::trace_counter("response_final_fitted_projection_bytes",
                                            n * a * r * sizeof(double));
         runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 1);
         runtime::cuda_trace::trace_counter("response_occupied_projection_products", a);
-        runtime::cuda_trace::trace_counter("response_occupied_projection_flops",
-                                           2 * a * n * rr);
+        runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
       } else if (read_values) {
         // Keep the existing eigenfactor inverse ordering. Its input and output
         // alternate between these disjoint intervals; previous spin factors

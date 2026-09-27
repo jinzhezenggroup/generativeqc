@@ -465,11 +465,12 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   const double* final_fitted_projection = nullptr;
   if ((projection == "reuse" || (projection == "auto" && fitted_occupied_requested)) &&
       fitted_occupied_requested &&
-      plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
-      plan->batch_size == 1 && system == 0 && terms.size() == 1 && final_state &&
-      plan->final_projection_token && *plan->final_projection_token == *final_state &&
-      plan->metric_full_rank[0] && plan->metric_response_valid[0]) {
-    const auto rank = final_state->identity.occupied.empty() ? 0 : final_state->identity.occupied[0];
+      plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle && plan->batch_size == 1 &&
+      system == 0 && terms.size() == 1 && final_state && plan->final_projection_token &&
+      *plan->final_projection_token == *final_state && plan->metric_full_rank[0] &&
+      plan->metric_response_valid[0]) {
+    const auto rank =
+        final_state->identity.occupied.empty() ? 0 : final_state->identity.occupied[0];
     auto* state = static_cast<PersistentScfState*>(plan->persistent_scf_state);
     if (state && !state->unrestricted && rank && rank <= plan->value_storage.rank_capacity &&
         plan->naux * rank <= static_cast<std::size_t>(std::numeric_limits<int>::max()))

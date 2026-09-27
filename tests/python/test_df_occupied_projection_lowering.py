@@ -197,7 +197,9 @@ def test_projected_panel_layout_and_tails(
 
 
 @pytest.mark.parametrize("n,r,a", [(4, 1, 3), (7, 3, 9), (12, 5, 13), (31, 7, 11)])
-def test_finish_final_k_projection_layout(native: ct.CDLL, n: int, r: int, a: int) -> None:
+def test_finish_final_k_projection_layout(
+    native: ct.CDLL, n: int, r: int, a: int
+) -> None:
     """The carried final-K B*C factor reproduces C^T B C without rereading B."""
     rng = np.random.default_rng(20260927 + n + r + a)
     coefficients = np.asfortranarray(rng.normal(size=(n, r)))
@@ -228,7 +230,10 @@ def test_finish_final_k_projection_layout(native: ct.CDLL, n: int, r: int, a: in
 
 def test_finish_final_k_projection_rejects_invalid_shape(native: ct.CDLL) -> None:
     data = np.ones(4)
-    assert native.finish_project(2, 3, 1, pointer(data), pointer(data), pointer(data), 0) == 7
+    assert (
+        native.finish_project(2, 3, 1, pointer(data), pointer(data), pointer(data), 0)
+        == 7
+    )
 
 
 @pytest.mark.parametrize("a,r", [(1, 1), (3, 2), (9, 3), (17, 5)])
