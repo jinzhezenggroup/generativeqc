@@ -19,9 +19,7 @@ def test_registry_identity_covers_backend_radial_shell_and_group() -> None:
     full = make_key(CoulombKernel("full_range", 0.0), angular, 0, backend="cpu")
     short = make_key(CoulombKernel("short_range", 0.3), angular, 0, backend="cpu")
     long = make_key(CoulombKernel("long_range", 0.3), angular, 0, backend="cpu")
-    cuda_short = make_key(
-        CoulombKernel("short_range", 0.3), angular, 0, backend="cuda"
-    )
+    cuda_short = make_key(CoulombKernel("short_range", 0.3), angular, 0, backend="cuda")
 
     assert len({full.identity, short.identity, long.identity, cuda_short.identity}) == 4
     assert full.to_payload()["derivative_order"] == 1

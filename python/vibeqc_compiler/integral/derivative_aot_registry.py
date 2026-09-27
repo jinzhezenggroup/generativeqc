@@ -80,10 +80,7 @@ class DerivativeAotKey:
         if not isinstance(self.radial, CoulombKernel):
             raise TypeError("derivative AOT requires an explicit CoulombKernel")
         groups = component_groups(self.angular)
-        if (
-            type(self.group_index) is not int
-            or not 0 <= self.group_index < len(groups)
-        ):
+        if type(self.group_index) is not int or not 0 <= self.group_index < len(groups):
             raise ValueError("derivative AOT group index is out of range")
         if self.derivative_order != AOT_DERIVATIVE_ORDER:
             raise ValueError("derivative AOT currently packages first derivatives only")
@@ -199,9 +196,7 @@ def program_source(
     """Emit one generated weighted-ERI derivative program for a registry key."""
 
     key = make_key(radial, angular, group_index, backend=backend)
-    integral = build_weighted_eri_ir(
-        angular, operator=four_center_eri_operator(radial)
-    )
+    integral = build_weighted_eri_ir(angular, operator=four_center_eri_operator(radial))
     kernel = build_weighted_eri_kernel(integral, key.component_indices)
     prefix = entry_prefix_for_key(key)
     return (

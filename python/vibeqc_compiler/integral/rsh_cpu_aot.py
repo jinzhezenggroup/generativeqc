@@ -11,11 +11,11 @@ from itertools import product
 
 from .derivative_aot_registry import (
     AOT_ANGULAR_DOMAIN,
-    AOT_COMPONENT_CAPACITY,
-    component_group,
     component_groups,
     entry_prefix_for_key,
     make_key,
+)
+from .derivative_aot_registry import (
     program_source as _program_source,
 )
 from .range_separation import CoulombKernel, CoulombKernelFamily
@@ -37,9 +37,7 @@ def entry_prefix(
     """Return the legacy-compatible symbol for one exact range AOT identity."""
 
     _require_range(radial)
-    return entry_prefix_for_key(
-        make_key(radial, angular, group_index, backend="cpu")
-    )
+    return entry_prefix_for_key(make_key(radial, angular, group_index, backend="cpu"))
 
 
 def program_source(
