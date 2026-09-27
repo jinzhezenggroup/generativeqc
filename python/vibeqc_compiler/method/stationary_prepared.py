@@ -31,7 +31,9 @@ class StationaryPreparedPlan:
 
     def __post_init__(self) -> None:
         if self.lifetimes.graph_identity != self.graph.identity:
-            raise ValueError("stationary prepared plan graph/lifetime identity mismatch")
+            raise ValueError(
+                "stationary prepared plan graph/lifetime identity mismatch"
+            )
 
     def semantic_payload(self) -> typing.Any:
         return {

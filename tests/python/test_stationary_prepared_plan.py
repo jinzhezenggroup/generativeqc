@@ -2,14 +2,17 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.method import MethodSpec, original_nonlocal_correlation, resolve_method
+from vibeqc_compiler.method import (
+    MethodSpec,
+    original_nonlocal_correlation,
+    resolve_method,
+)
 from vibeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
 from vibeqc_compiler.method.stationary_prepared import compile_stationary_prepared_plan
-
 
 HEX_A = "a" * 64
 HEX_B = "b" * 64
@@ -69,6 +72,7 @@ def test_lifetime_change_is_part_of_prepared_schedule_compatibility():
 
 def test_external_schedule_identity_still_invalidates_replay():
     prepared = _prepared("PBE")
-    assert _request(prepared, schedule="b" * 64).identity != _request(
-        prepared, schedule="d" * 64
-    ).identity
+    assert (
+        _request(prepared, schedule="b" * 64).identity
+        != _request(prepared, schedule="d" * 64).identity
+    )

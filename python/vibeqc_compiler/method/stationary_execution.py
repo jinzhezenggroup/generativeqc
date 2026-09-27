@@ -90,7 +90,9 @@ class StationaryExecutionGraph:
         produced = {value.name for value in self.values}
         expected = {f"source:{name}" for name in self.source_names}
         if not expected.issubset(produced):
-            raise ValueError("stationary execution graph does not cover every gradient source")
+            raise ValueError(
+                "stationary execution graph does not cover every gradient source"
+            )
 
     def semantic_payload(self) -> typing.Any:
         return {
@@ -188,7 +190,9 @@ def compile_stationary_execution_graph(
         if source in _INTEGRAL_SOURCES:
             nodes.append(_source_node(source))
 
-    semilocal = tuple(source for source in plan.source_names if source in _SEMILOCAL_SOURCES)
+    semilocal = tuple(
+        source for source in plan.source_names if source in _SEMILOCAL_SOURCES
+    )
     if semilocal:
         nodes.append(
             StationaryExecutionNode(
@@ -237,7 +241,9 @@ def compile_stationary_execution_graph(
     for node in nodes:
         for output in node.outputs:
             if output in producer:
-                raise ValueError(f"stationary execution value {output!r} has two producers")
+                raise ValueError(
+                    f"stationary execution value {output!r} has two producers"
+                )
             producer[output] = node.name
         for value in node.inputs:
             consumers.setdefault(value, []).append(node.name)
@@ -252,7 +258,8 @@ def compile_stationary_execution_graph(
                 consumers=tuple(consumers.get(name, ())),
                 memory_space="device",
                 borrowable=not host_visible,
-                recomputable=name.startswith("grid_feature:") or name == "nonlocal_seeds",
+                recomputable=name.startswith("grid_feature:")
+                or name == "nonlocal_seeds",
                 host_visible=host_visible,
             )
         )
