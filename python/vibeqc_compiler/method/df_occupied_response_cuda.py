@@ -76,8 +76,8 @@ inline cublasStatus_t df_occupied_finish_projection(
   const long long rr = static_cast<long long>(rank) * rank;
   const double one = 1, zero = 0;
   return cublasDgemmStridedBatched(
-      blas, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, n, &one,
-      linear, ar, rank, coefficients, n, 0, &zero,
+      blas, CUBLAS_OP_T, CUBLAS_OP_T, rank, rank, n, &one,
+      coefficients, n, 0, linear, ar, rank, &zero,
       projected, rank, rr, auxiliary);
 }
 
