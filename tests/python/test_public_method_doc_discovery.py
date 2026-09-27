@@ -120,7 +120,9 @@ def test_sphinx_tracks_renderer_manifest_and_recursive_catalog_sources(
 
     registered: list[str] = []
     app = SimpleNamespace(env=SimpleNamespace(note_dependency=registered.append))
-    monkeypatch.setattr(renderer, "render_public_methods_markdown", lambda: "updated catalog")
+    monkeypatch.setattr(
+        renderer, "render_public_methods_markdown", lambda: "updated catalog"
+    )
 
     text = ["source shell"]
     renderer.render_public_methods_source(app, "public_methods", text)
