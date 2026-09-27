@@ -108,7 +108,7 @@ struct DensityFittingMetricFactor {
 """
 
 PROVIDER = r"""
-namespace vibeqc::scf {
+namespace vibeqc::hf {
 struct PhysicalReference {
   std::size_t nbf, nocc;
   std::vector<double> coefficients;
@@ -124,10 +124,10 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
   return a+b;
 }
 struct DensityFittedBlockProvider {
-  const scf::PhysicalReference& ref;
+  const hf::PhysicalReference& ref;
   std::size_t na;
   std::vector<double> m,x,a,b;
-  DensityFittedBlockProvider(const scf::PhysicalReference& r,std::size_t size)
+  DensityFittedBlockProvider(const hf::PhysicalReference& r,std::size_t size)
       :ref(r),na(size),m(na*na),x(na*na),a(r.nbf*r.nbf*na),b(a.size()) {
     for(std::size_t i=0;i<na;++i) {
       m[i*na+i]=1.0+0.01*i;
@@ -175,7 +175,7 @@ int main(int argc,char** argv) {
   if(argc!=3) return 2;
   using namespace vibeqc;
   const std::size_t n=std::strtoul(argv[1],nullptr,10),na=std::strtoul(argv[2],nullptr,10);
-  scf::PhysicalReference ref{n,1,std::vector<double>(n*n)};
+  hf::PhysicalReference ref{n,1,std::vector<double>(n*n)};
   for(std::size_t i=0;i<n;++i) ref.coefficients[i*n+i]=1.0;
   posthf::DensityFittedBlockProvider provider(ref,na);
   mp2::LagrangianWeights weights{n,1,std::vector<double>(n*n,0.2),
