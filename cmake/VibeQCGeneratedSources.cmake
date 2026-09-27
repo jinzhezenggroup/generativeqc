@@ -783,6 +783,7 @@ macro(vibeqc_register_cuda_generated_sources target)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/semilocal_codegen.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/xc/b3lyp_production_policy.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/vibeqc_compiler/method/spec.py"
     ARGS --output "${VIBEQC_B3LYP_CUDA_HEADER}")
 
   set(VIBEQC_R2SCAN_CUDA_HEADER
