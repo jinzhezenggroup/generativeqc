@@ -478,7 +478,17 @@ def complete_rks_gradient_diagnostic(
             if component_execution == "native"
             else ComponentPrimitiveExecutor
         )
-        native = executor(basis, cache, primitive_tile, compiler)
+        native = (
+            executor(
+                basis,
+                cache,
+                primitive_tile,
+                compiler,
+                aot_library=state._source._library,
+            )
+            if component_execution == "native"
+            else executor(basis, cache, primitive_tile, compiler)
+        )
         work.update(native.compilation_work)
         work["component_execution"] = component_execution
     else:
