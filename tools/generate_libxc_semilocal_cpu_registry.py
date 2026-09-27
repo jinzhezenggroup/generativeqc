@@ -12,7 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.xc.automatic_semilocal import automatic_functional_code
+from vibeqc_compiler.xc.automatic_semilocal import (
+    AUTOMATIC_SCF_DOMAIN,
+    automatic_functional_code,
+)
 from vibeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
@@ -191,23 +194,23 @@ def _point_program_source(entry: RegistryEntry) -> str:
 
 
 def emit_header() -> str:
-    return """// Generated automatic Libxc CPU registry; do not edit.
+    return f"""// Generated automatic Libxc CPU registry; do not edit.
 #pragma once
 #include <cstdint>
 #include <string_view>
 #include "dft/xc.hpp"
 
-namespace vibeqc::dft::generated {
+namespace vibeqc::dft::generated {{
 inline constexpr const char* kAutomaticLibxcScfDomain =
-    "libxc-bulk-production-candidate/v2";
-struct AutomaticLibxcEntry {
-  const SemilocalPointProgram* program{};
-  std::uint32_t functional_code{};
-  constexpr explicit operator bool() const noexcept { return program != nullptr; }
-};
+    "{AUTOMATIC_SCF_DOMAIN}";
+struct AutomaticLibxcEntry {{
+  const SemilocalPointProgram* program{{}};
+  std::uint32_t functional_code{{}};
+  constexpr explicit operator bool() const noexcept {{ return program != nullptr; }}
+}};
 AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept;
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept;
-}  // namespace vibeqc::dft::generated
+}}  // namespace vibeqc::dft::generated
 """
 
 
