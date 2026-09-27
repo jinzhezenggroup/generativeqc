@@ -196,20 +196,19 @@ __global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_coun
 
 template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
 void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
-                           double coefficient,
-                      const double* points, const double* density, const double* omega,
-                      const double* kappa, const double* domega_drho, const double* domega_dsigma,
-                      const double* dkappa_drho, const double* weighted_density, double beta,
-                      double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
-                      double* weight_derivative, int* failed) {
+                           double coefficient, const double* points, const double* density,
+                           const double* omega, const double* kappa, const double* domega_drho,
+                           const double* domega_dsigma, const double* dkappa_drho,
+                           const double* weighted_density, double beta, double* energy_terms,
+                           double* vrho, double* vsigma, double* point_derivative,
+                           double* weight_derivative, int* failed) {
   constexpr unsigned threads = 128;
   const auto max_rows_per_launch =
       static_cast<std::size_t>(std::numeric_limits<int>::max()) * threads;
   for (std::size_t first = 0; first < layout.point_count; first += max_rows_per_launch) {
     const auto count = std::min(max_rows_per_launch, layout.point_count - first);
     const auto blocks = launch_blocks(count, threads);
-    pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows>
-        <<<blocks, threads, 0, stream>>>(
+    pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows><<<blocks, threads, 0, stream>>>(
         first, count, layout.point_count, coefficient, points, density, omega, kappa, domega_drho,
         domega_dsigma, dkappa_drho, weighted_density, beta, energy_terms, vrho, vsigma,
         point_derivative, weight_derivative, failed);
@@ -218,12 +217,11 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
-void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
-                      double coefficient, const double* points, const double* density,
-                      const double* omega, const double* kappa, const double* domega_drho,
-                      const double* domega_dsigma, const double* dkappa_drho,
-                      const double* weighted_density, double beta, double* energy_terms,
-                      double* vrho, double* vsigma, double* point_derivative,
+void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, double coefficient,
+                      const double* points, const double* density, const double* omega,
+                      const double* kappa, const double* domega_drho, const double* domega_dsigma,
+                      const double* dkappa_drho, const double* weighted_density, double beta,
+                      double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
                       double* weight_derivative, int* failed) {
   if (layout.mask_zero_weight_rows)
     launch_pair_rows_impl<Variant, Features, Geometry, true>(
@@ -378,9 +376,12 @@ Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_
   const auto arrays = std::size_t{4} + (features ? 3u : 0u);
   const auto doubles =
       runtime::size_mul(arrays, point_count, "resident VV10 CUDA workspace extent overflow");
-  return {point_count, std::min(tile_points, point_count),
+  return {point_count,
+          std::min(tile_points, point_count),
           runtime::size_mul(doubles, sizeof(double), "resident VV10 CUDA workspace byte overflow"),
-          features, geometry, mask_zero_weight_rows};
+          features,
+          geometry,
+          mask_zero_weight_rows};
 }
 
 void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters parameters,
