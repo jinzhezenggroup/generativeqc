@@ -409,10 +409,10 @@ def test_shared_z_operator_matches_generated_and_independent_mo_matrix(
         )
 
 
-def test_complete_gradient_capability_is_separate_from_energy_facade() -> None:
+def test_complete_gradient_capability_tracks_public_force_promotion() -> None:
     caps = gradient_capabilities()
     assert caps.method == "rccsd" and caps.family == "coupled_cluster"
-    assert caps.available and not caps.public_calculator
+    assert caps.available and caps.public_calculator
     assert caps.max_ao == 12
     assert caps.supported_properties == frozenset({"energy", "forces"})
     assert caps.derivative_backends == frozenset({"cpu", "cuda"})

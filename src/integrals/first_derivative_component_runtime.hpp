@@ -19,7 +19,11 @@ inline bool component_index(double value, std::size_t limit, std::size_t& out) {
 }
 }  // namespace vibeqc::integrals
 
-extern "C" int vibeqc_component_contract_cpu(
+#ifndef VIBEQC_COMPONENT_RUNTIME_API
+#define VIBEQC_COMPONENT_RUNTIME_API
+#endif
+
+extern "C" VIBEQC_COMPONENT_RUNTIME_API int vibeqc_component_contract_cpu(
     const double* centers, std::size_t atoms, const double* primitives, std::size_t nprimitive,
     const double* aos, std::size_t nao, const std::int64_t* labels, const std::int64_t* bindings,
     std::size_t binding_rows, std::size_t label_count,

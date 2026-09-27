@@ -65,7 +65,7 @@ METHOD_METADATA = MappingProxyType({
     'pbe-uks': MappingProxyType({"abi_id": 9, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE', "spin": 'polarized'}),
     'r2scan-rks': MappingProxyType({"abi_id": 10, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'R2SCAN', "spin": 'unpolarized'}),
     'r2scan-uks': MappingProxyType({"abi_id": 11, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'R2SCAN', "spin": 'polarized'}),
-    'rccsd': MappingProxyType({"abi_id": 12, "family": 'coupled_cluster', "provider": 'rccsd', "properties": ('energy',), "supports_batch": True, "aliases": ()}),
+    'rccsd': MappingProxyType({"abi_id": 12, "family": 'coupled_cluster', "provider": 'rccsd', "properties": ('energy', 'forces'), "supports_batch": True, "aliases": ()}),
     'pbe0-rks': MappingProxyType({"abi_id": 13, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE0', "spin": 'unpolarized'}),
     'pbe0-uks': MappingProxyType({"abi_id": 14, "family": 'density_functional', "provider": 'dft', "properties": ('energy',), "supports_batch": True, "aliases": (), "compiler_method": 'PBE0', "spin": 'polarized'}),
     'gfn2-xtb': MappingProxyType({"abi_id": 15, "family": 'semiempirical', "provider": 'xtb', "properties": ('energy', 'forces'), "supports_batch": False, "aliases": ('gfn2',)}),
