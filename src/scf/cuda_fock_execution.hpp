@@ -73,6 +73,13 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivatives, std::string& detail);
 
+/** Same scientific derivative as above, but borrow a validated native KS
+ * density that is already resident on the prepared Direct owner's device. */
+vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+    const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail);
+
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.
  * mixed_coulomb changes only the qualified exact-Coulomb recurrence precision;
