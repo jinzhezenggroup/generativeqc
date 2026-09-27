@@ -12,7 +12,7 @@
 
 namespace vibeqc::posthf {
 NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
-                                         const scf::PhysicalReference& reference,
+                                         const hf::PhysicalReference& reference,
                                          std::size_t budget, unsigned axis_tile)
     : source_(source),
       ref_(reference),
@@ -359,7 +359,7 @@ std::vector<double> NativeBlockProvider::get(const MOSlots& slots, bool cuda, in
 }
 
 DensityFittedBlockProvider::DensityFittedBlockProvider(const RawSource& source,
-                                                       const scf::PhysicalReference& reference,
+                                                       const hf::PhysicalReference& reference,
                                                        std::size_t budget,
                                                        double relative_threshold)
     : source_(source),
