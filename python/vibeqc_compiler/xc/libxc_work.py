@@ -109,9 +109,7 @@ def automatic_work_policy(name: str) -> LibxcWorkPolicy:
         "func->tau_threshold   = 1e-20;",
     ]
     if family == "mgga":
-        required.append(
-            "func->info->flags = func->info->flags | XC_FLAGS_ENFORCE_FHC;"
-        )
+        required.append("func->info->flags = func->info->flags | XC_FLAGS_ENFORCE_FHC;")
     source = functionals.read_text(encoding="utf-8")
     if any(snippet not in source for snippet in required):
         raise MapleImportError("pinned Libxc threshold policy changed")
