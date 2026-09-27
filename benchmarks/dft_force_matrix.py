@@ -405,24 +405,18 @@ def benchmark_case(
         cold = _clean_sample(batch, atoms, cupy_module, scenario="cold")
         batch.set_warm_start_updates(False)
         priming = _clean_sample(batch, atoms, cupy_module, scenario="priming")
-        warm = [
-            _clean_sample(
-                batch,
-                atoms,
-                cupy_module,
-                scenario=f"same_geometry_warm_{repeat}",
-            )
-            for repeat in range(repeats)
-        ]
-        scf_profile = None
-        if trace_directory is not None:
+        warm = []
+        warm_failed = False
+        for repeat in range(repeats):
+            scenario = f"same_geometry_warm_{repeat}"
             try:
-                scf_profile = _scf_trace_profile(
-                    batch,
-                    cupy_module,
-                    trace_directory / f"{method}-{system}.jsonl",
-                    exchange_operators,
-                    nonlocal_correlation=nonlocal_correlation,
+                warm.append(
+                    _clean_sample(
+                        batch,
+                        atoms,
+                        cupy_module,
+                        scenario=scenario,
+                    )
                 )
             except (
                 NotImplementedError,
@@ -431,41 +425,85 @@ def benchmark_case(
                 MemoryError,
                 OSError,
             ) as error:
+                warm.append(
+                    {
+                        "scenario": scenario,
+                        "status": (
+                            "unsupported"
+                            if isinstance(error, NotImplementedError)
+                            else "failed"
+                        ),
+                        "error_type": type(error).__name__,
+                        "error": str(error),
+                    }
+                )
+                warm_failed = True
+                break
+
+        scf_profile = None
+        if warm_failed:
+            if trace_directory is not None:
                 scf_profile = {
+                    "status": "skipped",
+                    "reason": "not run after warm replay failure",
+                }
+            changed = {
+                "scenario": "changed_geometry",
+                "status": "skipped",
+                "error": "not run after warm replay failure",
+            }
+        else:
+            if trace_directory is not None:
+                try:
+                    scf_profile = _scf_trace_profile(
+                        batch,
+                        cupy_module,
+                        trace_directory / f"{method}-{system}.jsonl",
+                        exchange_operators,
+                        nonlocal_correlation=nonlocal_correlation,
+                    )
+                except (
+                    NotImplementedError,
+                    ValueError,
+                    RuntimeError,
+                    MemoryError,
+                    OSError,
+                ) as error:
+                    scf_profile = {
+                        "status": (
+                            "unsupported"
+                            if isinstance(error, NotImplementedError)
+                            else "failed"
+                        ),
+                        "error_type": type(error).__name__,
+                        "reason": str(error),
+                    }
+            changed_atoms, coordinates = _changed_atoms(atoms)
+            try:
+                changed = _clean_sample(
+                    batch,
+                    changed_atoms,
+                    cupy_module,
+                    scenario="changed_geometry",
+                    coordinates=coordinates,
+                )
+            except (
+                NotImplementedError,
+                ValueError,
+                RuntimeError,
+                MemoryError,
+                OSError,
+            ) as error:
+                changed = {
+                    "scenario": "changed_geometry",
                     "status": (
                         "unsupported"
                         if isinstance(error, NotImplementedError)
                         else "failed"
                     ),
                     "error_type": type(error).__name__,
-                    "reason": str(error),
+                    "error": str(error),
                 }
-        changed_atoms, coordinates = _changed_atoms(atoms)
-        try:
-            changed = _clean_sample(
-                batch,
-                changed_atoms,
-                cupy_module,
-                scenario="changed_geometry",
-                coordinates=coordinates,
-            )
-        except (
-            NotImplementedError,
-            ValueError,
-            RuntimeError,
-            MemoryError,
-            OSError,
-        ) as error:
-            changed = {
-                "scenario": "changed_geometry",
-                "status": (
-                    "unsupported"
-                    if isinstance(error, NotImplementedError)
-                    else "failed"
-                ),
-                "error_type": type(error).__name__,
-                "error": str(error),
-            }
         return _jsonable(
             {
                 "status": "measured",

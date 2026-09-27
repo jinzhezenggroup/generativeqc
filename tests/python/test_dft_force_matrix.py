@@ -148,3 +148,69 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         "same_geometry_warm_0",
         "same_geometry_warm_1",
     ]
+
+
+def test_partial_warm_failure_preserves_prior_warm_samples(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from types import SimpleNamespace
+
+    import benchmarks.dft_force_matrix as matrix
+
+    library = tmp_path / "libvibeqc.so"
+    library.write_bytes(b"test")
+    execution_plan = SimpleNamespace(to_payload=lambda: {"version": 1})
+    options = SimpleNamespace(identity="ks-id", execution_plan=execution_plan)
+    calculator = SimpleNamespace(
+        _library=SimpleNamespace(_name=str(library)),
+        _method_name="pbe-rks",
+        method_ir=SimpleNamespace(identity="method-id"),
+        ks_options=options,
+    )
+
+    class Batch:
+        resource_diagnostics = {"ok": True}
+
+        def set_warm_start_updates(self, _enabled):
+            pass
+
+        def close(self):
+            pass
+
+    batch = Batch()
+    calculator.prepare_batch = lambda *_args, **_kwargs: batch
+    monkeypatch.setattr(matrix, "_calculator", lambda *_args, **_kwargs: calculator)
+    monkeypatch.setattr(matrix, "_exchange_operators", lambda _calculator: ())
+    monkeypatch.setattr(matrix, "_has_nonlocal_correlation", lambda _calculator: False)
+
+    def sample(_batch, _atoms, _cupy, *, scenario, coordinates=None):
+        if scenario == "same_geometry_warm_1":
+            raise RuntimeError("warm replay failed")
+        return {
+            "scenario": scenario,
+            "force_status": "ok",
+            "force_components": {"schema": "vibeqc.dft-force-components.v1"},
+        }
+
+    monkeypatch.setattr(matrix, "_clean_sample", sample)
+    result = matrix.benchmark_case(
+        method="pbe-rks",
+        system="water-3",
+        grid=object(),
+        basis="def2-svp",
+        density_fitting="none",
+        repeats=3,
+        trace_directory=tmp_path / "trace",
+        cupy_module=object(),
+    )
+
+    assert result["status"] == "measured"
+    assert [sample["scenario"] for sample in result["warm"]] == [
+        "same_geometry_warm_0",
+        "same_geometry_warm_1",
+    ]
+    assert result["warm"][0]["force_status"] == "ok"
+    assert result["warm"][1]["status"] == "failed"
+    assert result["warm"][1]["error"] == "warm replay failed"
+    assert result["scf_profile"]["status"] == "skipped"
+    assert result["changed_geometry"]["status"] == "skipped"
