@@ -164,7 +164,7 @@ def load_composite_methods() -> list[dict]:
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
     composites = payload.get("composite_methods", [])
     if not isinstance(composites, list):
-        raise ValueError("public composite methods must be a list")
+        raise TypeError("public composite methods must be a list")
 
     native = load_manifest()
     occupied = {method["name"] for method in native}
