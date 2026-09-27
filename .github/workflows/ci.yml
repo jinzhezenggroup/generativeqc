@@ -632,8 +632,11 @@ jobs:
               # on routine CI and run these long replays scheduled/manual.
               --deselect
               'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape0-water-rks]'
-              --deselect
-              'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape0-oh-doublet-uks]'
+              # Keep the coarse-grid OH doublet FD routine again: scheduled
+              # runs 4919/5654/6250 measured 90.2/98.7/86.3 s, far below the
+              # historical ~12.8-minute cost. This preserves one independent
+              # reconverged-energy WB97M-V force gate on every PR while the
+              # slower water and production-grid replays remain qualification.
               --deselect
               'tests/python/test_wb97mv_complete.py::test_public_wb97mv_force_matches_reconverged_energy_differences[grid_shape1-water-rks]'
               # The remaining production-grid OH UKS replay is still a full
