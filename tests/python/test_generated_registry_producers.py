@@ -77,7 +77,9 @@ def test_libxc_and_direct_headers_keep_one_attached_producer(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize("duplicate", [False, True])
-def test_producer_guard_rejects_missing_or_duplicate_registration(duplicate: bool) -> None:
+def test_producer_guard_rejects_missing_or_duplicate_registration(
+    duplicate: bool,
+) -> None:
     rows = [f"{name}|{generator}|vibeqc|TRUE" for name, generator in REQUIRED.items()]
     missing = rows.pop(0)
     if duplicate:
