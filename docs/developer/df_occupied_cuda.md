@@ -375,10 +375,12 @@ The explicit `create_cuda_density_fitting_jk_plan_from_source` overload accepts
 `DfValueStorageOptions{DfPairStorage::SymmetricLower, rank_capacity}`. This route
 requires a retained physical integral source and complete AO rows. Physical CUDA
 SCF and composed Fock preparation accept the diagnostic selector
-`VIBEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`; unset/`auto` remains dense. The
-explicit native constructor does not consult that selector, and arbitrary public
-tensor constructors remain dense. Packing is under qualification; component
-results do not establish a complete endpoint win.
+`VIBEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`. Unset/`auto` keeps a
+fully resident dense owner when it fits; for a generated singleton RHF source it
+promotes to `packed-single` only when dense would stream and the single fitted
+owner fits the same value allowance. UHF, batch, general-density and arbitrary
+public-tensor callers remain dense unless packing is requested explicitly. The
+explicit native constructor does not consult this ambient selector.
 
 The physical selector runs before full host raw construction, including requests
 with a zero value budget. Prepared metadata, device plans, composed Fock variants
