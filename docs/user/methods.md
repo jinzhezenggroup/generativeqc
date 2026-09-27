@@ -1,21 +1,19 @@
 # Methods and long-term scope
 
 VibeQC's long-term mission is to cover **all quantum-chemistry methods** in one
-accelerator-native system. Current executable method identity is registry-driven:
-the canonical native names, aliases, declared properties, and batch capability
-are generated from `manifests/public_methods.json` into the
-[public method table](../public_methods.md). That generated table is authoritative
-for public native discovery; backend-, basis-, grid-, and model-specific
-execution constraints remain method-specific and fail closed.
+accelerator-native system. Public method discovery is generated at Sphinx build
+time in the [public method catalog](../public_methods.md). The catalog combines
+stable native ABI registrations, public compiler-owned composite selectors, and
+the automatic Libxc semilocal MethodIR inventory instead of maintaining a second
+handwritten support list.
 
 ## Current method status
 
-Use the generated [public method table](../public_methods.md) for registered
-names, aliases, declared properties, and batch support. This guide deliberately
-does not maintain a second handwritten status table. A registered method is
-not a blanket claim that every backend, basis, grid, spin state, or requested
-property is qualified; the corresponding method contract and execution-time
-admission checks remain authoritative for those combinations.
+Use the generated [public method catalog](../public_methods.md) for current
+public entry points, aliases, declared properties, and execution class. A listed
+method is not a blanket claim that every backend, basis, grid, spin state, or
+requested property is qualified; the corresponding method contract and
+execution-time admission checks remain authoritative for those combinations.
 
 Internal validation helpers and compiler plans are not substitutes for native
 public method registration. Planned families and development directions are

@@ -64,6 +64,14 @@ def test_public_method_abi_ids_are_explicit_and_stable() -> None:
     }
 
 
+def test_public_composite_selectors_are_generated_from_manifest() -> None:
+    assert dict(_generated_methods.COMPOSITE_METHOD_ALIASES) == {
+        "r2scan-3c": ("R2SCAN-3c", "unpolarized"),
+        "r2scan-3c-rks": ("R2SCAN-3c", "unpolarized"),
+        "r2scan-3c-uks": ("R2SCAN-3c", "polarized"),
+    }
+
+
 def test_public_method_provider_sets_are_generated() -> None:
     assert _generated_methods.HF_METHOD_IDS == frozenset({1, 2})
     assert _generated_methods.NATIVE_DFT_METHOD_IDS == frozenset(

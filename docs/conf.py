@@ -1,3 +1,12 @@
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.render_public_methods_doc import render_public_methods_markdown
+
 from __future__ import annotations
 
 project = "VibeQC"
@@ -32,3 +41,13 @@ myst_enable_extensions = [
     "dollarmath",
 ]
 myst_heading_anchors = 3
+
+
+def _render_public_methods(app, docname, source):
+    if docname == "public_methods":
+        source[0] = render_public_methods_markdown()
+
+
+def setup(app):
+    app.connect("source-read", _render_public_methods)
+    return {"parallel_read_safe": True, "parallel_write_safe": True}

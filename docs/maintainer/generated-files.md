@@ -4,7 +4,7 @@ Some paths under `docs/` are machine-readable repository interfaces and should n
 
 Current examples include:
 
-- `docs/public_methods.md`, generated from `manifests/public_methods.json`;
+- `docs/public_methods.md`, a source shell populated during Sphinx `source-read` by `tools/render_public_methods_doc.py` from the native/composite manifest and automatic Libxc capability sources;
 - `docs/codegen_capabilities.json`, consumed by validation tooling; and
 - `docs/cuda_ownership/`, consumed by ownership/reporting tools;
 - `docs/libxc_bulk_import.md`, a registered hashed importer report; and
