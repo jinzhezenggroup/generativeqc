@@ -18,6 +18,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_method_parameters.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
@@ -62,6 +63,7 @@ struct NativeKsExecutionPlan {
   double range_omega{};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
+  const dft::SemilocalPointProgram* automatic_program{};
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method method) noexcept {
@@ -98,6 +100,7 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method meth
 bool unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
 
 std::uint32_t scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.automatic_program) return plan.automatic_program->domain_version;
   return plan.generated_split_hybrid ? 4U
                                      : dft::semilocal_family_domain_version(plan.semilocal_family);
 }
@@ -107,6 +110,7 @@ std::uint32_t xc_functional_code(const NativeKsExecutionPlan& plan) noexcept {
 }
 
 const char* semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.automatic_program) return plan.automatic_program->identifier;
   return plan.generated_split_hybrid ? "generated split global hybrid"
                                      : dft::semilocal_family_name(plan.semilocal_family);
 }
@@ -134,6 +138,7 @@ struct SemilocalAdmission {
   double correlation_scale{1.0};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
+  const dft::SemilocalPointProgram* automatic_program{};
 };
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const vibeqc_ks_options& input) {
@@ -174,6 +179,20 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
 
   if (auto curated = admit_curated_semilocal(input)) return *curated;
 
+  if (input.semilocal_component_count == 1 && input.semilocal_range_omega == 0.0) {
+    const auto& component = input.semilocal_components[0];
+    if (!component.component_id || !*component.component_id ||
+        !std::isfinite(component.coefficient) || component.coefficient < 0.0)
+      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid KS semilocal component");
+    if (component.coefficient == 1.0) {
+      const auto automatic =
+          dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
+      if (automatic)
+        return {dft::SemilocalFamily::Lda, 1.0,   1.0,
+                automatic.functional_code, false, automatic.program};
+    }
+  }
+
 #if VIBEQC_HAS_CUDA
   if (input.semilocal_component_count == 2 && input.semilocal_range_omega == 0.0) {
     const auto& first = input.semilocal_components[0];
@@ -192,6 +211,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
+  if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
@@ -227,6 +247,12 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
                       descriptor.method == VIBEQC_METHOD_PBE_D4_RKS};
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
+    execution_plan.automatic_program = semilocal.automatic_program;
+    if (execution_plan.automatic_program &&
+        (backend != VIBEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
+         ks_input->has_nonlocal_correlation != 0))
+      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+                        "automatic Libxc semilocal KS currently requires pure CPU execution");
     if (execution_plan.generated_split_hybrid && backend != VIBEQC_BACKEND_CUDA)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -830,17 +856,28 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return VIBEQC_STATUS_SUCCESS;
   }
 
-  vibeqc_status cuda_integral_gradient(const dft::CudaKsFinalStateToken& expected,
-                                       std::vector<double>& output, std::size_t maximum_bytes,
-                                       std::array<std::uint64_t, 9>& work, std::string& detail) {
+  vibeqc_status cuda_integral_gradient(
+      const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+      const std::vector<scf::reference::Matrix>* cached_density = nullptr,
+      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if VIBEQC_HAS_CUDA
     if (!cuda_ || execution_plan_.semilocal_family != dft::SemilocalFamily::Wb97mv ||
         !system_.ecp_terms.empty())
       return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
+      detail = "cached CUDA stationary D/W must be supplied together";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
+    }
     const auto transfers_before = cuda_->transfers();
-    dft::VerifiedKsFinalState state;
-    auto status = read_final_state(expected, true, state, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    dft::VerifiedKsFinalState exported_state;
+    vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+    if (!cached_density) {
+      status = read_final_state(expected, true, exported_state, detail);
+      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      cached_density = &exported_state.density;
+      cached_weighted_density = &exported_state.weighted_density;
+    }
     const auto& model = expected.identity.model;
     const auto device = model.device;
     const auto bytes = maximum_bytes;
@@ -848,6 +885,25 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (!derivative_source) {
       detail = "CUDA integral gradient requires a retained prepared Direct derivative source";
       return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto spins = model.spins;
+    const auto matrix_elements = derivative_source.nbf * derivative_source.nbf;
+    const auto valid_cached = [&](const auto& blocks) {
+      return blocks.size() == spins &&
+             std::all_of(blocks.begin(), blocks.end(),
+                         [&](const auto& matrix) { return matrix.size() == matrix_elements; });
+    };
+    if (!valid_cached(*cached_density) || !valid_cached(*cached_weighted_density)) {
+      detail = "cached CUDA stationary D/W has an incompatible spin or AO shape";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
+    }
+    dft::CudaKsResidentDensityBinding resident_density;
+    status = cuda_->resident_final_density(expected, resident_density, detail);
+    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (!resident_density || resident_density.device_id != derivative_source.device_id ||
+        resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+      detail = "CUDA stationary derivative density is incompatible with the prepared Direct owner";
+      return VIBEQC_STATUS_INVALID_ARGUMENT;
     }
     const auto transfers_after = cuda_->transfers();
     // The Direct source belongs to the already-budgeted SCF owner. Report its
@@ -862,42 +918,35 @@ class KsPreparedCalculation final : public PreparedCalculation {
             transfers_after.final_state_reads - transfers_before.final_state_reads,
             transfers_after.synchronizations - transfers_before.synchronizations};
     scf::OneElectronGradientResources one;
-    const auto record_one = [&] {
-      work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
-      work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
-      work[4] += one.host_to_device_bytes;
-      work[5] += one.device_to_host_bytes;
-    };
-    // The owner is immutable in geometry; only the freshly verified densities
-    // change on warm replay. No SCF iteration or reference solver runs here.
-    auto density = state.density[0], weighted = state.weighted_density[0];
-    if (state.density.size() == 2)
+    // D and W share immutable geometry/topology. Prepare that metadata once,
+    // launch the two existing generated contractions on one stream, and drain
+    // once while retaining separate hcore and Pulay component outputs.
+    auto density = (*cached_density)[0], weighted = (*cached_weighted_density)[0];
+    if (cached_density->size() == 2)
       for (std::size_t i = 0; i < density.size(); ++i) {
-        density[i] += state.density[1][i];
-        weighted[i] += state.weighted_density[1][i];
+        density[i] += (*cached_density)[1][i];
+        weighted[i] += (*cached_weighted_density)[1][i];
       }
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
     candidate.reserve(5 * nc);
-    std::vector<double> value;
-    status = scf::execute_cuda_one_electron_gradient(device, system_, {}, density, density, 0,
-                                                     bytes, value, detail, &one);
+    std::vector<double> hcore, pulay, value;
+    status = scf::execute_cuda_stationary_one_electron_pair(device, system_, density, weighted, 0,
+                                                            bytes, hcore, pulay, detail, &one);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
-    record_one();
-    candidate.insert(candidate.end(), value.begin(), value.end());
-    status = scf::execute_cuda_one_electron_gradient(device, system_, weighted, {}, {}, 0, bytes,
-                                                     value, detail, &one, -1.0);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
-    record_one();
-    candidate.insert(candidate.end(), value.begin(), value.end());
-    const std::vector<double> empty;
-    const auto& beta = state.density.size() == 2 ? state.density[1] : empty;
+    work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
+    work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
+    work[4] += one.host_to_device_bytes;
+    work[5] += one.device_to_host_bytes;
+    candidate.insert(candidate.end(), hcore.begin(), hcore.end());
+    candidate.insert(candidate.end(), pulay.begin(), pulay.end());
     if (!range_strategy_) {
       detail = "CUDA RSH integral gradient is missing its resolved range correction";
       return VIBEQC_STATUS_INVALID_ARGUMENT;
     }
-    status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives(
-        fock_, *range_strategy_, state.density[0], beta, value, detail);
+    status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+        fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
+        resident_density.matrix_elements, value, detail);
     if (status != VIBEQC_STATUS_SUCCESS) return status;
     candidate.insert(candidate.end(), value.begin(), value.end());
     output = std::move(candidate);
@@ -912,7 +961,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const char* method_name = semilocal_family_name(execution_plan_);
     if (compute_forces) {
       const char* issue =
-          execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164" : "#163";
+          execution_plan_.automatic_program
+              ? "#1122"
+              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
+                                                                                  : "#163");
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
@@ -967,10 +1019,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // last-good density, which coexists with its current/proposed densities.
     runtime::CpuRetainedCapacity retained_warm(runtime::vector_bytes(warm_));
     scf::ScfResult native;
-    if (execution_plan_.generated_split_hybrid)
+    if (execution_plan_.automatic_program) {
+      native = unrestricted(execution_plan_)
+                   ? scf::run_semilocal_uks(fock_, basis_, grid_, options_,
+                                            *execution_plan_.automatic_program, seed)
+                   : scf::run_semilocal_rks(fock_, basis_, grid_, options_,
+                                            *execution_plan_.automatic_program, seed);
+    } else if (execution_plan_.generated_split_hybrid)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
-    if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+    else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
       if (!range_correction_ || !nonlocal_)
         throw std::runtime_error("WB97M-V requires both range-exchange and nonlocal owners");
       native = unrestricted(execution_plan_)
@@ -1452,13 +1510,14 @@ class KsPreparedBatch final : public PreparedBatch {
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  vibeqc_status cuda_integral_gradient(std::size_t index,
-                                       const dft::CudaKsFinalStateToken& expected,
-                                       std::vector<double>& output, std::size_t maximum_bytes,
-                                       std::array<std::uint64_t, 9>& work, std::string& detail) {
+  vibeqc_status cuda_integral_gradient(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+      const std::vector<scf::reference::Matrix>* cached_density = nullptr,
+      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
     if (index < items_.size() && items_[index].plan)
-      return items_[index].plan->cuda_integral_gradient(expected, output, maximum_bytes, work,
-                                                        detail);
+      return items_[index].plan->cuda_integral_gradient(
+          expected, output, maximum_bytes, work, detail, cached_density, cached_weighted_density);
     detail = "KS batch item has no prepared final-state owner";
     return VIBEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -1587,6 +1646,19 @@ vibeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index
                                          std::array<std::uint64_t, 9>& work, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail);
+  detail = "CUDA integral gradient requires a native KS batch";
+  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+vibeqc_status dft_cuda_integral_gradient_cached(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks)
+    return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
+                                      &density, &weighted_density);
   detail = "CUDA integral gradient requires a native KS batch";
   return VIBEQC_STATUS_NOT_IMPLEMENTED;
 }

@@ -27,19 +27,8 @@ LEGACY_MODULE_FILES = {
 # This is a ceiling, not a list that must stay populated. Removing any edge is
 # always allowed. Adding a new edge fails CI and therefore cannot silently turn
 # a qualification oracle back into a production compatibility backend.
-LEGACY_CONSUMER_CEILING = {
-    (
-        "python/vibeqc_compiler/xc/expression_dispatch.py",
-        "vibeqc_compiler.xc.rsh_expressions",
-    ),
-    ("tests/python/test_libxc_maple_pw91.py", "vibeqc_compiler.xc.rsh_expressions"),
-    ("tests/python/test_libxc_maple_lyp.py", "vibeqc_compiler.xc.rsh_expressions"),
-    # Qualification oracles already present in the integration base (6b965bd7).
-    # These do not admit any additional production/runtime consumer.
-    ("tests/python/test_libxc_maple_b88.py", "vibeqc_compiler.xc.rsh_expressions"),
-    ("tests/python/test_libxc_maple_p86_pz.py", "vibeqc_compiler.xc.rsh_expressions"),
-    ("tests/python/test_libxc_maple_vwn.py", "vibeqc_compiler.xc.rsh_expressions"),
-}
+# No production or qualification code may depend on a retired XC expression module.
+LEGACY_CONSUMER_CEILING: set[tuple[str, str]] = set()
 
 SCAN_ROOTS = ("python", "tools", "tests")
 

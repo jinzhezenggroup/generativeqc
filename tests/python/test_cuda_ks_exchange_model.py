@@ -32,6 +32,14 @@ bool semilocal_family_has_cuda_ks(SemilocalFamily family) {
  return family==SemilocalFamily::Lda || family==SemilocalFamily::Pbe ||
         family==SemilocalFamily::R2scan;
 }
+namespace generated {
+struct SemilocalPointProgram { std::uint32_t domain_version{1}; };
+struct AutomaticLibxcEntry {
+ const SemilocalPointProgram* program{};
+ constexpr explicit operator bool() const noexcept { return program != nullptr; }
+};
+AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t) noexcept { return {}; }
+}
 namespace nlc { enum class Vv10DensityDomain { MolecularV1 }; }
 namespace scf {
 enum class FockBackend {Cpu,Cuda};

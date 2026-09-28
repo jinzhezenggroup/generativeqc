@@ -56,6 +56,7 @@ for functional in (0,1,2):
     assert '__device__ inline bool stationary_source_weight' in s
     assert '__global__ void source_reduce' in s
     assert 'if (view.error && *view.error)' in s
+    assert 'view.ao_ids ? view.ao_ids[mu] : mu' in s
     assert 'atomicExch(error, 1)' in s
     include = s.index('#include "dft/stationary_gradient_cuda.cuh"')
     for scientific in ('__global__ void task_kernel', '__global__ void geometry_kernel'):

@@ -259,7 +259,7 @@ class FunctionalSpec:
         else:
             manifest = "rsh-manifest.json" if special else "manifest.json"
             expression_source = (
-                "rsh_expressions.py" if special else "semilocal_family.py"
+                "expression_dispatch.py" if special else "semilocal_family.py"
             )
         sources = tuple(
             record

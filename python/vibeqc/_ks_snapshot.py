@@ -15,6 +15,8 @@ from types import MappingProxyType
 import numpy as np
 from vibeqc_compiler.common.arrays import immutable
 from vibeqc_compiler.common.provenance import canonical_hash
+from vibeqc_compiler.xc.automatic_semilocal import AUTOMATIC_FUNCTIONAL_CODE_BASE
+from vibeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
@@ -194,9 +196,13 @@ class NativeKsSnapshot:
             method_name = self._batch._calculator._method_name
             functional_code = native_xc_functional_code(method_name)
             expected_domain_version = (
-                4
-                if functional_code >= 0x10000
-                else {3: 2, 4: 3}.get(functional_code, 1)
+                LIBXC_WORK_DOMAIN_VERSION
+                if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE
+                else (
+                    4
+                    if functional_code >= 0x10000
+                    else {3: 2, 4: 3}.get(functional_code, 1)
+                )
             )
             if (
                 metadata[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)

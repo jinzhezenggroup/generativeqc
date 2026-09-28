@@ -14,7 +14,7 @@ import ctypes as ct
 import threading
 import typing
 from contextlib import ExitStack, contextmanager, nullcontext
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
@@ -35,7 +35,7 @@ from vibeqc_compiler.common.prepared_execution import (
     PreparedExecutionRequest,
 )
 from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain
+from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain, RuntimeTaskPage
 from vibeqc_compiler.dft.cuda import (
     CudaGrid,
     GridTaskView,
@@ -81,6 +81,189 @@ _DOUBLE = ct.POINTER(ct.c_double)
 _INT = ct.POINTER(ct.c_int64)
 _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
 _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
+
+
+class _StationaryTaskSource(typing.Protocol):
+    """Versioned/identity-bearing bounded derivative task producer."""
+
+    @property
+    def identity(self) -> str: ...
+
+    @property
+    def logical_size(self) -> int: ...
+
+    def pages(self, capacity: int) -> typing.Iterator[RuntimeTaskPage]: ...
+
+    def to_payload(self) -> dict[str, typing.Any]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _StationaryTaskExecution:
+    """Bounded producer evidence independent of the derivative task source."""
+
+    mode: str
+    source_schema: str
+    domain_identity: str
+    logical_tasks: int
+    fixed_capacity: int
+    resident_capacity: int
+    page_capacity: int
+    producer_pages: int
+
+
+class _BoundedStationaryTaskExecutor:
+    """Run a finite derivative-task producer without retaining its full domain.
+
+    The current AO producer is only one client of this boundary. #1477 can
+    replace it with compact shell tasks without changing the execution policy.
+    resident_capacity classifies when one logical producer fits the current
+    descriptor reservoir; native task-batch metrics remain authoritative when
+    Cartesian component expansion causes an earlier flush.
+    """
+
+    def __init__(
+        self,
+        *,
+        fixed_capacity: int,
+        resident_capacity: int,
+        page_capacity: int,
+    ) -> None:
+        for value, label in (
+            (fixed_capacity, "stationary fixed task capacity"),
+            (resident_capacity, "stationary resident task capacity"),
+            (page_capacity, "stationary task page capacity"),
+        ):
+            if type(value) is not int or value < 1:
+                raise ValueError(f"{label} must be a positive integer")
+        if fixed_capacity > resident_capacity:
+            raise ValueError(
+                "stationary fixed task capacity exceeds resident task capacity"
+            )
+        if page_capacity > resident_capacity:
+            raise ValueError(
+                "stationary task page capacity exceeds resident task capacity"
+            )
+        self.fixed_capacity = fixed_capacity
+        self.resident_capacity = resident_capacity
+        self.page_capacity = page_capacity
+
+    def execute_pages(
+        self,
+        source: _StationaryTaskSource,
+        submit_page: typing.Callable[[RuntimeTaskPage], None],
+        *,
+        finish_page: typing.Callable[[], None] | None = None,
+    ) -> _StationaryTaskExecution:
+        try:
+            identity = source.identity
+            logical_tasks = source.logical_size
+            page_source = source.pages
+            payload_source = source.to_payload
+        except AttributeError as error:
+            raise TypeError(
+                "stationary derivative producer requires a versioned identity-bearing task source"
+            ) from error
+        if (
+            type(identity) is not str
+            or len(identity) != 64
+            or any(char not in "0123456789abcdef" for char in identity)
+        ):
+            raise ValueError(
+                "stationary derivative task source requires a SHA-256 identity"
+            )
+        if type(logical_tasks) is not int or logical_tasks < 0:
+            raise ValueError(
+                "stationary derivative task source requires nonnegative logical size"
+            )
+        if not callable(page_source) or not callable(payload_source):
+            raise TypeError(
+                "stationary derivative task source requires bounded pages/payload"
+            )
+        payload = payload_source()
+        if not isinstance(payload, dict) or type(payload.get("schema")) is not str:
+            raise ValueError(
+                "stationary derivative task source requires a versioned schema"
+            )
+        source_schema = payload["schema"]
+        if not source_schema.startswith("vibeqc.") or not source_schema.endswith(".v1"):
+            raise ValueError("unsupported stationary derivative task-source schema")
+        if canonical_hash(payload) != identity:
+            raise ValueError(
+                "stationary derivative task-source identity/payload mismatch"
+            )
+        if not callable(submit_page):
+            raise TypeError("stationary derivative producer requires a page callback")
+        if finish_page is not None and not callable(finish_page):
+            raise TypeError("stationary derivative producer requires a finish callback")
+
+        mode = (
+            "empty"
+            if logical_tasks == 0
+            else (
+                "fixed"
+                if logical_tasks <= self.fixed_capacity
+                else (
+                    "resident" if logical_tasks <= self.resident_capacity else "paged"
+                )
+            )
+        )
+        submitted = pages = 0
+        page_rank: int | None = None
+        for page in page_source(self.page_capacity):
+            if not isinstance(page, RuntimeTaskPage):
+                raise TypeError(
+                    "stationary derivative task source yielded an invalid page"
+                )
+            if (
+                page.domain_identity != identity
+                or page.ordinal != pages
+                or page.offset != submitted
+                or page.capacity != self.page_capacity
+            ):
+                raise RuntimeError(
+                    "stationary derivative task page identity/order mismatch"
+                )
+            if page.count > self.page_capacity:
+                raise RuntimeError("stationary task producer exceeded page capacity")
+            if page_rank is None:
+                page_rank = page.rank
+            elif page.rank != page_rank:
+                raise RuntimeError(
+                    "stationary derivative task source changed page rank"
+                )
+            submit_page(page)
+            if finish_page is not None:
+                finish_page()
+            submitted += page.count
+            pages += 1
+        if submitted != logical_tasks:
+            raise RuntimeError("stationary task producer coverage mismatch")
+        return _StationaryTaskExecution(
+            mode,
+            source_schema,
+            identity,
+            logical_tasks,
+            self.fixed_capacity,
+            self.resident_capacity,
+            self.page_capacity,
+            pages,
+        )
+
+    def execute(
+        self,
+        source: _StationaryTaskSource,
+        submit: typing.Callable[[tuple[int, ...]], None],
+        *,
+        finish_page: typing.Callable[[], None] | None = None,
+    ) -> _StationaryTaskExecution:
+        if not callable(submit):
+            raise TypeError("stationary derivative producer requires a submit callback")
+
+        def submit_page(page: RuntimeTaskPage) -> None:
+            for coordinate in page.coordinates:
+                submit(coordinate)
+
+        return self.execute_pages(source, submit_page, finish_page=finish_page)
 
 
 class _ExclusiveWallTimeline:
@@ -250,7 +433,7 @@ class _CudaSources:
         budget: typing.Any,
         spin_blocks: typing.Any = 1,
         target: typing.Any = None,
-        work_budget: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
+        page_work_budget: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
         timeline: _ExclusiveWallTimeline | None = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
@@ -270,6 +453,13 @@ class _CudaSources:
         self.tasks = np.full((records, 9), -1, dtype=np.int64)
         self.charges = np.ones(records)
         self.used = 0
+        self.page_work_budget = int(page_work_budget)
+        self.pending_primitive_records = 0
+        self.primitive_pages = 0
+        self.primitive_page_peak_records = 0
+        self.bulk_pack_chunks = 0
+        self.bulk_packed_descriptors = 0
+        self.scalar_packed_descriptors = 0
         self.device = device
         self.borrowed_streams = set()
         self.centers = np.ascontiguousarray(
@@ -292,6 +482,11 @@ class _CudaSources:
             key: i
             for i, key in enumerate(_artifact_derivative_requests(requests, artifact))
         }
+        component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+        self.component_ids = np.asarray(
+            [component_index[label] for label in self.components], dtype=np.int64
+        )
+        self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
             [ct.c_int] * 3 + [ct.c_size_t] * 8 + [ct.POINTER(ct.c_void_p), *tail]
@@ -380,7 +575,7 @@ class _CudaSources:
             points,
             records,
             spin_blocks,
-            work_budget,
+            page_work_budget,
             budget,
             ct.byref(self.handle),
         )
@@ -427,6 +622,12 @@ class _CudaSources:
         weighted_density: typing.Any,
     ) -> None:
         self.used = 0
+        self.pending_primitive_records = 0
+        self.primitive_pages = 0
+        self.primitive_page_peak_records = 0
+        self.bulk_pack_chunks = 0
+        self.bulk_packed_descriptors = 0
+        self.scalar_packed_descriptors = 0
         self.borrowed_streams.clear()
         shape = (self.spin_blocks, self.nao, self.nao)
         density = _checked(density, shape)
@@ -451,6 +652,7 @@ class _CudaSources:
                 if self.timeline is not None
                 else nullcontext()
             )
+            page_primitive_records = int(np.sum(tasks[:, 8], dtype=np.int64))
             with phase:
                 self._call(
                     "stationary_tasks",
@@ -459,7 +661,12 @@ class _CudaSources:
                     _ptr(charges),
                     self.used,
                 )
+            self.primitive_pages += 1
+            self.primitive_page_peak_records = max(
+                self.primitive_page_peak_records, page_primitive_records
+            )
             self.used = 0
+            self.pending_primitive_records = 0
 
     def integral(
         self,
@@ -507,6 +714,101 @@ class _CudaSources:
             kind, source, rank, indices, primitive_work, nucleus, float(charge)
         )
 
+    def _kind_table(self, operator: str, rank: int) -> np.ndarray:
+        key = (operator, rank)
+        cached = self.kind_tables.get(key)
+        if cached is not None:
+            return cached
+        shape = (len(COMPONENT_LABELS),) * rank
+        table = np.full(shape, -1, dtype=np.int64)
+        component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+        for request, kind in self.kinds.items():
+            request_operator, components = request
+            if request_operator != operator or len(components) != rank:
+                continue
+            table[tuple(component_index[label] for label in components)] = kind
+        self.kind_tables[key] = table
+        return table
+
+    def integral_page(
+        self,
+        source: int,
+        operator: str,
+        coordinates: typing.Iterable[tuple[int, ...]],
+        nucleus: int | None = None,
+        charge: float = 1.0,
+    ) -> None:
+        """Append one bounded logical page, vectorizing the scalar AO producer."""
+        coordinates = tuple(coordinates)
+        if not coordinates:
+            return
+        rank = len(coordinates[0])
+        if rank not in (2, 4) or any(len(row) != rank for row in coordinates):
+            raise ValueError("stationary CUDA page requires uniform rank two or four")
+        if self.component_mode:
+            for indices in coordinates:
+                self.integral(
+                    source,
+                    operator,
+                    indices,
+                    nucleus=nucleus,
+                    charge=charge,
+                )
+            return
+        indices = np.asarray(coordinates, dtype=np.int64)
+        if np.any(indices < 0) or np.any(indices >= self.nao):
+            raise ValueError("stationary CUDA page contains invalid AO indices")
+        table = self._kind_table(operator, rank)
+        selectors = tuple(self.component_ids[indices[:, axis]] for axis in range(rank))
+        kinds = table[selectors]
+        if np.any(kinds < 0):
+            raise ValueError(
+                "stationary CUDA page requests an unavailable derivative kind"
+            )
+        primitive_work = np.prod(
+            self.aos[indices, 2].astype(np.int64),
+            axis=1,
+            dtype=np.int64,
+        )
+        if np.any(primitive_work > self.page_work_budget):
+            raise ValueError(
+                "stationary CUDA descriptor exceeds primitive page work budget"
+            )
+
+        offset = 0
+        while offset < len(coordinates):
+            if self.used == len(self.tasks):
+                self.flush()
+            descriptor_room = len(self.tasks) - self.used
+            work_room = self.page_work_budget - self.pending_primitive_records
+            if work_room <= 0:
+                self.flush()
+                continue
+            candidate = primitive_work[offset : offset + descriptor_room]
+            cumulative = np.cumsum(candidate, dtype=np.int64)
+            count = int(np.searchsorted(cumulative, work_room, side="right"))
+            if count == 0:
+                self.flush()
+                continue
+
+            begin, end = self.used, self.used + count
+            source_begin, source_end = offset, offset + count
+            tasks = self.tasks[begin:end]
+            tasks.fill(-1)
+            tasks[:, 0] = kinds[source_begin:source_end]
+            tasks[:, 1] = int(source)
+            tasks[:, 2] = rank
+            tasks[:, 3] = -1 if nucleus is None else int(nucleus)
+            tasks[:, 4 : 4 + rank] = indices[source_begin:source_end]
+            selected_work = primitive_work[source_begin:source_end]
+            tasks[:, 8] = selected_work
+            self.charges[begin:end] = float(charge)
+            self.used = end
+            self.pending_primitive_records += int(np.sum(selected_work, dtype=np.int64))
+            self.bulk_pack_chunks += 1
+            self.bulk_packed_descriptors += count
+            offset = source_end
+
     def _append_task(
         self,
         kind: int,
@@ -517,7 +819,14 @@ class _CudaSources:
         nucleus: typing.Any,
         charge: float,
     ) -> None:
-        if self.used == len(self.tasks):
+        if primitive_work > self.page_work_budget:
+            raise ValueError(
+                "stationary CUDA descriptor exceeds primitive page work budget"
+            )
+        if (
+            self.used == len(self.tasks)
+            or self.pending_primitive_records + primitive_work > self.page_work_budget
+        ):
             self.flush()
         task = self.tasks[self.used]
         task.fill(-1)
@@ -531,6 +840,8 @@ class _CudaSources:
         task[8] = primitive_work
         self.charges[self.used] = charge
         self.used += 1
+        self.pending_primitive_records += primitive_work
+        self.scalar_packed_descriptors += 1
 
     def nuclear(self, a: typing.Any, b: typing.Any, charges: typing.Any) -> None:
         self.flush()
@@ -839,7 +1150,7 @@ class PreparedStationaryCudaExecution:
         tile_points: int,
         primitive_tile: int,
         integral_terms: int,
-        work_budget: int,
+        page_work_budget: int,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
         scientific_identity = canonical_hash(
@@ -867,7 +1178,7 @@ class PreparedStationaryCudaExecution:
                 "tile_points": tile_points,
                 "primitive_tile": primitive_tile,
                 "integral_terms": integral_terms,
-                "work_budget": work_budget,
+                "primitive_page_work_budget": page_work_budget,
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
                 "tensor_plans": [
                     (name, value.identity)
@@ -927,7 +1238,7 @@ class PreparedStationaryCudaExecution:
         tile_points: int,
         primitive_tile: int,
         integral_terms: int,
-        work_budget: int,
+        page_work_budget: int,
         max_device_bytes: int,
         max_host_bytes: int,
         host_bound: int,
@@ -951,7 +1262,7 @@ class PreparedStationaryCudaExecution:
             tile_points=tile_points,
             primitive_tile=primitive_tile,
             integral_terms=integral_terms,
-            work_budget=work_budget,
+            page_work_budget=page_work_budget,
         )
         if self._lease.contract is not None:
             try:
@@ -1074,7 +1385,7 @@ class PreparedStationaryCudaExecution:
                     spin_blocks=plan.spin_blocks,
                     source_names=source_names,
                     target=target,
-                    work_budget=work_budget,
+                    page_work_budget=page_work_budget,
                     profile_device=profile_device,
                 )
             )
@@ -1134,7 +1445,7 @@ class PreparedStationaryCudaExecution:
                     "tile_points": tile_points,
                     "primitive_tile": primitive_tile,
                     "integral_terms": integral_terms,
-                    "work_budget": work_budget,
+                    "primitive_page_work_budget": page_work_budget,
                     "grid_allocation_bytes": grid_plan.allocation_bytes,
                 },
                 "tensor_plans": tuple(
@@ -1342,9 +1653,9 @@ def _complete_rks_cuda_gradient_diagnostic(
         + (na + 2) * primitive_sum**2
         + na * (na - 1) // 2
     )
+    if records > np.iinfo(np.uint64).max:
+        raise ValueError("primitive work count exceeds uint64 metric range")
     pair_visits = (1 + 2 * len(state.grid.points)) * na * (na - 1) // 2
-    if records > max_primitive_records:
-        raise ValueError("primitive work budget exceeded")
     if len(state.grid.points) > max_grid_points:
         raise ValueError("grid point work budget exceeded")
     if pair_visits > max_grid_pair_visits:
@@ -1404,8 +1715,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             plan.reduction_program(atoms=na), target, max_bytes=available
         )
     # Conservative numeric-array bound: compact task pages/sort staging, resident
-    # topology mirrors, D/W admission copies, adapter staging,
-    # candidate/publication copies, and tile owners.
+    # topology mirrors, D/W admission copies, adapter staging, cached Cartesian
+    # derivative-kind lookup tables, candidate/publication copies, and tile owners.
     # Compiler objects, Python headers and the caller's existing SCF snapshot
     # are explicit exclusions, as in the reused grid/TensorIR resource contracts.
     host_bound = (
@@ -1417,6 +1728,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             + 120 * na
             + 12 * (len(source_names) - len(_SOURCE_NAMES)) * na
             + 26 * integral_terms
+            + len(COMPONENT_LABELS) ** 4
+            + 3 * len(COMPONENT_LABELS) ** 2
             + 3 * tile_points
             + 2 * basis.nprimitive
             + 4 * n
@@ -1550,7 +1863,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 tile_points=tile_points,
                 primitive_tile=primitive_tile,
                 integral_terms=integral_terms,
-                work_budget=records,
+                page_work_budget=max_primitive_records,
                 max_device_bytes=max_device_bytes,
                 max_host_bytes=max_host_bytes,
                 host_bound=host_bound,
@@ -1626,7 +1939,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         spin_blocks=plan.spin_blocks,
                         source_names=source_names,
                         target=target,
-                        work_budget=records,
+                        page_work_budget=max_primitive_records,
                         timeline=timeline,
                         profile_device=profile_device,
                     )
@@ -1643,6 +1956,16 @@ def _complete_rks_cuda_gradient_diagnostic(
             )
             ao.set_density(density)
         timeline.switch("python_packing")
+        # integral_terms and primitive_tile are admitted independently. A fixed
+        # producer must fit both the logical fixed threshold and the resident
+        # native descriptor reservoir.
+        fixed_task_capacity = min(integral_terms, primitive_tile)
+        task_executor = _BoundedStationaryTaskExecutor(
+            fixed_capacity=fixed_task_capacity,
+            resident_capacity=primitive_tile,
+            page_capacity=primitive_tile,
+        )
+        task_executions: list[dict[str, typing.Any]] = []
         for source, rank, operator in (
             ("one_electron", 2, "kinetic"),
             ("overlap_pulay", 2, "overlap"),
@@ -1650,18 +1973,38 @@ def _complete_rks_cuda_gradient_diagnostic(
             *((("exact_exchange", 4, "four_center_eri"),) if has_exchange else ()),
         ):
             domain = RuntimeTaskDomain.rectangular((n,) * rank)
-            for page in domain.pages(integral_terms):
-                for indices in page.coordinates:
-                    sources.integral(source_names.index(source), operator, indices)
-                    if source == "one_electron":
-                        for atom in range(na):
-                            sources.integral(
-                                0,
-                                "nuclear_attraction",
-                                indices,
-                                atom,
-                                charges[atom],
-                            )
+            source_index = source_names.index(source)
+
+            def submit_page(
+                page: RuntimeTaskPage,
+                *,
+                _source_index: int = source_index,
+                _operator: str = operator,
+                _source: str = source,
+            ) -> None:
+                sources.integral_page(
+                    _source_index,
+                    _operator,
+                    page.coordinates,
+                )
+                if _source == "one_electron":
+                    for atom in range(na):
+                        sources.integral_page(
+                            0,
+                            "nuclear_attraction",
+                            page.coordinates,
+                            atom,
+                            charges[atom],
+                        )
+
+            execution = task_executor.execute_pages(domain, submit_page)
+            task_executions.append(
+                {
+                    "source": source,
+                    "rank": rank,
+                    **asdict(execution),
+                }
+            )
             sources.flush()
         for atom in range(na):
             for other in range(atom):
@@ -1673,7 +2016,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 end = min(begin + tile_points, len(grid.points))
                 with ao.feature_task(
                     grid.points[begin:end],
-                    np.arange(n, dtype=np.uintp),
+                    None,
                     ingredients,
                     defer_error_to_consumer=True,
                 ) as task:
@@ -1744,6 +2087,12 @@ def _complete_rks_cuda_gradient_diagnostic(
                 else _grid_metric_delta(grid_after, grid_before)
             )
             work["borrowed_grid_streams"] = tuple(sorted(sources.borrowed_streams))
+            work["primitive_pages"] = sources.primitive_pages
+            work["primitive_page_peak_records"] = sources.primitive_page_peak_records
+            work["primitive_record_page_budget"] = max_primitive_records
+            work["bulk_pack_chunks"] = sources.bulk_pack_chunks
+            work["bulk_packed_descriptors"] = sources.bulk_packed_descriptors
+            work["scalar_packed_descriptors"] = sources.scalar_packed_descriptors
         if work["owned_device_bytes"] != source_bytes:
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
@@ -1809,6 +2158,15 @@ def _complete_rks_cuda_gradient_diagnostic(
         stationary_state_dw_upload_bytes=(
             state.density.nbytes + state.weighted_density.nbytes
         ),
+        stationary_task_executor={
+            "schema": "vibeqc.stationary-bounded-task-executor.v2",
+            "fixed_capacity": fixed_task_capacity,
+            "resident_capacity": primitive_tile,
+            "page_capacity": primitive_tile,
+            "primitive_record_page_budget": max_primitive_records,
+            "logical_primitive_records": records,
+            "sources": tuple(task_executions),
+        },
         additional_host_numeric_bound=(
             host_bound if prepared is None else prepared.host_bound
         ),

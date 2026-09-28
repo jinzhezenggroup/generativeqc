@@ -260,6 +260,64 @@ void ks_option_semantic_plan() {
           "semantic range exchange accepted an inconsistent K coefficient");
 }
 
+void automatic_libxc_semilocal_plan() {
+  Fixture fixture;
+  auto method = lda_method();
+  // The public method ID selects the DFT provider; the compiler-owned KS
+  // descriptor below carries the actual semilocal scientific identity.
+  method.method = VIBEQC_METHOD_PBE_RKS;
+  std::array<vibeqc_ks_semilocal_component, 1> components{{{"GGA_X_APBE", 1.0}}};
+  vibeqc_ks_options options{};
+  options.struct_size = sizeof(options);
+  options.abi_version = VIBEQC_ABI_VERSION;
+  options.scf_domain = "libxc-7.0/work-semilocal-v1";
+  options.grid_version = 1;
+  options.radial_points = 1;
+  options.angular_polar = 2;
+  options.angular_azimuth = 4;
+  options.partition_iterations = 3;
+  options.coincident_tolerance = 1e-12;
+  options.tile_points = 8;
+  options.xc_execution_schedule = VIBEQC_XC_EXECUTION_HOST_UNFUSED;
+  options.spin_channels = 1;
+  options.semilocal_components = components.data();
+  options.semilocal_component_count = components.size();
+  method.ks_options = &options;
+
+  vibeqc_calculation* calculation = nullptr;
+  const auto prepare =
+      vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation);
+  const char* prepare_detail = vibeqc_context_get_last_detail(fixture.context);
+  require(prepare == VIBEQC_STATUS_SUCCESS && calculation != nullptr,
+          (std::string("automatic APBE CPU preparation failed: ") +
+           (prepare_detail ? prepare_detail : ""))
+              .c_str());
+  vibeqc_result_descriptor result{
+      sizeof(vibeqc_result_descriptor), VIBEQC_ABI_VERSION, 0.0, nullptr, 0, 0, 0.0, 0.0, 0,
+      VIBEQC_BACKEND_CPU_REFERENCE};
+  const auto execute = vibeqc_calculation_execute(calculation, &result);
+  const char* execute_detail = vibeqc_context_get_last_detail(fixture.context);
+  require(execute == VIBEQC_STATUS_SUCCESS && result.converged &&
+              result.executed_backend == VIBEQC_BACKEND_CPU_REFERENCE &&
+              std::isfinite(result.energy),
+          (std::string("automatic APBE CPU SCF failed: ") + (execute_detail ? execute_detail : ""))
+              .c_str());
+  vibeqc_calculation_destroy(calculation);
+
+  for (const char* boundary_name : {"GGA_C_AM05", "GGA_X_AK13"}) {
+    components[0] = {boundary_name, 1.0};
+    calculation = nullptr;
+    const auto boundary_prepare =
+        vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation);
+    const char* boundary_detail = vibeqc_context_get_last_detail(fixture.context);
+    require(boundary_prepare == VIBEQC_STATUS_SUCCESS && calculation != nullptr,
+            (std::string("shared-boundary automatic Libxc preparation failed for ") +
+             boundary_name + ": " + (boundary_detail ? boundary_detail : ""))
+                .c_str());
+    vibeqc_calculation_destroy(calculation);
+  }
+}
+
 void pbe0_composition_snapshot() {
   Fixture fixture;
   auto method = lda_method();
@@ -426,6 +484,7 @@ int main() {
     ks_short_method_descriptor_rejected();
     ks_option_snapshot();
     ks_option_semantic_plan();
+    automatic_libxc_semilocal_plan();
     pbe0_composition_snapshot();
     warm_preparation_failure(false);
     warm_preparation_failure(true);

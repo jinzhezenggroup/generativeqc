@@ -1662,10 +1662,10 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
         "bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>"
         in fallback_source[fock_wrapper:]
     )
-    # The older force fallback may use Fock screening while still writing forces.
+    # The method-neutral force fallback may use Fock screening while still writing forces.
     # Do not conflate screening purpose with the scientific consumer again.
     force_wrapper = fallback_source.index(
-        "void launch_bounded_direct_shell_quartet_kernel("
+        "void launch_bounded_direct_shell_quartet_kernel_scaled("
     )
     assert (
         "bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>"
@@ -2328,7 +2328,7 @@ def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
     bounded = (REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
         encoding="utf-8"
     )
-    assert "contract_two_electron_force_order3_task<Unrestricted>(" in bounded
+    assert "contract_two_electron_force_order3_task_scaled<Unrestricted>(" in bounded
     dispatcher = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
     ).read_text(encoding="utf-8")
