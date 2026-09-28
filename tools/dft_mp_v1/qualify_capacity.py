@@ -109,6 +109,15 @@ _IMPORTED_HELPER_SOURCES = {
     for name, helper in _LOCAL_HELPERS.items()
     if (path := _helper_source_path(helper)) is not None
 }
+_PUBLIC_METHOD_MANIFEST = SOURCE_REPOSITORY / "manifests/public_methods.json"
+_IMPORTED_DATA_DEPENDENCIES = {
+    "public_methods_manifest": (
+        _PUBLIC_METHOD_MANIFEST,
+        hashlib.sha256(
+            _PUBLIC_METHOD_MANIFEST.read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest(),
+    )
+}
 
 SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
@@ -333,6 +342,19 @@ def _assert_local_imports() -> None:
     if stale:
         raise RuntimeError(
             "capacity helper source changed since import: " + ", ".join(sorted(stale))
+        )
+    stale_data = [
+        name
+        for name, (path, imported_digest) in _IMPORTED_DATA_DEPENDENCIES.items()
+        if not path.is_relative_to(SOURCE_REPOSITORY)
+        or not path.is_file()
+        or hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        != imported_digest
+    ]
+    if stale_data:
+        raise RuntimeError(
+            "capacity import-time data dependency changed: "
+            + ", ".join(sorted(stale_data))
         )
 
 
@@ -1552,6 +1574,9 @@ def _build_report(
     spd_expansion = _spd_expansion_contract(repository)
     source_package = _source_package_inventory(repository)
     public_route = _source_public_route(repository)
+    public_route["registry_manifest_sha256"] = _lf_sha256(
+        (repository / "manifests/public_methods.json").read_bytes()
+    )
     public_route["prepared_aot_selection_sha256"] = _prepared_aot_route_contract(
         repository
     )

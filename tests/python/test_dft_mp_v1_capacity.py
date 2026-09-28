@@ -133,6 +133,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         ),
     }
     assert result["public_route"] == {
+        "registry_manifest_sha256": (
+            "639d08842ecdd159f37082f168f86b43166911cc7e2e85fe20124b243e51f2c6"
+        ),
         "semilocal_force_predicate_sha256": (
             "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
         ),
@@ -1370,6 +1373,23 @@ def test_report_rejects_same_checkout_helper_source_changed_since_import(
     )
 
     with pytest.raises(RuntimeError, match="helper source changed since import: Atom"):
+        qualify_capacity._assert_local_imports()
+
+
+def test_report_rejects_import_time_registry_manifest_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _ = qualify_capacity._IMPORTED_DATA_DEPENDENCIES["public_methods_manifest"]
+    monkeypatch.setitem(
+        qualify_capacity._IMPORTED_DATA_DEPENDENCIES,
+        "public_methods_manifest",
+        (path, "0" * 64),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="import-time data dependency changed: public_methods_manifest",
+    ):
         qualify_capacity._assert_local_imports()
 
 

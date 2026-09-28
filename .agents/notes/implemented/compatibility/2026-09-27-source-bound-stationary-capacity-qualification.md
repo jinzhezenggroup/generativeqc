@@ -45,6 +45,9 @@ file. No other dirty path is ignored.
 Imported planner, basis, grid, and AOT helpers retain their import-time source
 path and content identity. A long-lived process fails closed if the same
 checkout changes underneath already-imported helper objects.
+Import-time data dependencies are bound separately from their loader modules;
+in particular, the public-method registry manifest is fingerprinted before its
+generated-method payload can be accepted under a later clean checkout state.
 The tool also pins the checkout HEAD at module import and requires a fresh
 interpreter after any commit/checkout transition, covering transitive imported
 state that is not represented by a helper's defining file alone.
