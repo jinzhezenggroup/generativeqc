@@ -39,6 +39,10 @@ def _git_head(repository: Path) -> str:
 
 
 _IMPORTED_TOOL_HEAD = _git_head(SOURCE_REPOSITORY)
+_IMPORTED_TOOL_SOURCE = Path(__file__).resolve()
+_IMPORTED_TOOL_SOURCE_SHA256 = hashlib.sha256(
+    _IMPORTED_TOOL_SOURCE.read_bytes().replace(b"\r\n", b"\n")
+).hexdigest()
 
 source_python = str(SOURCE_PYTHON)
 if source_python in sys.path:
@@ -329,6 +333,15 @@ def _assert_local_imports() -> None:
     if _git_head(SOURCE_REPOSITORY) != _IMPORTED_TOOL_HEAD:
         raise RuntimeError(
             "capacity tool checkout changed since import; start a fresh interpreter"
+        )
+    if (
+        hashlib.sha256(
+            _IMPORTED_TOOL_SOURCE.read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest()
+        != _IMPORTED_TOOL_SOURCE_SHA256
+    ):
+        raise RuntimeError(
+            "capacity qualifier source changed since import; start a fresh interpreter"
         )
     foreign = []
     stale = []
@@ -1927,6 +1940,7 @@ def _build_report(
         "schema": SCHEMA,
         "source": {
             "sha": source_sha,
+            "qualifier_sha256": _IMPORTED_TOOL_SOURCE_SHA256,
             "runtime_owner_sha256": {
                 path: _lf_sha256((repository / path).read_bytes())
                 for path in owner_files

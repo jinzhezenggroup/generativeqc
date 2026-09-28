@@ -69,6 +69,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
 
     assert result["schema"] == "vibeqc.dft-mp-v1.stationary-capacity.v1"
     assert result["source"]["sha"] == SOURCE_SHA
+    assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
+        (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
+    )
     assert result["contract"] == {
         "id": "DFT-MP-v1",
         "version": "1.0.0",
@@ -1490,6 +1493,15 @@ def test_report_requires_a_fresh_interpreter_after_checkout_head_moves(
     monkeypatch.setattr(qualify_capacity, "_IMPORTED_TOOL_HEAD", "0" * 40)
 
     with pytest.raises(RuntimeError, match="start a fresh interpreter"):
+        qualify_capacity._assert_local_imports()
+
+
+def test_report_requires_a_fresh_interpreter_after_qualifier_source_moves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qualify_capacity, "_IMPORTED_TOOL_SOURCE_SHA256", "0" * 64)
+
+    with pytest.raises(RuntimeError, match="qualifier source changed since import"):
         qualify_capacity._assert_local_imports()
 
 
