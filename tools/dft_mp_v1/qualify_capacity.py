@@ -21,6 +21,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from tools.dft_mp_v1 import _SOURCE_ONLY_FINDER
+
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
 SOURCE_PYTHON = SOURCE_REPOSITORY / "python"
 _PRELOADED_LOCAL_MODULES = frozenset(
@@ -85,6 +87,9 @@ from vibeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+
+if _SOURCE_ONLY_FINDER in sys.meta_path:
+    sys.meta_path.remove(_SOURCE_ONLY_FINDER)
 
 _LOCAL_HELPERS = {
     "Atom": Atom,

@@ -1,13 +1,16 @@
 import json
 import os
+import py_compile
 import subprocess
 import sys
+from importlib.machinery import SourceFileLoader
+from importlib.util import cache_from_source
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tools.dft_mp_v1 import qualify_capacity
+from tools.dft_mp_v1 import _DftMpSourceOnlyLoader, qualify_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SHA = "f" * 40
@@ -82,6 +85,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "version": "1.0.0",
         "sha256": "a9d439261a08007a296862e8869d35c1b127e6725e7bd73e294fa9ccc9b602a0",
     }
+
     assert result["basis"]["manifest_ao_counts_match"] is True
     assert result["basis"]["basis_pack_sha256_match"] is True
     assert result["basis"]["packed_capacity_definition"] == (
@@ -209,6 +213,31 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "f0f51a6ba5dd355d91f95b0bdcd5d0354b889b3a257a7970c39aaf7c3ce36c0d"
     )
     assert all(item["identities"]["basis"] for item in cases.values())
+
+
+def test_qualifier_and_dependencies_use_current_source_not_stale_bytecode(
+    tmp_path: Path,
+) -> None:
+    assert isinstance(qualify_capacity.__loader__, _DftMpSourceOnlyLoader)
+    source = tmp_path / "stale_fixture.py"
+    bytecode = Path(cache_from_source(str(source)))
+    bytecode.parent.mkdir()
+    source.write_text("VALUE = 'stale'\n", encoding="utf-8")
+    py_compile.compile(
+        str(source),
+        cfile=str(bytecode),
+        doraise=True,
+        invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH,
+    )
+    source.write_text("VALUE = 'current'\n", encoding="utf-8")
+
+    stale_module = ModuleType("stale_fixture")
+    SourceFileLoader("stale_fixture", str(source)).exec_module(stale_module)
+    assert stale_module.VALUE == "stale"  # type: ignore[attr-defined]
+
+    current_module = ModuleType("current_fixture")
+    _DftMpSourceOnlyLoader("current_fixture", str(source)).exec_module(current_module)
+    assert current_module.VALUE == "current"  # type: ignore[attr-defined]
 
 
 def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
