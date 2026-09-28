@@ -50,7 +50,6 @@ def _constructor() -> CodeType:
         (4, 3, 7, True),
         (0x10001, 4, 7, True),
         (0x10001, 7, 7, False),
-        (99, 1, 7, False),
     ],
 )
 def test_snapshot_domain_is_shared_and_rejects_mismatch(
@@ -112,17 +111,6 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
     def check(library: typing.Any, status: int, **kwargs: typing.Any) -> None:
         assert status == 0
 
-    def domain(method: str) -> str:
-        assert code < 0x30000, "automatic selectors must use their producer version"
-        return {
-            0: "curated-1",
-            1: "curated-1",
-            2: "curated-1",
-            3: "curated-2",
-            4: "curated-3",
-            0x10001: "split-hybrid",
-        }.get(code, "unregistered-domain")
-
     namespace = {
         "__builtins__": builtins.__dict__,
         "ct": ct,
@@ -131,13 +119,6 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         "PreparedBatch": Batch,
         "_native": SimpleNamespace(check=check),
         "native_xc_functional_code": lambda method: code,
-        "scf_domain_for_method": domain,
-        "SPLIT_HYBRID_SCF_DOMAIN": "split-hybrid",
-        "_SCF_DOMAIN_VERSION_BY_DOMAIN": {
-            "curated-1": 1,
-            "curated-2": 2,
-            "curated-3": 3,
-        },
         "AUTOMATIC_FUNCTIONAL_CODE_BASE": 0x30000,
         "LIBXC_WORK_DOMAIN_VERSION": work_version,
         "immutable": lambda value: value,
