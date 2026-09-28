@@ -68,7 +68,10 @@ from vibeqc_compiler.method.stationary_gradient import (
 )
 from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from vibeqc_compiler.tensor.cuda_plan import plan_cuda
-from vibeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILY_CODES
+from vibeqc_compiler.xc._generated_native_semilocal import (
+    SEMILOCAL_FAMILY_BY_CODE,
+    SEMILOCAL_FAMILY_CODES,
+)
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
 from ._dft_gradient import (
@@ -81,6 +84,12 @@ from ._stationary_cpu import DiagnosticStationaryGradient
 _REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
     record["functional_code"] for record in SPLIT_HYBRIDS.values()
 )
+
+
+def _stationary_density_jet_count(functional: int) -> int:
+    record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
+    return 4 if record is None or record["requires_gradient"] else 1
+
 
 _DOUBLE = ct.POINTER(ct.c_double)
 _INT = ct.POINTER(ct.c_int64)
@@ -904,7 +913,7 @@ class _CudaSources:
             or functional not in _REGISTERED_STATIONARY_CODES
         ):
             raise ValueError("unsupported stationary semilocal functional")
-        work = task.density_jets(4 if functional else 1)
+        work = task.density_jets(_stationary_density_jet_count(functional))
         self._call(
             "stationary_geometry"
             if self.profile_device
@@ -1682,9 +1691,10 @@ def _complete_rks_cuda_gradient_diagnostic(
     functional = int(state._source.metadata[6])
     if functional not in _REGISTERED_STATIONARY_CODES:
         raise ValueError("native snapshot reported an unknown semilocal functional")
-    if functional == 2 and ecp:
+    record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
+    if ecp and record is not None and not record["stationary_ecp_gradient"]:
         raise NotImplementedError(
-            "r2SCAN CUDA stationary gradients do not inherit ECP support"
+            f"{record['name']} CUDA stationary gradients do not inherit ECP support"
         )
     ingredients = state._source.functional.ingredients
     needs_first = "sigma" in ingredients

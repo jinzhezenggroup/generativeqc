@@ -5,6 +5,7 @@ from pathlib import Path
 from vibeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
+    SEMILOCAL_FAMILY_BY_CODE,
     SEMILOCAL_FAMILY_CODES,
 )
 
@@ -36,3 +37,16 @@ def test_native_semilocal_domain_versions_are_generated_once() -> None:
     assert SCF_DOMAIN_BY_VERSION == {
         item["domain_version"]: item["scf_domain"] for item in SEMILOCAL_FAMILIES
     }
+
+
+def test_native_semilocal_execution_traits_are_manifest_owned() -> None:
+    assert SEMILOCAL_FAMILY_BY_CODE == {
+        item["code"]: item for item in SEMILOCAL_FAMILIES
+    }
+    by_name = {item["name"]: item for item in SEMILOCAL_FAMILIES}
+    assert by_name["LDA"]["requires_gradient"] is False
+    assert by_name["PBE"]["stationary_kernel"] == "pbe"
+    assert by_name["R2SCAN"]["requires_tau"] is True
+    assert by_name["R2SCAN"]["stationary_ecp_gradient"] is False
+    assert by_name["B3LYP"]["stationary_kernel"] == "composed"
+    assert by_name["WB97M-V"]["stationary_kernel"] == "wb97mv"

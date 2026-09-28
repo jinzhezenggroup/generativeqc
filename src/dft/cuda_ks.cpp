@@ -453,8 +453,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::invalid_argument("CUDA fitted KS requires strict FP64");
     if (mixed_j && (has_exchange || has_range_correction))
       throw std::invalid_argument("CUDA exact-exchange KS currently requires strict FP64");
-    if (mixed_j && (is_semilocal_family(functional, SemilocalFamily::R2scan) ||
-                    is_semilocal_family(functional, SemilocalFamily::Wb97mv)))
+    const auto* curated_metadata = semilocal_family_metadata_from_code(functional);
+    if (mixed_j && curated_metadata && curated_metadata->requires_tau)
       throw std::invalid_argument("meta-GGA CUDA KS currently requires strict FP64");
     if (nonlocal_correlation) {
       if (!is_semilocal_family(functional, SemilocalFamily::Pbe) &&
