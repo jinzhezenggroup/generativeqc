@@ -235,6 +235,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
         ),
+        "native_allocation_sha256": (
+            "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
+        ),
         "native_create_sha256": (
             "9aee878f0f32fae3f756934074fca0ea57062658e38b32deba9b6af98c94ab26"
         ),
@@ -728,6 +731,24 @@ def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
     )
 
     with pytest.raises(RuntimeError, match="native_tasks_sha256 contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_memory_bounds_fail_closed_when_native_allocation_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    old = "(579 + 3 * stationary_source_count) * na"
+    assert old in native
+    target.write_text(
+        native.replace(old, "(580 + 3 * stationary_source_count) * na", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="native_allocation_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 

@@ -199,6 +199,9 @@ STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
 )
+NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
+    "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
+)
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
     "9aee878f0f32fae3f756934074fca0ea57062658e38b32deba9b6af98c94ab26"
 )
@@ -446,6 +449,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_owner_sha256": (
             "struct Owner {",
             NATIVE_STATIONARY_OWNER_CONTRACT_SHA256,
+        ),
+        "native_allocation_sha256": (
+            "size_t allocation(",
+            NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256,
         ),
         "native_create_sha256": (
             "int stationary_create(",
