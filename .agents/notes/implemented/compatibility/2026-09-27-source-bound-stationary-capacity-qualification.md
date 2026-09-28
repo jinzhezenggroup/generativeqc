@@ -44,7 +44,8 @@ The writing CLI may regenerate one untracked `.json` report inside the checkout
 and exclude exactly that path from the clean-tree check. The public
 `build_report()` API has no exemption, and the CLI refuses to replace a tracked
 file or any multiply linked output. No other dirty path is ignored, and an
-output alias cannot truncate consumed AOT evidence through a shared inode.
+output alias cannot truncate consumed AOT evidence through a shared inode or a
+symlinked manifest/binary target. Symlinked AOT evidence is rejected outright.
 
 Imported planner, basis, grid, and AOT helpers retain their import-time source
 path and content identity. A long-lived process fails closed if the same
@@ -115,6 +116,9 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
   nested callback must continue forwarding the same page coordinates and
   nuclear-attraction tasks into `integral_page`. Cumulative logical work is
   evidence, not a whole-force cap.
+- The public stationary wrapper is source-bound as a complete function so its
+  defaults and every forwarded resource keyword remain identical to the private
+  endpoint whose gates are audited.
 - Python nuclear-pair routing and native `Owner`, `allocation`,
   `stationary_create`, `stationary_reset`, `stationary_tasks`, and
   `stationary_nuclear` blocks are part of the same contract, binding the exact

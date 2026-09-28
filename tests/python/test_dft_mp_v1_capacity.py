@@ -234,6 +234,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+        "public_wrapper_sha256": (
+            "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
+        ),
         "initializer_sha256": (
             "6ae30e757b7dd4d8df4729d3431d5631db0e53434b58cd2c886eefb8190ab2c6"
         ),
@@ -702,6 +705,28 @@ def test_report_output_rejects_hard_link_to_aot_evidence(tmp_path: Path) -> None
     assert evidence.read_text(encoding="utf-8") == '{"evidence": true}\n'
 
 
+def test_report_output_rejects_symlinked_aot_evidence(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    aot_directory = repository / "aot"
+    aot_directory.mkdir()
+    external = tmp_path / "external-evidence.json"
+    external.write_text('{"evidence": true}\n', encoding="utf-8")
+    try:
+        os.symlink(external, aot_directory / "pbe_rks_spd.json")
+    except OSError as error:
+        pytest.skip(f"filesystem cannot create a test symlink: {error}")
+
+    with pytest.raises(ValueError, match="AOT evidence must not contain symlinks"):
+        qualify_capacity._report_output_exemption(
+            repository,
+            external,
+            aot_directory=aot_directory,
+        )
+
+    assert external.read_text(encoding="utf-8") == '{"evidence": true}\n'
+
+
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     tmp_path: Path,
 ) -> None:
@@ -985,6 +1010,21 @@ def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
     stationary_contract_tree(tmp_path, source.replace(old, "primitive_sum**3", 1))
 
     with pytest.raises(RuntimeError, match="primitive-record definition"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_limit_defaults_fail_closed_when_public_forwarding_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = '"max_grid_points": max_grid_points,'
+    assert source.count(old) == 1
+    stationary_contract_tree(
+        tmp_path,
+        source.replace(old, '"max_grid_points": max_grid_points // 2,', 1),
+    )
+
+    with pytest.raises(RuntimeError, match="public wrapper contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 

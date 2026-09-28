@@ -258,6 +258,9 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
     "3c4b114f6d33b41f577268209218fbc89d95524dbf280ca5f54f01687cb3fcde"
 )
+STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
+    "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
+)
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
 )
@@ -505,6 +508,17 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if len(functions) != 1:
         raise RuntimeError("stationary CUDA admission owner is missing or ambiguous")
     owner = functions[0]
+    wrappers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "complete_rks_cuda_gradient_diagnostic"
+    ]
+    if len(wrappers) != 1:
+        raise RuntimeError("stationary CUDA public wrapper is missing or ambiguous")
+    wrapper_digest = _source_node_sha256(source, wrappers[0])
+    if wrapper_digest != STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA public wrapper contract changed")
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     page_methods = {
         "initializer": (
@@ -544,7 +558,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256,
         ),
     }
-    page_contract = {}
+    page_contract = {"public_wrapper_sha256": wrapper_digest}
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
         methods = (
@@ -2063,10 +2077,14 @@ def _report_output_exemption(
     """Allow only an untracked JSON report to be ignored inside the checkout."""
 
     output_path = Path(output_path).resolve()
-    if aot_directory is not None and output_path.is_relative_to(
-        Path(aot_directory).resolve()
-    ):
-        raise ValueError("capacity report output must not overlap AOT evidence")
+    if aot_directory is not None:
+        aot_path = Path(aot_directory)
+        if aot_path.is_symlink() or any(
+            candidate.is_symlink() for candidate in aot_path.rglob("*")
+        ):
+            raise ValueError("AOT evidence must not contain symlinks")
+        if output_path.is_relative_to(aot_path.resolve()):
+            raise ValueError("capacity report output must not overlap AOT evidence")
     if output_path.exists() and output_path.stat().st_nlink != 1:
         raise ValueError("capacity report output must not be a hard link")
     if not output_path.is_relative_to(repository):
