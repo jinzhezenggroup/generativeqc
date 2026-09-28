@@ -1,6 +1,7 @@
 #include "methods/rccsdt_method.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -94,21 +95,28 @@ class RccsdtPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     return last_;
   }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_performance_;
+  }
 
   void invalidate_result() override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
   }
 
   Result execute(bool compute_forces) override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
     auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_);
     last_ = state.diagnostic;
+    last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
     if (!state.solved.converged()) return state.result;
@@ -132,6 +140,7 @@ class RccsdtPrepared final : public PreparedCalculation {
       std::size_t triples_virtual_count = 0;
       std::size_t triples_workspace_bytes = 0;
 
+      const auto triples_started = std::chrono::steady_clock::now();
       if (execution_.cuda_requested()) {
 #if VIBEQC_HAS_CUDA
         const auto triples = cc::triples::evaluate_cuda(
@@ -159,7 +168,11 @@ class RccsdtPrepared final : public PreparedCalculation {
         triples_workspace_bytes = triples.workspace_bytes;
       }
 
+      const double triples_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - triples_started).count();
       auto diagnostic = state.diagnostic;
+      auto performance = state.performance;
+      performance.triples_seconds = triples_seconds;
       diagnostic.minimum_absolute_denominator =
           std::min(diagnostic.minimum_absolute_denominator, triples_minimum_denominator);
       diagnostic.numeric_capacity_bytes = std::max<std::uint64_t>(
@@ -238,6 +251,7 @@ class RccsdtPrepared final : public PreparedCalculation {
                     diagnostic.response_operator_hash);
       }
       last_ = diagnostic;
+      last_performance_ = performance;
       return state.result;
     } catch (const std::length_error& error) {
       throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY, error.what());
@@ -254,6 +268,7 @@ class RccsdtPrepared final : public PreparedCalculation {
   vibeqc_method_descriptor descriptor_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   std::optional<vibeqc_correlation_diagnostic> last_;
+  std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;
 };
 
@@ -323,6 +338,12 @@ class RccsdtPreparedBatch final : public PreparedBatch {
     if (index >= owners_.size())
       throw std::invalid_argument("correlation diagnostic batch index is out of range");
     return owners_[index]->correlation_diagnostic();
+  }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
+      std::size_t index) const override {
+    if (index >= owners_.size())
+      throw std::invalid_argument("CC performance diagnostic batch index is out of range");
+    return owners_[index]->cc_performance_diagnostic();
   }
 
   void clear_warm_starts() override {}

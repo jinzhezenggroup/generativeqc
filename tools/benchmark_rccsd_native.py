@@ -73,6 +73,8 @@ def run_case(name: str, device: str, budget: int) -> dict:
         }
     elapsed = time.perf_counter() - started
     diagnostic = result.correlation
+    performance = result.cc_performance
+    assert diagnostic is not None and performance is not None
     return {
         "case": name,
         "device": device,
@@ -101,6 +103,30 @@ def run_case(name: str, device: str, budget: int) -> dict:
         "scalar_d2h_bytes": diagnostic.ccsd_scalar_d2h_bytes,
         "amplitude_d2h_bytes": diagnostic.ccsd_amplitude_d2h_bytes,
         "synchronizations": diagnostic.ccsd_synchronizations,
+        "reference_seconds": performance.reference_seconds,
+        "problem_seconds": performance.problem_seconds,
+        "provider_seconds": performance.provider_seconds,
+        "source_seconds": performance.source_seconds,
+        "solver_seconds": performance.solver_seconds,
+        "iteration_seconds": performance.iteration_seconds,
+        "replay_seconds": performance.replay_seconds,
+        "update_seconds": performance.update_seconds,
+        "diis_seconds": performance.diis_seconds,
+        "source_scans": performance.source_scans,
+        "source_reads": performance.source_reads,
+        "source_values": performance.source_values,
+        "transform_fmas": performance.transform_fmas,
+        "transform_stages": performance.transform_stages,
+        "mo_blocks": performance.mo_blocks,
+        "cuda_transform_calls": performance.cuda_transform_calls,
+        "cuda_batch_calls": performance.cuda_batch_calls,
+        "iteration_graph_calls": performance.iteration_graph_calls,
+        "replay_graph_calls": performance.replay_graph_calls,
+        "update_calls": performance.update_calls,
+        "generated_error_checks": performance.generated_error_checks,
+        "diis_gram_calls": performance.diis_gram_calls,
+        "diis_coefficient_calls": performance.diis_coefficient_calls,
+        "diis_combine_calls": performance.diis_combine_calls,
         "equation_hash": diagnostic.equation_hash,
         "replay_equation_hash": diagnostic.ccsd_replay_equation_hash,
     }

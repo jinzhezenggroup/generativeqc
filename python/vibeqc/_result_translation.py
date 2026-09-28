@@ -14,7 +14,7 @@ import typing
 import numpy as np
 
 from . import _native
-from ._api_types import CorrelationResult
+from ._api_types import CcPerformanceResult, CorrelationResult
 
 
 def read_correlation_result(
@@ -60,6 +60,41 @@ def read_correlation_result(
     return CorrelationResult(**values)
 
 
+def read_cc_performance_result(
+    library: ctypes.CDLL,
+    owner: ctypes.c_void_p,
+    *,
+    index: int | None = None,
+    context: ctypes.c_void_p | None = None,
+) -> CcPerformanceResult | None:
+    """Decode the additive RCCSD/RCCSD(T) phase/work diagnostic."""
+
+    name = (
+        "vibeqc_calculation_get_cc_performance_diagnostic"
+        if index is None
+        else "vibeqc_batch_get_cc_performance_diagnostic"
+    )
+    getter = getattr(library, name)
+    diag = _native.CcPerformanceDiagnostic()
+    diag.struct_size = ctypes.sizeof(diag)
+    diag.abi_version = _native.ABI_VERSION
+    args = (
+        (owner, ctypes.byref(diag))
+        if index is None
+        else (owner, index, ctypes.byref(diag))
+    )
+    status = getter(*args)
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status, context=context)
+    values = {
+        field_name: getattr(diag, field_name)
+        for field_name, _ in diag._fields_
+        if field_name not in ("struct_size", "abi_version")
+    }
+    return CcPerformanceResult(**values)
+
+
 def backend_name(executed_backend: int) -> str:
     """Translate the native backend enum without consulting model metadata."""
 
@@ -87,6 +122,7 @@ def status_message(library: ctypes.CDLL, status: int) -> str:
 __all__ = [
     "backend_name",
     "copy_force_array",
+    "read_cc_performance_result",
     "read_correlation_result",
     "status_message",
 ]

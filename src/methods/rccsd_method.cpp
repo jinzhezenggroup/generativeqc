@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -339,6 +340,7 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     const bool cuda = execution.cuda_requested();
     if (cuda && prepared_exact)
       throw std::invalid_argument("CUDA RCCSD cannot borrow a CPU prepared exact source");
+    const auto reference_started = std::chrono::steady_clock::now();
     scf::ScfResult hf;
     if (prepared_exact) {
       auto prepared_options = reference_options;
@@ -348,6 +350,8 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
       hf = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id())
                 : scf::run_rhf(system, reference_options);
     }
+    const double reference_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - reference_started).count();
     if (!hf.converged || !hf.reference)
       throw MethodError(VIBEQC_STATUS_NOT_CONVERGED,
                         "HF did not converge; no RCCSD energy evaluated");
@@ -374,8 +378,11 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
       raw_source = std::make_unique<posthf::RawSource>(system);
       source = raw_source.get();
     }
+    const auto problem_started = std::chrono::steady_clock::now();
     state.problem = build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
                                   provider_work, provider_metrics);
+    const double problem_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
     // Provider planning already charged this source. Subsequent CC/(T)/force
     // stages must additionally retain the prepared owner beside the reference.
     if (prepared_exact)
@@ -384,8 +391,11 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     prepared_source.reset();
     raw_source.reset();
     allocation_stage = "CC resident solve";
+    const auto solver_started = std::chrono::steady_clock::now();
     state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
                         : cc::solve_cpu(state.problem, solver_options);
+    const double solver_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - solver_started).count();
     state.budget = solver_options.max_bytes;
 
     auto& diagnostic = state.diagnostic;
@@ -422,6 +432,31 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     diagnostic.ccsd_scalar_d2h_bytes = state.solved.diagnostic.scalar_d2h_bytes;
     diagnostic.ccsd_amplitude_d2h_bytes = state.solved.diagnostic.amplitude_d2h_bytes;
     diagnostic.ccsd_synchronizations = state.solved.diagnostic.synchronizations;
+    auto& performance = state.performance;
+    performance.reference_seconds = reference_seconds;
+    performance.problem_seconds = problem_seconds;
+    performance.provider_seconds = provider_work.provider_seconds;
+    performance.source_seconds = provider_work.source_seconds;
+    performance.solver_seconds = solver_seconds;
+    performance.iteration_seconds = state.solved.diagnostic.iteration_seconds;
+    performance.replay_seconds = state.solved.diagnostic.replay_seconds;
+    performance.update_seconds = state.solved.diagnostic.update_seconds;
+    performance.diis_seconds = state.solved.diagnostic.diis_seconds;
+    performance.source_scans = provider_work.source_scans;
+    performance.source_reads = provider_work.source_reads;
+    performance.source_values = provider_work.source_values;
+    performance.transform_fmas = provider_work.transform_fmas;
+    performance.transform_stages = provider_work.transform_stages;
+    performance.mo_blocks = provider_work.mo_blocks;
+    performance.cuda_transform_calls = provider_work.cuda_transform_calls;
+    performance.cuda_batch_calls = provider_work.cuda_batch_calls;
+    performance.iteration_graph_calls = state.solved.diagnostic.iteration_graph_calls;
+    performance.replay_graph_calls = state.solved.diagnostic.replay_graph_calls;
+    performance.update_calls = state.solved.diagnostic.update_calls;
+    performance.generated_error_checks = state.solved.diagnostic.generated_error_checks;
+    performance.diis_gram_calls = state.solved.diagnostic.diis_gram_calls;
+    performance.diis_coefficient_calls = state.solved.diagnostic.diis_coefficient_calls;
+    performance.diis_combine_calls = state.solved.diagnostic.diis_combine_calls;
     if (cuda) {
       execution.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
                                      state.solved.diagnostic.owned_device_bytes);
@@ -471,14 +506,20 @@ class RccsdPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     return last_;
   }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_performance_;
+  }
   void invalidate_result() override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
   }
 
   Result execute(bool compute_forces) override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
@@ -491,6 +532,7 @@ class RccsdPrepared final : public PreparedCalculation {
     auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
                                         reference_capacity_, cpu_exact_plan_.get());
     last_ = state.diagnostic;
+    last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
     if (!state.solved.converged() || !compute_forces) return state.result;
@@ -559,6 +601,7 @@ class RccsdPrepared final : public PreparedCalculation {
   std::size_t reference_capacity_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   std::optional<vibeqc_correlation_diagnostic> last_;
+  std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;
 };
 
@@ -625,6 +668,12 @@ class RccsdPreparedBatch final : public PreparedBatch {
     if (index >= owners_.size())
       throw std::invalid_argument("correlation diagnostic batch index is out of range");
     return owners_[index]->correlation_diagnostic();
+  }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
+      std::size_t index) const override {
+    if (index >= owners_.size())
+      throw std::invalid_argument("CC performance diagnostic batch index is out of range");
+    return owners_[index]->cc_performance_diagnostic();
   }
 
   void clear_warm_starts() override {}

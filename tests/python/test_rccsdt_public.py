@@ -92,6 +92,15 @@ def test_public_native_rccsdt_matches_pinned_standard_triples(
     assert diag.ccsd_t_equation_hash == INVENTORY_HASH
     assert diag.ccsd_t_virtual_triples > 0
     assert diag.ccsd_t_workspace_bytes > 0
+    perf = result.cc_performance
+    assert perf is not None
+    assert perf.triples_seconds >= 0.0
+    assert perf.reference_seconds >= 0.0
+    assert perf.problem_seconds >= perf.provider_seconds >= 0.0
+    assert perf.source_scans > 0
+    assert perf.transform_stages > 0
+    assert perf.iteration_graph_calls >= diag.ccsd_iterations
+    assert perf.replay_graph_calls == 1
     assert diag.ccsd_replay_singles_residual_max <= 1e-11
     assert diag.ccsd_replay_doubles_residual_max <= 1e-11
     if energy_device == "cuda":
