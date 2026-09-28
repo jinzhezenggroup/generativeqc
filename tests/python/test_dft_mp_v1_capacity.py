@@ -226,6 +226,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "nuclear_sha256": (
             "1e86737d8732ef8637378ab925f829dfe229bcf049219c2705a0a4fbf7afdb85"
         ),
+        "geometry_sha256": (
+            "5335bc5f3e4b9bb54821ef4cc50e2238d74ba2faa807f34d8557d33add0c4a33"
+        ),
+        "sources_owner_sha256": (
+            "f6ec2da8cbe1f54cf492a7f66c2cdc9789377b5f2bb9b2e0f6c62c563122d000"
+        ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
         ),
@@ -237,6 +243,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "nuclear_pair_loop_sha256": (
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
+        ),
+        "endpoint_owner_sha256": (
+            "3c4b114f6d33b41f577268209218fbc89d95524dbf280ca5f54f01687cb3fcde"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -255,6 +264,21 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "native_nuclear_sha256": (
             "f5106ec4c238357ece702013e10044c945705b5c9435aae1078ebfa85847c1c2"
+        ),
+        "native_geometry_external_sha256": (
+            "471074659e044cb4306af4ff98cdac91e625665554497b8a61cbee031310e08d"
+        ),
+        "native_geometry_enqueue_sha256": (
+            "0ce8cad05cd402f162e786cc9ff25ae37c699cf67a6dd2ef336eb0f7c9f0208e"
+        ),
+        "native_geometry_route_sha256": (
+            "a94fde0e6735f2afc4ed153f020a3fede1629da24a47325d5b5a14f1c9123722"
+        ),
+        "native_metrics_sha256": (
+            "c3aa6c1360bdfb13ddad49ada5c6c0ffba883a5448813063c7d099934bf849de"
+        ),
+        "native_header_sha256": (
+            "03a36e1d3681b9a80d6acdcae015ba8df892ae22a1fe6b6471dee95b4ff3f9e9"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -792,6 +816,96 @@ def test_nuclear_pair_work_fails_closed_when_native_consumer_moves(
     )
 
     with pytest.raises(RuntimeError, match="native_nuclear_sha256 contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_work_fails_closed_when_endpoint_enumeration_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = '("coulomb", 4, "four_center_eri")'
+    assert source.count(old) == 1
+    stationary_contract_tree(
+        tmp_path,
+        source.replace(old, '("coulomb", 2, "four_center_eri")', 1),
+    )
+
+    with pytest.raises(RuntimeError, match="endpoint owner contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "for begin in range(0, len(grid.points), tile_points):"
+    assert source.count(old) == 1
+    stationary_contract_tree(
+        tmp_path,
+        source.replace(
+            old,
+            "for begin in range(0, len(grid.points), 2 * tile_points):",
+            1,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="endpoint owner contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_grid_pair_work_fails_closed_when_python_geometry_route_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = 'else "stationary_geometry_enqueue"'
+    assert source.count(old) == 1
+    stationary_contract_tree(
+        tmp_path,
+        source.replace(old, 'else "stationary_geometry"', 1),
+    )
+
+    with pytest.raises(RuntimeError, match="geometry page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    marker = "int stationary_geometry_enqueue("
+    start = native.index(marker)
+    old = "p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);"
+    position = native.index(old, start)
+    target.write_text(
+        native[:position]
+        + "p->pair_visits += view->npoint * p->atoms;"
+        + native[position + len(old) :],
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RuntimeError, match="native_geometry_enqueue_sha256 contract changed"
+    ):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    old = "constexpr size_t workers = 32"
+    assert native.count(old) == 1
+    target.write_text(
+        native.replace(old, "constexpr size_t workers = 64", 1), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="native header contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 

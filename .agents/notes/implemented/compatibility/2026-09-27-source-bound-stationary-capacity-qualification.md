@@ -106,6 +106,11 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
   `stationary_nuclear` blocks are part of the same contract, binding the exact
   byte formula and shape caps, page-budget retention, reset, validation, and
   cumulative integral and nuclear-pair metric semantics.
+- Seal the complete Python stationary source owner and endpoint function plus
+  the native stationary header as semantic surfaces, while retaining narrow
+  method/function hashes for diagnostic localization. This binds source/rank
+  domain enumeration, grid tiling, geometry routing, pair-visit accounting,
+  and metric publication without treating a broad digest as the only evidence.
 
 ## Evidence
 
