@@ -72,7 +72,6 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
         (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
     )
-    assert result["source"]["preloaded_local_modules"] == []
     assert result["source"]["imported_module_sha256"][
         "vibeqc_compiler.dft.ao"
     ] == qualify_capacity._lf_sha256(
@@ -595,6 +594,7 @@ def test_public_report_binds_the_clean_git_head(
 ) -> None:
     revision = "e" * 40
     monkeypatch.setattr(qualify_capacity, "_clean_git_sha", lambda _, **__: revision)
+    monkeypatch.setattr(qualify_capacity, "_PRELOADED_LOCAL_MODULES", frozenset())
 
     result = qualify_capacity.build_report(ROOT)
 
@@ -1458,6 +1458,7 @@ def test_report_rejects_a_helper_imported_outside_the_tool_checkout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(qualify_capacity, "Atom", Path)
+    monkeypatch.setattr(qualify_capacity, "_PRELOADED_LOCAL_MODULES", frozenset())
     with pytest.raises(RuntimeError, match="outside the tool checkout"):
         qualify_capacity.build_report(ROOT)
 
@@ -1551,7 +1552,7 @@ def test_report_rejects_dependencies_preloaded_before_qualifier_import() -> None
             (
                 "import vibeqc_compiler.dft.plan; "
                 "from tools.dft_mp_v1 import qualify_capacity as q; "
-                "q._assert_local_imports()"
+                "q.build_report(q.SOURCE_REPOSITORY)"
             ),
         ],
         cwd=ROOT,

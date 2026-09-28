@@ -346,7 +346,7 @@ STATIONARY_OWNER = {
 }
 
 
-def _assert_local_imports() -> None:
+def _assert_local_imports(*, require_fresh: bool = False) -> None:
     """Reject helpers already imported from an installed or foreign checkout."""
 
     if _git_head(SOURCE_REPOSITORY) != _IMPORTED_TOOL_HEAD:
@@ -362,7 +362,7 @@ def _assert_local_imports() -> None:
         raise RuntimeError(
             "capacity qualifier source changed since import; start a fresh interpreter"
         )
-    if _PRELOADED_LOCAL_MODULES:
+    if require_fresh and _PRELOADED_LOCAL_MODULES:
         raise RuntimeError(
             "capacity qualifier requires a fresh interpreter; preloaded local modules: "
             + ", ".join(sorted(_PRELOADED_LOCAL_MODULES))
@@ -1979,7 +1979,6 @@ def _build_report(
         "source": {
             "sha": source_sha,
             "qualifier_sha256": _IMPORTED_TOOL_SOURCE_SHA256,
-            "preloaded_local_modules": sorted(_PRELOADED_LOCAL_MODULES),
             "imported_module_sha256": {
                 name: digest
                 for name, (_, digest) in sorted(_IMPORTED_LOCAL_MODULE_SOURCES.items())
@@ -2095,11 +2094,11 @@ def build_report(
     """Build a report whose source identity is the clean tool-checkout HEAD."""
 
     repository = Path(repository).resolve()
-    _assert_local_imports()
     if repository != SOURCE_REPOSITORY:
         raise ValueError(
             "capacity report must run against the checkout containing this tool"
         )
+    _assert_local_imports(require_fresh=True)
     return _build_report(
         repository,
         source_sha=_clean_git_sha(repository),
@@ -2127,11 +2126,11 @@ def main() -> None:
     if output_path is None:
         payload = build_report(repository, aot_directory=args.aot_directory)
     else:
-        _assert_local_imports()
         if repository != SOURCE_REPOSITORY:
             raise ValueError(
                 "capacity report must run against the checkout containing this tool"
             )
+        _assert_local_imports(require_fresh=True)
         exemption = _report_output_exemption(
             repository,
             output_path,
