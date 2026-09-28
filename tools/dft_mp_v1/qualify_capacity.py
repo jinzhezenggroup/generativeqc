@@ -187,6 +187,9 @@ STATIONARY_PAGE_SCALAR_CONTRACT_SHA256 = (
 STATIONARY_PAGE_COMPONENT_INTEGRAL_CONTRACT_SHA256 = (
     "c0eb9658bb707083073c9ea57b5021825691c35c0cc2ff6e2afa326c09159dc3"
 )
+STATIONARY_PAGE_NUCLEAR_CONTRACT_SHA256 = (
+    "1e86737d8732ef8637378ab925f829dfe229bcf049219c2705a0a4fbf7afdb85"
+)
 STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
     "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
 )
@@ -195,6 +198,9 @@ STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256 = (
 )
 STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
     "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+)
+STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
+    "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -210,6 +216,9 @@ NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
 )
 NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
     "e05af602b22c92dc71b056b0339910a8ac9f7dcc9816b2175d889620ef1024a0"
+)
+NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
+    "f5106ec4c238357ece702013e10044c945705b5c9435aae1078ebfa85847c1c2"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
@@ -407,6 +416,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "integral",
             STATIONARY_PAGE_COMPONENT_INTEGRAL_CONTRACT_SHA256,
         ),
+        "nuclear": (
+            "_CudaSources",
+            "nuclear",
+            STATIONARY_PAGE_NUCLEAR_CONTRACT_SHA256,
+        ),
         "executor": (
             "_BoundedStationaryTaskExecutor",
             "execute_pages",
@@ -465,6 +479,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_tasks_sha256": (
             "int stationary_tasks(",
             NATIVE_STATIONARY_TASKS_CONTRACT_SHA256,
+        ),
+        "native_nuclear_sha256": (
+            "int stationary_nuclear(",
+            NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256,
         ),
     }
     for label, (marker, expected_digest) in native_blocks.items():
@@ -612,6 +630,23 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if submit_page_digest != STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA submit-page contract changed")
     page_contract["submit_page_sha256"] = submit_page_digest
+    nuclear_pair_loops = [
+        node
+        for node in ast.walk(owner)
+        if isinstance(node, ast.For)
+        and len(node.body) == 1
+        and isinstance(node.body[0], ast.For)
+        and any(
+            isinstance(call, ast.Call) and ast.unparse(call.func) == "sources.nuclear"
+            for call in ast.walk(node.body[0])
+        )
+    ]
+    if len(nuclear_pair_loops) != 1:
+        raise RuntimeError("stationary CUDA nuclear-pair loop is ambiguous")
+    nuclear_pair_loop_digest = _source_node_sha256(source, nuclear_pair_loops[0])
+    if nuclear_pair_loop_digest != STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA nuclear-pair loop contract changed")
+    page_contract["nuclear_pair_loop_sha256"] = nuclear_pair_loop_digest
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"

@@ -223,6 +223,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "component_integral_sha256": (
             "c0eb9658bb707083073c9ea57b5021825691c35c0cc2ff6e2afa326c09159dc3"
         ),
+        "nuclear_sha256": (
+            "1e86737d8732ef8637378ab925f829dfe229bcf049219c2705a0a4fbf7afdb85"
+        ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
         ),
@@ -231,6 +234,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "submit_page_sha256": (
             "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+        ),
+        "nuclear_pair_loop_sha256": (
+            "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -246,6 +252,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "native_tasks_sha256": (
             "e05af602b22c92dc71b056b0339910a8ac9f7dcc9816b2175d889620ef1024a0"
+        ),
+        "native_nuclear_sha256": (
+            "f5106ec4c238357ece702013e10044c945705b5c9435aae1078ebfa85847c1c2"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -731,6 +740,58 @@ def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
     )
 
     with pytest.raises(RuntimeError, match="native_tasks_sha256 contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_nuclear_pair_work_fails_closed_when_python_consumer_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = '        self.flush()\n        kind = self.kinds["nuclear", ()]'
+    assert old in source
+    stationary_contract_tree(
+        tmp_path,
+        source.replace(old, '        kind = self.kinds["nuclear", ()]', 1),
+    )
+
+    with pytest.raises(RuntimeError, match="nuclear page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_nuclear_pair_work_fails_closed_when_endpoint_loop_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "            for other in range(atom):\n                sources.nuclear("
+    assert old in source
+    stationary_contract_tree(
+        tmp_path,
+        source.replace(
+            old,
+            "            for other in range(atom + 1):\n                sources.nuclear(",
+            1,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="nuclear-pair loop contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_nuclear_pair_work_fails_closed_when_native_consumer_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    old = "p->check_page_primitive_work(1);"
+    assert native.count(old) == 1
+    target.write_text(
+        native.replace(old, "p->check_page_primitive_work(2);", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="native_nuclear_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
