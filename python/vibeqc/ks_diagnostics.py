@@ -6,9 +6,10 @@ import typing
 from dataclasses import asdict, dataclass
 
 from vibeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
+from vibeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 from . import _native
-from .ks import SPLIT_HYBRID_SCF_DOMAIN
+from .ks import AUTOMATIC_SCF_DOMAIN, SPLIT_HYBRID_SCF_DOMAIN
 
 
 @dataclass(frozen=True)
@@ -124,7 +125,11 @@ def read_ks_diagnostic(
         return None
     _native.check(library, status)
     # Domain IDs identify numerical policies, independently of method aliases.
-    if expected_domain == SPLIT_HYBRID_SCF_DOMAIN:
+    if expected_domain == AUTOMATIC_SCF_DOMAIN:
+        if summary.scf_domain_version != LIBXC_WORK_DOMAIN_VERSION:
+            raise RuntimeError("native automatic Libxc diagnostic domain mismatch")
+        domain = AUTOMATIC_SCF_DOMAIN
+    elif expected_domain == SPLIT_HYBRID_SCF_DOMAIN:
         if summary.scf_domain_version != 4:
             raise RuntimeError("native split-hybrid diagnostic domain mismatch")
         domain = SPLIT_HYBRID_SCF_DOMAIN

@@ -20,6 +20,8 @@ from vibeqc_compiler.xc._generated_native_semilocal import (
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_CODES,
 )
+from vibeqc_compiler.xc.automatic_semilocal import AUTOMATIC_FUNCTIONAL_CODE_BASE
+from vibeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 from vibeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
@@ -213,12 +215,16 @@ class NativeKsSnapshot:
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
             method_name = self._batch._calculator._method_name
-            expected_domain = scf_domain_for_method(method_name)
-            expected_domain_version = (
-                4
-                if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
-                else _SCF_DOMAIN_VERSION_BY_DOMAIN.get(expected_domain)
-            )
+            functional_code = native_xc_functional_code(method_name)
+            if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:
+                expected_domain_version = LIBXC_WORK_DOMAIN_VERSION
+            else:
+                expected_domain = scf_domain_for_method(method_name)
+                expected_domain_version = (
+                    4
+                    if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
+                    else _SCF_DOMAIN_VERSION_BY_DOMAIN.get(expected_domain)
+                )
             if (
                 expected_domain_version is None
                 or metadata[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)

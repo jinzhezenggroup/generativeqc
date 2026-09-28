@@ -22,6 +22,7 @@ from vibeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
 from vibeqc_compiler.method import (
+    D4_METHOD_SUFFIX,
     METHOD_ALIASES,
     METHOD_CATALOG,
     D4Spec,
@@ -29,6 +30,7 @@ from vibeqc_compiler.method import (
     MethodIR,
     SemilocalXCPrimitive,
     compile_ks_execution_plan,
+    d4_composite_method_identifiers,
     resolve_method,
 )
 from vibeqc_compiler.xc._generated_native_semilocal import (
@@ -36,15 +38,46 @@ from vibeqc_compiler.xc._generated_native_semilocal import (
     SEMILOCAL_FAMILIES,
 )
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
-from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
+from vibeqc_compiler.xc.automatic_semilocal import (
+    AUTOMATIC_SCF_DOMAIN,
+    automatic_functional_code,
+)
+from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, UnsupportedXC, functional
 
 SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
 B3LYP_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[2]
 WB97MV_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[3]
 SPLIT_HYBRID_SCF_DOMAIN = "libxc-7.0/split-global-hybrid-v1"
 _NATIVE_SCF_DOMAINS = frozenset(
-    (*SCF_DOMAIN_BY_VERSION.values(), SPLIT_HYBRID_SCF_DOMAIN)
+    (
+        *SCF_DOMAIN_BY_VERSION.values(),
+        SPLIT_HYBRID_SCF_DOMAIN,
+        AUTOMATIC_SCF_DOMAIN,
+    )
 )
+
+_AUTOMATIC_LIBXC_PREFIXES = (
+    ("libxc-uks:", "polarized"),
+    ("libxc-rks:", "unpolarized"),
+    ("libxc:", "unpolarized"),
+)
+
+
+def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None:
+    """Parse and structurally validate one public automatic Libxc selector."""
+    if not isinstance(method, str):
+        return None
+    lowered = method.lower()
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if not lowered.startswith(prefix):
+            continue
+        name = method[len(prefix) :].strip().upper()
+        if not name:
+            raise ValueError("Libxc selector requires a functional registration name")
+        automatic_functional_code(name)
+        return name, spin
+    return None
+
 
 # DFT scientific identity belongs to the compiler catalog, not the native ABI
 # manifest.  Keep only genuine compatibility spellings here; ordinary
@@ -68,6 +101,14 @@ def _public_dft_identifier_index() -> dict[str, str]:
         # Preserve the requested alias in MethodIR provenance; resolve_method()
         # still maps it to the canonical mathematical specification.
         result[key] = alias
+    for identifier in d4_composite_method_identifiers():
+        result[identifier.lower()] = identifier
+        base = identifier[: -len(D4_METHOD_SUFFIX)]
+        short = f"{base}-D4".lower()
+        existing = result.get(short)
+        if existing is not None and existing != identifier:
+            raise RuntimeError(f"ambiguous public D4 selector {short!r}")
+        result[short] = identifier
     return result
 
 
@@ -302,8 +343,48 @@ def _native_pbe_d4_semilocal(method_ir: typing.Any) -> typing.Any:
     return typing.cast("SemilocalXCPrimitive", method_ir.primitives[0]).functional
 
 
+def _d4_electronic_projection(method_ir: typing.Any) -> MethodIR | None:
+    """Strip one standalone D4 correction while preserving electronic semantics."""
+    if not isinstance(method_ir, MethodIR):
+        return None
+    corrections = tuple(
+        primitive
+        for primitive in method_ir.primitives
+        if isinstance(primitive, DispersionCorrectionPrimitive)
+    )
+    if len(corrections) != 1 or not isinstance(corrections[0].specification, D4Spec):
+        return None
+    return replace(
+        method_ir,
+        identifier=f"{method_ir.identifier}/electronic",
+        primitives=tuple(
+            primitive
+            for primitive in method_ir.primitives
+            if not isinstance(primitive, DispersionCorrectionPrimitive)
+        ),
+    )
+
+
 def _native_semilocal(method_ir: typing.Any) -> typing.Any:
     return _native_execution_plan(method_ir).semilocal.functional
+
+
+def _automatic_semilocal_name(method_ir: typing.Any) -> str | None:
+    """Return the sole default-allow automatic component in a pure semilocal IR."""
+    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 1:
+        return None
+    plan = _native_execution_plan(method_ir)
+    if plan.exchange or plan.nonlocal_correlation is not None or plan.post_scf:
+        return None
+    components = plan.semilocal.functional.components
+    if len(components) != 1 or components[0][1] != Fraction(1):
+        return None
+    name = components[0][0]
+    try:
+        automatic_functional_code(name)
+    except UnsupportedXC:
+        return None
+    return name
 
 
 def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
@@ -418,6 +499,9 @@ def _native_semilocal_record(method_ir: typing.Any) -> typing.Mapping[str, typin
 def _native_semilocal_code(method_ir: typing.Any) -> int:
     """Return the stable curated/generated selector consumed by native KS execution."""
     if not _is_pbe_d4_composition(method_ir):
+        automatic_name = _automatic_semilocal_name(method_ir)
+        if automatic_name is not None:
+            return automatic_functional_code(automatic_name)
         split = _split_hybrid_record(method_ir)
         if split is not None:
             return int(split["functional_code"])
@@ -430,8 +514,9 @@ def ks_coefficients(method_ir: typing.Any) -> typing.Any:
         raise TypeError("KS coefficients require a resolved MethodIR")
     plan = _native_execution_plan(method_ir)
     components = dict(plan.semilocal.functional.components)
+    automatic_name = _automatic_semilocal_name(method_ir)
     split = _split_hybrid_record(method_ir)
-    if split is not None:
+    if automatic_name is not None or split is not None:
         exchange_scale = correlation_scale = Fraction(1)
     else:
         record = _native_semilocal_record(method_ir)
@@ -519,6 +604,12 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
     if _is_pbe_d4_composition(method_ir):
         return method_ir, functional("PBE", spin=spin)
 
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        semilocal = _native_semilocal(d4_electronic)
+        ks_coefficients(d4_electronic)
+        return method_ir, semilocal
+
     semilocal = _native_semilocal(method_ir)
     ks_coefficients(method_ir)
     return method_ir, semilocal
@@ -527,16 +618,40 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
 def public_dft_selectors() -> tuple[str, ...]:
     """Enumerate compiler-owned DFT selectors that pass current native lowerer gates."""
     selectors = set(_LEGACY_KS_SELECTORS)
-    for identifier in METHOD_CATALOG:
-        stem = identifier.lower()
+    # Ordinary aliases remain resolvable without duplicating catalog rows.
+    identifiers = set(METHOD_CATALOG)
+    identifiers.update(d4_composite_method_identifiers())
+    for identifier in sorted(identifiers):
+        if identifier.endswith(D4_METHOD_SUFFIX):
+            stem = f"{identifier[: -len(D4_METHOD_SUFFIX)].lower()}-d4"
+        else:
+            stem = identifier.lower()
         for suffix in ("rks", "uks"):
             selector = f"{stem}-{suffix}"
             try:
                 resolve_ks_method(selector)
+                native_dft_carrier(selector)
             except (ValueError, NotImplementedError):
                 continue
             selectors.add(selector)
     return tuple(sorted(selectors))
+
+
+def native_dft_carrier_for_ir(method_ir: MethodIR) -> str:
+    """Choose a provider carrier from the electronic ingredient contract."""
+    semilocal = _native_semilocal(method_ir)
+    ks_coefficients(method_ir)
+    carrier = {
+        ("rho",): "lda",
+        ("rho", "sigma"): "pbe",
+        ("rho", "sigma", "tau"): "r2scan",
+    }.get(semilocal.ingredients)
+    if carrier is None:
+        raise NotImplementedError(
+            "native KS has no provider carrier for these XC ingredients"
+        )
+    suffix = "uks" if method_ir.spin == "polarized" else "rks"
+    return f"{carrier}-{suffix}"
 
 
 def native_dft_carrier(method: typing.Any) -> str:
@@ -544,11 +659,19 @@ def native_dft_carrier(method: typing.Any) -> str:
     method_ir, _ = resolve_ks_method(method)
     if _is_pbe_d4_composition(method_ir):
         return "pbe-d4-rks"
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        return native_dft_carrier_for_ir(d4_electronic)
     return "pbe-uks" if method_ir.spin == "polarized" else "pbe-rks"
 
 
 def _scf_domain_for_ir(method_ir: typing.Any) -> str:
-    """Select the native work domain from generated semantic lowerer metadata."""
+    """Select the native work domain from the resolved, possibly renamed IR."""
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        method_ir = d4_electronic
+    if _automatic_semilocal_name(method_ir) is not None:
+        return AUTOMATIC_SCF_DOMAIN
     if not _is_pbe_d4_composition(method_ir):
         split = _split_hybrid_record(method_ir)
         if split is not None:
@@ -563,8 +686,15 @@ def scf_domain_for_method(method: typing.Any) -> str:
 
 
 def native_xc_functional_code(method: typing.Any) -> int:
-    """Return the lowerer code selected from the method's resolved semilocal IR."""
+    """Return the lowerer code selected from one public or automatic KS selector."""
+    automatic = parse_automatic_libxc_selector(method)
+    if automatic is not None:
+        name, _ = automatic
+        return automatic_functional_code(name)
     method_ir, _ = resolve_ks_method(method)
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        method_ir = d4_electronic
     return _native_semilocal_code(method_ir)
 
 
@@ -575,7 +705,12 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
     if not isinstance(options, KsOptions):
         raise TypeError("ks_options must be KsOptions")
 
-    method_ir = named_ir
+    native_named_ir = named_ir
+    if not _is_pbe_d4_composition(named_ir):
+        d4_electronic = _d4_electronic_projection(named_ir)
+        if d4_electronic is not None:
+            native_named_ir = d4_electronic
+    method_ir = native_named_ir
     # Calculator passes its resolved options to resource planning. Keep that
     # graph authoritative: rebinding the descriptive selector loses custom K.
     composition = options.composition or options._method_ir
@@ -626,7 +761,7 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
     if grid is None:
         if (
             "tau" in expected.ingredients
-            and not compile_ks_execution_plan(named_ir).exchange
+            and not compile_ks_execution_plan(native_named_ir).exchange
         ):
             # The v2 policy has no qualified pure meta-GGA profile. Preserve
             # the existing explicit v1 default rather than assigning a GGA grid.
