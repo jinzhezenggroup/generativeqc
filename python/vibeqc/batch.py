@@ -386,7 +386,11 @@ class PreparedBatch:
                     GeometricCounterpoisePrimitive,
                 )
 
-                from .dispersion import D3CorrectionBatch, R2SCAN3CCorrectionBatch
+                from .dispersion import (
+                    D3CorrectionBatch,
+                    D4CorrectionBatch,
+                    R2SCAN3CCorrectionBatch,
+                )
 
                 graph = calculator._dispersion_method_ir
                 correction_nodes = tuple(
@@ -401,24 +405,34 @@ class PreparedBatch:
                 )
                 correction = correction_nodes[0].specification
                 if isinstance(correction, D4Spec):
-                    if len(gcp_nodes) != 1:
-                        raise RuntimeError(
-                            "D4 composite execution requires its canonical gCP primitive"
+                    d4_systems = [
+                        (
+                            self._atomic_numbers[index],
+                            [atom.position for atom in atoms],
+                            self._charges[index],
                         )
-                    self._dispersion_batch = R2SCAN3CCorrectionBatch(
-                        graph,
-                        [
-                            (
-                                self._atomic_numbers[index],
-                                [atom.position for atom in atoms],
-                                self._charges[index],
+                        for index, atoms in enumerate(self._systems)
+                    ]
+                    if gcp_nodes:
+                        if len(gcp_nodes) != 1:
+                            raise RuntimeError(
+                                "D4 composite execution requires exactly one gCP primitive"
                             )
-                            for index, atoms in enumerate(self._systems)
-                        ],
-                        device=calculator._device_name,
-                        device_id=calculator._device_id,
-                        maximum_bytes=calculator._dispersion_memory_budget_bytes,
-                    )
+                        self._dispersion_batch = R2SCAN3CCorrectionBatch(
+                            graph,
+                            d4_systems,
+                            device=calculator._device_name,
+                            device_id=calculator._device_id,
+                            maximum_bytes=calculator._dispersion_memory_budget_bytes,
+                        )
+                    else:
+                        self._dispersion_batch = D4CorrectionBatch(
+                            graph,
+                            d4_systems,
+                            device=calculator._device_name,
+                            device_id=calculator._device_id,
+                            maximum_bytes=calculator._dispersion_memory_budget_bytes,
+                        )
                 else:
                     self._dispersion_batch = D3CorrectionBatch(
                         graph,

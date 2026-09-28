@@ -208,6 +208,40 @@ class D4Spec:
         return canonical_hash(self.to_payload())
 
 
+D4_METHOD_SUFFIX = "-D4(BJ-EEQ-ATM)"
+
+
+def d4_eeq_spec_for_method(method: str) -> D4Spec:
+    """Resolve one exact functional-specific D4(BJ)-EEQ-ATM parameter set.
+
+    The generated registry is the single source of truth. This helper composes
+    method semantics with that registry without creating a second hand-written
+    D4 whitelist.
+    """
+    if not isinstance(method, str) or not method:
+        raise TypeError("D4 method identifier must be a nonempty string")
+    candidates = [method]
+    if not method.endswith(D4_METHOD_SUFFIX):
+        from ._generated_xc_aliases import METHOD_ALIASES
+
+        candidates.extend(
+            alias
+            for alias, canonical in METHOD_ALIASES.items()
+            if canonical == method and alias not in candidates
+        )
+    for candidate in candidates:
+        parameter_name = (
+            candidate
+            if candidate.endswith(D4_METHOD_SUFFIX)
+            else f"{candidate}{D4_METHOD_SUFFIX}"
+        )
+        try:
+            return D4Spec(**_parameters.d4_parameters(parameter_name))
+        except KeyError:
+            continue
+    raise KeyError(f"no pinned D4(BJ-EEQ-ATM) parameters for {method!r}")
+
+
 def r2scan3c_d4_eeq() -> D4Spec:
     """Exact pinned D4 part of r2SCAN-3c; the electronic method is separate."""
     return D4Spec(**_parameters.d4_parameters("r2SCAN-3c"))
@@ -215,7 +249,7 @@ def r2scan3c_d4_eeq() -> D4Spec:
 
 def pbe_d4_eeq_spec() -> D4Spec:
     """Audited PBE-D4(BJ-EEQ-ATM) parameters from the pinned D4 catalog."""
-    return D4Spec(**_parameters.d4_parameters("PBE-D4(BJ-EEQ-ATM)"))
+    return d4_eeq_spec_for_method("PBE")
 
 
 @dataclass(frozen=True)

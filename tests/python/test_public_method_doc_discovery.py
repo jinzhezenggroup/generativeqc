@@ -25,6 +25,15 @@ def _catalog_modules(monkeypatch: pytest.MonkeyPatch) -> None:
         return SimpleNamespace(identifier=stem.upper(), spin=spin), None
 
     ks.resolve_ks_method = resolve
+    ks.public_dft_selectors = lambda: (
+        "new_hybrid-rks",
+        "new_hybrid-uks",
+        "new_alias-rks",
+        "new_alias-uks",
+        "pbe0-d4-rks",
+        "unsupported-rks",
+        "unsupported-uks",
+    )
     monkeypatch.setitem(sys.modules, "vibeqc", ModuleType("vibeqc"))
     monkeypatch.setitem(sys.modules, "vibeqc.ks", ks)
     monkeypatch.setitem(sys.modules, "vibeqc_compiler", ModuleType("vibeqc_compiler"))
@@ -59,6 +68,7 @@ def test_new_compiler_names_and_aliases_need_no_abi_rows(
     for stem in ("new_hybrid", "new_alias"):
         for spin in ("rks", "uks"):
             assert f"|`{stem}-{spin}` |" in text
+    assert "|`pbe0-d4-rks` |" in text
     assert "unsupported-rks" not in text
     assert "unsupported-uks" not in text
     assert "|`rhf` |" in text
