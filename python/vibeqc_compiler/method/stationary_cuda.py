@@ -417,11 +417,12 @@ __global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* wo
       return;
     }
     for (size_t mu = 0; mu < n; ++mu) {
-      if (view.ao_ids[mu] >= view.nao) {
+      const size_t global_ao = view.ao_ids ? view.ao_ids[mu] : mu;
+      if (global_ao >= view.nao) {
         atomicExch(error, 1);
         return;
       }
-      const auto atom = ao_atoms[view.ao_ids[mu]];
+      const auto atom = ao_atoms[global_ao];
       if (atom < 0 || atom >= int64_t(na)) {
         atomicExch(error, 1);
         return;

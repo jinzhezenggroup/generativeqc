@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from tools.render_public_methods_doc import render_public_methods_markdown
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -27,7 +29,7 @@ def test_mp2_documentation_states_exact_force_and_batch_boundary() -> None:
 def test_method_table_no_longer_calls_conventional_mp2_forces_planned() -> None:
     text = (ROOT / "docs/user/methods.md").read_text(encoding="utf-8")
     assert "../public_methods.md" in text
-    table = (ROOT / "docs/public_methods.md").read_text(encoding="utf-8")
+    table = render_public_methods_markdown()
     rows = [
         [cell.strip() for cell in line.strip().strip("|").split("|")]
         for line in table.splitlines()

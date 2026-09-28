@@ -1,37 +1,33 @@
 # Methods and long-term scope
 
 VibeQC's long-term mission is to cover **all quantum-chemistry methods** in one
-accelerator-native system. Stable native ABI IDs, providers, declared properties,
-batch capability and compatibility aliases are generated from
-`manifests/public_methods.json` into the
-[native ABI registry](../public_methods.md).
+accelerator-native system. Public method discovery is rendered at Sphinx build
+time in the [public method catalog](../public_methods.md). The catalog combines
+stable native ABI registrations, compiler-discovered DFT selectors, public
+composite selectors, and the automatic Libxc semilocal MethodIR inventory.
 
-DFT scientific identity is separate. Named DFT compositions come from the
-compiler MethodIR catalog, including generated metadata derived from the pinned
-Libxc sources. Public RKS/UKS selectors are discovered as `<method>-rks` and
-`<method>-uks`, then admitted only when the existing native primitive lowerers
-can execute that MethodIR. Representation never bypasses backend, basis, grid,
-spin, derivative or production-domain gates.
+Stable native ABI IDs, providers, declared properties, batch capability, and
+compatibility aliases remain owned by `manifests/public_methods.json`. DFT
+scientific identity remains compiler-owned: representation never bypasses
+backend, basis, grid, spin, derivative, or production-domain admission gates.
 
 ## Current method status
 
-Run the Python frontend (`python -m vibeqc methods`) for the current public\ndiscovery set. Non-DFT methods
-come from the native ABI/provider registry; DFT rows are derived from MethodIR
-and the current native lowerer gates. The generated
-[native ABI registry](../public_methods.md) remains authoritative for stable ABI
-IDs and compatibility selectors, but its DFT rows are not a functional
-whitelist.
+Run the Python frontend (`python -m vibeqc methods`) for the current public
+discovery set, and use the generated
+[public method catalog](../public_methods.md) for the documentation view across
+native, compiler-discovered, composite, and automatic Libxc entry paths.
 
-A discovered method is not a blanket claim that every backend, basis, grid,
-spin state, or requested property is qualified. The method contract and
+A discovered or listed method is not a blanket claim that every backend, basis,
+grid, spin state, or requested property is qualified. The method contract and
 execution-time admission checks remain authoritative for those combinations.
 Compiler representation alone is likewise not a public execution guarantee:
-unsupported lowerers fail closed. A Python-free native SDK install has a separate
-`vibeqc methods` command that intentionally reports the C/C++ ABI/provider
+unsupported lowerers fail closed. A Python-free native SDK install has a
+separate `vibeqc methods` command that intentionally reports the C/C++ ABI/provider
 registry only; it does not import the compiler catalog. Planned families and
-development directions
-are listed in the [implementation roadmap](../maintainer/roadmap.md), which does
-not promise release dates or a fixed implementation order.
+development directions are listed in the
+[implementation roadmap](../maintainer/roadmap.md), which does not promise
+release dates or a fixed implementation order.
 
 ## CUDA global-hybrid forces
 

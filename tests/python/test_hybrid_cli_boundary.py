@@ -2,7 +2,7 @@
 
 import pytest
 from vibeqc import _generated_methods
-from vibeqc.__main__ import _public_method_rows, parser
+from vibeqc.__main__ import _automatic_libxc_method_rows, _public_method_rows, parser
 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
@@ -54,4 +54,42 @@ def test_methods_command_is_publicly_parseable() -> None:
     assert parser().parse_args(["methods"]).command == "methods"
     args = parser().parse_args(["methods", "--json"])
     assert args.command == "methods"
+    assert args.json
+
+
+def test_methods_command_can_discover_default_allow_libxc() -> None:
+    rows = _automatic_libxc_method_rows()
+    names = {row["name"] for row in rows}
+
+    for name in ("GGA_X_APBE", "GGA_C_AM05", "GGA_X_AK13"):
+        assert f"libxc:{name}" in names
+        assert f"libxc-uks:{name}" in names
+    assert all(row["properties"] == ("energy",) for row in rows)
+
+
+def test_methods_libxc_discovery_honors_public_blacklist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from vibeqc_compiler.method import bulk_ks
+
+    original = bulk_ks.blacklist_reason
+
+    def blacklist_reason(name: str) -> str | None:
+        if name.upper() == "GGA_X_APBE":
+            return "test-only blocked registration"
+        return original(name)
+
+    monkeypatch.setattr(bulk_ks, "blacklist_reason", blacklist_reason)
+    names = {row["name"] for row in _automatic_libxc_method_rows()}
+
+    assert "libxc:GGA_X_APBE" not in names
+    assert "libxc-uks:GGA_X_APBE" not in names
+    assert "libxc:GGA_X_AK13" in names
+    assert "libxc-uks:GGA_X_AK13" in names
+
+
+def test_methods_libxc_flag_is_publicly_parseable() -> None:
+    args = parser().parse_args(["methods", "--libxc", "--json"])
+    assert args.command == "methods"
+    assert args.libxc
     assert args.json
