@@ -1688,6 +1688,23 @@ def test_imported_public_report_requires_direct_source_execution() -> None:
         qualify_capacity.build_report(ROOT)
 
 
+def test_module_execution_cannot_emit_authoritative_report() -> None:
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(ROOT / "python")
+    completed = subprocess.run(
+        [sys.executable, "-m", "tools.dft_mp_v1.qualify_capacity"],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert completed.returncode != 0
+    assert "require direct source CLI execution" in completed.stderr
+
+
 def test_report_reloads_basis_data_instead_of_reusing_a_stale_cache() -> None:
     baseline = next(case for case in report()["cases"] if case["id"] == "water")
     qualify_capacity._basis_pack.cache_clear()

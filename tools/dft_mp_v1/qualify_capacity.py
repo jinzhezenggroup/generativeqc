@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
 SOURCE_PYTHON = SOURCE_REPOSITORY / "python"
-_DIRECT_SOURCE_EXECUTION = __name__ == "__main__"
+_DIRECT_SOURCE_EXECUTION = __name__ == "__main__" and __spec__ is None
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
