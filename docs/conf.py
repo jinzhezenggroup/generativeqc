@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+import sys
+import typing
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.render_public_methods_doc import render_public_methods_source
+
 project = "VibeQC"
 author = "VibeQC contributors"
 language = "en"
@@ -32,3 +42,12 @@ myst_enable_extensions = [
     "dollarmath",
 ]
 myst_heading_anchors = 3
+
+
+def _render_public_methods(app: typing.Any, docname: str, source: list[str]) -> None:
+    render_public_methods_source(app, docname, source)
+
+
+def setup(app: typing.Any) -> dict[str, bool]:
+    app.connect("source-read", _render_public_methods)
+    return {"parallel_read_safe": True, "parallel_write_safe": True}

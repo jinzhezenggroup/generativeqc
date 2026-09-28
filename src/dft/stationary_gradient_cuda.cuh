@@ -16,7 +16,7 @@ constexpr size_t workers = 32, record_stride = 26, task_stride = 9;
 struct Owner {
   Context context;
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
-      max_primitive_work{}, bytes{};
+      max_page_primitive_work{}, bytes{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
   cudaStream_t geometry_stream{};
@@ -30,17 +30,15 @@ struct Owner {
   uint64_t uploads{}, downloads{}, launches{}, primitive_count{}, point_count{}, pair_visits{},
       task_count{}, task_batches{};
   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
-  uint64_t primitive_epoch_begin{};
-  // Metrics are cumulative; admission applies only to work since the last reset.
-  void reset_primitive_work() noexcept { primitive_epoch_begin = primitive_count; }
-  void check_primitive_work(size_t work) const {
-    const auto used = primitive_count - primitive_epoch_begin;
-    if (used > max_primitive_work || work > max_primitive_work - used ||
-        work > std::numeric_limits<uint64_t>::max() - primitive_count)
-      throw std::invalid_argument("stationary primitive work budget exceeded");
+  // Primitive metrics are cumulative across one reset/force execution. Admission
+  // is page-local so arbitrarily many bounded pages may contribute to one force.
+  void check_page_primitive_work(size_t work) const {
+    if (work > max_page_primitive_work)
+      throw std::invalid_argument("stationary primitive page work budget exceeded");
   }
   void count_primitive_work(size_t work) {
-    check_primitive_work(work);
+    if (work > std::numeric_limits<uint64_t>::max() - primitive_count)
+      throw std::invalid_argument("stationary primitive work counter overflow");
     primitive_count += work;
   }
 };
@@ -159,7 +157,7 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->points = np;
     p->task_capacity = ntask;
     p->spin_blocks = ns;
-    p->max_primitive_work = max_primitive_work;
+    p->max_page_primitive_work = max_primitive_work;
     p->bytes = bytes;
     p->context.prepare(device, major, minor, bytes, bytes - 256, 0, 0, 0, false);
     auto* next = reinterpret_cast<double*>(p->context.arena);
@@ -258,7 +256,6 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     p->context.check_device();
     drain_geometry(*p);
     p->failed = false;
-    p->reset_primitive_work();
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
@@ -295,11 +292,12 @@ int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges,
       for (size_t center = 0; center < size_t(rank); ++center)
         if (task[4 + center] < 0 || task[4 + center] >= int64_t(p->aos))
           throw std::invalid_argument("invalid stationary AO task index");
-      if (size_t(work) > p->max_primitive_work - primitive_work)
-        throw std::invalid_argument("stationary primitive work budget exceeded");
+      if (size_t(work) > p->max_page_primitive_work ||
+          primitive_work > p->max_page_primitive_work - size_t(work))
+        throw std::invalid_argument("stationary primitive page work budget exceeded");
       primitive_work += size_t(work);
     }
-    p->check_primitive_work(primitive_work);
+    p->check_page_primitive_work(primitive_work);
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     upload(*p, p->tasks, tasks, task_stride * count, stream);
@@ -331,7 +329,7 @@ int stationary_nuclear(void* pointer, unsigned kind, int64_t a, int64_t b, doubl
     if (!p) throw std::invalid_argument("invalid stationary owner");
     check(*p);
     drain_geometry(*p);
-    p->check_primitive_work(1);
+    p->check_page_primitive_work(1);
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     nuclear_kernel<<<1, 1, 0, stream>>>(kind, a, b, za, zb, p->centers, p->atoms, p->sources,
@@ -352,7 +350,7 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points)
+        !view->ao || !view->points)
       throw std::invalid_argument("invalid geometry task lease");
     check(*p);
     drain_geometry(*p);
@@ -416,8 +414,8 @@ int stationary_geometry_external_device(void* pointer, const vibeqc::dft::GridTa
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points || !external_device ||
-        external_stride < external_offset || view->npoint > external_stride - external_offset)
+        !view->ao || !view->points || !external_device || external_stride < external_offset ||
+        view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident nonlocal geometry seed lease");
     check(*p);
     drain_geometry(*p);
@@ -470,8 +468,8 @@ int stationary_geometry_external_device_enqueue(
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points || !external_device ||
-        external_stride < external_offset || view->npoint > external_stride - external_offset)
+        !view->ao || !view->points || !external_device || external_stride < external_offset ||
+        view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid deferred resident nonlocal geometry seed lease");
     check(*p);
     auto stream = view->stream;
@@ -508,7 +506,7 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points)
+        !view->ao || !view->points)
       throw std::invalid_argument("invalid deferred geometry task lease");
     check(*p);
     auto stream = view->stream;

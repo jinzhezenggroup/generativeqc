@@ -367,6 +367,38 @@ class CorrelationDiagnostic(ctypes.Structure):
     ]
 
 
+class CcPerformanceDiagnostic(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("reference_seconds", ctypes.c_double),
+        ("problem_seconds", ctypes.c_double),
+        ("provider_seconds", ctypes.c_double),
+        ("source_seconds", ctypes.c_double),
+        ("solver_seconds", ctypes.c_double),
+        ("iteration_seconds", ctypes.c_double),
+        ("replay_seconds", ctypes.c_double),
+        ("update_seconds", ctypes.c_double),
+        ("diis_seconds", ctypes.c_double),
+        ("triples_seconds", ctypes.c_double),
+        ("source_scans", ctypes.c_uint64),
+        ("source_reads", ctypes.c_uint64),
+        ("source_values", ctypes.c_uint64),
+        ("transform_fmas", ctypes.c_uint64),
+        ("transform_stages", ctypes.c_uint64),
+        ("mo_blocks", ctypes.c_uint64),
+        ("cuda_transform_calls", ctypes.c_uint64),
+        ("cuda_batch_calls", ctypes.c_uint64),
+        ("iteration_graph_calls", ctypes.c_uint64),
+        ("replay_graph_calls", ctypes.c_uint64),
+        ("update_calls", ctypes.c_uint64),
+        ("generated_error_checks", ctypes.c_uint64),
+        ("diis_gram_calls", ctypes.c_uint64),
+        ("diis_coefficient_calls", ctypes.c_uint64),
+        ("diis_combine_calls", ctypes.c_uint64),
+    ]
+
+
 class ResultDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -1139,6 +1171,19 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             ctypes.POINTER(CorrelationDiagnostic),
         ]
         correlation_diagnostic.restype = ctypes.c_int
+    for name, prefix in (
+        ("vibeqc_calculation_get_cc_performance_diagnostic", [ctypes.c_void_p]),
+        (
+            "vibeqc_batch_get_cc_performance_diagnostic",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+    ):
+        performance_diagnostic = getattr(library, name)
+        performance_diagnostic.argtypes = [
+            *prefix,
+            ctypes.POINTER(CcPerformanceDiagnostic),
+        ]
+        performance_diagnostic.restype = ctypes.c_int
     library.vibeqc_batch_get_hf_warm_state.argtypes = [
         ctypes.c_void_p,
         ctypes.c_uint32,

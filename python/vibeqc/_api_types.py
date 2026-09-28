@@ -115,6 +115,37 @@ class CorrelationResult:
 
 
 @dataclass(frozen=True)
+class CcPerformanceResult:
+    """Observational RCCSD/RCCSD(T) phase and semantic-work telemetry."""
+
+    reference_seconds: float
+    problem_seconds: float
+    provider_seconds: float
+    source_seconds: float
+    solver_seconds: float
+    iteration_seconds: float
+    replay_seconds: float
+    update_seconds: float
+    diis_seconds: float
+    triples_seconds: float
+    source_scans: int
+    source_reads: int
+    source_values: int
+    transform_fmas: int
+    transform_stages: int
+    mo_blocks: int
+    cuda_transform_calls: int
+    cuda_batch_calls: int
+    iteration_graph_calls: int
+    replay_graph_calls: int
+    update_calls: int
+    generated_error_checks: int
+    diis_gram_calls: int
+    diis_coefficient_calls: int
+    diis_combine_calls: int
+
+
+@dataclass(frozen=True)
 class Result:
     """Single-system output with separate convergence and stationarity measures."""
 
@@ -130,6 +161,7 @@ class Result:
     resource_diagnostics: dict | None = None
     precision: dict | None = None
     correlation: CorrelationResult | None = None
+    cc_performance: CcPerformanceResult | None = None
     physical_residual_rms: float | None = None
     ks_diagnostic: KsDiagnostic | None = None
     ks_transport_diagnostic: KsTransportDiagnostic | None = None
@@ -149,6 +181,7 @@ class MethodCapabilities:
 
 __all__ = [
     "Atom",
+    "CcPerformanceResult",
     "CorrelationResult",
     "MethodCapabilities",
     "Primitive",

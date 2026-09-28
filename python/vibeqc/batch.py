@@ -33,6 +33,9 @@ from ._result_translation import (
     status_message,
 )
 from ._result_translation import (
+    read_cc_performance_result as _read_cc_performance_result,
+)
+from ._result_translation import (
     read_correlation_result as _read_correlation_result,
 )
 from ._warm_state import WarmStartState
@@ -46,7 +49,7 @@ from .ks_diagnostics import (
 if typing.TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
-    from ._api_types import CorrelationResult
+    from ._api_types import CcPerformanceResult, CorrelationResult
     from .accuracy import AccuracyAssessment
     from .calculator import Calculator
 
@@ -76,6 +79,7 @@ class BatchItemResult:
     physical_residual_rms: float | None = None
     ks_diagnostic: KsDiagnostic | None = None
     correlation: CorrelationResult | None = None
+    cc_performance: CcPerformanceResult | None = None
     dispersion: object | None = None
 
     @property
@@ -386,7 +390,11 @@ class PreparedBatch:
                     GeometricCounterpoisePrimitive,
                 )
 
-                from .dispersion import D3CorrectionBatch, R2SCAN3CCorrectionBatch
+                from .dispersion import (
+                    D3CorrectionBatch,
+                    D4CorrectionBatch,
+                    R2SCAN3CCorrectionBatch,
+                )
 
                 graph = calculator._dispersion_method_ir
                 correction_nodes = tuple(
@@ -401,24 +409,34 @@ class PreparedBatch:
                 )
                 correction = correction_nodes[0].specification
                 if isinstance(correction, D4Spec):
-                    if len(gcp_nodes) != 1:
-                        raise RuntimeError(
-                            "D4 composite execution requires its canonical gCP primitive"
+                    d4_systems = [
+                        (
+                            self._atomic_numbers[index],
+                            [atom.position for atom in atoms],
+                            self._charges[index],
                         )
-                    self._dispersion_batch = R2SCAN3CCorrectionBatch(
-                        graph,
-                        [
-                            (
-                                self._atomic_numbers[index],
-                                [atom.position for atom in atoms],
-                                self._charges[index],
+                        for index, atoms in enumerate(self._systems)
+                    ]
+                    if gcp_nodes:
+                        if len(gcp_nodes) != 1:
+                            raise RuntimeError(
+                                "D4 composite execution requires exactly one gCP primitive"
                             )
-                            for index, atoms in enumerate(self._systems)
-                        ],
-                        device=calculator._device_name,
-                        device_id=calculator._device_id,
-                        maximum_bytes=calculator._dispersion_memory_budget_bytes,
-                    )
+                        self._dispersion_batch = R2SCAN3CCorrectionBatch(
+                            graph,
+                            d4_systems,
+                            device=calculator._device_name,
+                            device_id=calculator._device_id,
+                            maximum_bytes=calculator._dispersion_memory_budget_bytes,
+                        )
+                    else:
+                        self._dispersion_batch = D4CorrectionBatch(
+                            graph,
+                            d4_systems,
+                            device=calculator._device_name,
+                            device_id=calculator._device_id,
+                            maximum_bytes=calculator._dispersion_memory_budget_bytes,
+                        )
                 else:
                     self._dispersion_batch = D3CorrectionBatch(
                         graph,
@@ -1132,6 +1150,17 @@ class PreparedBatch:
                     index=index,
                     context=self._context,
                 )
+            cc_performance = None
+            if self._calculator._method in (
+                _native.METHOD_RCCSD,
+                _native.METHOD_RCCSD_T,
+            ):
+                cc_performance = _read_cc_performance_result(
+                    self._library,
+                    self._batch,
+                    index=index,
+                    context=self._context,
+                )
             accuracy = None
             if succeeded and self._calculator._target_accuracy is not None:
                 atoms = self._systems[index]
@@ -1173,6 +1202,7 @@ class PreparedBatch:
                     if self._calculator._ks_options is not None
                     else None,
                     correlation=correlation,
+                    cc_performance=cc_performance,
                     dispersion=dispersion if succeeded else None,
                     executed_backend=backend_name(output.executed_backend),
                     bucket_id=output.bucket_id,

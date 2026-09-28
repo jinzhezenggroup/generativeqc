@@ -710,6 +710,20 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   require(plan.final_state_token(token, snapshot_detail) == VIBEQC_STATUS_SUCCESS, snapshot_detail);
   require(plan.transfers().final_state_d2h_bytes == before_snapshot.final_state_d2h_bytes,
           "CUDA KS token query transferred device state");
+  dft::CudaKsResidentDensityBinding resident_density;
+  require(plan.resident_final_density(token, resident_density, snapshot_detail) ==
+              VIBEQC_STATUS_SUCCESS,
+          snapshot_detail);
+  const auto resident_spins = restricted ? 1U : 2U;
+  require(resident_density && resident_density.spins == resident_spins &&
+              resident_density.matrix_elements == basis.nao * basis.nao &&
+              (resident_spins == 1 ? resident_density.beta == nullptr
+                                   : resident_density.beta != nullptr),
+          "CUDA KS resident density binding has the wrong spin/shape contract");
+  require(plan.transfers().final_state_d2h_bytes == before_snapshot.final_state_d2h_bytes &&
+              plan.transfers().final_state_reads == before_snapshot.final_state_reads &&
+              plan.transfers().synchronizations == before_snapshot.synchronizations,
+          "CUDA KS resident density binding transferred or synchronized");
   dft::VerifiedKsFinalState snapshot;
   require(plan.read_final_state(token, false, snapshot, snapshot_detail) == VIBEQC_STATUS_SUCCESS,
           snapshot_detail);
