@@ -59,6 +59,9 @@ as transitive state that is not represented by a helper's defining file alone.
 All imported repository-local Python modules are fingerprinted for the same
 reason, and captured cross-module helpers such as `plan_tiles.jet_indices` keep
 an explicit object-identity binding.
+The qualifier also rejects repository-local modules loaded before its own
+import, because their executed code cannot be reconstructed from a subsequently
+restored clean source file. Normal CLI use therefore requires a fresh process.
 Each frozen selector is additionally resolved through the public MethodIR/KS
 path and must reproduce the audited native ABI ID, spin, semilocal coefficients,
 execution domain, native DFT eligibility, batch/energy registry eligibility, and

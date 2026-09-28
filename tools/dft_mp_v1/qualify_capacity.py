@@ -23,6 +23,13 @@ from typing import Any
 
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
 SOURCE_PYTHON = SOURCE_REPOSITORY / "python"
+_PRELOADED_LOCAL_MODULES = frozenset(
+    name
+    for name, module in tuple(sys.modules.items())
+    if module is not None
+    and (source := getattr(module, "__file__", None)) is not None
+    and Path(source).resolve().is_relative_to(SOURCE_PYTHON)
+)
 
 
 def _git_head(repository: Path) -> str:
@@ -354,6 +361,11 @@ def _assert_local_imports() -> None:
     ):
         raise RuntimeError(
             "capacity qualifier source changed since import; start a fresh interpreter"
+        )
+    if _PRELOADED_LOCAL_MODULES:
+        raise RuntimeError(
+            "capacity qualifier requires a fresh interpreter; preloaded local modules: "
+            + ", ".join(sorted(_PRELOADED_LOCAL_MODULES))
         )
     foreign = []
     stale = []
@@ -1967,6 +1979,7 @@ def _build_report(
         "source": {
             "sha": source_sha,
             "qualifier_sha256": _IMPORTED_TOOL_SOURCE_SHA256,
+            "preloaded_local_modules": sorted(_PRELOADED_LOCAL_MODULES),
             "imported_module_sha256": {
                 name: digest
                 for name, (_, digest) in sorted(_IMPORTED_LOCAL_MODULE_SOURCES.items())

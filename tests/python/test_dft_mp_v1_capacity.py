@@ -72,6 +72,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
         (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
     )
+    assert result["source"]["preloaded_local_modules"] == []
     assert result["source"]["imported_module_sha256"][
         "vibeqc_compiler.dft.ao"
     ] == qualify_capacity._lf_sha256(
@@ -1538,6 +1539,32 @@ def test_report_rejects_rebound_planner_ao_helper(
 
     with pytest.raises(RuntimeError, match="planner captured AO helper changed"):
         qualify_capacity._assert_local_imports()
+
+
+def test_report_rejects_dependencies_preloaded_before_qualifier_import() -> None:
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(ROOT / "python")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import vibeqc_compiler.dft.plan; "
+                "from tools.dft_mp_v1 import qualify_capacity as q; "
+                "q._assert_local_imports()"
+            ),
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert completed.returncode != 0
+    assert "requires a fresh interpreter; preloaded local modules" in completed.stderr
+    assert "vibeqc_compiler.dft.plan" in completed.stderr
 
 
 def test_report_reloads_basis_data_instead_of_reusing_a_stale_cache() -> None:
