@@ -90,8 +90,9 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - A report SHA identifies a clean source revision; only the writing CLI's
   validated untracked JSON output may be excluded from the cleanliness check.
 - Page-local primitive admission is source-bound to the merged #1486 bulk,
-  scalar, flush, executor, and endpoint-wiring contracts. Cumulative logical
-  work is evidence, not a whole-force cap.
+  scalar, spherical-component producer, component-mode selector, flush,
+  executor, and endpoint-wiring contracts. Cumulative logical work is evidence,
+  not a whole-force cap.
 
 ## Evidence
 

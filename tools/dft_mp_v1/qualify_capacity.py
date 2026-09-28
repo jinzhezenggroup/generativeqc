@@ -181,6 +181,12 @@ STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
 STATIONARY_PAGE_SCALAR_CONTRACT_SHA256 = (
     "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
 )
+STATIONARY_PAGE_COMPONENT_INTEGRAL_CONTRACT_SHA256 = (
+    "c0eb9658bb707083073c9ea57b5021825691c35c0cc2ff6e2afa326c09159dc3"
+)
+STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
+    "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
+)
 STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256 = (
     "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
 )
@@ -350,6 +356,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "_append_task",
             STATIONARY_PAGE_SCALAR_CONTRACT_SHA256,
         ),
+        "component_integral": (
+            "_CudaSources",
+            "integral",
+            STATIONARY_PAGE_COMPONENT_INTEGRAL_CONTRACT_SHA256,
+        ),
         "executor": (
             "_BoundedStationaryTaskExecutor",
             "execute_pages",
@@ -374,6 +385,17 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} page contract changed")
         page_contract[f"{label}_sha256"] = digest
+    component_modes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_component_mode"
+    ]
+    if len(component_modes) != 1:
+        raise RuntimeError("stationary CUDA component-mode owner is ambiguous")
+    component_mode_digest = _source_node_sha256(source, component_modes[0])
+    if component_mode_digest != STATIONARY_COMPONENT_MODE_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA component-mode contract changed")
+    page_contract["component_mode_sha256"] = component_mode_digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
         raise RuntimeError("stationary CUDA component-label capacity changed")
     definition_nodes = {

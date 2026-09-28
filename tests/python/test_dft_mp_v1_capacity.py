@@ -204,6 +204,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "scalar_sha256": (
             "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
         ),
+        "component_integral_sha256": (
+            "c0eb9658bb707083073c9ea57b5021825691c35c0cc2ff6e2afa326c09159dc3"
+        ),
+        "component_mode_sha256": (
+            "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
+        ),
         "executor_sha256": (
             "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
         ),
@@ -607,6 +613,22 @@ def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
     )
 
     with pytest.raises(RuntimeError, match="bulk page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_budget_scope_fails_closed_when_component_work_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "primitive_work *= int(row[2])"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source.replace(old, "primitive_work *= int(row[2]) + 1", 1), encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="component_integral page contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
