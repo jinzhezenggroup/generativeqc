@@ -201,6 +201,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+        "initializer_sha256": (
+            "6ae30e757b7dd4d8df4729d3431d5631db0e53434b58cd2c886eefb8190ab2c6"
+        ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
         ),
@@ -683,6 +686,23 @@ def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
     target.write_text(source.replace(old, "sources.integral(", 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="submit-page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_page_gate_fails_closed_when_budget_initialization_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "self.page_work_budget = int(page_work_budget)"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source.replace(old, "self.page_work_budget = 2 * int(page_work_budget)", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="initializer page contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 

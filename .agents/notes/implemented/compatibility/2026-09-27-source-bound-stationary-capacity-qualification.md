@@ -94,8 +94,9 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - Report output may not overlap the AOT directory whose manifests/binaries were
   consumed as evidence.
 - Page-local primitive admission is source-bound to the merged #1486 bulk,
-  scalar, spherical-component producer, component-mode selector, flush,
-  executor, and endpoint-wiring contracts. The endpoint descriptor-production
+  scalar, spherical-component producer, component-mode selector, source
+  constructor/native-create budget forwarding, flush, executor, and
+  endpoint-wiring contracts. The endpoint descriptor-production
   call must remain after the verified host/device admission gates, and its
   nested callback must continue forwarding the same page coordinates and
   nuclear-attraction tasks into `integral_page`. Cumulative logical work is

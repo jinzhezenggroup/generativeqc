@@ -175,6 +175,9 @@ STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
+STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
+    "6ae30e757b7dd4d8df4729d3431d5631db0e53434b58cd2c886eefb8190ab2c6"
+)
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
 )
@@ -351,6 +354,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     owner = functions[0]
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     page_methods = {
+        "initializer": (
+            "_CudaSources",
+            "__init__",
+            STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256,
+        ),
         "flush": ("_CudaSources", "flush", STATIONARY_PAGE_FLUSH_CONTRACT_SHA256),
         "bulk": (
             "_CudaSources",
