@@ -110,7 +110,7 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
         ),
         (
             "Prepare pinned GFN1 and D3 reference inputs",
-            shard in {"core", "compiler-heavy"} and cache_hit != "true",
+            shard in {"core-a", "core-b", "compiler-heavy"} and cache_hit != "true",
         ),
     ):
         step = workflow.split(f"      - name: {name}\n", 1)[1].split(
