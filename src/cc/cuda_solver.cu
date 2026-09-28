@@ -238,8 +238,7 @@ struct Owner {
         cudaMemcpyAsync(host.data(), out.energy, sizeof(double), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaMemcpyAsync(host.data() + 1, scalars, 2 * sizeof(double), cudaMemcpyDeviceToHost,
                                stream));
-    cuda_check(
-        cudaMemcpyAsync(&host_error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaMemcpyAsync(&error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaStreamSynchronize(stream));
     diagnostic.scalar_d2h_bytes += 3 * sizeof(double) + sizeof(int);
     ++diagnostic.synchronizations;
