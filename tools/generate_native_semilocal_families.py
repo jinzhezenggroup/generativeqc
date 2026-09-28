@@ -126,8 +126,7 @@ struct SemilocalFamilyMetadata {{
   bool component_coefficients_are_native_scales;
 }};
 
-inline constexpr std::array<SemilocalFamilyMetadata, {len(families)}>
-    kSemilocalFamilyMetadata{{{{
+inline constexpr std::array<SemilocalFamilyMetadata, {len(families)}> kSemilocalFamilyMetadata{{{{
 {record_text}
 }}}};
 
@@ -155,8 +154,7 @@ constexpr const char* semilocal_family_scf_domain(SemilocalFamily family) noexce
   return semilocal_family_metadata(family).scf_domain;
 }}
 
-constexpr std::uint32_t semilocal_family_domain_version(
-    SemilocalFamily family) noexcept {{
+constexpr std::uint32_t semilocal_family_domain_version(SemilocalFamily family) noexcept {{
   return semilocal_family_metadata(family).domain_version;
 }}
 
@@ -165,8 +163,7 @@ constexpr bool semilocal_family_has_cuda_ks(SemilocalFamily family) noexcept {{
 }}
 
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {{
-  if (const auto* metadata = semilocal_family_metadata_from_code(code))
-    return metadata->family;
+  if (const auto* metadata = semilocal_family_metadata_from_code(code)) return metadata->family;
   throw std::invalid_argument("unknown native KS semilocal family code");
 }}
 
@@ -229,9 +226,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "SEMILOCAL_FAMILIES = (\n"
         + "\n".join(rows)
         + "\n)\n\n"
-        + "SEMILOCAL_FAMILY_CODES = frozenset(\n"
-        + '    item["code"] for item in SEMILOCAL_FAMILIES\n'
-        + ")\n"
+        + 'SEMILOCAL_FAMILY_CODES = frozenset(item["code"] for item in SEMILOCAL_FAMILIES)\n'
         + f"SCF_DOMAIN_BY_VERSION = {domain_text}\n"
     )
 
