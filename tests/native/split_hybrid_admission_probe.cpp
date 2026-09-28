@@ -35,7 +35,7 @@ int main() {
       options.exchange_term_count = 1;
       options.xc_execution_schedule = VIBEQC_XC_EXECUTION_DEVICE_FUSED;
       vibeqc_method_descriptor descriptor{};
-      descriptor.method = VIBEQC_METHOD_M06_2X_RKS;
+      descriptor.method = spin == 2 ? VIBEQC_METHOD_PBE_UKS : VIBEQC_METHOD_PBE_RKS;
       descriptor.ks_options = &options;
       descriptor.precision_mode = VIBEQC_PRECISION_FP64;
       descriptor.density_fitting_mode = VIBEQC_DENSITY_FITTING_NONE;

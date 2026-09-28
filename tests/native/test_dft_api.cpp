@@ -321,7 +321,7 @@ void automatic_libxc_semilocal_plan() {
 void pbe0_composition_snapshot() {
   Fixture fixture;
   auto method = lda_method();
-  method.method = VIBEQC_METHOD_PBE0_RKS;
+  method.method = VIBEQC_METHOD_PBE_RKS;
   const std::array<vibeqc_ks_semilocal_component, 2> components{
       {{"GGA_C_PBE", 1.0}, {"GGA_X_PBE", 0.75}}};
   std::array<vibeqc_ks_exchange_term, 1> exchange{
@@ -360,8 +360,16 @@ void pbe0_composition_snapshot() {
   method.ks_options = nullptr;
   calculation = nullptr;
   require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
-              VIBEQC_STATUS_NOT_IMPLEMENTED,
-          "PBE0 RKS silently inferred composition without compiler plan");
+                  VIBEQC_STATUS_SUCCESS &&
+              calculation != nullptr,
+          "plain PBE carrier preparation failed without a semantic plan");
+  result = {sizeof(vibeqc_result_descriptor), VIBEQC_ABI_VERSION, 0.0, nullptr, 0, 0, 0.0, 0.0, 0,
+            VIBEQC_BACKEND_CPU_REFERENCE};
+  require(vibeqc_calculation_execute(calculation, &result) == VIBEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - (-1.1520643753396715)) < 2e-12,
+          "plain PBE carrier inferred a hybrid composition without a semantic plan");
+  vibeqc_calculation_destroy(calculation);
+  calculation = nullptr;
   method.ks_options = &options;
   exchange[0].fock_coefficient = -0.25;
   require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
@@ -494,7 +502,7 @@ int main() {
     for (vibeqc_method registered :
          {VIBEQC_METHOD_LDA_RKS, VIBEQC_METHOD_PBE_RKS, VIBEQC_METHOD_R2SCAN_RKS,
           VIBEQC_METHOD_LDA_UKS, VIBEQC_METHOD_PBE_UKS, VIBEQC_METHOD_R2SCAN_UKS,
-          VIBEQC_METHOD_PBE0_RKS, VIBEQC_METHOD_PBE0_UKS, VIBEQC_METHOD_PBE_D4_RKS}) {
+          VIBEQC_METHOD_PBE_D4_RKS}) {
       require(vibeqc_method_get_capabilities(registered, &capabilities) == VIBEQC_STATUS_SUCCESS &&
                   capabilities.family == VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
                   capabilities.supported_properties == VIBEQC_PROPERTY_ENERGY &&
@@ -828,15 +836,29 @@ int main() {
                                               0, VIBEQC_BACKEND_CUDA};
     vibeqc_context* cuda_context = nullptr;
     if (vibeqc_context_create(&cuda_descriptor, &cuda_context) == VIBEQC_STATUS_SUCCESS) {
-      for (auto ks : {VIBEQC_METHOD_LDA_RKS, VIBEQC_METHOD_PBE_RKS, VIBEQC_METHOD_R2SCAN_RKS,
-                      VIBEQC_METHOD_PBE0_RKS, VIBEQC_METHOD_B3LYP_RKS, VIBEQC_METHOD_LDA_UKS,
-                      VIBEQC_METHOD_PBE_UKS, VIBEQC_METHOD_R2SCAN_UKS, VIBEQC_METHOD_PBE0_UKS,
-                      VIBEQC_METHOD_B3LYP_UKS}) {
-        const bool uks = ks == VIBEQC_METHOD_LDA_UKS || ks == VIBEQC_METHOD_PBE_UKS ||
-                         ks == VIBEQC_METHOD_R2SCAN_UKS || ks == VIBEQC_METHOD_PBE0_UKS ||
-                         ks == VIBEQC_METHOD_B3LYP_UKS;
-        const bool pbe0 = ks == VIBEQC_METHOD_PBE0_RKS || ks == VIBEQC_METHOD_PBE0_UKS;
-        const bool b3lyp = ks == VIBEQC_METHOD_B3LYP_RKS || ks == VIBEQC_METHOD_B3LYP_UKS;
+      struct KsEndpoint {
+        vibeqc_method carrier;
+        bool uks;
+        bool pbe0;
+        bool b3lyp;
+      };
+      const std::array<KsEndpoint, 10> ks_endpoints{{
+          {VIBEQC_METHOD_LDA_RKS, false, false, false},
+          {VIBEQC_METHOD_PBE_RKS, false, false, false},
+          {VIBEQC_METHOD_R2SCAN_RKS, false, false, false},
+          {VIBEQC_METHOD_PBE_RKS, false, true, false},
+          {VIBEQC_METHOD_PBE_RKS, false, false, true},
+          {VIBEQC_METHOD_LDA_UKS, true, false, false},
+          {VIBEQC_METHOD_PBE_UKS, true, false, false},
+          {VIBEQC_METHOD_R2SCAN_UKS, true, false, false},
+          {VIBEQC_METHOD_PBE_UKS, true, true, false},
+          {VIBEQC_METHOD_PBE_UKS, true, false, true},
+      }};
+      for (const auto& endpoint : ks_endpoints) {
+        const auto ks = endpoint.carrier;
+        const bool uks = endpoint.uks;
+        const bool pbe0 = endpoint.pbe0;
+        const bool b3lyp = endpoint.b3lyp;
         Fixture cpu_fixture(VIBEQC_BACKEND_CPU_REFERENCE, uks ? 1 : 0, uks ? 2 : 1);
         vibeqc_system* cuda_system = Fixture::create_system(cuda_context, uks ? 1 : 0, uks ? 2 : 1);
         method = lda_method();
@@ -1009,10 +1031,10 @@ int main() {
         double exact_exchange;
       };
       const std::array<SplitHybridEndpoint, 4> split_hybrids{{
-          {VIBEQC_METHOD_M06_2X_RKS, false, "HYB_MGGA_X_M06_2X", "MGGA_C_M06_2X", 0.54},
-          {VIBEQC_METHOD_M06_2X_UKS, true, "HYB_MGGA_X_M06_2X", "MGGA_C_M06_2X", 0.54},
-          {VIBEQC_METHOD_MN15_RKS, false, "HYB_MGGA_X_MN15", "MGGA_C_MN15", 0.44},
-          {VIBEQC_METHOD_MN15_UKS, true, "HYB_MGGA_X_MN15", "MGGA_C_MN15", 0.44},
+          {VIBEQC_METHOD_PBE_RKS, false, "HYB_MGGA_X_M06_2X", "MGGA_C_M06_2X", 0.54},
+          {VIBEQC_METHOD_PBE_UKS, true, "HYB_MGGA_X_M06_2X", "MGGA_C_M06_2X", 0.54},
+          {VIBEQC_METHOD_PBE_RKS, false, "HYB_MGGA_X_MN15", "MGGA_C_MN15", 0.44},
+          {VIBEQC_METHOD_PBE_UKS, true, "HYB_MGGA_X_MN15", "MGGA_C_MN15", 0.44},
       }};
       for (const auto& endpoint : split_hybrids) {
         const auto charge = endpoint.unrestricted ? 1 : 0;

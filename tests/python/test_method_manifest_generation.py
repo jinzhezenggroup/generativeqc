@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_ABI_IDS = {
     "rhf": 1,
     "uhf": 2,
-    "wb97m-v": 3,
     "rccsd(t)": 4,
     "mp2": 5,
     "lda-rks": 6,
@@ -24,17 +23,8 @@ EXPECTED_ABI_IDS = {
     "r2scan-rks": 10,
     "r2scan-uks": 11,
     "rccsd": 12,
-    "pbe0-rks": 13,
-    "pbe0-uks": 14,
     "gfn2-xtb": 15,
-    "b3lyp-rks": 16,
-    "b3lyp-uks": 17,
     "pbe-d4-rks": 18,
-    "wb97m-v-uks": 19,
-    "m06-2x-rks": 20,
-    "m06-2x-uks": 21,
-    "mn15-rks": 22,
-    "mn15-uks": 23,
 }
 
 
@@ -50,7 +40,7 @@ def test_public_method_generated_metadata_is_fresh() -> None:
     )
 
 
-def test_public_method_abi_ids_are_explicit_and_stable() -> None:
+def test_native_provider_ids_are_explicit() -> None:
     payload = json.loads(
         (ROOT / "manifests/public_methods.json").read_text(encoding="utf-8")
     )
@@ -60,7 +50,6 @@ def test_public_method_abi_ids_are_explicit_and_stable() -> None:
         **EXPECTED_ABI_IDS,
         "ccsd(t)": 4,
         "gfn2": 15,
-        "wb97m-v-rks": 3,
     }
 
 
@@ -75,7 +64,7 @@ def test_public_composite_selectors_are_generated_from_manifest() -> None:
 def test_public_method_provider_sets_are_generated() -> None:
     assert _generated_methods.HF_METHOD_IDS == frozenset({1, 2})
     assert _generated_methods.NATIVE_DFT_METHOD_IDS == frozenset(
-        {3, 6, 7, 8, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23}
+        {6, 7, 8, 9, 10, 11, 18}
     )
 
 
