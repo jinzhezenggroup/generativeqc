@@ -10,7 +10,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from tools.dft_mp_v1 import _DftMpSourceOnlyLoader, qualify_capacity
+from tools.dft_mp_v1 import qualify_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SHA = "f" * 40
@@ -218,7 +218,6 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
 def test_qualifier_and_dependencies_use_current_source_not_stale_bytecode(
     tmp_path: Path,
 ) -> None:
-    assert isinstance(qualify_capacity.__loader__, _DftMpSourceOnlyLoader)
     source = tmp_path / "stale_fixture.py"
     bytecode = Path(cache_from_source(str(source)))
     bytecode.parent.mkdir()
@@ -236,7 +235,9 @@ def test_qualifier_and_dependencies_use_current_source_not_stale_bytecode(
     assert stale_module.VALUE == "stale"  # type: ignore[attr-defined]
 
     current_module = ModuleType("current_fixture")
-    _DftMpSourceOnlyLoader("current_fixture", str(source)).exec_module(current_module)
+    qualify_capacity._DftMpSourceOnlyLoader("current_fixture", str(source)).exec_module(
+        current_module
+    )
     assert current_module.VALUE == "current"  # type: ignore[attr-defined]
 
 
@@ -627,6 +628,7 @@ def test_public_report_binds_the_clean_git_head(
     revision = "e" * 40
     monkeypatch.setattr(qualify_capacity, "_clean_git_sha", lambda _, **__: revision)
     monkeypatch.setattr(qualify_capacity, "_PRELOADED_LOCAL_MODULES", frozenset())
+    monkeypatch.setattr(qualify_capacity, "_DIRECT_SOURCE_EXECUTION", True)
 
     result = qualify_capacity.build_report(ROOT)
 
@@ -1583,6 +1585,7 @@ def test_report_rejects_a_helper_imported_outside_the_tool_checkout(
 ) -> None:
     monkeypatch.setattr(qualify_capacity, "Atom", Path)
     monkeypatch.setattr(qualify_capacity, "_PRELOADED_LOCAL_MODULES", frozenset())
+    monkeypatch.setattr(qualify_capacity, "_DIRECT_SOURCE_EXECUTION", True)
     with pytest.raises(RuntimeError, match="outside the tool checkout"):
         qualify_capacity.build_report(ROOT)
 
@@ -1666,30 +1669,23 @@ def test_report_rejects_rebound_planner_ao_helper(
         qualify_capacity._assert_local_imports()
 
 
-def test_report_rejects_dependencies_preloaded_before_qualifier_import() -> None:
-    environment = dict(os.environ)
-    environment["PYTHONPATH"] = str(ROOT / "python")
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import vibeqc_compiler.dft.plan; "
-                "from tools.dft_mp_v1 import qualify_capacity as q; "
-                "q.build_report(q.SOURCE_REPOSITORY)"
-            ),
-        ],
-        cwd=ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+def test_report_rejects_dependencies_preloaded_before_qualifier_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qualify_capacity, "_DIRECT_SOURCE_EXECUTION", True)
+    monkeypatch.setattr(
+        qualify_capacity,
+        "_PRELOADED_LOCAL_MODULES",
+        frozenset({"vibeqc_compiler.dft.plan"}),
     )
 
-    assert completed.returncode != 0
-    assert "requires a fresh interpreter; preloaded local modules" in completed.stderr
-    assert "vibeqc_compiler.dft.plan" in completed.stderr
+    with pytest.raises(RuntimeError, match="requires a fresh interpreter"):
+        qualify_capacity.build_report(ROOT)
+
+
+def test_imported_public_report_requires_direct_source_execution() -> None:
+    with pytest.raises(RuntimeError, match="require direct source CLI execution"):
+        qualify_capacity.build_report(ROOT)
 
 
 def test_report_reloads_basis_data_instead_of_reusing_a_stale_cache() -> None:

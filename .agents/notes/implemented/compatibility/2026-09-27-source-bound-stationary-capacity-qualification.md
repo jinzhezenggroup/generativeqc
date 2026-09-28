@@ -66,10 +66,13 @@ an explicit object-identity binding.
 The qualifier also rejects repository-local modules loaded before its own
 import, because their executed code cannot be reconstructed from a subsequently
 restored clean source file. Normal CLI use therefore requires a fresh process.
-The package entry additionally source-loads the qualifier and its repository
-dependencies without consulting or writing bytecode caches, then removes the
-narrow finder after imports complete. Ignored stale `.pyc` files therefore
-cannot supply the code used for capacity evidence.
+The directly executed qualifier source-loads its repository dependencies
+without consulting or writing bytecode caches, then removes the narrow finder
+after imports complete. The importable API refuses authoritative clean-HEAD
+reports; imported `_build_report(source_sha=...)` remains only a private,
+source-injected test seam. Ignored stale `.pyc` files therefore cannot supply
+code used for authoritative capacity evidence, and no package initializer is
+trusted to bootstrap its own bytecode validation.
 Each frozen selector is additionally resolved through the public MethodIR/KS
 path and must reproduce the audited native ABI ID, spin, semilocal coefficients,
 execution domain, native DFT eligibility, batch/energy registry eligibility, and
