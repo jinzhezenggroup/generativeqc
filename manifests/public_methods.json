@@ -156,5 +156,31 @@
       ],
       "supports_batch": true
     }
+  ],
+  "composite_methods": [
+    {
+      "name": "r2scan-3c",
+      "family": "density_functional",
+      "identifier": "R2SCAN-3c",
+      "spin": "unpolarized",
+      "properties": [
+        "energy"
+      ],
+      "supports_batch": true,
+      "aliases": [
+        "r2scan-3c-rks"
+      ]
+    },
+    {
+      "name": "r2scan-3c-uks",
+      "family": "density_functional",
+      "identifier": "R2SCAN-3c",
+      "spin": "polarized",
+      "properties": [
+        "energy"
+      ],
+      "supports_batch": true,
+      "aliases": []
+    }
   ]
 }

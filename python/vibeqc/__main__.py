@@ -59,6 +59,34 @@ def _public_method_rows() -> tuple[dict[str, object], ...]:
     return tuple(rows)
 
 
+def _automatic_libxc_method_rows() -> tuple[dict[str, object], ...]:
+    """Return automatic Libxc selectors admitted by the public resolver."""
+    from vibeqc_compiler.method import resolve_bulk_ks
+    from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+
+    rows = []
+    for name in sorted(AUTO_BULK_COMPONENTS):
+        for selector, spin, aliases in (
+            (f"libxc:{name}", "unpolarized", (f"libxc-rks:{name}",)),
+            (f"libxc-uks:{name}", "polarized", ()),
+        ):
+            try:
+                resolve_bulk_ks(name, spin=spin, backend="cpu")
+            except ValueError:
+                continue
+            rows.append(
+                {
+                    "name": selector,
+                    "family": "density_functional",
+                    "properties": ("energy",),
+                    "supports_batch": True,
+                    "aliases": aliases,
+                    "status": "available",
+                }
+            )
+    return tuple(rows)
+
+
 def parser() -> argparse.ArgumentParser:
     """Expose stable quick/full, diagnostic, and cluster installation commands."""
     root = argparse.ArgumentParser(prog="vibeqc")
@@ -68,6 +96,11 @@ def parser() -> argparse.ArgumentParser:
     )
     methods.add_argument(
         "--json", action="store_true", help="emit the catalog as machine-readable JSON"
+    )
+    methods.add_argument(
+        "--libxc",
+        action="store_true",
+        help="also list default-allow automatic Libxc semilocal selectors",
     )
     resources = commands.add_parser(
         "resources",
@@ -181,6 +214,8 @@ def main() -> int:
     try:
         if args.command == "methods":
             rows = _public_method_rows()
+            if args.libxc:
+                rows += _automatic_libxc_method_rows()
             if args.json:
                 print(json.dumps(rows, indent=2))
             else:

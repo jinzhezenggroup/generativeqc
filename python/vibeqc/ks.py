@@ -33,15 +33,47 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
-from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, functional
+from vibeqc_compiler.xc.automatic_semilocal import (
+    AUTOMATIC_SCF_DOMAIN,
+    automatic_functional_code,
+)
+from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, UnsupportedXC, functional
 
 SCF_DOMAIN = "semilocal-scaled-v1/pbe-spin-c2-1e-18"
 B3LYP_SCF_DOMAIN = "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18"
 WB97MV_SCF_DOMAIN = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
 SPLIT_HYBRID_SCF_DOMAIN = "libxc-7.0/split-global-hybrid-v1"
 _NATIVE_SCF_DOMAINS = frozenset(
-    (SCF_DOMAIN, B3LYP_SCF_DOMAIN, WB97MV_SCF_DOMAIN, SPLIT_HYBRID_SCF_DOMAIN)
+    (
+        SCF_DOMAIN,
+        B3LYP_SCF_DOMAIN,
+        WB97MV_SCF_DOMAIN,
+        SPLIT_HYBRID_SCF_DOMAIN,
+        AUTOMATIC_SCF_DOMAIN,
+    )
 )
+
+_AUTOMATIC_LIBXC_PREFIXES = (
+    ("libxc-uks:", "polarized"),
+    ("libxc-rks:", "unpolarized"),
+    ("libxc:", "unpolarized"),
+)
+
+
+def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None:
+    """Parse and structurally validate one public automatic Libxc selector."""
+    if not isinstance(method, str):
+        return None
+    lowered = method.lower()
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if not lowered.startswith(prefix):
+            continue
+        name = method[len(prefix) :].strip().upper()
+        if not name:
+            raise ValueError("Libxc selector requires a functional registration name")
+        automatic_functional_code(name)
+        return name, spin
+    return None
 
 
 class _NativeSemilocalFamily(IntEnum):
@@ -319,6 +351,24 @@ def _native_semilocal(method_ir: typing.Any) -> typing.Any:
     return _native_execution_plan(method_ir).semilocal.functional
 
 
+def _automatic_semilocal_name(method_ir: typing.Any) -> str | None:
+    """Return the sole default-allow automatic component in a pure semilocal IR."""
+    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 1:
+        return None
+    plan = _native_execution_plan(method_ir)
+    if plan.exchange or plan.nonlocal_correlation is not None or plan.post_scf:
+        return None
+    components = plan.semilocal.functional.components
+    if len(components) != 1 or components[0][1] != Fraction(1):
+        return None
+    name = components[0][0]
+    try:
+        automatic_functional_code(name)
+    except UnsupportedXC:
+        return None
+    return name
+
+
 def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     """Return the generated split-hybrid record for one exact canonical MethodIR."""
 
@@ -394,6 +444,9 @@ def _native_semilocal_family(method_ir: typing.Any) -> int:
     # admission, or generalize its exception to arbitrary post-SCF corrections.
     if _is_pbe_d4_composition(method_ir):
         return int(_NativeSemilocalFamily.PBE)
+    automatic_name = _automatic_semilocal_name(method_ir)
+    if automatic_name is not None:
+        return automatic_functional_code(automatic_name)
     plan = _native_execution_plan(method_ir)
     split = _split_hybrid_record(method_ir)
     if split is not None:
@@ -422,8 +475,9 @@ def ks_coefficients(method_ir: typing.Any) -> typing.Any:
         raise TypeError("KS coefficients require a resolved MethodIR")
     plan = _native_execution_plan(method_ir)
     components = dict(plan.semilocal.functional.components)
+    automatic_name = _automatic_semilocal_name(method_ir)
     split = _split_hybrid_record(method_ir)
-    if split is not None:
+    if automatic_name is not None or split is not None:
         exchange_scale = correlation_scale = Fraction(1)
     else:
         family = _curated_semilocal_family(plan)
@@ -547,6 +601,8 @@ def native_dft_carrier(method: typing.Any) -> str:
 
 def _scf_domain_for_ir(method_ir: typing.Any) -> str:
     """Select the native work domain from the resolved, possibly renamed IR."""
+    if _automatic_semilocal_name(method_ir) is not None:
+        return AUTOMATIC_SCF_DOMAIN
     code = _native_semilocal_family(method_ir)
     if code >= 0x10000:
         return SPLIT_HYBRID_SCF_DOMAIN
@@ -560,7 +616,11 @@ def scf_domain_for_method(method: typing.Any) -> str:
 
 
 def native_xc_functional_code(method: typing.Any) -> int:
-    """Return the lowerer code selected from the method's resolved semilocal IR."""
+    """Return the lowerer code selected from one public or automatic KS selector."""
+    automatic = parse_automatic_libxc_selector(method)
+    if automatic is not None:
+        name, _ = automatic
+        return automatic_functional_code(name)
     method_ir, _ = resolve_ks_method(method)
     return int(_native_semilocal_family(method_ir))
 
