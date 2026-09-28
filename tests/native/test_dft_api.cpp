@@ -360,13 +360,13 @@ void pbe0_composition_snapshot() {
   method.ks_options = nullptr;
   calculation = nullptr;
   require(vibeqc_calculation_prepare(fixture.context, fixture.system, &method, &calculation) ==
-              VIBEQC_STATUS_SUCCESS && calculation != nullptr,
+                  VIBEQC_STATUS_SUCCESS &&
+              calculation != nullptr,
           "plain PBE carrier preparation failed without a semantic plan");
-  result = {sizeof(vibeqc_result_descriptor), VIBEQC_ABI_VERSION, 0.0, nullptr, 0, 0,
-            0.0, 0.0, 0, VIBEQC_BACKEND_CPU_REFERENCE};
+  result = {sizeof(vibeqc_result_descriptor), VIBEQC_ABI_VERSION, 0.0, nullptr, 0, 0, 0.0, 0.0, 0,
+            VIBEQC_BACKEND_CPU_REFERENCE};
   require(vibeqc_calculation_execute(calculation, &result) == VIBEQC_STATUS_SUCCESS &&
-              result.converged &&
-              std::abs(result.energy - (-1.1520643753396715)) < 2e-12,
+              result.converged && std::abs(result.energy - (-1.1520643753396715)) < 2e-12,
           "plain PBE carrier inferred a hybrid composition without a semantic plan");
   vibeqc_calculation_destroy(calculation);
   calculation = nullptr;
