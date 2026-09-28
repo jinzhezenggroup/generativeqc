@@ -151,7 +151,7 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - The source-span hashes derive from exact source text rather than interpreter
   serialization; a regression rejects any return to `ast.dump()` fingerprints,
   and repository CI covers Python 3.11 in addition to local Python 3.13.
-- `python -m tools.dft_mp_v1.qualify_capacity` emits all frozen required rows
+- `python tools/dft_mp_v1/qualify_capacity.py` emits all frozen required rows
   without loading a native library, initializing CUDA, or compiling science.
 
 ## Consequences
