@@ -190,6 +190,9 @@ STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
 STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256 = (
     "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
 )
+STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
+    "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+)
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
 )
@@ -528,6 +531,17 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         or page_execution_calls[0].lineno <= host_gates[0].end_lineno
     ):
         raise RuntimeError("stationary CUDA primitive descriptor page order changed")
+    submit_pages = [
+        node
+        for node in ast.walk(owner)
+        if isinstance(node, ast.FunctionDef) and node.name == "submit_page"
+    ]
+    if len(submit_pages) != 1:
+        raise RuntimeError("stationary CUDA submit-page owner is ambiguous")
+    submit_page_digest = _source_node_sha256(source, submit_pages[0])
+    if submit_page_digest != STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA submit-page contract changed")
+    page_contract["submit_page_sha256"] = submit_page_digest
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"

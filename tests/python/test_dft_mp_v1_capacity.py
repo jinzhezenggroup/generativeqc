@@ -219,6 +219,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "executor_sha256": (
             "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
         ),
+        "submit_page_sha256": (
+            "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+        ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
         "(1 + int(has_exchange)) * primitive_sum ** 4 + "
@@ -666,6 +669,20 @@ def test_primitive_page_gate_order_fails_closed_when_execution_moves(
     target.write_text(moved, encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="primitive descriptor page order changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "sources.integral_page("
+    assert source.count(old) == 2
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(source.replace(old, "sources.integral(", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="submit-page contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
