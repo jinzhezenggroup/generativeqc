@@ -48,12 +48,14 @@ sys.path.insert(0, source_python)
 import numpy as np
 from vibeqc import Atom
 from vibeqc import _generated_methods as generated_methods
+from vibeqc._model_resolution import snapshot_basis
 from vibeqc._stationary_cuda import (
     COMPONENT_LABELS,
     complete_rks_cuda_gradient_diagnostic,
 )
+from vibeqc.basis import BasisSet
 from vibeqc.basis_capabilities import resolved_basis_metadata
-from vibeqc.calculator import _basis_pack, _named_basis_record, _named_basis_shells
+from vibeqc.calculator import _basis_pack, _named_basis_record
 from vibeqc.ks import _native_semilocal_family, resolve_ks_method, resolve_ks_options
 from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from vibeqc_compiler.dft.plan import plan_tiles
@@ -75,6 +77,8 @@ from vibeqc_compiler.method.stationary_gradient import (
 _LOCAL_HELPERS = {
     "Atom": Atom,
     "generated_methods": generated_methods,
+    "snapshot_basis": snapshot_basis,
+    "BasisSet": BasisSet,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
     "resolved_basis_metadata": resolved_basis_metadata,
     "_native_semilocal_family": _native_semilocal_family,
@@ -82,7 +86,6 @@ _LOCAL_HELPERS = {
     "resolve_ks_options": resolve_ks_options,
     "_basis_pack": _basis_pack,
     "_named_basis_record": _named_basis_record,
-    "_named_basis_shells": _named_basis_shells,
     "GridSpec": GridSpec,
     "MolecularGrid": MolecularGrid,
     "plan_tiles": plan_tiles,
@@ -141,6 +144,18 @@ AO_PACK_BRIDGE_CONTRACT_SHA256 = (
 )
 NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256 = (
     "c08f40375765a126782325dd4d03ded0ea9bf3caa25f23953a8a5cdc5c75c01b"
+)
+BASIS_SNAPSHOT_CONTRACT_SHA256 = (
+    "4dea9a2041897bf843012c01f64c580b6b8696f444611a54c0d161141f1894fd"
+)
+BASIS_SHELL_EXPANSION_CONTRACT_SHA256 = (
+    "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
+)
+CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256 = (
+    "af7bd2da7d571fb6d92dee7f984bf8de95f32b263c8b75fe69555772d60a44b6"
+)
+NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256 = (
+    "61424398d9b4aaeb2047e715f3edcc3ccd96cc1818e6a5b8b4e389946b1600f4"
 )
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
@@ -857,10 +872,74 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
         raise RuntimeError("NativeAO numeric capacity definition changed")
     if constructor_digest != NATIVE_AO_CONSTRUCTOR_CONTRACT_SHA256:
         raise RuntimeError("NativeAO constructor contract changed")
+
+    def function_digest(
+        relative: str,
+        function_name: str,
+        expected: str,
+        *,
+        class_name: str | None = None,
+    ) -> str:
+        owner_source = (repository / relative).read_text(encoding="utf-8")
+        owner_tree = ast.parse(owner_source)
+        body: list[ast.stmt] = owner_tree.body
+        if class_name is not None:
+            owners = [
+                node
+                for node in owner_tree.body
+                if isinstance(node, ast.ClassDef) and node.name == class_name
+            ]
+            if len(owners) != 1:
+                raise RuntimeError(f"{class_name} basis owner is missing or ambiguous")
+            body = owners[0].body
+        functions = [
+            node
+            for node in body
+            if isinstance(node, ast.FunctionDef) and node.name == function_name
+        ]
+        if len(functions) != 1:
+            raise RuntimeError(
+                f"{function_name} basis lowering is missing or ambiguous"
+            )
+        digest = _source_node_sha256(owner_source, functions[0])
+        if digest != expected:
+            raise RuntimeError(f"{function_name} basis lowering contract changed")
+        return digest
+
+    snapshot_digest = function_digest(
+        "python/vibeqc/_model_resolution.py",
+        "snapshot_basis",
+        BASIS_SNAPSHOT_CONTRACT_SHA256,
+    )
+    expansion_digest = function_digest(
+        "python/vibeqc/basis.py",
+        "shells_for",
+        BASIS_SHELL_EXPANSION_CONTRACT_SHA256,
+        class_name="BasisSet",
+    )
+    shell_forwarding_digest = function_digest(
+        "python/vibeqc/calculator.py",
+        "_shells_for_atoms",
+        CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256,
+        class_name="Calculator",
+    )
+    native_system_digest = function_digest(
+        "python/vibeqc/calculator.py",
+        "_create_native_system",
+        NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256,
+        class_name="Calculator",
+    )
     return {
         "packed_capacity_definition": packed[0],
         "numeric_capacity_definition": numeric[0],
         "native_ao_constructor_contract_sha256": constructor_digest,
+        "basis_snapshot_contract_sha256": snapshot_digest,
+        "basis_shell_expansion_contract_sha256": expansion_digest,
+        "calculator_shell_forwarding_contract_sha256": shell_forwarding_digest,
+        "native_system_basis_forwarding_contract_sha256": native_system_digest,
+        "production_shell_expansion": (
+            "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
+        ),
     }
 
 
@@ -945,7 +1024,12 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
 def _basis_shape(
     atoms: tuple[Atom, ...], charge: int, multiplicity: int
 ) -> tuple[dict[str, Any], Any]:
-    shells = _named_basis_shells("def2-svp", atoms)
+    basis = snapshot_basis("def2-svp", "spherical")
+    if not isinstance(basis, BasisSet) or basis.representation != "spherical":
+        raise RuntimeError(
+            "production basis snapshot did not retain spherical def2-SVP"
+        )
+    shells = basis.shells_for(atoms)
     if any(
         shell.angular_momentum not in SPARSE_SPHERICAL_COMPONENT_TERMS
         for shell in shells

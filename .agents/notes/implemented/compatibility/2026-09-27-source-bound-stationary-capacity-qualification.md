@@ -21,7 +21,10 @@ bounds from frozen inputs, and accept copied formulas only after verifying their
 exact production definitions and gate predicates.
 
 Bind the spherical AO term counts and AO count through the complete native
-packing chain. Bind grid point counts through the source-only grid constructor,
+packing chain. Derive frozen shells through the source-only production
+`snapshot_basis(...).shells_for(...)` path and bind the Calculator shell/native
+system forwarding methods that connect it to execution. Bind grid point counts
+through the source-only grid constructor,
 public and native GridSpec ABI lowering, generated quadrature layout, native
 CUDA materializer, backend selector, and native point-count publication. Bind
 the complete public semilocal capability predicate/promotion, CUDA force method,

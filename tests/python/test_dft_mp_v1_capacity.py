@@ -100,6 +100,21 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["basis"]["native_ao_constructor_contract_sha256"] == (
         "c08f40375765a126782325dd4d03ded0ea9bf3caa25f23953a8a5cdc5c75c01b"
     )
+    assert result["basis"]["basis_snapshot_contract_sha256"] == (
+        "4dea9a2041897bf843012c01f64c580b6b8696f444611a54c0d161141f1894fd"
+    )
+    assert result["basis"]["basis_shell_expansion_contract_sha256"] == (
+        "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
+    )
+    assert result["basis"]["calculator_shell_forwarding_contract_sha256"] == (
+        "af7bd2da7d571fb6d92dee7f984bf8de95f32b263c8b75fe69555772d60a44b6"
+    )
+    assert result["basis"]["native_system_basis_forwarding_contract_sha256"] == (
+        "61424398d9b4aaeb2047e715f3edcc3ccd96cc1818e6a5b8b4e389946b1600f4"
+    )
+    assert result["basis"]["production_shell_expansion"] == (
+        "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
+    )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
         "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
     )
@@ -974,6 +989,60 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
 
     with pytest.raises(RuntimeError, match="source-bytes definition"):
         qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("relative", "old", "new", "message"),
+    [
+        (
+            "python/vibeqc/_model_resolution.py",
+            'return _named_basis_record(basis, representation or "cartesian")',
+            'return _named_basis_record(basis, representation or "spherical")',
+            "snapshot_basis basis lowering contract changed",
+        ),
+        (
+            "python/vibeqc/basis.py",
+            "for row in shell.coefficients:",
+            "for row in shell.coefficients[:1]:",
+            "shells_for basis lowering contract changed",
+        ),
+        (
+            "python/vibeqc/calculator.py",
+            "return (\n            selected_basis.shells_for(atoms)",
+            "return (\n            tuple(selected_basis.shells_for(atoms))",
+            "_shells_for_atoms basis lowering contract changed",
+        ),
+        (
+            "python/vibeqc/calculator.py",
+            "shells = self._shells_for_atoms(atoms, basis)",
+            "shells = tuple(self._shells_for_atoms(atoms, basis))",
+            "_create_native_system basis lowering contract changed",
+        ),
+    ],
+)
+def test_basis_counts_fail_closed_when_production_lowering_moves(
+    tmp_path: Path,
+    relative: str,
+    old: str,
+    new: str,
+    message: str,
+) -> None:
+    copy_contract_files(
+        tmp_path,
+        (
+            "python/vibeqc_compiler/dft/ao.py",
+            "python/vibeqc/_model_resolution.py",
+            "python/vibeqc/basis.py",
+            "python/vibeqc/calculator.py",
+        ),
+    )
+    target = tmp_path / relative
+    source = target.read_text(encoding="utf-8")
+    assert old in source
+    target.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._basis_layout_contract(tmp_path)
 
 
 def test_grid_memory_fails_closed_when_production_plan_inputs_move(
