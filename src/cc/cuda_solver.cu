@@ -93,6 +93,7 @@ struct Owner {
   DeviceScope scope;
   int device{};
   cudaStream_t stream{};
+  cudaEvent_t trial_begin{}, trial_end{};
   unsigned char* base{};
   Layout layout;
   generated::CudaState state;
@@ -155,6 +156,10 @@ struct Owner {
       throw std::length_error("RCCSD CUDA resident state exceeds correlation memory budget");
     try {
       cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+      if (options.diis_size) {
+        cuda_check(cudaEventCreate(&trial_begin));
+        cuda_check(cudaEventCreate(&trial_end));
+      }
       cuda_check(cudaMalloc(reinterpret_cast<void**>(&base), layout.total));
 
       std::array<double**, 14> fields = {
@@ -204,6 +209,10 @@ struct Owner {
 
   void cleanup() noexcept {
     if (stream) cudaStreamSynchronize(stream);
+    if (trial_begin) cudaEventDestroy(trial_begin);
+    if (trial_end) cudaEventDestroy(trial_end);
+    trial_begin = nullptr;
+    trial_end = nullptr;
     if (base) cudaFree(base);
     if (stream) cudaStreamDestroy(stream);
     base = nullptr;
@@ -229,7 +238,7 @@ struct Owner {
         cudaMemcpyAsync(host.data(), out.energy, sizeof(double), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaMemcpyAsync(host.data() + 1, scalars, 2 * sizeof(double), cudaMemcpyDeviceToHost,
                                stream));
-    cuda_check(cudaMemcpyAsync(&error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaMemcpyAsync(&host_error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaStreamSynchronize(stream));
     diagnostic.scalar_d2h_bytes += 3 * sizeof(double) + sizeof(int);
     ++diagnostic.synchronizations;
@@ -269,7 +278,6 @@ struct Owner {
 void run_diis(Owner& s, const SolverOptions& options,
               const generated::DeviceIterationOutputs& trial) {
   if (!options.diis_size) return;
-  const auto diis_started = std::chrono::steady_clock::now();
   int count = static_cast<int>(s.history);
   if (count == static_cast<int>(options.diis_size)) {
     vibeqc::cc::history_shift<<<
@@ -350,8 +358,6 @@ void run_diis(Owner& s, const SolverOptions& options,
   }
   s.history = static_cast<unsigned>(count);
   cuda_check(cudaGetLastError());
-  s.diagnostic.diis_seconds +=
-      std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
 }
 
 }  // namespace
@@ -411,12 +417,27 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
           std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
       ++owner.diagnostic.update_calls;
       if (options.diis_size) {
-        const auto trial_started = std::chrono::steady_clock::now();
+        const auto trial_diis_started = std::chrono::steady_clock::now();
+        cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
         const auto trial = generated::run_iteration_cuda(owner.state);
-        owner.diagnostic.iteration_seconds +=
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
+        cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
         ++owner.diagnostic.iteration_graph_calls;
         run_diis(owner, options, trial);
+        // Every successful DIIS path, including the first history push, has
+        // already drained this stream past both events. Do not add a timing
+        // fence: the trial's completed device interval belongs to iteration,
+        // not to DIIS merely because DIIS performs the existing host drain.
+        const double trial_diis_seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_diis_started)
+                .count();
+        float trial_ms = 0.0F;
+        cuda_check(cudaEventElapsedTime(&trial_ms, owner.trial_begin, owner.trial_end));
+        // The remainder includes host enqueue/history/control overhead. Clamp
+        // across clock domains so neither phase is negative or double counted.
+        const double trial_seconds =
+            std::clamp(static_cast<double>(trial_ms) * 1e-3, 0.0, trial_diis_seconds);
+        owner.diagnostic.iteration_seconds += trial_seconds;
+        owner.diagnostic.diis_seconds += trial_diis_seconds - trial_seconds;
       }
       previous = status[0];
     } catch (const std::runtime_error& error) {
