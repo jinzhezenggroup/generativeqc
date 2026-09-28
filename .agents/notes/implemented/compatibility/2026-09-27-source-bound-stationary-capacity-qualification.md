@@ -40,7 +40,8 @@ present and valid.
 The writing CLI may regenerate one untracked `.json` report inside the checkout
 and exclude exactly that path from the clean-tree check. The public
 `build_report()` API has no exemption, and the CLI refuses to replace a tracked
-file. No other dirty path is ignored.
+file or any multiply linked output. No other dirty path is ignored, and an
+output alias cannot truncate consumed AOT evidence through a shared inode.
 
 Imported planner, basis, grid, and AOT helpers retain their import-time source
 path and content identity. A long-lived process fails closed if the same

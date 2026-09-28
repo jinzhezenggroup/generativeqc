@@ -656,6 +656,28 @@ def test_clean_git_sha_ignores_only_the_requested_report_output(
         qualify_capacity._clean_git_sha(repository, ignored_path=output)
 
 
+def test_report_output_rejects_hard_link_to_aot_evidence(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    aot_directory = repository / "aot"
+    aot_directory.mkdir()
+    evidence = aot_directory / "pbe_rks_spd.json"
+    evidence.write_text('{"evidence": true}\n', encoding="utf-8")
+    output_directory = tmp_path / "reports"
+    output_directory.mkdir()
+    output = output_directory / "capacity.json"
+    os.link(evidence, output)
+
+    with pytest.raises(ValueError, match="must not be a hard link"):
+        qualify_capacity._report_output_exemption(
+            repository,
+            output,
+            aot_directory=aot_directory,
+        )
+
+    assert evidence.read_text(encoding="utf-8") == '{"evidence": true}\n'
+
+
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     tmp_path: Path,
 ) -> None:

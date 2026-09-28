@@ -1927,6 +1927,8 @@ def _report_output_exemption(
         Path(aot_directory).resolve()
     ):
         raise ValueError("capacity report output must not overlap AOT evidence")
+    if output_path.exists() and output_path.stat().st_nlink != 1:
+        raise ValueError("capacity report output must not be a hard link")
     if not output_path.is_relative_to(repository):
         return None
     if output_path.suffix.lower() != ".json":
