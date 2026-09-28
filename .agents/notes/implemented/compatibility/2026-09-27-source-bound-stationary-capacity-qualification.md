@@ -2,6 +2,7 @@
 
 Status: implemented
 Date: 2026-09-27
+Updated: 2026-09-28
 
 ## Problem
 
@@ -25,8 +26,11 @@ public and native GridSpec ABI lowering, generated quadrature layout, native
 CUDA materializer, backend selector, and native point-count publication. Bind
 the complete public semilocal capability predicate/promotion, CUDA force method,
 and stationary packaged-AOT CMake loop. Compute admission for each method/spin
-row with its own memory plan, and verify all seven production gates in source
-order. Python owner functions use hashes of their exact source spans. Do not
+row with its own memory plan, and verify the complete production gate order.
+The 16M primitive budget is page-local: cumulative logical records remain an
+exact uint64 coverage metric, while admission checks the maximum single
+descriptor and the bounded bulk/scalar page producers. Python owner functions
+use hashes of their exact source spans. Do not
 hash `ast.dump()` output: its serialization
 changes across supported Python versions even when the source does not. Every
 report records the clean Git HEAD, frozen input/basis/grid identities, owner
@@ -75,7 +79,8 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - Row admission uses that row's method/spin memory plan; a conservative
   case-level maximum cannot be propagated to every row.
 - The reported first blocker follows the verified complete production gate
-  order, including shape, topology, work, device, and host gates.
+  order, including shape, topology, logical-metric range, grid work, memory, and
+  page-local descriptor work.
 - AO and grid counts must agree with the verified native production formulas;
   source-only construction is not accepted as an independent proxy.
 - Grid memory uses the verified production derivative-order and `plan_tiles`
@@ -84,14 +89,16 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - The qualifier does not change caps, tolerances, frozen cases, or losing rows.
 - A report SHA identifies a clean source revision; only the writing CLI's
   validated untracked JSON output may be excluded from the cleanliness check.
-- Changes such as the proposed whole-force to page-local primitive-work contract
-  require recomputing the matrix from the merged source, not predicting results.
+- Page-local primitive admission is source-bound to the merged #1486 bulk,
+  scalar, flush, executor, and endpoint-wiring contracts. Cumulative logical
+  work is evidence, not a whole-force cap.
 
 ## Evidence
 
 - `tests/python/test_dft_mp_v1_capacity.py` mutation-tests the production
   definitions, public capability route, packed AO/count chain, native grid count
-  chain, clean-source binding, and output-path exception.
+  chain, page-local primitive producers, clean-source binding, and output-path
+  exception.
 - The source-span hashes derive from exact source text rather than interpreter
   serialization; a regression rejects any return to `ast.dump()` fingerprints,
   and repository CI covers Python 3.11 in addition to local Python 3.13.
@@ -109,7 +116,7 @@ and report together.
 
 - production exposes one public, side-effect-free estimator for every admission
   resource;
-- the page-local primitive admission proposed in #1486 lands;
+- the page-local descriptor or bounded task-executor contract changes;
 - the packed AO representation or stationary layout owner changes; or
 - DFT-MP-v1 changes its frozen basis, grid, products, or required cases.
 

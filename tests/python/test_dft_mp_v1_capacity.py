@@ -127,7 +127,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     }
     assert result["public_route"] == {
         "semilocal_force_predicate_sha256": (
-            "069f7414cb61d55c543d5829b5d793aed9b882318fbdeb157f4103c486ea0e71"
+            "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
         ),
         "force_capability_promotion_sha256": (
             "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
@@ -155,6 +155,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "ao_count_spherical": 192,
         "shell_count": 96,
         "basis_primitive_count": 176,
+        "ao_primitive_count_peak": 5,
         "component_primitive_sum": 328,
         "grid_points": 1_990_656,
     }
@@ -184,9 +185,29 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     }
     assert result["admission_limits"]["basis_primitive_count"] == 4096
     assert result["admission_limits"]["primitive_records"] == 16_000_000
-    assert result["admission_limits"]["primitive_records_scope"] == (
-        "whole_force_cumulative"
+    assert result["admission_limits"]["primitive_records_scope"] == "per_native_page"
+    assert result["admission_limits"]["primitive_logical_metric_limit"] == (2**64 - 1)
+    assert result["admission_limits"]["primitive_page_budget_bindings"] == [
+        "max_primitive_records",
+        "max_primitive_records",
+    ]
+    assert result["admission_limits"]["fixed_task_capacity_definition"] == (
+        "min(integral_terms, primitive_tile)"
     )
+    assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+        "flush_sha256": (
+            "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
+        ),
+        "bulk_sha256": (
+            "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
+        ),
+        "scalar_sha256": (
+            "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
+        ),
+        "executor_sha256": (
+            "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
+        ),
+    }
     assert result["admission_limits"]["primitive_records_definition"] == (
         "(1 + int(has_exchange)) * primitive_sum ** 4 + "
         "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
@@ -223,14 +244,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["gate_order"] == [
         "small_domain_atom_ao_cap",
         "primitive_topology_cap",
-        "primitive_work_budget",
+        "primitive_logical_metric_range",
         "grid_point_work_budget",
         "grid_pair_work_budget",
         "additional_device_budget",
         "additional_host_budget",
+        "primitive_descriptor_page_budget",
     ]
     assert result["admission_limits"]["gate_predicates"] == {
-        "primitive_records": "records > max_primitive_records",
+        "primitive_metric_range": "records > np.iinfo(np.uint64).max",
         "grid_points": "len(state.grid.points) > max_grid_points",
         "grid_pair_visits": "pair_visits > max_grid_pair_visits",
         "additional_device": "available <= 0",
@@ -245,6 +267,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert cases["water8"]["requirements"]["primitive_records"] == 11_577_114_516
     assert cases["water16"]["requirements"]["primitive_records"] == 185_210_590_824
     assert cases["water32"]["requirements"]["primitive_records"] == 2_963_193_862_608
+    assert all(
+        case["requirements"]["primitive_descriptor_peak_records"] == 625
+        for case in cases.values()
+    )
     assert cases["caffeine"]["requirements"]["grid_pair_visits"] == 1_098_842_388
     assert cases["ace_glygly_nme"]["requirements"]["grid_pair_visits"] == 1_401_753_925
 
@@ -265,12 +291,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "ao_count"
     ]
     assert cases["benzene"]["admission"]["first_blocker"]["gate"] == (
-        "primitive_work_budget"
+        "grid_pair_work_budget"
     )
-    assert cases["water_dimer"]["admission"]["first_blocker"]["gate"] == (
-        "primitive_work_budget"
-    )
-    for sentinel in ("water", "oh", "o2"):
+    for sentinel in ("water", "oh", "o2", "water_dimer"):
         assert cases[sentinel]["admission"]["outcome"] == (
             "passes_static_stationary_caps"
         )
@@ -281,7 +304,6 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     water32_gates = [item["gate"] for item in cases["water32"]["admission"]["failures"]]
     assert water32_gates == [
         "small_domain_atom_ao_cap",
-        "primitive_work_budget",
         "grid_point_work_budget",
         "grid_pair_work_budget",
     ]
@@ -294,6 +316,12 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
     rows = result["rows"]
 
     assert len(rows) == 22
+    assert result["summary"] == {
+        "required_semilocal_fp64_force_rows": 22,
+        "statically_blocked_rows": 12,
+        "rows_passing_static_stationary_caps": 10,
+        "scientific_qualification": "NOT_RUN",
+    }
     assert {row["method"] for row in rows} == {"lda", "pbe", "r2scan"}
     assert {row["product"] for row in rows} == {"energy+analytic_forces"}
     assert all(row["required"] is True for row in rows)
@@ -349,7 +377,7 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
         353_705_216
     )
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_105_088
+        192_187_488
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -544,7 +572,7 @@ def test_clean_git_sha_ignores_only_the_requested_report_output(
         qualify_capacity._clean_git_sha(repository, ignored_path=output)
 
 
-def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
+def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
@@ -552,12 +580,33 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_moves(
         "    if records > max_primitive_records:\n"
         '        raise ValueError("primitive work budget exceeded")\n'
     )
-    assert whole_force_gate in source
+    assert whole_force_gate not in source
+    marker = "    pair_visits = (1 + 2 * len(state.grid.points))"
+    assert marker in source
     target = tmp_path / "python/vibeqc/_stationary_cuda.py"
     target.parent.mkdir(parents=True)
-    target.write_text(source.replace(whole_force_gate, ""), encoding="utf-8")
+    target.write_text(
+        source.replace(marker, whole_force_gate + marker, 1), encoding="utf-8"
+    )
 
-    with pytest.raises(RuntimeError, match="whole-force cumulative"):
+    with pytest.raises(RuntimeError, match="restored a whole-force primitive cap"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    old = "if np.any(primitive_work > self.page_work_budget):"
+    assert old in source
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        source.replace(old, "if np.any(primitive_work >= self.page_work_budget):", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="bulk page contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
@@ -1109,6 +1158,7 @@ def test_device_budget_requires_a_positive_remainder() -> None:
         "small_domain": {"atom_count": 32, "ao_count": 128},
         "basis_primitive_count": 4096,
         "primitive_records": 16_000_000,
+        "primitive_logical_metric_limit": 2**64 - 1,
         "grid_points": 1_000_000,
         "grid_pair_visits": 100_000_000,
         "additional_device_bytes": 512,
@@ -1120,7 +1170,12 @@ def test_device_budget_requires_a_positive_remainder() -> None:
             "ao_count_spherical": 1,
             "basis_primitive_count": 1,
         },
-        {"primitive_records": 1, "grid_points": 1, "grid_pair_visits": 1},
+        {
+            "primitive_records": 1,
+            "primitive_descriptor_peak_records": 1,
+            "grid_points": 1,
+            "grid_pair_visits": 1,
+        },
         {
             "additional_device_peak_bound": 512,
             "additional_host_numeric_bound": 1,
@@ -1129,3 +1184,69 @@ def test_device_budget_requires_a_positive_remainder() -> None:
     )
 
     assert [item["gate"] for item in failures] == ["additional_device_budget"]
+
+
+def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> None:
+    limits = {
+        "small_domain": {"atom_count": 32, "ao_count": 128},
+        "basis_primitive_count": 4096,
+        "primitive_records": 16_000_000,
+        "primitive_logical_metric_limit": 2**64 - 1,
+        "grid_points": 1_000_000,
+        "grid_pair_visits": 100_000_000,
+        "additional_device_bytes": 512,
+        "additional_host_bytes": 256,
+    }
+    failures = qualify_capacity._case_failures(
+        {
+            "atom_count": 1,
+            "ao_count_spherical": 1,
+            "basis_primitive_count": 1,
+        },
+        {
+            "primitive_records": 16_000_001,
+            "primitive_descriptor_peak_records": 16_000_001,
+            "grid_points": 1,
+            "grid_pair_visits": 1,
+        },
+        {
+            "additional_device_peak_bound": 1,
+            "additional_host_numeric_bound": 1,
+        },
+        limits,
+    )
+
+    assert [item["gate"] for item in failures] == ["primitive_descriptor_page_budget"]
+
+
+def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
+    limits = {
+        "small_domain": {"atom_count": 32, "ao_count": 128},
+        "basis_primitive_count": 4096,
+        "primitive_records": 16_000_000,
+        "primitive_logical_metric_limit": 2**64 - 1,
+        "grid_points": 1_000_000,
+        "grid_pair_visits": 100_000_000,
+        "additional_device_bytes": 512,
+        "additional_host_bytes": 256,
+    }
+    failures = qualify_capacity._case_failures(
+        {
+            "atom_count": 1,
+            "ao_count_spherical": 1,
+            "basis_primitive_count": 1,
+        },
+        {
+            "primitive_records": 2**64,
+            "primitive_descriptor_peak_records": 1,
+            "grid_points": 1,
+            "grid_pair_visits": 1,
+        },
+        {
+            "additional_device_peak_bound": 1,
+            "additional_host_numeric_bound": 1,
+        },
+        limits,
+    )
+
+    assert [item["gate"] for item in failures] == ["primitive_logical_metric_range"]

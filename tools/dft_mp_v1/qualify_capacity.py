@@ -48,7 +48,10 @@ sys.path.insert(0, source_python)
 import numpy as np
 from vibeqc import Atom
 from vibeqc import _generated_methods as generated_methods
-from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
+from vibeqc._stationary_cuda import (
+    COMPONENT_LABELS,
+    complete_rks_cuda_gradient_diagnostic,
+)
 from vibeqc.basis_capabilities import resolved_basis_metadata
 from vibeqc.calculator import _basis_pack, _named_basis_record, _named_basis_shells
 from vibeqc.ks import _native_semilocal_family, resolve_ks_method, resolve_ks_options
@@ -137,7 +140,7 @@ NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "23785e9e006f9a100b4fecc690e6936a348581beba073507c154b185564832c6"
 )
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "069f7414cb61d55c543d5829b5d793aed9b882318fbdeb157f4103c486ea0e71"
+    "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
@@ -169,6 +172,18 @@ NATIVE_GRID_ABI_CONTRACT_SHA256 = (
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
     "c35064b2f437a6fb5bbce301b90e92c806c718b469d9ab539d8ae83237b8cd49"
 )
+STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
+    "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
+)
+STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
+    "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
+)
+STATIONARY_PAGE_SCALAR_CONTRACT_SHA256 = (
+    "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
+)
+STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256 = (
+    "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -194,14 +209,15 @@ HOST_BOUND_DEFINITION = (
     "grid_plan.host_bytes + 8 * (34 * primitive_tile + "
     "4 * plan.spin_blocks * n * n + 120 * na + "
     "12 * (len(source_names) - len(_SOURCE_NAMES)) * na + "
-    "26 * integral_terms + 3 * tile_points + 2 * basis.nprimitive + "
+    "26 * integral_terms + len(COMPONENT_LABELS) ** 4 + "
+    "3 * len(COMPONENT_LABELS) ** 2 + 3 * tile_points + 2 * basis.nprimitive + "
     "4 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
 )
 AVAILABLE_DEVICE_BYTES_DEFINITION = (
     "max_device_bytes - grid_plan.peak_bytes - source_bytes"
 )
 GATE_PREDICATES = {
-    "primitive_records": "records > max_primitive_records",
+    "primitive_metric_range": "records > np.iinfo(np.uint64).max",
     "grid_points": "len(state.grid.points) > max_grid_points",
     "grid_pair_visits": "pair_visits > max_grid_pair_visits",
     "additional_device": "available <= 0",
@@ -321,6 +337,45 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if len(functions) != 1:
         raise RuntimeError("stationary CUDA admission owner is missing or ambiguous")
     owner = functions[0]
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    page_methods = {
+        "flush": ("_CudaSources", "flush", STATIONARY_PAGE_FLUSH_CONTRACT_SHA256),
+        "bulk": (
+            "_CudaSources",
+            "integral_page",
+            STATIONARY_PAGE_BULK_CONTRACT_SHA256,
+        ),
+        "scalar": (
+            "_CudaSources",
+            "_append_task",
+            STATIONARY_PAGE_SCALAR_CONTRACT_SHA256,
+        ),
+        "executor": (
+            "_BoundedStationaryTaskExecutor",
+            "execute_pages",
+            STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256,
+        ),
+    }
+    page_contract = {}
+    for label, (class_name, method_name, expected_digest) in page_methods.items():
+        class_node = classes.get(class_name)
+        methods = (
+            []
+            if class_node is None
+            else [
+                node
+                for node in class_node.body
+                if isinstance(node, ast.FunctionDef) and node.name == method_name
+            ]
+        )
+        if len(methods) != 1:
+            raise RuntimeError(f"stationary CUDA {label} page owner is ambiguous")
+        digest = _source_node_sha256(source, methods[0])
+        if digest != expected_digest:
+            raise RuntimeError(f"stationary CUDA {label} page contract changed")
+        page_contract[f"{label}_sha256"] = digest
+    if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
+        raise RuntimeError("stationary CUDA component-label capacity changed")
     definition_nodes = {
         name: [
             node
@@ -383,7 +438,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ast.unparse(node.test) for node in owner.body if isinstance(node, ast.If)
     ]
     gate_labels = {
-        "primitive_records": "whole-force cumulative primitive-record",
+        "primitive_metric_range": "logical primitive metric range",
         "grid_points": "grid-point",
         "grid_pair_visits": "grid-pair-visits",
         "additional_device": "positive additional-device remainder",
@@ -392,6 +447,38 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     for name, predicate in GATE_PREDICATES.items():
         if direct_if_tests.count(predicate) != 1:
             raise RuntimeError(f"stationary CUDA {gate_labels[name]} predicate changed")
+    if direct_if_tests.count("records > max_primitive_records") != 0:
+        raise RuntimeError("stationary CUDA restored a whole-force primitive cap")
+    page_budget_bindings = [
+        ast.unparse(keyword.value)
+        for node in ast.walk(owner)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "page_work_budget"
+    ]
+    if page_budget_bindings.count("max_primitive_records") != 2:
+        raise RuntimeError("stationary CUDA page-work budget wiring changed")
+    executor_definitions = {
+        name: [
+            ast.unparse(node.value)
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name
+        ]
+        for name in ("fixed_task_capacity", "task_executor")
+    }
+    expected_executor_definitions = {
+        "fixed_task_capacity": "min(integral_terms, primitive_tile)",
+        "task_executor": (
+            "_BoundedStationaryTaskExecutor(fixed_capacity=fixed_task_capacity, "
+            "resident_capacity=primitive_tile, page_capacity=primitive_tile)"
+        ),
+    }
+    for name, expected in expected_executor_definitions.items():
+        if executor_definitions[name] != [expected]:
+            raise RuntimeError(f"stationary CUDA {name} definition changed")
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"
@@ -407,7 +494,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     messages = (
         "CUDA diagnostic small-domain atom/AO cap exceeded",
         "CUDA diagnostic primitive-topology cap exceeded",
-        "primitive work budget exceeded",
+        "primitive work count exceeds uint64 metric range",
         "grid point work budget exceeded",
         "grid work budget exceeded",
         "stationary additional-device budget exceeded",
@@ -427,9 +514,16 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         },
         "basis_primitive_count": int(primitives.group("primitives")),
         "primitive_records": default("max_primitive_records"),
-        "primitive_records_scope": "whole_force_cumulative",
+        "primitive_records_scope": "per_native_page",
+        "primitive_logical_metric_limit": (1 << 64) - 1,
         "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
         "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
+        "primitive_page_contract_sha256": page_contract,
+        "primitive_page_budget_bindings": list(page_budget_bindings),
+        "fixed_task_capacity_definition": expected_executor_definitions[
+            "fixed_task_capacity"
+        ],
+        "task_executor_definition": expected_executor_definitions["task_executor"],
         "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
         "method_ir_definition": METHOD_IR_DEFINITION,
         "functional_lowering_definition": FUNCTIONAL_LOWERING_DEFINITION,
@@ -452,11 +546,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "gate_order": [
             "small_domain_atom_ao_cap",
             "primitive_topology_cap",
-            "primitive_work_budget",
+            "primitive_logical_metric_range",
             "grid_point_work_budget",
             "grid_pair_work_budget",
             "additional_device_budget",
             "additional_host_budget",
+            "primitive_descriptor_page_budget",
         ],
     }
 
@@ -607,6 +702,7 @@ def _basis_shape(
         )
     ao_count = sum(2 * shell.angular_momentum + 1 for shell in shells)
     primitive_count = sum(len(shell.primitives) for shell in shells)
+    ao_primitive_peak = max(len(shell.primitives) for shell in shells)
     component_primitive_sum = sum(
         len(shell.primitives) * SPARSE_SPHERICAL_COMPONENT_TERMS[shell.angular_momentum]
         for shell in shells
@@ -637,6 +733,7 @@ def _basis_shape(
             "ao_count_spherical": ao_count,
             "shell_count": len(shells),
             "basis_primitive_count": primitive_count,
+            "ao_primitive_count_peak": ao_primitive_peak,
             "component_primitive_sum": component_primitive_sum,
         },
         (synthetic, metadata),
@@ -685,6 +782,8 @@ def _method_resources(
         + 120 * atom_count
         + 12 * (len(source_names) - len(STATIONARY_RUNTIME_SOURCE_NAMES)) * atom_count
         + 26 * integral_terms
+        + len(QUALIFIED_SPD_COMPONENTS) ** 4
+        + 3 * len(QUALIFIED_SPD_COMPONENTS) ** 2
         + 3 * tile_points
         + 2 * basis.nprimitive
         + 4 * basis.nao
@@ -768,12 +867,16 @@ def _case_failures(
                 cap=limits["basis_primitive_count"],
             )
         )
+    if requirements["primitive_records"] > limits["primitive_logical_metric_limit"]:
+        failures.append(
+            _failure(
+                "primitive_logical_metric_range",
+                "primitive work count exceeds uint64 metric range",
+                required=requirements["primitive_records"],
+                cap=limits["primitive_logical_metric_limit"],
+            )
+        )
     for key, gate, message in (
-        (
-            "primitive_records",
-            "primitive_work_budget",
-            "primitive work budget exceeded",
-        ),
         ("grid_points", "grid_point_work_budget", "grid point work budget exceeded"),
         ("grid_pair_visits", "grid_pair_work_budget", "grid work budget exceeded"),
     ):
@@ -802,6 +905,15 @@ def _case_failures(
                 "stationary additional-host byte budget exceeded",
                 required=memory["additional_host_numeric_bound"],
                 cap=limits["additional_host_bytes"],
+            )
+        )
+    if requirements["primitive_descriptor_peak_records"] > limits["primitive_records"]:
+        failures.append(
+            _failure(
+                "primitive_descriptor_page_budget",
+                "stationary CUDA descriptor exceeds primitive page work budget",
+                required=requirements["primitive_descriptor_peak_records"],
+                cap=limits["primitive_records"],
             )
         )
     return failures
@@ -1261,6 +1373,7 @@ def _build_report(
             "primitive_records": primitive_sum**4
             + (shape["atom_count"] + 2) * primitive_sum**2
             + atom_pairs,
+            "primitive_descriptor_peak_records": shape["ao_primitive_count_peak"] ** 4,
             "grid_points": native_grid_points,
             "grid_pair_visits": (1 + 2 * native_grid_points) * atom_pairs,
         }
@@ -1373,10 +1486,12 @@ def _build_report(
                         ]
                         for key in (
                             "primitive_records",
+                            "primitive_descriptor_peak_records",
                             "grid_points",
                             "grid_pair_visits",
                         )
                     },
+                    "primitive_page_work_budget": limits["primitive_records"],
                     **case_work[frozen_row["case"]]["memory"][method_key],
                 },
                 "public_capability": {
