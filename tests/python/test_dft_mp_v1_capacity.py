@@ -683,6 +683,41 @@ def test_clean_git_sha_ignores_only_the_requested_report_output(
         qualify_capacity._clean_git_sha(repository, ignored_path=output)
 
 
+@pytest.mark.parametrize("flag", ("--assume-unchanged", "--skip-worktree"))
+def test_clean_git_sha_rejects_hidden_index_paths(
+    tmp_path: Path,
+    flag: str,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    git("init")
+    git("config", "user.name", "Capacity Test")
+    git("config", "user.email", "capacity@example.invalid")
+    tracked = repository / "tracked.py"
+    tracked.write_text("ORIGINAL = True\n", encoding="utf-8")
+    git("add", "tracked.py")
+    git("commit", "-m", "fixture")
+    git("update-index", flag, "tracked.py")
+    tracked.write_text("ORIGINAL = False\n", encoding="utf-8")
+
+    assert git("status", "--porcelain").stdout == ""
+    with pytest.raises(
+        RuntimeError,
+        match="rejects assume-unchanged/skip-worktree paths: tracked.py",
+    ):
+        qualify_capacity._clean_git_sha(repository)
+
+
 def test_report_output_rejects_hard_link_to_aot_evidence(tmp_path: Path) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()

@@ -2043,6 +2043,21 @@ def _clean_git_sha(
     *,
     ignored_path: Path | None = None,
 ) -> str:
+    tagged = subprocess.run(
+        ["git", "ls-files", "-v", "--", "."],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    hidden = [
+        line[2:] for line in tagged if line and (line[0] == "S" or line[0].islower())
+    ]
+    if hidden:
+        raise RuntimeError(
+            "capacity report rejects assume-unchanged/skip-worktree paths: "
+            + ", ".join(hidden)
+        )
     status_command = [
         "git",
         "status",

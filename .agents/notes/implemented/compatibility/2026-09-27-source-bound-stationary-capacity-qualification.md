@@ -106,6 +106,8 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - The qualifier does not change caps, tolerances, frozen cases, or losing rows.
 - A report SHA identifies a clean source revision; only the writing CLI's
   validated untracked JSON output may be excluded from the cleanliness check.
+- Git index entries marked assume-unchanged or skip-worktree are rejected before
+  the clean-tree check so hidden tracked edits cannot inherit the HEAD identity.
 - Report output may not overlap the AOT directory whose manifests/binaries were
   consumed as evidence.
 - Page-local primitive admission is source-bound to the merged #1486 bulk,
