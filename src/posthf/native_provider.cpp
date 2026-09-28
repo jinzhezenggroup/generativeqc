@@ -1,6 +1,7 @@
 #include "posthf/native_provider.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
@@ -90,6 +91,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
                                                                vibeqc_tensor::Metrics* metrics,
                                                                ProviderWork* work) const {
   if (requests.empty()) return {};
+  const auto provider_started = std::chrono::steady_clock::now();
 
   std::vector<std::array<std::size_t, 4>> shapes;
   std::vector<NumericBlockPlan> plans;
@@ -244,9 +246,13 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
             current[k] = std::min(tile_[k], ref_.nbf - begin[k]);
             elements = checked_mul(elements, current[k]);
           }
+          const auto source_started = std::chrono::steady_clock::now();
           source_.read(integrals::ElectronInteractionOperator::eri, begin, current, raw.data(),
                        elements);
           if (work) {
+            work->source_seconds +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - source_started)
+                    .count();
             work->source_reads = checked_add(work->source_reads, 1);
             work->source_values = checked_add(work->source_values, elements);
             for (std::size_t request = 0; request < states.size(); ++request) {
@@ -257,9 +263,11 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
                 const auto ao = work_shape[0];
                 const auto rest = work_elements / ao;
                 const auto columns = state.shape[k];
-                if (!cuda || prefix_reuse.leaders[request][k] == request)
+                if (!cuda || prefix_reuse.leaders[request][k] == request) {
                   work->transform_fmas = checked_add(work->transform_fmas,
                                                      checked_mul(checked_mul(rest, ao), columns));
+                  work->transform_stages = checked_add(work->transform_stages, 1);
+                }
                 work_elements = checked_mul(rest, columns);
                 for (unsigned j = 0; j < 3; ++j) work_shape[j] = work_shape[j + 1];
                 work_shape[3] = columns;
@@ -347,6 +355,9 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
   std::vector<std::vector<double>> outputs;
   outputs.reserve(states.size());
   for (auto& state : states) outputs.push_back(std::move(state.output));
+  if (work)
+    work->provider_seconds +=
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - provider_started).count();
   return outputs;
 }
 

@@ -1,6 +1,7 @@
 #include "cc/solver.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -132,6 +133,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   SolverResult result;
   result.diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, capacity);
   result.reason = "maximum RCCSD iterations reached";
+  const auto solve_started = std::chrono::steady_clock::now();
 
   const unsigned iteration_budget = options.max_iterations == std::numeric_limits<unsigned>::max()
                                         ? options.max_iterations
@@ -140,8 +142,13 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     const unsigned iteration = ordinal - 1;
     try {
       auto in = inputs(p, current.data(), current.data() + n1);
+      const auto iteration_started = std::chrono::steady_clock::now();
       const auto out = generated::run_iteration_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
                                                     iteration_arena.size());
+      result.diagnostic.iteration_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
+              .count();
+      ++result.diagnostic.iteration_graph_calls;
       const double r1 = max_abs(out.r1, n1), r2 = max_abs(out.r2, n2);
       const double delta = std::isfinite(previous) ? std::abs(out.energy - previous)
                                                    : std::numeric_limits<double>::infinity();
@@ -153,8 +160,13 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
       result.diagnostic.r2_max = r2;
       if (std::isfinite(previous) && delta <= options.energy_tolerance &&
           std::max(r1, r2) <= options.residual_tolerance) {
+        const auto replay_started = std::chrono::steady_clock::now();
         const auto replay =
             generated::run_replay_cpu(p.nocc, p.nvir, in, replay_arena.data(), replay_arena.size());
+        result.diagnostic.replay_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started)
+                .count();
+        ++result.diagnostic.replay_graph_calls;
         result.diagnostic.replay_r1_max = max_abs(replay.r1, n1);
         result.diagnostic.replay_r2_max = max_abs(replay.r2, n2);
         if (std::max(result.diagnostic.replay_r1_max, result.diagnostic.replay_r2_max) <=
@@ -166,20 +178,31 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
         }
       }
       if (iteration == options.max_iterations) return false;
+      const auto update_started = std::chrono::steady_clock::now();
       std::vector<double> trial(elements);
       const double jacobi = 1.0 - options.damping;
       for (std::size_t k = 0; k < n1; ++k)
         trial[k] = current[k] + jacobi * (out.next_t1[k] - current[k]);
       for (std::size_t k = 0; k < n2; ++k)
         trial[n1 + k] = current[n1 + k] + jacobi * (out.next_t2[k] - current[n1 + k]);
+      result.diagnostic.update_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
+      ++result.diagnostic.update_calls;
       auto trial_in = inputs(p, trial.data(), trial.data() + n1);
+      const auto trial_started = std::chrono::steady_clock::now();
       const auto trial_out = generated::run_iteration_cpu(
           p.nocc, p.nvir, trial_in, iteration_arena.data(), iteration_arena.size());
+      result.diagnostic.iteration_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
+      ++result.diagnostic.iteration_graph_calls;
       std::vector<double> error;
       error.reserve(elements);
       error.insert(error.end(), trial_out.r1, trial_out.r1 + n1);
       error.insert(error.end(), trial_out.r2, trial_out.r2 + n2);
+      const auto diis_started = std::chrono::steady_clock::now();
       current = diis.update(std::move(trial), std::move(error));
+      result.diagnostic.diis_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
       previous = out.energy;
       return true;
     } catch (const std::runtime_error& error) {
@@ -189,6 +212,8 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     }
   });
   result.diagnostic.diis_restarts = diis.restarts();
+  result.diagnostic.tensor_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - solve_started).count();
   result.t1.assign(current.begin(), current.begin() + static_cast<std::ptrdiff_t>(n1));
   result.t2.assign(current.begin() + static_cast<std::ptrdiff_t>(n1), current.end());
   return result;

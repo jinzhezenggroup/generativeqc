@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SHARDS = ("core", "runtime-heavy", "posthf", "ecp-forces", "compiler-heavy")
+SHARDS = ("core-a", "core-b", "runtime-heavy", "posthf", "ecp-forces", "compiler-heavy")
 
 
 def _selection(event: str, shard: str) -> tuple[str, list[str], list[str]]:
@@ -52,7 +52,9 @@ def test_every_python_test_file_has_exactly_one_ci_shard(event: str) -> None:
 def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     distribution, _, arguments = _selection(event, shard)
     assert "--deselect" not in arguments
-    assert distribution == ("worksteal" if shard == "core" else "loadfile")
+    assert distribution == (
+        "worksteal" if shard in {"core-a", "core-b"} else "loadfile"
+    )
 
 
 def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
