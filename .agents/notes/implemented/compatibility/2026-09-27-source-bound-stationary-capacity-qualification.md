@@ -47,7 +47,8 @@ file or any multiply linked output. No other dirty path is ignored, and an
 output alias cannot truncate consumed AOT evidence through a shared inode or a
 symlinked manifest/binary target. Symlinked AOT evidence is rejected outright.
 That rejection runs in the common report builder, including public API, stdout,
-and file-writing CLI paths.
+and file-writing CLI paths, and covers the directory leaf, every ancestor,
+descendants, and Windows junctions.
 
 Imported planner, basis, grid, and AOT helpers retain their import-time source
 path and content identity. A long-lived process fails closed if the same

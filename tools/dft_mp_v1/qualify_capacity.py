@@ -1691,9 +1691,14 @@ def _validate_aot_evidence_directory(
 ) -> Path | None:
     if aot_directory is None:
         return None
-    aot_path = Path(aot_directory)
-    if aot_path.is_symlink() or any(
-        candidate.is_symlink() for candidate in aot_path.rglob("*")
+    aot_path = Path(aot_directory).absolute()
+
+    def linked(candidate: Path) -> bool:
+        junction = getattr(candidate, "is_junction", None)
+        return candidate.is_symlink() or (junction is not None and junction())
+
+    if any(linked(candidate) for candidate in (aot_path, *aot_path.parents)) or any(
+        linked(candidate) for candidate in aot_path.rglob("*")
     ):
         raise ValueError("AOT evidence must not contain symlinks")
     return aot_path

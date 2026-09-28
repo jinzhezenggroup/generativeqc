@@ -764,6 +764,24 @@ def test_report_output_rejects_symlinked_aot_evidence(tmp_path: Path) -> None:
     assert external.read_text(encoding="utf-8") == '{"evidence": true}\n'
 
 
+def test_report_rejects_symlinked_aot_directory_ancestor(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    real_parent = tmp_path / "real-aot-parent"
+    aot_directory = real_parent / "package"
+    aot_directory.mkdir(parents=True)
+    alias_parent = tmp_path / "alias-aot-parent"
+    try:
+        os.symlink(real_parent, alias_parent, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"filesystem cannot create a test directory symlink: {error}")
+    aliased_aot = alias_parent / "package"
+    assert not aliased_aot.is_symlink()
+
+    with pytest.raises(ValueError, match="AOT evidence must not contain symlinks"):
+        report(aot_directory=aliased_aot)
+
+
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     tmp_path: Path,
 ) -> None:
