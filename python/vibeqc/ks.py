@@ -365,15 +365,24 @@ def _curated_semilocal_record(
     components = dict(functional_spec.components)
     for record in SEMILOCAL_FAMILIES:
         expected = _record_components(record)
-        if set(components) != set(expected):
+        if record["coefficient_policy"] == "native-scales":
+            if not set(components) <= set(expected):
+                continue
+        elif components != expected:
             continue
-        if functional_spec.range_omega != Fraction(record["range_omega"]):
-            continue
-        if record["coefficient_policy"] == "exact" and components != expected:
-            continue
+        # A zero registry omega denotes an omega-independent point program.
+        # Exchange primitives still own and validate their own range parameter.
+        # Nonzero semilocal omega, notably canonical B97M, must match exactly.
+        expected_omega = Fraction(record["range_omega"])
+        if expected_omega and functional_spec.range_omega != expected_omega:
+            raise NotImplementedError(
+                f"native {record['name']} lowerer requires canonical semilocal omega"
+            )
         if plan is not None:
             policy = record["exchange_policy"]
-            if policy == "none" and plan.exchange:
+            if policy == "none" and (
+                plan.exchange or plan.nonlocal_correlation is not None
+            ):
                 raise NotImplementedError("unsupported native KS semilocal composition")
             if policy == "canonical":
                 if method_ir is None:
