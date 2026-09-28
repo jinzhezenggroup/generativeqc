@@ -758,6 +758,8 @@ def test_report_output_rejects_symlinked_aot_evidence(tmp_path: Path) -> None:
             external,
             aot_directory=aot_directory,
         )
+    with pytest.raises(ValueError, match="AOT evidence must not contain symlinks"):
+        report(aot_directory=aot_directory)
 
     assert external.read_text(encoding="utf-8") == '{"evidence": true}\n'
 

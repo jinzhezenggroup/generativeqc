@@ -1686,6 +1686,19 @@ def _artifact_verification(
     }
 
 
+def _validate_aot_evidence_directory(
+    aot_directory: Path | None,
+) -> Path | None:
+    if aot_directory is None:
+        return None
+    aot_path = Path(aot_directory)
+    if aot_path.is_symlink() or any(
+        candidate.is_symlink() for candidate in aot_path.rglob("*")
+    ):
+        raise ValueError("AOT evidence must not contain symlinks")
+    return aot_path
+
+
 def _build_report(
     repository: Path,
     *,
@@ -1700,6 +1713,7 @@ def _build_report(
         )
     if re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
         raise ValueError("source_sha must be a full lowercase Git commit SHA")
+    _validate_aot_evidence_directory(aot_directory)
     _basis_pack.cache_clear()
     _named_basis_record.cache_clear()
     root = repository / "tools/dft_mp_v1"
@@ -2093,11 +2107,8 @@ def _report_output_exemption(
 
     output_path = Path(output_path).resolve()
     if aot_directory is not None:
-        aot_path = Path(aot_directory)
-        if aot_path.is_symlink() or any(
-            candidate.is_symlink() for candidate in aot_path.rglob("*")
-        ):
-            raise ValueError("AOT evidence must not contain symlinks")
+        aot_path = _validate_aot_evidence_directory(aot_directory)
+        assert aot_path is not None
         if output_path.is_relative_to(aot_path.resolve()):
             raise ValueError("capacity report output must not overlap AOT evidence")
     if output_path.exists() and output_path.stat().st_nlink != 1:
