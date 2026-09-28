@@ -57,6 +57,13 @@ def copy_contract_files(tmp_path: Path, files: tuple[str, ...]) -> None:
         )
 
 
+def stationary_contract_tree(tmp_path: Path, source: str) -> None:
+    copy_contract_files(tmp_path, ("src/dft/stationary_gradient_cuda.cuh",))
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source, encoding="utf-8")
+
+
 def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     result = report()
 
@@ -224,6 +231,18 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "submit_page_sha256": (
             "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+        ),
+        "native_owner_sha256": (
+            "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
+        ),
+        "native_create_sha256": (
+            "9aee878f0f32fae3f756934074fca0ea57062658e38b32deba9b6af98c94ab26"
+        ),
+        "native_reset_sha256": (
+            "ea2a7df22edca3c3e1f6afad7185dfa7d06ddda5fec0610f8fd31f19ba585a9b"
+        ),
+        "native_tasks_sha256": (
+            "e05af602b22c92dc71b056b0339910a8ac9f7dcc9816b2175d889620ef1024a0"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -609,10 +628,8 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     assert whole_force_gate not in source
     marker = "    pair_visits = (1 + 2 * len(state.grid.points))"
     assert marker in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(
-        source.replace(marker, whole_force_gate + marker, 1), encoding="utf-8"
+    stationary_contract_tree(
+        tmp_path, source.replace(marker, whole_force_gate + marker, 1)
     )
 
     with pytest.raises(RuntimeError, match="restored a whole-force primitive cap"):
@@ -625,11 +642,9 @@ def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "if np.any(primitive_work > self.page_work_budget):"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(
+    stationary_contract_tree(
+        tmp_path,
         source.replace(old, "if np.any(primitive_work >= self.page_work_budget):", 1),
-        encoding="utf-8",
     )
 
     with pytest.raises(RuntimeError, match="bulk page contract changed"):
@@ -642,10 +657,8 @@ def test_primitive_budget_scope_fails_closed_when_component_work_moves(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "primitive_work *= int(row[2])"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(
-        source.replace(old, "primitive_work *= int(row[2]) + 1", 1), encoding="utf-8"
+    stationary_contract_tree(
+        tmp_path, source.replace(old, "primitive_work *= int(row[2]) + 1", 1)
     )
 
     with pytest.raises(RuntimeError, match="component_integral page contract changed"):
@@ -667,9 +680,7 @@ def test_primitive_page_gate_order_fails_closed_when_execution_moves(
         "    task_executor.execute_pages(domain, submit_page)\n" + host_gate,
         1,
     )
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(moved, encoding="utf-8")
+    stationary_contract_tree(tmp_path, moved)
 
     with pytest.raises(RuntimeError, match="primitive descriptor page order changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -681,9 +692,7 @@ def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "sources.integral_page("
     assert source.count(old) == 2
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(source.replace(old, "sources.integral(", 1), encoding="utf-8")
+    stationary_contract_tree(tmp_path, source.replace(old, "sources.integral(", 1))
 
     with pytest.raises(RuntimeError, match="submit-page contract changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -695,14 +704,30 @@ def test_primitive_page_gate_fails_closed_when_budget_initialization_moves(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "self.page_work_budget = int(page_work_budget)"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(
+    stationary_contract_tree(
+        tmp_path,
         source.replace(old, "self.page_work_budget = 2 * int(page_work_budget)", 1),
-        encoding="utf-8",
     )
 
     with pytest.raises(RuntimeError, match="initializer page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    old = "size_t(work) > p->max_page_primitive_work"
+    assert old in native
+    target.write_text(
+        native.replace(old, "size_t(work) >= p->max_page_primitive_work", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="native_tasks_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
@@ -712,9 +737,7 @@ def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "(1 + int(has_exchange)) * primitive_sum**4"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(source.replace(old, "primitive_sum**3", 1), encoding="utf-8")
+    stationary_contract_tree(tmp_path, source.replace(old, "primitive_sum**3", 1))
 
     with pytest.raises(RuntimeError, match="primitive-record definition"):
         qualify_capacity._source_limits(tmp_path)
@@ -726,9 +749,7 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "22 * primitive_tile"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(source.replace(old, "23 * primitive_tile", 1), encoding="utf-8")
+    stationary_contract_tree(tmp_path, source.replace(old, "23 * primitive_tile", 1))
 
     with pytest.raises(RuntimeError, match="source-bytes definition"):
         qualify_capacity._source_limits(tmp_path)
@@ -741,11 +762,9 @@ def test_grid_memory_fails_closed_when_production_plan_inputs_move(
     old = "order=2 if needs_first else 1"
     first = source.index(old)
     production = source.index(old, first + len(old))
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(
+    stationary_contract_tree(
+        tmp_path,
         source[:production] + "order=1" + source[production + len(old) :],
-        encoding="utf-8",
     )
 
     with pytest.raises(RuntimeError, match="grid-plan input definition changed"):
@@ -758,9 +777,7 @@ def test_grid_memory_fails_closed_when_functional_lowering_moves(
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "functional = _native_semilocal_family(method)"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(source.replace(old, "functional = 0", 1), encoding="utf-8")
+    stationary_contract_tree(tmp_path, source.replace(old, "functional = 0", 1))
 
     with pytest.raises(RuntimeError, match="functional-family lowering"):
         qualify_capacity._source_limits(tmp_path)
@@ -785,9 +802,9 @@ def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "if host_bound > max_host_bytes:"
     assert old in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(source.replace(old, "if host_bound >= max_host_bytes:", 1))
+    stationary_contract_tree(
+        tmp_path, source.replace(old, "if host_bound >= max_host_bytes:", 1)
+    )
 
     with pytest.raises(RuntimeError, match="additional-host predicate"):
         qualify_capacity._source_limits(tmp_path)
@@ -806,10 +823,8 @@ def test_admission_gate_order_fails_closed_when_leading_gates_move(
         '        raise ValueError("CUDA diagnostic primitive-topology cap exceeded")\n'
     )
     assert small + primitives in source
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(
-        source.replace(small + primitives, primitives + small, 1), encoding="utf-8"
+    stationary_contract_tree(
+        tmp_path, source.replace(small + primitives, primitives + small, 1)
     )
 
     with pytest.raises(RuntimeError, match="admission gate order changed"):
@@ -832,9 +847,7 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
     swapped = source.replace(device, "    # swapped-memory-gate\n", 1)
     swapped = swapped.replace(host, device, 1)
     swapped = swapped.replace("    # swapped-memory-gate\n", host, 1)
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
-    target.parent.mkdir(parents=True)
-    target.write_text(swapped, encoding="utf-8")
+    stationary_contract_tree(tmp_path, swapped)
 
     with pytest.raises(RuntimeError, match="admission gate order changed"):
         qualify_capacity._source_limits(tmp_path)

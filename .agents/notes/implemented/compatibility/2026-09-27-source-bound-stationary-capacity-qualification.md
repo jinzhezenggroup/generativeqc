@@ -101,6 +101,9 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
   nested callback must continue forwarding the same page coordinates and
   nuclear-attraction tasks into `integral_page`. Cumulative logical work is
   evidence, not a whole-force cap.
+- Native `Owner`, `stationary_create`, `stationary_reset`, and
+  `stationary_tasks` blocks are part of the same contract, binding allocation,
+  page-budget retention, reset, validation, and cumulative metric semantics.
 
 ## Evidence
 

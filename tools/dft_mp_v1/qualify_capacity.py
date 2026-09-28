@@ -196,6 +196,18 @@ STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256 = (
 STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
     "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
 )
+NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
+    "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
+)
+NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
+    "9aee878f0f32fae3f756934074fca0ea57062658e38b32deba9b6af98c94ab26"
+)
+NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
+    "ea2a7df22edca3c3e1f6afad7185dfa7d06ddda5fec0610f8fd31f19ba585a9b"
+)
+NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
+    "e05af602b22c92dc71b056b0339910a8ac9f7dcc9816b2175d889620ef1024a0"
+)
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
 )
@@ -327,6 +339,23 @@ def _source_span_sha256(
     return _lf_sha256(source[start:stop].encode())
 
 
+def _cpp_block_sha256(source: str, marker: str) -> str:
+    try:
+        start = source.index(marker)
+        opening = source.index("{", start)
+    except ValueError as error:
+        raise RuntimeError(f"native source block is missing: {marker}") from error
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return _lf_sha256(source[start : index + 1].encode())
+    raise RuntimeError(f"native source block is unterminated: {marker}")
+
+
 def _source_limits(repository: Path) -> dict[str, Any]:
     """Read the current owner's literal shape caps and public work defaults."""
 
@@ -410,6 +439,32 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if component_mode_digest != STATIONARY_COMPONENT_MODE_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA component-mode contract changed")
     page_contract["component_mode_sha256"] = component_mode_digest
+    native_source = (repository / "src/dft/stationary_gradient_cuda.cuh").read_text(
+        encoding="utf-8"
+    )
+    native_blocks = {
+        "native_owner_sha256": (
+            "struct Owner {",
+            NATIVE_STATIONARY_OWNER_CONTRACT_SHA256,
+        ),
+        "native_create_sha256": (
+            "int stationary_create(",
+            NATIVE_STATIONARY_CREATE_CONTRACT_SHA256,
+        ),
+        "native_reset_sha256": (
+            "int stationary_reset(",
+            NATIVE_STATIONARY_RESET_CONTRACT_SHA256,
+        ),
+        "native_tasks_sha256": (
+            "int stationary_tasks(",
+            NATIVE_STATIONARY_TASKS_CONTRACT_SHA256,
+        ),
+    }
+    for label, (marker, expected_digest) in native_blocks.items():
+        digest = _cpp_block_sha256(native_source, marker)
+        if digest != expected_digest:
+            raise RuntimeError(f"stationary CUDA {label} contract changed")
+        page_contract[label] = digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
         raise RuntimeError("stationary CUDA component-label capacity changed")
     definition_nodes = {
@@ -1652,6 +1707,7 @@ def _build_report(
         "src/dft/bridge.cpp",
         "src/dft/grid.hpp",
         "src/dft/cuda_quadrature.cu",
+        "src/dft/stationary_gradient_cuda.cuh",
         "src/methods/dft_method.cpp",
         "cmake/VibeQCCuda.cmake",
     )
