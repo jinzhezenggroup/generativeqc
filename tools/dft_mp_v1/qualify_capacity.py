@@ -21,10 +21,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from tools.dft_mp_v1 import _SOURCE_ONLY_FINDER
-
 SOURCE_REPOSITORY = Path(__file__).resolve().parents[2]
 SOURCE_PYTHON = SOURCE_REPOSITORY / "python"
+source_repository = str(SOURCE_REPOSITORY)
+if source_repository not in sys.path:
+    sys.path.insert(0, source_repository)
+
+from tools.dft_mp_v1 import _SOURCE_ONLY_FINDER
+
 _PRELOADED_LOCAL_MODULES = frozenset(
     name
     for name, module in tuple(sys.modules.items())
