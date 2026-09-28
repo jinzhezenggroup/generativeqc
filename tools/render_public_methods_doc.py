@@ -84,18 +84,15 @@ def _compiler_dft_rows() -> list[tuple[str, str, str]]:
     if str(PYTHON) not in sys.path:
         sys.path.insert(0, str(PYTHON))
 
-    from vibeqc.ks import resolve_ks_method
-    from vibeqc_compiler.method import METHOD_ALIASES, METHOD_CATALOG
+    from vibeqc.ks import public_dft_selectors, resolve_ks_method
 
     rows = []
-    for identifier in sorted(set(METHOD_CATALOG) | set(METHOD_ALIASES)):
-        for suffix in ("rks", "uks"):
-            selector = f"{identifier.lower()}-{suffix}"
-            try:
-                method, _ = resolve_ks_method(selector)
-            except (ValueError, NotImplementedError):
-                continue
-            rows.append((selector, method.identifier, method.spin))
+    for selector in public_dft_selectors():
+        try:
+            method, _ = resolve_ks_method(selector)
+        except (ValueError, NotImplementedError):
+            continue
+        rows.append((selector, method.identifier, method.spin))
     return rows
 
 

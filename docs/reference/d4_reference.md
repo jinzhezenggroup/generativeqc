@@ -72,9 +72,20 @@ replays reuse resident coordinates; changed geometry explicitly uploads the
 packed coordinate buffer. Diagnostics expose exact workspace slots, H2D bytes,
 kernel launches and host/device capacity bounds.
 
-The public named endpoint `pbe-d4-rks` executes native PBE RKS plus
-D4(BJ-EEQ-ATM). Native energy remains exact-once owned by the prepared KS/D4
-composition. In the bounded qualified force domain, the stationary derivative
+The pinned upstream D4 catalog is compositional rather than a second method
+whitelist. When an electronic MethodIR identifier has an exact
+`d4.bj-eeq-atm` parameter record, the compiler can resolve
+`<METHOD>-D4(BJ-EEQ-ATM)` from the existing electronic MethodSpec plus a
+D4Spec. Public `<method>-d4-rks` / `<method>-d4-uks` selectors are exposed
+only when that electronic projection also passes the current native lowerer
+gates. Parameterized composites use the ordinary electronic carrier plus a
+separate `D4CorrectionBatch`, so unsupported functionals or missing D4 fits
+remain fail-closed without hand-maintained allowlists.
+
+The public named endpoint `pbe-d4-rks` remains a compatibility path that
+executes native PBE RKS plus D4(BJ-EEQ-ATM). Native energy remains exact-once
+owned by the prepared KS/D4 composition. In the bounded qualified force domain,
+the stationary derivative
 projects that composite state onto its electronic PBE MethodIR, evaluates the
 existing PBE stationary force, and combines it with the existing D4 analytic
 gradient as `F_total = F_PBE - dE_D4/dR`. The auxiliary D4 force owner publishes
