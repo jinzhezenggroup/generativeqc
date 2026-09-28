@@ -504,6 +504,30 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     for name, expected in expected_executor_definitions.items():
         if executor_definitions[name] != [expected]:
             raise RuntimeError(f"stationary CUDA {name} definition changed")
+    page_execution_calls = [
+        node
+        for node in ast.walk(owner)
+        if isinstance(node, ast.Call)
+        and ast.unparse(node.func) == "task_executor.execute_pages"
+        and [ast.unparse(argument) for argument in node.args]
+        == [
+            "domain",
+            "submit_page",
+        ]
+        and not node.keywords
+    ]
+    host_gates = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == GATE_PREDICATES["additional_host"]
+    ]
+    if (
+        len(page_execution_calls) != 1
+        or len(host_gates) != 1
+        or page_execution_calls[0].lineno <= host_gates[0].end_lineno
+    ):
+        raise RuntimeError("stationary CUDA primitive descriptor page order changed")
     if small is None or primitives is None:
         raise RuntimeError(
             "stationary CUDA admission source no longer matches the audited gates"
@@ -549,6 +573,9 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "fixed_task_capacity"
         ],
         "task_executor_definition": expected_executor_definitions["task_executor"],
+        "primitive_page_execution_definition": (
+            "task_executor.execute_pages(domain, submit_page)"
+        ),
         "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
         "method_ir_definition": METHOD_IR_DEFINITION,
         "functional_lowering_definition": FUNCTIONAL_LOWERING_DEFINITION,

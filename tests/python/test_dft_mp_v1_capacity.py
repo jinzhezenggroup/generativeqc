@@ -197,6 +197,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["fixed_task_capacity_definition"] == (
         "min(integral_terms, primitive_tile)"
     )
+    assert result["admission_limits"]["primitive_page_execution_definition"] == (
+        "task_executor.execute_pages(domain, submit_page)"
+    )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -640,6 +643,29 @@ def test_primitive_budget_scope_fails_closed_when_component_work_moves(
     )
 
     with pytest.raises(RuntimeError, match="component_integral page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_primitive_page_gate_order_fails_closed_when_execution_moves(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    original = (
+        "            execution = task_executor.execute_pages(domain, submit_page)"
+    )
+    host_gate = "    if host_bound > max_host_bytes:"
+    assert original in source and host_gate in source
+    moved = source.replace(original, "            execution = None", 1)
+    moved = moved.replace(
+        host_gate,
+        "    task_executor.execute_pages(domain, submit_page)\n" + host_gate,
+        1,
+    )
+    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target.parent.mkdir(parents=True)
+    target.write_text(moved, encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="primitive descriptor page order changed"):
         qualify_capacity._source_limits(tmp_path)
 
 

@@ -95,8 +95,9 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
   consumed as evidence.
 - Page-local primitive admission is source-bound to the merged #1486 bulk,
   scalar, spherical-component producer, component-mode selector, flush,
-  executor, and endpoint-wiring contracts. Cumulative logical work is evidence,
-  not a whole-force cap.
+  executor, and endpoint-wiring contracts. The endpoint descriptor-production
+  call must remain after the verified host/device admission gates. Cumulative
+  logical work is evidence, not a whole-force cap.
 
 ## Evidence
 
