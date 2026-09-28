@@ -186,7 +186,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
     from vibeqc.ks import (
         WB97MV_SCF_DOMAIN,
         KsOptions,
-        _native_semilocal_family,
+        _native_semilocal_code,
         native_ks_options,
         resolve_ks_method,
         resolve_ks_options,
@@ -195,7 +195,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
 
     graph = resolve_method("WB97M-V", spin=spin)
     renamed = replace(graph, identifier="not-a-method-dispatch-key")
-    assert _native_semilocal_family(renamed) == 4
+    assert _native_semilocal_code(renamed) == 4
     options = resolve_ks_options(
         selector, KsOptions(composition=renamed, grid=GridSpec())
     )
@@ -236,7 +236,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
 def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -> None:
     from dataclasses import replace
 
-    from vibeqc.ks import _native_semilocal_family
+    from vibeqc.ks import _native_semilocal_code
     from vibeqc_compiler.method import (
         NonlocalCorrelationPrimitive,
         RangeSeparatedExchangePrimitive,
@@ -249,7 +249,7 @@ def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -
             graph, primitives=graph.primitives[:drop] + graph.primitives[drop + 1 :]
         )
         with pytest.raises(NotImplementedError):
-            _native_semilocal_family(missing)
+            _native_semilocal_code(missing)
     changed = []
     for primitive in graph.primitives:
         if isinstance(primitive, SemilocalXCPrimitive):
@@ -266,11 +266,11 @@ def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -
         else:
             changed.append(primitive)
     with pytest.raises(NotImplementedError, match="canonical"):
-        _native_semilocal_family(replace(graph, primitives=tuple(changed)))
+        _native_semilocal_code(replace(graph, primitives=tuple(changed)))
     nonlocal_term = graph.primitives[-1]
     assert isinstance(nonlocal_term, NonlocalCorrelationPrimitive)
     wrong = replace(nonlocal_term, spec=replace(nonlocal_term.spec, b=Fraction(59, 10)))
     with pytest.raises(NotImplementedError, match="canonical"):
-        _native_semilocal_family(
+        _native_semilocal_code(
             replace(graph, primitives=(*graph.primitives[:-1], wrong))
         )
