@@ -56,6 +56,9 @@ The tool also pins the checkout HEAD at module import and requires a fresh
 interpreter after any commit/checkout transition. Its own source is separately
 fingerprinted at import, covering a dirty-import/restored-file sequence as well
 as transitive state that is not represented by a helper's defining file alone.
+All imported repository-local Python modules are fingerprinted for the same
+reason, and captured cross-module helpers such as `plan_tiles.jet_indices` keep
+an explicit object-identity binding.
 Each frozen selector is additionally resolved through the public MethodIR/KS
 path and must reproduce the audited native ABI ID, spin, semilocal coefficients,
 execution domain, native DFT eligibility, batch/energy registry eligibility, and

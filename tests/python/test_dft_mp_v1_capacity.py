@@ -72,6 +72,11 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
         (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
     )
+    assert result["source"]["imported_module_sha256"][
+        "vibeqc_compiler.dft.ao"
+    ] == qualify_capacity._lf_sha256(
+        (ROOT / "python/vibeqc_compiler/dft/ao.py").read_bytes()
+    )
     assert result["contract"] == {
         "id": "DFT-MP-v1",
         "version": "1.0.0",
@@ -1502,6 +1507,36 @@ def test_report_requires_a_fresh_interpreter_after_qualifier_source_moves(
     monkeypatch.setattr(qualify_capacity, "_IMPORTED_TOOL_SOURCE_SHA256", "0" * 64)
 
     with pytest.raises(RuntimeError, match="qualifier source changed since import"):
+        qualify_capacity._assert_local_imports()
+
+
+def test_report_rejects_transitive_imported_module_source_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _ = qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES["vibeqc_compiler.dft.ao"]
+    monkeypatch.setitem(
+        qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES,
+        "vibeqc_compiler.dft.ao",
+        (path, "0" * 64),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="imported module source changed: vibeqc_compiler.dft.ao",
+    ):
+        qualify_capacity._assert_local_imports()
+
+
+def test_report_rejects_rebound_planner_ao_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        qualify_capacity.plan_tiles.__globals__,
+        "jet_indices",
+        lambda _: (),
+    )
+
+    with pytest.raises(RuntimeError, match="planner captured AO helper changed"):
         qualify_capacity._assert_local_imports()
 
 

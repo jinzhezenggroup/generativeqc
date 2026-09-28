@@ -61,6 +61,7 @@ from vibeqc.basis import BasisSet
 from vibeqc.basis_capabilities import resolved_basis_metadata
 from vibeqc.calculator import _basis_pack, _named_basis_record
 from vibeqc.ks import _native_semilocal_family, resolve_ks_method, resolve_ks_options
+from vibeqc_compiler.dft.ao import jet_indices
 from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from vibeqc_compiler.dft.plan import plan_tiles
 from vibeqc_compiler.method.stationary_cuda import (
@@ -92,6 +93,7 @@ _LOCAL_HELPERS = {
     "_named_basis_record": _named_basis_record,
     "GridSpec": GridSpec,
     "MolecularGrid": MolecularGrid,
+    "jet_indices": jet_indices,
     "plan_tiles": plan_tiles,
     "_qualified_aot_plan": _qualified_aot_plan,
     "load_stationary_aot_artifact": load_stationary_aot_artifact,
@@ -124,6 +126,16 @@ _IMPORTED_DATA_DEPENDENCIES = {
             _PUBLIC_METHOD_MANIFEST.read_bytes().replace(b"\r\n", b"\n")
         ).hexdigest(),
     )
+}
+_IMPORTED_LOCAL_MODULE_SOURCES = {
+    name: (
+        path,
+        hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
+    )
+    for name, module in tuple(sys.modules.items())
+    if module is not None
+    and (source := getattr(module, "__file__", None)) is not None
+    and (path := Path(source).resolve()).is_relative_to(SOURCE_PYTHON)
 }
 
 SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
@@ -384,6 +396,20 @@ def _assert_local_imports() -> None:
             "capacity import-time data dependency changed: "
             + ", ".join(sorted(stale_data))
         )
+    stale_modules = [
+        name
+        for name, (path, imported_digest) in _IMPORTED_LOCAL_MODULE_SOURCES.items()
+        if not path.is_file()
+        or hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        != imported_digest
+    ]
+    if stale_modules:
+        raise RuntimeError(
+            "capacity imported module source changed: "
+            + ", ".join(sorted(stale_modules))
+        )
+    if plan_tiles.__globals__.get("jet_indices") is not jet_indices:
+        raise RuntimeError("capacity planner captured AO helper changed since import")
 
 
 def _lf_sha256(data: bytes) -> str:
@@ -1941,6 +1967,10 @@ def _build_report(
         "source": {
             "sha": source_sha,
             "qualifier_sha256": _IMPORTED_TOOL_SOURCE_SHA256,
+            "imported_module_sha256": {
+                name: digest
+                for name, (_, digest) in sorted(_IMPORTED_LOCAL_MODULE_SOURCES.items())
+            },
             "runtime_owner_sha256": {
                 path: _lf_sha256((repository / path).read_bytes())
                 for path in owner_files
