@@ -190,6 +190,9 @@ STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
 STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256 = (
     "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
 )
+PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
+    "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
+)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -1168,6 +1171,36 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     }
 
 
+def _prepared_aot_route_contract(repository: Path) -> str:
+    """Bind no-runtime-compilation claims to the prepared production owner."""
+
+    source = (repository / "python/vibeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    classes = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+        and node.name == "PreparedStationaryCudaExecution"
+    ]
+    methods = (
+        []
+        if len(classes) != 1
+        else [
+            node
+            for node in classes[0].body
+            if isinstance(node, ast.FunctionDef) and node.name == "ensure"
+        ]
+    )
+    if len(methods) != 1:
+        raise RuntimeError("prepared stationary AOT owner is missing or ambiguous")
+    digest = _source_node_sha256(source, methods[0])
+    if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
+        raise RuntimeError("prepared stationary AOT selection contract changed")
+    return digest
+
+
 def _public_selector_contract(
     selector: str,
     *,
@@ -1313,6 +1346,9 @@ def _build_report(
     spd_expansion = _spd_expansion_contract(repository)
     source_package = _source_package_inventory(repository)
     public_route = _source_public_route(repository)
+    public_route["prepared_aot_selection_sha256"] = _prepared_aot_route_contract(
+        repository
+    )
     grid_contract = _grid_count_contract(repository)
     grid_spec = _grid_spec(manifest["model"]["grid_spec"])
 
@@ -1646,10 +1682,19 @@ def _clean_git_sha(
     return _git_head(repository)
 
 
-def _report_output_exemption(repository: Path, output_path: Path) -> Path | None:
+def _report_output_exemption(
+    repository: Path,
+    output_path: Path,
+    *,
+    aot_directory: Path | None = None,
+) -> Path | None:
     """Allow only an untracked JSON report to be ignored inside the checkout."""
 
     output_path = Path(output_path).resolve()
+    if aot_directory is not None and output_path.is_relative_to(
+        Path(aot_directory).resolve()
+    ):
+        raise ValueError("capacity report output must not overlap AOT evidence")
     if not output_path.is_relative_to(repository):
         return None
     if output_path.suffix.lower() != ".json":
@@ -1712,7 +1757,11 @@ def main() -> None:
             raise ValueError(
                 "capacity report must run against the checkout containing this tool"
             )
-        exemption = _report_output_exemption(repository, output_path)
+        exemption = _report_output_exemption(
+            repository,
+            output_path,
+            aot_directory=args.aot_directory,
+        )
         payload = _build_report(
             repository,
             source_sha=_clean_git_sha(repository, ignored_path=exemption),

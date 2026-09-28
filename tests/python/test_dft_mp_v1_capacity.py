@@ -135,6 +135,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "cuda_force_method_sha256": (
             "1d0df874a38441e94168f329e8055f9b9d27e7f26649e15e106db9ab7694c79e"
         ),
+        "prepared_aot_selection_sha256": (
+            "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
+        ),
     }
 
     cases = {item["id"]: item for item in result["cases"]}
@@ -572,6 +575,14 @@ def test_clean_git_sha_ignores_only_the_requested_report_output(
         qualify_capacity._report_output_exemption(
             repository, repository / "capacity-report.py"
         )
+    aot_directory = repository / "aot"
+    aot_directory.mkdir()
+    with pytest.raises(ValueError, match="must not overlap AOT evidence"):
+        qualify_capacity._report_output_exemption(
+            repository,
+            aot_directory / "pbe_rks_spd.json",
+            aot_directory=aot_directory,
+        )
 
     (repository / "unrelated.txt").write_text("dirty\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="clean Git worktree"):
@@ -926,6 +937,21 @@ def test_public_cuda_force_fails_closed_when_packaged_route_moves(
 
     with pytest.raises(RuntimeError, match="public CUDA force route changed"):
         qualify_capacity._source_public_route(tmp_path)
+
+
+def test_prepared_aot_route_fails_closed_when_selection_moves(
+    tmp_path: Path,
+) -> None:
+    relative = "python/vibeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    target = tmp_path / relative
+    source = target.read_text(encoding="utf-8")
+    old = "if aot_directory is None or ecp"
+    assert old in source
+    target.write_text(source.replace(old, "if True", 1), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="AOT selection contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
 
 
 def test_grid_count_fails_closed_when_native_cuda_shape_moves(

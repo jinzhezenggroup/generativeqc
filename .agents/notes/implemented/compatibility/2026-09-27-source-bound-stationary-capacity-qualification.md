@@ -54,6 +54,8 @@ execution domain, native DFT eligibility, batch/energy registry eligibility, and
 packaged stationary plan identity.
 The public MethodIR must also reproduce the production native functional-family
 code that selects grid derivative order and the packaged AOT profile.
+The no-runtime-compilation claim is bound to the complete prepared execution
+artifact-selection method, including stationary and grid AOT branches.
 The bundled basis-pack and named-record caches are cleared before every report,
 so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 
@@ -89,6 +91,8 @@ so a clean checkout switch cannot pair a new pack hash with stale expanded data.
 - The qualifier does not change caps, tolerances, frozen cases, or losing rows.
 - A report SHA identifies a clean source revision; only the writing CLI's
   validated untracked JSON output may be excluded from the cleanliness check.
+- Report output may not overlap the AOT directory whose manifests/binaries were
+  consumed as evidence.
 - Page-local primitive admission is source-bound to the merged #1486 bulk,
   scalar, spherical-component producer, component-mode selector, flush,
   executor, and endpoint-wiring contracts. Cumulative logical work is evidence,
