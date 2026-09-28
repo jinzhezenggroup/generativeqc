@@ -20,7 +20,7 @@ def _function(name: str, namespace: dict[str, typing.Any]) -> typing.Callable:
         if isinstance(item, ast.FunctionDef) and item.name == name
     )
     scope = {"typing": typing, **namespace}
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), scope)
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
     return scope[name]
 
 
