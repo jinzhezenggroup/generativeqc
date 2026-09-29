@@ -18,7 +18,8 @@ from generativeqc_compiler.common.value_numbering import (
     ValueNumberTable,
 )
 
-from .complexity import analyze_complexity, reassociate_einsums\nfrom .ir import PRIMITIVES, Node, _infer, constant
+from .complexity import analyze_complexity, reassociate_einsums
+from .ir import PRIMITIVES, Node, _infer, constant
 from .precision import precision_execution_contracts, remap_precision_execution
 from .program import Program, hash_node
 from .types import spec_to_payload
