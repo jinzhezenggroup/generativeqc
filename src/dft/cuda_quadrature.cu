@@ -2,6 +2,7 @@
 // come from the scientific compiler; the scalar reference remains in grid.cpp.
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include <stdexcept>
 
 #include "dft/grid.hpp"
