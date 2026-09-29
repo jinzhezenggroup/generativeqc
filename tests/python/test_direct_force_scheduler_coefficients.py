@@ -106,7 +106,8 @@ def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
     assert "contract_bounded_direct_force_subtile_range_scaled" in contraction
     assert "contract_two_electron_force_quartet_subtile_range_scaled" in quartet
     assert "launch_bounded_shell_range_exchange_derivative" in provider
-    assert "DirectRangeOperator::RshSources" in header
+    assert "RshSources = 3" in header
+    assert "DirectRangeOperator::RshSources" in bounded
     assert "launch_bounded_direct_rsh_force_kernel" in header
     assert "contract_bounded_direct_rsh_force_subtile" in contraction
     assert "contract_two_electron_force_quartet_subtile_rsh_scaled" in quartet
