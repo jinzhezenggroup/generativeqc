@@ -1,0 +1,677 @@
+"""Installed bounded CPU semilocal RKS molecular Hessian-vector products.
+
+This is the first native LDA/PBE RKS composition of the MethodIR-derived
+StationaryHVPPlan, one real CPKS nuclear response, generated first/second
+integral providers, analytic Becke mixed response and native SCF-domain XC
+Hessian contractions. It remains a tools endpoint: direct all-electron
+Cartesian CPU RKS under explicit resource budgets, with no public Calculator
+Hessian capability inferred.
+"""
+
+from __future__ import annotations
+
+import time
+import typing
+from copy import deepcopy
+from dataclasses import dataclass
+from itertools import product
+from pathlib import Path
+from types import MappingProxyType
+
+import numpy as np
+from .profiles import canonical_hash
+from generativeqc_compiler.method import StationaryHVPPlan, StationaryMeanField
+from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
+from generativeqc_compiler.tensor import execute
+
+from generativeqc_compiler.common.arrays import immutable
+
+from .response_solver import GMRESOptions
+from .rks_hessian_directional import (
+    DirectionalRKSBatchResponse,
+    DirectionalRKSResponse,
+    directional_rks_response,
+    directional_rks_responses,
+    native_rks_xc_hvp_components,
+)
+from .rks_hessian_integrals import (
+    checked_direction,
+    generated_weighted_first_integral_gradient,
+    generated_weighted_second_integral_hvp,
+    nuclear_hvp_from_topology,
+    rks_integral_topology,
+)
+from .rks_response import NativeRKSResponse
+from .second_order import (
+    StationaryHVPContributor,
+    StationaryPerturbationProvider,
+    StationaryResponseDriver,
+    StationarySecondOrderExecutor,
+)
+
+
+@dataclass(frozen=True, eq=False)
+class RKSHVPResult:
+    """Detached complete semilocal RKS HVP and its plan-owned source split."""
+
+    direction: np.ndarray
+    value: np.ndarray
+    components: typing.Mapping[str, np.ndarray]
+    directional_response: DirectionalRKSResponse
+    plan_identity: str
+    identity: str
+    _diagnostics: typing.Mapping[str, typing.Any]
+
+    @property
+    def diagnostics(self) -> dict[str, typing.Any]:
+        return deepcopy(dict(self._diagnostics))
+
+
+@dataclass(frozen=True, eq=False)
+class RKSHVPBatchResult:
+    """Detached complete HVPs assembled from one shared RKS multi-RHS solve."""
+
+    directions: np.ndarray
+    values: np.ndarray
+    results: tuple[RKSHVPResult, ...]
+    directional_responses: DirectionalRKSBatchResponse
+    plan_identity: str
+    identity: str
+    _diagnostics: typing.Mapping[str, typing.Any]
+
+    @property
+    def diagnostics(self) -> dict[str, typing.Any]:
+        return deepcopy(dict(self._diagnostics))
+
+
+@dataclass(frozen=True, eq=False)
+class RKSHessianResult:
+    """Raw bounded Cartesian RKS Hessian assembled from complete block HVPs."""
+
+    matrix: np.ndarray
+    identity: str
+    _diagnostics: typing.Mapping[str, typing.Any]
+
+    @property
+    def diagnostics(self) -> dict[str, typing.Any]:
+        return deepcopy(dict(self._diagnostics))
+
+
+def _checked_plan(operator: NativeRKSResponse) -> StationaryHVPPlan:
+    operator.validate_current()
+    state = operator.state
+    if state._source.backend != "cpu":
+        raise NotImplementedError("semilocal RKS molecular HVP is CPU-only")
+    topology = rks_integral_topology(operator)
+    if topology.nbf < 1 or not topology.atoms:
+        raise ValueError(
+            "semilocal RKS molecular HVP requires a nonempty direct Cartesian "
+            "all-electron source"
+        )
+    plan = StationaryHVPPlan(
+        state._source.method_ir,
+        StationaryMeanField(SCF_POINT_MODEL),
+    )
+    expected = (
+        "one_electron",
+        "coulomb",
+        "xc_ao",
+        "xc_grid",
+        "xc_weight",
+        "overlap_pulay",
+        "nuclear",
+    )
+    if plan.source_names != expected:
+        raise ValueError(
+            "semilocal RKS HVP source inventory is not the qualified slice"
+        )
+    return plan
+
+
+def _checked_integral_budget(operator: NativeRKSResponse, budget_bytes: int) -> int:
+    """Bound HVP plan-weight numerics before response/provider work starts."""
+    if type(budget_bytes) is not int or not 0 < budget_bytes < 2**63:
+        raise ValueError("integral_budget_bytes must be a positive int64 byte count")
+    nbf = rks_integral_topology(operator).nbf
+    largest_shell = max(rks_integral_topology(operator).shell_sizes, default=0)
+    # Pair plans retain index/feed/fixed/moving buffers; shell-local Coulomb
+    # plans retain four-index feeds and outputs. 128 bytes per scalar term is a
+    # conservative numeric-only envelope; Python/compiler metadata is excluded.
+    terms = max(nbf * nbf, largest_shell**4)
+    plan_weight_workspace = 128 * terms
+    if plan_weight_workspace > budget_bytes:
+        raise MemoryError(
+            "RKS Hessian plan-weight numerics exceed integral_budget_bytes"
+        )
+    output_accumulator_bytes = (
+        len(rks_integral_topology(operator).atoms) * 3 * np.dtype(np.float64).itemsize
+    )
+    if output_accumulator_bytes > budget_bytes:
+        raise MemoryError(
+            "RKS Hessian integral output accumulator exceeds integral_budget_bytes"
+        )
+    return plan_weight_workspace
+
+
+def _pair_plan_weights(
+    plan: StationaryHVPPlan,
+    source_name: str,
+    response: DirectionalRKSResponse,
+    operator: NativeRKSResponse,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Generate fixed and response weights for one ordered AO-pair source."""
+    nbf = rks_integral_topology(operator).nbf
+    rows, cols = np.indices((nbf, nbf))
+    rows, cols = rows.ravel(), cols.ravel()
+    state = operator.state
+    if source_name == "one_electron":
+        base = np.asarray(state.density[0])
+        delta = np.asarray(response.response.density_derivative)
+        feeds = {
+            "density_left": base[None, rows, cols],
+            "d_density_left": delta[None, rows, cols],
+        }
+    elif source_name == "overlap_pulay":
+        base = np.asarray(state.weighted_density[0])
+        delta = np.asarray(response.response.energy_weighted_density_derivative)
+        feeds = {
+            "weighted_density": base[None, rows, cols],
+            "d_weighted_density": delta[None, rows, cols],
+        }
+    else:
+        raise ValueError("pair weight generation requires one-electron or overlap")
+    block = plan.integral_block(source_name, terms=nbf * nbf, coordinates=1)
+    fixed = execute(block.weights, feeds).outputs["weights"].reshape(nbf, nbf)
+    moving = (
+        execute(block.response_weights, feeds)
+        .outputs["response_weights"]
+        .reshape(nbf, nbf)
+    )
+    return immutable(fixed), immutable(moving)
+
+
+def _coulomb_shell_plan_weights(
+    plan: StationaryHVPPlan,
+    response: DirectionalRKSResponse,
+    operator: NativeRKSResponse,
+    slots: tuple[int, int, int, int],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Generate one ordered shell-quartet Coulomb weight and its response JVP."""
+    offsets = np.cumsum((0, *rks_integral_topology(operator).shell_sizes))
+    ranges = [range(offsets[s], offsets[s + 1]) for s in slots]
+    tuples = tuple(product(*ranges))
+    if not tuples:
+        raise ValueError("empty Coulomb shell block")
+    ids = np.asarray(tuples, dtype=np.int64)
+    state = operator.state
+    density = np.asarray(state.density[0])
+    delta = np.asarray(response.response.density_derivative)
+    feeds = {
+        "density_left": density[None, ids[:, 0], ids[:, 1]],
+        "density_right": density[None, ids[:, 2], ids[:, 3]],
+        "d_density_left": delta[None, ids[:, 0], ids[:, 1]],
+        "d_density_right": delta[None, ids[:, 2], ids[:, 3]],
+    }
+    block = plan.integral_block("coulomb", terms=len(tuples), coordinates=1)
+    shape = tuple(offsets[s + 1] - offsets[s] for s in slots)
+    fixed = execute(block.weights, feeds).outputs["weights"].reshape(shape)
+    moving = (
+        execute(block.response_weights, feeds)
+        .outputs["response_weights"]
+        .reshape(shape)
+    )
+    return immutable(fixed), immutable(moving)
+
+
+def _integral_source_hvp(
+    source_name: str,
+    plan: StationaryHVPPlan,
+    operator: NativeRKSResponse,
+    response: DirectionalRKSResponse,
+    direction: np.ndarray,
+    cache: Path,
+    integral_budget_bytes: int,
+) -> tuple[np.ndarray, dict[str, typing.Any]]:
+    """Apply one plan-owned integral source as d(weight)dI + weight d2I(v)."""
+    if source_name in ("one_electron", "overlap_pulay"):
+        fixed, moving = _pair_plan_weights(plan, source_name, response, operator)
+        first = generated_weighted_first_integral_gradient(
+            rks_integral_topology(operator),
+            source_name,
+            pair_weights=moving,
+            cache=cache,
+        )
+        second, diagnostic = generated_weighted_second_integral_hvp(
+            rks_integral_topology(operator),
+            source_name,
+            direction,
+            pair_weights=fixed,
+            cache=cache,
+            budget_bytes=integral_budget_bytes,
+        )
+    elif source_name == "coulomb":
+
+        def response_weights(slots: tuple[int, int, int, int]) -> np.ndarray:
+            return _coulomb_shell_plan_weights(plan, response, operator, slots)[1]
+
+        def fixed_weights(slots: tuple[int, int, int, int]) -> np.ndarray:
+            return _coulomb_shell_plan_weights(plan, response, operator, slots)[0]
+
+        first = generated_weighted_first_integral_gradient(
+            rks_integral_topology(operator),
+            source_name,
+            eri_shell_weights=response_weights,
+            cache=cache,
+        )
+        second, diagnostic = generated_weighted_second_integral_hvp(
+            rks_integral_topology(operator),
+            source_name,
+            direction,
+            eri_shell_weights=fixed_weights,
+            cache=cache,
+            budget_bytes=integral_budget_bytes,
+        )
+    else:
+        raise ValueError("unknown semilocal RKS integral HVP source")
+    total = np.asarray(first) + np.asarray(second)
+    if not np.isfinite(total).all():
+        raise FloatingPointError("nonfinite semilocal RKS integral HVP source")
+    diagnostic = {
+        **diagnostic,
+        "response_first_integral": "generated-plan-weighted",
+        "stationary_hvp_plan": plan.identity,
+    }
+    return immutable(total), diagnostic
+
+
+def _xc_hvp_components(
+    operator: NativeRKSResponse,
+    response: DirectionalRKSResponse,
+    direction: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Reuse the native SCF point model and the already solved CPKS direction."""
+    if not np.array_equal(response.direction, direction):
+        raise ValueError("XC HVP direction does not match the solved response")
+    sources = native_rks_xc_hvp_components(operator, response)
+    return {name: getattr(sources, name) for name in ("xc_ao", "xc_grid", "xc_weight")}
+
+
+def _rks_hvp_with_response(
+    operator: NativeRKSResponse,
+    vector: np.ndarray,
+    directional: DirectionalRKSResponse,
+    *,
+    plan: StationaryHVPPlan,
+    cache: Path,
+    response_driver_identity: str,
+    nuclear_response_solves: int,
+    execution: str,
+    integral_budget_bytes: int,
+    plan_weight_workspace_bytes: int,
+) -> RKSHVPResult:
+    """Assemble one complete HVP from an already solved directional response."""
+    if not np.array_equal(directional.direction, vector):
+        raise ValueError("RKS HVP direction does not match the supplied response")
+    provider_diagnostics: dict[str, typing.Any] = {}
+    xc_cache: dict[str, np.ndarray] = {}
+
+    def integral(source_name: str) -> typing.Callable[[typing.Any], np.ndarray]:
+        def evaluate(context: typing.Any) -> np.ndarray:
+            value, diagnostic = _integral_source_hvp(
+                source_name,
+                plan,
+                operator,
+                context.response,
+                context.direction,
+                cache,
+                integral_budget_bytes,
+            )
+            provider_diagnostics[source_name] = diagnostic
+            return value
+
+        return evaluate
+
+    def xc(source_name: str) -> typing.Callable[[typing.Any], np.ndarray]:
+        def evaluate(context: typing.Any) -> np.ndarray:
+            if not xc_cache:
+                xc_cache.update(
+                    _xc_hvp_components(operator, context.response, context.direction)
+                )
+            return xc_cache[source_name]
+
+        return evaluate
+
+    def reuse_response(value: typing.Any) -> DirectionalRKSResponse:
+        candidate = checked_direction(value, operator.xc_kernel.basis.natom)
+        if not np.array_equal(candidate, directional.direction):
+            raise ValueError("stationary executor requested a different RKS direction")
+        return directional
+
+    contributors = (
+        StationaryHVPContributor(
+            "one_electron",
+            "native-rks-plan-weighted-one-electron-v1",
+            integral("one_electron"),
+        ),
+        StationaryHVPContributor(
+            "coulomb",
+            "native-rks-plan-weighted-coulomb-v1",
+            integral("coulomb"),
+        ),
+        StationaryHVPContributor(
+            "xc_ao", "native-rks-xc-scf-domain-ao-v2", xc("xc_ao")
+        ),
+        StationaryHVPContributor(
+            "xc_grid", "native-rks-xc-scf-domain-grid-v2", xc("xc_grid")
+        ),
+        StationaryHVPContributor(
+            "xc_weight", "native-rks-xc-scf-domain-weight-v2", xc("xc_weight")
+        ),
+        StationaryHVPContributor(
+            "overlap_pulay",
+            "native-rks-plan-weighted-overlap-v1",
+            integral("overlap_pulay"),
+        ),
+        StationaryHVPContributor(
+            "nuclear",
+            "native-rks-nuclear-hvp-v1",
+            lambda context: nuclear_hvp_from_topology(
+                rks_integral_topology(operator), context.direction
+            ),
+        ),
+    )
+    executor = StationarySecondOrderExecutor(
+        plan,
+        natoms=operator.xc_kernel.basis.natom,
+        perturbation=StationaryPerturbationProvider(
+            "native-rks-cartesian-direction-v1",
+            lambda value: immutable(np.asarray(value, dtype=np.float64)),
+        ),
+        response=StationaryResponseDriver(
+            response_driver_identity,
+            reuse_response,
+        ),
+        contributors=contributors,
+    )
+    executed = executor.apply(vector)
+    operator.validate_current()
+    if executed.response is not directional:
+        raise RuntimeError("RKS HVP executor did not reuse the supplied response")
+    identity = canonical_hash(
+        {
+            "schema": "generativeqc.rks-hvp/v1",
+            "state": operator.state.identity.to_payload(),
+            "plan": plan.identity,
+            "executor_result": executed.identity,
+            "directional_response": directional.identity,
+        }
+    )
+    diagnostics = MappingProxyType(
+        {
+            **dict(executed.diagnostics),
+            "molecular_hvp": True,
+            "method": operator.state.identity.method,
+            "nuclear_response_solves": nuclear_response_solves,
+            "response_iterations": directional.response.solve_result.iterations,
+            "response_residual_norm": directional.response.solve_result.residual_norm,
+            "integral_providers": deepcopy(provider_diagnostics),
+            "integral_budget_bytes": integral_budget_bytes,
+            "plan_weight_workspace_bound_bytes": plan_weight_workspace_bytes,
+            "xc_second_order": "native-scf-point-response/analytic-grid-mixed",
+            "full_molecular_hessian_allocated": False,
+            "full_ao_rank_four_weights": False,
+            "execution": execution,
+        }
+    )
+    return RKSHVPResult(
+        direction=executed.direction,
+        value=executed.value,
+        components=MappingProxyType(dict(executed.components)),
+        directional_response=directional,
+        plan_identity=plan.identity,
+        identity=identity,
+        _diagnostics=diagnostics,
+    )
+
+
+def rks_hvp(
+    operator: typing.Any,
+    direction: typing.Any,
+    *,
+    cache: typing.Any = ".artifacts",
+    integral_budget_bytes: int = 64 << 20,
+    solver_options: typing.Any = None,
+) -> RKSHVPResult:
+    """Apply the complete bounded direct LDA/PBE RKS molecular Hessian once."""
+    if not isinstance(operator, NativeRKSResponse):
+        raise TypeError("RKS molecular HVP requires NativeRKSResponse")
+    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
+        raise TypeError("solver_options must be GMRESOptions")
+    plan = _checked_plan(operator)
+    plan_weight_workspace = _checked_integral_budget(operator, integral_budget_bytes)
+    vector = checked_direction(direction, operator.xc_kernel.basis.natom)
+    cache_path = Path(cache)
+    directional = directional_rks_response(
+        operator,
+        vector,
+        cache=cache_path,
+        solver_options=solver_options,
+    )
+    return _rks_hvp_with_response(
+        operator,
+        vector,
+        directional,
+        plan=plan,
+        cache=cache_path,
+        response_driver_identity="native-rks-shared-cpks-direction-v1",
+        nuclear_response_solves=1,
+        execution="bounded-cpu-native-rks-hvp-v2",
+        integral_budget_bytes=integral_budget_bytes,
+        plan_weight_workspace_bytes=plan_weight_workspace,
+    )
+
+
+def rks_hvp_many(
+    operator: typing.Any,
+    directions: typing.Any,
+    *,
+    cache: typing.Any = ".artifacts",
+    strategy: str = "recycled",
+    integral_budget_bytes: int = 64 << 20,
+    solver_options: typing.Any = None,
+) -> RKSHVPBatchResult:
+    """Apply complete RKS HVPs after one shared sequential/blocked/recycled solve."""
+    if not isinstance(operator, NativeRKSResponse):
+        raise TypeError("RKS molecular HVP block requires NativeRKSResponse")
+    if strategy not in ("sequential", "blocked", "recycled"):
+        raise ValueError("strategy must be sequential, blocked or recycled")
+    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
+        raise TypeError("solver_options must be GMRESOptions")
+    plan = _checked_plan(operator)
+    plan_weight_workspace = _checked_integral_budget(operator, integral_budget_bytes)
+    natom = operator.xc_kernel.basis.natom
+    raw = np.asarray(directions)
+    if (
+        raw.ndim != 3
+        or raw.shape[0] < 1
+        or raw.shape[1:] != (natom, 3)
+        or raw.dtype.kind not in "iuf"
+        or np.iscomplexobj(raw)
+        or not np.isfinite(raw).all()
+    ):
+        raise ValueError(
+            "RKS HVP block directions must be finite real with shape (nrhs, natoms, 3)"
+        )
+    vectors = tuple(checked_direction(item, natom) for item in raw)
+    cache_path = Path(cache)
+    directional = directional_rks_responses(
+        operator,
+        np.stack(vectors),
+        cache=cache_path,
+        strategy=strategy,
+        solver_options=solver_options,
+    )
+    results = tuple(
+        _rks_hvp_with_response(
+            operator,
+            vector,
+            response,
+            plan=plan,
+            cache=cache_path,
+            response_driver_identity="native-rks-shared-cpks-multi-rhs-v1",
+            nuclear_response_solves=0,
+            execution="bounded-cpu-native-rks-hvp-multi-rhs-v1",
+            integral_budget_bytes=integral_budget_bytes,
+            plan_weight_workspace_bytes=plan_weight_workspace,
+        )
+        for vector, response in zip(vectors, directional.responses, strict=True)
+    )
+    values = immutable(np.stack([item.value for item in results]))
+    published_directions = immutable(np.stack(vectors))
+    identity = canonical_hash(
+        {
+            "schema": "generativeqc.rks-hvp-batch/v1",
+            "state": operator.state.identity.to_payload(),
+            "plan": plan.identity,
+            "strategy": strategy,
+            "directional_response_batch": directional.identity,
+            "results": tuple(item.identity for item in results),
+        }
+    )
+    diagnostics = MappingProxyType(
+        {
+            "molecular_hvp": True,
+            "nrhs": len(results),
+            "strategy": strategy,
+            "multi_rhs_calls": 1,
+            "response_operator_actions": directional.solve_result.operator_actions,
+            "response_peak_workspace_bytes": (
+                directional.solve_result.peak_workspace_bytes
+            ),
+            "rhs_rank": directional.solve_result.rhs_rank,
+            "rank_deficient_rhs": directional.solve_result.rank_deficient_rhs,
+            "integral_budget_bytes": integral_budget_bytes,
+            "plan_weight_workspace_bound_bytes": plan_weight_workspace,
+            "full_molecular_hessian_allocated": False,
+            "full_ao_rank_four_weights": False,
+            "execution": "bounded-cpu-native-rks-hvp-multi-rhs-v1",
+        }
+    )
+    return RKSHVPBatchResult(
+        directions=published_directions,
+        values=values,
+        results=results,
+        directional_responses=directional,
+        plan_identity=plan.identity,
+        identity=identity,
+        _diagnostics=diagnostics,
+    )
+
+
+def rks_hessian(
+    operator: typing.Any,
+    *,
+    block_size: int | None = None,
+    cache: typing.Any = ".artifacts",
+    strategy: str = "recycled",
+    output_budget_bytes: int = 64 << 20,
+    integral_budget_bytes: int = 64 << 20,
+    solver_options: typing.Any = None,
+) -> RKSHessianResult:
+    """Assemble the raw bounded semilocal RKS Hessian from block HVP columns.
+
+    The output is never symmetrized. output_budget_bytes covers the dense
+    result plus its final immutable publication; response/provider work keeps
+    the existing independently bounded contracts and is reported per block.
+    """
+    if not isinstance(operator, NativeRKSResponse):
+        raise TypeError("RKS Hessian requires NativeRKSResponse")
+    _checked_plan(operator)
+    if strategy not in ("sequential", "blocked", "recycled"):
+        raise ValueError("strategy must be sequential, blocked or recycled")
+    if solver_options is not None and not isinstance(solver_options, GMRESOptions):
+        raise TypeError("solver_options must be GMRESOptions")
+    if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
+        raise ValueError("output_budget_bytes must be a positive int64 byte count")
+
+    natom = operator.xc_kernel.basis.natom
+    coordinates = 3 * natom
+    if block_size is None:
+        block_size = min(4, coordinates)
+    if type(block_size) is not int or not 1 <= block_size <= coordinates:
+        raise ValueError("block_size must be between 1 and 3*natoms")
+
+    output_bytes = coordinates * coordinates * np.dtype(np.float64).itemsize
+    output_peak_bound = 2 * output_bytes
+    if output_peak_bound > output_budget_bytes:
+        raise ValueError(
+            "full RKS Hessian output and immutable publication exceed "
+            "output_budget_bytes"
+        )
+
+    _checked_integral_budget(operator, integral_budget_bytes)
+    matrix = np.empty((coordinates, coordinates), dtype=np.float64)
+    cache_path = Path(cache)
+    blocks: list[dict[str, typing.Any]] = []
+    started = time.perf_counter()
+    for begin in range(0, coordinates, block_size):
+        end = min(coordinates, begin + block_size)
+        directions = np.zeros((end - begin, coordinates), dtype=np.float64)
+        for local, column in enumerate(range(begin, end)):
+            directions[local, column] = 1.0
+        result = rks_hvp_many(
+            operator,
+            directions.reshape(end - begin, natom, 3),
+            cache=cache_path,
+            strategy=strategy,
+            integral_budget_bytes=integral_budget_bytes,
+            solver_options=solver_options,
+        )
+        matrix[:, begin:end] = result.values.reshape(end - begin, coordinates).T
+        blocks.append(
+            {
+                "begin": begin,
+                "end": end,
+                "identity": result.identity,
+                "diagnostics": result.diagnostics,
+            }
+        )
+        del result, directions
+
+    operator.validate_current()
+    if not np.isfinite(matrix).all():
+        raise FloatingPointError("nonfinite RKS Hessian; no result published")
+    # Keep at most one additional dense array alive. The nested expression
+    # abs(matrix - matrix.T) would allocate two and violate the output peak.
+    symmetry_scratch = matrix - matrix.T
+    np.abs(symmetry_scratch, out=symmetry_scratch)
+    symmetry_error = float(np.max(symmetry_scratch, initial=0.0))
+    del symmetry_scratch
+    identity = canonical_hash(
+        {
+            "schema": "generativeqc.rks-hessian-block/v1",
+            "state": operator.state.identity.to_payload(),
+            "block_size": block_size,
+            "strategy": strategy,
+            "blocks": tuple(item["identity"] for item in blocks),
+        }
+    )
+    diagnostics = MappingProxyType(
+        {
+            "method": operator.state.identity.method,
+            "block_size": block_size,
+            "block_count": len(blocks),
+            "strategy": strategy,
+            "output_bytes": output_bytes,
+            "output_peak_bound_bytes": output_peak_bound,
+            "output_budget_bytes": output_budget_bytes,
+            "integral_budget_bytes": integral_budget_bytes,
+            "raw_symmetry_error": symmetry_error,
+            "posthoc_symmetrization": False,
+            "blocks": tuple(blocks),
+            "seconds": time.perf_counter() - started,
+            "public_calculator_endpoint": False,
+            "complete_resource_bound": False,
+        }
+    )
+    return RKSHessianResult(immutable(matrix), identity, diagnostics)
