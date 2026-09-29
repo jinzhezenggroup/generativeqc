@@ -446,7 +446,7 @@ void retained_range_shell_d_parity() {
                                          system.atoms.size(), system.shells.size(), primitives, 1);
     PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
     const auto derivative = prepared_cuda_direct_derivative_binding(plan);
-    require(derivative, "d-shell Direct derivative owner was not retained");
+    require(static_cast<bool>(derivative), "d-shell Direct derivative owner was not retained");
 
     const auto n = generativeqc::molecule::ao_count(system);
     std::vector<double> density(n * n);
