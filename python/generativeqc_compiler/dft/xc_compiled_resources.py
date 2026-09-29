@@ -254,7 +254,7 @@ def _active_scopes(
 
 def _kernel_threads(function: str, functional: str) -> int:
     name = _leaf(function)
-    if name.startswith("tiled_density_product") or name.startswith("tiled_potential"):
+    if name.startswith(("tiled_density_product", "tiled_potential")):
         return DEFAULT_XC_MATRIX_SCHEDULE.threads
     if name.startswith("accumulate_totals"):
         return 32
