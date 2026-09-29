@@ -80,7 +80,7 @@ class RKSIntegralTopology:
     shell_sizes: tuple[int, ...]
     nbf: int
     representation: str = "cartesian"
-    auxiliary_shells: tuple[()] = ()
+    auxiliary_shells: tuple[typing.Any, ...] = ()
 
     @classmethod
     def from_basis(cls, basis: typing.Any) -> "RKSIntegralTopology":
