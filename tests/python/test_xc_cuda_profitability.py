@@ -76,14 +76,23 @@ def test_xc_artifact_exposes_scoped_compiled_profitability(tmp_path) -> None:
         "identity": {"target": {"architecture": "sm_120"}},
         "resources": [
             {
-                "function": "xc_group_0",
+                "function": "runtime_check_scale",
+                "registers": 200,
+                "stack_bytes": 0,
+                "spill_store_bytes": 64,
+                "spill_load_bytes": 64,
+                "shared_bytes": 4096,
+                "local_bytes": 128,
+            },
+            {
+                "function": "_Z10xc_group_0PKdPdmPi",
                 "registers": 80,
                 "stack_bytes": 0,
                 "spill_store_bytes": 16,
                 "spill_load_bytes": 8,
                 "shared_bytes": 512,
                 "local_bytes": 32,
-            }
+            },
         ],
         "compile_seconds": 2.0,
     }
