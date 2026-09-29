@@ -185,9 +185,15 @@ def test_complete_cuda_independent_analytic(
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-10, rtol=0)
         assert result.work["launches"] > 0
         assert result.work["tensor_executions"] == 0
+        assert result.work["full_range_derivative_route"] == "prepared-direct-shell"
+        assert result.work["full_range_ao_task_domain_elided"] is True
+        assert all(
+            item["source"] not in ("coulomb", "exact_exchange")
+            for item in result.work["stationary_task_executor"]["sources"]
+        )
         assert (
             result.work["stationary_final_reduction"]
-            == "native-seven-source-device-sum-v1"
+            == "native-plan-source-device-sum-plus-direct-shell-compose-v1"
         )
         assert result.work["stationary_weight_tensor_executions"] == 0
         assert result.work["stationary_weight_roundtrip_bytes"] == 0
@@ -277,7 +283,7 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         assert result.work["tensor_executions"] == 0
         assert (
             result.work["stationary_final_reduction"]
-            == "native-seven-source-device-sum-v1"
+            == "native-plan-source-device-sum-plus-direct-shell-compose-v1"
         )
         assert result.work["stationary_weight_tensor_executions"] == 0
         assert result.work["stationary_weight_roundtrip_bytes"] == 0

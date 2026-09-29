@@ -44,6 +44,12 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
     std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
 
+/** Token-checked full-range J'/K' through the prepared Direct shell owner.
+ * Output is source-major [J,K], each block containing 3*Natom values. */
+generativeqc_status dft_cuda_full_range_integral_derivatives(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::vector<double>& output, std::string& detail);
+
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
                                         std::string& detail);
 

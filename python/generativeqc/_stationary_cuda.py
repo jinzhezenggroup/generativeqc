@@ -1670,6 +1670,10 @@ def _complete_rks_cuda_gradient_diagnostic(
         + (na + 2) * primitive_sum**2
         + na * (na - 1) // 2
     )
+    # Keep the frozen whole-force capacity expression above intact for
+    # admission/evidence tooling. Production removes this AO^4 contribution
+    # from executed primitive work only after the prepared shell source succeeds.
+    ao_quartet_primitive_records = (1 + int(has_exchange)) * primitive_sum**4
     if records > np.iinfo(np.uint64).max:
         raise ValueError("primitive work count exceeds uint64 metric range")
     pair_visits = (1 + 2 * len(state.grid.points)) * na * (na - 1) // 2
@@ -1975,6 +1979,22 @@ def _complete_rks_cuda_gradient_diagnostic(
                 spec.coincident_tolerance, state.density, state.weighted_density
             )
             ao.set_density(density)
+        shell_full_range = None
+        shell_provider = getattr(state._source, "cuda_full_range_derivatives", None)
+        if not ecp and callable(shell_provider):
+            with timeline.phase("direct_shell_integral_derivatives"):
+                shell_full_range = shell_provider(na)
+        native_shell_full_range = shell_full_range is not None
+        if native_shell_full_range:
+            shell_full_range = np.asarray(shell_full_range)
+            if (
+                shell_full_range.shape != (2, na, 3)
+                or not np.isfinite(shell_full_range).all()
+            ):
+                raise RuntimeError(
+                    "prepared Direct shell derivative source returned invalid output"
+                )
+            records -= ao_quartet_primitive_records
         timeline.switch("python_packing")
         # integral_terms and primitive_tile are admitted independently. A fixed
         # producer must fit both the logical fixed threshold and the resident
@@ -1986,12 +2006,23 @@ def _complete_rks_cuda_gradient_diagnostic(
             page_capacity=primitive_tile,
         )
         task_executions: list[dict[str, typing.Any]] = []
-        for source, rank, operator in (
+        task_sources = (
             ("one_electron", 2, "kinetic"),
             ("overlap_pulay", 2, "overlap"),
-            ("coulomb", 4, "four_center_eri"),
-            *((("exact_exchange", 4, "four_center_eri"),) if has_exchange else ()),
-        ):
+            *(
+                ()
+                if native_shell_full_range
+                else (
+                    ("coulomb", 4, "four_center_eri"),
+                    *(
+                        (("exact_exchange", 4, "four_center_eri"),)
+                        if has_exchange
+                        else ()
+                    ),
+                )
+            ),
+        )
+        for source, rank, operator in task_sources:
             domain = RuntimeTaskDomain.rectangular((n,) * rank)
             source_index = source_names.index(source)
 
@@ -2051,6 +2082,14 @@ def _complete_rks_cuda_gradient_diagnostic(
             sources.drain_geometry()
         with timeline.phase("source_d2h_publication"):
             components = sources.finish()
+        if native_shell_full_range:
+            components["coulomb"] = np.ascontiguousarray(shell_full_range[0])
+            if has_exchange:
+                components["exact_exchange"] = np.ascontiguousarray(shell_full_range[1])
+            elif np.any(shell_full_range[1] != 0):
+                raise RuntimeError(
+                    "semilocal Direct shell derivative published unexpected K"
+                )
         if ecp:
             # Full ordered AO-pair contraction; the existing TensorIR supplies
             # spin summation and every scientific weight/reduction on CUDA.
@@ -2093,6 +2132,10 @@ def _complete_rks_cuda_gradient_diagnostic(
         else:
             with timeline.phase("final_reduction"):
                 gradient = sources.reduced()
+                if native_shell_full_range:
+                    gradient = gradient + components["coulomb"]
+                    if has_exchange:
+                        gradient = gradient + components["exact_exchange"]
         with timeline.phase("metrics_collection"):
             source_after = sources.metrics()
             grid_after = ao.metrics()
@@ -2148,6 +2191,15 @@ def _complete_rks_cuda_gradient_diagnostic(
         ordered_pairs=n * n,
         ordered_quartets=(1 + int(has_exchange)) * n**4,
         exchange_ordered_quartets=n**4 if has_exchange else 0,
+        full_range_derivative_route=(
+            "prepared-direct-shell" if native_shell_full_range else "bounded-ao-task"
+        ),
+        full_range_ao_task_domain_elided=bool(native_shell_full_range),
+        full_range_shell_sources=(
+            ("coulomb", "exact_exchange")
+            if native_shell_full_range and has_exchange
+            else (("coulomb",) if native_shell_full_range else ())
+        ),
         additional_device_peak_bound=peak,
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
@@ -2170,9 +2222,13 @@ def _complete_rks_cuda_gradient_diagnostic(
             "generated-tensorir-v1"
             if ecp
             else (
-                "native-plan-source-device-sum-v1"
-                if has_exchange
-                else "native-seven-source-device-sum-v1"
+                "native-plan-source-device-sum-plus-direct-shell-compose-v1"
+                if native_shell_full_range
+                else (
+                    "native-plan-source-device-sum-v1"
+                    if has_exchange
+                    else "native-seven-source-device-sum-v1"
+                )
             )
         ),
         stationary_state_dw_upload_bytes=(

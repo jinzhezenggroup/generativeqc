@@ -857,6 +857,51 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
+  generativeqc_status cuda_full_range_integral_derivatives(
+      const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::string& detail) {
+#if GENERATIVEQC_HAS_CUDA
+    output.clear();
+    if (!cuda_ || !system_.ecp_terms.empty() || range_strategy_ ||
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      detail = "CUDA full-range stationary shell derivatives require an all-electron Direct owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
+    if (!derivative_source) {
+      detail = "prepared CUDA Fock owner has no retained Direct shell derivative lease";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsResidentDensityBinding resident_density;
+    auto status = cuda_->resident_final_density(expected, resident_density, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!resident_density || resident_density.device_id != derivative_source.device_id ||
+        resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+      detail = "CUDA full-range stationary density is incompatible with the Direct shell owner";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+        fock_, resident_density.alpha, resident_density.beta, resident_density.matrix_elements,
+        output, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      output.clear();
+      return status;
+    }
+    const auto coordinates = 3 * system_.atoms.size();
+    if (output.size() != 2 * coordinates) {
+      output.clear();
+      detail = "prepared CUDA full-range shell derivative source shape mismatch";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    (void)expected;
+    (void)output;
+    detail = "CUDA full-range stationary shell derivatives are unavailable in this build";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
   generativeqc_status cuda_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
@@ -1518,6 +1563,16 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status cuda_full_range_integral_derivatives(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->cuda_full_range_integral_derivatives(expected, output, detail);
+    output.clear();
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status cuda_integral_gradient(
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
@@ -1646,6 +1701,16 @@ generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index
   state = {};
   detail = "prepared batch is not a KS final-state owner";
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+}
+
+generativeqc_status dft_cuda_full_range_integral_derivatives(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::vector<double>& output, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->cuda_full_range_integral_derivatives(index, expected, output, detail);
+  output.clear();
+  detail = "CUDA full-range stationary shell derivatives require a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
 generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
