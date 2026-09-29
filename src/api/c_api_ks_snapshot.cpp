@@ -17,7 +17,13 @@
 #include "methods/dft_method.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
+#include "dft/grid_task_view.cuh"
 #include "runtime/cuda_resources.cuh"
+
+extern "C" generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+    generativeqc_nonlocal_cuda_force* owner, generativeqc_context* expected_context, int device,
+    const double* density, const double* gradient, std::size_t point_count, void* source_stream,
+    const generativeqc::dft::GridTaskView* view);
 #endif
 
 struct generativeqc_ks_snapshot {
@@ -502,6 +508,40 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    generativeqc_nonlocal_cuda_force* owner, const generativeqc::dft::GridTaskView* view) {
+  if (!batch || !snapshot || !owner || !view) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    int device = -1;
+    const double* density = nullptr;
+    const double* gradient = nullptr;
+    std::size_t point_count = 0;
+    void* source_stream = nullptr;
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_resident_nonlocal_features(
+        *batch->plan, snapshot->index, snapshot->token, device, density, gradient, point_count,
+        source_stream, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    status = generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+        owner, batch->context, device, density, gradient, point_count, source_stream, view);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    return check_current(*batch, *snapshot);
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+#else
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
 }
 
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,

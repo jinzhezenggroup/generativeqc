@@ -90,6 +90,7 @@ function(generativeqc_attach_cuda_implib target)
     cudaStreamEndCapture
     cudaStreamIsCapturing
     cudaStreamSynchronize
+    cudaStreamWaitEvent
   )
   set(GENERATIVEQC_CUBLAS_SYMBOLS
     cublasCreate_v2

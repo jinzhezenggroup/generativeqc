@@ -195,7 +195,11 @@ class PreparedWb97mvCudaGradient:
             na + n + basis.nprimitive + len(basis.shells)
         )
         device_bound = (
-            gp.peak_bytes + source_bytes + 48 * tile_points + nlc_budget + native_budget
+            gp.peak_bytes
+            + 2 * source_bytes
+            + 48 * tile_points
+            + nlc_budget
+            + native_budget
         )
         host_bound = (
             gp.host_bytes
@@ -251,6 +255,22 @@ class PreparedWb97mvCudaGradient:
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
+                # Keep semilocal and nonlocal source accounting distinct while
+                # both consumers borrow the same GridTask lease. This second
+                # bounded accumulator replaces the former second AO/grid pass.
+                self.nonlocal_sources = self._stack.enter_context(
+                    _CudaSources(
+                        basis,
+                        artifact,
+                        compiler,
+                        device,
+                        tile_points,
+                        capacity,
+                        source_bytes,
+                        spin_blocks=plan.spin_blocks,
+                        page_work_budget=1,
+                    )
+                )
                 self.grid = self._stack.enter_context(
                     CudaGrid(
                         basis,
@@ -338,6 +358,7 @@ class PreparedWb97mvCudaGradient:
         self.sources.reset(
             source.grid_spec.coincident_tolerance, state.density, state.weighted_density
         )
+        self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
         for atom in range(na):
             for other in range(atom):
@@ -356,6 +377,7 @@ class PreparedWb97mvCudaGradient:
         resident_parts, resident_seconds, resident_work = resident_nonlocal_geometry(
             grid=self.grid,
             sources=self.sources,
+            nonlocal_sources=self.nonlocal_sources,
             nonlocal_owner=self._nonlocal,
             state=state,
             raw_weights=source.atomic_weights,
