@@ -529,6 +529,10 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   const auto b = shared.batch;
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   std::vector<double> result(2U * coordinates);
+  error = cudaMemsetAsync(p.heads, 0,
+                          detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+                          shared.stream);
+  if (error != cudaSuccess) return error;
   const double coefficients[2][2] = {{coulomb_coefficient, 0.0}, {0.0, exchange_coefficient}};
   for (unsigned source = 0; source < 2; ++source) {
     error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
