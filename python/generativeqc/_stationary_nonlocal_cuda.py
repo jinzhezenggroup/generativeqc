@@ -22,7 +22,6 @@ def resident_nonlocal_geometry(
     state: typing.Any,
     raw_weights: typing.Any,
     tile_points: int,
-    ao_count: int,
     functional: int,
     ingredients: tuple[str, ...],
 ) -> tuple[dict[str, np.ndarray], dict[str, float], dict[str, typing.Any]]:
@@ -43,9 +42,6 @@ def resident_nonlocal_geometry(
         raise ValueError("resident nonlocal owner/grid point count differs")
     if len(raw_weights) != count:
         raise ValueError("resident nonlocal raw quadrature size differs")
-    if type(ao_count) is not int or ao_count <= 0:
-        raise ValueError("resident nonlocal AO count must be a positive integer")
-    ao_ids = np.arange(ao_count, dtype=np.uintp)
     began = perf_counter()
     diagnostic = nonlocal_owner.diagnostic()
     if diagnostic.executed:
@@ -58,7 +54,12 @@ def resident_nonlocal_geometry(
     began = perf_counter()
     for begin in range(0, count, tile_points):
         end = min(begin + tile_points, count)
-        with grid.feature_task(points[begin:end], ao_ids, ingredients) as task:
+        with grid.feature_task(
+            points[begin:end],
+            None,
+            ingredients,
+            defer_error_to_consumer=True,
+        ) as task:
             # Both operations consume this exact lease before the grid can
             # overwrite its tile. The producer checks device/stream identity.
             nonlocal_owner.collect(task, begin)
@@ -99,7 +100,12 @@ def resident_nonlocal_geometry(
     began = perf_counter()
     for begin in range(0, count, tile_points):
         end = min(begin + tile_points, count)
-        with grid.feature_task(points[begin:end], ao_ids, ingredients) as task:
+        with grid.feature_task(
+            points[begin:end],
+            None,
+            ingredients,
+            defer_error_to_consumer=True,
+        ) as task:
             if task.view.stream != seeds.stream:
                 raise ValueError("resident nonlocal seed and geometry streams differ")
             # Inactive MolecularV1 rows have all six seeds zeroed by the native
