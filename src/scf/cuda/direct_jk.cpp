@@ -482,9 +482,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     if (spec.coulomb.present || spec.exchange.present) {
       auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
                                                          : plan->generated_coulomb.get();
-      const bool generated_exchange_available = plan->generated_exchange != nullptr &&
-                                                spec.exchange.present &&
-                                                spec.exchange.op == FockOperator::FullRange;
+      // A derivative-capable owner may retain generated exchange only as
+      // stationary shell state. Preserve the previously qualified value-K
+      // route until generated exchange is independently adopted there.
+      const bool generated_exchange_available =
+          plan->derivative_order == 0 && plan->generated_exchange != nullptr &&
+          spec.exchange.present && spec.exchange.op == FockOperator::FullRange;
       const auto dispatch =
           direct_jk_value_dispatch(generated_coulomb != nullptr, generated_exchange_available,
                                    spec.coulomb.present, spec.exchange.present, mixed_j);
