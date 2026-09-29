@@ -38,8 +38,14 @@ def resource(
 
 def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
     return (
-        resource("generativeqc::dft::cuda_xc_detail::validate_density(double*)", registers=24),
-        resource("generativeqc::dft::cuda_xc_detail::ao_kernel(double*)", registers=52),
+        resource(
+            "generativeqc::dft::cuda_xc_detail::(anonymous namespace)::validate_density(double*)",
+            registers=24,
+        ),
+        resource(
+            "generativeqc::dft::cuda_xc_detail::(anonymous namespace)::ao_kernel(double*)",
+            registers=52,
+        ),
         resource(
             "generativeqc::dft::cuda_xc_detail::tiled_density_product<false>(double*)",
             registers=64,
@@ -149,6 +155,30 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
     assert "tiled_potential" not in {
         row.function for _, scope in evidence.scopes for row in scope
     }
+
+
+def test_partial_final_tile_includes_tiled_and_scalar_resource_paths() -> None:
+    shape = GridXcCompiledResourceShape(npoint=4100, tile_points=256, nao=96, spins=2)
+    rows = (
+        *pbe_resources(),
+        resource("density_product<false>(double*)", registers=91),
+        resource("assemble_potential(double*)", registers=92),
+        resource("accumulate_totals(double*)", registers=8),
+    )
+    evidence = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=shape,
+        functional="PBE",
+        target=TARGET,
+        source_identity="partial-source",
+    )
+    density = dict(evidence.scopes)["density_product"]
+    potential = dict(evidence.scopes)["vxc_contraction"]
+    assert any("tiled_density_product" in row.function for row in density)
+    assert any("density_product<false>" in row.function and "tiled_" not in row.function for row in density)
+    assert any("tiled_potential" in row.function for row in potential)
+    assert any("assemble_potential" in row.function for row in potential)
+    assert evidence.profitability.compiled_registers_per_thread == 92
 
 
 def test_compiled_evidence_identity_changes_with_execution_shape() -> None:
