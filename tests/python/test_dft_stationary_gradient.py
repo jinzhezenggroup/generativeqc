@@ -3,8 +3,8 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import _native
-from vibeqc._dft_gradient import (
+from generativeqc import _native
+from generativeqc._dft_gradient import (
     StableGridMotion,
     StationaryDerivativeContract,
     StationaryKsIdentity,
@@ -16,14 +16,14 @@ from vibeqc._dft_gradient import (
     xc_geometry_topology_identity,
     xc_regularization_identity,
 )
-from vibeqc._ks_snapshot import _scf_xc_points
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc._ks_snapshot import _scf_xc_points
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
 
-from tools.vibeqc_validation.dft_gradient import finite_difference_xc_directional
+from tools.generativeqc_validation.dft_gradient import finite_difference_xc_directional
 
 
 def identity(method: typing.Any = "pbe-rks") -> typing.Any:
@@ -106,7 +106,7 @@ def bound_h2(
         # This is a manufactured fixed-density algebra fixture, not a solved
         # KS state. Use the true H2 metric nonetheless, so the oracle never
         # contracts matrices relabeled from a different AO space.
-        from tools.vibeqc_validation.dft_gradient import h2_overlap
+        from tools.generativeqc_validation.dft_gradient import h2_overlap
 
         value = state(method, occupations=occupations, overlap=h2_overlap(basis))
         value = replace(
@@ -524,7 +524,7 @@ def test_generated_xc_binding_rejects_actual_source_or_method_mismatch() -> None
 
 
 def test_generated_xc_binding_rejects_out_of_range_grid_owner() -> None:
-    from vibeqc_compiler.dft import ExplicitGrid
+    from generativeqc_compiler.dft import ExplicitGrid
 
     spec, value, args, grid, _, _, _ = bound_h2("pbe-rks", "PBE", "unpolarized")
     invalid = ExplicitGrid(
@@ -597,7 +597,7 @@ def test_stable_motion_reports_each_xc_component_once_and_translation() -> None:
 def test_generated_xc_geometry_rejects_stale_invalid_or_changing_motion(
     change: typing.Any, message: typing.Any
 ) -> None:
-    from vibeqc_compiler.xc.contractions import GeometryPartials
+    from generativeqc_compiler.xc.contractions import GeometryPartials
 
     value = state()
     spec = functional("PBE", spin="unpolarized")
@@ -606,7 +606,7 @@ def test_generated_xc_geometry_rejects_stale_invalid_or_changing_motion(
         identity=replace(value.identity, functional_identity=spec.identity),
     )
     partials = GeometryPartials(np.zeros((2, 3)), np.zeros((3, 3)), np.zeros(3))
-    from vibeqc._dft_gradient import FixedDensityXcGeometry
+    from generativeqc._dft_gradient import FixedDensityXcGeometry
 
     bound = FixedDensityXcGeometry(
         state_identity=value.identity,
@@ -633,8 +633,8 @@ def test_generated_xc_geometry_rejects_stale_invalid_or_changing_motion(
 
 
 def test_generated_xc_geometry_owns_read_only_partial_arrays() -> None:
-    from vibeqc._dft_gradient import FixedDensityXcGeometry
-    from vibeqc_compiler.xc.contractions import GeometryPartials
+    from generativeqc._dft_gradient import FixedDensityXcGeometry
+    from generativeqc_compiler.xc.contractions import GeometryPartials
 
     value = state()
     centers = np.zeros((2, 3))
@@ -757,7 +757,7 @@ def test_manufactured_state_cannot_authorize_stationary_derivatives() -> None:
 
 
 def test_finite_xc_components_cannot_publish_an_overflowed_total() -> None:
-    from vibeqc._dft_gradient import XcDirectionalComponents
+    from generativeqc._dft_gradient import XcDirectionalComponents
 
     with pytest.raises(ArithmeticError, match="nonfinite total"):
         _ = XcDirectionalComponents(1e308, 1e308, 0.0).total

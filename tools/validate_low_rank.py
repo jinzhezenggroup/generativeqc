@@ -20,11 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT / "tools")]
 
 import numpy as np
-from validate_range_eri import command, cpu_model
-from vibeqc.fock import FockBuildSpec, FockPlan
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc.fock import FockBuildSpec, FockPlan
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -32,16 +31,20 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_posthf.coulomb_columns import CoulombColumns
-from vibeqc_posthf.fixtures import load_fixture, source_arguments
-from vibeqc_posthf.low_rank import IncrementalCholesky
-from vibeqc_posthf.low_rank_consumers import LowRankProvider
-from vibeqc_posthf.low_rank_cuda import CudaIncrementalCholesky, compile_cholesky_cuda
-from vibeqc_posthf.low_rank_refinement import RefinementStage, solve_refined_rhf
-from vibeqc_posthf.sources import NativeSource
-from vibeqc_validation.publication import publish
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_posthf.coulomb_columns import CoulombColumns
+from generativeqc_posthf.fixtures import load_fixture, source_arguments
+from generativeqc_posthf.low_rank import IncrementalCholesky
+from generativeqc_posthf.low_rank_consumers import LowRankProvider
+from generativeqc_posthf.low_rank_cuda import (
+    CudaIncrementalCholesky,
+    compile_cholesky_cuda,
+)
+from generativeqc_posthf.low_rank_refinement import RefinementStage, solve_refined_rhf
+from generativeqc_posthf.sources import NativeSource
+from generativeqc_validation.publication import publish
+from validate_range_eri import command, cpu_model
 
 CASES = ("h2", "water", "lih")
 MODES = ("exact", "fixed_rank", "adaptive_rank", "density_fitted")
@@ -300,8 +303,8 @@ def run(args: typing.Any) -> typing.Any:
     evidence["toolchain"] = {
         "python": sys.version,
         "numpy": np.__version__,
-        "native_library": os.environ["VIBEQC_LIBRARY"],
-        "native_library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "native_library": os.environ["GENERATIVEQC_LIBRARY"],
+        "native_library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "compiler": command(str(args.nvcc), "--version")
         if artifact
         else command("c++", "--version"),
@@ -322,9 +325,11 @@ def run(args: typing.Any) -> typing.Any:
         "timing_scope": "whole solve includes setup through exact forces; excludes compilation, destruction and reference checks; section events enabled on CUDA",
         "DF_scope": "separate fixed auxiliary approximation; differences from exact are observations, not matching-accuracy gates",
     }
-    scientific_files = sorted((ROOT / "tools/vibeqc_posthf").glob("low_rank*.py")) + [
-        ROOT / "tools/vibeqc_posthf/pair_space.py",
-        ROOT / "tools/vibeqc_posthf/coulomb_columns.py",
+    scientific_files = sorted(
+        (ROOT / "tools/generativeqc_posthf").glob("low_rank*.py")
+    ) + [
+        ROOT / "tools/generativeqc_posthf/pair_space.py",
+        ROOT / "tools/generativeqc_posthf/coulomb_columns.py",
         ROOT / "src/posthf/cuda_low_rank.cu",
     ]
     evidence["hashes"] = {

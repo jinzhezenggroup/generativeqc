@@ -4,20 +4,23 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.evidence import canonical_hash
-from vibeqc_compiler.integral.cache import integral_cache_key
-from vibeqc_compiler.integral.cuda import CudaEmitter
-from vibeqc_compiler.integral.df_values import (
+from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.integral.cache import integral_cache_key
+from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.integral.df_values import (
     build_df_component_kernel,
     build_df_value_ir,
 )
-from vibeqc_compiler.integral.opencl_lowering import (
+from generativeqc_compiler.integral.opencl_lowering import (
     ScalarKernel,
     emit_opencl,
     source_hash,
 )
-from vibeqc_compiler.integral.runtime_backend import ExecutionShape, RuntimeCapabilities
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.integral.runtime_backend import (
+    ExecutionShape,
+    RuntimeCapabilities,
+)
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 
 def integral_program() -> typing.Any:

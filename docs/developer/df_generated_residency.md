@@ -50,7 +50,7 @@ tensor; changing a density alone reuses the same fixed-geometry tensor. Metric
 eigenvectors, eigenvalues, rank validity and inverse factors remain available
 to the existing complete spectral derivative, including discarded directions.
 
-With `VIBEQC_DF_TRACE`, `resident_three_center_materialization` records raw and
+With `GENERATIVEQC_DF_TRACE`, `resident_three_center_materialization` records raw and
 transformed logical production plus retained bytes. Later resident J/K records
 contain no tile generation. Capture counters describe construction and must
 not be interpreted as replay execution counts.

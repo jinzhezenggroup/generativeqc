@@ -7,9 +7,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.xc.bulk_aot import SourceVariant
-from vibeqc_compiler.xc.bulk_point_program import SemilocalPointBinding
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.bulk_aot import SourceVariant
+from generativeqc_compiler.xc.bulk_point_program import SemilocalPointBinding
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,7 +53,7 @@ def test_two_translation_units_keep_distinct_point_programs(
     include = tmp_path / "dft"
     include.mkdir()
     (include / "xc.hpp").write_text(
-        "#pragma once\nnamespace vibeqc::dft {\n" + header[start:stop] + "}\n",
+        "#pragma once\nnamespace generativeqc::dft {\n" + header[start:stop] + "}\n",
         encoding="utf-8",
     )
     paths = []
@@ -62,8 +62,8 @@ def test_two_translation_units_keep_distinct_point_programs(
         path = tmp_path / f"{name}.cpp"
         path.write_text(
             point.emit_source()
-            + '\nextern "C" const vibeqc::dft::SemilocalPointProgram* '
-            + f"{name}_program() {{ return &vibeqc::dft::bulk_generated::kPointProgram; }}\n",
+            + '\nextern "C" const generativeqc::dft::SemilocalPointProgram* '
+            + f"{name}_program() {{ return &generativeqc::dft::bulk_generated::kPointProgram; }}\n",
             encoding="utf-8",
         )
         paths.append(path)
@@ -72,8 +72,8 @@ def test_two_translation_units_keep_distinct_point_programs(
         r"""
 #include "dft/xc.hpp"
 #include <cstring>
-extern "C" const vibeqc::dft::SemilocalPointProgram* first_program();
-extern "C" const vibeqc::dft::SemilocalPointProgram* second_program();
+extern "C" const generativeqc::dft::SemilocalPointProgram* first_program();
+extern "C" const generativeqc::dft::SemilocalPointProgram* second_program();
 int main() {
   const auto* first = first_program();
   const auto* second = second_program();
@@ -118,7 +118,7 @@ def test_linkage_revision_invalidates_binding_but_not_scalar_artifact() -> None:
     source = point.variant.source
     identity = point.variant.emission_identity
     old_payload = point.to_payload()
-    old_payload["schema"] = "vibeqc.libxc-bulk-point-program-binding/v1"
+    old_payload["schema"] = "generativeqc.libxc-bulk-point-program-binding/v1"
     assert point.identity != canonical_hash(old_payload)
     assert point.variant.source == source
     assert point.variant.emission_identity == identity

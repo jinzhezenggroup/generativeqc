@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
-namespace vibeqc::mp2::generated {
+namespace generativeqc::mp2::generated {
 using CpuRun = void (*)(const double*, const double*, double, double, const double*, const double*,
                         double*);
 struct CpuPlan {
@@ -435,4 +435,4 @@ inline CpuPlan cpu_plan(unsigned tile) {
       throw std::invalid_argument("unsupported MP2 tile");
   }
 }
-}  // namespace vibeqc::mp2::generated
+}  // namespace generativeqc::mp2::generated

@@ -1,23 +1,23 @@
-#ifndef VIBEQC_XTB_RUNTIME_MOLECULAR_REQUEST_HPP
-#define VIBEQC_XTB_RUNTIME_MOLECULAR_REQUEST_HPP
+#ifndef GENERATIVEQC_XTB_RUNTIME_MOLECULAR_REQUEST_HPP
+#define GENERATIVEQC_XTB_RUNTIME_MOLECULAR_REQUEST_HPP
 
 #include <string>
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 
-// The native adapter serves VibeQC's molecular energy/force endpoint. The
+// The native adapter serves GenerativeQC's molecular energy/force endpoint. The
 // imported periodic/solvation/interaction APIs were never exposed by that
 // endpoint. Reject their descriptors before staging, so retiring an owner
 // cannot silently drop an interaction from the Hamiltonian or energy.
-inline vibeqc_xtb_status_t validate_molecular_request(const vibeqc_xtb_batch_t& batch,
-                                                      const vibeqc_xtb_compute_options_t& options,
+inline generativeqc_xtb_status_t validate_molecular_request(const generativeqc_xtb_batch_t& batch,
+                                                      const generativeqc_xtb_compute_options_t& options,
                                                       std::string& error) {
-  constexpr auto supported = VIBEQC_XTB_COMPUTE_ENERGY | VIBEQC_XTB_COMPUTE_FORCES |
-                             VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES;
-  if (batch.batch_size != 1 || options.model != VIBEQC_XTB_MODEL_GFN2_XTB ||
-      options.scc_start_mode != VIBEQC_XTB_SCC_START_FRESH || (options.flags & ~supported) != 0u ||
+  constexpr auto supported = GENERATIVEQC_XTB_COMPUTE_ENERGY | GENERATIVEQC_XTB_COMPUTE_FORCES |
+                             GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES;
+  if (batch.batch_size != 1 || options.model != GENERATIVEQC_XTB_MODEL_GFN2_XTB ||
+      options.scc_start_mode != GENERATIVEQC_XTB_SCC_START_FRESH || (options.flags & ~supported) != 0u ||
       batch.total_point_charges != 0 || batch.total_charge_response_elements != 0 ||
       batch.total_interactions != 0 || batch.point_charge_offsets.data != nullptr ||
       batch.point_charge_offsets.size_bytes != 0u || batch.point_charge_positions.data != nullptr ||
@@ -34,10 +34,10 @@ inline vibeqc_xtb_status_t validate_molecular_request(const vibeqc_xtb_batch_t& 
       batch.interaction_descriptors.size_bytes != 0u || batch.interaction_payload.data != nullptr ||
       batch.interaction_payload.size_bytes != 0u) {
     error = "native GFN2 supports a single molecular energy/force request with fresh SCC";
-    return VIBEQC_XTB_STATUS_NOT_SUPPORTED;
+    return GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED;
   }
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail
 #endif

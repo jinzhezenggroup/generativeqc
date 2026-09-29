@@ -19,7 +19,7 @@ def budget_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "#include <cstdlib>\n#include <iostream>\n"
         "int main(int argc, char** argv) {\n"
         "  if (argc != 4) return 2;\n"
-        "  using namespace vibeqc::scf;\n"
+        "  using namespace generativeqc::scf;\n"
         "  const auto free = std::strtoull(argv[1], nullptr, 10);\n"
         "  const bool force = std::strtoul(argv[2], nullptr, 10);\n"
         "  const auto requested = std::strtoull(argv[3], nullptr, 10);\n"
@@ -81,7 +81,7 @@ def test_roomy_automatic_budget_retains_source_backed_device_value_floor(
 #include "scf/df_preparation_budget.hpp"
 #include <cassert>
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   constexpr std::size_t mib = 1024U * 1024U;
   const DfBudgetWorkload work{64, 64, 8, 1, 8, true};
   const DfResourceEnvelope roomy{8ULL << 30, 8ULL << 30, true};
@@ -127,7 +127,7 @@ def test_resolved_subbudget_preserves_origin_and_cannot_reopen_auto(
 #include "scf/df_preparation_budget.hpp"
 #include <cassert>
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   for (bool force : {false, true}) {
     const DfBudgetWorkload work{64,96,12,1,6,force};
     for (std::size_t request : {std::size_t{0},std::size_t{10000}}) {

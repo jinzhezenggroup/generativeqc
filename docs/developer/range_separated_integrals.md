@@ -74,8 +74,8 @@ a weighted stream with the existing block adapter:
 ```python
 from pathlib import Path
 
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.integral.weighted_eri_execute import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.integral.weighted_eri_execute import (
     PreparedWeightedEri,
     compile_weighted_eri,
 )

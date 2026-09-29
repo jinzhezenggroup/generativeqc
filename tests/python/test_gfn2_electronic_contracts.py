@@ -4,9 +4,9 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc_compiler.method import build_gfn2_electronic_program
+from generativeqc_compiler.tensor import execute
 from test_gfn2_electronic_ir import _restricted_feeds, _topology
-from vibeqc_compiler.method import build_gfn2_electronic_program
-from vibeqc_compiler.tensor import execute
 
 
 def test_one_shell_cannot_assign_orbitals_to_different_atoms() -> None:

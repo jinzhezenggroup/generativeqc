@@ -25,7 +25,7 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import (
@@ -48,7 +48,7 @@ CASES = {
 @contextmanager
 def _screening_feature_scope(enabled: bool) -> typing.Iterator[None]:
     """Keep diagnostic work out of clean samples and restore on every exit."""
-    name = "VIBEQC_DF_SCREENING_FEATURES"
+    name = "GENERATIVEQC_DF_SCREENING_FEATURES"
     previous = os.environ.get(name)
     if enabled:
         os.environ[name] = "1"
@@ -94,7 +94,7 @@ def independent_reference(
         "density_tolerance": 1e-10,
         "reference_gradient_tolerance": 1e-10,
         "max_iterations": 100,
-        "vibeqc_screening_tolerance": 1e-12,
+        "generativeqc_screening_tolerance": 1e-12,
         "direct_scf_tolerance": 1e-14,
         "geometries": [
             [
@@ -109,7 +109,8 @@ def independent_reference(
         if workload.get(key) != value:
             raise RuntimeError(f"independent reference workload differs: {key}")
     retained_basis = [
-        row.get("basis_metadata") for row in reference["vibeqc"]["cold_convergence"]
+        row.get("basis_metadata")
+        for row in reference["generativeqc"]["cold_convergence"]
     ]
     # Live electron metadata contains tuples; JSON necessarily retains lists.
     # Canonicalize that representation without weakening identity comparisons.
@@ -219,7 +220,7 @@ def main() -> None:
         default=0,
         help="Total native DF value/response budget in bytes (zero selects resource policy)",
     )
-    parser.add_argument("--control", default="VIBEQC_DF_EXCHANGE")
+    parser.add_argument("--control", default="GENERATIVEQC_DF_EXCHANGE")
     parser.add_argument("--policies", nargs="+", default=["dense", "occupied"])
     parser.add_argument(
         "--policy-controls",
@@ -277,7 +278,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     allocation = os.environ.get("SLURM_JOB_ID") or os.environ.get(
-        "VIBEQC_BENCHMARK_ALLOCATION"
+        "GENERATIVEQC_BENCHMARK_ALLOCATION"
     )
     if (
         not allocation
@@ -307,7 +308,7 @@ def main() -> None:
         not args.warm_checkpoint_in or not (args.reference or args.cpu_reference)
     ):
         parser.error("skip-cold requires a frozen checkpoint and independent reference")
-    from vibeqc.resources_hf import _CUDA_SCHEDULE_VARIABLES
+    from generativeqc.resources_hf import _CUDA_SCHEDULE_VARIABLES
 
     if not isinstance(args.policy_controls, dict) or any(
         policy not in args.policies
@@ -342,7 +343,7 @@ def main() -> None:
             parser.error("cold-control requires a known CUDA schedule NAME=VALUE")
         cold_controls[name] = value
     case = benchmark_cases()[CASES[args.aos]]
-    orbital, cpu_orbital = case.vibeqc_basis, case.pyscf_basis
+    orbital, cpu_orbital = case.generativeqc_basis, case.pyscf_basis
     if args.orbital_basis_file:
         orbital, cpu_orbital = load_comparison_basis(
             args.orbital_basis_file, case, role="orbital", compute_forces=True
@@ -362,9 +363,9 @@ def main() -> None:
     )
     if fresh_reference is not None and fresh_reference[2]["ao_count"] != args.aos:
         parser.error("explicit orbital basis AO count differs from --aos")
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     native = _native.load_library()
-    native.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    native.generativeqc_get_source_identity.restype = ctypes.c_char_p
     # A pinned library may outlive subsequent local edits. Prefer its frozen
     # source patch so queued runs describe the code actually linked.
     frozen_patch = args.source_patch or library.with_name("source.patch")
@@ -382,10 +383,12 @@ def main() -> None:
         "scope": "intrusive diagnostic"
         if args.trace or args.host_trace or args.journal or args.cuda_profile
         else "clean endpoint",
-        "native_source_identity": native.vibeqc_get_source_identity().decode(),
+        "native_source_identity": native.generativeqc_get_source_identity().decode(),
         "source_patch_sha256": hashlib.sha256(patch).hexdigest(),
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        "controls": {k: v for k, v in os.environ.items() if k.startswith("VIBEQC_")},
+        "controls": {
+            k: v for k, v in os.environ.items() if k.startswith("GENERATIVEQC_")
+        },
         "diagnostic_controls": {
             "components_after": args.components_after,
             "shell_work": args.shell_work,
@@ -467,7 +470,7 @@ def main() -> None:
         max_iterations=100,
     )
     if args.warm_checkpoint_in:
-        from vibeqc.checkpoint import inspect_checkpoint
+        from generativeqc.checkpoint import inspect_checkpoint
 
         require_frozen_checkpoint_geometry(
             inspect_checkpoint(args.warm_checkpoint_in),
@@ -511,7 +514,7 @@ def main() -> None:
             batch.save_checkpoint(args.warm_checkpoint_out)
         checkpoint = args.warm_checkpoint_out or args.warm_checkpoint_in
         if checkpoint:
-            from vibeqc.checkpoint import inspect_checkpoint
+            from generativeqc.checkpoint import inspect_checkpoint
 
             payload["warm_checkpoint_sha256"] = hashlib.sha256(
                 checkpoint.read_bytes()
@@ -622,41 +625,41 @@ def main() -> None:
                 f".{phase}{repeat}-{policy}.host.jsonl"
             )
             if traced:
-                os.environ["VIBEQC_DF_TRACE"] = str(trace.resolve())
+                os.environ["GENERATIVEQC_DF_TRACE"] = str(trace.resolve())
             if traced or args.host_trace:
-                os.environ["VIBEQC_DF_HOST_TRACE"] = str(host_trace.resolve())
+                os.environ["GENERATIVEQC_DF_HOST_TRACE"] = str(host_trace.resolve())
             journal = args.output.with_suffix(
                 f".{phase}{repeat}-{policy}.journal.jsonl"
             )
             if args.journal or diagnostic:
-                os.environ["VIBEQC_DF_PROGRESS_TRACE"] = str(journal.resolve())
+                os.environ["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(journal.resolve())
             if args.cuda_profile:
                 cudart = ctypes.CDLL("libcudart.so.12")
                 if cudart.cudaProfilerStart() != 0:
                     raise RuntimeError("cudaProfilerStart failed")
-            previous_work = os.environ.get("VIBEQC_DF_SHELL_WORK")
-            previous_counters = os.environ.get("VIBEQC_DF_SHELL_COUNTERS")
+            previous_work = os.environ.get("GENERATIVEQC_DF_SHELL_WORK")
+            previous_counters = os.environ.get("GENERATIVEQC_DF_SHELL_COUNTERS")
             if diagnostic:
-                os.environ["VIBEQC_DF_SHELL_COUNTERS"] = "1"
+                os.environ["GENERATIVEQC_DF_SHELL_COUNTERS"] = "1"
                 if args.shell_work:
-                    os.environ["VIBEQC_DF_SHELL_WORK"] = "1"
+                    os.environ["GENERATIVEQC_DF_SHELL_WORK"] = "1"
             result, seconds = execute(
                 batch, screening_features=diagnostic and args.screening_features
             )
             if diagnostic:
                 if previous_counters is None:
-                    os.environ.pop("VIBEQC_DF_SHELL_COUNTERS", None)
+                    os.environ.pop("GENERATIVEQC_DF_SHELL_COUNTERS", None)
                 else:
-                    os.environ["VIBEQC_DF_SHELL_COUNTERS"] = previous_counters
+                    os.environ["GENERATIVEQC_DF_SHELL_COUNTERS"] = previous_counters
             if previous_work is None:
-                os.environ.pop("VIBEQC_DF_SHELL_WORK", None)
+                os.environ.pop("GENERATIVEQC_DF_SHELL_WORK", None)
             else:
-                os.environ["VIBEQC_DF_SHELL_WORK"] = previous_work
+                os.environ["GENERATIVEQC_DF_SHELL_WORK"] = previous_work
             if args.cuda_profile and cudart.cudaProfilerStop() != 0:
                 raise RuntimeError("cudaProfilerStop failed")
-            os.environ.pop("VIBEQC_DF_PROGRESS_TRACE", None)
-            os.environ.pop("VIBEQC_DF_TRACE", None)
-            os.environ.pop("VIBEQC_DF_HOST_TRACE", None)
+            os.environ.pop("GENERATIVEQC_DF_PROGRESS_TRACE", None)
+            os.environ.pop("GENERATIVEQC_DF_TRACE", None)
+            os.environ.pop("GENERATIVEQC_DF_HOST_TRACE", None)
             forces = (
                 None
                 if args.energy_only

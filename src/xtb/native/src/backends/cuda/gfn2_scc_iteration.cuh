@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -36,7 +36,7 @@
 #include "backends/cuda/gfn2_spin.cuh"
 #include "runtime/nvidia_host_api.h"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* ABI v2 seals the complete ordered WavefunctionLayout spin packing in the
  * device plan instead of accepting aggregate extents as layout identity.  ABI
@@ -584,6 +584,6 @@ static_assert(std::is_standard_layout_v<Gfn2SccIterationBinding>);
     const Gfn2SccIterationBinding& binding, const Gfn2GeometryEpochConsumerDevice& geometry,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CUH

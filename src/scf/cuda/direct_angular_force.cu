@@ -18,7 +18,7 @@
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Fixed-capacity wrapper for the small generic high-order force grids. */
 template <bool Unrestricted, unsigned AngularOrder>
@@ -410,4 +410,4 @@ void dispatch_angular_force_quartets(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_DF_RESPONSE_WEIGHTS_CUH
-#define VIBEQC_SCF_CUDA_DF_RESPONSE_WEIGHTS_CUH
+#ifndef GENERATIVEQC_SCF_CUDA_DF_RESPONSE_WEIGHTS_CUH
+#define GENERATIVEQC_SCF_CUDA_DF_RESPONSE_WEIGHTS_CUH
 
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -11,7 +11,7 @@
 #include "runtime/strided_range.hpp"
 #include "scf/cuda_df_gradient.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Preserve the provider status across the bridge's stream-draining cleanup. */
 struct CudaDfResponseBlasFailure {
@@ -82,5 +82,5 @@ cudaError_t contract_cuda_df_response_weights(
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted = {},
     bool single_fitted_tensor = false, const CudaDfResponseBuffers* streamed_occupied = nullptr);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

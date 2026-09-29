@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "dft/dispersion/d3_zero.hpp"
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
 namespace {
 
@@ -34,14 +34,15 @@ constexpr std::array<double, 12> kAtmOracleGradient{
     -2.58295550081963018e-08, -5.66303094069503694e-09, 4.96241136441330152e-08};
 
 struct Context {
-  vibeqc_context* value{};
+  generativeqc_context* value{};
   Context() {
-    vibeqc_context_descriptor descriptor{sizeof(vibeqc_context_descriptor), VIBEQC_ABI_VERSION, 0,
-                                         VIBEQC_BACKEND_CPU_REFERENCE};
-    if (vibeqc_context_create(&descriptor, &value) != VIBEQC_STATUS_SUCCESS)
+    generativeqc_context_descriptor descriptor{sizeof(generativeqc_context_descriptor),
+                                               GENERATIVEQC_ABI_VERSION, 0,
+                                               GENERATIVEQC_BACKEND_CPU_REFERENCE};
+    if (generativeqc_context_create(&descriptor, &value) != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error("D3 public-test context creation failed");
   }
-  ~Context() { vibeqc_context_destroy(value); }
+  ~Context() { generativeqc_context_destroy(value); }
   Context(const Context&) = delete;
   Context& operator=(const Context&) = delete;
 };
@@ -66,41 +67,42 @@ void require_close(double actual, double expected, double tolerance, const char*
 template <std::size_t N>
 PublicResult execute_public(Context& context, const std::array<std::int32_t, N>& numbers,
                             const std::array<double, 3 * N>& prepared,
-                            const vibeqc_d3_bj_descriptor& model,
+                            const generativeqc_d3_bj_descriptor& model,
                             const std::array<double, 3 * N>* changed = nullptr,
                             bool want_gradient = true) {
-  vibeqc_d3_system_descriptor system{sizeof(vibeqc_d3_system_descriptor), VIBEQC_ABI_VERSION,
-                                     numbers.data(), prepared.data(),
-                                     static_cast<std::uint32_t>(numbers.size())};
-  vibeqc_d3_batch* batch{};
-  const auto prepare_status = vibeqc_d3_batch_prepare(context.value, &system, 1, &model, &batch);
-  if (prepare_status != VIBEQC_STATUS_SUCCESS) {
-    const auto* detail = vibeqc_context_get_last_detail(context.value);
+  generativeqc_d3_system_descriptor system{
+      sizeof(generativeqc_d3_system_descriptor), GENERATIVEQC_ABI_VERSION, numbers.data(),
+      prepared.data(), static_cast<std::uint32_t>(numbers.size())};
+  generativeqc_d3_batch* batch{};
+  const auto prepare_status =
+      generativeqc_d3_batch_prepare(context.value, &system, 1, &model, &batch);
+  if (prepare_status != GENERATIVEQC_STATUS_SUCCESS) {
+    const auto* detail = generativeqc_context_get_last_detail(context.value);
     throw std::runtime_error(detail ? detail : "D3 public prepare failed");
   }
-  const char* raw_variant = vibeqc_d3_batch_variant_identity(batch);
+  const char* raw_variant = generativeqc_d3_batch_variant_identity(batch);
   require(raw_variant != nullptr, "D3 public variant identity is missing");
 
   std::array<double, 3 * N> gradient{};
-  vibeqc_d3_batch_item_result_descriptor result{
-      sizeof(vibeqc_d3_batch_item_result_descriptor),
-      VIBEQC_ABI_VERSION,
-      VIBEQC_STATUS_INTERNAL_ERROR,
+  generativeqc_d3_batch_item_result_descriptor result{
+      sizeof(generativeqc_d3_batch_item_result_descriptor),
+      GENERATIVEQC_ABI_VERSION,
+      GENERATIVEQC_STATUS_INTERNAL_ERROR,
       0.0,
       want_gradient ? gradient.data() : nullptr,
       want_gradient ? static_cast<std::uint32_t>(gradient.size()) : 0u,
-      VIBEQC_BACKEND_CPU_REFERENCE};
-  vibeqc_d3_batch_input_descriptor input{
-      sizeof(vibeqc_d3_batch_input_descriptor), VIBEQC_ABI_VERSION,
+      GENERATIVEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_d3_batch_input_descriptor input{
+      sizeof(generativeqc_d3_batch_input_descriptor), GENERATIVEQC_ABI_VERSION,
       changed ? changed->data() : nullptr,
       changed ? static_cast<std::uint32_t>(changed->size()) : 0u};
-  const auto status =
-      vibeqc_d3_batch_execute(batch, changed ? &input : nullptr, changed ? 1u : 0u, &result, 1u);
+  const auto status = generativeqc_d3_batch_execute(batch, changed ? &input : nullptr,
+                                                    changed ? 1u : 0u, &result, 1u);
   std::string variant(raw_variant);
-  vibeqc_d3_batch_destroy(batch);
-  require(status == VIBEQC_STATUS_SUCCESS && result.status == VIBEQC_STATUS_SUCCESS,
+  generativeqc_d3_batch_destroy(batch);
+  require(status == GENERATIVEQC_STATUS_SUCCESS && result.status == GENERATIVEQC_STATUS_SUCCESS,
           "D3 public execution failed");
-  require(result.executed_backend == VIBEQC_BACKEND_CPU_REFERENCE,
+  require(result.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
           "D3 public execution reported the wrong backend");
 
   PublicResult output{};
@@ -110,10 +112,10 @@ PublicResult execute_public(Context& context, const std::array<std::int32_t, N>&
   return output;
 }
 
-vibeqc_d3_bj_descriptor zero_model(std::uint64_t maximum_bytes = 64u << 20) {
-  return {sizeof(vibeqc_d3_bj_descriptor),
-          VIBEQC_ABI_VERSION,
-          VIBEQC_D3_DAMPING_ZERO,
+generativeqc_d3_bj_descriptor zero_model(std::uint64_t maximum_bytes = 64u << 20) {
+  return {sizeof(generativeqc_d3_bj_descriptor),
+          GENERATIVEQC_ABI_VERSION,
+          GENERATIVEQC_D3_DAMPING_ZERO,
           1.0,
           0.722,
           0.0,
@@ -130,10 +132,10 @@ vibeqc_d3_bj_descriptor zero_model(std::uint64_t maximum_bytes = 64u << 20) {
           0.0};
 }
 
-vibeqc_d3_bj_descriptor bj_model(double s9) {
-  return {sizeof(vibeqc_d3_bj_descriptor),
-          VIBEQC_ABI_VERSION,
-          VIBEQC_D3_DAMPING_BJ,
+generativeqc_d3_bj_descriptor bj_model(double s9) {
+  return {sizeof(generativeqc_d3_bj_descriptor),
+          GENERATIVEQC_ABI_VERSION,
+          GENERATIVEQC_D3_DAMPING_BJ,
           1.0,
           0.7875,
           0.4289,
@@ -151,12 +153,13 @@ vibeqc_d3_bj_descriptor bj_model(double s9) {
 }
 
 void test_identities() {
-  require(std::strcmp(vibeqc_d3_provider_identity(), "vibeqc-native-d3-v2") == 0,
+  require(std::strcmp(generativeqc_d3_provider_identity(), "generativeqc-native-d3-v2") == 0,
           "unexpected D3 provider identity");
-  require(std::strcmp(vibeqc_d3_scheduler_identity(), "ragged-system-cooperative-pair-v1") == 0,
-          "unexpected D3 scheduler identity");
-  require(std::strlen(vibeqc_d3_table_sha256()) == 64, "missing D3 table identity");
-  require(std::strlen(vibeqc_d3_radii_sha256()) == 64, "missing D3 radii identity");
+  require(
+      std::strcmp(generativeqc_d3_scheduler_identity(), "ragged-system-cooperative-pair-v1") == 0,
+      "unexpected D3 scheduler identity");
+  require(std::strlen(generativeqc_d3_table_sha256()) == 64, "missing D3 table identity");
+  require(std::strlen(generativeqc_d3_radii_sha256()) == 64, "missing D3 radii identity");
 }
 
 void test_zero_public_oracle_and_replay(Context& context) {
@@ -173,7 +176,7 @@ void test_zero_public_oracle_and_replay(Context& context) {
   changed[7] -= 0.019;
   const auto replay = execute_public(context, kZeroNumbers, kZeroCoordinates, model, &changed);
 
-  using namespace vibeqc::dft::dispersion;
+  using namespace generativeqc::dft::dispersion;
   std::vector<double> workspace(d3_workspace_elements(kZeroNumbers.size()));
   double reference_energy{};
   std::array<double, 12> reference_gradient{};
@@ -206,35 +209,35 @@ void test_atm_exactly_once(Context& context) {
 }
 
 void test_fail_closed_and_resources(Context& context) {
-  vibeqc_d3_system_descriptor system{sizeof(vibeqc_d3_system_descriptor), VIBEQC_ABI_VERSION,
-                                     kZeroNumbers.data(), kZeroCoordinates.data(),
-                                     static_cast<std::uint32_t>(kZeroNumbers.size())};
-  vibeqc_d3_batch* batch{};
+  generativeqc_d3_system_descriptor system{
+      sizeof(generativeqc_d3_system_descriptor), GENERATIVEQC_ABI_VERSION, kZeroNumbers.data(),
+      kZeroCoordinates.data(), static_cast<std::uint32_t>(kZeroNumbers.size())};
+  generativeqc_d3_batch* batch{};
 
   auto unsupported = zero_model();
   unsupported.s9 = 1.0;
-  require(vibeqc_d3_batch_prepare(context.value, &system, 1, &unsupported, &batch) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  require(generativeqc_d3_batch_prepare(context.value, &system, 1, &unsupported, &batch) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               batch == nullptr,
           "zero+ATM must fail closed");
 
   unsupported = zero_model();
   unsupported.damping = 99;
-  require(vibeqc_d3_batch_prepare(context.value, &system, 1, &unsupported, &batch) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  require(generativeqc_d3_batch_prepare(context.value, &system, 1, &unsupported, &batch) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               batch == nullptr,
           "unknown D3 damping must fail closed");
 
   auto tiny = zero_model(1);
-  require(vibeqc_d3_batch_prepare(context.value, &system, 1, &tiny, &batch) ==
-                  VIBEQC_STATUS_OUT_OF_MEMORY &&
+  require(generativeqc_d3_batch_prepare(context.value, &system, 1, &tiny, &batch) ==
+                  GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
               batch == nullptr,
           "D3 maximum_bytes must fail closed");
 
   auto truncated = bj_model(0.0);
-  truncated.struct_size = static_cast<std::uint32_t>(offsetof(vibeqc_d3_bj_descriptor, rs6));
-  require(vibeqc_d3_batch_prepare(context.value, &system, 1, &truncated, &batch) ==
-                  VIBEQC_STATUS_ABI_MISMATCH &&
+  truncated.struct_size = static_cast<std::uint32_t>(offsetof(generativeqc_d3_bj_descriptor, rs6));
+  require(generativeqc_d3_batch_prepare(context.value, &system, 1, &truncated, &batch) ==
+                  GENERATIVEQC_STATUS_ABI_MISMATCH &&
               batch == nullptr,
           "truncated D3 model descriptor was accepted");
 }

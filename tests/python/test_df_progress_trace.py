@@ -24,7 +24,7 @@ def test_live_journal_survives_process_exit_without_destructors(
 #include "runtime/df_progress_trace.hpp"
 #include <cstdlib>
 int main() {
-  using namespace vibeqc::runtime::df_progress;
+  using namespace generativeqc::runtime::df_progress;
   Scope endpoint("endpoint");
   { Scope setup("setup"); number("nbf", 768); }
   Scope raw("raw_materialization");
@@ -48,7 +48,7 @@ int main() {
         check=True,
     )
     path = tmp_path / "progress.jsonl"
-    env = dict(os.environ, VIBEQC_DF_PROGRESS_TRACE=str(path))
+    env = dict(os.environ, GENERATIVEQC_DF_PROGRESS_TRACE=str(path))
     subprocess.run([str(executable)], env=env, check=True)
     journal = read_progress(path)
     assert not journal["complete"]
@@ -69,7 +69,7 @@ def test_progress_rejects_capture_as_execution_and_scope_corruption(
 ) -> None:
     path = tmp_path / "trace.jsonl"
     begin = {
-        "schema": "vibeqc.df_progress",
+        "schema": "generativeqc.df_progress",
         "version": 1,
         "id": 0,
         "parent": -1,

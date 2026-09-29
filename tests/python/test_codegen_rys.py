@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     FUSED_SHELL_SPEC_BY_NAME,
     ScheduleIR,
     ScheduleKind,

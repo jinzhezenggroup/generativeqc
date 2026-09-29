@@ -4,7 +4,7 @@
 
 #include <stdexcept>
 
-namespace vibeqc_tensor {
+namespace generativeqc_tensor {
 
 // Shared host error boundary for generated executors and reference export.
 // Keep the typed allocation failure identical across these call sites.
@@ -22,4 +22,4 @@ inline void cuda_check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw DeviceAllocationError(cudaGetErrorString(status));
   if (status != cudaSuccess) throw DeviceRuntimeError(cudaGetErrorString(status));
 }
-}  // namespace vibeqc_tensor
+}  // namespace generativeqc_tensor

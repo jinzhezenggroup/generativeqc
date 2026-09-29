@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.xc import production_domain_controls as controls
+from generativeqc_compiler.xc import production_domain_controls as controls
 
 LAZY = "control/lazy-inactive-branch"
 NONFINITE = "control/invalid-nonfinite"

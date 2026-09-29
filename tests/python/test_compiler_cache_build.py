@@ -21,8 +21,8 @@ def _configure(binary: Path, *extra: str) -> None:
             str(binary),
             "-G",
             "Ninja",
-            "-DVIBEQC_ENABLE_CUDA=OFF",
-            "-DVIBEQC_BUILD_TESTS=OFF",
+            "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+            "-DGENERATIVEQC_BUILD_TESTS=OFF",
             *extra,
         ],
         check=True,
@@ -31,9 +31,9 @@ def _configure(binary: Path, *extra: str) -> None:
     )
 
 
-def _vibeqc_commands(binary: Path) -> str:
+def _generativeqc_commands(binary: Path) -> str:
     return subprocess.check_output(
-        ["ninja", "-C", str(binary), "-t", "commands", "vibeqc"], text=True
+        ["ninja", "-C", str(binary), "-t", "commands", "generativeqc"], text=True
     )
 
 
@@ -43,8 +43,8 @@ def test_ccache_launcher_normalizes_binary_directory(tmp_path: Path) -> None:
         pytest.skip("ccache is not installed")
 
     binary = tmp_path / "build"
-    _configure(binary, "-DVIBEQC_COMPILER_CACHE=ccache")
-    commands = _vibeqc_commands(binary)
+    _configure(binary, "-DGENERATIVEQC_COMPILER_CACHE=ccache")
+    commands = _generativeqc_commands(binary)
 
     assert f"CCACHE_BASEDIR={binary}" in commands
     assert "ccache" in commands
@@ -61,10 +61,10 @@ def test_explicit_compiler_launcher_remains_authoritative(tmp_path: Path) -> Non
     binary = tmp_path / "build"
     _configure(
         binary,
-        "-DVIBEQC_COMPILER_CACHE=ccache",
+        "-DGENERATIVEQC_COMPILER_CACHE=ccache",
         f"-DCMAKE_CXX_COMPILER_LAUNCHER={launcher}",
     )
-    commands = _vibeqc_commands(binary)
+    commands = _generativeqc_commands(binary)
 
     assert str(launcher) in commands
     assert "CCACHE_BASEDIR=" not in commands

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from tools import benchmark_density_sources as benchmark
-from tools.vibeqc_validation.hardware import CUDA_BENCHMARK_PROFILES
+from tools.generativeqc_validation.hardware import CUDA_BENCHMARK_PROFILES
 
 
 def _runtime(

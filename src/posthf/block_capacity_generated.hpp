@@ -1,10 +1,10 @@
-// Generated from tools/vibeqc_posthf/plan_spec.py; do not change formulas here.
+// Generated from tools/generativeqc_posthf/plan_spec.py; do not change formulas here.
 #pragma once
 #include <algorithm>
 #include <array>
 
 #include "posthf/capacity.hpp"
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 struct NumericBlockPlan {
   std::size_t output_elements;
   std::size_t tile_elements;
@@ -50,4 +50,4 @@ inline NumericBlockPlan numeric_block_plan(std::size_t nbf, std::size_t referenc
   return {output_elements, tile_elements,   coefficient_elements, stage_elements,
           host_bytes,      aligned_numeric, allocation_bytes,     device_bytes};
 }
-}  // namespace vibeqc::posthf
+}  // namespace generativeqc::posthf

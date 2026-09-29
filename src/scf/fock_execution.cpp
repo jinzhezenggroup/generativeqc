@@ -3,7 +3,7 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 ResolvedFockBuild fock_strategy_for_execution(const ScfOptions& options) {
   if (!options.resolved_fock_build)
@@ -77,4 +77,4 @@ ScfResult run_fock_strategy(const core::System& system, const core::System* auxi
                       : run_rhf_cuda(system, options, device_id, initial_density);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

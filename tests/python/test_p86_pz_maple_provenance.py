@@ -6,8 +6,8 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc import libxc_maple, p86_pz_maple
-from vibeqc_compiler.xc.spec import FunctionalSpec, functional
+from generativeqc_compiler.xc import libxc_maple, p86_pz_maple
+from generativeqc_compiler.xc.spec import FunctionalSpec, functional
 
 
 def _spec(name: str) -> FunctionalSpec:

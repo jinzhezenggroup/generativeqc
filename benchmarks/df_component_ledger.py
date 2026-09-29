@@ -60,7 +60,7 @@ def _exclusive(regions: list[dict], field: str) -> list[float]:
 def validate_record(record: dict) -> dict:
     """Reject partial, mistimed or structurally inconsistent native records."""
     try:
-        if record["schema"] != "vibeqc.df_trace" or record["version"] != 1:
+        if record["schema"] != "generativeqc.df_trace" or record["version"] != 1:
             raise ValueError("unsupported component trace schema/version")
         if record["valid"] is not True or record["cuda_error"] != 0:
             raise ValueError("invalid native component trace")
@@ -266,7 +266,7 @@ def trace_identity(path: Path) -> dict:
 def validate_host_record(record: dict) -> dict:
     """Validate actual host work separately from the existing CUDA-event view."""
     try:
-        if record["schema"] != "vibeqc.df_host_trace" or record["version"] != 1:
+        if record["schema"] != "generativeqc.df_host_trace" or record["version"] != 1:
             raise ValueError("unsupported host trace schema/version")
         if record["valid"] is not True:
             raise ValueError("invalid or truncated host trace")

@@ -7,9 +7,9 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.compiler_process import run_compiler
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.native_runtime import (
+from generativeqc_compiler.common.compiler_process import run_compiler
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.native_runtime import (
     compile_runtime,
     compile_runtime_bundle,
 )
@@ -109,4 +109,4 @@ def test_finite_compiler_process_reports_timeout_and_failure() -> None:
 
 def test_missing_requested_cpu_compiler_does_not_select_another_backend() -> None:
     with pytest.raises(ValueError, match=r"requested C\+\+ compiler"):
-        CppCompilerAdapter(Path("vibeqc-no-such-cxx"))
+        CppCompilerAdapter(Path("generativeqc-no-such-cxx"))

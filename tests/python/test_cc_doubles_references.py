@@ -5,11 +5,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
+from tools.generativeqc_cc.doubles import build_ccsd_program
+from tools.generativeqc_cc.oracle import dense_feeds
 from tools.validate_cc import load_references
-from tools.vibeqc_cc.doubles import build_ccsd_program
-from tools.vibeqc_cc.oracle import dense_feeds
 
 DATA = Path(__file__).resolve().parents[1] / "reference_data/cc/rccsd-b.json"
 
@@ -45,7 +45,7 @@ def test_pinned_doubles_and_each_shared_intermediate(case: typing.Any) -> None:
 def test_full_evidence_fixes_oracle_and_execution_identity(
     tmp_path: typing.Any,
 ) -> None:
-    from vibeqc_compiler.common.evidence import file_hash
+    from generativeqc_compiler.common.evidence import file_hash
 
     from tools.validate_ccsd import run
 
@@ -57,7 +57,11 @@ def test_full_evidence_fixes_oracle_and_execution_identity(
         assert settings["reference_cases_hash"] == load_references(DATA)["cases_hash"]
         assert settings["upstream"]["version"] == "2.14.0"
         assert (
-            "python/vibeqc_compiler/tensor/interpreter.py" in settings["source_files"]
+            "python/generativeqc_compiler/tensor/interpreter.py"
+            in settings["source_files"]
         )
-        assert "python/vibeqc_compiler/tensor/optimize.py" in settings["source_files"]
+        assert (
+            "python/generativeqc_compiler/tensor/optimize.py"
+            in settings["source_files"]
+        )
         assert isinstance(settings["dirty"], bool)

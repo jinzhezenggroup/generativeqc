@@ -20,14 +20,14 @@ momenta are rejected. Parameter import performs no online lookup.
 
 ## Interfaces and derivatives
 
-`vibeqc_system_create_ecp` is a separate C ABI extension; existing descriptors
+`generativeqc_system_create_ecp` is a separate C ABI extension; existing descriptors
 retain their layout. It owns core counts and atom-mapped terms.
-`vibeqc_system_ecp_integrals` exports local and nonlocal matrices separately,
+`generativeqc_system_ecp_integrals` exports local and nonlocal matrices separately,
 followed by atom-major xyz derivative matrices for each component.
 
 ```python
-from vibeqc import Calculator, load_basis
-from vibeqc.ecp import ecp_integrals
+from generativeqc import Calculator, load_basis
+from generativeqc.ecp import ecp_integrals
 
 basis = load_basis("owned-basis-and-ecp.json")
 raw = ecp_integrals(atoms, basis)
@@ -217,7 +217,7 @@ isolation and restoration. Existing KS resource plans include ECP setup
 workspace and preserve ECP parameter/core identity.
 
 Run `pytest tests/python/test_ecp_dft.py`; enable GPU cases only with
-`VIBEQC_ECP_CUDA_TEST=1`. `tools/qualify_ecp_dft.py --device cpu --output result.json`
+`GENERATIVEQC_ECP_CUDA_TEST=1`. `tools/qualify_ecp_dft.py --device cpu --output result.json`
 (or `--device cuda`) records source/library identities and eight independently
 checked energy endpoints. See the
 [decision note](../../.agents/notes/implemented/numerics/2026-09-18-ecp-dft-energy.md)
@@ -252,7 +252,7 @@ With the pinned reference-test extra and the corresponding native library:
 
 ```sh
 python -m pytest tests/python/test_ecp_stuttgart.py -q
-VIBEQC_ECP_CUDA_TEST=1 python -m pytest tests/python/test_ecp_stuttgart.py -q -k cuda
+GENERATIVEQC_ECP_CUDA_TEST=1 python -m pytest tests/python/test_ecp_stuttgart.py -q -k cuda
 python tools/qualify_ecp_stuttgart.py --device cpu --output stuttgart-cpu.json
 python tools/qualify_ecp_stuttgart.py --device cuda --output stuttgart-cuda.json
 ```
@@ -323,14 +323,14 @@ Run the suite and record a compact endpoint report with:
 
 ```sh
 python -m pytest tests/python/test_ecp_heavy.py -q
-VIBEQC_ECP_CUDA_TEST=1 python -m pytest tests/python/test_ecp_heavy.py -q -k cuda
+GENERATIVEQC_ECP_CUDA_TEST=1 python -m pytest tests/python/test_ecp_heavy.py -q -k cuda
 python tools/qualify_ecp_heavy.py --device cpu --output heavy-cpu.json
 python tools/qualify_ecp_heavy.py --device cuda --output heavy-cuda.json
 python tools/qualify_ecp_heavy.py --device cuda --elements Au --output gold-cuda.json
 python tools/qualify_ecp_heavy.py --device cuda --elements Br I --output halogen-cuda.json
 ```
 
-Use the pinned reference-test extra and the corresponding `VIBEQC_LIBRARY` as
+Use the pinned reference-test extra and the corresponding `GENERATIVEQC_LIBRARY` as
 described below. The report includes parameter identities, matrix/energy/force
 errors, exact library and test hashes, planned bounds and the CUDA ledger.
 Unsupported Au CUDA plans are recorded explicitly with no claimed peak bound.
@@ -345,13 +345,13 @@ records the separate Br/I physical-parameter extension and evidence.
 ## Reproduction and parameter sources
 
 Install the pinned `reference-test` extra (PySCF 2.14.0), build the CPU or CUDA
-library and set `PYTHONPATH=python` and `VIBEQC_LIBRARY` to that exact artifact.
+library and set `PYTHONPATH=python` and `GENERATIVEQC_LIBRARY` to that exact artifact.
 For example, build in Release mode with Ninja:
 
 ```sh
-cmake -S . -B build-ecp-cpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DVIBEQC_ENABLE_CUDA=OFF
+cmake -S . -B build-ecp-cpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DGENERATIVEQC_ENABLE_CUDA=OFF
 cmake --build build-ecp-cpu --parallel
-cmake -S . -B build-ecp-cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DVIBEQC_ENABLE_CUDA=ON -DVIBEQC_ENABLE_AOT_SHELLS=OFF -DCMAKE_CUDA_ARCHITECTURES=120
+cmake -S . -B build-ecp-cuda -G Ninja -DCMAKE_BUILD_TYPE=Release -DGENERATIVEQC_ENABLE_CUDA=ON -DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF -DCMAKE_CUDA_ARCHITECTURES=120
 cmake --build build-ecp-cuda --parallel
 ```
 
@@ -360,7 +360,7 @@ GPU architecture for other devices. The measurements validate the generic
 CUDA build and do not promote an AOT shell profile.
 
 Run `pytest tests/python/test_ecp.py tests/python/test_ecp_ir.py tests/python/test_ecp_validation.py tests/python/test_ecp_f.py tests/python/test_ecp_f_projector.py`; set
-`VIBEQC_ECP_CUDA_TEST=1` only on an allocated GPU. The tests use installed
+`GENERATIVEQC_ECP_CUDA_TEST=1` only on an allocated GPU. The tests use installed
 PySCF LANL2DZ Na ECP/orbitals with STO-3G H, asymmetric mixed centers, d shells,
 contracted f shells on ECP and all-electron atoms,
 Cartesian/spherical layouts, charged open-shell HF, independent ECP center
@@ -375,7 +375,7 @@ energy finite differences. Prepared geometry replay is checked under the
 planned host/device budget. The native capability test checks f acceptance,
 g orbital/projector rejection and acceptance of f projectors through the C API.
 
-`vibeqc_ecp_projector_tests` independently checks the emitted host arithmetic
+`generativeqc_ecp_projector_tests` independently checks the emitted host arithmetic
 using a double angular-node sum and the Legendre addition theorem, without
 forming the production AO projections. It covers all radial powers 0..4,
 local/s/p/d/f channels, signed mixed-exponent terms, center filtering, the
@@ -443,7 +443,7 @@ all-electron fragments of those records. Default calls include forces;
 `properties=("energy",)` skips all derivative work. Standalone all-electron
 CPU records and ECP records containing f or higher shells retain their existing capability.
 The native C method registry is unchanged. A C++ compiler (`CXX` or `c++`) is
-required for the shared generated consumers; `VIBEQC_STATIONARY_CACHE` selects
+required for the shared generated consumers; `GENERATIVEQC_STATIONARY_CACHE` selects
 their cache.
 
 For bases containing d shells, the compiler canonicalizes exact ERI center
@@ -522,7 +522,7 @@ full-grid-response analytic gradients and two reconverged energy-difference
 steps. The matched discrete XC grid is explicitly 24 x 8 x 16. PBE mixed
 NaH/KH + hydrogen-fragment batches additionally check exact resource budgets,
 warm replay, changed geometry and failed-item recovery. CPU cases run in the
-`ecp-forces` CI shard; CUDA cases require `VIBEQC_ECP_CUDA_TEST=1` on an actual
+`ecp-forces` CI shard; CUDA cases require `GENERATIVEQC_ECP_CUDA_TEST=1` on an actual
 allocated GPU. CUDA derivative execution is checked with CPU scientific
 fallback entrypoints disabled.
 
@@ -568,13 +568,13 @@ work rejection, snapshot cleanup, failure isolation and recovery. Spherical
 records additionally pass through serialized basis loading and are compared
 with the equivalent Cartesian public energy/forces for every method. These tests
 do not qualify arbitrary elements, parameter families or larger angular domains.
-Run `VIBEQC_ECP_CUDA_TEST=1 python -m pytest tests/python/test_ecp_public_cuda.py`
-on an allocated GPU with `CUDACXX` and `VIBEQC_LIBRARY` set. See the
+Run `GENERATIVEQC_ECP_CUDA_TEST=1 python -m pytest tests/python/test_ecp_public_cuda.py`
+on an allocated GPU with `CUDACXX` and `GENERATIVEQC_LIBRARY` set. See the
 [public-force decision](../../.agents/notes/implemented/compatibility/2026-09-20-ecp-public-cuda-forces.md).
 
 ## CPU generated-provider qualification
 
-`vibeqc_ecp_cpu_tests` compares the complete generated provider with the retained
+`generativeqc_ecp_cpu_tests` compares the complete generated provider with the retained
 independent CPU algorithm, including separate local/nonlocal values and every
 physical-center derivative. Its mixed three-center fixtures cover Cartesian and
 real-spherical s/p/d/f AOs, powers 0..4, signed multiexponent channels through f,

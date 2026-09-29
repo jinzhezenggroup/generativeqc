@@ -9,16 +9,16 @@
       "binaryDir": "${sourceDir}/build/cuda-dev-fast",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VIBEQC_ENABLE_CUDA": "ON",
-        "VIBEQC_CUDA_COMPILE_ARCHITECTURES": "120-real",
-        "VIBEQC_CUDA_COMPILE_JOBS": "2",
-        "VIBEQC_AOT_COMPILE_JOBS": "4",
-        "VIBEQC_AOT_SPLIT_COMPILE_THREADS": "2",
-        "VIBEQC_CUDA_SPLIT_COMPILE_THREADS": "2",
-        "VIBEQC_CUDA_FAST_COMPILE": "ON",
-        "VIBEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
-        "VIBEQC_AOT_UNIT_MODE": "class",
-        "VIBEQC_AOT_PROFILE": "sm_120"
+        "GENERATIVEQC_ENABLE_CUDA": "ON",
+        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120-real",
+        "GENERATIVEQC_CUDA_COMPILE_JOBS": "2",
+        "GENERATIVEQC_AOT_COMPILE_JOBS": "4",
+        "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS": "2",
+        "GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS": "2",
+        "GENERATIVEQC_CUDA_FAST_COMPILE": "ON",
+        "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
+        "GENERATIVEQC_AOT_UNIT_MODE": "class",
+        "GENERATIVEQC_AOT_PROFILE": "sm_120"
       }
     },
     {
@@ -29,13 +29,13 @@
       "binaryDir": "${sourceDir}/build/cuda-release-sm120",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VIBEQC_ENABLE_CUDA": "ON",
-        "VIBEQC_CUDA_COMPILE_ARCHITECTURES": "120",
-        "VIBEQC_CUDA_COMPILE_JOBS": "2",
-        "VIBEQC_CUDA_FAST_COMPILE": "OFF",
-        "VIBEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
-        "VIBEQC_AOT_UNIT_MODE": "stable-shards",
-        "VIBEQC_AOT_PROFILE": "sm_120"
+        "GENERATIVEQC_ENABLE_CUDA": "ON",
+        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
+        "GENERATIVEQC_CUDA_COMPILE_JOBS": "2",
+        "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
+        "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
+        "GENERATIVEQC_AOT_PROFILE": "sm_120"
       }
     }
   ],

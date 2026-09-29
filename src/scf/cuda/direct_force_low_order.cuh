@@ -22,7 +22,7 @@
 // Retained direct force low order contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Generated ssss mathematics over the existing native primitive-pair cache. */
 __device__ __forceinline__ generated_weighted_eri::IndependentGradient
@@ -271,4 +271,4 @@ __device__ inline __noinline__ void contract_two_electron_force_psss_task(
       resident_first_pair_count);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

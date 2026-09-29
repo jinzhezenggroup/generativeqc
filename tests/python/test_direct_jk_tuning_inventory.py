@@ -66,7 +66,9 @@ def _write_fixture(root: Path, payload: dict[str, object]) -> None:
         encoding="utf-8",
     )
 
-    schedule = root / "python/vibeqc_compiler/integral/direct_resident_schedule.py"
+    schedule = (
+        root / "python/generativeqc_compiler/integral/direct_resident_schedule.py"
+    )
     schedule.parent.mkdir(parents=True, exist_ok=True)
     schedule.write_text(
         "block_threads=128\nminimum_blocks_per_sm=4\nmaximum_bra_primitive_pairs=64\n",

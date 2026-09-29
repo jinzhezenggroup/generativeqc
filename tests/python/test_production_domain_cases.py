@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
-from vibeqc_compiler.xc.production_domain_cases import (
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.production_domain_cases import (
     control_case_ids,
     numerical_cases,
 )

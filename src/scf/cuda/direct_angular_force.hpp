@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 void launch_two_electron_force_psss_resident_bra_kernel(
@@ -36,4 +36,4 @@ void dispatch_angular_force_quartets(
     bool force_density_product_screening, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

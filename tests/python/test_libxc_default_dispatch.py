@@ -3,9 +3,9 @@ from __future__ import annotations
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.xc.expression_dispatch import build_energy_expression
-from vibeqc_compiler.xc.semilocal_codegen import build_roots
-from vibeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC, functional
+from generativeqc_compiler.xc.expression_dispatch import build_energy_expression
+from generativeqc_compiler.xc.semilocal_codegen import build_roots
+from generativeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC, functional
 
 
 def test_automatic_libxc_uses_generic_lowering_without_opt_in() -> None:

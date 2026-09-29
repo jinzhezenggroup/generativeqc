@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify, regenerate, and explicitly synchronize pinned scientific sources.
 
-Ordinary VibeQC builds never use the network.  This maintainer tool makes the
+Ordinary GenerativeQC builds never use the network.  This maintainer tool makes the
 repository-wide source registry the single ownership point for upstream
 revision/path/hash/license metadata while keeping domain artifacts checked in.
 """
@@ -18,8 +18,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "upstream/manifest.json"
-DEFAULT_CACHE = ROOT / ".cache/vibeqc-sources"
-_SCHEMA = "vibeqc.scientific-source-registry"
+DEFAULT_CACHE = ROOT / ".cache/generativeqc-sources"
+_SCHEMA = "generativeqc.scientific-source-registry"
 
 
 class SourceRegistryError(ValueError):
@@ -538,7 +538,7 @@ def _fetch(url: str, *, label: str) -> bytes:
     if not url.startswith("https://"):
         raise SourceRegistryError(f"{label} requires an HTTPS URL")
     request = urllib.request.Request(  # noqa: S310
-        url, headers={"User-Agent": "vibeqc-source-sync/1"}
+        url, headers={"User-Agent": "generativeqc-source-sync/1"}
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310

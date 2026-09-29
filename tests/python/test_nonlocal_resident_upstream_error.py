@@ -43,7 +43,7 @@ void atomicExch(int* out, int value) { *out = value; }
 double __longlong_as_double(unsigned long long value) {
   return std::bit_cast<double>(static_cast<std::uint64_t>(value));
 }
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 struct GridTaskView {
   std::size_t npoint;
   const double* features;
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
   density.fill(91.0);
   gradient.fill(92.0);
   if (mode == 3) features[0] = std::numeric_limits<double>::quiet_NaN();
-  vibeqc::dft::GridTaskView view{count, features.data(), mode == 4 ? nullptr : &producer_error};
+  generativeqc::dft::GridTaskView view{count, features.data(), mode == 4 ? nullptr : &producer_error};
   const auto begin = mode == 6 ? n : offset;
   for (std::size_t lane = 0; lane < count; ++lane) {
     threadIdx.x = lane;

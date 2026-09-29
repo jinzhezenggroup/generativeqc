@@ -12,7 +12,7 @@
 // Retained direct eri symmetry contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __device__ inline void eri_symmetry_permutation(unsigned permutation, std::size_t i, std::size_t j,
                                                 std::size_t k, std::size_t l, std::size_t& a,
@@ -81,4 +81,4 @@ __device__ inline bool unique_eri_symmetry_permutation(unsigned permutation, std
   return !pair_swapped || i != k || j != l;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

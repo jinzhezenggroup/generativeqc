@@ -5,7 +5,7 @@
 
 #include "core/electronic_reference.hpp"
 
-namespace vibeqc::hf {
+namespace generativeqc::hf {
 
 /** Owned physical canonical RHF state used by bounded post-HF consumers.
  *
@@ -40,4 +40,4 @@ struct PhysicalReference {
   }
 };
 
-}  // namespace vibeqc::hf
+}  // namespace generativeqc::hf

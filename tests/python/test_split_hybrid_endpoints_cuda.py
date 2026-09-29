@@ -1,7 +1,7 @@
 """Opt-in matched-grid Libxc/PySCF acceptance for public CUDA split hybrids.
 
 Run from a clean checkout on a Slurm-assigned GPU with
-VIBEQC_SPLIT_HYBRID_CUDA_TEST=1.
+GENERATIVEQC_SPLIT_HYBRID_CUDA_TEST=1.
 The reference consumes exported quadrature and density, never production XC
 code, and independently rebuilds J, K, semilocal XC, and the full SCF state.
 """
@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_SPLIT_HYBRID_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_SPLIT_HYBRID_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -140,11 +140,11 @@ def test_split_hybrid_complete_endpoint(method: str, polarized: bool) -> None:
     cancellation there cannot independently arbitrate the XC potential.
     """
     import pyscf
+    from generativeqc import Calculator, KsOptions
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft.grid import GridSpec
     from pyscf.dft import libxc
-    from vibeqc import Calculator, KsOptions
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
-    from vibeqc_compiler.dft.grid import GridSpec
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require a Slurm allocation"
     assert not subprocess.check_output(
@@ -240,7 +240,7 @@ def test_split_hybrid_complete_endpoint(method: str, polarized: bool) -> None:
         single_seconds = perf_counter() - begin
         assert single.converged and single.executed_backend == "cuda"
         assert abs(single.energy - cold.items[0].energy) < 2e-9
-        native_library = Path(os.environ["VIBEQC_LIBRARY"])
+        native_library = Path(os.environ["GENERATIVEQC_LIBRARY"])
         payload = {
             "method": selector,
             "slurm_job": os.environ["SLURM_JOB_ID"],
@@ -273,7 +273,7 @@ def test_split_hybrid_complete_endpoint(method: str, polarized: bool) -> None:
             ],
             "cases": evidence,
         }
-        directory = os.environ.get("VIBEQC_SPLIT_HYBRID_EVIDENCE")
+        directory = os.environ.get("GENERATIVEQC_SPLIT_HYBRID_EVIDENCE")
         if directory:
             Path(directory).mkdir(parents=True, exist_ok=True)
             (Path(directory) / f"{selector}.json").write_text(

@@ -136,7 +136,7 @@ Implementation tolerances and DF fitting error are separate quantities.
 ## Python validation API
 
 The internal validation helpers live in
-`tools.vibeqc_cc.df_ccsdt_oracle`:
+`tools.generativeqc_cc.df_ccsdt_oracle`:
 
 - `correlation_df_reference` fixes the method contract while preserving the
   conventional RHF state;

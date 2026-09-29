@@ -6,12 +6,12 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.matrix_function import SymmetricMatrixFunctionSpec
-from vibeqc_compiler.method.matrix_function_cuda import (
+from generativeqc_compiler.method.matrix_function import SymmetricMatrixFunctionSpec
+from generativeqc_compiler.method.matrix_function_cuda import (
     emit_pseudoinverse_vjp_cuda,
     emit_symmetric_matrix_function_vjp_cuda,
 )
-from vibeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor import Program, execute
 
 
 def _symmetric(rng: typing.Any, n: typing.Any) -> typing.Any:
@@ -327,7 +327,7 @@ def test_exact_logical_budget_and_detached_immutable_state() -> None:
 
 
 def test_matches_existing_293_metric_response_without_runtime_loading() -> None:
-    from tools.vibeqc_mp2.gradient import _inverse_sqrt_metric_response
+    from tools.generativeqc_mp2.gradient import _inverse_sqrt_metric_response
 
     for spectrum in ([0.02, 0.05, 1.0, 3.0], [1.0, 2.0, 4.0]):
         matrix, _, bar = _fixture(spectrum)
@@ -340,7 +340,7 @@ def test_matches_existing_293_metric_response_without_runtime_loading() -> None:
 
 def test_composes_with_generated_objective_vjp() -> None:
     """An ordinary #151 reverse graph supplies the custom matrix-function seed."""
-    from vibeqc_compiler.tensor import (
+    from generativeqc_compiler.tensor import (
         Index,
         IndexSpace,
         TensorSpec,
@@ -375,8 +375,8 @@ def test_composes_with_generated_objective_vjp() -> None:
 
 
 def test_response_graph_can_be_planned_for_cuda_without_a_device() -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     program = SymmetricMatrixFunctionSpec(3, "lowering", 0.1).response_program()
     plan = plan_cuda(program, cuda_target_info("sm_80"))

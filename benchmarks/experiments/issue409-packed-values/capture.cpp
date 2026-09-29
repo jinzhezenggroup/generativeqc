@@ -43,7 +43,7 @@ void write(const std::filesystem::path& path, const std::vector<double>& data) {
   if (!stream) throw std::runtime_error("capture write failed");
 }
 int requested_size() {
-  const char* value = std::getenv("VIBEQC_PACKED_CAPTURE_N");
+  const char* value = std::getenv("GENERATIVEQC_PACKED_CAPTURE_N");
   return value ? std::atoi(value) : 0;
 }
 }  // namespace
@@ -77,7 +77,7 @@ extern "C" cublasStatus_t cublasDsyrk_v2(cublasHandle_t handle, cublasFillMode_t
   try {
     static auto call = original<decltype(&cublasDsyrk_v2)>("cublasDsyrk_v2");
     std::lock_guard lock(capture_mutex);
-    const char* directory = std::getenv("VIBEQC_PACKED_CAPTURE_DIR");
+    const char* directory = std::getenv("GENERATIVEQC_PACKED_CAPTURE_DIR");
     const auto projection = projections.find(a);
     // Retain at most four eager occupied builds. Graph construction is skipped
     // below because a host snapshot/synchronization would invalidate capture.

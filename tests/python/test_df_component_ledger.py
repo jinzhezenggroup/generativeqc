@@ -18,7 +18,7 @@ from benchmarks.df_component_ledger import (
 def record() -> typing.Any:
     """One root with a nested generation region and a disjoint contraction."""
     return {
-        "schema": "vibeqc.df_trace",
+        "schema": "generativeqc.df_trace",
         "version": 1,
         "id": 0,
         "operation": "ri_j",

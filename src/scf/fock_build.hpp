@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_FOCK_BUILD_HPP
-#define VIBEQC_SCF_FOCK_BUILD_HPP
+#ifndef GENERATIVEQC_SCF_FOCK_BUILD_HPP
+#define GENERATIVEQC_SCF_FOCK_BUILD_HPP
 
 #include <array>
 #include <cstddef>
@@ -9,7 +9,7 @@
 
 #include "runtime/provider_registry.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 enum class FockSpin { Restricted, Unrestricted };
 enum class FockOperator { FullRange, ShortRange, LongRange };
@@ -199,5 +199,5 @@ double contract_exact_direct_energy_derivative(const ResolvedFockBuild& strategy
                                                std::span<const double> density,
                                                std::span<const double> beta = {});
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

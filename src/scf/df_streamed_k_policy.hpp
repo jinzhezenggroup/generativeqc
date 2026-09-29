@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <limits>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** One shared dense/occupied generated-K traversal of existing tile storage.
  * Capacity is in doubles in EACH of the four disjoint plan buffers. A panel
@@ -59,4 +59,4 @@ inline DfStreamedKPanel df_streamed_k_panel(std::size_t nbf, std::size_t naux,
   return best;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

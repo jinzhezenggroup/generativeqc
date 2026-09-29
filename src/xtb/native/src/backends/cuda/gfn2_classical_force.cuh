@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_CLASSICAL_FORCE_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_CLASSICAL_FORCE_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_CLASSICAL_FORCE_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_CLASSICAL_FORCE_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -14,7 +14,7 @@
 #include "backends/cuda/gfn2_force_common.cuh"
 #include "backends/cuda/gfn2_geometry.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Fixed setup-time component mask for the non-electronic force reverse pass. */
 enum class Gfn2ClassicalForceComponent : std::uint32_t {
@@ -184,6 +184,6 @@ cudaError_t add_gfn2_classical_forces_cuda(
     const Gfn2GeometryEpochDevice& geometry_epoch, std::uint32_t* system_errors,
     std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_CLASSICAL_FORCE_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_CLASSICAL_FORCE_CUH

@@ -18,11 +18,11 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
-vibeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture_error,
-                                  vibeqc_status iteration_status, bool& capture_rejected,
-                                  std::string& detail) {
+generativeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture_error,
+                                        generativeqc_status iteration_status,
+                                        bool& capture_rejected, std::string& detail) {
   const auto expected = [](cudaError_t error) {
     // CUDA assigns stable ABI values 900/901 to unsupported/invalidated stream
     // capture. Compare the values so compatible runtimes need not spell the
@@ -40,8 +40,8 @@ vibeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture_error
   // A library can report failure without setting CUDA's last-error slot.
   // Preserve that failure unless an explicit capture/mode error explains it;
   // in particular a solver allocation failure must never become a retry.
-  if (iteration_status != VIBEQC_STATUS_SUCCESS &&
-      (iteration_status != VIBEQC_STATUS_CUDA_ERROR ||
+  if (iteration_status != GENERATIVEQC_STATUS_SUCCESS &&
+      (iteration_status != GENERATIVEQC_STATUS_CUDA_ERROR ||
        (capture_error == cudaSuccess && pending == cudaSuccess)))
     return iteration_status;
   cudaStreamCaptureStatus capture{};
@@ -49,16 +49,16 @@ vibeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture_error
   if (status != cudaSuccess) return cuda_failure(status, "query recovered DF stream", detail);
   if (capture != cudaStreamCaptureStatusNone) {
     detail = "CUDA DF capture must be ended before ordinary execution";
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
   capture_rejected = true;
   detail.clear();
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left, std::size_t batch_size,
-                       std::size_t nbf, const double* left, const double* right, double* output,
-                       std::string& detail) {
+generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left,
+                             std::size_t batch_size, std::size_t nbf, const double* left,
+                             const double* right, double* output, std::string& detail) {
   const double one = 1.0;
   const double zero = 0.0;
   const std::size_t matrix_elements = nbf * nbf;
@@ -69,13 +69,14 @@ vibeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left, std:
       static_cast<long long>(matrix_elements), &zero, output, static_cast<int>(nbf),
       static_cast<long long>(matrix_elements), static_cast<int>(batch_size));
   return status == CUBLAS_STATUS_SUCCESS
-             ? VIBEQC_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
              : blas_failure(status, "CUDA DF device matrix product", detail);
 }
 
-vibeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nbf,
-                                  std::size_t batch_size, double* eigensystem, double* eigenvalues,
-                                  DeviceSolver& solver, std::string& detail) {
+generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nbf,
+                                        std::size_t batch_size, double* eigensystem,
+                                        double* eigenvalues, DeviceSolver& solver,
+                                        std::string& detail) {
   cusolverStatus_t status = cusolverDnCreate(&solver.handle);
   if (status == CUSOLVER_STATUS_SUCCESS) {
     status = cusolverDnSetStream(solver.handle, plan.stream);
@@ -116,7 +117,7 @@ vibeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nb
                                  df_scf_workspace_allowance(nbf, batch_size));
     if (bytes > df_scf_workspace_allowance(nbf, batch_size)) {
       detail = "CUDA DF SCF eigensolver query exceeds its planned workspace";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
     return allocate_device(reinterpret_cast<void**>(&solver.workspace), bytes,
                            "allocate CUDA DF SCF eigensolver workspace", detail);
@@ -140,25 +141,25 @@ vibeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nb
                                df_scf_workspace_allowance(nbf, batch_size));
   if (device_bytes > df_scf_workspace_allowance(nbf, batch_size)) {
     detail = "CUDA DF SCF generic eigensolver query exceeds its planned workspace";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
-  vibeqc_status allocation =
+  generativeqc_status allocation =
       allocate_device(reinterpret_cast<void**>(&solver.workspace), device_bytes,
                       "allocate CUDA DF SCF generic eigensolver workspace", detail);
-  if (allocation != VIBEQC_STATUS_SUCCESS) return allocation;
+  if (allocation != GENERATIVEQC_STATUS_SUCCESS) return allocation;
   if (host_bytes != 0) {
     solver.host_workspace = std::malloc(host_bytes);
     if (solver.host_workspace == nullptr) {
       detail = "host allocation for CUDA DF SCF generic eigensolver failed";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status solve_device_batch(CudaDensityFittingJkPlan& plan, DeviceSolver& solver,
-                                 std::size_t nbf, std::size_t batch_size, double* eigensystem,
-                                 double* eigenvalues, int* info, std::string& detail) {
+generativeqc_status solve_device_batch(CudaDensityFittingJkPlan& plan, DeviceSolver& solver,
+                                       std::size_t nbf, std::size_t batch_size, double* eigensystem,
+                                       double* eigenvalues, int* info, std::string& detail) {
   // Capture counts describe submitted graph nodes. Actual graph iterations
   // remain the device readback count; only ordinary calls receive event timing.
   runtime::cuda_trace::TraceOperation trace(
@@ -191,8 +192,8 @@ vibeqc_status solve_device_batch(CudaDensityFittingJkPlan& plan, DeviceSolver& s
         static_cast<std::int64_t>(batch_size));
   }
   return status == CUSOLVER_STATUS_SUCCESS
-             ? VIBEQC_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
              : solver_failure(status, "CUDA DF SCF eigensolve", detail);
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

@@ -6,7 +6,7 @@
 
 // Generated FP64 programs own the sizes. Only publish after every SSA value
 // passes its finite check. The budget includes adapter staging and snapshots.
-namespace vibeqc_tensor_cpu {
+namespace generativeqc_tensor_cpu {
 template <class Evaluate>
 int run(const double* input, size_t ni, double* output, size_t no, size_t budget,
         size_t expected_input, size_t expected_output, size_t arena_count, size_t required_bytes,
@@ -26,4 +26,4 @@ int run(const double* input, size_t ni, double* output, size_t no, size_t budget
     return -3;
   }
 }
-}  // namespace vibeqc_tensor_cpu
+}  // namespace generativeqc_tensor_cpu

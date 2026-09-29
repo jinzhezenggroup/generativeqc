@@ -6,23 +6,23 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture
-from tools.vibeqc_cc.df_ccsdt_oracle import (
+from tools.generativeqc_cc.df_ccsdt_oracle import (
     correlation_df_reference,
     dense_df_oracle_from_three_index,
     run_dense_df_ccsdt_oracle,
 )
-from tools.vibeqc_cc.df_factorized import (
+from tools.generativeqc_cc.df_factorized import (
     solve_df_ccsd,
     virtual_corrections,
 )
-from tools.vibeqc_cc.doubles import build_ccsd_program
-from tools.vibeqc_cc.solver import SolverOptions
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.providers import BlockResult
-from tools.vibeqc_posthf.reference import immutable
+from tools.generativeqc_cc.doubles import build_ccsd_program
+from tools.generativeqc_cc.solver import SolverOptions
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.providers import BlockResult
+from tools.generativeqc_posthf.reference import immutable
 
 
 def _factor_eri(eri: np.ndarray) -> np.ndarray:

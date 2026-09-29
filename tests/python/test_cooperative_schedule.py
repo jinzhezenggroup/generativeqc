@@ -2,22 +2,22 @@
 
 import re
 
-from vibeqc_compiler.common.backend import TargetInfo
-from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-from vibeqc_compiler.common.schedule import ScheduleContract
-from vibeqc_compiler.integral.cooperative_schedule import CooperativeLaneSchedule
-from vibeqc_compiler.integral.df_rys_shell import COOPERATIVE_RYS_SHELL_CLASSES
-from vibeqc_compiler.integral.df_shell_derivatives import (
+from generativeqc_compiler.common.backend import TargetInfo
+from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+from generativeqc_compiler.common.schedule import ScheduleContract
+from generativeqc_compiler.integral.cooperative_schedule import CooperativeLaneSchedule
+from generativeqc_compiler.integral.df_rys_shell import COOPERATIVE_RYS_SHELL_CLASSES
+from generativeqc_compiler.integral.df_shell_derivatives import (
     emit_df_shell_derivatives_cuda,
     shell_schedule,
 )
-from vibeqc_compiler.integral.one_electron_derivative_policy_cuda import (
+from generativeqc_compiler.integral.one_electron_derivative_policy_cuda import (
     emit_one_electron_derivative_policy_cuda,
     nucleus_cooperative_schedule,
     one_electron_derivative_policy_inventory,
     production_nucleus_cooperative_schedule,
 )
-from vibeqc_compiler.integral.one_electron_derivatives_cuda import (
+from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
     one_electron_derivative_inventory,
 )
 

@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SOLVER_DIIS_HISTORY_HPP
-#define VIBEQC_SOLVER_DIIS_HISTORY_HPP
+#ifndef GENERATIVEQC_SOLVER_DIIS_HISTORY_HPP
+#define GENERATIVEQC_SOLVER_DIIS_HISTORY_HPP
 
 #include <cstddef>
 #include <limits>
@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace vibeqc::solver::detail {
+namespace generativeqc::solver::detail {
 
 /** Method-neutral bounded host DIIS history storage.
  *
@@ -84,6 +84,6 @@ class DiisHistory {
   std::vector<std::vector<double>> errors_;
 };
 
-}  // namespace vibeqc::solver::detail
+}  // namespace generativeqc::solver::detail
 
 #endif

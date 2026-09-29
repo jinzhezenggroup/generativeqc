@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, ResourceBudget
+from generativeqc import Calculator, ResourceBudget
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -40,11 +40,11 @@ def test_single_packed_factor_cold_warm_and_force_replay(
         assert reference.converged
         references.append((reference.e_tot, -reference.nuc_grad_method().kernel()))
 
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "packed-single")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", response_space)
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", response_space)
     if response_space == "occupied":
-        monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
-        monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", "135000")
+        monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+        monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", "135000")
     calculator = Calculator(
         device="cuda",
         method="rhf",
@@ -60,7 +60,7 @@ def test_single_packed_factor_cold_warm_and_force_replay(
     with calculator.prepare_batch([atoms], warm_start=True) as batch:
         for index, geometry in enumerate((None, None, moved)):
             trace = tmp_path / f"single-packed-{index}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = batch.execute(
                 [np.asarray([position for _, position in geometry])]
                 if geometry is not None
@@ -103,9 +103,9 @@ def test_single_packed_factor_cold_warm_and_force_replay(
                 assert len(owners) == 1
                 assert owners[0]["counters"].get("resident_raw_bytes", 0) == 0
                 assert owners[0]["counters"].get("resident_transformed_bytes", 0) > 0
-        monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "packed")
+        monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed")
         trace = tmp_path / "dual-packed-after-single.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+        monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
         result = batch.execute(strict=True).items[0]
         assert result.energy == pytest.approx(references[0][0], abs=1e-8, rel=0)
         np.testing.assert_allclose(result.forces, references[0][1], atol=1e-7, rtol=0)
@@ -177,13 +177,13 @@ def test_packed_preparation_replay_and_representation_replacement(
         oracle.kernel()
         assert oracle.converged
         references.append((oracle.e_tot, -oracle.nuc_grad_method().kernel()))
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_SEED_EXCHANGE", "dense")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_STORAGE", "auto")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "shell")
-    monkeypatch.setenv("VIBEQC_DF_SHELL_SCHEDULE", "compact")
-    monkeypatch.setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "packed")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_SEED_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", "compact")
+    monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "packed")
     calc = Calculator(
         method=method,
         basis="def2-svp",
@@ -209,9 +209,9 @@ def test_packed_preparation_replay_and_representation_replacement(
                 ("dense", True),
             ]
         ):
-            monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", storage)
+            monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", storage)
             trace = tmp_path / f"values-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = batch.execute(
                 [np.array([r for _, r in moved])] * batch_size if changed else None,
                 strict=True,
@@ -269,11 +269,11 @@ def test_packed_global_ledger_and_raw_reuse_ablation(
         "energy_tolerance": 1e-12,
         "density_tolerance": 1e-10,
     }
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     reference = Calculator(**options).singlepoint(atoms)
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "packed")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed")
     for raw_reuse in ("auto", "off"):
-        monkeypatch.setenv("VIBEQC_DF_RAW_REUSE", raw_reuse)
+        monkeypatch.setenv("GENERATIVEQC_DF_RAW_REUSE", raw_reuse)
         probe = Calculator(**options).estimate_resources([atoms] * 2).require_feasible()
         budget = ResourceBudget(
             host_bytes=probe.peak_bytes["host"], device_bytes=probe.peak_bytes["device"]
@@ -284,7 +284,7 @@ def test_packed_global_ledger_and_raw_reuse_ablation(
                 (("energy", "forces"), ("energy",), ("energy", "forces"))
             ):
                 trace = tmp_path / f"raw-{raw_reuse}-{replay}.jsonl"
-                monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+                monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
                 result = batch.execute(strict=True, properties=properties)
                 ledger = batch.resource_diagnostics["observation"]["device_ledger"]
                 assert (
@@ -308,10 +308,10 @@ def test_packed_global_ledger_and_raw_reuse_ablation(
                         not r["counters"].get("raw_packed_value_reused_bytes", 0)
                         for r in read_trace(trace)
                     )
-            monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "dense")
+            monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
             with pytest.raises(ValueError, match="schedule changed"):
                 batch.execute(strict=True)
-            monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "packed")
+            monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed")
 
 
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
@@ -320,8 +320,8 @@ def test_packed_composed_fock_keeps_prepared_identity_and_dense_fallback(
     monkeypatch: typing.Any, spin: typing.Any, storage: typing.Any
 ) -> None:
     """Unknown-rank Fock inputs retain exact bounded K and frozen provenance."""
-    from vibeqc.fock import FockBuildSpec, FockPlan
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc.fock import FockBuildSpec, FockPlan
+    from generativeqc_compiler.dft import NativeAO
 
     assert os.environ.get("SLURM_JOB_ID")
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
@@ -329,13 +329,13 @@ def test_packed_composed_fock_keeps_prepared_identity_and_dense_fallback(
     d = np.array([[0.8, 0.1], [0.1, 0.6]])
     if spin == "unrestricted":
         d = np.stack((d, 0.4 * d))
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     with (
         NativeAO(atoms) as basis,
         FockPlan(basis, spec, device="cpu") as oracle,
         FockPlan(basis, spec, device="cuda", device_budget_bytes=16 << 20) as dense,
     ):
-        monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", storage)
+        monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", storage)
         with FockPlan(
             basis, spec, device="cuda", device_budget_bytes=16 << 20
         ) as packed:
@@ -343,7 +343,7 @@ def test_packed_composed_fock_keeps_prepared_identity_and_dense_fallback(
             assert packed.execution_identity != dense.execution_identity
             assert dense.diagnostics["df_pair_storage"] == "dense"
             assert packed.diagnostics["df_pair_storage"] == storage
-            monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "dense")
+            monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
             assert packed.diagnostics["df_pair_storage"] == storage
             for symmetric in (True, False):
                 density = d.copy()

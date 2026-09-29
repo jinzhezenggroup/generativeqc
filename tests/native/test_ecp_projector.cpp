@@ -27,7 +27,7 @@ struct Term {
   double exponent, coefficient;
 };
 void check_grid() {
-  using namespace vibeqc::generated;
+  using namespace generativeqc::generated;
   // Polynomial moments and standard-library Legendre polynomials are an
   // independent oracle for both odd and even orders, including the limits.
   for (unsigned n : {8, 9, 16, 17, 32, 44, 96, 160, 224, 512}) {
@@ -194,7 +194,7 @@ void check_ao_consumer() {
                 ao.z = node[2];
               }
               for (bool derivatives : {false, true}) {
-                const auto result = vibeqc::generated::ecp_evaluate_ao<Jet>(
+                const auto result = generativeqc::generated::ecp_evaluate_ao<Jet>(
                     ao, primitives, point, radius, center[0], center[1], center[2], derivatives);
                 near(result.v[0], static_cast<double>(ao_value(ao, primitives, node)));
                 for (int axis = 0; axis < 3; ++axis) {
@@ -220,7 +220,7 @@ void check_ao_consumer() {
   // g powers must not alias a supported component in the base-4 dispatch key.
   for (const auto powers : {std::array<unsigned, 3>{0, 0, 4}, {0, 4, 0}, {4, 0, 0}, {2, 1, 1}}) {
     double jet[4];
-    vibeqc::generated::ecp_ao(powers[0], powers[1], powers[2], 0.2, -0.3, 0.4, 0.7, jet);
+    generativeqc::generated::ecp_ao(powers[0], powers[1], powers[2], 0.2, -0.3, 0.4, 0.7, jet);
     for (double value : jet)
       if (std::isfinite(value)) throw std::runtime_error("unsupported ECP AO silently aliased");
   }
@@ -236,7 +236,7 @@ void check_weighted_consumer() {
     nonlocal[i] = std::sin(1.3 * i);
     dl[i] = std::sin(0.6 + i);
     dn[i] = std::cos(0.1 + 0.9 * i);
-    near(vibeqc::generated::ecp_add_operator(1.7, local[i], nonlocal[i]),
+    near(generativeqc::generated::ecp_add_operator(1.7, local[i], nonlocal[i]),
          static_cast<double>(1.7L + local[i] + nonlocal[i]));
   }
   for (int component = 0; component < 3; ++component) {
@@ -244,7 +244,7 @@ void check_weighted_consumer() {
     if (component == 0) a.fill(0);
     if (component == 1) b.fill(0);
     const double force =
-        vibeqc::generated::ecp_force_component(a.data(), b.data(), weights.data(), size);
+        generativeqc::generated::ecp_force_component(a.data(), b.data(), weights.data(), size);
     for (long double step : {2e-5L, 1e-5L}) {
       long double plus = 0, minus = 0;
       for (int row = 0; row < n; ++row)
@@ -258,7 +258,7 @@ void check_weighted_consumer() {
       near(force, static_cast<double>((minus - plus) / (2 * step)));
     }
   }
-  near(vibeqc::generated::ecp_force_component(nullptr, nullptr, nullptr, 0), 0);
+  near(generativeqc::generated::ecp_force_component(nullptr, nullptr, nullptr, 0), 0);
 }
 
 // This oracle never forms AO projections. It contracts pairs of angular
@@ -284,7 +284,7 @@ void check() {
                   std::sqrt(3 / (4 * pi)) * z, std::sqrt(15 / (4 * pi)) * x * y,
                   std::sqrt(15 / (4 * pi)) * y * z, std::sqrt(5 / (16 * pi)) * (3 * z * z - 1),
                   std::sqrt(15 / (4 * pi)) * x * z, std::sqrt(15 / (16 * pi)) * (x * x - y * y)}};
-    vibeqc::generated::ecp_harmonics(x, y, z, sphere[q].harmonics);
+    generativeqc::generated::ecp_harmonics(x, y, z, sphere[q].harmonics);
     for (int d = 0; d < 4; ++d) {
       a[q].v[d] = std::sin(0.7 + 1.3 * q + d * 0.4);
       b[q].v[d] = std::cos(-0.3 + 0.7 * q - d * 0.9);
@@ -298,8 +298,8 @@ void check() {
           av[q].v[d] = bv[q].v[d] = std::numeric_limits<double>::quiet_NaN();
     std::array<Jet, 16> pa{}, pb{};
     for (int m = 0; m < 16; ++m) {
-      pa[m] = vibeqc::generated::ecp_project(av.data(), sphere.data(), nq, m, derivatives);
-      pb[m] = vibeqc::generated::ecp_project(bv.data(), sphere.data(), nq, m, derivatives);
+      pa[m] = generativeqc::generated::ecp_project(av.data(), sphere.data(), nq, m, derivatives);
+      pb[m] = generativeqc::generated::ecp_project(bv.data(), sphere.data(), nq, m, derivatives);
     }
     for (int channel = -1; channel <= 3; ++channel)
       for (unsigned power = 0; power <= 4; ++power)
@@ -309,8 +309,9 @@ void check() {
                                 {1, channel, power, 1.23, 0.81},
                                 {0, channel, power, 0.11, 123.0}};
           double parts[2][10];
-          vibeqc::generated::ecp_contract(terms, 3, radial, sphere.data(), nq, 1, av.data(),
-                                          bv.data(), pa.data(), pb.data(), derivatives, parts);
+          generativeqc::generated::ecp_contract(terms, 3, radial, sphere.data(), nq, 1, av.data(),
+                                                bv.data(), pa.data(), pb.data(), derivatives,
+                                                parts);
           const double potential =
               radial.weight * std::pow(r, power) *
               (-1.2 * std::exp(-0.67 * r * r) + 0.81 * std::exp(-1.23 * r * r));
@@ -336,23 +337,24 @@ void check() {
           }
         }
   }
-  if (!std::isnan(vibeqc::generated::ecp_radial(5, 1, 1, 1, 1)))
+  if (!std::isnan(generativeqc::generated::ecp_radial(5, 1, 1, 1, 1)))
     throw std::runtime_error("unsupported radial power silently accepted");
 }
 }  // namespace
 
 int main() {
   try {
-    static_assert(vibeqc::generated::ecp_coarse_radial_points == 160);
-    static_assert(vibeqc::generated::ecp_coarse_polar_points == 32);
-    static_assert(vibeqc::generated::ecp_refined_radial_points == 224);
-    static_assert(vibeqc::generated::ecp_refined_polar_points == 44);
+    static_assert(generativeqc::generated::ecp_coarse_radial_points == 160);
+    static_assert(generativeqc::generated::ecp_coarse_polar_points == 32);
+    static_assert(generativeqc::generated::ecp_refined_radial_points == 224);
+    static_assert(generativeqc::generated::ecp_refined_polar_points == 44);
     for (const auto& c : ecp_policy_cases())
-      if (vibeqc::generated::ecp_grid_pair_accepted(c.coarse, c.fine, c.derivative) != c.accepted)
+      if (generativeqc::generated::ecp_grid_pair_accepted(c.coarse, c.fine, c.derivative) !=
+          c.accepted)
         throw std::runtime_error("generated ECP convergence policy changed acceptance");
-    static_assert(vibeqc::generated::ecp_cuda_radial_tile(16, 44) == 4);
-    static_assert(vibeqc::generated::ecp_cuda_radial_tile(17, 44) == 1);
-    static_assert(vibeqc::generated::ecp_cuda_radial_tile(16, 45) == 1);
+    static_assert(generativeqc::generated::ecp_cuda_radial_tile(16, 44) == 4);
+    static_assert(generativeqc::generated::ecp_cuda_radial_tile(17, 44) == 1);
+    static_assert(generativeqc::generated::ecp_cuda_radial_tile(16, 45) == 1);
     check_grid();
     check();
     check_ao_consumer();

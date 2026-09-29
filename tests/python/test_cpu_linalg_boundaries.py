@@ -115,7 +115,7 @@ def test_probe_multithread_contract(probe_binary: Path, provider: str) -> None:
     )
     assert run.returncode == 0, run.stderr
     record = json.loads(run.stdout)
-    assert record["schema"] == "vibeqc.cpu-linalg-probe.v1"
+    assert record["schema"] == "generativeqc.cpu-linalg-probe.v1"
     assert record["operation"] == "gemm"
     assert record["requested_provider"] == (
         "automatic" if provider == "auto" else provider

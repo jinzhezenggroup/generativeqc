@@ -9,11 +9,11 @@
 #include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include "generated_split_hybrid_registry.cuh"
 #endif
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 bool finite(const auto& values) {
@@ -24,7 +24,7 @@ bool finite(const auto& values) {
 bool valid_model(const KsFinalStateIdentity& identity) {
   const auto& model = identity.model;
   const auto& fock = identity.determinant.model;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   const bool split_hybrid = generated::split_hybrid_registered(model.functional);
 #else
   const bool split_hybrid = false;
@@ -75,7 +75,7 @@ bool valid_model(const KsFinalStateIdentity& identity) {
            correction.spec.exchange.omega > 0.0 &&
            correction.screening_tolerance == fock.screening_tolerance;
   }();
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   const auto split_composition = generated::split_hybrid_composition(model.functional);
   const bool valid_split_exchange =
       !split_hybrid ||
@@ -251,4 +251,4 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
   return true;
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

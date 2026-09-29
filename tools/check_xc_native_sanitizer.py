@@ -15,10 +15,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.common.provenance import file_hash
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.native import emit_native
+from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.native import emit_native
 
 
 def main() -> None:
@@ -91,7 +91,7 @@ def main() -> None:
     (args.output / "summary.json").write_text(
         json.dumps(
             {
-                "schema": "vibeqc.xc-native-sanitizer.v1",
+                "schema": "generativeqc.xc-native-sanitizer.v1",
                 "compiler": subprocess.check_output([args.cxx, "--version"], text=True),
                 "cases": rows,
             },

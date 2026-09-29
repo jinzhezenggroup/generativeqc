@@ -1,6 +1,6 @@
 # Scientific evidence retention
 
-VibeQC keeps the independent fixtures and numerical/performance evidence
+GenerativeQC keeps the independent fixtures and numerical/performance evidence
 required by [the validation protocol](validation.md) (#138). Storage policy
 does not change tolerances, reference independence, statistics or promotion
 gates. Three classes have different lifetimes:
@@ -34,8 +34,8 @@ at measurement time; the publishing checkout may be newer. Retain a source
 reconstruction patch for dirty runs. Never infer missing historical provenance
 from today's machine or manufacture a passing gate.
 
-The publisher consumes the existing `vibeqc.validation` envelope. Its additional
-`vibeqc.benchmark-publication.v1` storage manifest selects files for review:
+The publisher consumes the existing `generativeqc.validation` envelope. Its additional
+`generativeqc.benchmark-publication.v1` storage manifest selects files for review:
 
 - `source`: measured full `revision` and boolean `dirty`;
 - `reproduction.command`: argument-vector form of the stable runner command;
@@ -97,7 +97,7 @@ fixtures, but cannot waive or raise this size limit.
 
 Keep compact summaries, raw comparison samples and reproduction commands in
 Git. Group large JSON lists by workload or observable into readable companion
-files; `tools.vibeqc_validation.record.load_record` reconstructs the original
+files; `tools.generativeqc_validation.record.load_record` reconstructs the original
 record after checking each part's SHA-256 and size. No numerical values or
 sample ordering are changed. Permanent array inputs can be stored as named NPY
 files, preserving the original array bytes and numeric identity checks.
@@ -237,7 +237,7 @@ is not a new scientific qualification.
 
 The [checkout snapshot](../../benchmarks/results/retention-checkout/README.md)
 uses **existing ancestor Git objects**, not a Release or external archive.
-Its `vibeqc.git-snapshot.v1` manifest pins the original full commit SHA and
+Its `generativeqc.git-snapshot.v1` manifest pins the original full commit SHA and
 inventories every original path, size and SHA-256, plus total files and bytes.
 Concise summaries and test/production consumers remain in the current tree.
 Historical Markdown links point to pinned Git revisions rather than missing

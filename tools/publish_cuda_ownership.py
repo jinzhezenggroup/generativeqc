@@ -19,18 +19,18 @@ sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT))
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     new_evidence,
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.performance import assess_comparison
-from vibeqc_compiler.common.timing import interleaved_selection_order
+from generativeqc_compiler.common.performance import assess_comparison
+from generativeqc_compiler.common.timing import interleaved_selection_order
 
-from tools.vibeqc_validation.publication import publish
+from tools.generativeqc_validation.publication import publish
 
 
 def write(path: typing.Any, value: typing.Any) -> None:
@@ -90,7 +90,7 @@ def compact_comparison(directory: typing.Any) -> typing.Any:
         return key
 
     compact = {
-        "schema": "vibeqc.cuda-ownership-samples.v1",
+        "schema": "generativeqc.cuda-ownership-samples.v1",
         "records": interned,
         "runs": [],
     }
@@ -101,12 +101,12 @@ def compact_comparison(directory: typing.Any) -> typing.Any:
         if run["dirty"] or source != sources.setdefault(label, source):
             raise ValueError("dirty or changing measured source/binary")
         if (
-            run["schema"] != "vibeqc.cuda-ownership-endpoints.v1"
+            run["schema"] != "generativeqc.cuda-ownership-endpoints.v1"
             or run["selection"] != ("reference" if label == "baseline" else "generated")
             or not run["slurm_job_id"]
             or not run["gpu"]
             or "CMAKE_BUILD_TYPE:STRING=Release" not in run["build_settings"]
-            or "VIBEQC_CUDA_FAST_COMPILE:BOOL=OFF" not in run["build_settings"]
+            or "GENERATIVEQC_CUDA_FAST_COMPILE:BOOL=OFF" not in run["build_settings"]
         ):
             raise ValueError("missing optimized scheduled-worker provenance")
         compact["runs"].append(
@@ -451,12 +451,12 @@ def main() -> None:
         "reproduction": {
             "command": command,
             "baseline_source": {
-                "repository": "https://github.com/njzjz-bot/vibeqc",
+                "repository": "https://github.com/njzjz-bot/generativeqc",
                 "ref": args.baseline_ref or "refs/heads/evidence/issue-231-baseline",
                 "revision": baseline["revision"],
             },
             "candidate_source": {
-                "repository": "https://github.com/njzjz-bot/vibeqc",
+                "repository": "https://github.com/njzjz-bot/generativeqc",
                 "ref": args.candidate_ref
                 or "refs/heads/codex/issue-231-cuda-ownership",
                 "revision": candidate["revision"],

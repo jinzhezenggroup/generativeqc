@@ -144,6 +144,6 @@
       "parent_array_hash": "e120b22195ddf4f0e6aa451961101f84d7a5843d6b8e9971e58a77f341ea5ff9"
     }
   ],
-  "schema": "vibeqc.local_space_reference",
+  "schema": "generativeqc.local_space_reference",
   "version": 1
 }

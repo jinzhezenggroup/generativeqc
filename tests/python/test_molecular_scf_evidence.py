@@ -6,10 +6,10 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.common.evidence import canonical_hash
-from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
-from vibeqc_compiler.xc.molecular_scf_evidence import (
+from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.molecular_scf_evidence import (
     PHASES,
     RESULT_SCHEMA,
     build_result,
@@ -26,7 +26,7 @@ def _resolution(spin: str) -> SimpleNamespace:
     binding_identity = ("a" if spin == "unpolarized" else "b") * 64
     result_identity = ("c" if spin == "unpolarized" else "d") * 64
     payload = {
-        "schema": "vibeqc.bulk-libxc-ks-resolution.v2",
+        "schema": "generativeqc.bulk-libxc-ks-resolution.v2",
         "backend": "cpu",
         "capability": {
             "name": capability.name,
@@ -195,7 +195,7 @@ def test_stored_resolution_tampering_invalidates_receipt() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("schema", "vibeqc.bulk-libxc-ks-resolution.v1"),
+        ("schema", "generativeqc.bulk-libxc-ks-resolution.v1"),
         ("method_identity", None),
         ("plan_identity", "not-a-plan"),
         ("reference", "restricted"),
@@ -221,7 +221,7 @@ def test_builder_rejects_legacy_resolution_schema() -> None:
     resolutions = _resolutions()
     resolution = resolutions["polarized"]
     payload = resolution.to_payload()
-    payload["schema"] = "vibeqc.bulk-libxc-ks-resolution.v1"
+    payload["schema"] = "generativeqc.bulk-libxc-ks-resolution.v1"
     resolution.to_payload = lambda: payload
     with pytest.raises(ValueError, match="resolution schema"):
         build_result(NAME, resolutions, _rows(), evidence="test://legacy")

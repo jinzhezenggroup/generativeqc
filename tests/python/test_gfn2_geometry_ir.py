@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry import (
+from generativeqc_compiler.geometry import (
     GFN2_CUTOFF_BOHR,
     GFN2_SHORT_RANGE_PARAMETER_IDENTITY,
     build_gfn2_batch_pair_topology,
@@ -18,14 +18,14 @@ from vibeqc_compiler.geometry import (
     gfn2_element_parameters,
     gfn2_geometry,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
+    from generativeqc_compiler.geometry import Gfn2ShortRangeProgram
     from numpy.typing import ArrayLike
-    from vibeqc_compiler.geometry import Gfn2ShortRangeProgram
 
 # Independent values frozen in xTBloom's mctc-lib/tblite qualification tests.
 CN_ATOMIC_NUMBERS = (11, 1, 8, 1, 9, 1, 1, 8, 7, 1, 1, 17, 5, 5, 7, 13)
@@ -231,7 +231,7 @@ def test_parameter_subset_covers_complete_gfn2_element_domain() -> None:
         gfn2_element_parameters(87)
 
 
-def test_gfn2_coordination_matches_pinned_mctc_vibeqc_xtb_oracle() -> None:
+def test_gfn2_coordination_matches_pinned_mctc_generativeqc_xtb_oracle() -> None:
     compiled = _compiled(
         CN_ATOMIC_NUMBERS,
         CN_COORDINATES,
@@ -490,7 +490,7 @@ def test_gfn2_ragged_batch_rejects_cross_system_and_stale_pair_state() -> None:
     with pytest.raises(ValueError, match="stale GFN2 batch pair topology"):
         compiled.validate_coordinates(changed)
 
-    from vibeqc_compiler.geometry import PairCutoff, PairTopology
+    from generativeqc_compiler.geometry import PairCutoff, PairTopology
 
     cross_system = PairTopology(
         len(elements),
@@ -535,13 +535,13 @@ def test_changed_geometry_requires_rebuilt_25_bohr_topology() -> None:
 
 
 def test_gfn2_primal_and_generated_vjps_lower_through_shared_cuda_tensorir() -> None:
-    from vibeqc_compiler.common.cuda_target import (
+    from generativeqc_compiler.common.cuda_target import (
         CUDA_TARGETS,
     )
-    from vibeqc_compiler.tensor.cuda_emit import (
+    from generativeqc_compiler.tensor.cuda_emit import (
         emit_cuda,
     )
-    from vibeqc_compiler.tensor.cuda_plan import (
+    from generativeqc_compiler.tensor.cuda_plan import (
         plan_cuda,
     )
 
@@ -574,8 +574,8 @@ def test_gfn2_primal_and_generated_vjps_lower_through_shared_cuda_tensorir() -> 
 
 
 def test_gfn2_integration_preserves_existing_d3_and_scf_history_contracts() -> None:
-    from vibeqc_compiler import geometry
-    from vibeqc_compiler.tensor import Index, IndexSpace
+    from generativeqc_compiler import geometry
+    from generativeqc_compiler.tensor import Index, IndexSpace
 
     assert geometry.D3CompilerSpec is not None
     assert callable(geometry.compile_d3_bj)
@@ -584,23 +584,23 @@ def test_gfn2_integration_preserves_existing_d3_and_scf_history_contracts() -> N
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_GFN2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GFN2_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_gfn2_ragged_geometry_primal_and_vjps_execute_on_cuda(
     tmp_path: Path,
 ) -> None:
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_GFN2_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_GFN2_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     elements, offsets, coordinates = _ragged_batch_fixture()
     geometry = gfn2_geometry(elements)
@@ -636,21 +636,21 @@ def test_gfn2_ragged_geometry_primal_and_vjps_execute_on_cuda(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_GFN2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GFN2_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_gfn2_geometry_primal_and_vjps_execute_on_cuda(tmp_path: Path) -> None:
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_GFN2_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_GFN2_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
 
     geometry = gfn2_geometry((1, 6, 8))

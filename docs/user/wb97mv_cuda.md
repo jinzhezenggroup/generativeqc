@@ -13,7 +13,7 @@ not qualified. The retained [qualification evidence](../../benchmarks/results/wb
 records completed measurements and incomplete attempts separately.
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 calculator = Calculator(
     method="wb97m-v", basis="def2-svp",
@@ -59,17 +59,17 @@ performance costs.
 ## Reproduce acceptance and timing
 
 Run real-GPU commands through the local Slurm partition, preserving its device
-visibility. Point the Python package and `VIBEQC_LIBRARY` at the same checkout
+visibility. Point the Python package and `GENERATIVEQC_LIBRARY` at the same checkout
 and its Release CUDA build. The opt-in tests compare independent GPU4PySCF
 energies and grid-responsive analytic forces, reconverged energy finite
 differences, warm replay, geometry rebuild and failed-neighbor isolation:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:20:00 \
-  env VIBEQC_TEST_WB97MV_CUDA=1 PYTHONPATH=python:. \
+  env GENERATIVEQC_TEST_WB97MV_CUDA=1 PYTHONPATH=python:. \
   python -m pytest tests/python/test_wb97mv_complete_cuda.py -q
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00 \
-  build/vibeqc_cuda_fock_provider_tests --range-response-only
+  build/generativeqc_cuda_fock_provider_tests --range-response-only
 ```
 
 The benchmark uses the HF README's water geometries, 3/6/12/24/48/96 atoms,
@@ -82,7 +82,7 @@ points per atom. Every paired result must satisfy `|dE| <= 1e-8 Eh` and
 
 ```bash
 export README_BENCHMARK_PYTHON=/path/to/benchmark-env/bin/python
-export VIBEQC_LIBRARY=$PWD/build/libvibeqc.so
+export GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so
 export README_BENCHMARK_OUTPUT=$PWD/.artifacts/readme-wb97mv
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=01:35:00 \
   bash benchmarks/run_readme_benchmarks.sh wb97mv

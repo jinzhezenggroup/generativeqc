@@ -9,13 +9,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc.ks import cuda_global_hybrid_force_eligible
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_cuda import (
+from generativeqc.ks import cuda_global_hybrid_force_eligible
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import (
     emit_stationary_weight_cuda,
     stationary_runtime_sources,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -43,7 +43,7 @@ def test_generated_exchange_weight_matches_independent_density_contraction(
     source += emit_stationary_weight_cuda(plan)
     source += """
 extern "C" double weight(const double* density, const int64_t* ao) {
-  return vibeqc_stationary_cuda::stationary_weight_exact_exchange(density, nullptr, 3, ao);
+  return generativeqc_stationary_cuda::stationary_weight_exact_exchange(density, nullptr, 3, ao);
 }
 """
     cpp, library = tmp_path / "weight.cpp", tmp_path / "weight.so"

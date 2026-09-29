@@ -11,7 +11,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.dft.ao_cuda import (
+from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_policy,
     emit_grid_scientific_kernels,
 )
@@ -51,7 +51,7 @@ double finite(double value, int* error, int) {
 }
 """
         + policy
-        + "using namespace vibeqc_grid_policy;\n"
+        + "using namespace generativeqc_grid_policy;\n"
         + kernels[begin:end]
         + """
 int main() {

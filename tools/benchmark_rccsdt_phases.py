@@ -8,7 +8,7 @@ import json
 import time
 from pathlib import Path
 
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 from benchmarks.readme_hf_scaling import scaling_cases
 
@@ -108,17 +108,17 @@ def main() -> None:
     args = parser.parse_args()
     atoms = args.atoms or [3, 6]
     library = _native.load_library(device=args.device)
-    library.vibeqc_get_source_identity.argtypes = []
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    library.generativeqc_get_source_identity.argtypes = []
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
     rows = [
         _sample(atom_count, args.device, args.budget)
         for atom_count in atoms
         for _ in range(args.repeats)
     ]
     record = {
-        "schema": "vibeqc.ccsdt.phase-work/1",
+        "schema": "generativeqc.ccsdt.phase-work/1",
         "issue": 1501,
-        "source_identity": library.vibeqc_get_source_identity().decode(),
+        "source_identity": library.generativeqc_get_source_identity().decode(),
         "device": args.device,
         "budget_bytes": args.budget,
         "results": rows,

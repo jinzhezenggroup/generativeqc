@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.xc.libxc_maple import MapleImportError
-from vibeqc_compiler.xc.libxc_work import (
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.xc.libxc_work import (
     LIBXC_WORK_DOMAIN,
     LIBXC_WORK_DOMAIN_VERSION,
     automatic_work_policy,

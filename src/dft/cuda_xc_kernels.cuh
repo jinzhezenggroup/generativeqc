@@ -5,11 +5,11 @@
 // this header keeps only validation and launch/runtime glue.
 #include "dft/cuda_xc.hpp"
 
-namespace vibeqc::dft::cuda_xc_detail {
+namespace generativeqc::dft::cuda_xc_detail {
 namespace {
-using vibeqc_tensor::blocks;
-using vibeqc_tensor::cuda_check;
-using vibeqc_tensor::I;
+using generativeqc_tensor::blocks;
+using generativeqc_tensor::cuda_check;
+using generativeqc_tensor::I;
 
 __global__ void validate_density(const double* density, I n, I spins, int* error) {
   for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < spins * n * n;
@@ -126,4 +126,4 @@ void enqueue_nonlocal_potential(const CudaXcLayout& l, cudaStream_t stream, cons
   add_nonlocal_energy<<<1, 1, 0, stream>>>(nonlocal_energy, totals, error);
   cuda_check(cudaGetLastError());
 }
-}  // namespace vibeqc::dft::cuda_xc_detail
+}  // namespace generativeqc::dft::cuda_xc_detail

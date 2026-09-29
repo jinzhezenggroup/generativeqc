@@ -16,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_rccsd_generator_preserves_canonical_evidence(preload: bool) -> None:
     script = f"""
 import importlib, runpy, sys
-first = importlib.import_module('vibeqc_compiler.common.evidence') if {preload!r} else None
+first = importlib.import_module('generativeqc_compiler.common.evidence') if {preload!r} else None
 runpy.run_path('tools/generate_rccsd_native.py', run_name='review_generator')
-after = importlib.import_module('vibeqc_compiler.common.evidence')
-from vibeqc_compiler.common import evidence
+after = importlib.import_module('generativeqc_compiler.common.evidence')
+from generativeqc_compiler.common import evidence
 assert evidence is after
 assert first is None or after is first
 assert after.__file__.endswith('common/evidence.py')
@@ -46,10 +46,10 @@ assert after.outcome('not-run', 'no device')['status'] == 'not-run'
 def test_rccsd_evidence_bootstrap_requires_no_numpy() -> None:
     script = """
 import runpy, sys
-from vibeqc_compiler.common import evidence
+from generativeqc_compiler.common import evidence
 assert 'numpy' not in sys.modules
 runpy.run_path('tools/generate_rccsd_native.py', run_name='review_generator')
-from vibeqc_compiler.common import evidence as after
+from generativeqc_compiler.common import evidence as after
 assert after is evidence and callable(after.block_error)
 assert after.canonical_hash({'b': 2, 'a': 1}) == evidence.canonical_hash({'a': 1, 'b': 2})
 assert 'numpy' not in sys.modules

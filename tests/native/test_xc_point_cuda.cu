@@ -14,17 +14,17 @@ struct Input {
   double rho[2], gradient[2][3];
 };
 
-__global__ void point_kernel(const Input* input, vibeqc::dft::point::Value* output) {
-  *output = vibeqc::dft::point::evaluate(input->pbe, input->rho, input->gradient);
+__global__ void point_kernel(const Input* input, generativeqc::dft::point::Value* output) {
+  *output = generativeqc::dft::point::evaluate(input->pbe, input->rho, input->gradient);
 }
 
 /** Test-only transfer wrapper: this is point arithmetic evidence, separately
  * from the native device-buffer pipeline and complete SCF timing evidence. */
-vibeqc::dft::point::Value evaluate_device(bool pbe, const double rho[2],
-                                          const double gradient[2][3]) {
+generativeqc::dft::point::Value evaluate_device(bool pbe, const double rho[2],
+                                                const double gradient[2][3]) {
   struct Buffers {
     Input* input{};
-    vibeqc::dft::point::Value* output{};
+    generativeqc::dft::point::Value* output{};
     Buffers() {
       check_point_cuda(cudaMalloc(&input, sizeof(Input)));
       try {
@@ -49,13 +49,13 @@ vibeqc::dft::point::Value evaluate_device(bool pbe, const double rho[2],
   check_point_cuda(cudaMemcpy(buffers.input, &input, sizeof(input), cudaMemcpyHostToDevice));
   point_kernel<<<1, 1>>>(buffers.input, buffers.output);
   check_point_cuda(cudaGetLastError());
-  vibeqc::dft::point::Value result;
+  generativeqc::dft::point::Value result;
   check_point_cuda(cudaMemcpy(&result, buffers.output, sizeof(result), cudaMemcpyDeviceToHost));
   return result;
 }
 }  // namespace
 
-#define VIBEQC_TEST_POINT_EVALUATE evaluate_device
+#define GENERATIVEQC_TEST_POINT_EVALUATE evaluate_device
 #define main point_test_main
 #include "test_xc_point.cpp"
 #undef main

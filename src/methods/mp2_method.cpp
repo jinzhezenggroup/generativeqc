@@ -15,18 +15,18 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include <cuda_runtime_api.h>
 #endif
 
-namespace vibeqc::methods::detail {
+namespace generativeqc::methods::detail {
 namespace {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 struct DeviceScope {
   int previous{};
   explicit DeviceScope(int device) {
     if (cudaGetDevice(&previous) != cudaSuccess || cudaSetDevice(device) != cudaSuccess)
-      throw MethodError(VIBEQC_STATUS_CUDA_ERROR, "cannot select MP2 CUDA device");
+      throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, "cannot select MP2 CUDA device");
   }
   ~DeviceScope() { cudaSetDevice(previous); }
 };
@@ -49,7 +49,7 @@ class Mp2Prepared final : public PreparedCalculation {
         fitted_cuda_(fitted_cuda) {}
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
   const Capabilities& capabilities() const noexcept override { return caps_; }
-  std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic() const override {
+  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic() const override {
     std::lock_guard<std::mutex> lock(mutex_);
     return last_;
   }
@@ -61,21 +61,21 @@ class Mp2Prepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     try {
-      const bool cuda = context_.requested_backend == VIBEQC_BACKEND_CUDA;
+      const bool cuda = context_.requested_backend == GENERATIVEQC_BACKEND_CUDA;
       const bool execution_cuda = density_fitted_ ? fitted_cuda_ : cuda;
-      if (!cuda && context_.requested_backend != VIBEQC_BACKEND_CPU_REFERENCE)
-        throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      if (!cuda && context_.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                           "MP2 requires an explicit CPU or CUDA backend");
       if (compute_forces && density_fitted_ && fitted_cuda_)
         throw MethodError(
-            VIBEQC_STATUS_NOT_IMPLEMENTED,
+            GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
             "CUDA RI-MP2 analytic forces are not implemented; select the explicit CPU RI route");
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
       std::unique_ptr<DeviceScope> device_scope;
       if (execution_cuda) device_scope = std::make_unique<DeviceScope>(context_.device_id);
 #else
       if (execution_cuda)
-        throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
       scf::ScfResult hf;
@@ -98,7 +98,7 @@ class Mp2Prepared final : public PreparedCalculation {
                  : scf::run_rhf_cuda(system_, options_, context_.device_id);
       }
       if (!hf.converged || !hf.reference)
-        throw MethodError(VIBEQC_STATUS_NOT_CONVERGED,
+        throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
       const auto& ref = *hf.reference;
       // Release the iterative density. The exact CPU prepared owner remains
@@ -152,10 +152,11 @@ class Mp2Prepared final : public PreparedCalculation {
       }
       result.convergence = {hf.iterations, hf.energy_change, ref.commutator_residual, true};
       const bool executed_cuda = execution_cuda;
-      result.executed_backend = executed_cuda ? VIBEQC_BACKEND_CUDA : VIBEQC_BACKEND_CPU_REFERENCE;
-      vibeqc_correlation_diagnostic diagnostic{};
-      diagnostic.struct_size = sizeof(vibeqc_correlation_diagnostic);
-      diagnostic.abi_version = VIBEQC_ABI_VERSION;
+      result.executed_backend =
+          executed_cuda ? GENERATIVEQC_BACKEND_CUDA : GENERATIVEQC_BACKEND_CPU_REFERENCE;
+      generativeqc_correlation_diagnostic diagnostic{};
+      diagnostic.struct_size = sizeof(generativeqc_correlation_diagnostic);
+      diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
       diagnostic.reference_energy = ref.energy;
       diagnostic.opposite_spin_energy = corr.opposite_spin;
       diagnostic.same_spin_energy = corr.same_spin;
@@ -204,7 +205,7 @@ class Mp2Prepared final : public PreparedCalculation {
       }
       return result;
     } catch (const std::length_error& e) {
-      throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY, e.what());
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY, e.what());
     }
   }
 
@@ -220,7 +221,7 @@ class Mp2Prepared final : public PreparedCalculation {
   bool density_fitted_{};
   bool fitted_cuda_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
-  std::optional<vibeqc_correlation_diagnostic> last_;
+  std::optional<generativeqc_correlation_diagnostic> last_;
   mutable std::mutex mutex_;
 };
 
@@ -243,26 +244,27 @@ void set_positions(core::System& system, const std::vector<double>& coordinates)
     std::copy_n(coordinates.begin() + 3 * atom, 3, system.atoms[atom].position.begin());
 }
 
-vibeqc_status item_exception_status() {
+generativeqc_status item_exception_status() {
   try {
     throw;
   } catch (const MethodError& error) {
     return error.status();
   } catch (const std::bad_alloc&) {
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument&) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception&) {
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (...) {
-    return VIBEQC_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
 }
 
 class Mp2PreparedBatch final : public PreparedBatch {
  public:
   Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
-                   std::vector<core::System> systems, const vibeqc_method_descriptor& descriptor)
+                   std::vector<core::System> systems,
+                   const generativeqc_method_descriptor& descriptor)
       : capabilities_(capabilities), context_(&context), systems_(std::move(systems)) {
     descriptor_ = descriptor;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
@@ -307,7 +309,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
           owner_coordinates_[index] = std::move(target_coordinates);
         }
         result.calculation = owners_[index]->execute(compute_forces);
-        result.status = VIBEQC_STATUS_SUCCESS;
+        result.status = GENERATIVEQC_STATUS_SUCCESS;
       } catch (...) {
         result.status = item_exception_status();
       }
@@ -315,7 +317,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
     return results;
   }
 
-  std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic(
+  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
       std::size_t index) const override {
     if (index >= owners_.size())
       throw std::invalid_argument("correlation diagnostic batch index is out of range");
@@ -323,17 +325,21 @@ class Mp2PreparedBatch final : public PreparedBatch {
   }
 
   void clear_warm_starts() override {
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "MP2 batch does not support warm starts");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "MP2 batch does not support warm starts");
   }
   [[nodiscard]] std::size_t warm_density_size(std::size_t) const override { return 0; }
   [[nodiscard]] const std::optional<scf::HfWarmState>& warm_state(std::size_t) const override {
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "MP2 batch does not support warm starts");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "MP2 batch does not support warm starts");
   }
   void restore_warm_states(std::vector<std::optional<scf::HfWarmState>>) override {
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "MP2 batch does not support warm starts");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "MP2 batch does not support warm starts");
   }
   void set_warm_start_updates(bool) override {
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "MP2 batch does not support warm starts");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "MP2 batch does not support warm starts");
   }
   [[nodiscard]] std::optional<std::vector<DirectShellClassProfileEntry>>
   last_direct_shell_class_profile() const override {
@@ -359,79 +365,81 @@ class Mp2PreparedBatch final : public PreparedBatch {
   Capabilities capabilities_;
   core::ContextState* context_{};
   std::vector<core::System> systems_;
-  vibeqc_method_descriptor descriptor_{};
+  generativeqc_method_descriptor descriptor_{};
   std::vector<std::unique_ptr<PreparedCalculation>> owners_;
   std::vector<std::vector<double>> owner_coordinates_;
 };
 }  // namespace
 
-vibeqc_status validate_mp2_system(vibeqc_method, const core::System& system, std::string& detail) {
+generativeqc_status validate_mp2_system(generativeqc_method, const core::System& system,
+                                        std::string& detail) {
   if (system.shells.empty()) {
     detail = "canonical MP2 requires an explicit Gaussian orbital basis";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // The canonical reference/provider gates cover all-electron systems only.
   // Enabling ECP HF must not silently extend that correlated-method domain.
   if (!system.ecp_terms.empty()) {
     detail = "canonical MP2 with ECP is not implemented";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (std::any_of(system.shells.begin(), system.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum > 3; })) {
     detail = "canonical MP2 reference/provider validation supports shells through f";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2) {
     detail = "MP2 supports real closed-shell all-electron RHF only";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (static_cast<std::size_t>(system.electron_count / 2) >= molecule::ao_count(system)) {
     detail = "MP2 reference requires a nonempty virtual space";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(const Capabilities& caps,
-                                                             core::ContextState& context,
-                                                             const core::System& system,
-                                                             const vibeqc_method_descriptor& d) {
+std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
+    const Capabilities& caps, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& d) {
   const auto density_fitting_mode = d.density_fitting_mode;
-  if (density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE &&
-      density_fitting_mode != VIBEQC_DENSITY_FITTING_CPU_REFERENCE &&
-      density_fitting_mode != VIBEQC_DENSITY_FITTING_CUDA &&
-      density_fitting_mode != VIBEQC_DENSITY_FITTING_AUTO)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown RI-MP2 execution mode");
-  const bool density_fitted = density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE;
-  const bool context_cuda = context.requested_backend == VIBEQC_BACKEND_CUDA;
-  if (density_fitting_mode == VIBEQC_DENSITY_FITTING_CUDA && !context_cuda)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+      density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+      density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
+      density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "unknown RI-MP2 execution mode");
+  const bool density_fitted = density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
+  const bool context_cuda = context.requested_backend == GENERATIVEQC_BACKEND_CUDA;
+  if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA && !context_cuda)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA RI-MP2 requires a CUDA execution context");
   const bool fitted_cuda = density_fitted && context_cuda &&
-                           density_fitting_mode != VIBEQC_DENSITY_FITTING_CPU_REFERENCE;
+                           density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
   if (d.screening_tolerance != 0)
     throw std::invalid_argument(
         "canonical MP2 requires unscreened integrals (screening_tolerance=0)");
-  if (d.precision_mode != VIBEQC_PRECISION_FP64 && d.precision_mode != VIBEQC_PRECISION_AUTO)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown floating-point precision mode");
-  if (d.precision_mode != VIBEQC_PRECISION_FP64)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "canonical MP2 requires FP64 precision");
+  if (d.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
+      d.precision_mode != GENERATIVEQC_PRECISION_AUTO)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "unknown floating-point precision mode");
+  if (d.precision_mode != GENERATIVEQC_PRECISION_FP64)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "canonical MP2 requires FP64 precision");
   std::optional<core::System> auxiliary;
   if (density_fitted) {
     auxiliary =
         d.density_fitting_auxiliary_basis ? d.density_fitting_auxiliary_basis->data : system;
     if (auxiliary->atoms.size() != system.atoms.size())
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "RI-MP2 auxiliary basis must contain the same atoms");
     for (std::size_t atom = 0; atom < system.atoms.size(); ++atom) {
       if (auxiliary->atoms[atom].atomic_number != system.atoms[atom].atomic_number ||
           auxiliary->atoms[atom].position != system.atoms[atom].position)
-        throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                           "RI-MP2 auxiliary basis must share the orbital geometry");
     }
     for (const auto& shell : auxiliary->shells) {
       if (shell.atom_index >= system.atoms.size())
-        throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                           "RI-MP2 auxiliary shell atom is out of range");
     }
     auxiliary->atoms = system.atoms;
@@ -439,7 +447,7 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(const Capabilities&
     auxiliary->multiplicity = system.multiplicity;
     auxiliary->electron_count = system.electron_count;
   } else if (d.density_fitting_auxiliary_basis) {
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "an auxiliary basis requires an explicit RI-MP2 mode");
   }
   std::size_t budget =
@@ -471,15 +479,15 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(const Capabilities&
       !std::isfinite(options.density_fitting_relative_threshold))
     throw std::invalid_argument("RI-MP2 metric threshold must lie in (0,1)");
   const bool cpu_conventional_reference =
-      !density_fitted && context.requested_backend == VIBEQC_BACKEND_CPU_REFERENCE;
+      !density_fitted && context.requested_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE;
   const std::size_t standalone_reference_capacity =
       posthf::rhf_reference_capacity(system, options.diis_history, cpu_conventional_reference);
   if (standalone_reference_capacity > budget)
-    throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
+    throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "MP2 bounded reference exceeds numeric memory budget");
   if (fitted_cuda) {
     if (standalone_reference_capacity == budget)
-      throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                         "RI-MP2 CUDA reference leaves no density-fitting plan budget");
     const std::size_t remaining = budget - standalone_reference_capacity;
     options.density_fitting_memory_budget_bytes =
@@ -499,7 +507,7 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(const Capabilities&
   if (density_fitted && !fitted_cuda &&
       posthf::ri_mp2_capacity(system, *auxiliary,
                               static_cast<std::size_t>(system.electron_count / 2)) > budget)
-    throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
+    throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "RI-MP2 reference and correlation exceed numeric memory budget");
   const std::size_t reference_capacity =
       density_fitted && !fitted_cuda
@@ -508,7 +516,7 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(const Capabilities&
                                           options.density_fitting_memory_budget_bytes)
                     : standalone_reference_capacity;
   if (reference_capacity > budget)
-    throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
+    throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "RI-MP2 DF reference state exceeds numeric memory budget");
   return std::make_unique<Mp2Prepared>(caps, context, system, std::move(auxiliary), options, budget,
                                        reference_capacity, threshold, density_fitted, fitted_cuda);
@@ -517,23 +525,25 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(const Capabilities&
 std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilities,
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
-                                                 const vibeqc_method_descriptor& descriptor,
-                                                 vibeqc_batch_flags flags) {
-  if ((flags & VIBEQC_BATCH_ENABLE_WARM_STARTS) != 0)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "MP2 batch does not support warm starts");
-  constexpr vibeqc_batch_flags profiling_flags = VIBEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |
-                                                 VIBEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING;
+                                                 const generativeqc_method_descriptor& descriptor,
+                                                 generativeqc_batch_flags flags) {
+  if ((flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "MP2 batch does not support warm starts");
+  constexpr generativeqc_batch_flags profiling_flags =
+      GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |
+      GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING;
   if ((flags & profiling_flags) != 0)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "MP2 batch does not support profiling");
-  if ((flags & ~(VIBEQC_BATCH_ENABLE_WARM_STARTS | profiling_flags)) != 0)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unsupported MP2 batch flag");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "MP2 batch does not support profiling");
+  if ((flags & ~(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | profiling_flags)) != 0)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "unsupported MP2 batch flag");
   const auto density_fitting_mode = descriptor.density_fitting_mode;
-  if (density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "MP2 batch supports conventional correlation only");
   if (descriptor.density_fitting_auxiliary_basis)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "conventional MP2 batch does not accept an auxiliary basis");
   return std::make_unique<Mp2PreparedBatch>(capabilities, context, std::move(systems), descriptor);
 }
-}  // namespace vibeqc::methods::detail
+}  // namespace generativeqc::methods::detail

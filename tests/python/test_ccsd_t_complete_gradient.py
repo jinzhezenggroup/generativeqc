@@ -1,4 +1,4 @@
-"""Complete VibeQC RCCSD(T) analytic-gradient acceptance for issue #155 B."""
+"""Complete GenerativeQC RCCSD(T) analytic-gradient acceptance for issue #155 B."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import pytest
 from test_cc_complete_gradient import _source
 
 from tools.cc_gradient_fixtures import inputs
+from tools.generativeqc_cc import CCSDGradientResult, rccsd_t_force
 from tools.validate_ccsd_t_gradient import analytic_oracle
-from tools.vibeqc_cc import CCSDGradientResult, rccsd_t_force
 
 
 @lru_cache(maxsize=2)

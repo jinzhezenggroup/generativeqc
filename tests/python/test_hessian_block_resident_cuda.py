@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 from test_hessian_block import h2_case as _h2_case
 
-from tools.vibeqc_hessian import rhf_hvp_many
-from tools.vibeqc_validation.hessian_fixtures import oracle_analytic_hessian
+from tools.generativeqc_hessian import rhf_hvp_many
+from tools.generativeqc_validation.hessian_fixtures import oracle_analytic_hessian
 
 # Native dense assembly checks parity; it shares the response solver under test.
 h2_case = _h2_case
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated real GPU",
 )
 
@@ -23,8 +23,8 @@ pytestmark = pytest.mark.skipif(
 def h2_external_hessian(h2_case: typing.Any) -> typing.Any:
     """Build the external oracle with native Hessian/response seams forbidden."""
     pytest.importorskip("pyscf")
-    from tools.vibeqc_hessian import analytic, perturbation
-    from tools.vibeqc_response import krylov
+    from tools.generativeqc_hessian import analytic, perturbation
+    from tools.generativeqc_response import krylov
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
         pytest.fail("external Hessian oracle called native Hessian/response code")
@@ -45,7 +45,7 @@ def test_complete_hvp_block_uses_resident_shared_solve(
     monkeypatch: typing.Any,
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
-    from tools.vibeqc_hessian import perturbation
+    from tools.generativeqc_hessian import perturbation
 
     state, dense, directions = h2_case
     original = perturbation.solve_many
@@ -99,7 +99,7 @@ def test_resident_consumer_budget_rejection_precedes_first_sources(
     h2_case: typing.Any, monkeypatch: typing.Any
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     state, _, directions = h2_case
 

@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc import rsh_maple as adapter
+from generativeqc_compiler.xc import rsh_maple as adapter
 
 
 def test_canonical_upstream_directory_preserves_imported_identity(

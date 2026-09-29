@@ -16,9 +16,9 @@ water/PBE/def2-SVP. All measured storage was released.
 
 `tests/python/test_ks_resources.py` checks public KS dry runs, preparation,
 replay/rebuild budgets, singlepoints, failure evidence and ledger release.
-Its CUDA cases require `VIBEQC_RESOURCE_CUDA_TEST=1` inside a Slurm allocation.
+Its CUDA cases require `GENERATIVEQC_RESOURCE_CUDA_TEST=1` inside a Slurm allocation.
 
-Build a CPU Release library with `VIBEQC_ENABLE_CUDA=OFF`, then run:
+Build a CPU Release library with `GENERATIVEQC_ENABLE_CUDA=OFF`, then run:
 
 ```bash
 PYTHONPATH=python:. python benchmarks/resource-planning/cpu_inventory.py \
@@ -44,13 +44,13 @@ tracked allocations were released after destruction:
 | H2 RI-UHF, def2-SVP | 2,459,232 | 1,391,224 |
 
 Build CUDA Release for the assigned GPU architecture with
-`VIBEQC_CUDA_FAST_COMPILE=OFF`. Run all real GPU work through the scheduler:
+`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`. Run all real GPU work through the scheduler:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=00:15:00 env PYTHONPATH=python:. VIBEQC_PROFILE=off \
+  --time=00:15:00 env PYTHONPATH=python:. GENERATIVEQC_PROFILE=off \
   LD_LIBRARY_PATH=/path/to/cuda/targets/x86_64-linux/lib \
-  VIBEQC_NVCC=/path/to/nvcc OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  GENERATIVEQC_NVCC=/path/to/nvcc OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python benchmarks/resource-planning/cuda_inventory.py --build build-cuda \
   --cache /tmp/tensor-resource-cache --output /tmp/cuda-resources.json
 ```
@@ -64,7 +64,7 @@ are conservative policies rather than measured peaks. Fast compilation builds
 are rejected as resource receipts.
 
 The checked-in [CUDA receipt](cuda-receipt.json) uses CUDA 12.9, Release `-O3`,
-`sm_120`, and `VIBEQC_ENABLE_AOT_SHELLS=OFF`. The supported small-HF inventory
+`sm_120`, and `GENERATIVEQC_ENABLE_AOT_SHELLS=OFF`. The supported small-HF inventory
 does not use AOT shell kernels. All 45 production CUDA Python checks and 12
 applicable native suites passed. The additional AOT profile-selection test
 expects a tuned AOT registry on this GPU and fails with this deliberately
@@ -91,10 +91,10 @@ Focused tests include actual native allocation rejection and rollback:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=00:15:00 env PYTHONPATH=python:. VIBEQC_PROFILE=off \
+  --time=00:15:00 env PYTHONPATH=python:. GENERATIVEQC_PROFILE=off \
   LD_LIBRARY_PATH=/path/to/cuda/targets/x86_64-linux/lib \
-  VIBEQC_RESOURCE_CUDA_TEST=1 VIBEQC_TENSOR_CUDA_TEST=1 \
-  VIBEQC_LIBRARY="$PWD/build-cuda/libvibeqc.so" VIBEQC_NVCC=/path/to/nvcc \
+  GENERATIVEQC_RESOURCE_CUDA_TEST=1 GENERATIVEQC_TENSOR_CUDA_TEST=1 \
+  GENERATIVEQC_LIBRARY="$PWD/build-cuda/libgenerativeqc.so" GENERATIVEQC_NVCC=/path/to/nvcc \
   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python -m pytest -q tests/python/test_hf_resources_cuda.py \
   tests/python/test_tensor_cuda_execution.py

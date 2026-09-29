@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_spin.cuh"
 #include "generated_gfn2_spin_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 64;
@@ -499,4 +499,4 @@ cudaError_t evaluate_gfn2_spin_polarization_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

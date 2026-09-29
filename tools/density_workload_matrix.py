@@ -8,10 +8,10 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-from vibeqc.autotune import dft_density_candidates
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.common.reference_sources import reference_source_matches
-from vibeqc_compiler.common.resources import (
+from generativeqc.autotune import dft_density_candidates
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.common.reference_sources import reference_source_matches
+from generativeqc_compiler.common.resources import (
     ResourceBudget,
     ResourceCandidate,
     ResourceEstimate,
@@ -19,8 +19,8 @@ from vibeqc_compiler.common.resources import (
     ResourceRequest,
     plan_resources,
 )
-from vibeqc_compiler.dft import DensitySource, ExplicitGrid, NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.dft import DensitySource, ExplicitGrid, NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
 
 
 def validate_matrix_errors(errors: typing.Any) -> None:
@@ -83,7 +83,7 @@ def load_workloads(directory: typing.Any) -> typing.Any:
         meta = json.loads((directory / f"{name}.json").read_text())
         identity = meta.pop("identity")
         if (
-            meta["schema"] != "vibeqc.density-workload-reference.v1"
+            meta["schema"] != "generativeqc.density-workload-reference.v1"
             or identity != entry["identity"]
             or canonical_hash(meta) != identity
             or canonical_hash(meta["inputs"]) != meta["inputs_hash"]
@@ -100,7 +100,7 @@ def load_workloads(directory: typing.Any) -> typing.Any:
         if "array_files" in entry:
             # Large reference bundles retain their original NPY member bytes
             # separately. The existing numeric hashes still bind every value.
-            from tools.vibeqc_validation.retention import safe_relative
+            from tools.generativeqc_validation.retention import safe_relative
 
             arrays = {}
             for key, record in entry["array_files"].items():

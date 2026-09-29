@@ -15,9 +15,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc import _native
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.evidence import file_hash
+from generativeqc import _native
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.evidence import file_hash
 
 
 def summarize_profiles(directory: typing.Any) -> typing.Any:
@@ -79,8 +79,8 @@ def main() -> None:
         name = "profile-summary.json"
     else:
         library = _native.load_library()
-        library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-        identity = library.vibeqc_get_source_identity().decode()
+        library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+        identity = library.generativeqc_get_source_identity().decode()
         if identity != source_identity(ROOT):
             raise RuntimeError("loaded library does not match the scientific source")
         payload = {

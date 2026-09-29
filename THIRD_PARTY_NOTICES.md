@@ -2,16 +2,16 @@
 
 ## Implib.so
 
-VibeQC vendors the Implib.so generator/templates under `cmake/3rdparty/implib/`
+GenerativeQC vendors the Implib.so generator/templates under `cmake/3rdparty/implib/`
 for provider-free CUDA wheel linking. Upstream: https://github.com/yugr/Implib.so.
 The vendored files are MIT-licensed, Copyright (c) 2017-2023 Yury Gribov; see
 `LICENSES/implib-MIT.txt`. The source snapshot and digests are recorded in
 `cmake/3rdparty/implib_manifest.json`.
 
-The generated trampoline objects are compiled into `libvibeqc.so` and lazily
+The generated trampoline objects are compiled into `libgenerativeqc.so` and lazily
 resolve CUDA runtime, cuBLAS, and cuSOLVER provider SONAMEs at execution time.
 The NVIDIA provider shared libraries themselves are not redistributed in the
-VibeQC wheel.
+GenerativeQC wheel.
 
 ## Scientific regeneration source snapshots
 
@@ -27,7 +27,7 @@ Their SPDX identities remain recorded in the registry and retained license files
 
 ## Native GFN2 runtime provenance
 
-`src/xtb/native/` contains VibeQC adaptations of the pinned xTBloom GFN2
+`src/xtb/native/` contains GenerativeQC adaptations of the pinned xTBloom GFN2
 runtime. Its original GPL-3.0-or-later license, scoped CUDA/MKL permission and
 third-party notices remain in that directory. See
 `src/xtb/native/CUDA_SOURCE_PROVENANCE.json` for the CPU/CUDA source revisions
@@ -36,7 +36,7 @@ not remove the attribution or change the licenses of retained source/data.
 
 ## xTBloom D3 qualification baseline
 
-The repository-only D3 tools under `tools/vibeqc_d3/native/` adapt GPL-3.0-or-later
+The repository-only D3 tools under `tools/generativeqc_d3/native/` adapt GPL-3.0-or-later
 code from xTBloom commit `2cbdf1db8661ccbd5cb7d3d4bfc868a848cbbff3`.
 The exact pinned GFN1/D3 source identities and remote URLs are registered in
 `upstream/manifest.json`; normal builds consume the deterministic compact
@@ -47,7 +47,7 @@ relevant LGPL/Apache license texts are retained under `LICENSES/`.
 The D3 tables derive from simple-dftd3 v1.4.0 (LGPL-3.0-or-later); the extracted
 covalent radii retain the source's LGPL-3.0-or-later AND Apache-2.0 provenance.
 No xTBloom/simple-dftd3 binary or runtime dependency is added. The pinned data
-needed by compiler/runtime provenance are packaged as VibeQC wheel assets.
+needed by compiler/runtime provenance are packaged as GenerativeQC wheel assets.
 
 ## xTBloom / DFT-D4 molecular qualification baseline
 
@@ -57,7 +57,7 @@ are adapted from xTBloom commit `2cbdf1db8661ccbd5cb7d3d4bfc868a848cbbff3`
 exporter), under GPL-3.0-or-later. The original narrowly scoped CUDA/MKL
 additional permission is retained verbatim in
 `LICENSES/xtbloom-CUDA_MKL_LINKING_EXCEPTION.txt`; it is not a blanket
-relicensing of VibeQC or third-party data. Source hashes and scope are recorded
+relicensing of GenerativeQC or third-party data. Source hashes and scope are recorded
 in `src/dft/dispersion/xtbloom_manifest.json`.
 
 The generated GFN2-D4 reference data in `src/dft/dispersion/d4_data.hpp`
@@ -74,7 +74,7 @@ runtime; independent upstream tools are used to generate its test fixtures.
 
 The repository-only snapshots under `upstream/simple-dftd3/` and
 `upstream/dftd4/` retain the upstream damping-parameter tables used to
-generate VibeQC's static method catalog. The simple-dftd3 snapshot is pinned to commit
+generate GenerativeQC's static method catalog. The simple-dftd3 snapshot is pinned to commit
 `41d5a07b98ce15e97bec7a1815869725f6c7b0c2`; the DFT-D4 snapshot is pinned
 to commit `82fbaf41724ab9a3c0a38ddc978ad0c38c4659b4`. Both are
 LGPL-3.0-or-later data/code distributions; the corresponding license texts
@@ -83,16 +83,16 @@ SHA-256 digests are recorded in
 `tools/parameters/dispersion_parameter_sources.json`.
 
 These snapshots are development-time generation inputs only. Production
-VibeQC does not import, execute, or dynamically read simple-dftd3 or DFT-D4;
+GenerativeQC does not import, execute, or dynamically read simple-dftd3 or DFT-D4;
 the generated Python/C++ parameter constants remain runtime-self-contained.
 For D3, the generated catalog intentionally projects the upstream BJ pair
-parameters to VibeQC's currently validated two-body model with `s9=0`;
+parameters to GenerativeQC's currently validated two-body model with `s9=0`;
 upstream ATM availability is not claimed as a production D3 capability.
 
 ## r2SCAN-3c basis and gCP qualification data
 
 The canonical H-Ar def2-mTZVPP snapshot shipped under
-`python/vibeqc/data/r2scan3c/` is generated offline from MolSSI Basis Set
+`python/generativeqc/data/r2scan3c/` is generated offline from MolSSI Basis Set
 Exchange commit `4adaf1372c7101620ca1a9f3130be9ae97fb8f30`. The exact source
 export, content identity, and supported-element domain are recorded in
 `manifests/r2scan3c/manifest.json`; the BSE BSD-3-Clause text is retained as
@@ -111,17 +111,17 @@ see `LICENSES/mstore-Apache-2.0.txt`.
 
 ## xTBloom GFN2-xTB runtime bootstrap
 
-VibeQC issue #560 embeds a reviewed source snapshot of xTBloom commit
+GenerativeQC issue #560 embeds a reviewed source snapshot of xTBloom commit
 `5a67cc59ace94c8296e873503b2ae1298e7c2861` under
 `src/xtb/native/` to provide the first production GFN2-xTB runtime:
 intrinsic-basis integrals, H0, ES2/ES3/AES2, generalized eigensolution,
 occupations, Mulliken/multipole state, SCC mixing, repulsion, self-consistent
-D4, spin terms, total energy, and analytic nuclear forces. VibeQC compiles the required common/GFN2/CPU-runtime sources from that
-snapshot into `libvibeqc`. Native non-wheel CUDA builds additionally use the
+D4, spin terms, total energy, and analytic nuclear forces. GenerativeQC compiles the required common/GFN2/CPU-runtime sources from that
+snapshot into `libgenerativeqc`. Native non-wheel CUDA builds additionally use the
 GFN2-only CUDA cohort from xTBloom commit
 `3c21f50195389b093941eb5ed6f1143b8802f96e`, selected from the repository
 state immediately before production GFN1 CUDA execution was integrated. The
-cohort reuses VibeQC's canonical packed D4 tables and carries the narrow
+cohort reuses GenerativeQC's canonical packed D4 tables and carries the narrow
 correctness backport from xTBloom #487 that passes CUDA kernel descriptors by
 value rather than launcher-stack reference.
 `src/xtb/native/CUDA_SOURCE_PROVENANCE.json` records the exact source
@@ -135,9 +135,9 @@ with the source/wheel legal material.
 Linux wheels use xTBloom's reviewed private `scipy-openblas32==0.3.34.0.0`
 LP64 LAPACKE/CBLAS provider boundary. A tiny sibling shim gives auditwheel one
 content-qualified dependency edge; repair vendors and collision-renames the
-OpenBLAS cohort into the VibeQC wheel. `scipy-openblas32` is a build input only,
+OpenBLAS cohort into the GenerativeQC wheel. `scipy-openblas32` is a build input only,
 not an end-user Python runtime dependency.
 
 This is a transitional scientific owner: compiler-generated GFN2 pieces from
 #504/#505 are intended to replace duplicated handwritten equations after
-independent qualification, while the VibeQC-owned SCC/runtime boundary remains.
+independent qualification, while the GenerativeQC-owned SCC/runtime boundary remains.

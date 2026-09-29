@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from vibeqc_compiler.xc import capability_catalog, libxc_bulk_capabilities
+from generativeqc_compiler.xc import capability_catalog, libxc_bulk_capabilities
 
 
 def _stage_evidence(

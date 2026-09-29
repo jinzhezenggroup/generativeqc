@@ -19,24 +19,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc import Atom
-from vibeqc.calculator import _named_basis_shells
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc import Atom
+from generativeqc.calculator import _named_basis_shells
+from generativeqc_compiler.common.cuda_adapter import (
     CudaBenchmarkExecutor,
     CudaCompilerAdapter,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.df_tuning.batch import compile_batch
-from vibeqc_compiler.integral.df_tuning.emission import API, emit_candidate, emit_driver
-from vibeqc_compiler.integral.df_tuning.manifest import MANIFEST, load_manifest
-from vibeqc_compiler.integral.df_tuning.policy import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.df_tuning.batch import compile_batch
+from generativeqc_compiler.integral.df_tuning.emission import (
+    API,
+    emit_candidate,
+    emit_driver,
+)
+from generativeqc_compiler.integral.df_tuning.manifest import MANIFEST, load_manifest
+from generativeqc_compiler.integral.df_tuning.policy import (
     LOW_ANGULAR_CLASSES,
     enumerate_trials,
     rank_profiles,
     read_profile,
 )
-from vibeqc_compiler.integral.ir import KernelConsumer
-from vibeqc_compiler.integral.tuning.process import _runtime_environment, _tool_version
+from generativeqc_compiler.integral.ir import KernelConsumer
+from generativeqc_compiler.integral.tuning.process import (
+    _runtime_environment,
+    _tool_version,
+)
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_policy_endpoint import CASES
@@ -45,7 +52,7 @@ from benchmarks.df_policy_endpoint import CASES
 def source_identity(generated: typing.Any) -> typing.Any:
     """Conservatively bind both compiler and transitive native template inputs."""
     digest = hashlib.sha256()
-    for base in (ROOT / "python/vibeqc_compiler", ROOT / "src", generated):
+    for base in (ROOT / "python/generativeqc_compiler", ROOT / "src", generated):
         for path in sorted(base.rglob("*")):
             if path.suffix in (".py", ".json", ".hpp", ".cuh", ".cpp", ".cu"):
                 digest.update(str(path.relative_to(base)).encode() + b"\0")
@@ -69,7 +76,7 @@ def write_workloads(
             raise ValueError("profile name must be a simple identifier")
         case = benchmark_cases()[CASES[payload["aos"]]]
         atoms = [Atom.from_value(atom) for atom in case.atoms]
-        shells = _named_basis_shells(case.vibeqc_basis, atoms)
+        shells = _named_basis_shells(case.generativeqc_basis, atoms)
         reconstruction = payload["host_reconstruction"]
         domain = read_profile(payload, angular=angular)
         panels = reconstruction["panels"]
@@ -148,7 +155,7 @@ def main() -> None:
         generated,
         ROOT / "include",
         ROOT / "src",
-        ROOT / "tools/vibeqc_validation",
+        ROOT / "tools/generativeqc_validation",
     )
     (directory / "df_benchmark_api.hpp").write_text(API)
     write_workloads(directory / "workload.txt", profiles)
@@ -167,7 +174,7 @@ def main() -> None:
     )
     runnable = [t for t, row in zip(trials, compiled) if row["eligible"]]
     report = {
-        "schema": "vibeqc.df_derivative_tuning",
+        "schema": "generativeqc.df_derivative_tuning",
         "version": 1,
         "generator_sha256": identity,
         "architecture": args.architecture,

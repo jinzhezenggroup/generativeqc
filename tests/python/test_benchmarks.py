@@ -18,7 +18,9 @@ def _benchmark_support_module() -> typing.Any:
     """Load benchmark helpers without turning the scripts into a package."""
 
     path = REPOSITORY_ROOT / "benchmarks" / "_support.py"
-    spec = importlib.util.spec_from_file_location("vibeqc_benchmark_support", path)
+    spec = importlib.util.spec_from_file_location(
+        "generativeqc_benchmark_support", path
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -29,7 +31,7 @@ def _shell_histogram_module() -> typing.Any:
     """Load the pure shell-work planner without requiring PySCF."""
 
     path = REPOSITORY_ROOT / "benchmarks" / "shell_class_histogram.py"
-    spec = importlib.util.spec_from_file_location("vibeqc_shell_histogram", path)
+    spec = importlib.util.spec_from_file_location("generativeqc_shell_histogram", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -42,7 +44,7 @@ def _batch_comparison_module() -> typing.Any:
 
     benchmark_directory = REPOSITORY_ROOT / "benchmarks"
     path = benchmark_directory / "compare_gpu4pyscf_batch.py"
-    spec = importlib.util.spec_from_file_location("vibeqc_batch_comparison", path)
+    spec = importlib.util.spec_from_file_location("generativeqc_batch_comparison", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(benchmark_directory))
@@ -57,7 +59,7 @@ def _results_summary_module() -> typing.Any:
     """Load the artifact-to-Markdown generator as a pure helper module."""
 
     path = REPOSITORY_ROOT / "benchmarks" / "generate_results_summary.py"
-    spec = importlib.util.spec_from_file_location("vibeqc_results_summary", path)
+    spec = importlib.util.spec_from_file_location("generativeqc_results_summary", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -70,13 +72,13 @@ def test_batch_native_metadata_identifies_loaded_profile_library(
     """A replaced library must not inherit the requested base binary's identity."""
     import hashlib
 
-    from vibeqc import profiles
+    from generativeqc import profiles
 
     base = tmp_path / "base.so"
     selected = tmp_path / "selected.so"
     base.write_bytes(b"generic build")
     selected.write_bytes(b"selected AOT build")
-    monkeypatch.setenv("VIBEQC_LIBRARY", str(base))
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(base))
     library = SimpleNamespace(_name=str(selected))
     observed = []
 
@@ -123,7 +125,7 @@ def _comparison_basis_fixture(
     core: typing.Any = 0,
 ) -> typing.Any:
     """Retain a general contraction, including zeros, through both input routes."""
-    from vibeqc import BasisProvenance, BasisSet, BasisShell, ElementBasis
+    from generativeqc import BasisProvenance, BasisSet, BasisShell, ElementBasis
 
     record = BasisSet(
         "explicit-test",
@@ -163,7 +165,7 @@ def test_comparison_basis_preserves_general_contractions(
     tmp_path: typing.Any,
 ) -> None:
     """Neither backend may lose a contraction column or its zero coefficients."""
-    from vibeqc import Atom
+    from generativeqc import Atom
 
     path, original = _comparison_basis_fixture(tmp_path)
     case = SimpleNamespace(atoms=(("H", (0, 0, 0)),), basis_representation="spherical")
@@ -216,7 +218,7 @@ def _aot_shell_gate_module() -> typing.Any:
     """Load the AOT endpoint helpers without importing a GPU backend."""
 
     path = REPOSITORY_ROOT / "benchmarks" / "aot_shell_batch_gate.py"
-    spec = importlib.util.spec_from_file_location("vibeqc_aot_shell_gate", path)
+    spec = importlib.util.spec_from_file_location("generativeqc_aot_shell_gate", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -228,7 +230,9 @@ def _issue174_precision_module() -> typing.Any:
     """Load the pure #174 parser without importing CuPy or a native library."""
 
     path = REPOSITORY_ROOT / "benchmarks" / "issue174_precision_boundaries.py"
-    spec = importlib.util.spec_from_file_location("vibeqc_issue174_precision", path)
+    spec = importlib.util.spec_from_file_location(
+        "generativeqc_issue174_precision", path
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -243,7 +247,7 @@ def test_batch_benchmark_writes_reproducible_json(tmp_path: typing.Any) -> None:
     environment["PYTHONPATH"] = str(REPOSITORY_ROOT / "python")
     # Keep an explicit frozen library when validating benchmark changes.
     environment.setdefault(
-        "VIBEQC_LIBRARY", str(REPOSITORY_ROOT / "build" / "libvibeqc.so")
+        "GENERATIVEQC_LIBRARY", str(REPOSITORY_ROOT / "build" / "libgenerativeqc.so")
     )
     completed = subprocess.run(
         (
@@ -492,7 +496,7 @@ def test_gpu_comparison_help_does_not_require_an_allocated_device() -> None:
         assert "water-octamer-s4-def2-svp-spherical" in completed.stdout
         if script == "compare_gpu4pyscf_batch.py":
             assert "--minimum-speedup" in completed.stdout
-            assert "--maximum-vibeqc-over-gpu4pyscf" in completed.stdout
+            assert "--maximum-generativeqc-over-gpu4pyscf" in completed.stdout
             assert "--maximum-energy-error" in completed.stdout
             assert "--maximum-force-error" in completed.stdout
             assert "--energy-tolerance" in completed.stdout
@@ -543,11 +547,11 @@ def test_aot_endpoint_default_fock_selection_ignores_ambient_filter(
     """Make an omitted Fock CLI selection mean the reproducible full registry."""
 
     endpoint = _aot_shell_gate_module()
-    monkeypatch.setenv("VIBEQC_AOT_FOCK_SHELL_CLASSES", "ambient-only")
+    monkeypatch.setenv("GENERATIVEQC_AOT_FOCK_SHELL_CLASSES", "ambient-only")
     with endpoint._aot_selection(("dppp",), None):
-        assert os.environ["VIBEQC_AOT_SHELL_CLASSES"] == "dppp"
-        assert "VIBEQC_AOT_FOCK_SHELL_CLASSES" not in os.environ
-    assert os.environ["VIBEQC_AOT_FOCK_SHELL_CLASSES"] == "ambient-only"
+        assert os.environ["GENERATIVEQC_AOT_SHELL_CLASSES"] == "dppp"
+        assert "GENERATIVEQC_AOT_FOCK_SHELL_CLASSES" not in os.environ
+    assert os.environ["GENERATIVEQC_AOT_FOCK_SHELL_CLASSES"] == "ambient-only"
 
 
 def test_aot_endpoint_environment_overrides_parse_and_restore(
@@ -557,56 +561,58 @@ def test_aot_endpoint_environment_overrides_parse_and_restore(
 
     endpoint = _aot_shell_gate_module()
     assert endpoint._parse_environment_overrides(
-        ("VIBEQC_TEST_A=one=two", "VIBEQC_TEST_B=")
+        ("GENERATIVEQC_TEST_A=one=two", "GENERATIVEQC_TEST_B=")
     ) == {
-        "VIBEQC_TEST_A": "one=two",
-        "VIBEQC_TEST_B": "",
+        "GENERATIVEQC_TEST_A": "one=two",
+        "GENERATIVEQC_TEST_B": "",
     }
     parser = endpoint._parser()
     arguments = parser.parse_args(
         (
             "--baseline-env",
-            "VIBEQC_PSPS_RESIDENT_BRA=0",
+            "GENERATIVEQC_PSPS_RESIDENT_BRA=0",
             "--candidate-env",
-            "VIBEQC_PSPS_RESIDENT_BRA=1",
+            "GENERATIVEQC_PSPS_RESIDENT_BRA=1",
         )
     )
     endpoint._validate_arguments(parser, arguments)
-    assert arguments.baseline_environment_overrides == {"VIBEQC_PSPS_RESIDENT_BRA": "0"}
+    assert arguments.baseline_environment_overrides == {
+        "GENERATIVEQC_PSPS_RESIDENT_BRA": "0"
+    }
     assert arguments.candidate_environment_overrides == {
-        "VIBEQC_PSPS_RESIDENT_BRA": "1"
+        "GENERATIVEQC_PSPS_RESIDENT_BRA": "1"
     }
 
-    monkeypatch.setenv("VIBEQC_TEST_A", "outside")
-    monkeypatch.delenv("VIBEQC_TEST_NEW", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_TEST_A", "outside")
+    monkeypatch.delenv("GENERATIVEQC_TEST_NEW", raising=False)
     with endpoint._aot_selection(
         ("dppp",),
         environment_overrides={
-            "VIBEQC_TEST_A": "inside",
-            "VIBEQC_TEST_NEW": "created",
+            "GENERATIVEQC_TEST_A": "inside",
+            "GENERATIVEQC_TEST_NEW": "created",
         },
     ):
-        assert os.environ["VIBEQC_TEST_A"] == "inside"
-        assert os.environ["VIBEQC_TEST_NEW"] == "created"
-    assert os.environ["VIBEQC_TEST_A"] == "outside"
-    assert "VIBEQC_TEST_NEW" not in os.environ
+        assert os.environ["GENERATIVEQC_TEST_A"] == "inside"
+        assert os.environ["GENERATIVEQC_TEST_NEW"] == "created"
+    assert os.environ["GENERATIVEQC_TEST_A"] == "outside"
+    assert "GENERATIVEQC_TEST_NEW" not in os.environ
 
     with (
         pytest.raises(RuntimeError, match="restore"),
         endpoint._aot_selection(
             ("dppp",),
-            environment_overrides={"VIBEQC_TEST_A": "during-error"},
+            environment_overrides={"GENERATIVEQC_TEST_A": "during-error"},
         ),
     ):
         raise RuntimeError("restore")
-    assert os.environ["VIBEQC_TEST_A"] == "outside"
+    assert os.environ["GENERATIVEQC_TEST_A"] == "outside"
 
     for values, message in (
-        (("VIBEQC_TEST_DUP=1", "VIBEQC_TEST_DUP=2"), "duplicate"),
-        (("VIBEQC_TEST_MALFORMED",), "NAME=VALUE"),
+        (("GENERATIVEQC_TEST_DUP=1", "GENERATIVEQC_TEST_DUP=2"), "duplicate"),
+        (("GENERATIVEQC_TEST_MALFORMED",), "NAME=VALUE"),
         (("=missing-name",), "non-empty"),
-        (("VIBEQC_AOT_SHELL_CLASSES=bad",), "reserved"),
-        (("VIBEQC_AOT_FOCK_SHELL_CLASSES=bad",), "reserved"),
+        (("GENERATIVEQC_AOT_SHELL_CLASSES=bad",), "reserved"),
+        (("GENERATIVEQC_AOT_FOCK_SHELL_CLASSES=bad",), "reserved"),
     ):
         with pytest.raises(ValueError, match=message):
             endpoint._parse_environment_overrides(values)
@@ -651,9 +657,9 @@ def test_aot_endpoint_freezes_after_one_cold_baseline_and_records_schema() -> No
             self.executions.append(
                 (
                     strict,
-                    os.environ.get("VIBEQC_AOT_SHELL_CLASSES"),
-                    os.environ.get("VIBEQC_AOT_FOCK_SHELL_CLASSES"),
-                    os.environ.get("VIBEQC_PSPS_RESIDENT_BRA"),
+                    os.environ.get("GENERATIVEQC_AOT_SHELL_CLASSES"),
+                    os.environ.get("GENERATIVEQC_AOT_FOCK_SHELL_CLASSES"),
+                    os.environ.get("GENERATIVEQC_PSPS_RESIDENT_BRA"),
                 )
             )
             return FakeResult()
@@ -670,8 +676,8 @@ def test_aot_endpoint_freezes_after_one_cold_baseline_and_records_schema() -> No
         2,
         order_style="abba",
         warmups=1,
-        baseline_environment_overrides={"VIBEQC_PSPS_RESIDENT_BRA": "0"},
-        candidate_environment_overrides={"VIBEQC_PSPS_RESIDENT_BRA": "1"},
+        baseline_environment_overrides={"GENERATIVEQC_PSPS_RESIDENT_BRA": "0"},
+        candidate_environment_overrides={"GENERATIVEQC_PSPS_RESIDENT_BRA": "1"},
         maximum_energy_error=1.0e-12,
         maximum_force_error=1.0e-12,
         minimum_speedup=0.0,
@@ -700,10 +706,10 @@ def test_aot_endpoint_freezes_after_one_cold_baseline_and_records_schema() -> No
     assert [
         sample["environment_overrides"] for sample in measurement["raw_samples"]
     ] == [
-        {"VIBEQC_PSPS_RESIDENT_BRA": "0"},
-        {"VIBEQC_PSPS_RESIDENT_BRA": "1"},
-        {"VIBEQC_PSPS_RESIDENT_BRA": "1"},
-        {"VIBEQC_PSPS_RESIDENT_BRA": "0"},
+        {"GENERATIVEQC_PSPS_RESIDENT_BRA": "0"},
+        {"GENERATIVEQC_PSPS_RESIDENT_BRA": "1"},
+        {"GENERATIVEQC_PSPS_RESIDENT_BRA": "1"},
+        {"GENERATIVEQC_PSPS_RESIDENT_BRA": "0"},
     ]
     assert measurement["fixed_dm0"] == {
         "enabled": True,
@@ -785,7 +791,7 @@ import runpy
 import sys
 
 real_import = builtins.__import__
-blocked = ("cupy", "vibeqc", "gpu4pyscf", "pyscf", "_cases", "_support")
+blocked = ("cupy", "generativeqc", "gpu4pyscf", "pyscf", "_cases", "_support")
 output_path = sys.argv[1]
 script_path = sys.argv[2]
 
@@ -803,9 +809,9 @@ sys.argv = [
     "--repeats",
     "2",
     "--baseline-env",
-    "VIBEQC_PSPS_RESIDENT_BRA=0",
+    "GENERATIVEQC_PSPS_RESIDENT_BRA=0",
     "--candidate-env",
-    "VIBEQC_PSPS_RESIDENT_BRA=1",
+    "GENERATIVEQC_PSPS_RESIDENT_BRA=1",
     "--output",
     output_path,
 ]
@@ -825,10 +831,10 @@ runpy.run_path(script_path, run_name="__main__")
     assert payload["baseline_selection"]["shell_classes"] == ["dppp", "dpds"]
     assert payload["candidate_selection"]["shell_classes"][-1] == "dspp"
     assert payload["baseline_selection"]["environment_overrides"] == {
-        "VIBEQC_PSPS_RESIDENT_BRA": "0"
+        "GENERATIVEQC_PSPS_RESIDENT_BRA": "0"
     }
     assert payload["candidate_selection"]["environment_overrides"] == {
-        "VIBEQC_PSPS_RESIDENT_BRA": "1"
+        "GENERATIVEQC_PSPS_RESIDENT_BRA": "1"
     }
     assert payload["measurement_order"].count("baseline") == 2
     assert payload["measurement_order"].count("candidate") == 2
@@ -1040,11 +1046,11 @@ def test_gpu_comparison_gate_reports_all_threshold_failures() -> None:
         speedup=4.0,
         maximum_energy_error=2.0e-12,
         maximum_force_error=3.0e-12,
-        vibeqc_converged=False,
+        generativeqc_converged=False,
         reference_converged=False,
     )
     assert convergence_failures == [
-        "one or more VIBEQC systems did not converge",
+        "one or more GENERATIVEQC systems did not converge",
         "one or more GPU4PySCF reference systems did not converge",
     ]
 
@@ -1057,15 +1063,15 @@ def test_gpu_comparison_gate_can_reject_a_large_topology_regression() -> None:
         speedup=1.0 / 1.31,
         maximum_energy_error=0.0,
         maximum_force_error=0.0,
-        maximum_vibeqc_over_reference=1.30,
+        maximum_generativeqc_over_reference=1.30,
     )
-    assert failures == ["VibeQC/reference warm ratio 1.31x exceeds 1.3x"]
+    assert failures == ["GenerativeQC/reference warm ratio 1.31x exceeds 1.3x"]
     assert (
         support.benchmark_gate_failures(
             speedup=1.0 / 1.30,
             maximum_energy_error=0.0,
             maximum_force_error=0.0,
-            maximum_vibeqc_over_reference=1.30,
+            maximum_generativeqc_over_reference=1.30,
         )
         == []
     )
@@ -1073,8 +1079,8 @@ def test_gpu_comparison_gate_can_reject_a_large_topology_regression() -> None:
         speedup=0.0,
         maximum_energy_error=0.0,
         maximum_force_error=0.0,
-        maximum_vibeqc_over_reference=1.30,
-    ) == ["VibeQC/reference warm ratio infx exceeds 1.3x"]
+        maximum_generativeqc_over_reference=1.30,
+    ) == ["GenerativeQC/reference warm ratio infx exceeds 1.3x"]
 
 
 def test_batch_comparison_pairs_each_timing_with_convergence_state() -> None:
@@ -1115,7 +1121,7 @@ def test_batch_comparison_records_fixed_post_cold_warm_policy() -> None:
 
     comparison = _batch_comparison_module()
     assert comparison.fixed_warm_start_policy() == {
-        "vibeqc": "engine-local fixed post-cold converged density snapshot",
+        "generativeqc": "engine-local fixed post-cold converged density snapshot",
         "gpu4pyscf": "engine-local fixed post-cold converged density snapshot",
         "cross_engine_density_identity": (
             "not asserted because backend AO conventions are independent"
@@ -1133,8 +1139,8 @@ def test_batch_comparison_records_fixed_post_cold_warm_policy() -> None:
     )
     assert metadata["performed"] is True
     assert metadata["measured"] is False
-    assert metadata["engine_order"] == ["vibeqc", "gpu4pyscf"]
-    assert metadata["vibeqc"] == {
+    assert metadata["engine_order"] == ["generativeqc", "gpu4pyscf"]
+    assert metadata["generativeqc"] == {
         "seconds": 1.25,
         "iteration_branch": [2, 3],
     }
@@ -1149,18 +1155,18 @@ def test_batch_comparison_uses_exact_abba_counts_and_iteration_matching() -> Non
 
     order = comparison.interleaved_engine_order(5)
     assert order == (
-        "vibeqc",
+        "generativeqc",
         "gpu4pyscf",
         "gpu4pyscf",
-        "vibeqc",
-        "vibeqc",
+        "generativeqc",
+        "generativeqc",
         "gpu4pyscf",
         "gpu4pyscf",
-        "vibeqc",
-        "vibeqc",
+        "generativeqc",
+        "generativeqc",
         "gpu4pyscf",
     )
-    assert order.count("vibeqc") == order.count("gpu4pyscf") == 5
+    assert order.count("generativeqc") == order.count("gpu4pyscf") == 5
 
     def sample(seconds: typing.Any, iterations: typing.Any) -> typing.Any:
         return {
@@ -1173,7 +1179,7 @@ def test_batch_comparison_uses_exact_abba_counts_and_iteration_matching() -> Non
         [sample(4.0, (2, 2)), sample(4.2, (2, 2)), sample(5.0, (4, 2))],
     )
     assert matched["iteration_branch"] == [2, 2]
-    assert matched["vibeqc_median_seconds"] == pytest.approx(2.1)
+    assert matched["generativeqc_median_seconds"] == pytest.approx(2.1)
     assert matched["gpu4pyscf_median_seconds"] == pytest.approx(4.1)
     assert matched["speedup"] == pytest.approx(4.1 / 2.1)
 
@@ -1226,7 +1232,7 @@ def test_accuracy_gate_rejects_an_earlier_failed_repeat(
         speedup=2.0,
         maximum_energy_error=summary["maximum_energy_error_hartree"],
         maximum_force_error=summary["maximum_force_error_hartree_per_bohr"],
-        vibeqc_converged=True,
+        generativeqc_converged=True,
         reference_converged=True,
         maximum_energy_error_limit=1e-10,
         maximum_force_error_limit=1e-10,
@@ -1328,7 +1334,7 @@ def test_results_summary_selects_latest_clean_five_repeat_artifacts(
             },
             "timing_summary": {
                 "ordinary": {
-                    "vibeqc_median_seconds": 1.0,
+                    "generativeqc_median_seconds": 1.0,
                     "gpu4pyscf_median_seconds": 2.0,
                 },
                 "iteration_matched": {
@@ -1662,7 +1668,7 @@ def test_packed_response_qualification_cases_bracket_policy_threshold() -> None:
         assert len(case.atoms) == waters * 3
         assert case.expected_ao_count == aos
         assert case.basis_representation == "spherical"
-        assert case.vibeqc_basis == case.pyscf_basis == "def2-svp"
+        assert case.generativeqc_basis == case.pyscf_basis == "def2-svp"
 
     assert 384**3 < 1 << 28 < 648**3 < 768**3 < 864**3
 
@@ -1689,5 +1695,5 @@ def test_benchmark_rejects_missing_portability_evidence() -> None:
 def test_cumetal_ci_declares_its_intentional_portable_profile() -> None:
     root = Path(__file__).resolve().parents[2]
     workflow = (root / ".github/workflows/cumetal-cuda.yml").read_text()
-    assert "-DVIBEQC_CUDA_ARCHITECTURES=80" in workflow
-    assert "-DVIBEQC_AOT_PROFILE=portable" in workflow
+    assert "-DGENERATIVEQC_CUDA_ARCHITECTURES=80" in workflow
+    assert "-DGENERATIVEQC_AOT_PROFILE=portable" in workflow

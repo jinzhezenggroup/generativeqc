@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 void launch_bounded_direct_dddd_streaming_kernel_scaled(
@@ -28,4 +28,4 @@ void launch_bounded_direct_dddd_streaming_kernel(
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
     unsigned long long* fp64_work_count);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

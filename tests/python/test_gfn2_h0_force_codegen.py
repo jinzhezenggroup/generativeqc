@@ -8,7 +8,7 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.method.gfn2_h0_force_runtime import (
+from generativeqc_compiler.method.gfn2_h0_force_runtime import (
     build_gfn2_h0_ao_update_program,
     build_gfn2_h0_distance_program,
     build_gfn2_h0_distance_vjp_program,
@@ -18,12 +18,12 @@ from vibeqc_compiler.method.gfn2_h0_force_runtime import (
     build_gfn2_h0_onsite_vjp_program,
     build_gfn2_h0_pulay_seed_program,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ROOT = Path(__file__).resolve().parents[2]
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.tensor import Program
+    from generativeqc_compiler.tensor import Program
 
 
 def _run(program: Program, feeds: dict[str, float]) -> dict[str, float]:
@@ -224,13 +224,17 @@ def test_generated_header_and_runtime_retire_handwritten_h0_force_math(
         timeout=60,
     )
     generated = output.read_text()
-    assert "#define VIBEQC_GFN2_H0_HD __host__ __device__" in generated
-    assert "VIBEQC_GFN2_H0_HD inline bool gfn2_h0_offsite_factor_tensor" in generated
-    assert "VIBEQC_GFN2_H0_HD inline bool gfn2_h0_offsite_vjp_tensor" in generated
-    assert "VIBEQC_GFN2_H0_HD inline bool gfn2_h0_ao_update_tensor" in generated
-    assert "VIBEQC_GFN2_H0_HD inline bool gfn2_h0_distance_tensor" in generated
-    assert "VIBEQC_GFN2_H0_HD inline bool gfn2_h0_distance_vjp_tensor" in generated
-    assert "VIBEQC_GFN2_H0_HD inline bool gfn2_h0_pulay_seed_tensor" in generated
+    assert "#define GENERATIVEQC_GFN2_H0_HD __host__ __device__" in generated
+    assert (
+        "GENERATIVEQC_GFN2_H0_HD inline bool gfn2_h0_offsite_factor_tensor" in generated
+    )
+    assert "GENERATIVEQC_GFN2_H0_HD inline bool gfn2_h0_offsite_vjp_tensor" in generated
+    assert "GENERATIVEQC_GFN2_H0_HD inline bool gfn2_h0_ao_update_tensor" in generated
+    assert "GENERATIVEQC_GFN2_H0_HD inline bool gfn2_h0_distance_tensor" in generated
+    assert (
+        "GENERATIVEQC_GFN2_H0_HD inline bool gfn2_h0_distance_vjp_tensor" in generated
+    )
+    assert "GENERATIVEQC_GFN2_H0_HD inline bool gfn2_h0_pulay_seed_tensor" in generated
     assert "bar_distance" in generated
 
     consumer = (ROOT / "src/xtb/native/src/backends/cuda/gfn2_h0_force.cu").read_text()
@@ -254,9 +258,9 @@ def test_generated_header_and_runtime_retire_handwritten_h0_force_math(
     ):
         assert retired not in consumer
 
-    cmake = (ROOT / "cmake/VibeQCGeneratedSources.cmake").read_text()
+    cmake = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
     assert "generate_gfn2_h0_native.py" in cmake
-    assert "vibeqc_gfn2_h0_native_codegen" in cmake
+    assert "generativeqc_gfn2_h0_native_codegen" in cmake
 
 
 def test_cpu_h0_and_cuda_values_share_the_generated_primal_and_ad() -> None:

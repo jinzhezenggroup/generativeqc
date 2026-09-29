@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_RUNTIME_GFN2_CPU_EXECUTION_HPP
+#ifndef GENERATIVEQC_XTB_RUNTIME_GFN2_CPU_EXECUTION_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_RUNTIME_GFN2_CPU_EXECUTION_HPP
+#define GENERATIVEQC_XTB_RUNTIME_GFN2_CPU_EXECUTION_HPP
 
 #include <cstdint>
 #include <memory>
@@ -11,7 +11,7 @@
 #include "cpu_dispatch/features.hpp"
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 
 struct Gfn2CpuOrbitalSnapshot {
   std::int64_t orbital_count = 0;
@@ -30,7 +30,7 @@ struct Gfn2CpuOrbitalSnapshot {
 };
 
 // Retains molecular topology and numerical workspaces across synchronous calls.
-// Every call resets SCC from the SAD state; VibeQC has no public warm-start API.
+// Every call resets SCC from the SAD state; GenerativeQC has no public warm-start API.
 class Gfn2CpuExecutionCache {
  public:
   explicit Gfn2CpuExecutionCache(CpuIsa cpu_isa = CpuIsa::kBaseline);
@@ -43,11 +43,11 @@ class Gfn2CpuExecutionCache {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 
-  friend vibeqc_xtb_status_t execute_restricted_gfn2_cpu(
-      Gfn2CpuExecutionCache& cache, const vibeqc_xtb_batch_t& batch,
-      const vibeqc_xtb_compute_options_t& options, vibeqc_xtb_batch_result_t& result,
+  friend generativeqc_xtb_status_t execute_restricted_gfn2_cpu(
+      Gfn2CpuExecutionCache& cache, const generativeqc_xtb_batch_t& batch,
+      const generativeqc_xtb_compute_options_t& options, generativeqc_xtb_batch_result_t& result,
       std::string& error);
-  friend vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
+  friend generativeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
       Gfn2CpuExecutionCache& cache, Gfn2CpuOrbitalSnapshot& snapshot, std::string& error);
 };
 
@@ -59,18 +59,18 @@ class Gfn2CpuExecutionCache {
  * call. Requested outputs and result flags are committed only after every
  * batch member reaches either a successful or documented terminal state.
  */
-vibeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
-                                                const vibeqc_xtb_batch_t& batch,
-                                                const vibeqc_xtb_compute_options_t& options,
-                                                vibeqc_xtb_batch_result_t& result,
+generativeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
+                                                const generativeqc_xtb_batch_t& batch,
+                                                const generativeqc_xtb_compute_options_t& options,
+                                                generativeqc_xtb_batch_result_t& result,
                                                 std::string& error);
 
 /* Copy the last converged one-system restricted GFN2 orbital state.
  * This is an internal bridge for SCF initialization, not a public xTB result
  * descriptor. Coefficients remain in the native GFN2 spherical AO order. */
-vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
+generativeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
     Gfn2CpuExecutionCache& cache, Gfn2CpuOrbitalSnapshot& snapshot, std::string& error);
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail
 
-#endif  // VIBEQC_XTB_RUNTIME_GFN2_CPU_EXECUTION_HPP
+#endif  // GENERATIVEQC_XTB_RUNTIME_GFN2_CPU_EXECUTION_HPP

@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda
 
 
 @pytest.mark.parametrize("dtype", ("int64", "float32", "float64"))

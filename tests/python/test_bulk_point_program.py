@@ -8,8 +8,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.xc import bulk_point_program
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.xc import bulk_point_program
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_CANDIDATE_DOMAIN,
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
@@ -179,7 +179,7 @@ int main() {
   const double rho[2]{0.7, 0.4};
   const double gradient[2][3]{{0.1, 0.2, 0.05}, {0.05, -0.1, 0.15}};
   const double tau[2]{0.0, 0.0};
-  const auto value = vibeqc::dft::bulk_generated::evaluate_point(rho, gradient, tau);
+  const auto value = generativeqc::dft::bulk_generated::evaluate_point(rho, gradient, tau);
   std::cout << std::setprecision(17)
             << value.energy << ' ' << value.rho[0] << ' ' << value.rho[1];
   for (const auto& spin : value.gradient)

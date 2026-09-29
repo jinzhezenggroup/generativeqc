@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_ecp_ao.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/ecp_projector.py"
+  "owner": "python/generativeqc_compiler/integral/ecp_projector.py"
 }

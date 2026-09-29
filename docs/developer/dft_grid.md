@@ -1,6 +1,6 @@
 # Atom-centered grids and spatial AO jets (DFT01)
 
-`vibeqc_compiler.dft` is the compiler-side grid/AO/density interface installed beside the runtime.
+`generativeqc_compiler.dft` is the compiler-side grid/AO/density interface installed beside the runtime.
 It provides CPU quadrature, native CPU/CUDA AO derivatives and spin density
 features for later XC/SCF consumers. It registers no DFT method, XC functional,
 nuclear gradient or Hessian. Use `PYTHONPATH=.:python` and a built native
@@ -86,7 +86,7 @@ normalization and derivative exports share the same prescription.
 The native owner retains host coordinates, weights and owners for current export
 contracts; tile downloads and the subsequent XC upload are part of preparation.
 All temporary CUDA arrays are charged through the resource ledger and the pure
-`vibeqc_resource_quadrature_cuda_v1` shape bridge. Quadrature scratch coexists with
+`generativeqc_resource_quadrature_cuda_v1` shape bridge. Quadrature scratch coexists with
 the prepared Fock provider and retires before KS/XC state allocation. Unsupported
 inputs or failed normalization throw without a CPU partition fallback. The
 ordinary `MolecularGrid` constructor remains the independent CPU reference.
@@ -102,7 +102,7 @@ renormalization conceals quadrature error.
 
 ## Generated moving-grid response (#163 B1)
 
-`vibeqc_compiler.xc.grid_response.grid_response_tiles(grid, center_motion,
+`generativeqc_compiler.xc.grid_response.grid_response_tiles(grid, center_motion,
 tile_points=...)` is a **CPU diagnostic/consumer building block**, not a complete
 molecular gradient or a native CPU/CUDA force endpoint. It streams the same raw
 atomic quadrature as `MolecularGrid.tiles`, then supplies separate point and
@@ -235,7 +235,7 @@ for CPU fixed-input consumers (#235 A).
 ## Prepared execution and budgets
 
 ```python
-from vibeqc_compiler.dft import GridSpec, PreparedGrid
+from generativeqc_compiler.dft import GridSpec, PreparedGrid
 
 with PreparedGrid(
     atoms, basis="sto-3g", spec=GridSpec(), tile_points=251, budget_bytes=256 << 20
@@ -304,16 +304,16 @@ PySCF (Apache-2.0) and libcint (BSD-2-Clause) are test references; no external
 solver source is copied.
 
 ```bash
-PYTHONPATH=.:python VIBEQC_LIBRARY=$PWD/build/cpu/libvibeqc.so \
+PYTHONPATH=.:python GENERATIVEQC_LIBRARY=$PWD/build/cpu/libgenerativeqc.so \
   python -m pytest tests/python/test_grid_cpu.py tests/python/test_grid_prepared.py -q
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env PYTHONPATH=.:python VIBEQC_LIBRARY=$PWD/build/cpu/libvibeqc.so \
-  VIBEQC_GRID_CUDA_TEST=1 OMP_NUM_THREADS=1 \
+  env PYTHONPATH=.:python GENERATIVEQC_LIBRARY=$PWD/build/cpu/libgenerativeqc.so \
+  GENERATIVEQC_GRID_CUDA_TEST=1 OMP_NUM_THREADS=1 \
   python -m pytest tests/python/test_grid_cuda.py -q
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00 \
-  env PYTHONPATH=.:python VIBEQC_LIBRARY=$PWD/build/cpu/libvibeqc.so \
+  env PYTHONPATH=.:python GENERATIVEQC_LIBRARY=$PWD/build/cpu/libgenerativeqc.so \
   OMP_NUM_THREADS=1 python tools/validate_grid.py --cuda --output /tmp/grid-evidence
 ```
 

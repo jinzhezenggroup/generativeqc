@@ -8,40 +8,40 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.integral.blocks import TensorLayout, WeightTile
-from vibeqc_compiler.integral.second_derivatives import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.integral.blocks import TensorLayout, WeightTile
+from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
 )
-from vibeqc_compiler.integral.second_derivatives_execute import (
+from generativeqc_compiler.integral.second_derivatives_execute import (
     PreparedSecondDerivative,
     compile_second_derivative,
 )
-from vibeqc_compiler.integral.second_derivatives_inputs import (
+from generativeqc_compiler.integral.second_derivatives_inputs import (
     prepare_second_shell_stream,
 )
-from vibeqc_compiler.integral.second_order_layout import SecondAtomMap
-from vibeqc_compiler.integral.shell_signature import BasisConvention
+from generativeqc_compiler.integral.second_order_layout import SecondAtomMap
+from generativeqc_compiler.integral.shell_signature import BasisConvention
 
-from tools.validate_weighted_eri import make_fixture
-from tools.vibeqc_validation.f_shell_numerics import _normalized_primitives
-from tools.vibeqc_validation.one_electron_values import make_one_electron_fixture
-from tools.vibeqc_validation.second_derivatives import (
+from tools.generativeqc_validation.f_shell_numerics import _normalized_primitives
+from tools.generativeqc_validation.one_electron_values import make_one_electron_fixture
+from tools.generativeqc_validation.second_derivatives import (
     contracted_public_first_gradient,
     normalized_cartesian_rotation,
 )
+from tools.validate_weighted_eri import make_fixture
 
 
 @pytest.fixture(scope="module", params=("cpu", "cuda"))
 def compiler(request: typing.Any, tmp_path_factory: typing.Any) -> typing.Any:
     pytest.importorskip("pyscf")
     cuda = request.param == "cuda"
-    if cuda and os.environ.get("VIBEQC_TEST_SECOND_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_SECOND_CUDA=1 inside a Slurm GPU job")
+    if cuda and os.environ.get("GENERATIVEQC_TEST_SECOND_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_SECOND_CUDA=1 inside a Slurm GPU job")
     if cuda and not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("public second derivative CUDA validation requires Slurm")
     executable = shutil.which("nvcc" if cuda else "c++")
@@ -164,7 +164,7 @@ def test_public_coverage_and_composed_budget_fail_before_execution(
         TensorLayout(signature.tensor_indices, signature.component_shape),
         weights.ravel(),
     )
-    from vibeqc_compiler.integral.shell_signature import CenterBinding
+    from generativeqc_compiler.integral.shell_signature import CenterBinding
 
     for malformed in (
         replace(

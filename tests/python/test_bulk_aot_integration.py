@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.xc import bulk_aot, libxc_bulk
+from generativeqc_compiler.xc import bulk_aot, libxc_bulk
 
 
 @pytest.mark.parametrize("name", ["LDA_C_VWN_4", "GGA_X_PBE_SOL", "MGGA_X_R2SCAN01"])

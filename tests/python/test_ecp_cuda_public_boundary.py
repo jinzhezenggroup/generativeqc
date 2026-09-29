@@ -6,10 +6,10 @@ import typing
 from dataclasses import replace
 
 import pytest
+from generativeqc import Calculator, KsOptions, _native
+from generativeqc._dft_gradient import StationaryKsState
 from test_ecp import fixture
 from test_ecp_stationary_cpu import GRID
-from vibeqc import Calculator, KsOptions, _native
-from vibeqc._dft_gradient import StationaryKsState
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])
@@ -75,7 +75,7 @@ def test_cuda_ecp_public_force_capability_has_an_explicit_basis_domain(
 def test_public_force_wrapper_rejects_cpu_owner_before_compilation(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _stationary_cuda
+    from generativeqc import _stationary_cuda
 
     atoms, record, _ = fixture(representation="cartesian")
     calculator = Calculator(

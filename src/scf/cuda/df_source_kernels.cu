@@ -9,7 +9,7 @@
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 unsigned resolve_cuda_df_source_value_mapping(unsigned requested, bool transformed) noexcept {
   return generated_df_policy::ValueSourceSchedule::resolve(requested, transformed);
@@ -370,4 +370,4 @@ void launch_build_cuda_df_transformed_tile_kernel(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

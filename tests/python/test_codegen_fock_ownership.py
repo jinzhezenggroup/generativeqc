@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from vibeqc_compiler.integral.lowering.fock_accumulation import (
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
     emit_direct_force_component_weight,
     emit_direct_force_density_coefficient,
@@ -21,13 +21,13 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
 
     shared = (
         REPOSITORY_ROOT
-        / "python/vibeqc_compiler/integral/lowering/fock_accumulation.py"
+        / "python/generativeqc_compiler/integral/lowering/fock_accumulation.py"
     ).read_text(encoding="utf-8")
     native = (REPOSITORY_ROOT / "src/scf/cuda/direct_fock_accumulation.cuh").read_text(
         encoding="utf-8"
     )
     shell_lowering = (
-        REPOSITORY_ROOT / "python/vibeqc_compiler/integral/lowering/fock.py"
+        REPOSITORY_ROOT / "python/generativeqc_compiler/integral/lowering/fock.py"
     ).read_text(encoding="utf-8")
 
     assert "restricted_exchange_scale" in shared

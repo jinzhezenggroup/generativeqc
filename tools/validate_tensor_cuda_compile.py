@@ -6,9 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -19,9 +19,9 @@ from vibeqc_compiler.tensor import (
     reduce_sum,
     scatter_add,
 )
-from vibeqc_compiler.tensor.cuda_execute import compile_cuda
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_resident import compile_resident
+from generativeqc_compiler.tensor.cuda_execute import compile_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_resident import compile_resident
 
 
 def _program() -> Program:

@@ -1,6 +1,6 @@
-# Extending VibeQC
+# Extending GenerativeQC
 
-VibeQC does not currently promise a stable public plug-in ABI/API for third-party scientific extensions.
+GenerativeQC does not currently promise a stable public plug-in ABI/API for third-party scientific extensions.
 
 Future public extension contracts should define stable identity/versioning, inputs/outputs, scientific invariants and units, capability boundaries, state identity, validation requirements, failure behavior, and compatibility guarantees.
 

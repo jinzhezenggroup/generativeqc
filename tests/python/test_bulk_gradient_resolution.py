@@ -5,15 +5,15 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.method import bulk_gradient
-from vibeqc_compiler.method.bulk_gradient import (
+from generativeqc_compiler.method import bulk_gradient
+from generativeqc_compiler.method.bulk_gradient import (
     BULK_FORCE_RESOLUTION_SCHEMA,
     resolve_bulk_force_capability,
 )
-from vibeqc_compiler.method.spec import UnsupportedMethod
-from vibeqc_compiler.xc import libxc_bulk_capabilities
-from vibeqc_compiler.xc.capability_resolution import CapabilityNotQualified
-from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
+from generativeqc_compiler.method.spec import UnsupportedMethod
+from generativeqc_compiler.xc import libxc_bulk_capabilities
+from generativeqc_compiler.xc.capability_resolution import CapabilityNotQualified
+from generativeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
 
 
 def _coverage(

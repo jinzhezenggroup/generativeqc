@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_ARENA_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_ARENA_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_ARENA_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_ARENA_CUH
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,7 @@
 
 #include "backends/cuda/gfn2_scc_iteration_reports.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::uint32_t kGfn2SccIterationArenaAbiVersion = 5u;
 inline constexpr std::size_t kGfn2SccIterationArenaAlignment = 256u;
@@ -112,6 +112,6 @@ static_assert(std::is_standard_layout_v<Gfn2SccIterationArenaRequirements>);
     Gfn2SccIterationDeviceState& state, Gfn2SccIterationDeviceWorkspace& workspace,
     Gfn2SccIterationReportStorage& report_storage) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_ARENA_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_ARENA_CUH

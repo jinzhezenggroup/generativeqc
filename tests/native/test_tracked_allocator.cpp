@@ -11,9 +11,9 @@
 #include "runtime/tracked_allocator.hpp"
 
 namespace {
-using vibeqc::runtime::AllocationCounter;
-using vibeqc::runtime::TrackedAllocator;
-using vibeqc::runtime::TrackedVector;
+using generativeqc::runtime::AllocationCounter;
+using generativeqc::runtime::TrackedAllocator;
+using generativeqc::runtime::TrackedVector;
 
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);

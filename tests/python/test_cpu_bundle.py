@@ -8,31 +8,31 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cpu_dispatch import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cpu_dispatch import (
     CpuRuntimeFeatures,
     cpu_binary_target_supported,
     detect_cpu_features,
     select_cpu_target,
 )
-from vibeqc_compiler.common.cpu_target import (
+from generativeqc_compiler.common.cpu_target import (
     AVX2_FMA_TARGET,
     AVX512F_FMA_TARGET,
     CPU_TARGETS,
     GENERIC_CPU_TARGET,
 )
-from vibeqc_compiler.integral.cpu_bundle import (
+from generativeqc_compiler.integral.cpu_bundle import (
     FirstDerivativeCpuDispatchEvaluator,
     compile_first_derivative_cpu_bundle,
     load_first_derivative_cpu_bundle,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
 
 def test_cpu_target_selection_prefers_widest_supported_and_forces_safely(
     monkeypatch: typing.Any,
 ) -> None:
-    monkeypatch.delenv("VIBEQC_CPU_TARGET", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_CPU_TARGET", raising=False)
     none = CpuRuntimeFeatures("x86_64", ())
     avx2 = CpuRuntimeFeatures("amd64", ("fma", "avx2"))
     avx512 = CpuRuntimeFeatures("x86_64", ("avx512f", "fma", "avx2"))
@@ -59,7 +59,7 @@ def test_cpu_target_selection_prefers_widest_supported_and_forces_safely(
     with pytest.raises(ValueError, match="not in this bundle"):
         select_cpu_target(CPU_TARGETS, avx512, forced_target="x86_64-amx")
 
-    monkeypatch.setenv("VIBEQC_CPU_TARGET", "generic")
+    monkeypatch.setenv("GENERATIVEQC_CPU_TARGET", "generic")
     decision = select_cpu_target(CPU_TARGETS, avx512)
     assert decision.selected_target == "generic"
     assert decision.forced_target == "generic"
@@ -121,7 +121,7 @@ def test_bundle_materializes_portable_manifest_and_target_specific_cache(
 def test_dispatch_loads_only_selected_compatible_candidate(
     cpu_bundle: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    monkeypatch.delenv("VIBEQC_CPU_TARGET", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_CPU_TARGET", raising=False)
     primitives = (
         (
             (0.71, 0.8),
@@ -174,7 +174,7 @@ def test_dispatch_loads_only_selected_compatible_candidate(
 def test_bundle_rejects_cross_architecture_before_loading(
     cpu_bundle: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    import vibeqc_compiler.integral.cpu_bundle as module
+    import generativeqc_compiler.integral.cpu_bundle as module
 
     def forbidden_loader(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         raise AssertionError("incompatible CPU binary must be rejected before dlopen")

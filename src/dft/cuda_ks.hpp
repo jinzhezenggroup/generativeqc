@@ -12,11 +12,11 @@
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/fock_prepared.hpp"
 #include "scf/types.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Explicit component ownership for composition into #203. Provider/context
  * overhead and host quadrature preparation remain distinct from the native
@@ -132,21 +132,21 @@ class CudaKsPlan {
   /** Revoke final-state eligibility without changing warm-start ownership. */
   void invalidate_final_state() noexcept;
   /** Read-only host eligibility query. It performs no CUDA call or transfer. */
-  vibeqc_status final_state_token(CudaKsFinalStateToken& token, std::string& detail) const;
+  generativeqc_status final_state_token(CudaKsFinalStateToken& token, std::string& detail) const;
   /** Borrow the current converged density in device memory under the same
    * exact-token contract. This is a zero-transfer execution lease for native
    * downstream consumers; callers must not retain pointers across invalidation. */
-  vibeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
-                                       CudaKsResidentDensityBinding& binding,
-                                       std::string& detail) const;
+  generativeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
+                                             CudaKsResidentDensityBinding& binding,
+                                             std::string& detail) const;
   /** Export a detached, strictly validated current physical state. Exact-token
    * comparison
    * precedes transfer; eligibility is rechecked before publication.
    * W is built only when
    * explicitly requested. */
-  vibeqc_status read_final_state(const CudaKsFinalStateToken& expected,
-                                 bool compute_weighted_density, VerifiedKsFinalState& state,
-                                 std::string& detail);
+  generativeqc_status read_final_state(const CudaKsFinalStateToken& expected,
+                                       bool compute_weighted_density, VerifiedKsFinalState& state,
+                                       std::string& detail);
   const CudaKsResources& resources() const noexcept;
   CudaKsTransfers transfers() const noexcept;
 
@@ -154,4 +154,4 @@ class CudaKsPlan {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

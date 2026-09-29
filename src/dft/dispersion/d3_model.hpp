@@ -7,12 +7,12 @@
 #include "dft/dispersion/d3_zero.hpp"
 
 #if defined(__CUDACC__)
-#define VIBEQC_D3_MODEL_HD __host__ __device__
+#define GENERATIVEQC_D3_MODEL_HD __host__ __device__
 #else
-#define VIBEQC_D3_MODEL_HD
+#define GENERATIVEQC_D3_MODEL_HD
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 enum class D3Damping : std::int32_t { bj = 1, zero = 2 };
 
@@ -24,7 +24,7 @@ struct D3ModelParameters {
   bool atm_enabled{false};
 };
 
-VIBEQC_D3_MODEL_HD inline bool valid_d3_model(const D3ModelParameters& model) {
+GENERATIVEQC_D3_MODEL_HD inline bool valid_d3_model(const D3ModelParameters& model) {
   if (model.damping == D3Damping::bj) {
     if (!d3_detail::valid_parameters(model.bj)) return false;
   } else if (model.damping == D3Damping::zero) {
@@ -45,10 +45,10 @@ struct D3PairTerm {
   double radial_derivative_over_distance{};
 };
 
-VIBEQC_D3_MODEL_HD inline bool d3_pair_term(std::size_t first, std::size_t second,
-                                            const std::int32_t* z, double r2,
-                                            const D3ModelParameters& model, D3Tables tables,
-                                            D3PairTerm& out) {
+GENERATIVEQC_D3_MODEL_HD inline bool d3_pair_term(std::size_t first, std::size_t second,
+                                                  const std::int32_t* z, double r2,
+                                                  const D3ModelParameters& model, D3Tables tables,
+                                                  D3PairTerm& out) {
   using namespace d3_detail;
   out = {};
   const double r = sqrt(r2);
@@ -99,12 +99,12 @@ VIBEQC_D3_MODEL_HD inline bool d3_pair_term(std::size_t first, std::size_t secon
   return finite(out.damping) && finite(out.radial_derivative_over_distance);
 }
 
-VIBEQC_D3_MODEL_HD inline D3Status evaluate_d3_model(std::size_t n, const std::int32_t* z,
-                                                     const double* xyz,
-                                                     const D3ModelParameters& model,
-                                                     D3Tables tables, double* workspace,
-                                                     std::size_t workspace_elements, double* energy,
-                                                     double* gradient) {
+GENERATIVEQC_D3_MODEL_HD inline D3Status evaluate_d3_model(std::size_t n, const std::int32_t* z,
+                                                           const double* xyz,
+                                                           const D3ModelParameters& model,
+                                                           D3Tables tables, double* workspace,
+                                                           std::size_t workspace_elements,
+                                                           double* energy, double* gradient) {
   if (!valid_d3_model(model)) return D3Status::invalid_argument;
   D3Status status = D3Status::unsupported;
   if (model.damping == D3Damping::bj) {
@@ -119,12 +119,12 @@ VIBEQC_D3_MODEL_HD inline D3Status evaluate_d3_model(std::size_t n, const std::i
                             gradient, true);
 }
 
-VIBEQC_D3_MODEL_HD inline const char* d3_variant_identity(const D3ModelParameters& model) {
+GENERATIVEQC_D3_MODEL_HD inline const char* d3_variant_identity(const D3ModelParameters& model) {
   if (model.damping == D3Damping::bj) return model.atm_enabled ? "d3.bj-atm" : "d3.bj-two-body";
   if (model.damping == D3Damping::zero && !model.atm_enabled) return "d3.zero-two-body";
   return "d3.unsupported";
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion
 
-#undef VIBEQC_D3_MODEL_HD
+#undef GENERATIVEQC_D3_MODEL_HD

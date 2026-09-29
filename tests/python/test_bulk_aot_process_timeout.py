@@ -9,7 +9,7 @@ import time
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.xc import bulk_aot
+from generativeqc_compiler.xc import bulk_aot
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -7,16 +7,16 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc.fock import FockBuildSpec, FockPlan, FockTerm
-from vibeqc.mean_field import FixedDensityMeanField, compile_fixed_density_method
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.method import MethodSpec, resolve_method
-from vibeqc_compiler.xc import FixedDensityXC
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
-from vibeqc_compiler.xc.spec import FunctionalSpec, functional
+from generativeqc.fock import FockBuildSpec, FockPlan, FockTerm
+from generativeqc.mean_field import FixedDensityMeanField, compile_fixed_density_method
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.method import MethodSpec, resolve_method
+from generativeqc_compiler.xc import FixedDensityXC
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.spec import FunctionalSpec, functional
 
-DEVICE = os.environ.get("VIBEQC_TEST_FOCK_DEVICE", "cpu")
+DEVICE = os.environ.get("GENERATIVEQC_TEST_FOCK_DEVICE", "cpu")
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,7 @@
 #include "dft/dispersion/d3_atm.hpp"
 
 namespace {
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 
 void check(cudaError_t status, const char* what) {
   if (status != cudaSuccess)
@@ -37,7 +37,7 @@ __global__ void evaluate_kernel(const std::int32_t* z, const double* xyz,
 }  // namespace
 
 int main() {
-  using namespace vibeqc::dft::dispersion;
+  using namespace generativeqc::dft::dispersion;
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {

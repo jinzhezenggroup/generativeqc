@@ -14,7 +14,7 @@
 #include "runtime/resource_usage.hpp"
 #include "xc_cpu_generated.hpp"
 
-namespace vibeqc::dft::nlc {
+namespace generativeqc::dft::nlc {
 namespace {
 
 std::size_t matrix_size(std::size_t n) {
@@ -133,7 +133,7 @@ Vv10Integral integrate_vv10_rks(const AoBasis& basis, const MolecularGrid& grid,
   std::string detail;
   const auto status = plan.execute(xyz, effective_weights, rho, gradient, energy, vrho, vsigma,
                                    std::span<double>{}, std::span<double>{}, detail);
-  if (status != VIBEQC_STATUS_SUCCESS)
+  if (status != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error(detail.empty() ? "VV10 pair execution failed" : detail);
 
   Vv10Integral result;
@@ -192,4 +192,4 @@ SpinVv10Integral integrate_vv10_uks(const AoBasis& basis, const MolecularGrid& g
   return result;
 }
 
-}  // namespace vibeqc::dft::nlc
+}  // namespace generativeqc::dft::nlc

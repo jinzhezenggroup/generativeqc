@@ -5,7 +5,7 @@
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/matrix_index.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void initialize_direct_fock_kernel(std::int32_t batch_size,
                                               std::int32_t matrices_per_system, std::int32_t nbf,
@@ -178,4 +178,4 @@ void launch_transform_direct_fock_right_kernel(dim3 grid, dim3 block, std::size_
       batch_size, spin_count, nbf, direct_nbf, transform, temporary, hcore, active, fock);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

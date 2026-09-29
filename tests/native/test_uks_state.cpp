@@ -10,7 +10,7 @@
 #include "scf/reference/mean_field.hpp"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 
 void require(bool passed, const char* message) {
   if (!passed) throw std::runtime_error(message);
@@ -48,7 +48,7 @@ void check_state(bool pbe, unsigned max_iterations, bool hydroxyl = false,
          {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}}};
   }
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "invalid UKS state fixture");
   scf::FockBuildSpec spec;
   spec.spin = scf::FockSpin::Unrestricted;

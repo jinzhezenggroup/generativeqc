@@ -5,11 +5,11 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-from vibeqc_compiler.dft.ao import jet_indices
-from vibeqc_compiler.dft.spatial import SpatialPolicy, build_spatial_tasks
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+from generativeqc_compiler.dft.ao import jet_indices
+from generativeqc_compiler.dft.spatial import SpatialPolicy, build_spatial_tasks
 
 
 @pytest.fixture
@@ -177,7 +177,7 @@ def test_grid_and_atom_permutations_preserve_geometric_masks(
 def test_shared_budget_preflight_precedes_envelope_construction(
     fixture: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from vibeqc_compiler.dft import spatial
+    from generativeqc_compiler.dft import spatial
 
     basis, grid = fixture
 

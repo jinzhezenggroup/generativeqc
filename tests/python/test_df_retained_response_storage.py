@@ -23,13 +23,13 @@ def test_resident_response_survives_value_phase_retirement(tmp_path: Path) -> No
         r"""
 #include "scf/density_fitting.hpp"
 #include <stdexcept>
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 """
         + helper
         + r"""
 }
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   DensityFittingScfData resident;
   resident.resolved_budget.value_bytes = 1U << 20;
   resident.raw.nbf = 2; resident.raw.naux = 2;

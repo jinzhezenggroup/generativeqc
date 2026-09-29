@@ -6,12 +6,12 @@
 #include "scf/cuda/runtime_support.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
-vibeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
-                                    const double* left, bool transpose_left, const double* right,
-                                    const std::uint8_t* active, double* output, bool use_cublas,
-                                    double scale) {
+generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
+                                          const double* left, bool transpose_left,
+                                          const double* right, const std::uint8_t* active,
+                                          double* output, bool use_cublas, double scale) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * static_cast<std::size_t>(nbf);
   if (!use_cublas) {
     const std::size_t elements = static_cast<std::size_t>(batch_size) * matrix_size;
@@ -39,12 +39,12 @@ vibeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_
  * stride over the interleaved state array. One strided-batched GEMM per spin
  * preserves the existing [system][spin][matrix] storage without pointer lists.
  */
-vibeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int batch_size,
-                                         int spin_count, int nbf, const double* left,
-                                         bool left_is_spin, bool transpose_left,
-                                         const double* right, bool right_is_spin,
-                                         const std::uint8_t* active, double* output,
-                                         bool use_cublas) {
+generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int batch_size,
+                                               int spin_count, int nbf, const double* left,
+                                               bool left_is_spin, bool transpose_left,
+                                               const double* right, bool right_is_spin,
+                                               const std::uint8_t* active, double* output,
+                                               bool use_cublas) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * static_cast<std::size_t>(nbf);
   if (!use_cublas) {
     const std::size_t elements =
@@ -74,7 +74,7 @@ vibeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int b
                                   &beta, output + spin_offset, nbf, spin_stride, batch_size);
     if (status != CUBLAS_STATUS_SUCCESS) return blas_status(status);
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

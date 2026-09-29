@@ -5,7 +5,7 @@
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/resource_cuda.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 CudaResources::~CudaResources() {
   std::lock_guard<std::mutex> allocation_lock(runtime::allocation_measurement_mutex);
@@ -44,4 +44,4 @@ EigensolverResources CudaResources::eigensolver_view() const {
           solver_host_workspace_bytes_};
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

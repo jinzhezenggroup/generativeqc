@@ -7,7 +7,7 @@ components, convergence measures and iteration history. The enclosing result's
 `executed_backend` identifies the backend that performed the calculation.
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 result = Calculator(method="pbe-uks").singlepoint(
     [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))],
@@ -57,11 +57,11 @@ unchanged. Unsupported methods and older native libraries return `None`.
 The public object stores frozen dataclasses and tuples, not borrowed pointers
 into a mutable native history.
 
-The additive C queries are `vibeqc_calculation_get_ks_diagnostic` and
-`vibeqc_batch_get_ks_diagnostic`. Legacy result structures and batch-array
-strides do not change. Query a size/ABI-initialized `vibeqc_ks_diagnostic` with
+The additive C queries are `generativeqc_calculation_get_ks_diagnostic` and
+`generativeqc_batch_get_ks_diagnostic`. Legacy result structures and batch-array
+strides do not change. Query a size/ABI-initialized `generativeqc_ks_diagnostic` with
 NULL history and zero capacity to learn `history_count`. To copy the history,
-allocate at least that many `vibeqc_ks_iteration` descriptors, initialize every
+allocate at least that many `generativeqc_ks_iteration` descriptors, initialize every
 descriptor's size and ABI, and query again. Every output is validated before
 any output is written. Query and execution calls on a prepared owner must be
 serialized by its caller.
@@ -122,7 +122,7 @@ ordinary-stream provider. See the
 ## CUDA KS iteration residency
 
 Native CUDA LDA/PBE direct all-electron RKS has an explicitly selectable
-ordinary-stream device-control prototype. With \`VIBEQC_CUDA_KS_CHUNK=2\`, an
+ordinary-stream device-control prototype. With \`GENERATIVEQC_CUDA_KS_CHUNK=2\`, an
 eligible owner can submit a bounded two-iteration chunk and synchronize once at
 the chunk boundary rather than unconditionally fencing after every iteration.
 Each completed physical iteration still writes one compact scalar diagnostic
@@ -138,14 +138,14 @@ updates for that slot are masked. Ragged batch items retain independent state
 and streams.
 
 The production default remains the established one-iteration host-controlled
-route. \`VIBEQC_CUDA_KS_CHUNK=1\` (also \`0\`, \`off\` or \`none\`) selects that
-baseline explicitly. \`VIBEQC_CUDA_KS_CHUNK=2\` is an opt-in qualification
+route. \`GENERATIVEQC_CUDA_KS_CHUNK=1\` (also \`0\`, \`off\` or \`none\`) selects that
+baseline explicitly. \`GENERATIVEQC_CUDA_KS_CHUNK=2\` is an opt-in qualification
 selector for direct all-electron RKS only. UKS keeps its occupation
 stabilization and bounded final-closure host policy; ECP RKS keeps the strict
 physical final closure required by #586.
 
 The two-slot path is bound to the shared compiled-execution lifecycle also used
-by TensorIR graph replay. \`VIBEQC_CUDA_KS_REPLAY=1\` (also \`on\`, \`true\` or
+by TensorIR graph replay. \`GENERATIVEQC_CUDA_KS_REPLAY=1\` (also \`on\`, \`true\` or
 \`small-native\`) additionally requests shared CUDA-Graph capture/replay for
 this qualification route. Replay is admitted only for LDA/PBE when the KS
 eigensolver is the capture-safe small-native implementation (currently at most
@@ -168,7 +168,7 @@ route is therefore not auto-promoted. See the
 
 ## Native CPU stationary-gradient diagnostic
 
-`vibeqc._stationary_cpu.complete_rks_gradient_diagnostic` is an internal,
+`generativeqc._stationary_cpu.complete_rks_gradient_diagnostic` is an internal,
 complete first nuclear-gradient **diagnostic**, not a production native force
 endpoint. It consumes a live `StationaryKsState.from_native` lease. The supported
 domain is direct, all-electron, integer-occupation real-FP64 LDA/PBE RKS with
@@ -193,10 +193,10 @@ operations remain; neither selector enables public forces or establishes a
 whole-endpoint resource reservation. See [compiled consumer contracts](stationary_native_consumers.md).
 
 ```python
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
 
 atoms = [("H", (0.1, 0.2, -0.6)), ("H", (0.2, -0.1, 0.8))]
 calc = Calculator(
@@ -265,7 +265,7 @@ With a current CPU library and the test dependencies installed:
 
 ```sh
 PYTHONPATH=.:python OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
-VIBEQC_LIBRARY="$PWD/build/libvibeqc.so" python -m pytest -q \
+GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" python -m pytest -q \
   tests/python/test_dft_complete_cpu.py \
   tests/python/test_dft_stationary_native.py \
   tests/python/test_dft_stationary_gradient.py

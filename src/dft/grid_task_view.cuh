@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 /** Borrowed device buffers for one current local-dense task, ABI version 1.
  *
  * Arrays are FP64. ao is [jet,point,active_ao]; features has the fixed
@@ -45,4 +45,4 @@ struct GridBasisView {
   const double* basis{};
   cudaStream_t stream{};
 };
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

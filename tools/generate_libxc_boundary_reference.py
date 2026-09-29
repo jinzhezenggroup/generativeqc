@@ -2,7 +2,7 @@
 """Generate independent Libxc E/vxc boundary fixtures for bulk semilocal XC.
 
 This optional oracle tool calls the Libxc 7.0.0 C API through PySCF.  It reads
-only registration IDs plus deterministic physical probes; no VibeQC Graph,
+only registration IDs plus deterministic physical probes; no GenerativeQC Graph,
 Maple lowering, generated kernel or derivative participates in the reference.
 """
 
@@ -14,14 +14,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from vibeqc_compiler.xc.boundary import (
+from generativeqc_compiler.xc.boundary import (
     BOUNDARY_SEMANTICS,
     bulk_feature_names,
     semilocal_boundary_probes,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "python/vibeqc_compiler/xc/libxc_bulk_catalog.json"
+CATALOG = ROOT / "python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
 OUTPUT = ROOT / "tests/data/xc/libxc-boundary"
 _DOUBLE_POINTER = ctypes.POINTER(ctypes.c_double)
 
@@ -142,7 +142,7 @@ def main() -> int:
                     }
                 )
         payload = {
-            "schema": "vibeqc.libxc-boundary-reference/v1",
+            "schema": "generativeqc.libxc-boundary-reference/v1",
             "boundary_semantics": BOUNDARY_SEMANTICS,
             "oracle": {
                 "pyscf": pyscf.__version__,

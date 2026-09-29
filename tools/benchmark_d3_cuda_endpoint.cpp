@@ -9,25 +9,26 @@
 #include <string>
 #include <vector>
 
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
 namespace {
 
 struct Context {
-  vibeqc_context* value{};
+  generativeqc_context* value{};
   Context() {
-    vibeqc_context_descriptor descriptor{sizeof(vibeqc_context_descriptor), VIBEQC_ABI_VERSION, 0,
-                                         VIBEQC_BACKEND_CUDA};
-    if (vibeqc_context_create(&descriptor, &value) != VIBEQC_STATUS_SUCCESS)
+    generativeqc_context_descriptor descriptor{sizeof(generativeqc_context_descriptor),
+                                               GENERATIVEQC_ABI_VERSION, 0,
+                                               GENERATIVEQC_BACKEND_CUDA};
+    if (generativeqc_context_create(&descriptor, &value) != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error("failed to create CUDA context");
   }
-  ~Context() { vibeqc_context_destroy(value); }
+  ~Context() { generativeqc_context_destroy(value); }
 };
 
 struct Fleet {
   std::vector<std::vector<std::int32_t>> numbers;
   std::vector<std::vector<double>> coordinates;
-  std::vector<vibeqc_d3_system_descriptor> descriptors;
+  std::vector<generativeqc_d3_system_descriptor> descriptors;
 };
 
 Fleet make_fleet(std::size_t systems, std::size_t atoms) {
@@ -52,17 +53,18 @@ Fleet make_fleet(std::size_t systems, std::size_t atoms) {
     }
   }
   for (std::size_t system = 0; system < systems; ++system) {
-    fleet.descriptors.push_back(vibeqc_d3_system_descriptor{
-        sizeof(vibeqc_d3_system_descriptor), VIBEQC_ABI_VERSION, fleet.numbers[system].data(),
-        fleet.coordinates[system].data(), static_cast<std::uint32_t>(atoms)});
+    fleet.descriptors.push_back(generativeqc_d3_system_descriptor{
+        sizeof(generativeqc_d3_system_descriptor), GENERATIVEQC_ABI_VERSION,
+        fleet.numbers[system].data(), fleet.coordinates[system].data(),
+        static_cast<std::uint32_t>(atoms)});
   }
   return fleet;
 }
 
-vibeqc_d3_bj_descriptor model() {
-  return {sizeof(vibeqc_d3_bj_descriptor),
-          VIBEQC_ABI_VERSION,
-          VIBEQC_D3_DAMPING_BJ,
+generativeqc_d3_bj_descriptor model() {
+  return {sizeof(generativeqc_d3_bj_descriptor),
+          GENERATIVEQC_ABI_VERSION,
+          GENERATIVEQC_D3_DAMPING_BJ,
           1.0,
           0.7875,
           0.4289,
@@ -86,30 +88,31 @@ double percentile(std::vector<double> values, double fraction) {
   return values[index];
 }
 
-void run_mode(vibeqc_d3_batch* batch, const Fleet& fleet, bool gradient, int warmups,
+void run_mode(generativeqc_d3_batch* batch, const Fleet& fleet, bool gradient, int warmups,
               int iterations) {
   const std::size_t systems = fleet.descriptors.size();
   const std::size_t atoms = fleet.numbers.front().size();
   std::vector<std::vector<double>> gradients(systems);
-  std::vector<vibeqc_d3_batch_item_result_descriptor> results(systems);
+  std::vector<generativeqc_d3_batch_item_result_descriptor> results(systems);
   for (std::size_t system = 0; system < systems; ++system) {
     gradients[system].resize(gradient ? 3 * atoms : 0);
-    results[system] = vibeqc_d3_batch_item_result_descriptor{
-        sizeof(vibeqc_d3_batch_item_result_descriptor),
-        VIBEQC_ABI_VERSION,
-        VIBEQC_STATUS_INTERNAL_ERROR,
+    results[system] = generativeqc_d3_batch_item_result_descriptor{
+        sizeof(generativeqc_d3_batch_item_result_descriptor),
+        GENERATIVEQC_ABI_VERSION,
+        GENERATIVEQC_STATUS_INTERNAL_ERROR,
         0.0,
         gradient ? gradients[system].data() : nullptr,
         gradient ? static_cast<std::uint32_t>(gradients[system].size()) : 0u,
-        VIBEQC_BACKEND_CUDA};
+        GENERATIVEQC_BACKEND_CUDA};
   }
 
   auto execute = [&] {
-    const auto status = vibeqc_d3_batch_execute(batch, nullptr, 0, results.data(),
-                                                static_cast<std::uint32_t>(results.size()));
-    if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error("benchmark batch failed");
+    const auto status = generativeqc_d3_batch_execute(batch, nullptr, 0, results.data(),
+                                                      static_cast<std::uint32_t>(results.size()));
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error("benchmark batch failed");
     for (const auto& result : results)
-      if (result.status != VIBEQC_STATUS_SUCCESS || result.executed_backend != VIBEQC_BACKEND_CUDA)
+      if (result.status != GENERATIVEQC_STATUS_SUCCESS ||
+          result.executed_backend != GENERATIVEQC_BACKEND_CUDA)
         throw std::runtime_error("benchmark item failed");
   };
 
@@ -148,17 +151,17 @@ int main(int argc, char** argv) {
     const auto fleet = make_fleet(systems, atoms);
     Context context;
     auto parameters = model();
-    vibeqc_d3_batch* batch{};
-    const auto status = vibeqc_d3_batch_prepare(
+    generativeqc_d3_batch* batch{};
+    const auto status = generativeqc_d3_batch_prepare(
         context.value, fleet.descriptors.data(),
         static_cast<std::uint32_t>(fleet.descriptors.size()), &parameters, &batch);
-    if (status != VIBEQC_STATUS_SUCCESS) {
-      const auto* detail = vibeqc_context_get_last_detail(context.value);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      const auto* detail = generativeqc_context_get_last_detail(context.value);
       throw std::runtime_error(detail ? detail : "benchmark prepare failed");
     }
     run_mode(batch, fleet, true, warmups, iterations);
     run_mode(batch, fleet, false, warmups, iterations);
-    vibeqc_d3_batch_destroy(batch);
+    generativeqc_d3_batch_destroy(batch);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

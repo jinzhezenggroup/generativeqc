@@ -12,49 +12,49 @@
 #include <vector>
 
 #include "runtime/gfn2_cpu_execution.hpp"
-#if defined(VIBEQC_HAS_GFN2_CUDA)
+#if defined(GENERATIVEQC_HAS_GFN2_CUDA)
 #include "runtime/gfn2_cuda_execution.hpp"
 #endif
 
-namespace vibeqc::methods::detail {
+namespace generativeqc::methods::detail {
 namespace {
 
 template <typename T>
-vibeqc_xtb_const_buffer_t input_buffer(std::span<const T> values) {
-  return {values.empty() ? nullptr : values.data(), values.size_bytes(), VIBEQC_XTB_MEMORY_HOST,
-          0u};
+generativeqc_xtb_const_buffer_t input_buffer(std::span<const T> values) {
+  return {values.empty() ? nullptr : values.data(), values.size_bytes(),
+          GENERATIVEQC_XTB_MEMORY_HOST, 0u};
 }
 
 template <typename T>
-vibeqc_xtb_buffer_t output_buffer(std::vector<T>& values) {
+generativeqc_xtb_buffer_t output_buffer(std::vector<T>& values) {
   return {values.empty() ? nullptr : values.data(), values.size() * sizeof(T),
-          VIBEQC_XTB_MEMORY_HOST, 0u};
+          GENERATIVEQC_XTB_MEMORY_HOST, 0u};
 }
 
-Gfn2RuntimeStatus map_status(vibeqc_xtb_status_t status) noexcept {
+Gfn2RuntimeStatus map_status(generativeqc_xtb_status_t status) noexcept {
   switch (status) {
-    case VIBEQC_XTB_STATUS_SUCCESS:
+    case GENERATIVEQC_XTB_STATUS_SUCCESS:
       return Gfn2RuntimeStatus::kSuccess;
-    case VIBEQC_XTB_STATUS_INVALID_ARGUMENT:
+    case GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT:
       return Gfn2RuntimeStatus::kInvalidArgument;
-    case VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE:
+    case GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE:
       return Gfn2RuntimeStatus::kBackendUnavailable;
-    case VIBEQC_XTB_STATUS_NOT_SUPPORTED:
+    case GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED:
       return Gfn2RuntimeStatus::kNotSupported;
-    case VIBEQC_XTB_STATUS_NOT_IMPLEMENTED:
+    case GENERATIVEQC_XTB_STATUS_NOT_IMPLEMENTED:
       return Gfn2RuntimeStatus::kNotImplemented;
-    case VIBEQC_XTB_STATUS_ALLOCATION_FAILED:
+    case GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED:
       return Gfn2RuntimeStatus::kAllocationFailed;
-    case VIBEQC_XTB_STATUS_SCC_NOT_CONVERGED:
+    case GENERATIVEQC_XTB_STATUS_SCC_NOT_CONVERGED:
       return Gfn2RuntimeStatus::kNotConverged;
-    case VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED:
+    case GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED:
       return Gfn2RuntimeStatus::kEigensolverFailed;
     default:
       return Gfn2RuntimeStatus::kInternalError;
   }
 }
 
-double gfn2_radial_to_vibeqc(unsigned angular_momentum) {
+double gfn2_radial_to_generativeqc(unsigned angular_momentum) {
   double odd_double_factorial = 1.0;
   for (unsigned factor = 1; factor < 2u * angular_momentum; factor += 2u)
     odd_double_factorial *= static_cast<double>(factor);
@@ -62,7 +62,7 @@ double gfn2_radial_to_vibeqc(unsigned angular_momentum) {
 }
 
 bool convert_cpu_orbitals(const Gfn2RuntimeRequest& request,
-                          const vibeqc::xtb::detail::Gfn2CpuOrbitalSnapshot& snapshot,
+                          const generativeqc::xtb::detail::Gfn2CpuOrbitalSnapshot& snapshot,
                           Gfn2RuntimeOrbitals& result, std::string& error) {
   if (snapshot.orbital_count <= 0 || static_cast<std::uint64_t>(snapshot.orbital_count) >
                                          std::numeric_limits<std::size_t>::max()) {
@@ -100,7 +100,7 @@ bool convert_cpu_orbitals(const Gfn2RuntimeRequest& request,
   source.charge = request.charge;
   source.multiplicity = request.multiplicity;
   source.electron_count = static_cast<int>(rounded_electrons);
-  source.basis_representation = VIBEQC_BASIS_SPHERICAL;
+  source.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   source.atoms.reserve(request.atomic_numbers.size());
   for (std::size_t atom = 0; atom < request.atomic_numbers.size(); ++atom) {
     const auto atomic_number = request.atomic_numbers[atom];
@@ -135,7 +135,7 @@ bool convert_cpu_orbitals(const Gfn2RuntimeRequest& request,
     core::Shell shell;
     shell.atom_index = static_cast<std::uint32_t>(atom64);
     shell.angular_momentum = angular;
-    const double radial_scale = gfn2_radial_to_vibeqc(angular);
+    const double radial_scale = gfn2_radial_to_generativeqc(angular);
     for (std::int64_t primitive = primitive_begin64; primitive < primitive_end64; ++primitive) {
       const std::size_t p = static_cast<std::size_t>(primitive);
       shell.primitives.push_back(
@@ -145,7 +145,7 @@ bool convert_cpu_orbitals(const Gfn2RuntimeRequest& request,
 
     const std::size_t begin = static_cast<std::size_t>(orbital_begin64);
     if (angular == 1u) {
-      // Native GFN2 spherical p order is (y,z,x); VibeQC's public p order is
+      // Native GFN2 spherical p order is (y,z,x); GenerativeQC's public p order is
       // Cartesian (x,y,z). d uses the same m=-2..2 order on both sides.
       new_to_old[begin] = begin + 2u;
       new_to_old[begin + 1u] = begin;
@@ -181,10 +181,10 @@ bool convert_cpu_orbitals(const Gfn2RuntimeRequest& request,
 
 struct Gfn2RuntimeBridge::Impl {
   Impl(Gfn2RuntimeBackend requested_backend, int device_id) : backend(requested_backend) {
-#if defined(VIBEQC_HAS_GFN2_CUDA)
+#if defined(GENERATIVEQC_HAS_GFN2_CUDA)
     if (backend == Gfn2RuntimeBackend::kCuda)
       cuda_cache =
-          std::make_unique<vibeqc::xtb::detail::Gfn2CudaExecutionCache>(device_id, nullptr);
+          std::make_unique<generativeqc::xtb::detail::Gfn2CudaExecutionCache>(device_id, nullptr);
 #else
     (void)device_id;
 #endif
@@ -192,9 +192,9 @@ struct Gfn2RuntimeBridge::Impl {
 
   std::mutex execution_mutex;
   Gfn2RuntimeBackend backend;
-  vibeqc::xtb::detail::Gfn2CpuExecutionCache cpu_cache;
-#if defined(VIBEQC_HAS_GFN2_CUDA)
-  std::unique_ptr<vibeqc::xtb::detail::Gfn2CudaExecutionCache> cuda_cache;
+  generativeqc::xtb::detail::Gfn2CpuExecutionCache cpu_cache;
+#if defined(GENERATIVEQC_HAS_GFN2_CUDA)
+  std::unique_ptr<generativeqc::xtb::detail::Gfn2CudaExecutionCache> cuda_cache;
 #endif
 };
 
@@ -234,15 +234,15 @@ Gfn2RuntimeResult Gfn2RuntimeBridge::execute(const Gfn2RuntimeRequest& request) 
   // separate capability and must not be inferred at this adapter boundary.
   std::vector<std::int32_t> spin_channels{1};
 
-  vibeqc_xtb_batch_t batch{};
-  vibeqc_xtb_compute_options_t options{};
-  vibeqc_xtb_batch_result_t output{};
+  generativeqc_xtb_batch_t batch{};
+  generativeqc_xtb_compute_options_t options{};
+  generativeqc_xtb_batch_result_t output{};
   batch.struct_size = sizeof(batch);
-  batch.api_version = VIBEQC_XTB_API_VERSION;
+  batch.api_version = GENERATIVEQC_XTB_API_VERSION;
   options.struct_size = sizeof(options);
-  options.api_version = VIBEQC_XTB_API_VERSION;
+  options.api_version = GENERATIVEQC_XTB_API_VERSION;
   output.struct_size = sizeof(output);
-  output.api_version = VIBEQC_XTB_API_VERSION;
+  output.api_version = GENERATIVEQC_XTB_API_VERSION;
 
   batch.batch_size = 1;
   batch.total_atoms = atom_count;
@@ -253,19 +253,19 @@ Gfn2RuntimeResult Gfn2RuntimeBridge::execute(const Gfn2RuntimeRequest& request) 
   batch.unpaired_electrons = input_buffer<std::int32_t>(unpaired_electrons);
   batch.spin_channels = input_buffer<std::int32_t>(spin_channels);
 
-  options.model = VIBEQC_XTB_MODEL_GFN2_XTB;
+  options.model = GENERATIVEQC_XTB_MODEL_GFN2_XTB;
   options.flags =
-      static_cast<std::uint32_t>(VIBEQC_XTB_COMPUTE_ENERGY) |
-      (request.compute_forces ? static_cast<std::uint32_t>(VIBEQC_XTB_COMPUTE_FORCES) : 0u) |
+      static_cast<std::uint32_t>(GENERATIVEQC_XTB_COMPUTE_ENERGY) |
+      (request.compute_forces ? static_cast<std::uint32_t>(GENERATIVEQC_XTB_COMPUTE_FORCES) : 0u) |
       (request.compute_atomic_charges
-           ? static_cast<std::uint32_t>(VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES)
+           ? static_cast<std::uint32_t>(GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES)
            : 0u);
   options.max_scc_iterations = request.maximum_iterations;
   options.charge_tolerance = request.charge_tolerance;
   options.energy_tolerance = request.energy_tolerance;
-  options.electronic_temperature = VIBEQC_XTB_DEFAULT_ELECTRONIC_TEMPERATURE;
-  options.scc_start_mode = VIBEQC_XTB_SCC_START_FRESH;
-  options.scc_mixer = VIBEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN;
+  options.electronic_temperature = GENERATIVEQC_XTB_DEFAULT_ELECTRONIC_TEMPERATURE;
+  options.scc_start_mode = GENERATIVEQC_XTB_SCC_START_FRESH;
+  options.scc_mixer = GENERATIVEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN;
   options.scc_mixer_history = request.mixer_history;
   options.scc_mixer_damping = 0.4;
 
@@ -287,30 +287,30 @@ Gfn2RuntimeResult Gfn2RuntimeBridge::execute(const Gfn2RuntimeRequest& request) 
   // orbital snapshot has been detached; the cache locks each operation alone.
   std::lock_guard<std::mutex> execution_lock(impl_->execution_mutex);
   std::string execution_error;
-  vibeqc_xtb_status_t execution_status = VIBEQC_XTB_STATUS_NOT_IMPLEMENTED;
+  generativeqc_xtb_status_t execution_status = GENERATIVEQC_XTB_STATUS_NOT_IMPLEMENTED;
   if (impl_->backend == Gfn2RuntimeBackend::kCpu) {
-    execution_status = vibeqc::xtb::detail::execute_restricted_gfn2_cpu(
+    execution_status = generativeqc::xtb::detail::execute_restricted_gfn2_cpu(
         impl_->cpu_cache, batch, options, output, execution_error);
-#if defined(VIBEQC_HAS_GFN2_CUDA)
+#if defined(GENERATIVEQC_HAS_GFN2_CUDA)
   } else if (impl_->backend == Gfn2RuntimeBackend::kCuda && impl_->cuda_cache) {
-    execution_status = vibeqc::xtb::detail::execute_restricted_gfn2_cuda(
+    execution_status = generativeqc::xtb::detail::execute_restricted_gfn2_cuda(
         *impl_->cuda_cache, batch, options, output, execution_error);
 #endif
   }
-  if (execution_status != VIBEQC_XTB_STATUS_SUCCESS) {
+  if (execution_status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     result.status = map_status(execution_status);
     result.detail = std::move(execution_error);
     return result;
   }
 
-  const auto system_status = static_cast<vibeqc_xtb_status_t>(statuses[0]);
-  if (system_status == VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED) {
+  const auto system_status = static_cast<generativeqc_xtb_status_t>(statuses[0]);
+  if (system_status == GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED) {
     result.status = Gfn2RuntimeStatus::kEigensolverFailed;
     result.detail = "generalized eigensolver failed";
     return result;
   }
-  if (system_status != VIBEQC_XTB_STATUS_SUCCESS &&
-      system_status != VIBEQC_XTB_STATUS_SCC_NOT_CONVERGED) {
+  if (system_status != GENERATIVEQC_XTB_STATUS_SUCCESS &&
+      system_status != GENERATIVEQC_XTB_STATUS_SCC_NOT_CONVERGED) {
     // Match the former public-method boundary exactly: only the eigensolver
     // status has a dedicated public mapping; every other unexpected terminal
     // per-system status remains an internal runtime failure.
@@ -324,13 +324,14 @@ Gfn2RuntimeResult Gfn2RuntimeBridge::execute(const Gfn2RuntimeRequest& request) 
   result.forces = std::move(forces);
   result.atomic_charges = std::move(atomic_charges);
   result.iterations = iterations[0] < 0 ? 0u : static_cast<unsigned>(iterations[0]);
-  result.converged = system_status == VIBEQC_XTB_STATUS_SUCCESS && converged[0] != 0u;
+  result.converged = system_status == GENERATIVEQC_XTB_STATUS_SUCCESS && converged[0] != 0u;
   if (request.compute_orbitals && result.converged) {
-    vibeqc::xtb::detail::Gfn2CpuOrbitalSnapshot snapshot;
+    generativeqc::xtb::detail::Gfn2CpuOrbitalSnapshot snapshot;
     std::string snapshot_error;
-    const auto snapshot_status = vibeqc::xtb::detail::copy_restricted_gfn2_orbital_snapshot_cpu(
-        impl_->cpu_cache, snapshot, snapshot_error);
-    if (snapshot_status != VIBEQC_XTB_STATUS_SUCCESS) {
+    const auto snapshot_status =
+        generativeqc::xtb::detail::copy_restricted_gfn2_orbital_snapshot_cpu(
+            impl_->cpu_cache, snapshot, snapshot_error);
+    if (snapshot_status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       result.status = map_status(snapshot_status);
       result.detail = std::move(snapshot_error);
       return result;
@@ -370,4 +371,4 @@ const char* gfn2_runtime_status_name(Gfn2RuntimeStatus status) noexcept {
   return "internal error";
 }
 
-}  // namespace vibeqc::methods::detail
+}  // namespace generativeqc::methods::detail

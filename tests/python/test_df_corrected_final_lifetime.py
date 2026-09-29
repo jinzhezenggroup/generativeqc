@@ -22,8 +22,8 @@ _SHIM = r"""
 #include <string>
 #include <vector>
 using cudaStream_t=int;
-using vibeqc_status=int;
-constexpr int cudaSuccess=0,VIBEQC_STATUS_SUCCESS=0,failure=3;
+using generativeqc_status=int;
+constexpr int cudaSuccess=0,GENERATIVEQC_STATUS_SUCCESS=0,failure=3;
 constexpr int cudaMemcpyHostToDevice=1,cudaMemcpyDeviceToHost=2;
 int mode=0,syncs=0,copies=0,factor_calls=0;
 std::vector<std::function<void()>> pending;

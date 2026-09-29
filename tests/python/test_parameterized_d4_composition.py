@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions, evaluate_d4_correction
-from vibeqc.ks import public_dft_selectors
-from vibeqc_compiler.method import (
+from generativeqc import Calculator, GridSpec, KsOptions, evaluate_d4_correction
+from generativeqc.ks import public_dft_selectors
+from generativeqc_compiler.method import (
     D4Spec,
     DispersionCorrectionPrimitive,
     UnsupportedMethod,

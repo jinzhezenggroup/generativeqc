@@ -5,14 +5,14 @@
 
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 class RawSource;
 }
-namespace vibeqc::hf {
+namespace generativeqc::hf {
 struct PhysicalReference;
 }
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 
 struct ConventionalForceResult {
   std::vector<double> forces;
@@ -53,4 +53,4 @@ ConventionalForceResult density_fitted_force_cpu(
     std::size_t budget_bytes, double denominator_threshold, double metric_relative_threshold,
     double same_space_threshold, const response::GmresOptions& response_options);
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

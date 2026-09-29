@@ -8,7 +8,7 @@
 #include "scf/reference/mean_field.hpp"
 
 namespace {
-using vibeqc::scf::reference::Matrix;
+using generativeqc::scf::reference::Matrix;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -53,9 +53,9 @@ int main() {
     for (const auto [occupied, weight] :
          std::array<std::pair<std::size_t, double>, 4>{{{0, 2.0}, {1, 2.0}, {3, 2.0}, {2, 1.0}}}) {
       const auto density =
-          vibeqc::scf::reference::density_from_orbitals(coefficients, n, occupied, weight);
-      const auto weighted = vibeqc::scf::reference::energy_weighted_density(coefficients, energies,
-                                                                            n, occupied, weight);
+          generativeqc::scf::reference::density_from_orbitals(coefficients, n, occupied, weight);
+      const auto weighted = generativeqc::scf::reference::energy_weighted_density(
+          coefficients, energies, n, occupied, weight);
       exact_equal(density, density_oracle(coefficients, n, occupied, weight),
                   "generated Array density changed FP64 evaluation");
       exact_equal(weighted, weighted_oracle(coefficients, energies, n, occupied, weight),

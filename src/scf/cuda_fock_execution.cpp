@@ -4,7 +4,7 @@
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 
 bool exact_full_range(const FockTermSpec& term) noexcept {
@@ -68,7 +68,7 @@ PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
           diagnostic.derivative_order};
 }
 
-vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
+generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivatives, std::string& detail) {
@@ -79,7 +79,7 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
   const auto& c = long_range_correction.spec;
   if (!binding || !source) {
     detail = "prepared CUDA Fock owner did not retain Direct first-derivative capability";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const bool valid_primary = primary.backend == FockBackend::Cuda && p.derivative_order == 0 &&
                              p.coulomb.present &&
@@ -95,7 +95,7 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
       long_range_correction.screening_tolerance == primary.screening_tolerance;
   if (!valid_primary || !valid_correction) {
     detail = "prepared CUDA RSH derivative plans have incompatible scientific identity";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return execute_cuda_direct_rsh_energy_derivatives_item(
       source, 0, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
@@ -103,7 +103,7 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
       detail);
 }
 
-vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail) {
@@ -114,7 +114,7 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
   const auto& c = long_range_correction.spec;
   if (!binding || !source) {
     detail = "prepared CUDA Fock owner did not retain Direct first-derivative capability";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const bool valid_primary = primary.backend == FockBackend::Cuda && p.derivative_order == 0 &&
                              p.coulomb.present &&
@@ -130,7 +130,7 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
       long_range_correction.screening_tolerance == primary.screening_tolerance;
   if (!valid_primary || !valid_correction || matrix_elements != binding.nbf * binding.nbf) {
     detail = "prepared CUDA resident RSH derivative has incompatible scientific identity";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return execute_cuda_direct_rsh_energy_derivatives_device(
       source, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
@@ -138,15 +138,15 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
       matrix_elements, derivatives, detail);
 }
 
-vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
-                                         const double* beta, std::size_t matrix_elements,
-                                         double* coulomb, double* alpha_exchange,
-                                         double* beta_exchange, int* numerical_error,
-                                         bool mixed_coulomb, std::string& detail) {
+generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
+                                               const double* beta, std::size_t matrix_elements,
+                                               double* coulomb, double* alpha_exchange,
+                                               double* beta_exchange, int* numerical_error,
+                                               bool mixed_coulomb, std::string& detail) {
   const auto binding = prepared_cuda_fock_binding(plan);
   if (!binding) {
     detail = "prepared CUDA Fock owner has no single-provider resident value execution";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   auto* exact = plan.cuda_direct_source();
@@ -154,7 +154,7 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
   if (exact) {
     if (fitted) {
       detail = "prepared CUDA Fock facade refuses mixed resident providers";
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     return mixed_coulomb ? enqueue_cuda_direct_jk_device_mixed_j(
                                exact, plan.strategy().spec, density, beta, matrix_elements, coulomb,
@@ -166,11 +166,11 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
 
   if (!fitted) {
     detail = "prepared CUDA Fock source became unavailable";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (mixed_coulomb) {
     detail = "prepared density-fitted CUDA Fock does not support mixed Coulomb precision";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const auto& spec = plan.strategy().spec;
   const bool unrestricted = spec.spin == FockSpin::Unrestricted;
@@ -181,7 +181,7 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
   if (matrix_elements != binding.nbf * binding.nbf || numerical_error == nullptr ||
       density == nullptr || (unrestricted ? beta == nullptr : beta != nullptr) || !valid_outputs) {
     detail = "prepared density-fitted CUDA Fock buffers, spin or dimensions are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto reset = cudaMemsetAsync(numerical_error, 0, sizeof(*numerical_error), binding.stream);
   if (reset != cudaSuccess) {
@@ -200,7 +200,7 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
                                                           FockMatrixLayout::RowMajor);
 }
 
-vibeqc_status enqueue_prepared_cuda_exchange_correction(
+generativeqc_status enqueue_prepared_cuda_exchange_correction(
     const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, std::string& detail) {
@@ -214,11 +214,11 @@ vibeqc_status enqueue_prepared_cuda_exchange_correction(
       spec.exchange.op != FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
       correction.screening_tolerance != primary.screening_tolerance) {
     detail = "CUDA range correction is incompatible with the prepared primary Fock owner";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   return enqueue_cuda_direct_jk_device(source, spec, density, beta, matrix_elements, nullptr,
                                        alpha_exchange, beta_exchange, numerical_error, detail);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

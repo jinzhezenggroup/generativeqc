@@ -9,11 +9,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.gfn2_spin_runtime import (
+from generativeqc_compiler.method.gfn2_spin_runtime import (
     build_gfn2_spin_atom_primal,
     build_gfn2_spin_atom_vjp,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "src/xtb/native"
@@ -79,7 +79,7 @@ def native_spin(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
 
 // Exercise the actual ragged runtime, including its restricted zero branch.
 extern "C" int evaluate(const double* population, double* energy, double* potential) {
-  using namespace vibeqc::xtb::detail::gfn2;
+  using namespace generativeqc::xtb::detail::gfn2;
   SpinPolarizationPlan plan;
   plan.batch_size=3; plan.total_atoms=3; plan.total_shells=5;
   plan.shell_population_elements=9;
@@ -95,7 +95,7 @@ extern "C" int evaluate(const double* population, double* energy, double* potent
 // Contraction rounding belongs to the existing FMA contract, including
 // cancellation when an unfused intermediate product would overflow.
 extern "C" int fma_contract() {
-  using namespace vibeqc::xtb::generated;
+  using namespace generativeqc::xtb::generated;
   double value=0;
   const double largest=std::numeric_limits<double>::max();
   if (!accumulate_gfn2_spin_potential(largest, 2.0, -largest, value) || value!=largest) return 1;
@@ -174,7 +174,7 @@ def test_native_spin_consumers_retire_duplicate_fma_equations() -> None:
 
 def test_generated_spin_cuda_matches_matrix_and_fma_oracles(tmp_path: Path) -> None:
     """Qualify nonzero spin science even though the public endpoint is restricted."""
-    if os.environ.get("VIBEQC_TEST_GFN2_CUDA") != "1":
+    if os.environ.get("GENERATIVEQC_TEST_GFN2_CUDA") != "1":
         pytest.skip("explicit GFN2 CUDA qualification is disabled")
     if not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("GFN2 CUDA qualification requires a Slurm allocation")
@@ -201,7 +201,7 @@ def test_generated_spin_cuda_matches_matrix_and_fma_oracles(tmp_path: Path) -> N
 #include <limits>
 
 __global__ void evaluate(double* out) {
-  using namespace vibeqc::xtb::generated;
+  using namespace generativeqc::xtb::generated;
   const double w[9]={-.07,.01,-.02, .01,-.04,.03, -.02,.03,-.06};
   const double m[3]={.7,-.8,.9};
   double energy=0;

@@ -14,13 +14,15 @@ from tools import generate_derivative_range_aot as generator
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from vibeqc_compiler.integral.range_separation import CoulombKernel
+    from generativeqc_compiler.integral.range_separation import CoulombKernel
 
 
 def _arguments(tmp_path: Path, entries: list[dict[str, object]]) -> list[str]:
     manifest = tmp_path / "radials.json"
     manifest.write_text(
-        json.dumps({"schema": "vibeqc.derivative-aot.radials.v1", "entries": entries}),
+        json.dumps(
+            {"schema": "generativeqc.derivative-aot.radials.v1", "entries": entries}
+        ),
         encoding="utf-8",
     )
     return [

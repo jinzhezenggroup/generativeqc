@@ -5,7 +5,7 @@ import typing
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.common.timing import interleaved_selection_order
+from generativeqc_compiler.common.timing import interleaved_selection_order
 
 from tools import benchmark_cuda_ownership as benchmark
 

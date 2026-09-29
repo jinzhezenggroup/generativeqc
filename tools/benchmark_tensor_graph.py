@@ -14,10 +14,10 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -27,14 +27,14 @@ from vibeqc_compiler.tensor import (
     multiply,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
 
 def benchmark(args: typing.Any) -> None:
     nvcc = find_nvcc()
     if nvcc is None:
-        raise RuntimeError("set VIBEQC_NVCC to a CUDA compiler")
+        raise RuntimeError("set GENERATIVEQC_NVCC to a CUDA compiler")
     compiler = CudaCompilerAdapter(nvcc, cuda_target_info(args.arch))
     axis = Index("i", IndexSpace("graph_axis", "batch", args.size))
     spec = TensorSpec((axis,), role="input")
@@ -108,7 +108,7 @@ def benchmark(args: typing.Any) -> None:
             + capture.metrics["graph_instantiate_ms"]
         )
         result = {
-            "schema": "vibeqc.tensor.graph-benchmark.v1",
+            "schema": "generativeqc.tensor.graph-benchmark.v1",
             "scope": "complete host-staged TensorIR endpoint; not an iterative electronic-structure endpoint",
             "size": args.size,
             "depth": args.depth,
@@ -154,7 +154,7 @@ def benchmark(args: typing.Any) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--arch", default=os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120")
+        "--arch", default=os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120")
     )
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)

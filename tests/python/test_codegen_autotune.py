@@ -16,7 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DPDS_SPEC,
     DPPP_SPEC,
     FUSED_SHELL_SPEC_BY_NAME,
@@ -35,7 +35,7 @@ from vibeqc_compiler.integral import (
     build_shell_class_contraction_kernel,
     cuda_target_info,
 )
-from vibeqc_compiler.integral.autotune import (
+from generativeqc_compiler.integral.autotune import (
     StaticAlgebraModel,
     _analysis_roots,
     _compile_trial,
@@ -55,7 +55,7 @@ from vibeqc_compiler.integral.autotune import (
     supported_schedule_trials,
     write_tuned_manifest,
 )
-from vibeqc_compiler.integral.batch_benchmark import KernelResources
+from generativeqc_compiler.integral.batch_benchmark import KernelResources
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
@@ -76,13 +76,13 @@ def test_autotune_compile_timeout_terminates_the_compiler_process_group(
         """#!/bin/sh
 sleep 60 &
 child_pid=$!
-printf '%s\n' "$child_pid" > "$VIBEQC_TEST_CHILD_PID_FILE"
+printf '%s\n' "$child_pid" > "$GENERATIVEQC_TEST_CHILD_PID_FILE"
 wait "$child_pid"
 """,
         encoding="utf-8",
     )
     fake_nvcc.chmod(0o755)
-    monkeypatch.setenv("VIBEQC_TEST_CHILD_PID_FILE", str(child_pid_file))
+    monkeypatch.setenv("GENERATIVEQC_TEST_CHILD_PID_FILE", str(child_pid_file))
 
     row = _compile_trial(
         fake_nvcc,
@@ -121,16 +121,16 @@ def test_autotune_keeps_benchmark_executor_distinct_from_compile_pool(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
     """Exercise both compile pools before using the configured GPU adapter."""
-    from vibeqc_compiler.integral.tuning import driver
-    from vibeqc_compiler.integral.tuning.cli import argument_parser
+    from generativeqc_compiler.integral.tuning import driver
+    from generativeqc_compiler.integral.tuning.cli import argument_parser
 
     class ReachedBenchmark(Exception):
         pass
 
     trial = supported_schedule_trials(PSPS_SPEC, target=TEST_CUDA_TARGET)[0]
     compiled = []
-    monkeypatch.setenv("VIBEQC_BENCHMARK_PARTITION", "test-partition")
-    monkeypatch.setenv("VIBEQC_BENCHMARK_GRES", "gpu:environment:1")
+    monkeypatch.setenv("GENERATIVEQC_BENCHMARK_PARTITION", "test-partition")
+    monkeypatch.setenv("GENERATIVEQC_BENCHMARK_GRES", "gpu:environment:1")
     monkeypatch.setattr(driver, "supported_schedule_trials", lambda *a: (trial,))
     for name in (
         "emit_schedule_oracle_translation_unit",
@@ -223,7 +223,9 @@ def test_fock_autotune_includes_shared_production_baseline(name: str) -> None:
 def test_production_subgroup_fock_baseline_is_not_experimental() -> None:
     """The shipped subgroup mapping is evidence, not a new proposal."""
 
-    from vibeqc_compiler.integral.tuning.driver import _experimental_subgroup_blocked
+    from generativeqc_compiler.integral.tuning.driver import (
+        _experimental_subgroup_blocked,
+    )
 
     expected = dict(_production_fock_schedule_index("sm_120"))["ppps"]
     trials = supported_schedule_trials(
@@ -300,7 +302,7 @@ def test_autotune_manifest_replacement_is_atomic(
         raise OSError("synthetic atomic-replace failure")
 
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.manifest.os.replace", fail_replace
+        "generativeqc_compiler.integral.tuning.manifest.os.replace", fail_replace
     )
     with pytest.raises(OSError, match="synthetic atomic-replace failure"):
         write_tuned_manifest(
@@ -702,7 +704,7 @@ def test_packed_autotune_searches_real_algebra_placement_variants() -> None:
 def test_autotune_candidate_limit_samples_distinct_execution_geometries() -> None:
     """Quick tuning must not spend its budget on one enumeration prefix."""
 
-    from vibeqc_compiler.integral.tuning.driver import (
+    from generativeqc_compiler.integral.tuning.driver import (
         _diverse_bounded_trials,
         _schedule_geometry_key,
     )
@@ -747,11 +749,11 @@ def test_autotune_candidate_artifact_includes_static_model(
         }
 
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver.supported_schedule_trials",
+        "generativeqc_compiler.integral.tuning.driver.supported_schedule_trials",
         lambda *args, **kwargs: (trial,),
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver._compile_trial",
+        "generativeqc_compiler.integral.tuning.driver._compile_trial",
         failed_compile,
     )
     arguments = SimpleNamespace(
@@ -787,7 +789,7 @@ def test_autotune_candidate_artifact_includes_static_model(
         require_all_winners=True,
         manifest=REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json",
     )
@@ -834,37 +836,37 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
     baseline, candidate = trials[:2]
 
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver._production_fock_schedule_index",
+        "generativeqc_compiler.integral.tuning.driver._production_fock_schedule_index",
         lambda architecture: ((PSPS_SPEC.name, baseline.schedule),),
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver.supported_schedule_trials",
+        "generativeqc_compiler.integral.tuning.driver.supported_schedule_trials",
         lambda *args, **kwargs: (baseline, candidate),
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver.emit_schedule_oracle_translation_unit",
+        "generativeqc_compiler.integral.tuning.driver.emit_schedule_oracle_translation_unit",
         lambda *args, **kwargs: "// oracle\n",
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver.emit_schedule_translation_unit",
+        "generativeqc_compiler.integral.tuning.driver.emit_schedule_translation_unit",
         lambda *args, **kwargs: "// candidate\n",
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver.emit_schedule_driver",
+        "generativeqc_compiler.integral.tuning.driver.emit_schedule_driver",
         lambda *args, **kwargs: "// driver\n",
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver.emit_schedule_resource_translation_unit",
+        "generativeqc_compiler.integral.tuning.driver.emit_schedule_resource_translation_unit",
         lambda *args, **kwargs: "// resource\n",
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver._resource_rejections",
+        "generativeqc_compiler.integral.tuning.driver._resource_rejections",
         lambda *args, **kwargs: [],
     )
     # The gate is independent of symbolic envelope construction; keep this
     # focused test from spending time building the large Fock component graph.
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.policy.static_algebra_model",
+        "generativeqc_compiler.integral.tuning.policy.static_algebra_model",
         lambda trial: SimpleNamespace(to_payload=dict),
     )
 
@@ -881,10 +883,11 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
         }
 
     monkeypatch.setattr(
-        "vibeqc_compiler.integral.tuning.driver._compile_trial", successful_compile
+        "generativeqc_compiler.integral.tuning.driver._compile_trial",
+        successful_compile,
     )
     monkeypatch.setattr(
-        "vibeqc_compiler.common.cuda_adapter.CudaCompilerAdapter.link",
+        "generativeqc_compiler.common.cuda_adapter.CudaCompilerAdapter.link",
         lambda *args, **kwargs: subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         ),
@@ -900,7 +903,7 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
         "fused_ms": 1.0,
     }
     monkeypatch.setattr(
-        "vibeqc_compiler.common.cuda_adapter.CudaBenchmarkExecutor.run",
+        "generativeqc_compiler.common.cuda_adapter.CudaBenchmarkExecutor.run",
         lambda *args, **kwargs: subprocess.CompletedProcess(
             args=[],
             returncode=0,
@@ -941,7 +944,7 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
         require_all_winners=False,
         manifest=REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json",
     )
@@ -1015,10 +1018,10 @@ def test_autotune_same_class_variants_link_when_nvcc_is_configured(
 ) -> None:
     """Ensure symbol isolation lets one GPU process compare same-class code."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA link gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA link gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     trials = supported_schedule_trials(DPDS_SPEC, target=TEST_CUDA_TARGET)[:2]
     sources = []
     for trial in trials:

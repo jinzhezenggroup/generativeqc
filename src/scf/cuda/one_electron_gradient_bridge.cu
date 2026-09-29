@@ -11,7 +11,7 @@
 #include "scf/cuda/one_electron_derivatives.cuh"
 #include "scf/cuda_one_electron_gradient.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 struct CudaFailure {
   cudaError_t status;
@@ -138,7 +138,7 @@ struct Arena {
 };
 }  // namespace
 
-vibeqc_status execute_cuda_one_electron_gradient(
+generativeqc_status execute_cuda_one_electron_gradient(
     int device_id, const core::System& system, std::span<const double> ws,
     std::span<const double> wt, std::span<const double> wv, unsigned schedule,
     std::size_t maximum_bytes, std::vector<double>& gradient, std::string& detail,
@@ -151,14 +151,14 @@ vibeqc_status execute_cuda_one_electron_gradient(
       n > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
       n > std::numeric_limits<std::size_t>::max() / n || system.shells.size() > n) {
     detail = "invalid generated one-electron gradient dimensions or budget";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (auto weights : {ws, wt, wv})
     if ((!weights.empty() && weights.size() != n * n) ||
         !std::all_of(weights.begin(), weights.end(),
                      [](double value) { return std::isfinite(value); })) {
       detail = "one-electron weights must be finite full public-AO matrices";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   // Geometric vector growth may retain nearly twice the initialized numeric
   // entries. Bound that before creating any pair lists or metadata vectors.
@@ -175,7 +175,7 @@ vibeqc_status execute_cuda_one_electron_gradient(
            sizeof(std::int32_t) * static_cast<long double>(n) * (n + 1) + 4 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
     detail = "generated one-electron host staging exceeds maximum_bytes";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
     const auto host = pack(system, schedule);
@@ -242,26 +242,26 @@ vibeqc_status execute_cuda_one_electron_gradient(
                                        arena.stats.stream_synchronizations);
     if (!std::all_of(result.begin(), result.end(), [](double x) { return std::isfinite(x); })) {
       detail = "nonfinite generated one-electron gradient";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     gradient.swap(result);
     if (resources) *resources = arena.stats;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& failure) {
     detail =
         std::string("generated one-electron CUDA failure: ") + cudaGetErrorString(failure.status);
-    return failure.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                       : VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return failure.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                       : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (const std::bad_alloc&) {
     detail = "generated one-electron gradient exceeded its allocation budget";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 }
 
-vibeqc_status execute_cuda_stationary_one_electron_pair(
+generativeqc_status execute_cuda_stationary_one_electron_pair(
     int device_id, const core::System& system, std::span<const double> density,
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
@@ -273,14 +273,14 @@ vibeqc_status execute_cuda_stationary_one_electron_pair(
       n > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
       n > std::numeric_limits<std::size_t>::max() / n || system.shells.size() > n) {
     detail = "invalid paired one-electron gradient dimensions or budget";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (auto weights : {density, weighted_density})
     if (weights.size() != n * n || !std::all_of(weights.begin(), weights.end(), [](double value) {
           return std::isfinite(value);
         })) {
       detail = "paired stationary D/W must be finite full public-AO matrices";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
 
   long double primitives = 0;
@@ -296,7 +296,7 @@ vibeqc_status execute_cuda_stationary_one_electron_pair(
       6 * sizeof(double) * atoms;
   if (host_bound > maximum_bytes) {
     detail = "paired one-electron host staging exceeds maximum_bytes";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   try {
@@ -374,23 +374,23 @@ vibeqc_status execute_cuda_stationary_one_electron_pair(
     };
     if (!finite(hcore_result) || !finite(pulay_result)) {
       detail = "nonfinite paired generated one-electron gradient";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     hcore_gradient.swap(hcore_result);
     pulay_gradient.swap(pulay_result);
     if (resources) *resources = arena.stats;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& failure) {
     detail = std::string("paired generated one-electron CUDA failure: ") +
              cudaGetErrorString(failure.status);
-    return failure.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                       : VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return failure.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                       : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (const std::bad_alloc&) {
     detail = "paired generated one-electron gradient exceeded its allocation budget";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -12,7 +12,7 @@ gradient, which the invariance identities alone cannot: a gradient that is
 wrong in a geometry-independent way still produces a symmetric,
 translation-invariant Hessian.
 
-All coordinates are in **Bohr**, which is what VibeQC's native layer expects.
+All coordinates are in **Bohr**, which is what GenerativeQC's native layer expects.
 All checks run on the raw, unsymmetrized array; symmetrizing first would hide
 exactly the errors these tests exist to find.
 
@@ -21,7 +21,7 @@ Cost
 One analytic gradient costs about 11 ms for H2, 3.1 s for water and 95 s for
 the 18-AO d/f system on the CPU reference path, and a three-step Hessian needs
 ``2 * 3N`` gradients per step. H2 and water therefore run in the default suite;
-the d/f case is gated behind ``VIBEQC_HESSIAN_SLOW=1`` because a full run takes
+the d/f case is gated behind ``GENERATIVEQC_HESSIAN_SLOW=1`` because a full run takes
 tens of minutes rather than seconds.
 """
 
@@ -31,16 +31,16 @@ from itertools import pairwise
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     forces_to_gradient,
     hessian_difference,
     hessian_symmetry_error,
     hessian_translation_error,
     numerical_hessian,
 )
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
 
 
 def _bundled_basis(fixture_name: typing.Any, atomic_numbers: typing.Any) -> typing.Any:
@@ -48,7 +48,7 @@ def _bundled_basis(fixture_name: typing.Any, atomic_numbers: typing.Any) -> typi
 
     Handing PySCF a basis *name* would compare two different basis definitions
     and call it a like-for-like reference: PySCF's built-in tables are rounded,
-    and its ``sto-3g`` hydrogen exponent is 3.42525091 where VibeQC bundles
+    and its ``sto-3g`` hydrogen exponent is 3.42525091 where GenerativeQC bundles
     3.425250914. The repository's validation contract requires molecular
     references to use the bundled coefficients, and the fixtures under
     ``tests/reference_data/posthf`` are where those exact records live.
@@ -144,9 +144,9 @@ def _hessian_scale(samples: typing.Any) -> typing.Any:
 
 
 def _case(name: typing.Any) -> typing.Any:
-    if name in SLOW_CASES and os.environ.get("VIBEQC_HESSIAN_SLOW") != "1":
+    if name in SLOW_CASES and os.environ.get("GENERATIVEQC_HESSIAN_SLOW") != "1":
         pytest.skip(
-            "set VIBEQC_HESSIAN_SLOW=1 to run the 18-AO d/f case; "
+            "set GENERATIVEQC_HESSIAN_SLOW=1 to run the 18-AO d/f case; "
             "it costs about 95 s per analytic gradient"
         )
     return {"h2": H2, "water": WATER, "heh_df": HEH_DF}[name]
@@ -299,7 +299,7 @@ def _pyscf_hessian(case: typing.Any) -> typing.Any:
     -- they produce a plausible-looking matrix, or a crash the default suite
     never reaches, rather than an obvious failure:
 
-    ``unit="Bohr"`` is essential, because VibeQC works in Bohr while PySCF's
+    ``unit="Bohr"`` is essential, because GenerativeQC works in Bohr while PySCF's
     default input unit is Angstrom.
 
     An explicit shell tuple needs its per-atom ownership rebuilt, which
@@ -324,14 +324,14 @@ def _pyscf_hessian(case: typing.Any) -> typing.Any:
         charge=case["charge"],
         spin=case["multiplicity"] - 1,
         unit="Bohr",
-        # VibeQC prepares these systems in the Cartesian representation, and
+        # GenerativeQC prepares these systems in the Cartesian representation, and
         # the d/f comparison is specifically about those components.
         cart=case.get("representation", "cartesian") == "cartesian",
         verbose=0,
     )
 
     # A reordered or rounded basis would make the reference a different
-    # scientific model than the one VibeQC was handed, while the comparison
+    # scientific model than the one GenerativeQC was handed, while the comparison
     # still looked plausible.
     _assert_loaded_basis(mol, case["basis"])
 
@@ -530,7 +530,7 @@ def test_numerical_hessian_rejects_non_finite_gradients(
 
 
 def test_pyscf_basis_preserves_per_atom_ownership() -> None:
-    """A VibeQC shell tuple must translate into PySCF's per-atom mapping.
+    """A GenerativeQC shell tuple must translate into PySCF's per-atom mapping.
 
     This runs in the default suite even though the d/f Hessian comparison is
     gated, so the translation the higher-angular-momentum reference depends on
@@ -558,7 +558,7 @@ def test_rounded_basis_table_is_rejected() -> None:
     """A reference built from a rounded table must be refused.
 
     This makes the exact-basis requirement concrete rather than a convention:
-    PySCF's built-in ``sto-3g`` hydrogen exponent is 3.42525091 where VibeQC
+    PySCF's built-in ``sto-3g`` hydrogen exponent is 3.42525091 where GenerativeQC
     bundles 3.425250914, so a reference that silently substituted the built-in
     table would describe a slightly different basis. Pinning the detection here
     means the substitution cannot return unnoticed.

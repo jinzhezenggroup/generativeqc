@@ -15,9 +15,9 @@
 #include "runtime/resource_ledger.hpp"
 
 namespace {
-using vibeqc::core::System;
-using vibeqc::dft::GridSpec;
-using vibeqc::dft::MolecularGrid;
+using generativeqc::core::System;
+using generativeqc::dft::GridSpec;
+using generativeqc::dft::MolecularGrid;
 
 void require(bool value, const char* message) {
   if (!value) throw std::runtime_error(message);
@@ -67,10 +67,10 @@ void compare(const System& system, GridSpec spec, bool derivative) {
 }
 
 void accounting(const System& system, GridSpec spec) {
-  using namespace vibeqc::runtime;
+  using namespace generativeqc::runtime;
   const auto points =
       system.atoms.size() * spec.radial_points * spec.angular_polar * spec.angular_azimuth;
-  const auto expected = vibeqc::dft::cuda_quadrature_bytes(system.atoms.size(), points);
+  const auto expected = generativeqc::dft::cuda_quadrature_bytes(system.atoms.size(), points);
   auto ledger = std::make_shared<DeviceResourceLedger>(DeviceResourceLedger{expected, 0});
   active_device_resource_ledger = ledger;
   (void)MolecularGrid::from_cuda(system, spec, 0);
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
                 << ",\"cuda_grid_prepare_seconds\":"
                 << std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()
                 << ",\"device_bytes\":"
-                << vibeqc::dft::cuda_quadrature_bytes(system.atoms.size(), grid.point_count())
+                << generativeqc::dft::cuda_quadrature_bytes(system.atoms.size(), grid.point_count())
                 << "}\n";
       return 0;
     }
@@ -158,7 +158,7 @@ int main(int argc, char** argv) {
     require(rejected, "missing v2 radius accepted");
     rejected = false;
     try {
-      (void)vibeqc::dft::cuda_quadrature_bytes(96, std::numeric_limits<std::size_t>::max());
+      (void)generativeqc::dft::cuda_quadrature_bytes(96, std::numeric_limits<std::size_t>::max());
     } catch (const std::overflow_error&) {
       rejected = true;
     }

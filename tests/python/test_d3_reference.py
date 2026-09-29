@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     METHOD_CATALOG,
     D3Spec,
     DispersionCorrectionPrimitive,
@@ -20,7 +20,7 @@ from vibeqc_compiler.method import (
     resolve_method,
 )
 
-from tools.vibeqc_d3.reference import (
+from tools.generativeqc_d3.reference import (
     NativeD3,
     build_reference,
     gfn1_compatibility,
@@ -34,11 +34,11 @@ _GOLDENS = json.loads(
 
 @pytest.fixture(scope="module")
 def native(tmp_path_factory: typing.Any) -> typing.Any:
-    path = os.environ.get("VIBEQC_D3_LIBRARY")
+    path = os.environ.get("GENERATIVEQC_D3_LIBRARY")
     if path is None:
         path = build_reference(tmp_path_factory.mktemp("d3-native"))
     engine = NativeD3(path)
-    assert engine.backend == os.environ.get("VIBEQC_D3_EXPECT_BACKEND", "cpu")
+    assert engine.backend == os.environ.get("GENERATIVEQC_D3_EXPECT_BACKEND", "cpu")
     return engine
 
 
@@ -253,7 +253,7 @@ def test_variant_capabilities_are_explicit_and_fail_closed() -> None:
 def test_native_ks_cannot_silently_omit_correction(
     monkeypatch: typing.Any, method: typing.Any, spin: typing.Any
 ) -> None:
-    from vibeqc import ks
+    from generativeqc import ks
 
     graph = resolve_method(
         replace(METHOD_CATALOG["PBE"], dispersion=gfn1_compatibility()), spin=spin

@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_copy_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
@@ -66,4 +66,4 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
                                            const double* subtract, const std::uint8_t* active,
                                            double* minuend);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -29,9 +29,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 import numpy as np
-from vibeqc import Calculator, import_bse
-from vibeqc.profiles import probe_device
-from vibeqc_compiler.common.evidence import (
+from generativeqc import Calculator, import_bse
+from generativeqc.profiles import probe_device
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -64,7 +64,7 @@ def basis_for(spec: typing.Any) -> typing.Any:
     """Load the exact local source and explicitly select the oracle convention."""
     return import_bse(
         DATA / spec["source"],
-        source="BSE pinned checkout; VibeQC original synthetic Fe diagnostic data",
+        source="BSE pinned checkout; GenerativeQC original synthetic Fe diagnostic data",
         source_version="4adaf1372c7101620ca1a9f3130be9ae97fb8f30",
         license="BSD-3-Clause AND GPL-3.0-or-later"
         if spec["source"] == "synthetic-fe-h.json"
@@ -300,8 +300,8 @@ def main() -> None:
     devices = ("cpu", "cuda") if args.cuda else ("cpu",)
     calculator = Calculator()
     library = calculator._library
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    source_identity = library.vibeqc_get_source_identity().decode()
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    source_identity = library.generativeqc_get_source_identity().decode()
     device = (
         probe_device(library)
         if args.cuda

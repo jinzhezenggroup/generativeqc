@@ -12,7 +12,7 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DDPS_SPEC,
     DPDS_SPEC,
     FUSED_SHELL_SPEC_BY_NAME,
@@ -20,7 +20,7 @@ from vibeqc_compiler.integral import (
     KernelConsumer,
     cuda_target_info,
 )
-from vibeqc_compiler.integral.batch_benchmark import (
+from generativeqc_compiler.integral.batch_benchmark import (
     DEFAULT_CANDIDATES,
     benchmark_command,
     candidate_specs,
@@ -30,14 +30,14 @@ from vibeqc_compiler.integral.batch_benchmark import (
     parse_ptxas_resources,
     rank_profiled_candidates,
 )
-from vibeqc_compiler.integral.batch_benchmark import (
+from generativeqc_compiler.integral.batch_benchmark import (
     _compile_candidate as _compile_batch_candidate,
 )
-from vibeqc_compiler.integral.benchmark import (
+from generativeqc_compiler.integral.benchmark import (
     benchmark_command as standalone_benchmark_command,
 )
-from vibeqc_compiler.integral.benchmark import emit_shell_class_benchmark_cuda
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.benchmark import emit_shell_class_benchmark_cuda
+from generativeqc_compiler.integral.production import (
     resolve_production_profile,
     write_production_bundles,
 )
@@ -56,7 +56,7 @@ def test_unmeasured_cuda_targets_require_explicit_portable_profile(
     manifest = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -131,12 +131,12 @@ def test_multi_profile_bundle_is_order_independent_and_collision_free(
     for first_path, second_path in zip(first, second, strict=True):
         assert first_path.read_bytes() == second_path.read_bytes()
 
-    registry = (first_directory / "vibeqc_generated_shell_registry.cu").read_text(
+    registry = (first_directory / "generativeqc_generated_shell_registry.cu").read_text(
         encoding="utf-8"
     )
-    assert "vibeqc_launch_sm80_generated_dsss" in registry
-    assert "vibeqc_launch_sm120_generated_dsss" in registry
-    header = (first_directory / "vibeqc_generated_shell_registry.hpp").read_text(
+    assert "generativeqc_launch_sm80_generated_dsss" in registry
+    assert "generativeqc_launch_sm120_generated_dsss" in registry
+    header = (first_directory / "generativeqc_generated_shell_registry.hpp").read_text(
         encoding="utf-8"
     )
     assert header.index('"sm_80"') < header.index('"sm_120"')
@@ -146,8 +146,8 @@ def test_multi_profile_bundle_is_order_independent_and_collision_free(
     sm120 = next(path for path in first if "sm120_shard" in path.name).read_text(
         encoding="utf-8"
     )
-    assert "namespace vibeqc::scf::generated::profile_sm80" in sm80
-    assert "namespace vibeqc::scf::generated::profile_sm120" in sm120
+    assert "namespace generativeqc::scf::generated::profile_sm80" in sm80
+    assert "namespace generativeqc::scf::generated::profile_sm120" in sm120
 
 
 def test_multi_profile_objects_compile_and_link_when_nvcc_is_configured(
@@ -155,9 +155,9 @@ def test_multi_profile_objects_compile_and_link_when_nvcc_is_configured(
 ) -> None:
     """Verify two architecture bundles do not collide at host or device link."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the multi-profile compile/link test")
+        pytest.skip("set GENERATIVEQC_NVCC to run the multi-profile compile/link test")
     manifest = tmp_path / "manifest.json"
     _small_multi_profile_manifest(manifest)
     output = tmp_path / "generated"
@@ -166,7 +166,7 @@ def test_multi_profile_objects_compile_and_link_when_nvcc_is_configured(
     for architecture in ("sm_80", "sm_120"):
         source = next(
             (output / architecture).glob(
-                f"vibeqc_generated_shell_{architecture.replace('_', '')}_shard_0.cu"
+                f"generativeqc_generated_shell_{architecture.replace('_', '')}_shard_0.cu"
             )
         )
         obj = tmp_path / f"{architecture}.o"
@@ -199,7 +199,7 @@ def test_multi_profile_objects_compile_and_link_when_nvcc_is_configured(
             f"-I{REPOSITORY_ROOT / 'src'}",
             "-Xcompiler=-fPIC",
             "-c",
-            str(output / "vibeqc_generated_shell_registry.cu"),
+            str(output / "generativeqc_generated_shell_registry.cu"),
             "-o",
             str(registry_object),
         ],
@@ -232,15 +232,15 @@ def test_virtual_cuda_target_keeps_host_profile_portable() -> None:
 
     cmake = (REPOSITORY_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     profile_block = cmake.split("# A single real architecture may use", 1)[1].split(
-        "vibeqc_register_cuda_generated_sources", 1
+        "generativeqc_register_cuda_generated_sources", 1
     )[0]
     virtual_guard = profile_block.index(
-        'if(NOT _vibeqc_cuda_profile_architecture MATCHES "-virtual$")'
+        'if(NOT _generativeqc_cuda_profile_architecture MATCHES "-virtual$")'
     )
     real_normalization = profile_block.index(
-        'string(REGEX REPLACE "-real$" "" _vibeqc_cuda_profile_architecture'
+        'string(REGEX REPLACE "-real$" "" _generativeqc_cuda_profile_architecture'
     )
-    profile_define = profile_block.index("VIBEQC_CUDA_PROFILE_ARCHITECTURE=")
+    profile_define = profile_block.index("GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE=")
     assert virtual_guard < real_normalization < profile_define
     assert 'REGEX REPLACE "-.*$"' not in profile_block
 
@@ -269,10 +269,10 @@ def test_batch_screening_ranks_real_profile_and_emits_one_process_driver() -> No
         samples=1,
         target=TEST_CUDA_TARGET,
     )
-    assert f"vibeqc_run_shell_class_{candidate.name}" in source
+    assert f"generativeqc_run_shell_class_{candidate.name}" in source
     driver = emit_batch_driver((candidate,))
     assert "cudaFree(nullptr)" in driver
-    assert f"vibeqc_run_shell_class_{candidate.name}()" in driver
+    assert f"generativeqc_run_shell_class_{candidate.name}()" in driver
 
 
 def test_batch_screening_discovers_consumer_specific_manifest_gap() -> None:

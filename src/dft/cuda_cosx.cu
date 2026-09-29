@@ -13,8 +13,8 @@
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid_task_view.cuh"
 #include "generated_one_electron_values.cuh"
+#include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
-#include "vibeqc/vibeqc.h"
 
 extern "C" {
 int grid_cuda_create_v2(int device, int major, int minor, const size_t* dimensions,
@@ -24,11 +24,13 @@ void grid_cuda_destroy_v1(void* pointer);
 int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint, int features,
                               const size_t* ao_ids, size_t active, double* feature_output,
                               double* jet_output, char* error, size_t size);
-int grid_cuda_view_v1(void* pointer, vibeqc::dft::GridTaskView* output, char* error, size_t size);
-int grid_cuda_basis_v1(void* pointer, vibeqc::dft::GridBasisView* output, char* error, size_t size);
+int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, char* error,
+                      size_t size);
+int grid_cuda_basis_v1(void* pointer, generativeqc::dft::GridBasisView* output, char* error,
+                       size_t size);
 }
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 void check(cudaError_t status) {
@@ -37,7 +39,7 @@ void check(cudaError_t status) {
 }
 
 void checked_status(int status, const char* detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status != 0) throw std::runtime_error(detail);
 }
 
@@ -148,7 +150,7 @@ __device__ double finite_or_flag(double value, int* error) {
 __global__ void esp_integrals_kernel(const double* basis, std::size_t natom, std::size_t nprimitive,
                                      std::size_t nao, const double* points, std::size_t npoint,
                                      double* esp, int* error) {
-  namespace one = vibeqc::scf::generated_one_electron;
+  namespace one = generativeqc::scf::generated_one_electron;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t total = npoint * nao * nao;
@@ -314,7 +316,7 @@ struct CudaCosxStagingPlan::Impl {
     const int status = grid_cuda_create_v2(device, properties.major, properties.minor, dimensions,
                                            basis.packed.data(), tile_points, 0, expected_grid_bytes,
                                            basis.nao, &grid, message, sizeof(message));
-    if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
     if (status != 0 || !grid)
       throw std::runtime_error(message[0] ? message : "CUDA COSX grid preparation failed");
     try {
@@ -465,4 +467,4 @@ const CudaCosxStagingDiagnostic& CudaCosxStagingPlan::diagnostic() const noexcep
   return impl_->diagnostic;
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

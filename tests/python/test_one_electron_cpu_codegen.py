@@ -1,6 +1,6 @@
 """Regression gates for the #351 production CPU S/T/V lowering."""
 
-from vibeqc_compiler.integral.one_electron_cpu import (
+from generativeqc_compiler.integral.one_electron_cpu import (
     emit_one_electron_cpu,
     emit_one_electron_st_cpu,
     one_electron_cpu_inventory,
@@ -10,7 +10,7 @@ from vibeqc_compiler.integral.one_electron_cpu import (
 
 def test_cpu_stv_inventory_is_shared_ir_and_bounded_to_spdf() -> None:
     inventory = one_electron_cpu_inventory()
-    assert inventory["schema"] == "vibeqc.one_electron_cpu"
+    assert inventory["schema"] == "generativeqc.one_electron_cpu"
     assert inventory["version"] == 2
     assert inventory["precision"] == "fp64"
     assert inventory["maximum_angular"] == 3
@@ -25,7 +25,7 @@ def test_cpu_stv_emitter_is_deterministic_host_code() -> None:
     second = emit_one_electron_cpu()
     assert first == second
     assert emit_one_electron_st_cpu() == first
-    assert "namespace vibeqc::integrals::generated_one_electron_cpu" in first
+    assert "namespace generativeqc::integrals::generated_one_electron_cpu" in first
     assert "overlap_kinetic_gradient" in first
     assert "attraction(" in first
     assert "attraction_gradient" in first

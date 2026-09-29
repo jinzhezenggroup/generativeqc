@@ -4,7 +4,7 @@
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/direct_tile_validation.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __device__ bool direct_shell_ao_range_valid(const DeviceBatch& batch, std::int32_t shell,
                                             std::size_t system_ao_begin, std::size_t direct_nbf,
@@ -187,4 +187,4 @@ void launch_validate_direct_tile_descriptors_kernel(dim3 grid, dim3 block, std::
       batch, active_tile_offsets, active_tile_counts, active_tiles, total_tile_capacity, record);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

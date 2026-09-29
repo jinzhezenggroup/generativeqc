@@ -33,7 +33,7 @@ def test_host_xc_staging_keeps_copy_sources_alive(tmp_path: Path) -> None:
 #include <vector>
 #include <iostream>
 #include "dft/semilocal_family.hpp"
-using vibeqc::dft::SemilocalFamily;
+using generativeqc::dft::SemilocalFamily;
 int selected_route = -1;
 constexpr bool is_semilocal_family(std::uint32_t functional, SemilocalFamily family) noexcept {
  return functional == static_cast<std::uint32_t>(family);

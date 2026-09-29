@@ -9,7 +9,7 @@
 #include "posthf/raw_source.hpp"
 #include "tensor/metrics.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 using MOSlots = std::array<std::vector<std::size_t>, 4>;
 inline constexpr std::size_t padded_mo = static_cast<std::size_t>(-1);
 
@@ -38,7 +38,7 @@ class MOBlockProvider {
  public:
   virtual ~MOBlockProvider() = default;
   virtual std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
-                                  vibeqc_tensor::Metrics* metrics = nullptr) const = 0;
+                                  generativeqc_tensor::Metrics* metrics = nullptr) const = 0;
   virtual std::size_t provider_bytes() const noexcept = 0;
   virtual const hf::PhysicalReference& reference() const noexcept = 0;
 };
@@ -56,14 +56,14 @@ class NativeBlockProvider final : public MOBlockProvider {
   std::size_t batch_capacity(const std::array<std::size_t, 4>& shape, bool cuda = false) const;
   std::vector<std::vector<double>> get_many(const std::vector<MOSlots>& requests, bool cuda = false,
                                             int device = 0,
-                                            vibeqc_tensor::Metrics* metrics = nullptr,
+                                            generativeqc_tensor::Metrics* metrics = nullptr,
                                             ProviderWork* work = nullptr) const;
   std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
-                          vibeqc_tensor::Metrics* metrics = nullptr) const override {
+                          generativeqc_tensor::Metrics* metrics = nullptr) const override {
     return get(slots, cuda, device, metrics, nullptr);
   }
   std::vector<double> get(const MOSlots& slots, bool cuda, int device,
-                          vibeqc_tensor::Metrics* metrics, ProviderWork* work) const;
+                          generativeqc_tensor::Metrics* metrics, ProviderWork* work) const;
   std::size_t source_bytes() const noexcept { return source_bytes_; }
   std::size_t reference_bytes() const noexcept { return reference_bytes_; }
   std::size_t provider_bytes() const noexcept override { return source_bytes_ + reference_bytes_; }
@@ -92,7 +92,7 @@ class DensityFittedBlockProvider final : public MOBlockProvider {
   DensityFittedBlockProvider(const RawSource& source, const hf::PhysicalReference& reference,
                              std::size_t budget, double relative_threshold = 1.0e-10);
   std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
-                          vibeqc_tensor::Metrics* metrics = nullptr) const override;
+                          generativeqc_tensor::Metrics* metrics = nullptr) const override;
   std::size_t provider_bytes() const noexcept override { return provider_bytes_; }
   const hf::PhysicalReference& reference() const noexcept override { return ref_; }
   const RawSource& source() const noexcept { return source_; }
@@ -110,4 +110,4 @@ class DensityFittedBlockProvider final : public MOBlockProvider {
   double relative_threshold_{};
   std::vector<double> metric_, inverse_square_root_, transformed_, whitened_;
 };
-}  // namespace vibeqc::posthf
+}  // namespace generativeqc::posthf

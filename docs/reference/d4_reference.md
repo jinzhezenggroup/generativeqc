@@ -43,7 +43,7 @@ the electronic r2SCAN functional, the r2SCAN-3c basis, or gCP.
 ## Validation
 
 Independent fixtures are generated with the DFT-D4 4.2.0 executable, not with
-VibeQC mathematics. They cover r2SCAN-3c water, an asymmetric PBE molecule and
+GenerativeQC mathematics. They cover r2SCAN-3c water, an asymmetric PBE molecule and
 a charged Zn-ammonia PBE case. Tests compare EEQ charges, complete energies and
 Cartesian gradients. Separate multi-step finite differences validate `dq/dR`
 and the complete chain-rule gradient; charge and response conservation are also
@@ -55,7 +55,7 @@ continues to qualify the shared pair/ATM mathematics and actual device path.
 ## Production ownership
 
 Production never calls `evaluate_complete_d4_eeq*`. The compiler module
-`vibeqc_compiler.method.d4_derivative` generates the only production
+`generativeqc_compiler.method.d4_derivative` generates the only production
 composition of the EEQ response with fixed-charge D4 partial derivatives.
 EEQ2019 and fixed-charge D4 remain separately qualified custom scientific
 primitives; the generated VJP computes
@@ -138,13 +138,13 @@ python tools/parameters/generate_d4_eeq.py \
 
 Both generators bind to the named products in `upstream/manifest.json`, verify
 the product's source-identity digest, and parse only SHA-256-verified files in
-`.cache/vibeqc-sources/`. The explicit `sync` commands are maintainer network
+`.cache/generativeqc-sources/`. The explicit `sync` commands are maintainer network
 operations; normal configure, build, tests, and runtime remain offline.
 
-Qualification CTest targets are `vibeqc_d4_reference_tests`,
-`vibeqc_d4_eeq_tests` and their CUDA variants, plus
-`vibeqc_d4_schedule_cuda_tests`. Production additionally runs
-`vibeqc_d4_production_tests`, `vibeqc_d4_ragged_tests` and their CUDA
+Qualification CTest targets are `generativeqc_d4_reference_tests`,
+`generativeqc_d4_eeq_tests` and their CUDA variants, plus
+`generativeqc_d4_schedule_cuda_tests`. Production additionally runs
+`generativeqc_d4_production_tests`, `generativeqc_d4_ragged_tests` and their CUDA
 invocations. `benchmarks/d4_production_gate.py` records cold, warm, changed
 geometry and ragged endpoint timings together with resource diagnostics.
 Regenerate the independent EEQ

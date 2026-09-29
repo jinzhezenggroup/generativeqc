@@ -7,14 +7,14 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
-from vibeqc_compiler.integral.df_shell_derivatives import (
+from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+from generativeqc_compiler.integral.df_shell_derivatives import (
     SHELL_CLASSES,
     emit_df_shell_derivatives_cuda,
     shell_work_model,
 )
 
-from tools.vibeqc_validation.df_derivatives import make_df_derivative_fixture
+from tools.generativeqc_validation.df_derivatives import make_df_derivative_fixture
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +51,7 @@ def shell_library(tmp_path_factory: typing.Any) -> typing.Any:
 static unsigned long long test_polynomial_calls=0,test_convolution_iterations=0,
                           test_specialized_calls=0;
 #include "generated_df_shell_derivatives.cuh"
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 extern "C" void boys_probe(unsigned order,double argument,double* plain,double* observed,
                            unsigned* work) {
   generated_df_derivatives::BoysWork counts;

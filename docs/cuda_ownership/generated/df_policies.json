@@ -5,5 +5,5 @@
     "generated/generated_df_derivative_policy.cuh",
     "generated/generated_df_derivative_schedule.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_policy.py"
+  "owner": "python/generativeqc_compiler/integral/df_policy.py"
 }

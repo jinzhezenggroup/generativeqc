@@ -24,8 +24,8 @@
 #include "scf/cuda_density_fitting.hpp"
 
 namespace {
-using vibeqc::core::System;
-using namespace vibeqc::scf;
+using generativeqc::core::System;
+using namespace generativeqc::scf;
 void require(bool ok, const std::string& message) {
   if (!ok) throw std::runtime_error(message);
 }
@@ -45,7 +45,7 @@ struct Buffer {
 void shells(std::istream& input, System& system, std::size_t count) {
   require(count && count <= 2048, "invalid shell count");
   for (std::size_t i = 0; i < count; ++i) {
-    vibeqc::core::Shell shell;
+    generativeqc::core::Shell shell;
     std::size_t primitives;
     input >> shell.atom_index >> shell.angular_momentum >> primitives;
     require(input && primitives && primitives <= 64, "invalid shell record");
@@ -58,8 +58,9 @@ void shells(std::istream& input, System& system, std::size_t count) {
   }
   std::string detail;
   require(bool(input), "truncated shell input");
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          detail);
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail);
 }
 std::vector<double> read(const std::string& name, std::size_t count) {
   std::ifstream file(name, std::ios::binary | std::ios::ate);
@@ -95,13 +96,15 @@ int main(int argc, char** argv) try {
     input >> atoms >> oshells >> ashells;
     require(atoms && atoms <= 256, "invalid atoms");
     for (std::size_t i = 0; i < atoms; ++i) {
-      vibeqc::core::Atom atom;
+      generativeqc::core::Atom atom;
       input >> atom.atomic_number >> atom.position[0] >> atom.position[1] >> atom.position[2];
       orbital[item].atoms.push_back(atom);
     }
     auxiliary[item].atoms = orbital[item].atoms;
-    orbital[item].basis_representation = orepr ? VIBEQC_BASIS_SPHERICAL : VIBEQC_BASIS_CARTESIAN;
-    auxiliary[item].basis_representation = arepr ? VIBEQC_BASIS_SPHERICAL : VIBEQC_BASIS_CARTESIAN;
+    orbital[item].basis_representation =
+        orepr ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
+    auxiliary[item].basis_representation =
+        arepr ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
     shells(input, orbital[item], oshells);
     shells(input, auxiliary[item], ashells);
   }
@@ -110,7 +113,7 @@ int main(int argc, char** argv) try {
   std::string detail;
   CudaDensityFittingIntegralSource* raw_source{};
   require(create_cuda_density_fitting_integral_source(0, orbital, auxiliary, &raw_source, metrics,
-                                                      n, a, detail) == VIBEQC_STATUS_SUCCESS,
+                                                      n, a, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   const auto source = std::unique_ptr<CudaDensityFittingIntegralSource,
                                       decltype(&destroy_cuda_density_fitting_integral_source)>(
@@ -150,7 +153,7 @@ int main(int argc, char** argv) try {
     for (std::size_t mu = 0; mu < n; ++mu)
       require(generate_cuda_density_fitting_raw_tile(source.get(), item, mu * n, mu + 1, 0, a, -1,
                                                      stream, raw.p + mu * (mu + 1) / 2 * a,
-                                                     detail) == VIBEQC_STATUS_SUCCESS,
+                                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail);
     check(cudaStreamSynchronize(stream));
     const auto generated = std::chrono::steady_clock::now();

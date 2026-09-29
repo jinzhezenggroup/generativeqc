@@ -1,9 +1,9 @@
 """Automatic Libxc representation uses default generic lowering without evidence admission."""
 
 import pytest
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.semilocal_codegen import build_roots
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.semilocal_codegen import build_roots
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 
 @pytest.mark.parametrize("spin", ("polarized", "unpolarized"))

@@ -9,14 +9,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.cuda import CudaEmitter
-from vibeqc_compiler.integral.expr import Expr, Graph
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc.libxc_maple import MapleModule, import_maple_file
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.integral.expr import Expr, Graph
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc.libxc_maple import MapleModule, import_maple_file
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBXC_ROOT = ROOT / "upstream/libxc/7.0.0"

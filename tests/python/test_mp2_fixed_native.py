@@ -7,8 +7,8 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def check_native(
@@ -29,7 +29,7 @@ def check_native(
     packed = np.ascontiguousarray(
         np.concatenate([arrays[k].ravel() for k in ("S", "h", "F", "C", "D", "eps")])
     )
-    fn = lib.vibeqc_posthf_mp2_energy_v1
+    fn = lib.generativeqc_posthf_mp2_energy_v1
     fn.argtypes = [
         ct.c_void_p,
         ct.c_int,
@@ -63,7 +63,7 @@ def check_native(
         )
         assert status == 0, error.value.decode()
         np.testing.assert_allclose(output[:2], [os_ref, ss_ref], atol=1e-11, rtol=1e-10)
-    block = lib.vibeqc_posthf_mo_block_v1
+    block = lib.generativeqc_posthf_mo_block_v1
     block.argtypes = [
         ct.c_void_p,
         ct.c_int,
@@ -120,7 +120,7 @@ def check_native(
 def test_same_orbitals_native_components_and_permutations(
     name: typing.Any, backend: typing.Any
 ) -> None:
-    if backend and os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1":
+    if backend and os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1":
         pytest.skip("requires allocated CUDA device")
     meta, a = load_fixture(name)
     arrays = {k: a["conventional_" + k] for k in ("S", "h", "F", "C", "eps")}

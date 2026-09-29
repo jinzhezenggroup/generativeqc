@@ -6,7 +6,7 @@ import time
 import typing
 
 from _support import environment_metadata, raw_output_path, write_result
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 
 def make_system(index: int) -> typing.Any:

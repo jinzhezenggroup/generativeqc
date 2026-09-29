@@ -1,7 +1,7 @@
 """Generate redistributable local BSE data and independent PySCF integral/HF oracles.
 
 The BSE checkout must match tools/reference_sources.toml. This script imports no
-VibeQC basis parser, normalizer, capability table or scientific evaluator.
+GenerativeQC basis parser, normalizer, capability table or scientific evaluator.
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ def main() -> None:
     }
     synthetic = {
         "molssi_bse_schema": {"schema_type": "complete", "schema_version": "0.1"},
-        "name": "vibeqc-synthetic-fe-h",
+        "name": "generativeqc-synthetic-fe-h",
         "version": "1",
         "function_types": ["gto", "gto_spherical"],
         "elements": {
@@ -172,7 +172,7 @@ def main() -> None:
                 if not hf.converged:
                     raise RuntimeError(f"reference did not converge: {key}")
                 overlap = molecule.intor("int1e_ovlp")
-                # VibeQC normalizes each Cartesian component, while libcint's
+                # GenerativeQC normalizes each Cartesian component, while libcint's
                 # Cartesian d/f convention uses common radial shell factors.
                 # Apply an independent overlap-derived diagonal basis transform.
                 scale = 1 / np.sqrt(np.diag(overlap))
@@ -209,7 +209,7 @@ def main() -> None:
         "pyscf": pyscf.__version__,
         "numpy": np.__version__,
         "license": "BSD-3-Clause",
-        "synthetic_fe_data": "VibeQC original diagnostic basis; GPL-3.0-or-later. Hydrogen is unchanged BSE STO-3G.",
+        "synthetic_fe_data": "GenerativeQC original diagnostic basis; GPL-3.0-or-later. Hydrogen is unchanged BSE STO-3G.",
         "files": {
             p.name: digest(p)
             for p in args.output.iterdir()

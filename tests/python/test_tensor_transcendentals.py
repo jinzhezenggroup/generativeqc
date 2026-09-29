@@ -6,7 +6,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Node,
@@ -272,7 +272,7 @@ def test_power_exact_exponent_identity_and_rejection() -> None:
 def test_nonlinear_symmetry_metadata_and_packed_ad(
     op: typing.Any, exponent: typing.Any
 ) -> None:
-    from vibeqc_compiler.tensor import PackedLayout
+    from generativeqc_compiler.tensor import PackedLayout
 
     axis = IndexSpace("a", "batch", 2)
     indices = (Index("i", axis), Index("j", axis))
@@ -300,10 +300,10 @@ def test_nonlinear_symmetry_metadata_and_packed_ad(
 def test_cuda_emission_and_dtype_gate_without_a_device(
     op: typing.Any, exponent: typing.Any
 ) -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-    from vibeqc_compiler.tensor.cuda_resident_emit import resident_source
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
 
     x = _input((3,))
     graph = Program({"out": add(_operation(op, x, exponent), x)})

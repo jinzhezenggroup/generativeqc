@@ -43,7 +43,7 @@ def test_cutoff_method_changes_semantic_identity_without_mutating_catalog() -> N
 
 
 def test_error_summary_uses_force_to_gradient_normalized_outputs() -> None:
-    vibeqc = {
+    generativeqc = {
         "energies_hartree": [-1.0],
         "gradients_hartree_per_bohr": [[[1.0, 2.0, 3.0]]],
     }
@@ -51,7 +51,7 @@ def test_error_summary_uses_force_to_gradient_normalized_outputs() -> None:
         "energies_hartree": [-0.75],
         "gradients_hartree_per_bohr": [[[1.5, 1.0, 3.0]]],
     }
-    summary = _error_summary(vibeqc, alchemi)
+    summary = _error_summary(generativeqc, alchemi)
     assert summary["max_abs_energy_hartree"] == pytest.approx(0.25)
     assert summary["max_abs_gradient_hartree_per_bohr"] == pytest.approx(1.0)
 

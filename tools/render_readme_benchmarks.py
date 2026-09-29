@@ -19,7 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-COLORS = {"VibeQC": "#136f63", "GPU4PySCF": "#c05c26"}
+COLORS = {"GenerativeQC": "#136f63", "GPU4PySCF": "#c05c26"}
 
 
 def save_svg(fig: plt.Figure, path: Path) -> None:
@@ -88,7 +88,10 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
             gates=raw["settings"]["gates"],
             engines={},
         )
-        for engine, label in (("vibeqc", "VibeQC"), ("gpu4pyscf", "GPU4PySCF")):
+        for engine, label in (
+            ("generativeqc", "GenerativeQC"),
+            ("gpu4pyscf", "GPU4PySCF"),
+        ):
             record["engines"][label] = {
                 "cold_ms": raw[engine]["cold_seconds"] * 1000,
                 "cold_convergence": convergence(raw[engine]["cold_convergence"]),
@@ -100,7 +103,7 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
             role: {key: value for key, value in basis.items() if key != "electrons"}
             if isinstance(basis, dict)
             else basis
-            for role, basis in raw["vibeqc"]["cold_convergence"][0]
+            for role, basis in raw["generativeqc"]["cold_convergence"][0]
             .get("basis_metadata", {})
             .items()
         }
@@ -155,7 +158,7 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
                     nvir=reference_shape["nvir"],
                     aos=reference_shape["nocc"] + reference_shape["nvir"],
                 )
-            for engine, label in (("native", "VibeQC"),):
+            for engine, label in (("native", "GenerativeQC"),):
                 converted = []
                 for row in raw.get(engine + "_samples", []):
                     diag = row.get("correlation", row)
@@ -194,7 +197,10 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
                 family="dft",
                 atoms=raw["atoms"] if "atoms" in raw else raw["arguments"]["atoms"],
             )
-            for engine, label in (("native", "VibeQC"), ("reference", "GPU4PySCF")):
+            for engine, label in (
+                ("native", "GenerativeQC"),
+                ("reference", "GPU4PySCF"),
+            ):
                 rows = raw.get(engine + "_samples", [])
                 if rows:
                     record["engines"][label] = {
@@ -301,7 +307,7 @@ def figures(records: list[dict], destination: Path) -> None:
             "font.family": "DejaVu Sans",
             "font.size": 10,
             "svg.fonttype": "none",
-            "svg.hashsalt": "vibeqc-readme-20260922",
+            "svg.hashsalt": "generativeqc-readme-20260922",
         }
     )
     for family, filename, endpoint in (("hf", "hf.svg", "warm energy + forces"),):
@@ -311,7 +317,7 @@ def figures(records: list[dict], destination: Path) -> None:
         fig, axes = plt.subplots(1, len(modes), figsize=(5.8 * len(modes), 3.6))
         for ax, (mode, title) in zip(np.atleast_1d(axes), modes, strict=True):
             points = [p for p in records if p["family"] == family and p["mode"] == mode]
-            for engine in ("VibeQC", "GPU4PySCF"):
+            for engine in ("GenerativeQC", "GPU4PySCF"):
                 plot_series(ax, points, engine, engine)
             style_axes(ax, title, [24, 48, 96, 192, 384, 768])
             stopped = [p for p in points if p["status"] == "stopped"]
@@ -345,22 +351,26 @@ def figures(records: list[dict], destination: Path) -> None:
         ]
         direct = [p for p in points if p["mode"] == "direct"]
         fitted = [p for p in points if p["mode"] == "df"]
-        plot_series(ax, direct, "VibeQC", "VibeQC direct")
+        plot_series(ax, direct, "GenerativeQC", "GenerativeQC direct")
         plot_series(ax, direct, "GPU4PySCF", "GPU4PySCF direct")
         plot_series(
             ax, fitted, "GPU4PySCF", "GPU4PySCF DF", style="--", color="#4669a1"
         )
         style_axes(ax, title, [24, 48, 96, 192, 384, 768])
         coverage = {
-            "pbe-rks": "VibeQC direct: 3/6 atoms measured",
-            "r2scan-rks": "96-atom reference run stopped at 120 s\nVibeQC direct: 3 atoms measured",
+            "pbe-rks": "GenerativeQC direct: 3/6 atoms measured",
+            "r2scan-rks": "96-atom reference run stopped at 120 s\nGenerativeQC direct: 3 atoms measured",
             "pbe0-rks": "Only 3-atom DF smoke completed\nFurther runs cancelled",
         }[method]
         ax.text(
             0.04,
             0.96,
-            "VibeQC DF: unavailable"
-            + ("\nVibeQC CUDA hybrid: unavailable" if method == "pbe0-rks" else "")
+            "GenerativeQC DF: unavailable"
+            + (
+                "\nGenerativeQC CUDA hybrid: unavailable"
+                if method == "pbe0-rks"
+                else ""
+            )
             + "\n"
             + coverage,
             transform=ax.transAxes,
@@ -383,13 +393,13 @@ def figures(records: list[dict], destination: Path) -> None:
     )
     fig, ax = plt.subplots(figsize=(11.6, 3.1))
     for index, point in enumerate(points):
-        observations = point["engines"]["VibeQC"]["samples"]
+        observations = point["engines"]["GenerativeQC"]["samples"]
         times = np.array([row["ms"] for row in observations]) / 1000
         branches = {
             (row["scf_iterations"], row["ccsd_iterations"]) for row in observations
         }
         label = (
-            "VibeQC CUDA composition (host preparation included)"
+            "GenerativeQC CUDA composition (host preparation included)"
             if index == 0
             else None
         )
@@ -400,7 +410,7 @@ def figures(records: list[dict], destination: Path) -> None:
                 [median],
                 yerr=[[median - min(times)], [max(times) - median]],
                 fmt="o",
-                color=COLORS["VibeQC"],
+                color=COLORS["GenerativeQC"],
                 label=label,
                 capsize=5,
             )
@@ -417,7 +427,7 @@ def figures(records: list[dict], destination: Path) -> None:
                 [index] * len(times),
                 times,
                 marker="x",
-                color=COLORS["VibeQC"],
+                color=COLORS["GenerativeQC"],
                 label=label,
             )
     ax.set_xticks(
@@ -522,7 +532,7 @@ def main() -> None:
             }
         )
     summary = {
-        "schema": "vibeqc.readme-benchmarks.v1",
+        "schema": "generativeqc.readme-benchmarks.v1",
         "timing": "warm endpoint latency; stable-branch median with min/max; x marks unpooled unstable samples",
         "comparison": "normal convergence, no cross-engine speedup claim; work counts retained per repeat",
         "samples": parts,

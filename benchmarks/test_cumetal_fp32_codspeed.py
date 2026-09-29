@@ -71,9 +71,9 @@ class _CuMetalServer:
 
 @pytest.fixture(scope="module")
 def cumetal_fp32_server() -> _CuMetalServer:
-    path = os.environ.get("VIBEQC_CUMETAL_FP32_BENCH")
+    path = os.environ.get("GENERATIVEQC_CUMETAL_FP32_BENCH")
     if not path:
-        pytest.skip("VIBEQC_CUMETAL_FP32_BENCH is not configured")
+        pytest.skip("GENERATIVEQC_CUMETAL_FP32_BENCH is not configured")
     executable = Path(path)
     if not executable.is_file():
         pytest.fail(f"CuMetal FP32 benchmark executable is missing: {executable}")

@@ -9,7 +9,7 @@
 
 // Retained normalized AO contraction for the Dual one-electron response
 // path, including public spherical expansion weights.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar>
 __device__ inline Scalar contracted_overlap(const DeviceBatch& batch, std::int32_t system,
@@ -161,4 +161,4 @@ __device__ inline Scalar contracted_hcore(const DeviceBatch& batch, std::int32_t
   return scalar<Scalar>(0.0);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

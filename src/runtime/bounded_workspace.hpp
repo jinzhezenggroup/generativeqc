@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <type_traits>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Overflow-checked arithmetic shared by runtime/resource planners.
  * Failure never publishes a partial result.
@@ -184,4 +184,4 @@ struct ResourcePlan {
   }
 };
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

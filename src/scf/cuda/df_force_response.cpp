@@ -19,7 +19,7 @@
 #include "scf/cuda_df_gradient.hpp"
 #include "scf/density_fitting.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 using namespace cuda_df;
 
 void bind_cuda_density_fitting_response_source(CudaDensityFittingJkPlan* plan,
@@ -44,22 +44,20 @@ namespace {
  * comparison with the actual device density excludes corrected determinants;
  * dimension equality or a nearby physical residual cannot authorize reuse.
  */
-vibeqc_status select_occupied_response_factors(CudaDensityFittingJkPlan& plan, std::size_t system,
-                                               const CudaDfFinalStateToken* requested,
-                                               std::span<const DensityFittingDensityResponse> terms,
-                                               std::size_t maximum_bytes,
-                                               CudaDfOccupiedResponseView& view,
-                                               std::string& detail) {
+generativeqc_status select_occupied_response_factors(
+    CudaDensityFittingJkPlan& plan, std::size_t system, const CudaDfFinalStateToken* requested,
+    std::span<const DensityFittingDensityResponse> terms, std::size_t maximum_bytes,
+    CudaDfOccupiedResponseView& view, std::string& detail) {
   auto* state = static_cast<PersistentScfState*>(plan.persistent_scf_state);
   if (!requested || !state || !state->occupied_exchange || !plan.occupied_scf_reserved ||
       !state->final_frames_available)
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   CudaDfFinalStateToken current;
   const auto status = cuda_density_fitting_final_state_token(&plan, system, current, detail);
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) return status;
-  if (status != VIBEQC_STATUS_SUCCESS || current != *requested) {
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS || current != *requested) {
     detail.clear();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   const auto spins = state->unrestricted ? 2U : 1U, first = state->unrestricted ? 1U : 0U;
   const auto matrix = plan.nbf * plan.nbf;
@@ -67,7 +65,7 @@ vibeqc_status select_occupied_response_factors(CudaDensityFittingJkPlan& plan, s
       terms[0].coulomb_coefficient != 1.0 ||
       (state->unrestricted && terms[0].exchange_coefficient != 0.0) ||
       spins * matrix * sizeof(double) > maximum_bytes)
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   const auto rank = [&](unsigned spin) {
     return static_cast<std::size_t>(spin ? state->factor_beta_ranks[system]
                                          : state->factor_alpha_ranks[system]);
@@ -79,7 +77,7 @@ vibeqc_status select_occupied_response_factors(CudaDensityFittingJkPlan& plan, s
         terms[t].exchange_coefficient != (state->unrestricted ? .5 : .25) ||
         (state->unrestricted && terms[t].coulomb_coefficient != 0.0) ||
         current.identity.occupied[spin] != r)
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
   }
   try {
     std::vector<double> canonical(spins * matrix);
@@ -115,16 +113,16 @@ vibeqc_status select_occupied_response_factors(CudaDensityFittingJkPlan& plan, s
               current.identity.factor.density_generation ||
           !std::equal(terms[first + spin].density.begin(), terms[first + spin].density.end(),
                       canonical.begin() + spin * matrix))
-        return VIBEQC_STATUS_SUCCESS;
+        return GENERATIVEQC_STATUS_SUCCESS;
     }
     if (state->unrestricted)
       for (std::size_t k = 0; k < matrix; ++k)
         if (terms[0].density[k] != canonical[k] + canonical[matrix + k])
-          return VIBEQC_STATUS_SUCCESS;
+          return GENERATIVEQC_STATUS_SUCCESS;
     for (unsigned spin = 0; spin < spins; ++spin) {
       const auto r = rank(spin);
       const auto* coefficients = spin ? state->d_beta_factor : state->d_alpha_factor;
-      if (r && !coefficients) return VIBEQC_STATUS_SUCCESS;
+      if (r && !coefficients) return GENERATIVEQC_STATUS_SUCCESS;
       view.factors[first + spin] = {
           coefficients
               ? coefficients +
@@ -139,10 +137,10 @@ vibeqc_status select_occupied_response_factors(CudaDensityFittingJkPlan& plan, s
     runtime::cuda_trace::trace_counter("density_generation",
                                        current.identity.factor.density_generation);
     runtime::cuda_trace::trace_counter("solve_epoch", current.identity.solve_epoch);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "DF response factor validation exceeded host storage";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 }
 
@@ -150,7 +148,7 @@ vibeqc_status select_occupied_response_factors(CudaDensityFittingJkPlan& plan, s
  * its exact density independently before lending the value plan's reserved
  * factor scratch; revoke the previous SCF generation before overwriting it.
  */
-vibeqc_status select_corrected_occupied_response_factor(
+generativeqc_status select_corrected_occupied_response_factor(
     CudaDensityFittingJkPlan& plan, std::size_t system, const CudaDfFinalStateToken* requested,
     std::span<const DensityFittingDensityResponse> terms, std::size_t maximum_bytes,
     CudaDfOccupiedResponseView& view, std::string& detail) {
@@ -163,13 +161,13 @@ vibeqc_status select_corrected_occupied_response_factor(
       terms[0].exchange_coefficient != .25 || requested->identity.occupied.size() != 1 ||
       !requested->identity.occupied[0] ||
       !qualified_value_rhf_exchange(plan, requested->identity.occupied[0]))
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   CudaDfFinalStateToken original;
   const auto token_status = cuda_density_fitting_final_state_token(&plan, system, original, detail);
-  if (token_status == VIBEQC_STATUS_OUT_OF_MEMORY) return token_status;
-  if (token_status != VIBEQC_STATUS_SUCCESS) {
+  if (token_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) return token_status;
+  if (token_status != GENERATIVEQC_STATUS_SUCCESS) {
     detail.clear();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   const auto& current = original.identity;
   const auto& corrected = requested->identity;
@@ -186,7 +184,7 @@ vibeqc_status select_corrected_occupied_response_factor(
           orbital_generation - current.factor.orbital_generation ||
       !std::all_of(terms[0].density.begin(), terms[0].density.end(),
                    [](double value) { return std::isfinite(value); }))
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   runtime::cuda_trace::TraceOperation trace("corrected_response_factor", plan.stream,
                                             {1, plan.nbf, plan.naux, true, true, system});
   const auto bytes = plan.matrix_elements * sizeof(double);
@@ -213,11 +211,11 @@ vibeqc_status select_corrected_occupied_response_factor(
   std::size_t rank = 0;
   const auto status =
       factor_density_for_exchange(plan, *state, plan.primary_density, accepted, rank, detail);
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (!accepted || rank != corrected.occupied[0] ||
       rank * rank > maximum_bytes / plan.naux / view.factors.size()) {
     runtime::cuda_trace::trace_counter("reconstruction_rejected", 1);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   // Accepted reconstruction has already drained its spectrum and full-density
   // checks. Do not add a synchronization to the successful occupied path.
@@ -230,13 +228,13 @@ vibeqc_status select_corrected_occupied_response_factor(
   runtime::cuda_trace::trace_counter("correction_generations",
                                      density_generation - current.factor.density_generation);
   runtime::cuda_trace::trace_counter("borrowed_factor_bytes", plan.nbf * rank * sizeof(double));
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 }  // namespace
 
 // Both value providers borrow forward device factors and bounded bridge
 // scratch. The explicit host adapter remains available for diagnostic ablation.
-vibeqc_status execute_cuda_density_fitting_generated_force_response(
+generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan* plan, std::size_t system, const core::System& orbital,
     const core::System& auxiliary, std::span<const double> raw_a,
     const std::vector<double>& raw_metric, std::span<const DensityFittingDensityResponse> terms,
@@ -247,21 +245,21 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   if (!plan || system >= plan->batch_size || molecule::ao_count(orbital) != plan->nbf ||
       molecule::ao_count(auxiliary) != plan->naux) {
     detail = "invalid generated DF force plan or batch index";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (plan->integral_source && !cuda_density_fitting_integral_source_geometry_matches(
                                    plan->integral_source, system, orbital, auxiliary)) {
     detail = "generated DF response source geometry or basis does not match";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto elements = plan->naux * plan->naux, offset = system * elements;
-  const char* host_policy = std::getenv("VIBEQC_DF_HOST_RESPONSE_WEIGHTS");
+  const char* host_policy = std::getenv("GENERATIVEQC_DF_HOST_RESPONSE_WEIGHTS");
   const bool host_weights = host_policy && host_policy[0] == '1' && host_policy[1] == '\0';
-  const char* storage_control = std::getenv("VIBEQC_DF_RESPONSE_STORAGE");
+  const char* storage_control = std::getenv("GENERATIVEQC_DF_RESPONSE_STORAGE");
   const std::string_view storage = storage_control ? storage_control : "auto";
   if (storage != "auto" && storage != "panel" && storage != "jk-scratch") {
     detail = "unknown DF response storage (use auto, panel or jk-scratch)";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // Prepared generated-source metadata deliberately releases host A. In that
   // case the integral source itself is the immutable geometry/metric owner;
@@ -289,18 +287,18 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   const bool packed_resident = !host_weights && plan->integral_source && !plan->streamed &&
                                df_packed_pairs(plan->value_storage.pairs) && plan->packed_raw &&
                                plan->row_tile == plan->nbf;
-  const char* space_control = std::getenv("VIBEQC_DF_RESPONSE_SPACE");
+  const char* space_control = std::getenv("GENERATIVEQC_DF_RESPONSE_SPACE");
   const std::string_view space = space_control ? space_control : "auto";
   if (space != "auto" && space != "dense" && space != "occupied") {
     detail = "unknown DF response space (use auto, dense or occupied)";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  const char* occupied_source_control = std::getenv("VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE");
+  const char* occupied_source_control = std::getenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE");
   const std::string_view occupied_source =
       occupied_source_control ? occupied_source_control : "auto";
   if (occupied_source != "auto" && occupied_source != "raw" && occupied_source != "fitted") {
-    detail = "VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE requires auto, raw or fitted";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE requires auto, raw or fitted";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const bool fitted_occupied_requested = occupied_source == "fitted";
   if (fitted_occupied_requested &&
@@ -308,7 +306,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
        plan->value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
        storage == "jk-scratch")) {
     detail = "fitted occupied response requires explicit occupied single-B source storage";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   bool borrow =
       storage == "jk-scratch" || (space == "occupied" && full_scratch && storage != "panel");
@@ -329,12 +327,13 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
       const char* value = std::getenv(name);
       return !value || !*value;
     };
-    const char* serial = std::getenv("VIBEQC_DF_SERIAL_RESPONSE_DOT");
-    if (compatible("VIBEQC_DF_WEIGHTED_EXECUTION", "shell") &&
-        (compatible("VIBEQC_DF_SHELL_SCHEDULE", "compact") ||
-         compatible("VIBEQC_DF_SHELL_SCHEDULE", "auto")) &&
-        compatible("VIBEQC_DF_RESPONSE_ALGEBRA", "blas") &&
-        absent("VIBEQC_DF_RESPONSE_UPLOAD_PROBE") && absent("VIBEQC_DF_RESPONSE_SCATTER_PROBE") &&
+    const char* serial = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
+    if (compatible("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell") &&
+        (compatible("GENERATIVEQC_DF_SHELL_SCHEDULE", "compact") ||
+         compatible("GENERATIVEQC_DF_SHELL_SCHEDULE", "auto")) &&
+        compatible("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas") &&
+        absent("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE") &&
+        absent("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE") &&
         !(serial && std::string_view(serial) == "1")) {
       automatic_occupied =
           space == "auto" && final_state && final_state->identity.occupied.size() == 1 &&
@@ -352,7 +351,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   }
   CudaDfResponseBuffers buffers;
   CudaDfPackedRawTensorView packed_raw;
-  const char* raw_reuse_control = std::getenv("VIBEQC_DF_RAW_REUSE");
+  const char* raw_reuse_control = std::getenv("GENERATIVEQC_DF_RAW_REUSE");
   if (packed_resident && (!raw_reuse_control || std::string_view(raw_reuse_control) == "auto")) {
     packed_raw = {plan->packed_raw + system * plan->stored_tensor_elements_per_system,
                   plan->nbf,
@@ -367,11 +366,11 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
     const char* value = std::getenv(name);
     return !value || std::string_view(value) == "auto";
   };
-  for (const char* name : {"VIBEQC_DF_RAW_REUSE", "VIBEQC_DF_RESPONSE_BATCHING"}) {
+  for (const char* name : {"GENERATIVEQC_DF_RAW_REUSE", "GENERATIVEQC_DF_RESPONSE_BATCHING"}) {
     const char* value = std::getenv(name);
     if (value && std::string_view(value) != "auto" && std::string_view(value) != "off") {
       detail = std::string(name) + " must be auto or off";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
   if (borrow) {
@@ -381,7 +380,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
     // resident plans can retain B while their K scratch is only a small tile.
     if (!full_scratch && !packed_resident) {
       detail = "JK-scratch response requires a resident plan with full J/K tensors";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     buffers = {plan->auxiliary_tile_values, plan->exchange_contributions,
                plan->exchange_intermediate, plan->tensor_elements_per_system};
@@ -392,9 +391,9 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
       buffers.raw_elements = plan->panel_capacity;
       buffers.exchange_elements = plan->panel_capacity;
     }
-    buffers.batch_products = enabled("VIBEQC_DF_RESPONSE_BATCHING");
+    buffers.batch_products = enabled("GENERATIVEQC_DF_RESPONSE_BATCHING");
     if (!packed_resident && plan->resident_raw_valid && matching_source &&
-        enabled("VIBEQC_DF_RAW_REUSE")) {
+        enabled("GENERATIVEQC_DF_RAW_REUSE")) {
       buffers.resident_raw = {
           plan->exchange_contributions,
           plan->nbf,
@@ -412,7 +411,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDfOccupiedResponseView factors;
     const auto selected = select_occupied_response_factors(*plan, system, final_state, terms,
                                                            maximum_bytes, factors, detail);
-    if (selected != VIBEQC_STATUS_SUCCESS) return selected;
+    if (selected != GENERATIVEQC_STATUS_SUCCESS) return selected;
     // Validation authorizes immutable factors, not arbitrary mutable capacity.
     // Both spin projections must still fit the actual resident scratch lease.
     std::size_t projected = 0;
@@ -432,11 +431,11 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   // Packed scratch is not a dense all-Q allocation. Invalid/stale/corrected
   // factors retain the exact bounded raw loader instead of widening storage.
   if (packed_resident && (!buffers.occupied_response || !packed_raw.data)) borrow = false;
-  const char* projection_control = std::getenv("VIBEQC_DF_FINAL_PROJECTION");
+  const char* projection_control = std::getenv("GENERATIVEQC_DF_FINAL_PROJECTION");
   const std::string_view projection = projection_control ? projection_control : "auto";
   if (projection != "auto" && projection != "off" && projection != "reuse") {
-    detail = "VIBEQC_DF_FINAL_PROJECTION must be auto, off or reuse";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_FINAL_PROJECTION must be auto, off or reuse";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // Automatic reuse shares the resident work/capacity policy above.
   // Full-rank M gives
@@ -483,7 +482,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   if (plan->integral_source || !host_weights) {
     if (!plan->metric_response_valid[system]) {
       detail = "DF metric rank crossing: retained/discarded subspaces are unresolved";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     const CudaDfMetricView metric{plan->inverse_square_roots + offset,
                                   plan->metric_eigenvectors + offset,
@@ -516,11 +515,11 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
       // streamed plans select it automatically.
       const auto selected = select_occupied_response_factors(
           *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
-      if (selected != VIBEQC_STATUS_SUCCESS) return selected;
+      if (selected != GENERATIVEQC_STATUS_SUCCESS) return selected;
       if (!streamed_factors.owner_identity && space == "occupied") {
         const auto corrected = select_corrected_occupied_response_factor(
             *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
-        if (corrected != VIBEQC_STATUS_SUCCESS) return corrected;
+        if (corrected != GENERATIVEQC_STATUS_SUCCESS) return corrected;
       }
       if (streamed_factors.owner_identity && final_fitted_projection &&
           streamed_factors.factors[0].rank == final_state->identity.occupied[0] &&
@@ -539,7 +538,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
     if (fitted_occupied_requested &&
         (!streamed_factors.owner_identity || !whitened.data || !metric.full_rank)) {
       detail = "fitted occupied response has no current full-rank canonical factor";
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     // The diagnostic upload route writes the former raw scratch buffer.
     // Revoke its immutable view before submission, so an interrupted copy
@@ -552,7 +551,7 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
         reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr,
         packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
         streamed_factors.owner_identity ? &streamed_factors : nullptr);
-    if (status == VIBEQC_STATUS_SUCCESS && borrow && matching_source &&
+    if (status == GENERATIVEQC_STATUS_SUCCESS && borrow && matching_source &&
         plan->resident_exchange_enabled && plan->batch_size == 1 &&
         plan->nbf * plan->naux <= static_cast<std::size_t>(std::numeric_limits<int>::max()))
       plan->resident_raw_valid = true;
@@ -563,13 +562,13 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
   const auto copies_bytes = 2 * elements * sizeof(double);
   if (maximum_bytes <= copies_bytes || 12.0L * elements * sizeof(double) > maximum_bytes) {
     detail = "generated DF metric reverse staging exceeds maximum_bytes";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
     std::vector<double> metric, inverse;
     if (raw_metric.size() != elements) {
       detail = "generated resident DF response needs its original metric";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     metric = raw_metric;
     // The resident value path already stages raw A/M on the host. Reuse
@@ -589,18 +588,18 @@ vibeqc_status execute_cuda_density_fitting_generated_force_response(
         orbital, auxiliary, raw_a, metric, inverse, terms, plan->metric_relative_threshold,
         schedule, maximum_bytes - copies_bytes, maximum_auxiliary_tile, derivative, detail,
         &measured);
-    if (status == VIBEQC_STATUS_SUCCESS && resources) {
+    if (status == GENERATIVEQC_STATUS_SUCCESS && resources) {
       measured.host_bytes += copies_bytes;
       *resources = measured;
     }
     return status;
   } catch (const std::bad_alloc&) {
     detail = "generated DF metric reverse staging exceeded its allocation budget";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::exception& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

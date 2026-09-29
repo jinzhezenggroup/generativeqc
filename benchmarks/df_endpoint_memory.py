@@ -17,10 +17,10 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator, _native
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.evidence import file_hash
-from vibeqc_compiler.common.resources import ResourceBudget
+from generativeqc import Calculator, _native
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.evidence import file_hash
+from generativeqc_compiler.common.resources import ResourceBudget
 
 from benchmarks._cases import benchmark_cases
 
@@ -47,22 +47,22 @@ def main() -> None:
         parser.error(
             "coordinate-wise DF response was retired; use an archived source checkout"
         )
-    os.environ["VIBEQC_DF_DERIVATIVE_MAPPING"] = "thread"
+    os.environ["GENERATIVEQC_DF_DERIVATIVE_MAPPING"] = "thread"
     lib = _native.load_library()
-    lib.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    identity = lib.vibeqc_get_source_identity().decode()
+    lib.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    identity = lib.generativeqc_get_source_identity().decode()
     if identity != source_identity(ROOT):
         raise RuntimeError("loaded library does not match the scientific source")
     case = cases[args.case]
     # Inventory v1 covers at most 16 public AOs. Larger cases still measure
     # complete-process RSS, but cannot claim a whole-HF device-ledger bound.
     ao_count = case.expected_ao_count
-    if ao_count is None and not isinstance(case.vibeqc_basis, str):
+    if ao_count is None and not isinstance(case.generativeqc_basis, str):
         ao_count = sum(
             2 * shell.angular_momentum + 1
             if case.basis_representation == "spherical"
             else (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
-            for shell in case.vibeqc_basis
+            for shell in case.generativeqc_basis
         )
     observe_resources = ao_count is not None and ao_count <= 16
     systems = [
@@ -72,7 +72,7 @@ def main() -> None:
     calc = Calculator(
         device="cuda",
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         density_fitting="cuda",
         density_fitting_memory_budget_bytes=args.df_budget,
@@ -100,7 +100,7 @@ def main() -> None:
         changed = batch.execute(moved, strict=True)
         observed = batch.resource_diagnostics if observe_resources else None
     payload = {
-        "schema": "vibeqc.df_endpoint_memory",
+        "schema": "generativeqc.df_endpoint_memory",
         "version": 1,
         "case": args.case,
         "selection": args.selection,

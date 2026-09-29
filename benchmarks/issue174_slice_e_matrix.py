@@ -257,11 +257,11 @@ def _calculator(
 ) -> typing.Any:
     """Construct one calculator with the controls fixed for this matrix."""
 
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     return Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=(
@@ -347,7 +347,7 @@ def _strict_reference(
 def _accuracy_target(arguments: typing.Any, tolerance: float) -> typing.Any:
     """Build the observable requirements for the requested properties."""
 
-    from vibeqc import ObservableTarget, TargetAccuracy
+    from generativeqc import ObservableTarget, TargetAccuracy
 
     observables = [ObservableTarget("energy", "absolute", "Eh", absolute=tolerance)]
     if "forces" in arguments.properties:
@@ -377,7 +377,7 @@ def _evidence(
 
     if target is None or not converged:
         return None
-    from vibeqc import compare_observables
+    from generativeqc import compare_observables
 
     assessment = compare_observables(
         model,
@@ -981,7 +981,7 @@ def main() -> None:
             (
                 "density_rms and energy_change are the recorded convergence "
                 "residuals. The independent physical-residual and fixed-density "
-                "operator audits live in tools.vibeqc_numerics.audit and are not "
+                "operator audits live in tools.generativeqc_numerics.audit and are not "
                 "re-run here."
             ),
             (

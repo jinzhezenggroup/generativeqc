@@ -7,7 +7,7 @@
 #include "dft/dispersion/d4_eeq.hpp"
 
 namespace d4_eeq_tests {
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 inline constexpr int kMaxAtoms = 5;
 struct EEQOracleFixture {
   const char* name;

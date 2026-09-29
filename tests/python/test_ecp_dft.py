@@ -6,15 +6,15 @@ from dataclasses import asdict
 
 import numpy as np
 import pytest
+from generativeqc import Atom, Calculator, ResourceBudget
+from generativeqc_compiler.dft.grid import MolecularGrid
 from test_ecp import fixture
-from vibeqc import Atom, Calculator, ResourceBudget
-from vibeqc_compiler.dft.grid import MolecularGrid
 
 METHODS = ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks")
 
 
 def require_device(device: typing.Any) -> None:
-    if device == "cuda" and os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1":
         pytest.skip("requires an allocated CUDA device")
 
 

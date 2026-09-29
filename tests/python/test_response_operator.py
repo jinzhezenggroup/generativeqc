@@ -7,14 +7,14 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     DenseAOResponseBackend,
     GMRESOptions,
     NativeJKBackend,
@@ -170,8 +170,8 @@ def test_cuda_df_metric_preflight_rejects_stale_identity_without_device(
     mismatch: typing.Any,
 ) -> None:
     """Metric identity errors must fail even with a CPU-only native library."""
-    from tools.vibeqc_posthf.df import MetricFactor
-    from tools.vibeqc_response import CudaDFJKBackend
+    from tools.generativeqc_posthf.df import MetricFactor
+    from tools.generativeqc_response import CudaDFJKBackend
 
     meta, _ = load_fixture("h2")
     try:

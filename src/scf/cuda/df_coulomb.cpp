@@ -17,19 +17,19 @@
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 using runtime::cuda_trace::trace_call;
 using runtime::cuda_trace::TraceOperation;
 
 // Coulomb needs two bounded raw passes unless an admitted K traversal supplies its charge.
-vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* density,
-                            std::string& detail, bool raw_charge_ready) {
+generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* density,
+                                  std::string& detail, bool raw_charge_ready) {
   plan.final_projection_token.reset();
   if (raw_charge_ready && (!plan.streamed || !plan.integral_source || plan.batch_size != 1 ||
                            plan.metric_full_rank.empty() || !plan.metric_full_rank[0] ||
                            plan.row_tile * plan.nbf * plan.auxiliary_tile < plan.naux)) {
     detail = "shared DF charge requires a full-rank, factor-first streamed source";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   TraceOperation trace(
       "ri_j", plan.stream,
@@ -67,7 +67,7 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
     runtime::cuda_trace::trace_counter("value_packed_pairs", plan.stored_pair_count);
     runtime::cuda_trace::trace_counter("coulomb_contraction_flops",
                                        4 * plan.batch_size * plan.stored_pair_count * plan.naux);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   if (plan.streamed) {
     cudaError_t cuda_error = cudaSuccess;
@@ -112,7 +112,7 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
               auto status = generate_cuda_density_fitting_raw_tile(
                   plan.integral_source, system, pair_begin, pairs, begin, count, -1,
                   reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
-              if (status != VIBEQC_STATUS_SUCCESS) return status;
+              if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
               launch_accumulate_streamed_auxiliary_density_kernel(
                   blocks_for(count), kThreads, 0, plan.stream, pairs, count,
                   plan.auxiliary_tile_values, density + system * plan.matrix_elements + pair_begin,
@@ -178,7 +178,7 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
             auto source_status = generate_cuda_density_fitting_raw_tile(
                 plan.integral_source, system, pair_begin, pairs, begin, count, -1,
                 reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
-            if (source_status != VIBEQC_STATUS_SUCCESS) return source_status;
+            if (source_status != GENERATIVEQC_STATUS_SUCCESS) return source_status;
             launch_build_streamed_coulomb_tile_kernel(
                 blocks_for(pairs), kThreads, 0, plan.stream, pairs, count,
                 plan.auxiliary_tile_values, potential,
@@ -189,7 +189,7 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
           }
         }
       }
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     // The staged device tile is sized from row_tile * nbf.  The planner's
     // AO-pair tile is a logical budget and may not be divisible by nbf, so
@@ -201,7 +201,7 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
       host_tile.resize(plan.auxiliary_tile * pair_tile_capacity);
     } catch (const std::bad_alloc&) {
       detail = "host allocation for streamed CUDA DF Coulomb tile failed";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
     for (std::size_t system = 0; system < plan.batch_size; ++system) {
       const double* raw =
@@ -284,7 +284,7 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
         }
       }
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
   const int batch_size = static_cast<int>(plan.batch_size);
@@ -311,8 +311,8 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
                                      plan.coulomb, matrix_elements, matrix_stride, batch_size);
   });
   return blas_status == CUBLAS_STATUS_SUCCESS
-             ? VIBEQC_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
              : blas_failure(blas_status, "DF Coulomb contraction", detail);
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

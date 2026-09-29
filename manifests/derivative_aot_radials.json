@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.derivative-aot.radials.v1",
+  "schema": "generativeqc.derivative-aot.radials.v1",
   "entries": [
     {
       "backend": "cpu",

@@ -6,7 +6,7 @@
 #include "scf/cuda_batch.hpp"
 #include "scf/generated_shell_task.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** POD queue and diagnostic records shared by host planning and device consumers; these own no
  * allocations. */
@@ -97,4 +97,4 @@ enum class DirectScreeningPurpose : std::uint8_t {
   Force,
 };
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -3,8 +3,8 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc._ks_snapshot import NativeKsSnapshot
-from vibeqc_compiler.dft.grid import GridPolicy, grid_policy_provenance
+from generativeqc._ks_snapshot import NativeKsSnapshot
+from generativeqc_compiler.dft.grid import GridPolicy, grid_policy_provenance
 
 
 @pytest.mark.parametrize("method", ["lda", "pbe"])

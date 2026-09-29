@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_cold_constructor_receives_requested_profile(
     call_index: int, profile_device: bool
 ) -> None:
-    tree = ast.parse((ROOT / "python/vibeqc/_stationary_cuda.py").read_text())
+    tree = ast.parse((ROOT / "python/generativeqc/_stationary_cuda.py").read_text())
     calls = sorted(
         (
             node

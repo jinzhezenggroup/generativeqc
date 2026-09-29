@@ -19,7 +19,7 @@ SOURCE = r"""
 
 #include "response/resident_krylov.hpp"
 
-using namespace vibeqc::response;
+using namespace generativeqc::response;
 
 struct Backend final : ResidentKrylovBackend {
   explicit Backend(std::size_t count) : data(count) {}

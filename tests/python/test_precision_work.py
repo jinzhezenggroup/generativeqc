@@ -6,8 +6,8 @@ import ctypes
 from types import SimpleNamespace
 from typing import Any
 
-from vibeqc import _native
-from vibeqc._precision_work import query_precision_work
+from generativeqc import _native
+from generativeqc._precision_work import query_precision_work
 
 
 def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNamespace:
@@ -58,7 +58,7 @@ def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNames
             operators[0].count = 23
         return _native.STATUS_SUCCESS
 
-    return SimpleNamespace(vibeqc_calculation_get_precision_work=work)
+    return SimpleNamespace(generativeqc_calculation_get_precision_work=work)
 
 
 def test_decoder_preserves_execution_rows_without_certifying_them() -> None:
@@ -128,7 +128,7 @@ def test_batch_decoder_preserves_original_index() -> None:
         summary.detail_version = version
         return _native.STATUS_SUCCESS
 
-    library = SimpleNamespace(vibeqc_batch_get_precision_work=work)
+    library = SimpleNamespace(generativeqc_batch_get_precision_work=work)
     precision = query_precision_work(library, ctypes.c_void_p(), index=7)
     assert precision is not None and precision["detail_version"] == 1
     assert observed == [7, 7]

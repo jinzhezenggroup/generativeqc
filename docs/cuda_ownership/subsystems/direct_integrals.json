@@ -4,7 +4,7 @@
     "docs/developer/shell_codegen.md",
     "docs/developer/weighted_eri.md",
     "docs/developer/second_integral_derivatives.md",
-    "python/vibeqc_compiler/integral/production_shell_classes.json",
+    "python/generativeqc_compiler/integral/production_shell_classes.json",
     "benchmarks/results/weighted-eri-144/README.md",
     "benchmarks/results/issue356-psss-retirement/README.md"
   ],

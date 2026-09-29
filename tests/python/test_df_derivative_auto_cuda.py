@@ -6,15 +6,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
-from vibeqc.profiles import probe_device
+from generativeqc import Calculator
+from generativeqc.profiles import probe_device
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -46,7 +46,7 @@ def test_automatic_derivative_route_cold_warm_and_moved(
 
     assert os.environ.get("SLURM_JOB_ID")
     case = benchmark_cases()[case_name]
-    orbital, cpu_orbital = case.vibeqc_basis, case.pyscf_basis
+    orbital, cpu_orbital = case.generativeqc_basis, case.pyscf_basis
     auxiliary, cpu_auxiliary = orbital, cpu_orbital
     if practical:
         identity = (
@@ -68,8 +68,8 @@ def test_automatic_derivative_route_cold_warm_and_moved(
         "RESPONSE_SCATTER_PROBE",
         "SERIAL_RESPONSE_DOT",
     ):
-        monkeypatch.delenv("VIBEQC_DF_" + name, raising=False)
-    monkeypatch.setenv("VIBEQC_DF_SHELL_POLICY", "auto")
+        monkeypatch.delenv("GENERATIVEQC_DF_" + name, raising=False)
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_POLICY", "auto")
     moved = [(symbol, np.asarray(position).copy()) for symbol, position in case.atoms]
     moved[1][1][0] += 0.001
     references = []
@@ -114,7 +114,7 @@ def test_automatic_derivative_route_cold_warm_and_moved(
     ) as owner:
         for index, changed in enumerate((False, False, True, True)):
             trace = tmp_path / f"phase-{index}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             positions = (
                 [np.asarray([xyz for _, xyz in moved])] * batch_size
                 if changed

@@ -10,13 +10,15 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.one_electron_cuda import emit_one_electron_values_cuda
-from vibeqc_compiler.integral.one_electron_values import (
+from generativeqc_compiler.integral.one_electron_cuda import (
+    emit_one_electron_values_cuda,
+)
+from generativeqc_compiler.integral.one_electron_values import (
     build_one_electron_component_kernel,
     build_one_electron_value_ir,
     evaluate_one_electron_primitive,
 )
-from vibeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 
 def test_generated_value_header_helpers_have_internal_linkage() -> None:
@@ -85,7 +87,7 @@ def test_every_public_cartesian_component_against_pyscf(
                 reference = -charge * mol.intor("int1e_rinv_cart")
         # PySCF's Cartesian d/f functions share shell radial normalization.
         # Recover its component scale from independent diagonal overlaps and
-        # closed Gaussian moments; no VibeQC contraction convention enters.
+        # closed Gaussian moments; no GenerativeQC contraction convention enters.
         exponents = [alpha] * len(components[0]) + [beta] * len(components[1])
         raw_norms = [
             gaussian_self_norm(e, name)
@@ -161,8 +163,8 @@ def test_selected_g_cartesian_components_against_pyscf(
 
 
 def test_g_codegen_is_explicit_and_production_capability_stays_fail_closed() -> None:
-    from vibeqc_compiler.integral.capabilities import query_integral_capability
-    from vibeqc_compiler.integral.one_electron_cuda import (
+    from generativeqc_compiler.integral.capabilities import query_integral_capability
+    from generativeqc_compiler.integral.one_electron_cuda import (
         _component_layout,
         _emit_component_index,
         _emit_support_cuda,
@@ -198,7 +200,7 @@ def test_g_codegen_is_explicit_and_production_capability_stays_fail_closed() -> 
     )
     assert not bounded.supported
     assert "first-derivative raw IR" in bounded.reasons[0]
-    from vibeqc_compiler.integral.one_electron_derivatives import (
+    from generativeqc_compiler.integral.one_electron_derivatives import (
         build_one_electron_derivative_ir,
     )
 
@@ -263,7 +265,9 @@ def emitted_host(tmp_path_factory: typing.Any) -> typing.Any:
     This is explicitly a source-lowering test. CUDA compilation, device
     resources and numerical evidence remain separate manual GPU tiers.
     """
-    from vibeqc_compiler.integral.one_electron_cuda import emit_one_electron_values_cuda
+    from generativeqc_compiler.integral.one_electron_cuda import (
+        emit_one_electron_values_cuda,
+    )
 
     compiler = shutil.which("c++")
     if compiler is None:
@@ -277,7 +281,7 @@ def emitted_host(tmp_path_factory: typing.Any) -> typing.Any:
     )
     source += r"""
 extern "C" void evaluate(const double* inputs, double* outputs, unsigned count) {
-  namespace one = vibeqc::scf::generated_one_electron;
+  namespace one = generativeqc::scf::generated_one_electron;
   for (unsigned i = 0; i < count; ++i) {
     const double* p = inputs + 14 * i;
     const auto pair = one::make_pair(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
@@ -318,7 +322,9 @@ def test_emitted_arithmetic_all_pairs_and_normalized_contractions(
     emitted_host: typing.Any,
 ) -> None:
     pytest.importorskip("pyscf")
-    from tools.vibeqc_validation.one_electron_values import one_electron_value_matrix
+    from tools.generativeqc_validation.one_electron_values import (
+        one_electron_value_matrix,
+    )
 
     for fixture in one_electron_value_matrix():
         values = np.zeros((len(fixture.records), 3))
@@ -341,7 +347,7 @@ def test_emitted_arithmetic_all_pairs_and_normalized_contractions(
 
 
 def test_one_electron_inventory_retains_operator_and_output_contracts() -> None:
-    from vibeqc_compiler.integral.one_electron_cuda import (
+    from generativeqc_compiler.integral.one_electron_cuda import (
         one_electron_program_inventory,
     )
 
@@ -349,7 +355,7 @@ def test_one_electron_inventory_retains_operator_and_output_contracts() -> None:
     assert len(inventory["programs"]) == 48
     assert inventory["precision"] == "fp64"
     assert inventory["schedules"] == ["thread", "shell_warp"]
-    from vibeqc_compiler.integral.capabilities import query_integral_capability
+    from generativeqc_compiler.integral.capabilities import query_integral_capability
 
     request = build_one_electron_value_ir("kinetic", (3, 3))
     assert query_integral_capability(

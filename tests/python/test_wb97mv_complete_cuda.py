@@ -1,6 +1,6 @@
 """Complete public CUDA energy/force gates against independent GPU4PySCF.
 
-Run VIBEQC_TEST_WB97MV_CUDA=1 through Slurm main with one 5090 and a finite
+Run GENERATIVEQC_TEST_WB97MV_CUDA=1 through Slurm main with one 5090 and a finite
 time limit. Grid motion, partition response, SR/LR exchange and self-consistent
 VV10 are all included in both engines; no component-only success promotes API.
 """
@@ -17,7 +17,7 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
     source = (
         Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
     ).read_text(encoding="utf-8")
-    begin = source.index("vibeqc_status cuda_integral_gradient(")
+    begin = source.index("generativeqc_status cuda_integral_gradient(")
     end = source.index("Result execute(bool compute_forces)", begin)
     bridge = source[begin:end]
     assert "execute_cuda_stationary_one_electron_pair(" in bridge
@@ -53,11 +53,11 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
 def test_complete_cuda_force_matches_independent_engine(
     method: str, spin: int, atoms: typing.Any, basis: str
 ) -> None:
-    if os.environ.get("VIBEQC_TEST_WB97MV_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_WB97MV_CUDA=1 inside Slurm")
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm")
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     import cupy as cp
-    from vibeqc import Calculator, GridSpec, KsOptions
+    from generativeqc import Calculator, GridSpec, KsOptions
 
     from benchmarks.readme_wb97mv import reference_engine, reference_sample
 
@@ -128,12 +128,12 @@ def test_complete_cuda_force_matches_independent_engine(
 
 def test_cuda_force_rebuild_failure_isolation_and_stale_snapshot() -> None:
     """Rebuild real owners, reject old SCF generations, then recover cleanly."""
-    if os.environ.get("VIBEQC_TEST_WB97MV_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_WB97MV_CUDA=1 inside Slurm")
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm")
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
-    from vibeqc import Calculator, GridSpec, KsOptions
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
 
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     calc = Calculator(

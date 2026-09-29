@@ -14,7 +14,7 @@
 #include "scf/reference/linalg.hpp"
 #include "scf/reference/observation.hpp"
 
-namespace vibeqc::scf::initial_guess {
+namespace generativeqc::scf::initial_guess {
 
 /** Preserve the full symmetric S^(-1/2) and historical strict '<1e-10' cutoff.
  * Only decomposition is substituted; no Cholesky representation or subspace
@@ -120,10 +120,10 @@ inline reference::Matrix prepare_overlap_orthogonalizer(const core::System& syst
                                                         std::size_t n,
                                                         OverlapOrthogonalizer* cache = nullptr,
                                                         const EigenOperation& eigen = {}) {
-  const char* rebuild = std::getenv("VIBEQC_DF_REBUILD_OVERLAP");
+  const char* rebuild = std::getenv("GENERATIVEQC_DF_REBUILD_OVERLAP");
   if (cache && !(rebuild && rebuild[0] == '1' && rebuild[1] == '\0'))
     return cache->get(system, overlap, n, eigen);
   return symmetric_overlap(overlap, n, eigen);
 }
 
-}  // namespace vibeqc::scf::initial_guess
+}  // namespace generativeqc::scf::initial_guess

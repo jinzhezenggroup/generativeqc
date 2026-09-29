@@ -5,10 +5,10 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc.profiles import canonical_hash
+from generativeqc.profiles import canonical_hash
 
+from tools.generativeqc_numerics.replay import replay
 from tools.validate_accuracy import run
-from tools.vibeqc_numerics.replay import replay
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def test_strict_operator_replay_and_corruption(
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         raise AssertionError("an operator replay must not launch SCF")
 
-    monkeypatch.setattr("tools.vibeqc_numerics.audit.probe_hf", forbidden)
+    monkeypatch.setattr("tools.generativeqc_numerics.audit.probe_hf", forbidden)
     result = replay(report)
     assert result["passed"] and result["scf_executed"] is False
     assert sum(row["status"] == "pass" for row in result["rows"]) == 13
@@ -58,7 +58,7 @@ def test_replay_requires_successful_reference_evidence(
 
 
 def test_extra_holdouts_have_stable_independent_reference_generations() -> None:
-    from tools.vibeqc_numerics.fixtures import REFERENCE_DIRECTORY, accuracy_suite
+    from tools.generativeqc_numerics.fixtures import REFERENCE_DIRECTORY, accuracy_suite
 
     assert {r["inputs"]["name"] for r in accuracy_suite()} >= {"hf", "h2-def2-svp"}
     rows = json.loads((Path(REFERENCE_DIRECTORY) / "stability.json").read_text())[

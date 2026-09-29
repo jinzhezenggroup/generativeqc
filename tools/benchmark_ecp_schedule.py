@@ -12,10 +12,10 @@ from time import perf_counter
 
 import numpy as np
 import pyscf
+from generativeqc import Calculator, ResourceBudget
+from generativeqc.ecp import ecp_integrals
+from generativeqc.profiles import file_hash
 from pyscf import scf
-from vibeqc import Calculator, ResourceBudget
-from vibeqc.ecp import ecp_integrals
-from vibeqc.profiles import file_hash
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests/python"))
 from test_ecp import fixture
@@ -41,7 +41,7 @@ def main() -> None:
             key: os.environ.get(key)
             for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
         },
-        "library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "driver_sha256": file_hash(Path(__file__)),
         "timing_scope": "synchronous complete energy+forces; every sample checked; first call is not process-cold",
         "repeats": args.repeats,

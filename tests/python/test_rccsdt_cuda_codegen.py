@@ -11,11 +11,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc.triples import triples_fullsum
+from tools.generativeqc_cc.triples import triples_fullsum
 
 ROOT = Path(__file__).resolve().parents[2]
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RCCSDT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RCCSDT_CUDA_TEST") != "1",
     reason="requires an allocated CUDA device and compiler",
 )
 
@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
     input.read(reinterpret_cast<char*>(arrays.back().data()), size*sizeof(double));
   }
   auto run = [&](std::size_t budget) {
-    return vibeqc::cc::triples::evaluate_cuda(o,v,arrays[0].data(),arrays[1].data(),
+    return generativeqc::cc::triples::evaluate_cuda(o,v,arrays[0].data(),arrays[1].data(),
       arrays[2].data(),arrays[3].data(),arrays[4].data(),arrays[5].data(),
       arrays[6].data(),arrays[7].data(),1e-10,budget,0);
   };
@@ -80,8 +80,8 @@ int main(int argc, char** argv) {
             nvcc,
             "-std=c++17",
             "-O2",
-            "-arch=" + os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120"),
-            "-DVIBEQC_HAS_CUDA=1",
+            "-arch=" + os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120"),
+            "-DGENERATIVEQC_HAS_CUDA=1",
             f"-I{ROOT / 'src'}",
             str(source),
             str(driver),

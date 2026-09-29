@@ -6,10 +6,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated CUDA test job",
 )
 
@@ -46,13 +46,13 @@ def test_occupied_scf_matches_dense_across_warm_replays(
         Calculator(**options).prepare_batch(systems, **preparation) as reference,
     ):
         for replay, policy in enumerate(("occupied", "dense", "occupied")):
-            monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+            monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
             expected = reference.execute(strict=True)
-            monkeypatch.setenv("VIBEQC_DF_EXCHANGE", policy)
+            monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", policy)
             trace = tmp_path / f"replay-{replay}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             actual = batch.execute(strict=True)
-            monkeypatch.delenv("VIBEQC_DF_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_TRACE")
             np.testing.assert_allclose(
                 actual.energies, expected.energies, atol=1e-9, rtol=0
             )

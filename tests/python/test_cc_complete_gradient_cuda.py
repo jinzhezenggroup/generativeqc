@@ -6,26 +6,26 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc.calculator import Atom, Primitive, Shell
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc.calculator import Atom, Primitive, Shell
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
 from tools.cc_gradient_fixtures import inputs, load, source_arguments
-from tools.validate_ccsd_t_gradient import analytic_oracle
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     complete_ccsdt_cuda_response_gradient_validation,
     complete_ccsdt_gradient_validation,
 )
-from tools.vibeqc_cc.complete_gradient import (
+from tools.generativeqc_cc.complete_gradient import (
     CCSDGradientOptions,
     complete_gradient_validation,
 )
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.validate_ccsd_t_gradient import analytic_oracle
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_CC_GRADIENT_CUDA_TEST") != "1",
-    reason="set VIBEQC_CC_GRADIENT_CUDA_TEST=1 for real-device qualification",
+    os.environ.get("GENERATIVEQC_CC_GRADIENT_CUDA_TEST") != "1",
+    reason="set GENERATIVEQC_CC_GRADIENT_CUDA_TEST=1 for real-device qualification",
 )
 
 
@@ -138,10 +138,10 @@ def test_complete_ccsdt_cuda_response_gradient_matches_pinned_pyscf(
     assert os.environ.get("SLURM_JOB_ID"), (
         "CUDA RCCSD(T) response-gradient qualification requires Slurm"
     )
-    architecture = os.environ.get("VIBEQC_TENSOR_ARCH", "").strip()
+    architecture = os.environ.get("GENERATIVEQC_TENSOR_ARCH", "").strip()
     if not architecture:
         pytest.fail(
-            "set VIBEQC_TENSOR_ARCH to the allocated GPU architecture; "
+            "set GENERATIVEQC_TENSOR_ARCH to the allocated GPU architecture; "
             "CUDA RCCSD(T) qualification must not assume a device target"
         )
     nvcc = find_nvcc()

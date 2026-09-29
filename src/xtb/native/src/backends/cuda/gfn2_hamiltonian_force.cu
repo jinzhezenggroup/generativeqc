@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_hamiltonian_force.cuh"
 #include "generated_gfn2_electronic_native.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -78,7 +78,7 @@ __device__ bool load_force_gate(const Gfn2ForceDeviceActivity& activity, std::in
     if (requested > 1u) {
       record_system_error(system_errors, system, device_error,
                           Gfn2HamiltonianForceDeviceError::kInvalidActiveMask);
-    } else if (requested == 1u && activity.system_statuses[system] == VIBEQC_XTB_STATUS_SUCCESS) {
+    } else if (requested == 1u && activity.system_statuses[system] == GENERATIVEQC_XTB_STATUS_SUCCESS) {
       *selected = 1;
     }
   }
@@ -286,7 +286,7 @@ __global__ void contract_kernel(Gfn2HamiltonianDeviceBatch batch, Gfn2ForceDevic
     const std::int64_t reverse = matrix_begin + local_column * orbitals + local_row;
     const double pair_density =
         input.density[forward] + (forward == reverse ? 0.0 : input.density[reverse]);
-    vibeqc::xtb::generated::Gfn2ElectronicPairPotentials pair_potentials{};
+    generativeqc::xtb::generated::Gfn2ElectronicPairPotentials pair_potentials{};
     pair_potentials.row_scalar = input.shell_scalar_potentials[row_shell];
     pair_potentials.column_scalar = input.shell_scalar_potentials[column_shell];
     for (int component = 0; component < kGfn2HamiltonianDipoleComponents; ++component) {
@@ -305,8 +305,8 @@ __global__ void contract_kernel(Gfn2HamiltonianDeviceBatch batch, Gfn2ForceDevic
                                              component];
     }
 
-    vibeqc::xtb::generated::Gfn2ElectronicPairAdjoint pair_adjoint{};
-    bool finite = vibeqc::xtb::generated::evaluate_gfn2_electronic_pair_vjp(
+    generativeqc::xtb::generated::Gfn2ElectronicPairAdjoint pair_adjoint{};
+    bool finite = generativeqc::xtb::generated::evaluate_gfn2_electronic_pair_vjp(
         pair_density, pair_potentials, pair_adjoint);
     if (finite) {
       const double updated = workspace.overlap_adjoint_scratch[forward] + pair_adjoint.overlap;
@@ -320,7 +320,7 @@ __global__ void contract_kernel(Gfn2HamiltonianDeviceBatch batch, Gfn2ForceDevic
       const double pair_spin_density =
           input.spin_density[forward] + (forward == reverse ? 0.0 : input.spin_density[reverse]);
       double spin_overlap_adjoint = 0.0;
-      finite = vibeqc::xtb::generated::evaluate_gfn2_electronic_overlap_vjp(
+      finite = generativeqc::xtb::generated::evaluate_gfn2_electronic_overlap_vjp(
           pair_spin_density, input.spin_shell_scalar_potentials[row_shell],
           input.spin_shell_scalar_potentials[column_shell], spin_overlap_adjoint);
       if (finite) {
@@ -389,7 +389,7 @@ __global__ void publish_kernel(Gfn2HamiltonianDeviceBatch batch, Gfn2ForceDevice
                                const std::uint32_t* system_errors) {
   const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
   if (!sequence_is_active(workspace) || activity.requested_mask[system] != 1u ||
-      activity.system_statuses[system] != VIBEQC_XTB_STATUS_SUCCESS ||
+      activity.system_statuses[system] != GENERATIVEQC_XTB_STATUS_SUCCESS ||
       !system_is_valid(system_errors, system)) {
     return;
   }
@@ -521,7 +521,7 @@ cudaError_t validate_descriptors(const Gfn2HamiltonianDeviceBatch& batch,
       !is_aligned(batch.orbital_to_shell, alignof(std::int64_t)) ||
       !is_aligned(batch.orbital_to_atom, alignof(std::int64_t)) ||
       !is_aligned(activity.requested_mask, alignof(std::uint8_t)) ||
-      !is_aligned(activity.system_statuses, alignof(vibeqc_xtb_status_t)) ||
+      !is_aligned(activity.system_statuses, alignof(generativeqc_xtb_status_t)) ||
       !required_pointer(input.density, batch.total_matrix_elements) ||
       !required_pointer(input.shell_scalar_potentials, batch.total_shells) ||
       !required_pointer(input.atomic_dipole_potentials,
@@ -670,4 +670,4 @@ cudaError_t add_gfn2_hamiltonian_integral_adjoints_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

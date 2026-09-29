@@ -3,15 +3,15 @@
 from fractions import Fraction
 
 import pytest
-from vibeqc.ks import (
+from generativeqc.ks import (
     KsOptions,
     _native_semilocal_code,
     ks_coefficients,
     ks_range_exchange_parameters,
     resolve_ks_options,
 )
-from vibeqc_compiler.dft.grid import GridSpec
-from vibeqc_compiler.method import (
+from generativeqc_compiler.dft.grid import GridSpec
+from generativeqc_compiler.method import (
     MethodSpec,
     original_nonlocal_correlation,
     resolve_method,

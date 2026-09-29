@@ -25,7 +25,7 @@ def policy_query(tmp_path_factory: typing.Any) -> typing.Any:
 int main() {
   std::size_t n, a, capacity;
   while (std::cin >> n >> a >> capacity) {
-    const auto p = vibeqc::scf::df_streamed_k_panel(n, a, capacity);
+    const auto p = generativeqc::scf::df_streamed_k_panel(n, a, capacity);
     std::cout << "[" << p.rows << "," << p.output_auxiliaries << ","
               << p.raw_auxiliaries << "," << p.row_tiles << ","
               << p.output_tiles << "]\n";
@@ -65,7 +65,7 @@ def test_policy_minimizes_actual_source_work_and_handles_tails(
 ) -> None:
     # Exhaustively compare both row and Q choices for many nondivisible shapes.
     # This independently enumerates the traversal, rather than repeating the
-    # production quotient search or using VibeQC-to-VibeQC numeric parity.
+    # production quotient search or using GenerativeQC-to-GenerativeQC numeric parity.
     shapes = [
         (n, a, cap)
         for n in range(1, 16)
@@ -117,8 +117,8 @@ def test_reported_768_shape_uses_raw_panel_for_multiple_outputs(
 def test_generated_positive_budget_reduces_raw_passes_monotonically(
     policy_query: typing.Any,
 ) -> None:
-    from vibeqc import Calculator
-    from vibeqc.resources_df import density_fitting_tile_plan
+    from generativeqc import Calculator
+    from generativeqc.resources_df import density_fitting_tile_plan
 
     library = Calculator()._library
     plans = [

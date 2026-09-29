@@ -6,10 +6,10 @@ import hashlib
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.d3_data import load_d3_production_data
+from generativeqc_compiler.common.d3_data import load_d3_production_data
 
 from tools import source_registry
-from tools.vibeqc_d3 import generate_compact_data, generate_native_data
+from tools.generativeqc_d3 import generate_compact_data, generate_native_data
 
 
 def test_checked_in_compact_d3_product_matches_registry() -> None:

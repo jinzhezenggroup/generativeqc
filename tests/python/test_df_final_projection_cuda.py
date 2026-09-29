@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires a finite Slurm GPU allocation",
 )
 
@@ -26,12 +26,12 @@ def test_final_projection_replay_and_geometry(
     assert os.environ.get("SLURM_JOB_ID")
     case = benchmark_cases()["water-tetramer-def2-svp-spherical"]
     for name, value in {
-        "VIBEQC_DF_EXCHANGE": "occupied",
-        "VIBEQC_DF_FINAL_EXCHANGE": "occupied",
-        "VIBEQC_DF_RESIDENT_EXCHANGE": "full",
-        "VIBEQC_DF_RESPONSE_STORAGE": "jk-scratch",
-        "VIBEQC_DF_RESPONSE_SPACE": "occupied",
-        "VIBEQC_DF_FINAL_PROJECTION": "reuse",
+        "GENERATIVEQC_DF_EXCHANGE": "occupied",
+        "GENERATIVEQC_DF_FINAL_EXCHANGE": "occupied",
+        "GENERATIVEQC_DF_RESIDENT_EXCHANGE": "full",
+        "GENERATIVEQC_DF_RESPONSE_STORAGE": "jk-scratch",
+        "GENERATIVEQC_DF_RESPONSE_SPACE": "occupied",
+        "GENERATIVEQC_DF_FINAL_PROJECTION": "reuse",
     }.items():
         monkeypatch.setenv(name, value)
     calc = Calculator(
@@ -61,9 +61,9 @@ def test_final_projection_replay_and_geometry(
             expected = -oracle.nuc_grad_method().kernel()
             answers = []
             for policy in ("off", "reuse", "reuse"):
-                monkeypatch.setenv("VIBEQC_DF_FINAL_PROJECTION", policy)
+                monkeypatch.setenv("GENERATIVEQC_DF_FINAL_PROJECTION", policy)
                 trace = tmp_path / f"{moved}-{len(answers)}.jsonl"
-                monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+                monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
                 actual = batch.execute(
                     [coordinates] if moved else None, strict=True
                 ).items[0]

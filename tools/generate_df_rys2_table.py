@@ -74,7 +74,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("python/vibeqc_compiler/integral/df_rys2_data.py"),
+        default=Path("python/generativeqc_compiler/integral/df_rys2_data.py"),
     )
     args = parser.parse_args()
     args.output.write_text(generate())

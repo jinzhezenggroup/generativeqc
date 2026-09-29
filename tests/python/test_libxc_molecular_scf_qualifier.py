@@ -16,9 +16,9 @@ NAME = "GGA_X_PBE_SOL"
 
 
 def test_pbesol_reaches_exact_molecular_scf_evidence() -> None:
-    build_dir_value = os.environ.get("VIBEQC_BUILD_DIR")
+    build_dir_value = os.environ.get("GENERATIVEQC_BUILD_DIR")
     if not build_dir_value:
-        pytest.skip("native VibeQC build directory is unavailable")
+        pytest.skip("native GenerativeQC build directory is unavailable")
     pyscf = pytest.importorskip("pyscf")
     from pyscf.dft import libxc
 
@@ -45,7 +45,7 @@ def test_pbesol_reaches_exact_molecular_scf_evidence() -> None:
     )
 
     bundle = {
-        "schema": "vibeqc.libxc-public-promotion-bundle/v1",
+        "schema": "generativeqc.libxc-public-promotion-bundle/v1",
         "functional": NAME,
         "compiled_cpu": {
             "result": compiled["result"],

@@ -56,7 +56,7 @@ def _component(
     identity: int = 1,
 ) -> dict[str, Any]:
     return {
-        "schema": "vibeqc.df_trace",
+        "schema": "generativeqc.df_trace",
         "version": 1,
         "id": identity,
         "operation": operation,
@@ -91,7 +91,7 @@ def _component(
 def _host() -> list[dict[str, Any]]:
     return [
         {
-            "schema": "vibeqc.df_host_trace",
+            "schema": "generativeqc.df_host_trace",
             "version": 1,
             "id": 1,
             "valid": True,

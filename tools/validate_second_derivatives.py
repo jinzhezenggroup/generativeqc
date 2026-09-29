@@ -21,14 +21,13 @@ sys.path[:0] = [str(ROOT), str(ROOT / "python"), str(ROOT / "tools")]
 
 import numpy as np
 import pyscf
-from validate_range_eri import command, cpu_model
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import (
     CudaCompilerAdapter,
     resolve_cuda_execution_profile,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -36,22 +35,23 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.paths import source_hashes
-from vibeqc_compiler.integral.second_derivatives import (
+from generativeqc_compiler.common.paths import source_hashes
+from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
 )
-from vibeqc_compiler.integral.second_derivatives_execute import (
+from generativeqc_compiler.integral.second_derivatives_execute import (
     PreparedSecondDerivative,
     SecondPrimitive,
     compile_second_derivative,
 )
-from vibeqc_validation.publication import publish
-from vibeqc_validation.second_derivatives import (
+from generativeqc_validation.publication import publish
+from generativeqc_validation.second_derivatives import (
     libcint_eri_hessian,
     libcint_one_electron_hessian,
     libcint_primitive_gradient,
 )
+from validate_range_eri import command, cpu_model
 
 POSITIONS = np.array(
     [
@@ -402,7 +402,7 @@ def run(args: typing.Any) -> typing.Any:
                     "src/scf/weighted_eri_runtime.hpp",
                     "src/scf/cuda_weighted_eri.hpp",
                     "src/tensor/cuda_runtime.cuh",
-                    "include/vibeqc/vibeqc.h",
+                    "include/generativeqc/generativeqc.h",
                 ),
             )
         ),

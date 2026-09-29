@@ -10,25 +10,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-import vibeqc_compiler
+import generativeqc_compiler
 
 # Generation from an uninstalled checkout needs only the standard library.
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python/vibeqc_compiler" / package_name)]
+        package.__path__ = [str(ROOT / "python/generativeqc_compiler" / package_name)]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_spin_runtime import (
+from generativeqc_compiler.method.gfn2_spin_runtime import (
     GFN2_SPIN_RUNTIME_VERSION,
     build_gfn2_spin_atom_vjp,
     build_gfn2_spin_energy_update,
     build_gfn2_spin_potential_update,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
 def native_header() -> str:
@@ -57,7 +57,8 @@ def native_header() -> str:
         )
         definitions.append(
             body.replace(
-                f"inline bool {function}", f"VIBEQC_GFN2_SPIN_HD inline bool {function}"
+                f"inline bool {function}",
+                f"GENERATIVEQC_GFN2_SPIN_HD inline bool {function}",
             )
         )
         identities.append(
@@ -73,16 +74,16 @@ def native_header() -> str:
             "#pragma once",
             "#include <cmath>",
             "#if defined(__CUDACC__)",
-            "#define VIBEQC_GFN2_SPIN_HD __host__ __device__",
+            "#define GENERATIVEQC_GFN2_SPIN_HD __host__ __device__",
             "#else",
-            "#define VIBEQC_GFN2_SPIN_HD",
+            "#define GENERATIVEQC_GFN2_SPIN_HD",
             "#endif",
-            "namespace vibeqc::xtb::generated {",
+            "namespace generativeqc::xtb::generated {",
             f'inline constexpr const char* gfn2_spin_runtime_version = "{GFN2_SPIN_RUNTIME_VERSION}";',
             *identities,
             *definitions,
-            "}  // namespace vibeqc::xtb::generated",
-            "#undef VIBEQC_GFN2_SPIN_HD",
+            "}  // namespace generativeqc::xtb::generated",
+            "#undef GENERATIVEQC_GFN2_SPIN_HD",
             "",
         ]
     )

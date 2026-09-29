@@ -6,7 +6,7 @@
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_task_encoding.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Materialize one page of an overflowed exact class for its generated kernel.
@@ -185,4 +185,4 @@ void launch_compact_bounded_exact_class_force_wave_kernel(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

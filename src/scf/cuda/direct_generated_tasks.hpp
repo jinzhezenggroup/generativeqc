@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_classify_generated_shell_tasks_kernel(
@@ -46,4 +46,4 @@ void launch_materialize_generated_shell_tasks_kernel(
     std::uint64_t low_order_signature_mask, const std::uint32_t* low_order_signature_offsets,
     std::uint32_t* low_order_signature_write_counts);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

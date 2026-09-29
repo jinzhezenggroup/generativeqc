@@ -5,11 +5,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry.gfn2_pair import (
+from generativeqc_compiler.geometry.gfn2_pair import (
     build_gfn2_runtime_pair_kernel,
     build_gfn2_runtime_pair_primal,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -92,8 +92,8 @@ def test_gfn2_native_pair_codegen_needs_no_site_packages(tmp_path: Path) -> None
     assert "gfn2_pair_distance_jvp_hash" in source
     assert "evaluate_gfn2_coordination_pair" in source
     assert "evaluate_gfn2_repulsion_pair" in source
-    assert "#define VIBEQC_GFN2_PAIR_HOST_DEVICE __host__ __device__" in source
-    assert source.count("VIBEQC_GFN2_PAIR_HOST_DEVICE inline bool") == 4
+    assert "#define GENERATIVEQC_GFN2_PAIR_HOST_DEVICE __host__ __device__" in source
+    assert source.count("GENERATIVEQC_GFN2_PAIR_HOST_DEVICE inline bool") == 4
 
 
 def test_gfn2_cuda_pair_science_consumes_generated_helpers() -> None:

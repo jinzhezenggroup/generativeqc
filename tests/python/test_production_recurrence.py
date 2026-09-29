@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral import (
     DPDS_SPEC,
     ContractionSpec,
     KernelConsumer,
@@ -17,7 +17,7 @@ from vibeqc_compiler.integral import (
     build_fused_shell_plan,
     build_integral_ir,
 )
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.production import (
     KernelSelection,
     emit_multi_registry_header,
     emit_multi_registry_source,
@@ -356,7 +356,7 @@ def test_existing_production_rows_default_to_subset_wick() -> None:
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -469,7 +469,7 @@ def test_production_dsps_promotes_scalar_force_but_retains_component_fock() -> N
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -492,7 +492,7 @@ def test_production_rys3_component_force_uses_subgroup_fock(
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -522,7 +522,7 @@ def test_production_rys3_uniform_force_keeps_independent_fock_schedule(
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -572,7 +572,7 @@ def test_production_rys4_force_retains_explicit_fock_schedule(
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -601,7 +601,7 @@ def test_production_rys4_force_retains_explicit_fock_schedule(
     assert f"generated_sm120_{shell_class}_rys4" in shard
     assert f"generated_sm120_{shell_class}_shell_class_fock_rhf_kernel" in shard
     fock_launch = shard.split(
-        f'extern "C" cudaError_t vibeqc_launch_sm120_generated_{shell_class}_fock(',
+        f'extern "C" cudaError_t generativeqc_launch_sm120_generated_{shell_class}_fock(',
         maxsplit=1,
     )[1].split('extern "C"', maxsplit=1)[0]
     assert (
@@ -621,7 +621,7 @@ def test_production_dddp_rys5_retains_explicit_fock_schedule() -> None:
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -647,7 +647,7 @@ def test_production_dddd_rys5_retains_native_fock_schedule() -> None:
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -685,7 +685,7 @@ def test_production_packed_streaming_fock_uses_profiled_lane_local_state(
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -719,7 +719,7 @@ def test_production_mixed_fock_uses_compact_fp32_geometry() -> None:
     manifest = (
         repository_root
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -771,9 +771,9 @@ def test_ppps_resident_option_keeps_ordinary_fock_force_fallback(
     assert selection.resident_force_recurrence == "rys3"
 
     source = emit_production_shard(resolved.selections)
-    assert "vibeqc_launch_generated_ppps(" in source
-    assert "vibeqc_launch_generated_ppps_fock(" in source
-    assert 'extern "C" cudaError_t vibeqc_launch_ppps_resident(' in source
+    assert "generativeqc_launch_generated_ppps(" in source
+    assert "generativeqc_launch_generated_ppps_fock(" in source
+    assert 'extern "C" cudaError_t generativeqc_launch_ppps_resident(' in source
     assert "generated_ppps_resident_bra_force_rhf_kernel<<<" in source
     assert "generated_ppps_resident_bra_force_uhf_kernel<<<" in source
     assert "const void* resident_tasks" in source
@@ -786,13 +786,16 @@ def test_ppps_resident_option_keeps_ordinary_fock_force_fallback(
     assert "resident.ket_count > kGeneratedPppsResidentBlockThreads" not in source
 
     profile_source = emit_profile_shard(resolved, resolved.selections)
-    assert "vibeqc::scf::detail::GeneratedPppsResidentTask" in profile_source
-    assert "vibeqc::scf::detail::GeneratedSm120PppsResidentTask" not in profile_source
+    assert "generativeqc::scf::detail::GeneratedPppsResidentTask" in profile_source
+    assert (
+        "generativeqc::scf::detail::GeneratedSm120PppsResidentTask"
+        not in profile_source
+    )
 
     registry_header = emit_registry_header(resolved.selections)
     registry_source = emit_registry_source(resolved.selections)
     assert "launch_ppps_resident" in registry_header
-    assert "vibeqc_launch_ppps_resident" in registry_source
+    assert "generativeqc_launch_ppps_resident" in registry_source
     assert "return cudaErrorNotSupported;" not in registry_source
 
 
@@ -857,7 +860,7 @@ def test_multi_profile_resident_registry_tracks_each_profile(
     assert "launch_sm80_resident" in source
     assert "return cudaErrorNotSupported;" in source
     assert "launch_sm120_resident" in source
-    assert "vibeqc_launch_sm120_ppps_resident" in source
+    assert "generativeqc_launch_sm120_ppps_resident" in source
 
 
 def test_multi_profile_registry_dispatches_dpps_mixed_fock(
@@ -901,7 +904,7 @@ def test_multi_profile_registry_dispatches_dpps_mixed_fock(
     shard = emit_profile_shard(resolved, resolved.selections)
     source = emit_multi_registry_source((resolved,))
 
-    assert "vibeqc_launch_sm120_generated_dpps_mixed_fock" in shard
+    assert "generativeqc_launch_sm120_generated_dpps_mixed_fock" in shard
     assert "generated_sm120_dpps_shell_class_mixed_fock_rhf" in shard
     assert "generated_sm120_dpps_shell_class_mixed_fock_task" in shard
     assert "mixed_precision_enabled" in shard
@@ -909,7 +912,7 @@ def test_multi_profile_registry_dispatches_dpps_mixed_fock(
     assert "stream_state == 3U" in shard
     assert "launch_sm120_mixed_fock" in source
     assert "UINT64_C(2048)" in source
-    assert "VIBEQC_AOT_MIXED_FOCK_SHELL_CLASSES" in source
+    assert "GENERATIVEQC_AOT_MIXED_FOCK_SHELL_CLASSES" in source
     assert "enabled_mixed_fock_shell_class_mask" in source
     assert "launch_shell_class_mixed_fock" in source
 
@@ -996,7 +999,7 @@ def test_multi_profile_registry_keeps_fock_only_force_symbols_dormant(
     source = emit_multi_registry_source((resolved,))
 
     # Bounded spd force dispatch can call the exact dormant symbol directly.
-    assert "vibeqc_launch_sm120_generated_ssss" in source
+    assert "generativeqc_launch_sm120_generated_ssss" in source
     assert "case 0U:" in source
     # Ordinary force selection and allocation must nevertheless remain empty.
     assert "std::array<ShellKernelMetadata, 0> kForceNames0" in source

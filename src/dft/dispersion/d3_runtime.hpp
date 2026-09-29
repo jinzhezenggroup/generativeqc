@@ -10,11 +10,11 @@
 #include <vector>
 
 #include "dft/dispersion/d3_model.hpp"
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
-inline constexpr const char* kD3ProductionProviderIdentity = "vibeqc-native-d3-v2";
+inline constexpr const char* kD3ProductionProviderIdentity = "generativeqc-native-d3-v2";
 inline constexpr const char* kD3ProductionSchedulerIdentity = "ragged-system-cooperative-pair-v1";
 
 // Aggregate ragged storage is not subject to the per-system physics cap.
@@ -41,18 +41,18 @@ struct D3CudaOwner;
 
 class D3Plan {
  public:
-  static std::unique_ptr<D3Plan> prepare(vibeqc_backend backend, int device_id,
+  static std::unique_ptr<D3Plan> prepare(generativeqc_backend backend, int device_id,
                                          std::vector<std::uint32_t> offsets,
                                          std::vector<std::int32_t> atomic_numbers,
                                          std::vector<double> default_coordinates,
                                          D3ModelParameters parameters, std::uint64_t maximum_bytes,
-                                         std::string& detail, vibeqc_status& status);
-  static std::unique_ptr<D3Plan> prepare(vibeqc_backend backend, int device_id,
+                                         std::string& detail, generativeqc_status& status);
+  static std::unique_ptr<D3Plan> prepare(generativeqc_backend backend, int device_id,
                                          std::vector<std::uint32_t> offsets,
                                          std::vector<std::int32_t> atomic_numbers,
                                          std::vector<double> default_coordinates,
                                          D3Parameters parameters, std::uint64_t maximum_bytes,
-                                         std::string& detail, vibeqc_status& status) {
+                                         std::string& detail, generativeqc_status& status) {
     D3ModelParameters model{};
     model.damping = D3Damping::bj;
     model.bj = parameters;
@@ -71,7 +71,7 @@ class D3Plan {
   [[nodiscard]] std::uint32_t atom_count(std::uint32_t system) const noexcept {
     return offsets_[system + 1] - offsets_[system];
   }
-  [[nodiscard]] vibeqc_backend backend() const noexcept { return backend_; }
+  [[nodiscard]] generativeqc_backend backend() const noexcept { return backend_; }
   [[nodiscard]] const D3ModelParameters& parameters() const noexcept { return parameters_; }
   [[nodiscard]] const D3ResourceUsage& resources() const noexcept { return resources_; }
   [[nodiscard]] std::span<const double> default_coordinates(std::uint32_t system) const noexcept {
@@ -81,14 +81,14 @@ class D3Plan {
   }
 
   // active[i]==0 skips the item and leaves status ownership to the caller.
-  vibeqc_status execute(std::span<const double> packed_coordinates,
-                        std::span<const std::uint8_t> active,
-                        std::span<const std::uint8_t> want_gradient,
-                        std::vector<D3Status>& statuses, std::vector<double>& energies,
-                        std::vector<double>& packed_gradients, std::string& detail);
+  generativeqc_status execute(std::span<const double> packed_coordinates,
+                              std::span<const std::uint8_t> active,
+                              std::span<const std::uint8_t> want_gradient,
+                              std::vector<D3Status>& statuses, std::vector<double>& energies,
+                              std::vector<double>& packed_gradients, std::string& detail);
 
  private:
-  D3Plan(vibeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
+  D3Plan(generativeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
          std::vector<std::int32_t> atomic_numbers, std::vector<double> default_coordinates,
          D3ModelParameters parameters, D3ResourceUsage resources)
       : backend_(backend),
@@ -99,7 +99,7 @@ class D3Plan {
         parameters_(parameters),
         resources_(resources) {}
 
-  vibeqc_backend backend_{};
+  generativeqc_backend backend_{};
   int device_id_{};
   std::vector<std::uint32_t> offsets_;
   std::vector<std::int32_t> atomic_numbers_;
@@ -112,13 +112,13 @@ class D3Plan {
 D3CudaOwner* create_d3_cuda_owner(int device_id, std::span<const std::uint32_t> offsets,
                                   std::span<const std::int32_t> atomic_numbers,
                                   const D3ResourceUsage& resources, std::string& detail,
-                                  vibeqc_status& status);
+                                  generativeqc_status& status);
 void destroy_d3_cuda_owner(D3CudaOwner* owner) noexcept;
-vibeqc_status execute_d3_cuda(D3CudaOwner* owner, const D3ModelParameters& parameters,
-                              std::span<const double> coordinates,
-                              std::span<const std::uint8_t> active,
-                              std::span<const std::uint8_t> want_gradient,
-                              std::vector<D3Status>& statuses, std::vector<double>& energies,
-                              std::vector<double>& gradients, std::string& detail);
+generativeqc_status execute_d3_cuda(D3CudaOwner* owner, const D3ModelParameters& parameters,
+                                    std::span<const double> coordinates,
+                                    std::span<const std::uint8_t> active,
+                                    std::span<const std::uint8_t> want_gradient,
+                                    std::vector<D3Status>& statuses, std::vector<double>& energies,
+                                    std::vector<double>& gradients, std::string& detail);
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

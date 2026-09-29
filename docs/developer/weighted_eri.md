@@ -24,8 +24,8 @@ task domain or screening. See the
 | HF, at most 16 public AOs | Persistent ERI values and their native force path | AO cutoff; does not exercise the direct psss migration |
 | Direct HF psss Fock | Compiler-generated multi-output value lowering for both fixed-topology and bounded streaming execution | The production psss row is enabled for fixed and bounded Fock; the former psss-specific native value body is retired, while a shared generic order-one fallback remains available when generated exact-class execution is unavailable |
 | Direct HF psss force | Generated force-only weighted-ERI expression over the existing native primitive-pair scheduler | Compiler-generated mathematics is unconditional; resident/fixed/paged scheduling remains native, while the superseded handwritten weighted derivative formula and route selector are retired |
-| Direct HF psss resident force | Resident bra pairs and primitive-length descriptors | `VIBEQC_PSSS_RESIDENT_BRA`; the generated expression uses the same resident pairs and canonical-orientation scales |
-| Bounded direct psss force | Lossless paged exact-class consumer | `VIBEQC_BOUNDED_DIRECT_STREAMING=force` or topology limits; uses the same weighted expression, retains page traversal |
+| Direct HF psss resident force | Resident bra pairs and primitive-length descriptors | `GENERATIVEQC_PSSS_RESIDENT_BRA`; the generated expression uses the same resident pairs and canonical-orientation scales |
+| Bounded direct psss force | Lossless paged exact-class consumer | `GENERATIVEQC_BOUNDED_DIRECT_STREAMING=force` or topology limits; uses the same weighted expression, retains page traversal |
 | Direct HF ssss force | Generated force-only weighted-ERI expression over the native primitive-pair cache | Generated mathematics is the unconditional production path; the qualified bounded/packed native scheduler remains, while the superseded handwritten ssss derivative body and runtime selector are deleted |
 | Direct HF psps/ppss | Common generated production kernels | Already migrated before this issue; manifest, signature policies and queues are retained |
 | Direct HF PPPS/DSPS/DPSS/FSSS force | Generated force-only Weighted IntegralIR over the existing compact order-three queue | Compiler-generated mathematics is unconditional for the native order-three route; generated-AOT mask ownership remains disjoint, while screening, density folding and atom scatter stay native |
@@ -51,11 +51,11 @@ the generic value pass retains uncovered order one and includes order three,
 notably `(f s|s s)`.
 The force pass independently retains its order-three shell consumer.
 
-`VIBEQC_BOUNDED_DIRECT_STREAMING=force` selects this schedule explicitly. Normal
+`GENERATIVEQC_BOUNDED_DIRECT_STREAMING=force` selects this schedule explicitly. Normal
 execution selects it when the fixed descriptor grid or its memory budget would
 be exceeded. Neither mode restores a topology-sized descriptor allocation.
 
-`VIBEQC_DIRECT_TILE_VALIDATION=validate` is a structural diagnostic. It reports
+`GENERATIVEQC_DIRECT_TILE_VALIDATION=validate` is a structural diagnostic. It reports
 `NOT_IMPLEMENTED` for the numerical endpoint after descriptor validation; its
 output is never an SCF energy/force result. Unset it for numerical qualification.
 The allocated-GPU regression suite is
@@ -70,7 +70,7 @@ are historical and are not claimed as current candidate results.
 
 ## Weight and permutation contracts
 
-`python/vibeqc_compiler/integral/eri_weights.py` exposes three explicit adapters:
+`python/generativeqc_compiler/integral/eri_weights.py` exposes three explicit adapters:
 
 - `fold_dense_eri_weight` sums every *distinct* ordered weight in the eightfold
   ERI orbit. Same AO indices and same pairs reduce the orbit size. Multiplying
@@ -107,8 +107,8 @@ The provider is called once and its numerical weights are frozen. There is no
 primitive-product array. A new geometry needs a newly prepared stream.
 
 The internal C++ entry point is
-`vibeqc::scf::contract_cuda_weighted_eri_primitives`, declared in
-`src/scf/cuda_weighted_eri.hpp`. Link against a CUDA-enabled VibeQC library.
+`generativeqc::scf::contract_cuda_weighted_eri_primitives`, declared in
+`src/scf/cuda_weighted_eri.hpp`. Link against a CUDA-enabled GenerativeQC library.
 It accepts a bounded span of 208-byte primitive records and returns one
 104-byte result per output tile: the explicitly scaled weighted scalar and
 four three-component derivatives. Callers can stream multiple spans and add
@@ -158,7 +158,7 @@ Only representative f shells are used here; the full f matrix belongs to #135.
 Run `tools/screen_weighted_eri.py` to compile the materialized and inline-single-use
 candidates. Both consume all runtime inputs and write all thirteen outputs.
 The native numerical driver is `tools/validate_weighted_eri.py`, paired with
-the manual CMake target `vibeqc_weighted_eri_probe`. It checks mixed output tiles,
+the manual CMake target `generativeqc_weighted_eri_probe`. It checks mixed output tiles,
 both execution routes, multiple upload capacities, raw unit weights, repeated
 geometries and libcint center derivatives.
 

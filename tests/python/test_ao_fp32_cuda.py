@@ -14,15 +14,15 @@ import subprocess
 
 import numpy as np
 import pytest
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.ao_cuda import (
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_policy,
     emit_grid_scientific_kernels,
 )
-from vibeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
+from generativeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_GRID_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GRID_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
 def fp32_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     """Compile the actual emitted AO body with only a transport test wrapper."""
     assert os.environ.get("SLURM_JOB_ID")
-    compiler = os.environ.get("VIBEQC_NVCC") or shutil.which("nvcc")
+    compiler = os.environ.get("GENERATIVEQC_NVCC") or shutil.which("nvcc")
     assert compiler, "allocated qualification requires nvcc"
     directory = tmp_path_factory.mktemp("ao-fp32-cuda")
     policy = emit_grid_policy()
@@ -46,7 +46,7 @@ def fp32_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         "__device__ double finite(double x, int* error, int) {\n"
         "  if (!isfinite(x)) atomicExch(error, 1); return x;\n}\n"
         + policy[:end]
-        + "\n}\nusing namespace vibeqc_grid_policy;\n"
+        + "\n}\nusing namespace generativeqc_grid_policy;\n"
         + kernels[begin:end_kernels]
         + r"""
 extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
@@ -85,7 +85,7 @@ extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
             "--fmad=false",
             "-shared",
             "-Xcompiler=-fPIC",
-            "-arch=" + os.environ.get("VIBEQC_GRID_CUDA_ARCH", "sm_120"),
+            "-arch=" + os.environ.get("GENERATIVEQC_GRID_CUDA_ARCH", "sm_120"),
             str(source),
             "-o",
             str(library),

@@ -6,15 +6,15 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
-from tools.vibeqc_validation.df_gradient import (
+from tools.generativeqc_validation.df_gradient import (
     execute_df_gradient,
     reference_df_matrices,
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_DF_DERIVATIVE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DF_DERIVATIVE_CUDA_TEST") != "1",
     reason="explicit Slurm DF derivative tier",
 )
 
@@ -224,7 +224,7 @@ def test_complete_hf_replay_two_budgets_and_force_components(
         )
         for positions in (base, base, moved, base)
     ]
-    monkeypatch.setenv("VIBEQC_DF_DERIVATIVE_MAPPING", "thread")
+    monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_MAPPING", "thread")
     with calc.prepare_batch(
         [atoms], charges=[charge], multiplicities=[multiplicity]
     ) as batch:
@@ -240,17 +240,17 @@ def test_complete_hf_replay_two_budgets_and_force_components(
         # values have no dispatch/provenance effect and cannot resurrect an oracle.
         for mapping in ("serial", "thread"):
             monkeypatch.setenv(
-                "VIBEQC_DF_DERIVATIVES",
+                "GENERATIVEQC_DF_DERIVATIVES",
                 "reference" if mapping == "serial" else "generated",
             )
-            monkeypatch.setenv("VIBEQC_DF_DERIVATIVE_MAPPING", mapping)
+            monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_MAPPING", mapping)
             actual = batch.execute([base], strict=True).items[0]
             np.testing.assert_allclose(
                 actual.forces, expected[0].forces, atol=3e-9, rtol=0
             )
             policy = batch._warm_metadata[0]["controls"]["runtime_policy"]
-            assert "VIBEQC_DF_DERIVATIVES" not in policy
-            assert policy["VIBEQC_DF_DERIVATIVE_MAPPING"] == mapping
+            assert "GENERATIVEQC_DF_DERIVATIVES" not in policy
+            assert policy["GENERATIVEQC_DF_DERIVATIVE_MAPPING"] == mapping
 
 
 @pytest.mark.parametrize("budget", [1 << 20, 4 << 20])
@@ -370,7 +370,7 @@ def test_null_weight_channels_are_documented_zero_operators(
         np.zeros_like(wa) if null_a else wa,
         np.zeros_like(wm) if null_m else wm,
     )
-    native = orbital._library.vibeqc_system_df_gradient_cuda
+    native = orbital._library.generativeqc_system_df_gradient_cuda
 
     def nullable(*arguments: typing.Any) -> typing.Any:
         native.argtypes, native.restype = nullable.argtypes, nullable.restype
@@ -382,7 +382,9 @@ def test_null_weight_channels_are_documented_zero_operators(
             arguments[5] = None
         return native(*arguments)
 
-    monkeypatch.setattr(orbital._library, "vibeqc_system_df_gradient_cuda", nullable)
+    monkeypatch.setattr(
+        orbital._library, "generativeqc_system_df_gradient_cuda", nullable
+    )
     actual, resources = execute_df_gradient(orbital, auxiliary, atoms, wa, wm)
     np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
     if null_a and null_m:

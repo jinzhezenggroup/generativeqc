@@ -1,19 +1,19 @@
-#ifndef VIBEQC_XTB_RUNTIME_BACKEND_HPP
+#ifndef GENERATIVEQC_XTB_RUNTIME_BACKEND_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_RUNTIME_BACKEND_HPP
+#define GENERATIVEQC_XTB_RUNTIME_BACKEND_HPP
 
 #include <cstdint>
 #include <string>
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 
 // Only native CUDA device admission and parameter residency are declared
 // here. Context/cache ownership belongs to Gfn2RuntimeBridge; the imported
 // external context and GFN1 cache API had no implementation or consumers.
-#if defined(VIBEQC_XTB_HAS_CUDA)
+#if defined(GENERATIVEQC_XTB_HAS_CUDA)
 bool resolve_cuda_device(std::int32_t requested_device, std::int32_t& resolved_device,
                          std::string& error);
 
@@ -27,6 +27,6 @@ std::uint64_t cuda_gfn2_parameter_upload_count(std::int32_t device_id);
 bool cuda_gfn2_parameters_match_host(std::int32_t device_id, std::string& error);
 #endif
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail
 
-#endif  // VIBEQC_XTB_RUNTIME_BACKEND_HPP
+#endif  // GENERATIVEQC_XTB_RUNTIME_BACKEND_HPP

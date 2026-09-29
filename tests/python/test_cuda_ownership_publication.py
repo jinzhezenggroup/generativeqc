@@ -10,8 +10,8 @@ from xml.etree import ElementTree
 
 import pytest
 
+from tools.generativeqc_validation.publication import validate_publication
 from tools.publish_cuda_ownership import compact_comparison, validate_resources, write
-from tools.vibeqc_validation.publication import validate_publication
 
 BUNDLE = (
     Path(__file__).resolve().parents[2]

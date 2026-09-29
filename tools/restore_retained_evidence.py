@@ -38,12 +38,12 @@ def _records(manifest: Path | None) -> list[dict]:
     if not isinstance(audit, dict):
         raise TypeError("unsupported evidence migration manifest")
     schema = audit.get("schema")
-    if schema == "vibeqc.storage-migration.v1":
+    if schema == "generativeqc.storage-migration.v1":
         records = audit.get("archives")
     elif schema in {
-        "vibeqc.evidence-archive.v1",
-        "vibeqc.git-snapshot.v1",
-        "vibeqc.git-object-snapshot.v1",
+        "generativeqc.evidence-archive.v1",
+        "generativeqc.git-snapshot.v1",
+        "generativeqc.git-object-snapshot.v1",
     }:
         records = audit.get("files")
     else:
@@ -56,7 +56,7 @@ def _records(manifest: Path | None) -> list[dict]:
         if not isinstance(record, dict):
             raise TypeError("invalid historical evidence identity")
         entry = dict(record)
-        if schema != "vibeqc.storage-migration.v1":
+        if schema != "generativeqc.storage-migration.v1":
             entry["revision"] = audit.get("source_revision")
         _safe_path(entry.get("path"))
         if entry["path"] in paths:
@@ -65,7 +65,7 @@ def _records(manifest: Path | None) -> list[dict]:
         digest_ok = (
             isinstance(entry.get("git_blob_sha1"), str)
             and re.fullmatch(r"[0-9a-f]{40}", entry["git_blob_sha1"])
-            if schema == "vibeqc.git-object-snapshot.v1"
+            if schema == "generativeqc.git-object-snapshot.v1"
             else isinstance(entry.get("sha256"), str)
             and re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
         )
@@ -84,7 +84,10 @@ def _records(manifest: Path | None) -> list[dict]:
         for parent in PurePosixPath(path).parents
     ):
         raise ValueError("historical evidence paths conflict")
-    if schema in {"vibeqc.git-snapshot.v1", "vibeqc.git-object-snapshot.v1"} and (
+    if schema in {
+        "generativeqc.git-snapshot.v1",
+        "generativeqc.git-object-snapshot.v1",
+    } and (
         type(audit.get("file_count")) is not int
         or audit["file_count"] != len(result)
         or type(audit.get("total_bytes")) is not int
@@ -174,7 +177,9 @@ def restore_snapshot(
     """
     records = _records(manifest)
     target = _target(output, ROOT / ".artifacts/retention-snapshot")
-    with tempfile.TemporaryDirectory(prefix="vibeqc-evidence-restore-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="generativeqc-evidence-restore-"
+    ) as temporary:
         staged = Path(temporary)
         for entry in records:
             data = _read(entry)

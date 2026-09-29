@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _tree() -> ast.Module:
-    return ast.parse((ROOT / "python/vibeqc/resources_ks.py").read_text())
+    return ast.parse((ROOT / "python/generativeqc/resources_ks.py").read_text())
 
 
 def _function(name: str) -> ast.FunctionDef:
@@ -124,8 +124,8 @@ def _library(quadrature_status: int = 0) -> SimpleNamespace:
         return quadrature_status
 
     return SimpleNamespace(
-        vibeqc_resource_ks_cuda_v1=query,
-        vibeqc_resource_quadrature_cuda_v1=quadrature,
+        generativeqc_resource_ks_cuda_v1=query,
+        generativeqc_resource_quadrature_cuda_v1=quadrature,
     )
 
 
@@ -141,7 +141,7 @@ def test_quadrature_setup_coexists_with_prepared_coulomb() -> None:
 def test_unavailable_quadrature_inventory_fails_closed(missing: bool) -> None:
     library = _library(quadrature_status=1)
     if missing:
-        del library.vibeqc_resource_quadrature_cuda_v1
+        del library.generativeqc_resource_quadrature_cuda_v1
     with pytest.raises(NotImplementedError, match="quadrature"):
         _load("_cuda_item_inventory")(
             library, _item(32), diis_history=8, pbe=True, tile=16
@@ -158,9 +158,9 @@ def test_native_semantic_abi_version_is_checked_even_for_default_model(
         for node in ast.walk(function)
         if isinstance(node, ast.If) and ast.unparse(node.test) == "library is not None"
     )
-    library = SimpleNamespace(vibeqc_ks_resource_inventory_version_v1=lambda: 1)
+    library = SimpleNamespace(generativeqc_ks_resource_inventory_version_v1=lambda: 1)
     if version is not None:
-        library.vibeqc_ks_options_version = lambda: version
+        library.generativeqc_ks_options_version = lambda: version
     namespace = _environment()
     namespace.update(library=library, model=_model(), method="pbe-rks")
     module = ast.Module(body=[guard], type_ignores=[])
@@ -230,7 +230,7 @@ def test_unusable_semantic_abi_symbol_is_explicitly_unsupported(symbol: object) 
         if isinstance(node, ast.If) and ast.unparse(node.test) == "library is not None"
     )
     namespace = _environment()
-    namespace["library"] = SimpleNamespace(vibeqc_ks_options_version=symbol)
+    namespace["library"] = SimpleNamespace(generativeqc_ks_options_version=symbol)
     module = ast.Module(body=[guard], type_ignores=[])
     with pytest.raises(NotImplementedError, match="semantic KS execution-plan ABI"):
         exec(compile(module, "inventory ABI", "exec"), namespace)  # noqa: S102

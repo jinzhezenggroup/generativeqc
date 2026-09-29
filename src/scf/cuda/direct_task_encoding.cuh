@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Return the canonical ``pp`` pair for an active ppps tile.
@@ -198,4 +198,4 @@ __device__ __forceinline__ bool bounded_generated_class_enabled(
          (enabled_mask & (std::uint64_t{1} << shell_class)) != 0U;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

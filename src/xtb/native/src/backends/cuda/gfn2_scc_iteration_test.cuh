@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_TEST_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_TEST_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_TEST_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_TEST_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/cuda/gfn2_scc_iteration.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /*
  * Test-only fault descriptor for composed-DAG failure evidence. The dedicated
@@ -33,6 +33,6 @@ static_assert(std::is_standard_layout_v<Gfn2SccIterationTestFault>);
     const Gfn2SccIterationBinding& binding, const Gfn2SccIterationTestFault& fault,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_TEST_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_TEST_CUH

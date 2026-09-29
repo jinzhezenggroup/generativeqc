@@ -5,10 +5,10 @@ from hashlib import sha256
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.common.resources import ResourceBudget
 
-from tools.vibeqc_posthf.low_rank import IncrementalCholesky
-from tools.vibeqc_posthf.pair_space import PairSpace
+from tools.generativeqc_posthf.low_rank import IncrementalCholesky
+from tools.generativeqc_posthf.pair_space import PairSpace
 
 
 class DenseColumns:

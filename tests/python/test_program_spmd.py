@@ -5,10 +5,10 @@ import math
 from collections.abc import Callable
 
 import pytest
-from vibeqc_compiler.common.layout import DenseLayout
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.resources import ResourceBudget, plan_resources
-from vibeqc_compiler.common.spmd import (
+from generativeqc_compiler.common.layout import DenseLayout
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+from generativeqc_compiler.common.spmd import (
     BufferPlacement,
     CollectiveSpec,
     DeviceMesh,

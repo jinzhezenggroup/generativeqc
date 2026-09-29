@@ -5,11 +5,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.gfn2_es3_runtime import (
+from generativeqc_compiler.method.gfn2_es3_runtime import (
     build_gfn2_es3_kernel,
     build_gfn2_es3_primal,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -68,7 +68,7 @@ def test_gfn2_es3_codegen_is_standalone_and_records_ad_identity(tmp_path: Path) 
     assert "gfn2_es3_charge_jvp_hash" in source
     assert "evaluate_gfn2_es3_energy" in source
     assert "evaluate_gfn2_es3_potential" in source
-    assert "VIBEQC_GFN2_ES3_HD" in source
+    assert "GENERATIVEQC_GFN2_ES3_HD" in source
 
 
 def test_gfn2_es3_generated_host_recovers_representable_extremes(
@@ -84,8 +84,8 @@ def test_gfn2_es3_generated_host_recovers_representable_extremes(
         r"""#include <cmath>
 #include "generated_gfn2_es3_native.cuh"
 int main() {
-  using vibeqc::xtb::generated::evaluate_gfn2_es3_energy;
-  using vibeqc::xtb::generated::evaluate_gfn2_es3_potential;
+  using generativeqc::xtb::generated::evaluate_gfn2_es3_energy;
+  using generativeqc::xtb::generated::evaluate_gfn2_es3_potential;
   double value = 0.0;
   if (!evaluate_gfn2_es3_potential(1.0e-300, 1.0e200, &value) ||
       !std::isfinite(value) || std::abs(value / 1.0e100 - 1.0) > 2.0e-15) return 1;

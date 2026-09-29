@@ -52,7 +52,7 @@ Omit `--run` for a short, hardware-free manifest preflight:
 
 ```bash
 python3 benchmarks/issue206_df_matrix.py \
-  --library build/cuda-release-sm120/libvibeqc.so \
+  --library build/cuda-release-sm120/libgenerativeqc.so \
   --output-dir .artifacts/issue206-preflight
 ```
 

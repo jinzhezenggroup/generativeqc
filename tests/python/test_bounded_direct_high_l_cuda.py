@@ -7,10 +7,10 @@ from dataclasses import asdict
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -37,8 +37,8 @@ def test_forced_bounded_high_l_matches_fixed(
     """Registry gaps use the bounded high-l oracle instead of failing late."""
 
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.delenv("VIBEQC_BOUNDED_DIRECT_STREAMING", raising=False)
-    monkeypatch.delenv("VIBEQC_DIRECT_TILE_VALIDATION", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DIRECT_TILE_VALIDATION", raising=False)
     options = {
         "method": method,
         "basis": BASIS,
@@ -59,7 +59,7 @@ def test_forced_bounded_high_l_matches_fixed(
         fixed = prepared.execute(strict=True).items[0]
         fixed_work = prepared.last_shell_class_profile()
 
-    monkeypatch.setenv("VIBEQC_BOUNDED_DIRECT_STREAMING", "force")
+    monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
     with Calculator(**options).prepare_batch(
         [ATOMS],
         charges=[charge],
@@ -122,9 +122,9 @@ def test_tile_validation_is_structural_only(
 ) -> None:
     """A successful descriptor diagnostic cannot return an SCF result."""
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("VIBEQC_DIRECT_TILE_VALIDATION", "validate")
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_TILE_VALIDATION", "validate")
     monkeypatch.setenv(
-        "VIBEQC_BOUNDED_DIRECT_STREAMING", "force" if bounded else "none"
+        "GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force" if bounded else "none"
     )
     calculator = Calculator(
         method=method, basis=BASIS, device="cuda", density_fitting="none"

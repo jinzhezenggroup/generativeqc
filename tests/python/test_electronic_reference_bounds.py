@@ -17,7 +17,7 @@ def test_virtual_orbital_access_is_checked(tmp_path: Path) -> None:
     source.write_text(r"""#include "core/electronic_reference.hpp"
 #include <iostream>
 int main() {
-  using vibeqc::core::ElectronicReferenceView;
+  using generativeqc::core::ElectronicReferenceView;
   ElectronicReferenceView view;
   view.basis_functions = 3; view.spin_channels = 2;
   view.channels[0].occupied = 2; view.channels[1].occupied = 0;

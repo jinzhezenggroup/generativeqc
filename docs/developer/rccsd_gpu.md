@@ -10,7 +10,7 @@ TensorIR interfaces are coordinated with #193.
 
 ## A: fixed-amplitude equations
 
-`tools.vibeqc_cc.cuda.PreparedRCCSDResidual` compiles the complete #148
+`tools.generativeqc_cc.cuda.PreparedRCCSDResidual` compiles the complete #148
 energy/R1/R2 DAG with the #146 planner and executor. `trace=True` retains every
 live node as an output, with unchanged node definitions. The resulting longer
 lifetimes and host output storage are charged by the same planner. It is an
@@ -29,8 +29,8 @@ export PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 python -m tools.validate_cc_cuda --architecture sm_90 \
   --nvcc /usr/local/cuda/bin/nvcc --cache build/tensor-cuda-cache \
   --output build/cc149-reproduction
-VIBEQC_CC_CUDA_TEST=1 VIBEQC_TENSOR_ARCH=sm_90 \
-  VIBEQC_NVCC=/usr/local/cuda/bin/nvcc python -m pytest \
+GENERATIVEQC_CC_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_90 \
+  GENERATIVEQC_NVCC=/usr/local/cuda/bin/nvcc python -m pytest \
   tests/python/test_cc_cuda.py tests/python/test_cc_cuda_state.py -q
 ```
 
@@ -63,7 +63,7 @@ cross-geometry amplitude transport remains unsupported.
 
 ## B: resident single-system solver
 
-`tools.vibeqc_cc.resident_solver.PreparedResidentCCSD` now binds the existing
+`tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` now binds the existing
 #149 primary iteration plan to the #420 resident TensorIR ABI. The physical
 energy/R1/R2 equations and damped Jacobi proposal remain generated from #148;
 no second CC residual implementation is introduced.
@@ -98,7 +98,7 @@ a backend switch.
 
 The internal energy facade accepts `backend="cuda-resident"`. It remains
 energy-only. Slice C now additionally exposes the production native owner through
-`VIBEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`; force requests remain
+`GENERATIVEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`; force requests remain
 unsupported. `PreparedResidentCCSD` itself
 stays open after convergence. Its immutable `owner_identity` binds the
 reference/integrals/equations/artifact/device; a separate
@@ -130,7 +130,7 @@ energy to about 2.9e-13 Eh.
 ## C: native/public promotion
 
 Slice C promotes restricted closed-shell CCSD as a genuine native method without
-reusing the reserved `VIBEQC_METHOD_RCCSD_T` identifier. `VIBEQC_METHOD_RCCSD=12`
+reusing the reserved `GENERATIVEQC_METHOD_RCCSD_T` identifier. `GENERATIVEQC_METHOD_RCCSD=12`
 is an additive method id; all earlier values remain unchanged. The registry reports
 energy only and prepared-batch support. A force buffer/request therefore fails
 explicitly instead of returning an HF derivative under a CC label.

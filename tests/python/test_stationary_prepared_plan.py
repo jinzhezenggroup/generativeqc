@@ -2,18 +2,18 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.common.prepared_execution import PreparedExecutionRequest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.common.prepared_execution import PreparedExecutionRequest
+from generativeqc_compiler.method import (
     MethodSpec,
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.method.stationary_prepared import (
+from generativeqc_compiler.method.stationary_prepared import (
     StationaryPreparedPlan,
     compile_stationary_prepared_plan,
 )

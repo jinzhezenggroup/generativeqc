@@ -2,8 +2,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "src/posthf/cuda_transform.cu"
-OWNER = ROOT / "tools/vibeqc_posthf/cuda.py"
-PROVIDER = ROOT / "tools/vibeqc_posthf/providers.py"
+OWNER = ROOT / "tools/generativeqc_posthf/cuda.py"
+PROVIDER = ROOT / "tools/generativeqc_posthf/providers.py"
 
 
 def _function_body(source: str, name: str, next_name: str) -> str:

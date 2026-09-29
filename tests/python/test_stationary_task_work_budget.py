@@ -49,9 +49,9 @@ def test_native_task_budget_is_per_page_not_cumulative(
         pieces.append(body)
     assert launches == 4
     source = tmp_path / "admission.cpp"
-    from vibeqc_compiler.method import resolve_method
-    from vibeqc_compiler.method.stationary_cuda import _runtime_layout_cuda
-    from vibeqc_compiler.method.stationary_gradient import (
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import _runtime_layout_cuda
+    from generativeqc_compiler.method.stationary_gradient import (
         SCF_POINT_MODEL,
         StationaryGradientPlan,
         StationaryMeanField,
@@ -77,7 +77,7 @@ def test_native_task_budget_is_per_page_not_cumulative(
 
 
 def test_task_metrics_are_reported_per_execution() -> None:
-    from vibeqc import _stationary_cuda as runtime
+    from generativeqc import _stationary_cuda as runtime
 
     before = {
         "owned_device_bytes": 1024,
@@ -118,7 +118,7 @@ PREAMBLE = r"""
 #include <limits>
 #include <stdexcept>
 using std::size_t;
-namespace vibeqc_stationary_cuda {}
+namespace generativeqc_stationary_cuda {}
 constexpr size_t task_stride=9;
 using cudaEvent_t = void*;
 using cudaStream_t = void*;

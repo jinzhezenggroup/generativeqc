@@ -1,7 +1,7 @@
 # Complete RCCSD residuals and CPU solver
 
 The A baseline and its reviewed commit remain documented in `rccsd.md`.
-Slice B adds `tools.vibeqc_cc.doubles.build_ccsd_program(o,v,form=...)`.
+Slice B adds `tools.generativeqc_cc.doubles.build_ccsd_program(o,v,form=...)`.
 All inputs/energy/singles conventions from A continue unchanged. This remains
 an internal conventional all-electron real restricted CPU implementation.
 
@@ -24,7 +24,7 @@ implementations must map their physical dual projectors to this convention.
 PySCF 2.14.0 `rccsd.update_amps` (CCSD branch, not CC2) and `rintermediates`
 `cc_Foo`, `cc_Fvv`, `Loo`, `Lvv`, `cc_Woooo`, `cc_Wvvvv`, `cc_Wvoov`, `cc_Wvovo`.
 Source bytes, Apache-2.0 license and attribution remain in A's manifest/NOTICE.
-VibeQC expands those definitions with full Fock diagonals restored. No orbital
+GenerativeQC expands those definitions with full Fock diagonals restored. No orbital
 energy, denominator, level shift or update formula occurs in the inventory.
 
 | Diagnostic | Role |
@@ -69,7 +69,7 @@ PYTHONPATH=.:python python -m tools.validate_ccsd --output /tmp/cc-b-evidence
 
 ## C: CPU iteration and final acceptance
 
-`tools.vibeqc_cc.solve(snapshot, provider, options=SolverOptions(),
+`tools.generativeqc_cc.solve(snapshot, provider, options=SolverOptions(),
 t1=None, t2=None)` is the internal CPU facade. It consumes the existing #147
 reference and conventional CPU provider; it does not register a public method
 or call an external CC solver. `PreparedCCSD` first validates the reference,
@@ -131,7 +131,7 @@ its module layout. For a small validated RHF reference and open conventional
 CPU provider:
 
 ```python
-from tools.vibeqc_cc import SolverOptions, solve
+from tools.generativeqc_cc import SolverOptions, solve
 
 result = solve(
     snapshot,
@@ -162,11 +162,11 @@ the multielectron references; full source versions/hashes, actual coefficients,
 AO/MO integrals and two-generation stability evidence are retained.
 
 Each system has both a same-C/integral-provider CCSD run and a genuinely new
-VibeQC-native RHF→CCSD run. Occupied and virtual overlap rotations align
+GenerativeQC-native RHF→CCSD run. Occupied and virtual overlap rotations align
 amplitudes across phase changes and degenerate subspaces; occupied/virtual
 mixing is checked separately. The endpoint runner transforms independent saved
 AO integrals with the **actual new C**, compares every native MO block, and
-re-evaluates PySCF's physical residual at the VibeQC final amplitudes. It does
+re-evaluates PySCF's physical residual at the GenerativeQC final amplitudes. It does
 not interpret `update_amps` as a residual or use bridge smoke as an endpoint.
 
 All five systems have at most 9 AOs, so #147's existing <=12-AO exporter is
@@ -178,7 +178,7 @@ raw MO tensors keep 1e-11 absolute, 1e-10 relative gates.
 
 ```bash
 export PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
-export VIBEQC_LIBRARY="$PWD/build/cpu/libvibeqc.so"
+export GENERATIVEQC_LIBRARY="$PWD/build/cpu/libgenerativeqc.so"
 python -m tools.generate_cc_endpoints --output /tmp/cc-endpoints-first
 python -m tools.generate_cc_endpoints --output /tmp/cc-endpoints-second \
   --compare /tmp/cc-endpoints-first

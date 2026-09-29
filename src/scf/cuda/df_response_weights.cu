@@ -13,7 +13,7 @@
 #include "scf/cuda/df_response_weights.cuh"
 #include "scf/cuda/df_scf_kernels.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 constexpr unsigned threads = 128;
 unsigned blocks(std::size_t size) { return static_cast<unsigned>((size + threads - 1) / threads); }
@@ -624,11 +624,11 @@ static cudaError_t contract_occupied_response(
   // The spectral route remains an explicit numerical/performance control.
   // Only the qualified fitted/full-rank consumer may reuse this forward root;
   // raw and truncated response retain their original eigenfactor ordering.
-  const char* metric_control = std::getenv("VIBEQC_DF_OCCUPIED_METRIC");
+  const char* metric_control = std::getenv("GENERATIVEQC_DF_OCCUPIED_METRIC");
   const std::string_view metric_policy = metric_control ? metric_control : "auto";
   if (metric_policy != "auto" && metric_policy != "spectral" && metric_policy != "retained-root")
     throw std::invalid_argument(
-        "VIBEQC_DF_OCCUPIED_METRIC must be auto, spectral or retained-root");
+        "GENERATIVEQC_DF_OCCUPIED_METRIC must be auto, spectral or retained-root");
   const bool retained_root = fitted_occupied && metric.full_rank && metric.inverse_square_root &&
                              metric_policy != "spectral";
   const auto* final_fitted_projection = buffers.final_fitted_occupied_projection;
@@ -1346,4 +1346,4 @@ cudaError_t contract_cuda_df_response_weights(
   consume(1, {}, aa, bar_inverse);
   return cudaSuccess;
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

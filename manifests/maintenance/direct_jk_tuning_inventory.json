@@ -94,7 +94,7 @@
     },
     {
       "name": "resident-psss-schedule",
-      "source": "python/vibeqc_compiler/integral/direct_resident_schedule.py",
+      "source": "python/generativeqc_compiler/integral/direct_resident_schedule.py",
       "owner": "compiler ScheduleIR profile",
       "required_tokens": [
         "block_threads=128",

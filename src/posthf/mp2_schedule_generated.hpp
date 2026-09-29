@@ -1,4 +1,4 @@
-// Generated from vibeqc_compiler.method.mp2_schedule; do not edit.
+// Generated from generativeqc_compiler.method.mp2_schedule; do not edit.
 #pragma once
 #include <algorithm>
 #include <cstddef>
@@ -6,7 +6,7 @@
 
 #include "posthf/capacity.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
-namespace vibeqc::mp2::generated {
+namespace generativeqc::mp2::generated {
 struct ConventionalReusePlan {
   bool shared_scan;
   std::size_t jobs_per_batch;
@@ -72,4 +72,4 @@ inline RiMp2ResidencyPlan ri_mp2_residency_plan(std::size_t fixed, std::size_t b
         "CUDA RI-MP2 resident/blocked B transform exceeds numeric memory budget");
   return {best, best_j, ri_block_capacity(fixed, n, no, na, best, best_j, false), false};
 }
-}  // namespace vibeqc::mp2::generated
+}  // namespace generativeqc::mp2::generated

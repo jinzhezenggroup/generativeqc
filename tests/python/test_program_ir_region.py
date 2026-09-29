@@ -5,25 +5,25 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.gpu_profitability import GpuProfitability
-from vibeqc_compiler.common.liveness import EffectKind
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.program_region import (
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.liveness import EffectKind
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.program_region import (
     ProgramRegion,
     ProgramRegionCandidate,
     apply_program_region_candidate,
     derive_program_region,
     select_program_region_candidate,
 )
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.schedule import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.schedule import (
     ScheduleContract,
     ScheduleResources,
     ScheduleTopology,
 )
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.program_ir import fixed_density_tile_program
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.program_ir import fixed_density_tile_program
 
 
 def _program() -> ProgramIR:

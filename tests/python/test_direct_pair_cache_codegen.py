@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from vibeqc_compiler.integral.direct_pair_cache_cuda import (
+from generativeqc_compiler.integral.direct_pair_cache_cuda import (
     emit_direct_pair_cache_header,
 )
 

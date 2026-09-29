@@ -1,6 +1,6 @@
 # Methods and long-term scope
 
-VibeQC's long-term mission is to cover **all quantum-chemistry methods** in one
+GenerativeQC's long-term mission is to cover **all quantum-chemistry methods** in one
 accelerator-native system. Public method discovery is rendered at Sphinx build
 time in the [public method catalog](../public_methods.md). The catalog combines
 stable native ABI registrations, compiler-discovered DFT selectors, public
@@ -13,7 +13,7 @@ backend, basis, grid, spin, derivative, or production-domain admission gates.
 
 ## Current method status
 
-Run the Python frontend (`python -m vibeqc methods`) for the current public
+Run the Python frontend (`python -m generativeqc methods`) for the current public
 discovery set, and use the generated
 [public method catalog](../public_methods.md) for the documentation view across
 native, compiler-discovered, composite, and automatic Libxc entry paths.
@@ -23,7 +23,7 @@ grid, spin state, or requested property is qualified. The method contract and
 execution-time admission checks remain authoritative for those combinations.
 Compiler representation alone is likewise not a public execution guarantee:
 unsupported lowerers fail closed. A Python-free native SDK install has a
-separate `vibeqc methods` command that intentionally reports the C/C++ ABI/provider
+separate `generativeqc methods` command that intentionally reports the C/C++ ABI/provider
 registry only; it does not import the compiler catalog. Planned families and
 development directions are listed in the
 [implementation roadmap](../maintainer/roadmap.md), which does not promise
@@ -38,7 +38,7 @@ the SCF owner still validates the semilocal composition. Request forces through
 the ordinary single-point or prepared-batch interface:
 
 ```python
-from vibeqc import Calculator, GridSpec, KsOptions
+from generativeqc import Calculator, GridSpec, KsOptions
 
 calc = Calculator(
     method="b3lyp-rks", device="cuda", precision="fp64", basis="sto-3g",
@@ -79,7 +79,7 @@ physical-reference execution retain their existing finalization contracts.
 This force finalization adds one density projection, one physical Fock build,
 four matrix products for residual validation and two for the Pulay weight.
 Existing device scratch holds the products; a four-byte work counter is copied
-at the existing completion fence. `VIBEQC_DF_PROGRESS_TRACE` records final
+at the existing completion fence. `GENERATIVEQC_DF_PROGRESS_TRACE` records final
 updates, physical Fock builds, residual checks and rejections separately from
 iterative SCF updates. Complete endpoint costs include all this work. The
 [decision record](../../.agents/notes/proposed/2026-09-17-consistent-direct-pulay-weight.md)
@@ -100,7 +100,7 @@ A method becomes supported only when all of the following are true:
 
 ## Expansion strategy
 
-VibeQC expands method coverage behind the same registry-driven prepared
+GenerativeQC expands method coverage behind the same registry-driven prepared
 calculation interface. New public capabilities should reuse the existing basis,
 integral, SCF, batching, resource-planning, and diagnostic contracts rather than
 introducing method-specific API branches.

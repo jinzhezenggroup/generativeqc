@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = (
     ROOT / "manifests" / "maintenance" / "electronic_structure_production_paths.json"
 )
-SCHEMA = "vibeqc.electronic-production-paths.v2"
+SCHEMA = "generativeqc.electronic-production-paths.v2"
 STATUSES = {"production", "qualification-only", "reference", "unsupported"}
 BACKENDS = {"cpu", "cuda"}
 EVIDENCE_LEVELS = (

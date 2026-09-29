@@ -30,22 +30,22 @@ using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
 }
-void check(vibeqc_status status, const std::string& detail) {
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void check(generativeqc_status status, const std::string& detail) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
-    using namespace vibeqc::scf;
+    using namespace generativeqc::scf;
     std::cout << std::unitbuf;
     Dl_info library_info{};
-    if (!dladdr(reinterpret_cast<void*>(&vibeqc_get_source_identity), &library_info))
+    if (!dladdr(reinterpret_cast<void*>(&generativeqc_get_source_identity), &library_info))
       throw std::runtime_error("cannot identify the loaded native library");
     std::cout << "{\"operation\":\"identity\",\"source_identity\":"
-              << std::quoted(vibeqc_get_source_identity())
+              << std::quoted(generativeqc_get_source_identity())
               << ",\"library\":" << std::quoted(library_info.dli_fname) << "}\n";
-    vibeqc::runtime::df_progress::Scope endpoint("fixed_density_probe");
+    generativeqc::runtime::df_progress::Scope endpoint("fixed_density_probe");
     if (!std::getenv("SLURM_JOB_ID") || argc < 7 || argc > 9)
       throw std::runtime_error(
           "usage inside Slurm: probe INPUT REPEATS AUX_TILE AO_PAIRS ARRAYS MODE [RETAIN_B "
@@ -57,10 +57,10 @@ int main(int argc, char** argv) {
     std::size_t atoms = 0, shells = 0, rank = 0;
     int representation = 0;
     input >> magic >> atoms >> shells >> representation >> rank;
-    if (magic != "vibeqc-stage-v1" || !atoms || !shells)
+    if (magic != "generativeqc-stage-v1" || !atoms || !shells)
       throw std::runtime_error("invalid occupied probe input");
-    vibeqc::core::System system;
-    system.basis_representation = static_cast<vibeqc_basis_representation>(representation);
+    generativeqc::core::System system;
+    system.basis_representation = static_cast<generativeqc_basis_representation>(representation);
     system.atoms.resize(atoms);
     system.shells.resize(shells);
     for (auto& atom : system.atoms)
@@ -72,8 +72,8 @@ int main(int argc, char** argv) {
       for (auto& primitive : shell.primitives) input >> primitive.exponent >> primitive.coefficient;
     }
     std::string detail;
-    check(vibeqc::molecule::validate_and_normalize(system, detail), detail);
-    const auto nbf = vibeqc::molecule::ao_count(system);
+    check(generativeqc::molecule::validate_and_normalize(system, detail), detail);
+    const auto nbf = generativeqc::molecule::ao_count(system);
     if (rank > nbf) throw std::runtime_error("occupied rank exceeds AO dimension");
     std::vector<double> coefficients(nbf * rank), occupations(rank, 2.0);
     for (auto& value : coefficients) input >> value;
@@ -83,9 +83,9 @@ int main(int argc, char** argv) {
     std::vector<double> reference_overlap(nbf * nbf);
     for (auto& value : reference_overlap) input >> value;
     if (!input) throw std::runtime_error("missing independent overlap");
-    vibeqc::integrals::IntegralData cartesian;
+    generativeqc::integrals::IntegralData cartesian;
     check(build_cuda_one_electron_integrals(0, system, cartesian, detail, false, false), detail);
-    const auto one_electron = vibeqc::integrals::transform_integrals(cartesian, system);
+    const auto one_electron = generativeqc::integrals::transform_integrals(cartesian, system);
     // Reject individual nonfinite entries before maxima: std::max can hide NaN.
     for (const auto* values : std::initializer_list<const std::vector<double>*>{
              &coefficients, &reference_overlap, &one_electron.overlap})

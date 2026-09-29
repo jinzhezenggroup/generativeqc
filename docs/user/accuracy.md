@@ -1,6 +1,6 @@
 # Numerical accuracy evidence
 
-`vibeqc.accuracy` separates the resolved scientific model, observable-error
+`generativeqc.accuracy` separates the resolved scientific model, observable-error
 requirements and evidence. It is an explicit comparison API. It does not yet
 select precision, screening or iteration tolerances inside `Calculator`.
 
@@ -14,7 +14,7 @@ compare numerical choices against a fixed model. Distinct metric thresholds
 remain distinct approximations and cannot be relabeled as identical models.
 
 ```python
-from vibeqc import (
+from generativeqc import (
     Calculator,
     ObservableTarget,
     TargetAccuracy,
@@ -82,7 +82,7 @@ descriptor layouts and default numerical results are unchanged.
 
 ## Strict HF audits and experiments
 
-`tools.vibeqc_numerics.audit` provides a native RHF/UHF final-state probe and an
+`tools.generativeqc_numerics.audit` provides a native RHF/UHF final-state probe and an
 independent fixed-density operator audit. The latter contracts unscreened raw
 integrals in NumPy FP64 to compute the energy, physical Fock commutator,
 electron traces and metric idempotency. A fully relaxed audit performs a
@@ -93,14 +93,14 @@ PySCF references. These dense diagnostic tools reject systems larger than
 `python -m tools.validate_accuracy --output /tmp/accuracy` records independent
 and coupled convergence sweeps. CUDA additionally sweeps screening. Saved
 densities and forces have checksum-linked manifests and can be replayed with
-`python -m tools.vibeqc_numerics.replay /tmp/accuracy/report.json` without SCF.
+`python -m tools.generativeqc_numerics.replay /tmp/accuracy/report.json` without SCF.
 Failures remain in the report. Metric-rank changes use distinct model identities.
 An additional CUDA driver compares experimental mixed-Fock requests at matched
 SCF controls; its requested threshold does not establish actual FP32 work.
 
 ## Limited empirical calibration
 
-`vibeqc.accuracy_estimator.EmpiricalHFEstimator` relates measured physical
+`generativeqc.accuracy_estimator.EmpiricalHFEstimator` relates measured physical
 residuals to observed energy and force errors using a conservative training
 envelope. Water and methane are the training families. Hydrogen, ammonia and
 neutral HF are held out as entire families, including all numerical settings.
@@ -113,9 +113,9 @@ To consume the recorded calibration after producing a matching probe and audit:
 ```python
 import json
 from pathlib import Path
-from vibeqc import AccuracyAssessment
-from vibeqc.accuracy_estimator import EmpiricalHFEstimator
-from tools.vibeqc_numerics.audit import error_features
+from generativeqc import AccuracyAssessment
+from generativeqc.accuracy_estimator import EmpiricalHFEstimator
+from tools.generativeqc_numerics.audit import error_features
 
 estimator = EmpiricalHFEstimator.from_dict(
     json.loads(Path("benchmarks/results/accuracy-173/cpu/estimator.json").read_text())

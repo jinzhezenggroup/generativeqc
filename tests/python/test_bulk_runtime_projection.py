@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.xc import bulk_runtime, libxc_bulk
-from vibeqc_compiler.xc.spec import UnsupportedXC
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.xc import bulk_runtime, libxc_bulk
+from generativeqc_compiler.xc.spec import UnsupportedXC
 
 
 @pytest.mark.parametrize("spin", ["polarized", "unpolarized"])

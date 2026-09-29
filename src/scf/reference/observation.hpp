@@ -4,7 +4,7 @@
 #include <exception>
 #include <limits>
 
-namespace vibeqc::scf::reference::observation {
+namespace generativeqc::scf::reference::observation {
 
 /** Optional observer of actual reference work. The oracle knows no runtime,
  * file format, CUDA API or timer; its caller owns the thread-local observer.
@@ -59,4 +59,4 @@ class Scope {
   std::size_t token_{};
   int exceptions_{};
 };
-}  // namespace vibeqc::scf::reference::observation
+}  // namespace generativeqc::scf::reference::observation

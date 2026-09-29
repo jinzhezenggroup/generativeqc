@@ -2,8 +2,8 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc.program import build_program
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc.program import build_program
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))

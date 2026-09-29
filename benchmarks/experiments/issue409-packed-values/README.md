@@ -1,7 +1,7 @@
 # Exact packed DF values: experiments and endpoint reproduction
 
 This is the work in progress for #409. Physical CUDA DF preparation accepts
-`VIBEQC_DF_VALUE_STORAGE=auto|dense|packed`; unset/`auto` remains dense. The
+`GENERATIVEQC_DF_VALUE_STORAGE=auto|dense|packed`; unset/`auto` remains dense. The
 explicit packed path stores separate immutable raw A and whitened B in exact
 unit-weight lower-triangular AO-pair order. It preserves FP64, native metric
 factorization, all raw metric directions and the existing single Gram.
@@ -15,13 +15,13 @@ selected, and the current matrix does not establish a general endpoint win.
 
 Build before starting clean GPU measurements, using the retained build flags
 when reproducing an archived result. `run_endpoints.py` needs a Python environment
-with the normal VibeQC benchmark dependencies, a CUDA-enabled native library and
+with the normal GenerativeQC benchmark dependencies, a CUDA-enabled native library and
 the library search path for that CUDA installation. From the checkout root:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=01:00:00 \
   python benchmarks/experiments/issue409-packed-values/run_endpoints.py \
-  --library build/cuda/libvibeqc.so --output .artifacts/packed-warm-new
+  --library build/cuda/libgenerativeqc.so --output .artifacts/packed-warm-new
 ```
 
 The wrapper performs at least seven alternating dense/packed pairs with normal
@@ -51,9 +51,9 @@ record its own identities; copying old medians or headers is not reproduction.
 
 Run the native density-fitting/occupied-response suites and
 `tests/python/test_df_packed_values_cuda.py` against the chosen library inside
-finite Slurm. The molecular tests require `VIBEQC_RESOURCE_CUDA_TEST=1` and
+finite Slurm. The molecular tests require `GENERATIVEQC_RESOURCE_CUDA_TEST=1` and
 `PYTHONPATH=python:.`. The separate failed-neighbor tier requires
-`VIBEQC_DF_DERIVATIVE_CUDA_TEST=1`; a missing flag skips that tier. Compute
+`GENERATIVEQC_DF_DERIVATIVE_CUDA_TEST=1`; a missing flag skips that tier. Compute
 Sanitizer also runs inside Slurm. CPU-safe resource and independent-reference
 admission tests need no GPU allocation.
 
@@ -106,14 +106,14 @@ by the caller:
 ```bash
 nvcc -std=c++17 -O3 -arch=sm_120 projection.cu -lcublas -o trial
 c++ -std=c++20 -O3 -Iinclude -Isrc -I<cuda>/include producer.cpp \
-  -L<baseline-library-directory> -L<cuda>/lib64 -lvibeqc -lcublas -lcudart -o producer
+  -L<baseline-library-directory> -L<cuda>/lib64 -lgenerativeqc -lcublas -lcudart -o producer
 PYTHONPATH=python python run_projection.py prepare \
   --captures <capture-directory> --executable <trial> --output <fresh-trial-directory>
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00 \
   env PYTHONPATH=python python run_projection.py run --output <fresh-trial-directory>
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   env PYTHONPATH=python:. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-  python validate_producer.py --executable <producer> --library <libvibeqc.so> \
+  python validate_producer.py --executable <producer> --library <libgenerativeqc.so> \
   --output <fresh-producer-directory>
 ```
 

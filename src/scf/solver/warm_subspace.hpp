@@ -1,11 +1,11 @@
-#ifndef VIBEQC_SCF_SOLVER_WARM_SUBSPACE_HPP
-#define VIBEQC_SCF_SOLVER_WARM_SUBSPACE_HPP
+#ifndef GENERATIVEQC_SCF_SOLVER_WARM_SUBSPACE_HPP
+#define GENERATIVEQC_SCF_SOLVER_WARM_SUBSPACE_HPP
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 
 /**
  * Evidence that a previous orthonormal orbital frame still spans the occupied
@@ -54,6 +54,6 @@ WarmSubspaceResidual inspect_warm_occupied_subspace(const std::vector<double>& o
 bool accept_warm_occupied_subspace(const WarmSubspaceResidual& diagnostic, double maximum_tolerance,
                                    double scaled_tolerance, std::string& detail);
 
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver
 
 #endif

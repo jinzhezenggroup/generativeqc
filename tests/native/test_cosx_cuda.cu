@@ -14,7 +14,7 @@
 #include "dft/grid.hpp"
 #include "molecule/basis.hpp"
 
-#if defined(VIBEQC_COSX_TEST_INTERPOSE)
+#if defined(GENERATIVEQC_COSX_TEST_INTERPOSE)
 // Linker interposition is test-only: the production CUDA translation unit and
 // actual device transfers remain unchanged. Inject an error after a queued D2H.
 namespace fault_injection {
@@ -63,8 +63,8 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
-vibeqc::core::System h2() {
-  vibeqc::core::System system;
+generativeqc::core::System h2() {
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, 0.0}}, {1, {0.1, 0.2, 1.4}}};
   system.shells = {
       {0,
@@ -75,8 +75,9 @@ vibeqc::core::System h2() {
        {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}},
   };
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "CUDA COSX H2 normalization failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "CUDA COSX H2 normalization failed");
   return system;
 }
 
@@ -87,18 +88,19 @@ double max_error(const std::vector<double>& a, const std::vector<double>& b) {
   return error;
 }
 
-vibeqc::core::System spherical_sdf() {
-  vibeqc::core::System system;
+generativeqc::core::System spherical_sdf() {
+  generativeqc::core::System system;
   system.atoms = {{2, {0.2, -0.1, 0.3}}};
   system.shells = {
       {0, 0, {{1.4, 1.0}}},
       {0, 2, {{0.8, 1.0}}},
       {0, 3, {{0.6, 1.0}}},
   };
-  system.basis_representation = VIBEQC_BASIS_SPHERICAL;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "CUDA COSX spherical s/d/f normalization failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "CUDA COSX spherical s/d/f normalization failed");
   return system;
 }
 
@@ -122,16 +124,19 @@ int main() {
     if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
     const int device = 0;
     const auto system = h2();
-    const vibeqc::dft::MolecularGrid grid(system, vibeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
+    const generativeqc::dft::MolecularGrid grid(
+        system, generativeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
     const std::vector<double> density{0.8, 0.2, 0.2, 0.6};
-    const auto cpu =
-        vibeqc::dft::build_cosx_reference(system, grid.points(), grid.weights(), density,
-                                          vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const auto cpu = generativeqc::dft::build_cosx_reference(
+        system, grid.points(), grid.weights(), density,
+        generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
 
     std::vector<double> first_exchange;
     for (std::size_t tile : {std::size_t(1), std::size_t(7), grid.point_count()}) {
-      vibeqc::dft::CudaCosxStagingPlan plan(system, grid.points(), grid.weights(), tile, device);
-      const auto gpu = plan.build(density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+      generativeqc::dft::CudaCosxStagingPlan plan(system, grid.points(), grid.weights(), tile,
+                                                  device);
+      const auto gpu =
+          plan.build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
       require(max_error(gpu.raw_exchange, cpu.raw_exchange) < 3.0e-12,
               "bounded CUDA COSX raw K differs from the CPU discrete oracle");
       require(max_error(gpu.exchange, cpu.exchange) < 3.0e-12,
@@ -162,14 +167,14 @@ int main() {
                                              grid.points().begin() + 3 * derivative_points);
     const std::vector<double> derivative_weights(grid.weights().begin(),
                                                  grid.weights().begin() + derivative_points);
-    const auto cpu_point_derivative = vibeqc::dft::build_cosx_point_derivative_reference(
+    const auto cpu_point_derivative = generativeqc::dft::build_cosx_point_derivative_reference(
         system, derivative_xyz, derivative_weights, density,
-        vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+        generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     std::vector<double> first_point_derivative;
     for (std::size_t tile : {std::size_t(1), std::size_t(3), derivative_points}) {
-      const auto gpu_point_derivative = vibeqc::dft::cuda_cosx_point_derivative_reference(
+      const auto gpu_point_derivative = generativeqc::dft::cuda_cosx_point_derivative_reference(
           system, derivative_xyz, derivative_weights, density,
-          vibeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
+          generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
       require(max_error(gpu_point_derivative, cpu_point_derivative.point_gradient) < 3.0e-11,
               "bounded CUDA COSX point derivative differs from the CPU analytic oracle");
       if (first_point_derivative.empty())
@@ -179,12 +184,12 @@ int main() {
                 "CUDA COSX point derivative changed with tile partition");
     }
 
-    const auto cpu_molecular = vibeqc::dft::build_cosx_molecular_derivative_reference(
-        grid, density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const auto cpu_molecular = generativeqc::dft::build_cosx_molecular_derivative_reference(
+        grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     std::vector<double> first_molecular;
     for (std::size_t tile : {std::size_t(1), std::size_t(7), grid.point_count()}) {
-      const auto gpu_molecular = vibeqc::dft::cuda_cosx_molecular_energy_derivative(
-          grid, density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
+      const auto gpu_molecular = generativeqc::dft::cuda_cosx_molecular_energy_derivative(
+          grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
       require(max_error(gpu_molecular, cpu_molecular.nuclear_gradient) < 2.0e-10,
               "bounded CUDA COSX molecular derivative differs from the CPU analytic oracle");
       if (first_molecular.empty())
@@ -192,7 +197,7 @@ int main() {
       else
         require(max_error(gpu_molecular, first_molecular) < 2.0e-10,
                 "CUDA COSX molecular derivative changed with tile partition");
-      const auto info = vibeqc::dft::cuda_cosx_molecular_derivative_diagnostic(grid, tile);
+      const auto info = generativeqc::dft::cuda_cosx_molecular_derivative_diagnostic(grid, tile);
       require(info.nbf == 2 && info.natom == system.atoms.size() &&
                   info.npoint == grid.point_count() &&
                   info.tile_points == std::min(tile, grid.point_count()) &&
@@ -217,45 +222,47 @@ int main() {
     auto changed_system = system;
     changed_system.atoms[1].position[0] += 0.07;
     changed_system.atoms[1].position[2] -= 0.05;
-    const vibeqc::dft::MolecularGrid changed_grid(changed_system,
-                                                  vibeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
-    const auto changed_cpu = vibeqc::dft::build_cosx_molecular_derivative_reference(
-        changed_grid, density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
-    const auto changed_gpu = vibeqc::dft::cuda_cosx_molecular_energy_derivative(
-        changed_grid, density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed, 7, device);
+    const generativeqc::dft::MolecularGrid changed_grid(
+        changed_system, generativeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
+    const auto changed_cpu = generativeqc::dft::build_cosx_molecular_derivative_reference(
+        changed_grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const auto changed_gpu = generativeqc::dft::cuda_cosx_molecular_energy_derivative(
+        changed_grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed, 7,
+        device);
     require(max_error(changed_gpu, changed_cpu.nuclear_gradient) < 2.0e-10,
             "CUDA COSX molecular derivative replay failed on changed geometry");
 
     std::vector<double> half_density = density;
     for (double& value : half_density) value *= 0.5;
-    vibeqc::dft::CudaCosxStagingPlan spin_plan(system, grid.points(), grid.weights(), 7, device);
+    generativeqc::dft::CudaCosxStagingPlan spin_plan(system, grid.points(), grid.weights(), 7,
+                                                     device);
     const auto gpu_spin =
-        spin_plan.build(half_density, vibeqc::dft::CosxDensityConvention::spin_resolved);
-    const auto cpu_spin =
-        vibeqc::dft::build_cosx_reference(system, grid.points(), grid.weights(), half_density,
-                                          vibeqc::dft::CosxDensityConvention::spin_resolved);
+        spin_plan.build(half_density, generativeqc::dft::CosxDensityConvention::spin_resolved);
+    const auto cpu_spin = generativeqc::dft::build_cosx_reference(
+        system, grid.points(), grid.weights(), half_density,
+        generativeqc::dft::CosxDensityConvention::spin_resolved);
     require(max_error(gpu_spin.exchange, cpu_spin.exchange) < 3.0e-12 &&
                 std::abs(gpu_spin.exchange_energy - cpu_spin.exchange_energy) < 3.0e-12,
             "native CUDA COSX single-spin convention differs from the CPU oracle");
-    const auto cpu_spin_molecular = vibeqc::dft::build_cosx_molecular_derivative_reference(
-        grid, half_density, vibeqc::dft::CosxDensityConvention::spin_resolved);
-    const auto gpu_spin_molecular = vibeqc::dft::cuda_cosx_molecular_energy_derivative(
-        grid, half_density, vibeqc::dft::CosxDensityConvention::spin_resolved, 7, device);
+    const auto cpu_spin_molecular = generativeqc::dft::build_cosx_molecular_derivative_reference(
+        grid, half_density, generativeqc::dft::CosxDensityConvention::spin_resolved);
+    const auto gpu_spin_molecular = generativeqc::dft::cuda_cosx_molecular_energy_derivative(
+        grid, half_density, generativeqc::dft::CosxDensityConvention::spin_resolved, 7, device);
     require(max_error(gpu_spin_molecular, cpu_spin_molecular.nuclear_gradient) < 2.0e-10,
             "native CUDA COSX single-spin molecular derivative differs from the CPU oracle");
 
     {
       const auto high = spherical_sdf();
-      const vibeqc::dft::MolecularGrid high_grid(high,
-                                                 vibeqc::dft::GridSpec{1, 3, 3, 6, 3, 1.0e-12});
-      const auto high_density = symmetric_density(vibeqc::molecule::ao_count(high));
-      const auto high_cpu = vibeqc::dft::build_cosx_reference(
+      const generativeqc::dft::MolecularGrid high_grid(
+          high, generativeqc::dft::GridSpec{1, 3, 3, 6, 3, 1.0e-12});
+      const auto high_density = symmetric_density(generativeqc::molecule::ao_count(high));
+      const auto high_cpu = generativeqc::dft::build_cosx_reference(
           high, high_grid.points(), high_grid.weights(), high_density,
-          vibeqc::dft::CosxDensityConvention::spin_resolved);
-      vibeqc::dft::CudaCosxStagingPlan high_plan(high, high_grid.points(), high_grid.weights(), 5,
-                                                 device);
+          generativeqc::dft::CosxDensityConvention::spin_resolved);
+      generativeqc::dft::CudaCosxStagingPlan high_plan(high, high_grid.points(),
+                                                       high_grid.weights(), 5, device);
       const auto high_gpu =
-          high_plan.build(high_density, vibeqc::dft::CosxDensityConvention::spin_resolved);
+          high_plan.build(high_density, generativeqc::dft::CosxDensityConvention::spin_resolved);
       require(max_error(high_gpu.raw_exchange, high_cpu.raw_exchange) < 2.0e-11 &&
                   max_error(high_gpu.exchange, high_cpu.exchange) < 2.0e-11 &&
                   std::abs(high_gpu.exchange_energy - high_cpu.exchange_energy) < 2.0e-11,
@@ -265,48 +272,50 @@ int main() {
           high_grid.points().begin(), high_grid.points().begin() + 3 * high_derivative_points);
       const std::vector<double> high_derivative_weights(
           high_grid.weights().begin(), high_grid.weights().begin() + high_derivative_points);
-      const auto high_cpu_point = vibeqc::dft::build_cosx_point_derivative_reference(
+      const auto high_cpu_point = generativeqc::dft::build_cosx_point_derivative_reference(
           high, high_derivative_xyz, high_derivative_weights, high_density,
-          vibeqc::dft::CosxDensityConvention::spin_resolved);
-      const auto high_gpu_point = vibeqc::dft::cuda_cosx_point_derivative_reference(
+          generativeqc::dft::CosxDensityConvention::spin_resolved);
+      const auto high_gpu_point = generativeqc::dft::cuda_cosx_point_derivative_reference(
           high, high_derivative_xyz, high_derivative_weights, high_density,
-          vibeqc::dft::CosxDensityConvention::spin_resolved, high_derivative_points, device);
+          generativeqc::dft::CosxDensityConvention::spin_resolved, high_derivative_points, device);
       require(max_error(high_gpu_point, high_cpu_point.point_gradient) < 2.0e-10,
               "native CUDA COSX spherical d/f point derivative differs from the CPU oracle");
-      const auto high_cpu_molecular = vibeqc::dft::build_cosx_molecular_derivative_reference(
-          high_grid, high_density, vibeqc::dft::CosxDensityConvention::spin_resolved);
-      const auto high_gpu_molecular = vibeqc::dft::cuda_cosx_molecular_energy_derivative(
-          high_grid, high_density, vibeqc::dft::CosxDensityConvention::spin_resolved, 5, device);
+      const auto high_cpu_molecular = generativeqc::dft::build_cosx_molecular_derivative_reference(
+          high_grid, high_density, generativeqc::dft::CosxDensityConvention::spin_resolved);
+      const auto high_gpu_molecular = generativeqc::dft::cuda_cosx_molecular_energy_derivative(
+          high_grid, high_density, generativeqc::dft::CosxDensityConvention::spin_resolved, 5,
+          device);
       require(max_error(high_gpu_molecular, high_cpu_molecular.nuclear_gradient) < 2.0e-9,
               "native CUDA COSX spherical d/f molecular derivative differs from the CPU oracle");
     }
 
     bool bad_density = false;
     try {
-      vibeqc::dft::CudaCosxStagingPlan plan(system, grid.points(), grid.weights(), 7, device);
+      generativeqc::dft::CudaCosxStagingPlan plan(system, grid.points(), grid.weights(), 7, device);
       (void)plan.build(std::vector<double>{1.0},
-                       vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+                       generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     } catch (const std::invalid_argument&) {
       bad_density = true;
     }
     require(bad_density, "CUDA COSX staging accepted a malformed density");
 
-#if defined(VIBEQC_COSX_TEST_INTERPOSE)
+#if defined(GENERATIVEQC_COSX_TEST_INTERPOSE)
     {
       using namespace fault_injection;
-      auto owner = std::make_unique<vibeqc::dft::CudaCosxStagingPlan>(system, grid.points(),
-                                                                      grid.weights(), 7, device);
+      auto owner = std::make_unique<generativeqc::dft::CudaCosxStagingPlan>(
+          system, grid.points(), grid.weights(), 7, device);
       fail_download = true;
       bool caught = false;
       try {
-        (void)owner->build(density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+        (void)owner->build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
       } catch (const std::runtime_error&) {
         caught = true;
       }
       require(caught && injected, "COSX did not reach the injected second-download error");
       require(!awaiting_download && failure_fences == 1,
               "COSX download failure released host targets before draining their stream");
-      const auto retry = owner->build(density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+      const auto retry =
+          owner->build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
       require(max_error(retry.exchange, cpu.exchange) < 3.0e-12,
               "COSX transfer failure contaminated the next replay");
       fail_get_device = true;

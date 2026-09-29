@@ -9,15 +9,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.cuda import CudaEmitter
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.xc.expression_dispatch import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.xc.expression_dispatch import (
     build_energy_expression as energy_expression,
 )
-from vibeqc_compiler.xc.libxc_maple import import_maple_source
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.xc.libxc_maple import import_maple_source
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBXC_ROOT = ROOT / "upstream/libxc/7.0.0"
@@ -35,7 +35,7 @@ POLARIZED_FEATURES = (
 
 # Independent 80-decimal closed-form values for canonical B88 exchange.
 # Generated from the published B88 scalar definition directly, not through
-# VibeQC Graph/Maple code. Output order is E, feature gradient, packed Hessian.
+# GenerativeQC Graph/Maple code. Output order is E, feature gradient, packed Hessian.
 _INDEPENDENT = {
     "polarized": {
         "features": (0.8, 0.6, 0.12, 0.02, 0.07, 0.7, 0.5),

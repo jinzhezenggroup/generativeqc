@@ -7,7 +7,7 @@
 
 #include "tensor/cpu_linalg.hpp"
 
-namespace vibeqc::tensor {
+namespace generativeqc::tensor {
 namespace {
 std::size_t index(std::size_t row, std::size_t column, std::size_t n) { return row * n + column; }
 
@@ -115,4 +115,4 @@ std::vector<double> symmetric_matrix_function_vjp(std::span<const double> eigenv
     throw std::runtime_error("symmetric matrix-function response is non-finite");
   return result;
 }
-}  // namespace vibeqc::tensor
+}  // namespace generativeqc::tensor

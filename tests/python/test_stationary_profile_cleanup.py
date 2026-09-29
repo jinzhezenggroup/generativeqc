@@ -46,7 +46,7 @@ int cudaEventCreate(cudaEvent_t* event) {
 }
 int cudaEventDestroy(cudaEvent_t event) { live.erase(event); return 0; }
 void cuda_check(int status) { if(status) throw std::runtime_error("injected"); }
-namespace vibeqc_stationary_cuda {
+namespace generativeqc_stationary_cuda {
 struct Context { void check_device() {} };
 struct Owner { Context context; bool profile=false; int stage0=0,stage1=0,stage2=0,stage3=0; };
 template<class F> int guarded(Owner*,char*,size_t,F f) { try { f();return 0; } catch(...) {return 1;} }
@@ -55,7 +55,7 @@ template<class F> int guarded(Owner*,char*,size_t,F f) { try { f();return 0; } c
 
 MAIN = r"""
 int main() {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   for(int failure=1; failure<=4; ++failure) {
     Owner owner; calls=0; fail_at=failure; char error[128]{};
     if(stationary_profile(&owner,error,sizeof(error))!=1) return 1;

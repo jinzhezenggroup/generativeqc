@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_df_shell_derivatives.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_shell_derivatives.py"
+  "owner": "python/generativeqc_compiler/integral/df_shell_derivatives.py"
 }

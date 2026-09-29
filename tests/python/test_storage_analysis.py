@@ -3,7 +3,7 @@
 import typing
 
 import pytest
-from vibeqc_compiler.common.storage import (
+from generativeqc_compiler.common.storage import (
     AliasKind,
     BufferOp,
     BufferValue,

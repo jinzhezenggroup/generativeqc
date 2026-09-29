@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, method_capabilities
-from vibeqc.ks import (
+from generativeqc import Calculator, method_capabilities
+from generativeqc.ks import (
     AUTOMATIC_SCF_DOMAIN,
     native_xc_functional_code,
     parse_automatic_libxc_selector,
 )
-from vibeqc_compiler.xc.automatic_semilocal import automatic_functional_code
+from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 

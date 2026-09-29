@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_INITIAL_GUESS_DENSITY_HPP
-#define VIBEQC_SCF_INITIAL_GUESS_DENSITY_HPP
+#ifndef GENERATIVEQC_SCF_INITIAL_GUESS_DENSITY_HPP
+#define GENERATIVEQC_SCF_INITIAL_GUESS_DENSITY_HPP
 
 #include <cstddef>
 #include <functional>
@@ -10,14 +10,14 @@
 #include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/reference/linalg.hpp"
 
-namespace vibeqc::core {
+namespace generativeqc::core {
 struct System;
 }
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 struct IntegralData;
 }
 
-namespace vibeqc::scf::initial_guess {
+namespace generativeqc::scf::initial_guess {
 
 using reference::EigenResult;
 using reference::Matrix;
@@ -139,5 +139,5 @@ std::pair<Matrix, Matrix> prepare_initial_uhf_density(
     InitialOrbitalRequest request = InitialOrbitalRequest::ColdDensityOnly,
     const EigenOperation& eigen = {});
 
-}  // namespace vibeqc::scf::initial_guess
+}  // namespace generativeqc::scf::initial_guess
 #endif

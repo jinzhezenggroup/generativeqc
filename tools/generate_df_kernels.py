@@ -17,7 +17,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.integral.df_cuda import df_program_inventory, emit_df_values_cuda
+from generativeqc_compiler.integral.df_cuda import (
+    df_program_inventory,
+    emit_df_values_cuda,
+)
 
 
 def write_if_changed(path: Path, text: str) -> None:
@@ -46,7 +49,7 @@ def main() -> None:
             "--shell-units-directory requires --derivatives and --shell-output"
         )
     if args.derivatives:
-        from vibeqc_compiler.integral.df_derivatives_cuda import (
+        from generativeqc_compiler.integral.df_derivatives_cuda import (
             df_derivative_inventory,
             emit_df_derivatives_cpu,
             emit_df_derivatives_cuda,
@@ -56,14 +59,14 @@ def main() -> None:
         inventory = df_derivative_inventory
     else:
         if args.cpu:
-            from vibeqc_compiler.integral.df_cuda import emit_df_values_cpu
+            from generativeqc_compiler.integral.df_cuda import emit_df_values_cpu
 
             emitter = emit_df_values_cpu
         else:
             emitter = emit_df_values_cuda
         inventory = df_program_inventory
     if not args.derivatives and not args.cpu:
-        from vibeqc_compiler.integral.df_value_candidates import (
+        from generativeqc_compiler.integral.df_value_candidates import (
             emit_df_value_candidates_cuda,
         )
 
@@ -74,33 +77,40 @@ def main() -> None:
     source = emitter()
     write_if_changed(args.output, source)
     if args.policy_output:
-        from vibeqc_compiler.integral.df_policy import emit_df_policy_cuda
+        from generativeqc_compiler.integral.df_policy import emit_df_policy_cuda
 
         write_if_changed(
             args.policy_output, emit_df_policy_cuda(derivatives=args.derivatives)
         )
     if args.schedule_output:
-        from vibeqc_compiler.integral.df_policy import emit_df_derivative_schedule_cuda
+        from generativeqc_compiler.integral.df_policy import (
+            emit_df_derivative_schedule_cuda,
+        )
 
         write_if_changed(args.schedule_output, emit_df_derivative_schedule_cuda())
     if args.shell_output:
-        from vibeqc_compiler.integral.df_shell_derivatives import (
+        from generativeqc_compiler.integral.df_shell_derivatives import (
             emit_df_shell_derivatives_cuda,
         )
 
         write_if_changed(args.shell_output, emit_df_shell_derivatives_cuda())
-        from vibeqc_compiler.integral.df_rys import emit_df_rys_cuda
-        from vibeqc_compiler.integral.df_rys_shell import (
+        from generativeqc_compiler.integral.df_rys import emit_df_rys_cuda
+        from generativeqc_compiler.integral.df_rys_shell import (
             emit_df_rys_policy_cpp,
             emit_df_rys_shell_cuda,
         )
-        from vibeqc_compiler.integral.df_screening import emit_sss_force_screening_cuda
+        from generativeqc_compiler.integral.df_screening import (
+            emit_sss_force_screening_cuda,
+        )
 
         write_if_changed(
             args.shell_output.with_name("generated_df_screening.cuh"),
             emit_sss_force_screening_cuda(),
         )
-        from vibeqc_compiler.integral.df_tuning.manifest import MANIFEST, emit_policy
+        from generativeqc_compiler.integral.df_tuning.manifest import (
+            MANIFEST,
+            emit_policy,
+        )
 
         write_if_changed(
             args.shell_output.with_name("generated_df_production.hpp"),
@@ -113,7 +123,7 @@ def main() -> None:
         ):
             write_if_changed(args.shell_output.with_name(name), emitter())
     if args.shell_units_directory:
-        from vibeqc_compiler.integral.df_shell_units import emit_df_shell_units
+        from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
 
         for name, text in emit_df_shell_units():
             write_if_changed(args.shell_units_directory / name, text)

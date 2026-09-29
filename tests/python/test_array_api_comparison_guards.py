@@ -4,8 +4,8 @@ import operator
 import typing
 
 import pytest
-from vibeqc_compiler.array_api import VibeArray, input_array, trace
-from vibeqc_compiler.tensor import Index, IndexSpace, TensorSpec
+from generativeqc_compiler.array_api import VibeArray, input_array, trace
+from generativeqc_compiler.tensor import Index, IndexSpace, TensorSpec
 
 
 def _spec() -> TensorSpec:

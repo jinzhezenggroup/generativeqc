@@ -18,22 +18,22 @@ struct Input {
   double rho[2]{}, gradient[2][3]{}, delta[2]{}, delta_gradient[2][3]{};
 };
 
-__global__ void evaluate(const Input* in, vibeqc::dft::point::Value* out) {
+__global__ void evaluate(const Input* in, generativeqc::dft::point::Value* out) {
   *out = in->unrestricted
-             ? vibeqc::dft::point::unrestricted_response(in->pbe, in->rho, in->gradient, in->delta,
-                                                         in->delta_gradient)
-             : vibeqc::dft::point::restricted_response(in->pbe, in->rho[0], in->gradient[0],
-                                                       in->delta[0], in->delta_gradient[0]);
+             ? generativeqc::dft::point::unrestricted_response(in->pbe, in->rho, in->gradient,
+                                                               in->delta, in->delta_gradient)
+             : generativeqc::dft::point::restricted_response(in->pbe, in->rho[0], in->gradient[0],
+                                                             in->delta[0], in->delta_gradient[0]);
 }
 
 /** Same 450-digit original-energy references and roundoff gates as the CPU
  * tier. This tests the device point algebra, separately from complete AO/SCF
  * acceptance; no CPU production point evaluator is used as an oracle. */
 void independent_points(bool unrestricted) {
-  using vibeqc::runtime::cuda_resource_check;
-  vibeqc::runtime::OwnedCudaBuffer<Input> input(0, 1);
-  vibeqc::runtime::OwnedCudaBuffer<vibeqc::dft::point::Value> output(0, 1);
-  std::ifstream table(std::string(VIBEQC_SOURCE_DIR) + "/tests/data/xc/" +
+  using generativeqc::runtime::cuda_resource_check;
+  generativeqc::runtime::OwnedCudaBuffer<Input> input(0, 1);
+  generativeqc::runtime::OwnedCudaBuffer<generativeqc::dft::point::Value> output(0, 1);
+  std::ifstream table(std::string(GENERATIVEQC_SOURCE_DIR) + "/tests/data/xc/" +
                       (unrestricted ? "uks_response.tsv" : "rks_response.tsv"));
   if (!table) throw std::runtime_error("missing independent response fixture");
   unsigned count = 0;
@@ -58,7 +58,7 @@ void independent_points(bool unrestricted) {
     cuda_resource_check(cudaMemcpy(input.get(), &in, sizeof(in), cudaMemcpyHostToDevice));
     evaluate<<<1, 1>>>(input.get(), output.get());
     cuda_resource_check(cudaGetLastError());
-    vibeqc::dft::point::Value value;
+    generativeqc::dft::point::Value value;
     cuda_resource_check(cudaMemcpy(&value, output.get(), sizeof(value), cudaMemcpyDeviceToHost));
     if (!value.valid) throw std::runtime_error("valid device point direction rejected");
     double actual[8]{};
@@ -87,15 +87,15 @@ void independent_points(bool unrestricted) {
  * linear-response invariant is exact zero for an exact zero direction; no CPU
  * response implementation supplies the expected values. */
 void vacuum_reference_domain() {
-  using vibeqc::runtime::cuda_resource_check;
-  vibeqc::runtime::OwnedCudaBuffer<Input> input(0, 1);
-  vibeqc::runtime::OwnedCudaBuffer<vibeqc::dft::point::Value> output(0, 1);
+  using generativeqc::runtime::cuda_resource_check;
+  generativeqc::runtime::OwnedCudaBuffer<Input> input(0, 1);
+  generativeqc::runtime::OwnedCudaBuffer<generativeqc::dft::point::Value> output(0, 1);
   unsigned count = 0;
   const auto check = [&](const Input& in, bool valid) {
     cuda_resource_check(cudaMemcpy(input.get(), &in, sizeof(in), cudaMemcpyHostToDevice));
     evaluate<<<1, 1>>>(input.get(), output.get());
     cuda_resource_check(cudaGetLastError());
-    vibeqc::dft::point::Value value;
+    generativeqc::dft::point::Value value;
     cuda_resource_check(cudaMemcpy(&value, output.get(), sizeof(value), cudaMemcpyDeviceToHost));
     if (value.valid != valid) throw std::runtime_error("device vacuum reference domain mismatch");
     if (valid) {

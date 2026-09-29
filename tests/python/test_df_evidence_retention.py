@@ -34,7 +34,8 @@ def test_retained_scientific_records_keep_original_bytes() -> None:
 def test_production_df_provenance_keeps_current_files() -> None:
     policy = json.loads(
         (
-            ROOT / "python/vibeqc_compiler/integral/production_df_derivatives.json"
+            ROOT
+            / "python/generativeqc_compiler/integral/production_df_derivatives.json"
         ).read_text()
     )
 

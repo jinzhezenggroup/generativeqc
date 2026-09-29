@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.independent-semilocal-hessian.v1",
+  "schema": "generativeqc.independent-semilocal-hessian.v1",
   "pyscf": "2.14.0",
   "libxc": "7.0.0",
   "seed": 609610,

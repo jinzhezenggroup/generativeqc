@@ -11,14 +11,14 @@
 #include <string>
 #include <string_view>
 
-namespace vibeqc::runtime::df_progress {
+namespace generativeqc::runtime::df_progress {
 
 /** Append-only diagnostic journal, independent of the completed host/CUDA
  * ledgers. Each line is closed before returning, so a killed process retains
  * its last BEGIN and submitted work. This is process-crash visibility, not an
  * fsync durability guarantee. A missing END is incomplete evidence.
  *
- * Set VIBEQC_DF_PROGRESS_TRACE to a fresh JSONL path. Disabled scopes perform
+ * Set GENERATIVEQC_DF_PROGRESS_TRACE to a fresh JSONL path. Disabled scopes perform
  * no allocation, clock read or I/O. Host END means returned (or exception),
  * never numerical convergence. CUDA callers explicitly distinguish completed
  * stream work from graph construction. Names/statuses are internal identifiers.
@@ -26,7 +26,7 @@ namespace vibeqc::runtime::df_progress {
 class Scope {
  public:
   explicit Scope(const char* name, const char* execution = "host") noexcept {
-    const char* path = std::getenv("VIBEQC_DF_PROGRESS_TRACE");
+    const char* path = std::getenv("GENERATIVEQC_DF_PROGRESS_TRACE");
     if (!path || !*path) return;
     try {
       state_ = std::make_unique<State>();
@@ -106,7 +106,7 @@ class Scope {
       auto* file = std::fopen(state.path.c_str(), "a");
       if (!file) return;  // The evidence reader rejects missing/truncated records.
       std::fprintf(file,
-                   "{\"schema\":\"vibeqc.df_progress\",\"version\":1,\"id\":%llu,"
+                   "{\"schema\":\"generativeqc.df_progress\",\"version\":1,\"id\":%llu,"
                    "\"parent\":%lld,\"time_ns\":%lld,\"elapsed_ms\":%.17g,"
                    "\"event\":\"%s\",\"status\":\"%s\",\"execution\":\"%s\",\"name\":",
                    static_cast<unsigned long long>(state.id), static_cast<long long>(state.parent),
@@ -132,4 +132,4 @@ class Scope {
 inline void number(const char* name, std::uint64_t value) noexcept { Scope::number(name, value); }
 inline void label(const char* name, const char* value) noexcept { Scope::label(name, value); }
 
-}  // namespace vibeqc::runtime::df_progress
+}  // namespace generativeqc::runtime::df_progress

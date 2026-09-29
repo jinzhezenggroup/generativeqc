@@ -12,7 +12,7 @@
 
 #include "scf/cuda/df_metric_kernels.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 // Existing DF arithmetic and reduction order; host orchestration compiles separately.
 __global__ void symmetrize_metrics_kernel(std::size_t dimension, std::size_t tiles,
@@ -183,4 +183,4 @@ void launch_scale_metric_projection(cudaStream_t stream, std::size_t dimension, 
   launch_scale_metric_projection_to(stream, dimension, pairs, eigenvalues, square_root, projected,
                                     projected);
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

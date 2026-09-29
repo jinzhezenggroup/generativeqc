@@ -1,6 +1,6 @@
 # D3 production correction runtime
 
-VibeQC represents additive geometry-only dispersion with
+GenerativeQC represents additive geometry-only dispersion with
 `DispersionCorrectionPrimitive` and an immutable `D3Spec`. The native library
 exposes one retained production D3 owner for CPU and CUDA, including ragged batches
 and fixed-topology changed-geometry replay. `Calculator` composes that owner
@@ -36,8 +36,8 @@ The preferred composite entry point is a spin-explicit `MethodIR`. The method na
 does not select D3 execution after resolution:
 
 ```python
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc_compiler.method import resolve_method
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc_compiler.method import resolve_method
 
 method = resolve_method("PBE-D3(BJ)", spin="unpolarized")
 calc = Calculator(
@@ -93,7 +93,7 @@ The architecture rationale and sign/failure invariants are recorded in the
 ## Production API and ownership
 
 ```python
-from vibeqc import D3CorrectionBatch, evaluate_d3_correction
+from generativeqc import D3CorrectionBatch, evaluate_d3_correction
 
 one = evaluate_d3_correction("PBE-D3(BJ)", atomic_numbers, coordinates)
 with D3CorrectionBatch(
@@ -129,9 +129,9 @@ No xTBloom, simple-dftd3 or dftd4 runtime dependency is added. The editable
 source contract is the pinned snapshots and source manifest under
 `tools/parameters/`, together with `method_parameter_overrides.json` for local
 choices. Run `python tools/sync_dispersion_parameters.py` to regenerate the
-committed intermediate `python/vibeqc_compiler/method/method_parameters.json`;
+committed intermediate `python/generativeqc_compiler/method/method_parameters.json`;
 do not edit that intermediate by hand. Then run
-`python tools/generate_method_parameters.py --python-output python/vibeqc_compiler/method/_generated_parameters.py`.
+`python tools/generate_method_parameters.py --python-output python/generativeqc_compiler/method/_generated_parameters.py`.
 CMake uses the same intermediate and typed generator for native/CUDA `constexpr`
 accessors, so calculation paths parse no configuration or upstream table.
 The [source-ownership decision](../../.agents/notes/implemented/architecture/2026-09-20-pinned-dispersion-catalog-sources.md)
@@ -165,7 +165,7 @@ representation uses an explicit fixed pair/switch-state identity.
 Use the checked NumPy compiler-reference execution boundary for coordinate replay:
 
 ```python
-from vibeqc_compiler.geometry import compile_d3_bj, execute_d3_bj
+from generativeqc_compiler.geometry import compile_d3_bj, execute_d3_bj
 
 compiled = compile_d3_bj(spec, atomic_numbers, coordinates)
 result = execute_d3_bj(compiled, new_coordinates, gradient=True)
@@ -248,7 +248,7 @@ See the [workspace decision](../../.agents/notes/implemented/architecture/2026-0
 `tools/benchmark_d3_alchemi.py` compares the production D3 owner with NVIDIA
 ALCHEMI Toolkit-Ops on exactly the same generated nonperiodic geometries, D3(BJ)
 damping parameters, and hard pair/CN cutoff. It is an optional benchmark tool;
-ALCHEMI, PyTorch, and its parameter cache are not VibeQC runtime dependencies.
+ALCHEMI, PyTorch, and its parameter cache are not GenerativeQC runtime dependencies.
 
 The comparison deliberately reports three ALCHEMI timings separately:
 
@@ -257,14 +257,14 @@ The comparison deliberately reports three ALCHEMI timings separately:
   benchmark convention;
 - neighbor-list plus D3 pipeline latency.
 
-VibeQC currently performs pair traversal inside its D3 owner and therefore has no
+GenerativeQC currently performs pair traversal inside its D3 owner and therefore has no
 separate neighbor-list stage to subtract. Its warm synchronous `execute()` latency
 includes coordinate upload, the D3 kernel, and requested result download. The
 benchmark records candidate-pair counts, ALCHEMI neighbor-edge counts, throughput,
 resource diagnostics, package/CUDA metadata, raw timing samples, and the numerical
 delta after converting ALCHEMI forces back to `dE/dR`.
 
-A precision caveat is mandatory when interpreting performance: VibeQC production
+A precision caveat is mandatory when interpreting performance: GenerativeQC production
 D3 is FP64, while ALCHEMI Toolkit-Ops 0.4.x uses FP32 reference tables and FP32
 energy/force/CN outputs even when positions are FP64. The benchmark records this
 explicitly and does not declare an equal-precision winner.
@@ -272,7 +272,7 @@ explicitly and does not declare an equal-precision winner.
 Example:
 
 ```sh
-PYTHONPATH=python:. VIBEQC_LIBRARY=/path/to/cuda/libvibeqc.so \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY=/path/to/cuda/libgenerativeqc.so \
   python tools/benchmark_d3_alchemi.py \
   --device cuda --method 'PBE-D3(BJ)' --cutoff-angstrom 15 \
   --workload 32x1 --workload 128x1 --workload 32x64 \
@@ -281,7 +281,7 @@ PYTHONPATH=python:. VIBEQC_LIBRARY=/path/to/cuda/libvibeqc.so \
 ```
 
 For retained performance evidence, pin the exact `nvalchemi-toolkit-ops` wheel,
-PyTorch/CUDA versions, GPU, VibeQC commit/library, cutoff, workload, and timing
+PyTorch/CUDA versions, GPU, GenerativeQC commit/library, cutoff, workload, and timing
 samples. Do not compare published H100 numbers directly with a local RTX 5090 run;
 run both implementations on the same allocated device.
 

@@ -1,12 +1,12 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_INTEGRALS_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_INTEGRALS_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_INTEGRALS_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_INTEGRALS_HPP
 
 #include "model/common/integrals.hpp"
 #include "model/gfn2/basis.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 using IntegralPlan = common::IntegralPlan;
 inline constexpr double kDefaultIntegralCutoff = common::kDefaultIntegralCutoff;
@@ -72,6 +72,6 @@ using common::make_integral_plan;
  * respects both matrix triangles even when the caller's adjoint is not
  * symmetric, and does not materialize a four-index derivative tensor.
  */
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_INTEGRALS_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_INTEGRALS_HPP

@@ -8,15 +8,15 @@
 #include <vector>
 
 #include "dft/dispersion/d4_eeq.hpp"
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 inline constexpr char kD4EEQTableSha256[] =
     "f0caaa42a0604d2d0c429e34eb84f5078769058ab02cccc55ae492746c6bc34c";
 inline constexpr char kD4EEQChargeParameterSha256[] =
     "02b8bee49c10b4c31914caf149d9f58164e58d6dc7ae2ab21e9d12f5bc22797a";
-inline constexpr char kD4ProductionProviderIdentity[] = "vibeqc-native-d4-bj-eeq-v1";
+inline constexpr char kD4ProductionProviderIdentity[] = "generativeqc-native-d4-bj-eeq-v1";
 inline constexpr char kD4ProductionSchedulerIdentity[] =
     "bounded-eeq-workers-cooperative-fixed-charge-v1";
 
@@ -47,10 +47,10 @@ struct D4CudaOwner;
 class D4Plan {
  public:
   static std::unique_ptr<D4Plan> prepare(
-      vibeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
+      generativeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
       std::vector<std::int32_t> atomic_numbers, std::vector<double> total_charges,
       std::vector<double> default_coordinates, D4Parameters parameters, D4EEQProfile profile,
-      std::uint64_t maximum_bytes, std::string& detail, vibeqc_status& status);
+      std::uint64_t maximum_bytes, std::string& detail, generativeqc_status& status);
   ~D4Plan();
 
   D4Plan(const D4Plan&) = delete;
@@ -62,7 +62,7 @@ class D4Plan {
   [[nodiscard]] std::uint32_t atom_count(std::uint32_t system) const noexcept {
     return offsets_[system + 1] - offsets_[system];
   }
-  [[nodiscard]] vibeqc_backend backend() const noexcept { return backend_; }
+  [[nodiscard]] generativeqc_backend backend() const noexcept { return backend_; }
   [[nodiscard]] D4EEQProfile profile() const noexcept { return profile_; }
   [[nodiscard]] const D4Parameters& parameters() const noexcept { return parameters_; }
   [[nodiscard]] const D4ResourceUsage& resources() const noexcept { return resources_; }
@@ -76,15 +76,16 @@ class D4Plan {
                                    static_cast<std::size_t>(atom_count(system)) * 3);
   }
 
-  vibeqc_status execute(std::span<const double> packed_coordinates,
-                        std::span<const std::uint8_t> active,
-                        std::span<const std::uint8_t> want_gradient,
-                        std::vector<D4Status>& statuses, std::vector<double>& energy_components,
-                        std::vector<double>& packed_gradients, std::vector<double>& packed_charges,
-                        std::string& detail);
+  generativeqc_status execute(std::span<const double> packed_coordinates,
+                              std::span<const std::uint8_t> active,
+                              std::span<const std::uint8_t> want_gradient,
+                              std::vector<D4Status>& statuses,
+                              std::vector<double>& energy_components,
+                              std::vector<double>& packed_gradients,
+                              std::vector<double>& packed_charges, std::string& detail);
 
  private:
-  D4Plan(vibeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
+  D4Plan(generativeqc_backend backend, int device_id, std::vector<std::uint32_t> offsets,
          std::vector<std::int32_t> atomic_numbers, std::vector<double> total_charges,
          std::vector<double> default_coordinates, D4Parameters parameters, D4EEQProfile profile,
          D4ResourceUsage resources)
@@ -99,7 +100,7 @@ class D4Plan {
         profile_(profile),
         resources_(resources) {}
 
-  vibeqc_backend backend_{};
+  generativeqc_backend backend_{};
   int device_id_{};
   std::vector<std::uint32_t> offsets_;
   std::vector<std::int32_t> atomic_numbers_;
@@ -119,15 +120,15 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
                                   std::span<const double> total_charges,
                                   std::span<const double> default_coordinates, D4EEQProfile profile,
                                   const D4ResourceUsage& resources, std::string& detail,
-                                  vibeqc_status& status);
+                                  generativeqc_status& status);
 void destroy_d4_cuda_owner(D4CudaOwner* owner) noexcept;
-vibeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& parameters,
-                              D4EEQProfile profile, std::span<const double> coordinates,
-                              bool coordinates_changed, std::span<const std::uint8_t> active,
-                              std::span<const std::uint8_t> want_gradient,
-                              std::vector<D4Status>& statuses,
-                              std::vector<double>& energy_components,
-                              std::vector<double>& gradients, std::vector<double>& charges,
-                              D4RuntimeCounters& counters, std::string& detail);
+generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& parameters,
+                                    D4EEQProfile profile, std::span<const double> coordinates,
+                                    bool coordinates_changed, std::span<const std::uint8_t> active,
+                                    std::span<const std::uint8_t> want_gradient,
+                                    std::vector<D4Status>& statuses,
+                                    std::vector<double>& energy_components,
+                                    std::vector<double>& gradients, std::vector<double>& charges,
+                                    D4RuntimeCounters& counters, std::string& detail);
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

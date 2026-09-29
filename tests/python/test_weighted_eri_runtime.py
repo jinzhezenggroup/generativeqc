@@ -9,28 +9,28 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.integral.blocks import TensorLayout, WeightTile
-from vibeqc_compiler.integral.capabilities import query_integral_capability
-from vibeqc_compiler.integral.ir import four_center_eri_operator
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.weighted_eri import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.integral.blocks import TensorLayout, WeightTile
+from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.ir import four_center_eri_operator
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
-from vibeqc_compiler.integral.weighted_eri_execute import (
+from generativeqc_compiler.integral.weighted_eri_execute import (
     PreparedWeightedEri,
     compile_weighted_eri,
 )
-from vibeqc_compiler.integral.weighted_eri_inputs import (
+from generativeqc_compiler.integral.weighted_eri_inputs import (
     PRIMITIVE_RANGE_RECORD,
     prepare_weighted_eri_stream,
     weighted_eri_response,
 )
-from vibeqc_compiler.integral.weighted_eri_native import (
+from generativeqc_compiler.integral.weighted_eri_native import (
     weighted_eri_program_identity,
 )
 
@@ -44,8 +44,8 @@ def runtime(request: typing.Any, tmp_path_factory: typing.Any) -> typing.Any:
     """Exercise the exported generated ABI, including CUDA's shared arena owner."""
     pytest.importorskip("pyscf")
     cuda = request.param == "cuda"
-    if cuda and os.environ.get("VIBEQC_TEST_RANGE_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
+    if cuda and os.environ.get("GENERATIVEQC_TEST_RANGE_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
     if cuda and not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("native CUDA validation requires a Slurm allocation")
     compiler = shutil.which("nvcc" if cuda else "c++")
@@ -65,18 +65,19 @@ def runtime(request: typing.Any, tmp_path_factory: typing.Any) -> typing.Any:
     lib._weighted_artifact = artifact
     lib._weighted_compiler = adapter
     lib._weighted_cache = folder
-    lib.vibeqc_weighted_identity_v2.restype = ct.c_char_p
-    assert lib.vibeqc_weighted_identity_v2().decode() == weighted_eri_program_identity(
-        kernel, request.param
+    lib.generativeqc_weighted_identity_v2.restype = ct.c_char_p
+    assert (
+        lib.generativeqc_weighted_identity_v2().decode()
+        == weighted_eri_program_identity(kernel, request.param)
     )
-    lib.vibeqc_weighted_create_v2.argtypes = (
+    lib.generativeqc_weighted_create_v2.argtypes = (
         [ct.c_int] * 3
         + [ct.c_size_t] * 3
         + [ct.POINTER(ct.c_void_p), ct.c_char_p, ct.c_size_t]
     )
-    lib.vibeqc_weighted_destroy_v2.argtypes = [ct.c_void_p]
-    lib.vibeqc_weighted_destroy_v2.restype = None
-    lib.vibeqc_weighted_run_v2.argtypes = [
+    lib.generativeqc_weighted_destroy_v2.argtypes = [ct.c_void_p]
+    lib.generativeqc_weighted_destroy_v2.restype = None
+    lib.generativeqc_weighted_run_v2.argtypes = [
         ct.c_void_p,
         ct.c_void_p,
         ct.c_size_t,
@@ -86,7 +87,7 @@ def runtime(request: typing.Any, tmp_path_factory: typing.Any) -> typing.Any:
         ct.c_char_p,
         ct.c_size_t,
     ]
-    lib.vibeqc_weighted_storage_v2.argtypes = [
+    lib.generativeqc_weighted_storage_v2.argtypes = [
         ct.c_void_p,
         ct.POINTER(ct.c_uint64),
         ct.c_char_p,
@@ -124,7 +125,7 @@ def create(
     lib, cuda = runtime
     handle = ct.c_void_p()
     error = ct.create_string_buffer(1024)
-    status = lib.vibeqc_weighted_create_v2(
+    status = lib.generativeqc_weighted_create_v2(
         0,
         12 if cuda else 0,
         0,
@@ -150,7 +151,7 @@ def run(
     # NumPy owns aligned, contiguous bytes, including for an empty chunk.
     inputs = np.frombuffer(b"".join(records), dtype=np.uint8).copy()
     error = ct.create_string_buffer(1024)
-    status = lib.vibeqc_weighted_run_v2(
+    status = lib.generativeqc_weighted_run_v2(
         handle,
         inputs.ctypes.data,
         len(records),
@@ -187,7 +188,7 @@ def test_retained_chunks_match_independent_ragged_tiles_and_empty_replay(
         assert run(runtime, handle, [], output)[0] == 0
         np.testing.assert_array_equal(output, 0)
     finally:
-        runtime[0].vibeqc_weighted_destroy_v2(handle)
+        runtime[0].generativeqc_weighted_destroy_v2(handle)
 
 
 def test_budget_is_checked_before_publication_and_capacity_is_enforced(
@@ -199,7 +200,9 @@ def test_budget_is_checked_before_publication_and_capacity_is_enforced(
         amounts = (ct.c_uint64 * 2)()
         error = ct.create_string_buffer(1024)
         assert (
-            runtime[0].vibeqc_weighted_storage_v2(handle, amounts, error, len(error))
+            runtime[0].generativeqc_weighted_storage_v2(
+                handle, amounts, error, len(error)
+            )
             == 0
         )
         assert amounts[0] > 0 and bool(amounts[1]) == runtime[1]
@@ -211,7 +214,7 @@ def test_budget_is_checked_before_publication_and_capacity_is_enforced(
         assert run(runtime, handle, records, output)[0] == 1
         np.testing.assert_array_equal(output, 123)
     finally:
-        runtime[0].vibeqc_weighted_destroy_v2(handle)
+        runtime[0].generativeqc_weighted_destroy_v2(handle)
 
 
 def test_record_identity_and_numerical_failures_leave_output_and_plan_reusable(
@@ -248,7 +251,7 @@ def test_record_identity_and_numerical_failures_leave_output_and_plan_reusable(
             assert run(runtime, handle, records[:1], replay)[0] == 0
             np.testing.assert_allclose(replay, healthy, rtol=1e-13, atol=1e-13)
     finally:
-        runtime[0].vibeqc_weighted_destroy_v2(handle)
+        runtime[0].generativeqc_weighted_destroy_v2(handle)
 
 
 def test_python_prepared_chunks_detach_results_and_track_geometry_identity(

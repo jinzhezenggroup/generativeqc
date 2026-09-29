@@ -15,7 +15,7 @@
 #include "scf/solver/diis.hpp"
 #include "scf/solver/proposal_control.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 using scf::reference::commutator_residual;
@@ -275,4 +275,4 @@ scf::ScfResult run_cosx_uhf(PreparedCosxFockPlan& plan, const scf::ScfOptions& o
   return result;
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

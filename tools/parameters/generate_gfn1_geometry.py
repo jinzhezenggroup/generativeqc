@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 
 from tools import source_registry
 
-DEFAULT_OUTPUT = ROOT / "python/vibeqc_compiler/geometry/_gfn1_data.py"
+DEFAULT_OUTPUT = ROOT / "python/generativeqc_compiler/geometry/_gfn1_data.py"
 PRODUCT_ID = "gfn1-geometry-python-data"
 PRODUCT_INPUTS = ("xtbloom-gfn1-parameters",)
 SOURCE_ID = PRODUCT_INPUTS[0]

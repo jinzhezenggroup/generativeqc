@@ -15,7 +15,7 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import aggregate, read_host_trace, read_trace
@@ -51,7 +51,7 @@ def main() -> None:
     if not oracle.converged:
         raise RuntimeError("independent reference failed to converge")
     force = -oracle.nuc_grad_method().kernel()
-    library = Path(os.environ["VIBEQC_LIBRARY"])
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"])
     payload = {
         "case": "water8-separated",
         "aos": 192,
@@ -61,7 +61,9 @@ def main() -> None:
         "representation": "spherical",
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
         "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
-        "controls": {k: v for k, v in os.environ.items() if k.startswith("VIBEQC_")},
+        "controls": {
+            k: v for k, v in os.environ.items() if k.startswith("GENERATIVEQC_")
+        },
         "independent_energy": oracle.e_tot,
         "independent_forces": force.tolist(),
         "samples": [],
@@ -77,7 +79,7 @@ def main() -> None:
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
     )
-    os.environ["VIBEQC_DF_FORCE_SCREEN_ABS"] = "off"
+    os.environ["GENERATIVEQC_DF_FORCE_SCREEN_ABS"] = "off"
     policies = ("off", "1e-8", "1e-6", "1e-4")
     with calc.prepare_batch([atoms]) as batch:
         initial = batch.execute(strict=True).items[0]
@@ -91,15 +93,15 @@ def main() -> None:
         ]
         jobs += [(True, 0, p) for p in policies]
         for diagnostic, repeat, policy in jobs:
-            os.environ["VIBEQC_DF_FORCE_SCREEN_ABS"] = policy
+            os.environ["GENERATIVEQC_DF_FORCE_SCREEN_ABS"] = policy
             batch.execute(strict=True)  # Exclude plan transition from clean replay.
             if diagnostic:
                 trace = args.output.with_suffix(f".{policy}.jsonl")
                 host = args.output.with_suffix(f".{policy}.host.jsonl")
                 os.environ.update(
-                    VIBEQC_DF_TRACE=str(trace),
-                    VIBEQC_DF_HOST_TRACE=str(host),
-                    VIBEQC_DF_SHELL_COUNTERS="1",
+                    GENERATIVEQC_DF_TRACE=str(trace),
+                    GENERATIVEQC_DF_HOST_TRACE=str(host),
+                    GENERATIVEQC_DF_SHELL_COUNTERS="1",
                 )
             start = time.perf_counter()
             actual = batch.execute(strict=True).items[0]
@@ -134,9 +136,9 @@ def main() -> None:
                     / 1000
                 )
                 for key in (
-                    "VIBEQC_DF_TRACE",
-                    "VIBEQC_DF_HOST_TRACE",
-                    "VIBEQC_DF_SHELL_COUNTERS",
+                    "GENERATIVEQC_DF_TRACE",
+                    "GENERATIVEQC_DF_HOST_TRACE",
+                    "GENERATIVEQC_DF_SHELL_COUNTERS",
                 ):
                     os.environ.pop(key)
             payload["diagnostics" if diagnostic else "samples"].append(row)

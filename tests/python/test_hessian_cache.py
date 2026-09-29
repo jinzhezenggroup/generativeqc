@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tools.vibeqc_hessian import analytic
+from tools.generativeqc_hessian import analytic
 
 
 @pytest.fixture

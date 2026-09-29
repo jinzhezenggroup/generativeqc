@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">GenerativeQC logo</title>
+  <desc id="description">A gradient orbital ring forming a G, with an electron and a small generated spark.</desc>
+  <defs>
+    <linearGradient id="orbital" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.55" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+
+  <!-- The open ring and inward stroke keep the G legible at icon size. -->
+  <path d="M386 143A176 176 0 1 0 425 277H282" fill="none" stroke="url(#orbital)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M425 277v67" fill="none" stroke="url(#orbital)" stroke-width="52" stroke-linecap="round"/>
+  <circle cx="386" cy="143" r="19" fill="#22d3ee"/>
+  <path d="M114 75v41M94 95h40M431 399v33M415 415h32" fill="none" stroke="#c084fc" stroke-width="10" stroke-linecap="round"/>
+</svg>

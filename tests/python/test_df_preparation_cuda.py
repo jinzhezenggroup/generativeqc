@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -21,7 +21,7 @@ def preparation_probe(tmp_path_factory: typing.Any) -> typing.Any:
     compiler = shutil.which("c++")
     if not compiler:
         pytest.skip("host C++ compiler unavailable")
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     root = Path(__file__).resolve().parents[2]
     directory = tmp_path_factory.mktemp("df-preparation")
     source = directory / "prepare.cpp"
@@ -33,26 +33,26 @@ def preparation_probe(tmp_path_factory: typing.Any) -> typing.Any:
 #include <iostream>
 #include <string>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 // Internal native preparation entry: isolate its live-set policy from SCF/J/K.
 std::vector<std::optional<DensityFittingScfData>> prepare_cuda_density_fitting_batch(
     const std::vector<core::System>&, const std::optional<core::System>&,
-    double, std::size_t, int, std::vector<vibeqc_status>&, bool);
+    double, std::size_t, int, std::vector<generativeqc_status>&, bool);
 }
 int main(int argc, char** argv) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   if (argc != 4 || !std::getenv("SLURM_JOB_ID")) return 1;
   const bool spherical = std::stoi(argv[1]), forces = std::stoi(argv[2]);
   const std::string mode = argv[3];
   core::System system;
-  system.basis_representation = spherical ? VIBEQC_BASIS_SPHERICAL : VIBEQC_BASIS_CARTESIAN;
+  system.basis_representation = spherical ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
   for (std::size_t atom = 0; atom < 8; ++atom) {
     system.atoms.push_back({2, {0.0, 0.0, 3.0 * atom}});
     for (unsigned l = 0; l < 3; ++l)
       system.shells.push_back({atom, l, {{0.7 + 0.2 * l, 1.0}}});
   }
   std::string detail;
-  if (molecule::validate_and_normalize(system, detail) != VIBEQC_STATUS_SUCCESS) return 2;
+  if (molecule::validate_and_normalize(system, detail) != GENERATIVEQC_STATUS_SUCCESS) return 2;
   const auto c = molecule::cartesian_ao_count(system), n = molecule::ao_count(system);
   scf::DfPreparationShape shape{c, n, 8, 24, 24, 24, 24, forces, true};
   const auto storage = scf::df_preparation_storage(shape);
@@ -62,13 +62,13 @@ int main(int argc, char** argv) {
   if (mode == "reject") --budget;
   if (mode == "small") budget = 2U << 20;
   if (mode == "zero") budget = 0;
-  std::vector<vibeqc_status> statuses;
+  std::vector<generativeqc_status> statuses;
   const auto prepared = scf::prepare_cuda_density_fitting_batch(
       std::vector<core::System>(count, system), std::nullopt, 1e-10, budget, 0, statuses, forces);
   std::size_t accepted = 0, derivative_values = 0, nuclear_values = 0, generated_owners = 0;
   for (std::size_t i = 0; i < count; ++i) {
     if (!prepared[i]) {
-      if (statuses[i] != VIBEQC_STATUS_OUT_OF_MEMORY) return 3;
+      if (statuses[i] != GENERATIVEQC_STATUS_OUT_OF_MEMORY) return 3;
       continue;
     }
     ++accepted;

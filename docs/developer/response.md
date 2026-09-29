@@ -1,6 +1,6 @@
 # Shared orbital response and bounded Krylov solves
 
-`tools/vibeqc_response` is the shared response-solver tooling for RHF and
+`tools/generativeqc_response` is the shared response-solver tooling for RHF and
 semilocal-KS orbital response. Its Krylov controller is Python/host-controlled;
 the operator backends include native J/K execution. It separates the problem snapshot, the
 matrix-free operator, and the linear-solver/recycling state so downstream
@@ -140,7 +140,7 @@ native integral source. The batch and `NativeAO` must remain open; the adapter
 owns its integral source and revocable snapshot lease.
 
 ```python
-from tools.vibeqc_response import NativeRKSResponse, solve_many
+from tools.generativeqc_response import NativeRKSResponse, solve_many
 
 # batch.execute(strict=True) has already converged; basis describes its exact AO source.
 with NativeRKSResponse.from_native(batch, basis) as response:
@@ -172,7 +172,7 @@ claim; the native kernel does not yet qualify implicit-response resource binding
 `tests/python/test_response_native_rks.py` checks independent libcint/Libxc
 actions, finite orbital rotations, reconverged one-electron perturbations,
 transpose/true residuals, multi-RHS/recycling, tails and lifecycle negatives.
-The native `vibeqc_rks_response_tests` target also exercises the actual private
+The native `generativeqc_rks_response_tests` target also exercises the actual private
 point-response ABI against 30 independent high-precision directions, its batch
 layout and invalid-input boundaries, and energy snapshot leases from real
 LDA/PBE H2 solves. See [point acceptance](xc_scf_domain.md#executable-evidence)
@@ -197,7 +197,7 @@ finite full Hessian at the empty-spin boundary.
 `tests/python/test_response_native_uks.py` uses real LiH+ and H2+ LDA/PBE states,
 independent libcint/Libxc spin actions, finite orbital rotations, reconverged
 spin densities, true residuals, transpose identities, multi-RHS/recycling and
-lease/domain negatives. `vibeqc_uks_response_tests` checks 48 independent
+lease/domain negatives. `generativeqc_uks_response_tests` checks 48 independent
 high-precision point directions, spin permutations and the private batch ABI.
 See [the spin binding decision](../../.agents/notes/implemented/numerics/2026-09-20-native-uks-cpks.md).
 
@@ -233,13 +233,13 @@ and solver workspace, CUDA context and library-private memory are outside the
 retained response budget. This is not a fully resident CPKS solve or a complete
 endpoint memory/performance guarantee.
 
-With `VIBEQC_RESPONSE_CUDA_TEST=1` under an explicit Slurm GPU allocation,
+With `GENERATIVEQC_RESPONSE_CUDA_TEST=1` under an explicit Slurm GPU allocation,
 `tests/python/test_response_native_cuda.py` reuses the independent CPU-tier
 libcint/Libxc, finite-rotation and reconverged-perturbation assertions on real
 CUDA LDA/PBE water RKS and LiH+ UKS states. Tests forbid CPU AO/XC/J fallbacks and
 SCF reruns during actions. They also cover empty-spin tangent directions,
 resource rejection, preparation/export counters, legacy-proof/method/ECP gates
-and lifetime revocation. `vibeqc_xc_response_cuda_tests` runs all 30 restricted
+and lifetime revocation. `generativeqc_xc_response_cuda_tests` runs all 30 restricted
 and 48 unrestricted independent high-precision point directions on device with
 the unchanged CPU-tier numerical gates. See
 [the CUDA CPKS decision](../../.agents/notes/implemented/numerics/2026-09-20-native-cuda-cpks.md).
@@ -358,9 +358,9 @@ are qualified.
 
 ```python
 import numpy as np
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_response import CudaDirectJKBackend, RHFResponseOperator
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_response import CudaDirectJKBackend, RHFResponseOperator
 
 with NativeSource([(1, (0, 0, 0)), (1, (0, 0, 1.4))]) as source:
     reference, _ = export_rhf(source, backend="cpu", tolerance=1e-12)
@@ -372,7 +372,7 @@ with NativeSource([(1, (0, 0, 0)), (1, (0, 0, 1.4))]) as source:
 
 Run `tests/python/test_response_direct.py` for CPU-only ownership/identity and
 failure contracts. In an explicitly allocated Slurm GPU job, set
-`VIBEQC_RESPONSE_CUDA_TEST=1` and run
+`GENERATIVEQC_RESPONSE_CUDA_TEST=1` and run
 `tests/python/test_response_direct_cuda.py`. Device tests compare raw signed J/K
 with committed independent AO-integral fixtures (including an f-shell case),
 CPHF actions with explicit MO matrices and finite orbital rotations, and all
@@ -435,8 +435,8 @@ uses CPU overlap/hcore preparation and NumPy canonicalization. Response actions
 never invoke SCF or CPU integral tiles.
 
 ```python
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import CudaSpinJKBackend, UHFResponseOperator, solve_many
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import CudaSpinJKBackend, UHFResponseOperator, solve_many
 
 with NativeSource(atoms, basis, auxiliary_basis=auxiliary, charge=1,
                   multiplicity=2) as source:
@@ -456,7 +456,7 @@ payload counts are not measured PCIe transfer counts. Closing the backend or
 borrowed source invalidates actions and zero-RHS solves. Invalid directions,
 failed SCF and impossible budgets cannot publish a successful action.
 
-With `VIBEQC_RESPONSE_CUDA_TEST=1` in a Slurm allocation,
+With `GENERATIVEQC_RESPONSE_CUDA_TEST=1` in a Slurm allocation,
 `tests/python/test_response_spin_cuda.py` checks independent signed raw J/K,
 native open-shell snapshots, explicit coupled MO matrices, true residuals for
 sequential/blocked/recycled solves, empty spin, identity and failure replay.
@@ -472,7 +472,7 @@ subsequent use of a retained vector rejects its closed owner. Ordinary explicit
 regressions cover memory, validation and runtime errors and idempotent teardown.
 
 The resident CUDA numerical comparison in `test_cuda_runtime.py` requires an
-explicit NVIDIA device allocation (`VIBEQC_RESOURCE_CUDA_TEST=1`) and skips under
+explicit NVIDIA device allocation (`GENERATIVEQC_RESOURCE_CUDA_TEST=1`) and skips under
 `CUMETAL_ROOT`. The CuMetal workflow reports that skip; its green status is not
 resident-response numerical qualification. NVIDIA compilation, host GMRES tests,
 and ownership tests are distinct from executing the resident operator/solver

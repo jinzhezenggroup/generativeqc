@@ -53,9 +53,9 @@ def test_current_dft_descriptor_readers_compile_and_keep_defaults(
 #include <stdexcept>
 #include <string_view>
 #include <vector>
-constexpr unsigned VIBEQC_ABI_VERSION=1;
-constexpr int VIBEQC_STATUS_ABI_MISMATCH=2,VIBEQC_STATUS_NOT_IMPLEMENTED=3,VIBEQC_STATUS_INVALID_ARGUMENT=4;
-constexpr unsigned VIBEQC_XC_EXECUTION_DEVICE_FUSED=0,VIBEQC_XC_EXECUTION_HOST_UNFUSED=1;
+constexpr unsigned GENERATIVEQC_ABI_VERSION=1;
+constexpr int GENERATIVEQC_STATUS_ABI_MISMATCH=2,GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3,GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
+constexpr unsigned GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED=0,GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED=1;
 struct MethodError:std::runtime_error { MethodError(int,const char* m):std::runtime_error(m){} };
 struct NativeKsExecutionPlan {};
 const char* expected_scf_domain(const NativeKsExecutionPlan&) {return "current-domain";}
@@ -73,17 +73,17 @@ struct GridSpec {
 };
 void validate_grid_spec(const GridSpec& g) {if(!g.radial_points)throw std::invalid_argument("radial");}
 }
-struct vibeqc_ks_options {
- std::size_t struct_size=sizeof(vibeqc_ks_options); unsigned abi_version=1;
+struct generativeqc_ks_options {
+ std::size_t struct_size=sizeof(generativeqc_ks_options); unsigned abi_version=1;
  const char* scf_domain="current-domain"; std::uint64_t tile_points=37;
- unsigned xc_execution_schedule=VIBEQC_XC_EXECUTION_HOST_UNFUSED;
+ unsigned xc_execution_schedule=GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
 };
 struct Auxiliary {core::System data;};
-struct vibeqc_method_descriptor {
- std::size_t struct_size=sizeof(vibeqc_method_descriptor);
- const vibeqc_ks_options* ks_options=nullptr;
+struct generativeqc_method_descriptor {
+ std::size_t struct_size=sizeof(generativeqc_method_descriptor);
+ const generativeqc_ks_options* ks_options=nullptr;
  const Auxiliary* density_fitting_auxiliary_basis=nullptr;
 };
 """
@@ -91,11 +91,11 @@ struct vibeqc_method_descriptor {
         + auxiliary
         + r"""
 int main() {
- vibeqc_method_descriptor d; scf::ScfOptions options; NativeKsExecutionPlan plan;
+ generativeqc_method_descriptor d; scf::ScfOptions options; NativeKsExecutionPlan plan;
  auto defaults=ks_grid_options(d,options,plan);
  assert(defaults.version==1 && options.xc_tile_points==256);
  assert(!ks_auxiliary_template(d));
- vibeqc_ks_options input; d.ks_options=&input;
+ generativeqc_ks_options input; d.ks_options=&input;
  auto copied=ks_grid_options(d,options,plan);
  assert(copied.version==2 && copied.radial_points==7 && options.xc_tile_points==37);
  assert(options.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);

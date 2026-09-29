@@ -9,7 +9,7 @@
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
     "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science; retain CUDA reduction and error ownership.",
     "src/backends/cuda/gfn2_repulsion.cuh": "Add explicit generated-pair nonfinite arithmetic status.",
-    "src/runtime/gfn2_cuda_execution.cu": "Reuse VibeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback.",
+    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback.",
     "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, and AO contraction arithmetic while retaining CUDA topology, validation, reductions, atomics, thresholds, and failure semantics.",
     "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces.",
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
@@ -628,13 +628,13 @@
   },
   "schema_version": 1,
   "scope": "Native non-wheel molecular GFN2-xTB CUDA bootstrap",
-  "selection_reason": "Repository state immediately before xTBloom production GFN1 CUDA execution was integrated; selected to keep VibeQC CUDA ownership GFN2-only.",
+  "selection_reason": "Repository state immediately before xTBloom production GFN1 CUDA execution was integrated; selected to keep GenerativeQC CUDA ownership GFN2-only.",
   "upstream_commit": "3c21f50195389b093941eb5ed6f1143b8802f96e",
   "upstream_commit_subject": "chore(deps): bump astral-sh/setup-uv from 9.0.0 to 10.0.1 (#436)",
   "upstream_repository": "https://github.com/jinzhezenggroup/xtbloom",
   "native_ownership": {
     "root": "src/xtb/native",
-    "namespace": "vibeqc::xtb",
+    "namespace": "generativeqc::xtb",
     "descriptors": "src/runtime/types.hpp",
     "scope": "All imported sources use native identifiers/includes; external C entry points and version header are retired. Upstream hashes and revision provenance are preserved."
   },
@@ -645,15 +645,15 @@
     },
     "src/runtime/dlpack_layout.hpp": {
       "upstream_sha256": "1d1d09b2ec5ee5da3174aecccd0692f20be419f887d51a3f99b358209a97ce5d",
-      "reason": "Standalone result-arena/DLPack API has no VibeQC callers."
+      "reason": "Standalone result-arena/DLPack API has no GenerativeQC callers."
     },
     "src/runtime/result_owner.hpp": {
       "upstream_sha256": "0bf8775ea558faf44a872fedff4ce6fa50e380456409fda4051fa5e92e28400e",
-      "reason": "Standalone result-arena/DLPack API has no VibeQC callers."
+      "reason": "Standalone result-arena/DLPack API has no GenerativeQC callers."
     },
     "src/runtime/result_owner_cuda.cu": {
       "upstream_sha256": "80f95c4e4d2d107053404f213599ee449bd7a04377276ecf51f00c024d2bbad3",
-      "reason": "Standalone result-arena/DLPack API has no VibeQC callers."
+      "reason": "Standalone result-arena/DLPack API has no GenerativeQC callers."
     }
   }
 }

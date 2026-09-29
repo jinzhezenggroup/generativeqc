@@ -3,8 +3,8 @@
 from dataclasses import replace
 
 import pytest
+from generativeqc.force_aware_scf import ScfForceErrorEstimator
 from test_force_aware_scf import policy, sample
-from vibeqc.force_aware_scf import ScfForceErrorEstimator
 
 
 def test_unmeasured_method_basis_cross_product_is_not_admitted() -> None:

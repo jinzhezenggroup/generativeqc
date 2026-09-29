@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_gfn2_spin_native.hpp"
   ],
-  "owner": "python/vibeqc_compiler/method/gfn2_spin_runtime.py"
+  "owner": "python/generativeqc_compiler/method/gfn2_spin_runtime.py"
 }

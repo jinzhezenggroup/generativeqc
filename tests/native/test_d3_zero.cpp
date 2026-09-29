@@ -9,15 +9,15 @@
 #include "dft/dispersion/d3_model.hpp"
 
 namespace {
-using vibeqc::dft::dispersion::d3_host_tables;
-using vibeqc::dft::dispersion::d3_pair_term;
-using vibeqc::dft::dispersion::d3_zero_workspace_elements;
-using vibeqc::dft::dispersion::D3Damping;
-using vibeqc::dft::dispersion::D3ModelParameters;
-using vibeqc::dft::dispersion::D3PairTerm;
-using vibeqc::dft::dispersion::D3Status;
-using vibeqc::dft::dispersion::D3ZeroParameters;
-using vibeqc::dft::dispersion::evaluate_d3_zero;
+using generativeqc::dft::dispersion::d3_host_tables;
+using generativeqc::dft::dispersion::d3_pair_term;
+using generativeqc::dft::dispersion::d3_zero_workspace_elements;
+using generativeqc::dft::dispersion::D3Damping;
+using generativeqc::dft::dispersion::D3ModelParameters;
+using generativeqc::dft::dispersion::D3PairTerm;
+using generativeqc::dft::dispersion::D3Status;
+using generativeqc::dft::dispersion::D3ZeroParameters;
+using generativeqc::dft::dispersion::evaluate_d3_zero;
 
 constexpr std::array<std::int32_t, 4> kNumbers{6, 8, 7, 1};
 constexpr std::array<double, 12> kCoordinates{0.0, 0.0, 0.0, 2.5,  0.1, 0.0,
@@ -158,7 +158,7 @@ void test_overflowing_damping_keeps_representable_weighted_results() {
   // and its radial derivative are normal representable FP64 values.
   for (int power : {6, 8}) {
     const double exponent = power + 254.0;
-    const auto term = vibeqc::dft::dispersion::d3_zero_detail::damped_inverse_power(
+    const auto term = generativeqc::dft::dispersion::d3_zero_detail::damped_inverse_power(
         std::ldexp(1.0, -16), std::ldexp(1.0, -32), std::ldexp(1.0, -12), exponent, power);
     const double expected = std::ldexp(1.0 / 6.0, 12 * power - 1016);
     const double expected_derivative = std::ldexp(254.0 / 6.0, 12 * power - 984);
@@ -175,7 +175,7 @@ void test_pair_helper_overflowing_damping_keeps_representable_results() {
   const double r = std::ldexp(1.0, -16);
   const double r2 = std::ldexp(1.0, -32);
   const double r0 =
-      tables.pairs[vibeqc::dft::dispersion::d3_detail::pair_index(numbers[0], numbers[1])]
+      tables.pairs[generativeqc::dft::dispersion::d3_detail::pair_index(numbers[0], numbers[1])]
           .vdw_radius;
   const double rr =
       3.0 * tables.elements[numbers[0] - 1].r4r2 * tables.elements[numbers[1] - 1].r4r2;

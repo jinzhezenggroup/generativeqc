@@ -15,7 +15,7 @@
 #include "scf/reference/observation.hpp"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 using namespace scf::initial_guess;
 using namespace scf::reference;
 

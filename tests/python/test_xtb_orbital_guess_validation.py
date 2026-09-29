@@ -37,7 +37,7 @@ BRIDGE = r"""
 #include "scf/mean_field.hpp"
 #include "scf/reference/linalg.hpp"
 
-using namespace vibeqc;
+using namespace generativeqc;
 using Clock = std::chrono::steady_clock;
 
 double seconds(Clock::time_point begin) {
@@ -48,7 +48,7 @@ core::System oxygen_hydrogens(const std::vector<std::array<double, 3>>& hydrogen
   core::System system;
   system.charge = charge;
   system.multiplicity = 1;
-  system.basis_representation = VIBEQC_BASIS_CARTESIAN;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
   system.atoms.push_back({8, {0, 0, 0}});
   for (const auto& position : hydrogens) system.atoms.push_back({1, position});
   system.shells = {
@@ -63,7 +63,7 @@ core::System oxygen_hydrogens(const std::vector<std::array<double, 3>>& hydrogen
           {0.168855404, 0.4446345422}}});
   }
   std::string detail;
-  if (molecule::validate_and_normalize(system, detail) != VIBEQC_STATUS_SUCCESS)
+  if (molecule::validate_and_normalize(system, detail) != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error(detail);
   return system;
 }
@@ -125,7 +125,7 @@ Candidate run_candidate(const core::System& system, const scf::PreparedFockPlan&
   if (source_occupied > target_occupied)
     throw std::runtime_error("GFN2 valence occupied space exceeds the target occupied space");
 
-  // The bridge translates GFN2's native spherical AO convention into VibeQC's
+  // The bridge translates GFN2's native spherical AO convention into GenerativeQC's
   // public source-basis convention. Verify that translation independently with
   // the ordinary cross-overlap evaluator before timing the actual projection.
   std::vector<double> rebuilt_source_overlap(source_n * source_n);
@@ -309,7 +309,7 @@ def _compile_bridge(tmp_path: Path) -> Path:
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("C++ compiler unavailable")
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     source = tmp_path / "xtb_orbital_guess_validation.cpp"
     source.write_text(BRIDGE)
     executable = tmp_path / "xtb_orbital_guess_validation"

@@ -10,7 +10,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,7 +38,7 @@ inline dim3 blockIdx{0,0,0},threadIdx{0,0,0},blockDim{1,1,1},gridDim{1,1,1};
 #include <array>
 #include <cstdlib>
 #include <iostream>
-using namespace vibeqc::generated::quadrature;
+using namespace generativeqc::generated::quadrature;
 template<unsigned It> int run(double sep,double tolerance) {
   constexpr size_t count=4;
   const double centers[6]{0,0,0,sep,0,0};

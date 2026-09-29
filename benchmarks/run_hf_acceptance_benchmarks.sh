@@ -3,7 +3,7 @@
 # Separate processes avoid charging either engine for the other's resident DF B.
 set -euo pipefail
 : "${SLURM_JOB_ID:?Run through finite srun on main with --gres=gpu:5090:1}"
-: "${VIBEQC_LIBRARY:?Select the qualified Release native library}"
+: "${GENERATIVEQC_LIBRARY:?Select the qualified Release native library}"
 hf_python="${HF_BENCHMARK_PYTHON:-python}"
 hf_output="${HF_BENCHMARK_OUTPUT:-.artifacts/hf-unified-acceptance}"
 hf_sizes="${HF_BENCHMARK_AOS:-24 48 96 192 384 768}"

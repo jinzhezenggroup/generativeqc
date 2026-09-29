@@ -5,7 +5,7 @@
  */
 #include <sys/resource.h>
 
-#ifdef VIBEQC_DF_PROBE_PROFILE
+#ifdef GENERATIVEQC_DF_PROBE_PROFILE
 #include <cuda_profiler_api.h>
 #endif
 
@@ -27,7 +27,7 @@
 #include "scf/density_fitting.hpp"
 
 int main(int argc, char** argv) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   try {
     if (!std::getenv("SLURM_JOB_ID") || !std::getenv("CUDA_VISIBLE_DEVICES") || argc != 7)
       throw std::invalid_argument(
@@ -52,8 +52,8 @@ int main(int argc, char** argv) {
                                                               {0, 3, {{0.6, 1.0}}},
                                                               {1, 0, {{1.2, 1.0}}}};
     std::string detail;
-    const auto check = [&](vibeqc_status status) {
-      if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    const auto check = [&](generativeqc_status status) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     };
     check(molecule::validate_and_normalize(orbital, detail));
     const auto auxiliary = orbital;
@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
           actual, detail, &resources));
     };
     execute();
-#ifdef VIBEQC_DF_PROBE_PROFILE
+#ifdef GENERATIVEQC_DF_PROBE_PROFILE
     if (cudaProfilerStart() != cudaSuccess) throw std::runtime_error("start CUDA profile failed");
 #endif
     std::vector<double> timings;
@@ -119,7 +119,7 @@ int main(int argc, char** argv) {
       for (std::size_t i = 0; i < actual.size(); ++i)
         maximum_error = std::max(maximum_error, std::abs(actual[i] - expected[i]));
     }
-#ifdef VIBEQC_DF_PROBE_PROFILE
+#ifdef GENERATIVEQC_DF_PROBE_PROFILE
     if (cudaProfilerStop() != cudaSuccess) throw std::runtime_error("stop CUDA profile failed");
 #endif
     if (source &&
@@ -131,11 +131,11 @@ int main(int argc, char** argv) {
       throw std::runtime_error("response error or staging budget gate failed");
     rusage usage{};
     if (getrusage(RUSAGE_SELF, &usage)) throw std::runtime_error("getrusage failed");
-    std::cout << std::setprecision(17) << "{\"source_identity\":\"" << vibeqc_get_source_identity()
-              << "\",\"case\":\"" << name << "\",\"mode\":\"" << mode << "\",\"spin\":\"" << spin
-              << "\",\"budget\":" << budget << ",\"maximum_error\":" << maximum_error
-              << ",\"slurm_job_id\":\"" << std::getenv("SLURM_JOB_ID")
-              << "\",\"raw_derivative_bytes\":"
+    std::cout << std::setprecision(17) << "{\"source_identity\":\""
+              << generativeqc_get_source_identity() << "\",\"case\":\"" << name << "\",\"mode\":\""
+              << mode << "\",\"spin\":\"" << spin << "\",\"budget\":" << budget
+              << ",\"maximum_error\":" << maximum_error << ",\"slurm_job_id\":\""
+              << std::getenv("SLURM_JOB_ID") << "\",\"raw_derivative_bytes\":"
               << (raw.metric_derivative.size() + raw.three_center_derivative.size()) *
                      sizeof(double)
               << ",\"process_peak_host_bytes_including_oracle\":" << usage.ru_maxrss * 1024ULL

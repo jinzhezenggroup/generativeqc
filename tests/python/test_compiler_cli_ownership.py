@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPILER_ROOT = ROOT / "python" / "vibeqc_compiler"
+COMPILER_ROOT = ROOT / "python" / "generativeqc_compiler"
 
 
 def _tool_imports(root: Path) -> list[tuple[Path, int, str]]:
@@ -33,13 +33,13 @@ def test_compiler_library_does_not_import_repository_tools() -> None:
         for path, line, module in violations
     )
     assert not violations, (
-        "vibeqc_compiler must own reusable compiler logic; repository tools/CLI "
+        "generativeqc_compiler must own reusable compiler logic; repository tools/CLI "
         f"may consume it but must not become library dependencies:\n{detail}"
     )
 
 
 def test_tool_import_detector_accepts_library_dependencies(tmp_path: Path) -> None:
-    package = tmp_path / "vibeqc_compiler"
+    package = tmp_path / "generativeqc_compiler"
     package.mkdir()
     (package / "clean.py").write_text(
         "from .common import identity\nimport json\n", encoding="utf-8"
@@ -48,7 +48,7 @@ def test_tool_import_detector_accepts_library_dependencies(tmp_path: Path) -> No
 
 
 def test_tool_import_detector_rejects_cli_dependency(tmp_path: Path) -> None:
-    package = tmp_path / "vibeqc_compiler"
+    package = tmp_path / "generativeqc_compiler"
     package.mkdir()
     bad = package / "bad.py"
     bad.write_text(

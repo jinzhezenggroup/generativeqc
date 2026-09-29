@@ -5,7 +5,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Cumulative work, not a latency estimate or a peak allocation budget.
  * panels/reader_calls count visits, projected_columns counts auxiliary columns,
@@ -76,4 +76,4 @@ inline DfOccupiedProjectionBatch plan_df_occupied_projection_batch(
           df_response_checked_product(columns, stride)};
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -7,7 +7,7 @@
 
 #include "dft/dispersion/gcp_r2scan3c.hpp"
 
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 
 namespace {
 constexpr std::array<std::int32_t, 16> kZ{

@@ -9,7 +9,7 @@
 #include "../tensor/cuda_runtime.cuh"
 
 namespace {
-using namespace vibeqc_tensor;
+using namespace generativeqc_tensor;
 struct Transform {
   Context context;
   size_t nbf{}, stage{}, output{}, coefficients{};
@@ -18,8 +18,8 @@ struct Transform {
   bool validated = true;
   bool failed = false;
 };
-using vibeqc::runtime::size_add;
-using vibeqc::runtime::size_mul;
+using generativeqc::runtime::size_add;
+using generativeqc::runtime::size_mul;
 template <class F>
 int guarded(char* error, size_t size, F fn) noexcept {
   try {

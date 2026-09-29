@@ -6,15 +6,20 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.opencl_runtime import OpenCLError, OpenCLRuntime, Resource
-from vibeqc_compiler.integral.runtime_backend import (
+from generativeqc_compiler.integral.opencl_runtime import (
+    OpenCLError,
+    OpenCLRuntime,
+    Resource,
+)
+from generativeqc_compiler.integral.runtime_backend import (
     ExecutionShape,
     LibraryRequest,
     UnsupportedBackendFeature,
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_OPENCL_TEST") != "1", reason="explicit Slurm OpenCL GPU tier"
+    os.environ.get("GENERATIVEQC_OPENCL_TEST") != "1",
+    reason="explicit Slurm OpenCL GPU tier",
 )
 
 SOURCE = """
@@ -29,7 +34,9 @@ __kernel void scale(__global const double* input, __global double* output, ulong
 @pytest.fixture
 def runtime() -> typing.Any:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
-    with OpenCLRuntime(library=os.environ.get("VIBEQC_OPENCL_LIBRARY")) as context:
+    with OpenCLRuntime(
+        library=os.environ.get("GENERATIVEQC_OPENCL_LIBRARY")
+    ) as context:
         yield context
 
 
@@ -45,7 +52,7 @@ def test_transfers_bounds_and_context_ownership(runtime: typing.Any) -> None:
     with pytest.raises(ValueError, match="live buffer"):
         runtime.read(forged, 8)
     with (
-        OpenCLRuntime(library=os.environ.get("VIBEQC_OPENCL_LIBRARY")) as other,
+        OpenCLRuntime(library=os.environ.get("GENERATIVEQC_OPENCL_LIBRARY")) as other,
         pytest.raises(ValueError, match="live buffer"),
     ):
         other.write(buffer, b"12345678")

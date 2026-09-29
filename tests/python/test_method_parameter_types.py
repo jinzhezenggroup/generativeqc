@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method import _generated_parameters as generated
+from generativeqc_compiler.method import _generated_parameters as generated
 
 from tools.generate_method_parameters import DEFAULT_SOURCE, load_source
 

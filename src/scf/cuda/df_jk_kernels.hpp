@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 /** Mirror the computed column-major lower triangle; never average with the
  * uninitialized upper triangle of a BLAS symmetric rank-k result. */
@@ -63,4 +63,4 @@ void launch_reduce_exchange_row_tile_kernel(dim3 grid, dim3 block, std::size_t s
                                             std::size_t auxiliary_count, std::size_t system,
                                             const double* contributions, double* exchange);
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

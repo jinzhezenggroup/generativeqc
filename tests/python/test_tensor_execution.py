@@ -8,8 +8,8 @@ from itertools import pairwise
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.evidence import GATES, block_error
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.evidence import GATES, block_error
+from generativeqc_compiler.tensor import (
     PASSES,
     PRIMITIVES,
     Index,
@@ -34,7 +34,7 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.tensor.examples import example_cases
 
 FP64 = GATES["integral_fp64"]
 

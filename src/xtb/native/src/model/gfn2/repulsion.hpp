@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_REPULSION_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_REPULSION_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_REPULSION_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_REPULSION_HPP
 
 #include <cstdint>
 #include <string>
@@ -9,7 +9,7 @@
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 /*
  * Geometry-independent data for the GFN2 screened nuclear repulsion term.
@@ -26,7 +26,7 @@ struct RepulsionPlan {
 };
 
 /* Build a reusable ragged-batch plan from atomic numbers and molecule offsets. */
-vibeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t total_atoms,
+generativeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t total_atoms,
                                         const std::int64_t* atom_offsets,
                                         const std::int32_t* atomic_numbers, RepulsionPlan& plan,
                                         std::string& error);
@@ -36,9 +36,9 @@ vibeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t to
  * buffers. Positions use atom-major xyz layout in bohr; output is Hartree and
  * Hartree/bohr. Forces may be NULL for an energy-only evaluation.
  */
-vibeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* positions,
+generativeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* positions,
                                       double* energies, double* forces, std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_REPULSION_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_REPULSION_HPP

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.vibeqc_cc.lambda_equations import build_lambda_programs
+from tools.generativeqc_cc.lambda_equations import build_lambda_programs
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,7 +45,7 @@ def test_generated_response_arena_with_default_compiler_depth(
     source = tmp_path / "check.cpp"
     source.write_text(
         '#include "generated.hpp"\n'
-        "int main(){using namespace vibeqc::cc::generated;\n"
+        "int main(){using namespace generativeqc::cc::generated;\n"
         f"if(lambda_transpose_arena_elements(2,3)!={expected})return 1;\n"
         "try{(void)lambda_transpose_arena_elements(std::numeric_limits<std::size_t>::max(),1);return 2;}"
         "catch(const std::length_error&){}return 0;}\n"

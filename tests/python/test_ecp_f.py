@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, ResourceBudget
+from generativeqc.ecp import ecp_integrals
 from test_ecp import detached_native, detached_reference, fixture, reference
-from vibeqc import Calculator, ResourceBudget
-from vibeqc.ecp import ecp_integrals
 
 
 def require_device(device: typing.Any) -> None:
-    if device == "cuda" and os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1":
         pytest.skip("requires an allocated CUDA device")
 
 
@@ -133,7 +133,9 @@ def test_f_prepared_replay_with_planned_budget(device: typing.Any) -> None:
     # Complete HF above covers f on the ECP atom. This replay gate covers f
     # on the all-electron atom too, without repeating the very expensive
     # two-f-center CPU reference on every PR. Keep that larger case opt-in.
-    both_centers = device == "cpu" and os.getenv("VIBEQC_ECP_LARGE_CPU_TEST") == "1"
+    both_centers = (
+        device == "cpu" and os.getenv("GENERATIVEQC_ECP_LARGE_CPU_TEST") == "1"
+    )
     atoms, basis, _ = fixture(f_shell=both_centers, f_on_h=True)
     calculator = Calculator(basis=basis, device=device)
     if device == "cuda":

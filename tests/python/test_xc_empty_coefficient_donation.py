@@ -4,11 +4,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.coefficients import coefficient_program
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.potential import assemble_coefficients
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.coefficients import coefficient_program
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.potential import assemble_coefficients
 
 
 @pytest.mark.parametrize("spin", ["polarized", "unpolarized"])

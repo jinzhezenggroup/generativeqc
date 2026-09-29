@@ -4,13 +4,13 @@ import os
 import typing
 
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace
 from benchmarks.df_progress_ledger import read_progress, summarize_progress
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -45,7 +45,7 @@ def test_diis_retry_provider_and_iteration_limit(
     # Occupied mode executes a dense seed before capture; this gives the
     # generic provider an ordinary stream boundary even on capture-capable GPUs.
     monkeypatch.setenv(
-        "VIBEQC_DF_EXCHANGE", "dense" if water_count == 1 else "occupied"
+        "GENERATIVEQC_DF_EXCHANGE", "dense" if water_count == 1 else "occupied"
     )
     spin = int(method == "uhf")
     count = 4 if route == "batch-four" else 1
@@ -63,9 +63,11 @@ def test_diis_retry_provider_and_iteration_limit(
     for reference in (True, False):
         path = tmp_path / f"retry-{reference}.jsonl"
         progress_path = tmp_path / f"progress-{reference}.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(progress_path))
-        monkeypatch.setenv("VIBEQC_DF_REFERENCE_ITERATION_EIGEN", str(int(reference)))
-        monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+        monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(progress_path))
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_REFERENCE_ITERATION_EIGEN", str(int(reference))
+        )
+        monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
         try:
             if route == "single":
                 with pytest.raises(RuntimeError, match="converg"):
@@ -85,9 +87,9 @@ def test_diis_retry_provider_and_iteration_limit(
                     assert result.failure_indices == tuple(range(count))
                     assert all(item.iterations == 1 for item in result.items)
         finally:
-            monkeypatch.delenv("VIBEQC_DF_PROGRESS_TRACE")
-            monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
-            monkeypatch.delenv("VIBEQC_DF_REFERENCE_ITERATION_EIGEN")
+            monkeypatch.delenv("GENERATIVEQC_DF_PROGRESS_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_ITERATION_EIGEN")
         journal = read_progress(progress_path)
         assert journal["complete"]
         progress = summarize_progress(journal)

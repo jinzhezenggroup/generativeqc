@@ -19,8 +19,8 @@ _BENCHMARKS_DIR = next(
 sys.path.insert(0, str(_BENCHMARKS_DIR))
 import numpy as np
 from _retention import raw_output_path
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
-from vibeqc_compiler.common.resources import (
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.resources import (
     ResourceBudget,
     ResourceCandidate,
     ResourceEstimate,
@@ -29,9 +29,9 @@ from vibeqc_compiler.common.resources import (
     plan_resources,
 )
 
+from tools.generativeqc_validation.df_gradient import reference_df_matrices
+from tools.generativeqc_validation.f_shell_numerics import numerical_error
 from tools.validate_df_source import fixture_systems, write_input
-from tools.vibeqc_validation.df_gradient import reference_df_matrices
-from tools.vibeqc_validation.f_shell_numerics import numerical_error
 
 
 def dump(path: typing.Any, value: typing.Any) -> None:

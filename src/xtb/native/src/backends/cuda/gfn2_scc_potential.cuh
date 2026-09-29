@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_POTENTIAL_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_POTENTIAL_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_POTENTIAL_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_POTENTIAL_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -11,7 +11,7 @@
 #include "backends/common/gfn2_plan_schema.hpp"
 #include "backends/cuda/gfn2_scc_iteration_control.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::int64_t kGfn2SccPotentialDipoleComponents = 3;
 inline constexpr std::int64_t kGfn2SccPotentialQuadrupoleComponents = 6;
@@ -280,6 +280,6 @@ cudaError_t compose_gfn2_scc_potentials_cuda(
     const Gfn2SccPotentialDeviceWorkspace& workspace, std::uint32_t* system_errors,
     std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_POTENTIAL_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_POTENTIAL_CUH

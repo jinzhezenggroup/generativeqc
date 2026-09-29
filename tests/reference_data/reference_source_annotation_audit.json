@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.reference-source-annotation-audit.v1",
+  "schema": "generativeqc.reference-source-annotation-audit.v1",
   "source_pr": 643,
   "source_commit": "df5b75d773affd8b674269ff3988436bfea40dd9",
   "scope": "annotation-only source rebinding; no new reference execution or numerical values",
@@ -66,13 +66,13 @@
       "executable_ast_sha256": "abd5153cebbc0a312903b5c65e9eaeed0cdc8d3e2c96f3d28b52bad5362eee45"
     },
     {
-      "path": "tools/vibeqc_numerics/fixtures.py",
+      "path": "tools/generativeqc_numerics/fixtures.py",
       "original_source_sha256": "1c98b61ecc49485f00dc992ba79bc2f3a705658aa3e41a0210b6978317b9c78b",
       "annotated_source_sha256": "b2492e081404932c5f219258893bbae95170cde22abb74bf7f47b5f313171775",
       "executable_ast_sha256": "d4aea2043a1c8a1e93b9bf0f42e9da21be49540728324b7af993879f471af84d"
     },
     {
-      "path": "tools/vibeqc_validation/fixtures.py",
+      "path": "tools/generativeqc_validation/fixtures.py",
       "original_source_sha256": "7259560d24fbb675e3e527678ccf058ec6bb417116349170381d16b1979baef5",
       "annotated_source_sha256": "7259560d24fbb675e3e527678ccf058ec6bb417116349170381d16b1979baef5",
       "executable_ast_sha256": "6db886daf6c72f3fe3fe1cbdcbd76e6d86ae4010450f7dc072bc20ffcee21ebe"

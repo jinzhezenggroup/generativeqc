@@ -5,7 +5,7 @@
 
 #include "scf/generated_shell_task.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Borrowed device basis view and primitive-pair storage ABI. The owning plan outlives every
  * submitted kernel. */
@@ -79,4 +79,4 @@ struct DeviceBatch {
   const std::int32_t* occupied;
 };
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

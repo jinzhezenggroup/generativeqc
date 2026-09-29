@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.xc-boundary-reference/v1",
+  "schema": "generativeqc.xc-boundary-reference/v1",
   "boundary_semantics": "semilocal-boundary-v1",
   "functional": "R2SCAN",
   "spin": "polarized",

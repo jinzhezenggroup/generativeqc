@@ -2,10 +2,10 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.array_api import capabilities, trace
-from vibeqc_compiler.array_api import namespace as xp
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.array_api import capabilities, trace
+from generativeqc_compiler.array_api import namespace as xp
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -18,7 +18,7 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose_program,
 )
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
 TARGET = cuda_target_info("sm_80")
 
@@ -168,14 +168,14 @@ def test_captured_take_vjp_replay_and_cuda_plan_use_plain_tensorir() -> None:
 
 
 def test_scf_density_builders_reuse_single_source_equations_through_frontend() -> None:
-    from vibeqc_compiler.array_api.scf import (
+    from generativeqc_compiler.array_api.scf import (
         density_program as frontend_density_program,
     )
-    from vibeqc_compiler.array_api.scf import (
+    from generativeqc_compiler.array_api.scf import (
         weighted_density_program as frontend_weighted_density_program,
     )
-    from vibeqc_compiler.tensor import density_program as tensor_density_program
-    from vibeqc_compiler.tensor import (
+    from generativeqc_compiler.tensor import density_program as tensor_density_program
+    from generativeqc_compiler.tensor import (
         weighted_density_program as tensor_weighted_density_program,
     )
 

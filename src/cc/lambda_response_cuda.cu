@@ -1,6 +1,6 @@
 #include "cc/lambda_response.hpp"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 
 #include <cuda_runtime.h>
 
@@ -20,10 +20,10 @@
 #include "generated_rccsd_cpu.hpp"
 #include "tensor/cuda_error.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 namespace {
 
-using vibeqc_tensor::cuda_check;
+using generativeqc_tensor::cuda_check;
 
 std::size_t checked_add(std::size_t a, std::size_t b) { return generated::checked_add(a, b); }
 
@@ -230,7 +230,7 @@ class CudaLambdaActions {
       state_.error = reinterpret_cast<int*>(base_ + device_layout_.error);
       cuda_check(cudaStreamSynchronize(stream_));
       ++synchronizations_;
-    } catch (const vibeqc_tensor::DeviceAllocationError&) {
+    } catch (const generativeqc_tensor::DeviceAllocationError&) {
       cleanup();
       throw std::bad_alloc();
     } catch (...) {
@@ -637,7 +637,7 @@ struct CudaHamiltonianResponseOwner::Impl {
       state.stream = stream;
       cuda_check(cudaStreamSynchronize(stream));
       ++syncs;
-    } catch (const vibeqc_tensor::DeviceAllocationError&) {
+    } catch (const generativeqc_tensor::DeviceAllocationError&) {
       cleanup();
       throw std::bad_alloc();
     } catch (...) {
@@ -827,6 +827,6 @@ std::size_t CudaHamiltonianResponseOwner::d2h_bytes() const noexcept { return im
 
 std::size_t CudaHamiltonianResponseOwner::synchronizations() const noexcept { return impl_->syncs; }
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc
 
 #endif

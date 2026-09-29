@@ -7,12 +7,12 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     ExactExchangePrimitive,
     SemilocalXCPrimitive,
     resolve_method,
 )
-from vibeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.program import build_program
 
 POLARIZED = np.array([[0.3, 0.2, 0.015, 0.003, 0.01, 0.0, 0.0]]).T
 UNPOLARIZED = np.array([[0.5, 0.031, 0.0]]).T

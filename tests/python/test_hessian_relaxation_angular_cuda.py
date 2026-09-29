@@ -7,20 +7,20 @@ from typing import NoReturn
 
 import numpy as np
 import test_hessian_relaxation_cuda as _shared
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.integral.first_gradient import (
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.integral.first_gradient import (
     FirstGradientTerm,
     FirstGradientWeight,
 )
-from vibeqc_compiler.integral.first_gradient_execute import (
+from generativeqc_compiler.integral.first_gradient_execute import (
     FirstGradientAccumulator,
     compile_first_gradient,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
-from tools.vibeqc_hessian import NativeRHFState, rhf_hvp
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_hessian import NativeRHFState, rhf_hvp
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 pytestmark = _shared.pytestmark
 compiler = _shared.compiler
@@ -111,7 +111,8 @@ def test_water_p_shell_complete_hvp_has_no_cpu_relaxation_substitution(
             raise AssertionError("CUDA relaxation entered CPU substitution")
 
         monkeypatch.setattr(
-            "tools.vibeqc_hessian.hvp.generated_rhf_relaxation_contraction", forbidden
+            "tools.generativeqc_hessian.hvp.generated_rhf_relaxation_contraction",
+            forbidden,
         )
         actual = rhf_hvp(
             state, vector, relaxation_backend="cuda", relaxation_compiler=compiler

@@ -11,7 +11,7 @@
 #include "../tensor/cuda_runtime.cuh"
 
 namespace {
-using namespace vibeqc_tensor;
+using namespace generativeqc_tensor;
 constexpr size_t workspace_bytes = 4U << 20;
 constexpr size_t provider_bytes = 96U << 20;
 

@@ -8,15 +8,15 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import execute as cpu_execute
 from test_cc_lambda_cuda import _cc_state
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import execute as cpu_execute
 
-from tools.vibeqc_cc import CudaCCTensorExecutor
-from tools.vibeqc_cc.lambda_equations import build_parameter_vjp
-from tools.vibeqc_cc.lambda_solver import BoundCCSDLambda
-from tools.vibeqc_cc.triples_lambda_response import (
+from tools.generativeqc_cc import CudaCCTensorExecutor
+from tools.generativeqc_cc.lambda_equations import build_parameter_vjp
+from tools.generativeqc_cc.lambda_solver import BoundCCSDLambda
+from tools.generativeqc_cc.triples_lambda_response import (
     BoundCCSDTResponse,
     solve_corrected_lambda,
 )

@@ -6,7 +6,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import GridSpec
+from generativeqc import GridSpec
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -85,7 +85,7 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
 
     import benchmarks.dft_force_matrix as matrix
 
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"test")
     execution_plan = SimpleNamespace(to_payload=lambda: {"version": 1})
     options = SimpleNamespace(identity="ks-id", execution_plan=execution_plan)
@@ -127,7 +127,7 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         return {
             "scenario": scenario,
             "force_status": "ok",
-            "force_components": {"schema": "vibeqc.dft-force-components.v1"},
+            "force_components": {"schema": "generativeqc.dft-force-components.v1"},
         }
 
     monkeypatch.setattr(matrix, "_clean_sample", sample)
@@ -169,7 +169,7 @@ def test_partial_warm_failure_preserves_prior_warm_samples(
 
     import benchmarks.dft_force_matrix as matrix
 
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"test")
     execution_plan = SimpleNamespace(to_payload=lambda: {"version": 1})
     options = SimpleNamespace(identity="ks-id", execution_plan=execution_plan)
@@ -208,7 +208,7 @@ def test_partial_warm_failure_preserves_prior_warm_samples(
         return {
             "scenario": scenario,
             "force_status": "ok",
-            "force_components": {"schema": "vibeqc.dft-force-components.v1"},
+            "force_components": {"schema": "generativeqc.dft-force-components.v1"},
         }
 
     monkeypatch.setattr(matrix, "_clean_sample", sample)

@@ -7,7 +7,7 @@
 
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 enum class DirectCoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
 
@@ -48,4 +48,4 @@ void launch_independent_rsh_derivative_kernel(
     double cj, double short_ck, double long_ck, bool unrestricted, double omega, double screening,
     const double* bounds, const double* density, const double* beta, double* out);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

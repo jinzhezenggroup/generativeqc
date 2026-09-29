@@ -15,7 +15,7 @@
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/direct_task_layout.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 namespace {
 using namespace cuda_execution;
@@ -33,7 +33,7 @@ CudaDirectJkPlan::~CudaDirectJkPlan() {
 namespace {
 
 struct DirectJkFailure {
-  vibeqc_status status;
+  generativeqc_status status;
   std::string detail;
 };
 void direct_jk_check(cudaError_t error) {
@@ -45,7 +45,7 @@ void direct_jk_require(bool condition, const char* message) {
 }
 std::size_t direct_jk_product(std::size_t a, std::size_t b) {
   std::size_t out;
-  if (!vibeqc::runtime::checked_multiply(a, b, out)) throw std::bad_alloc();
+  if (!generativeqc::runtime::checked_multiply(a, b, out)) throw std::bad_alloc();
   return out;
 }
 void direct_jk_finite(const std::vector<double>& values) {
@@ -54,7 +54,7 @@ void direct_jk_finite(const std::vector<double>& values) {
 void direct_jk_finite_result(const std::vector<double>& values) {
   for (double value : values)
     if (!std::isfinite(value))
-      throw DirectJkFailure{VIBEQC_STATUS_NUMERICAL_FAILURE, "nonfinite direct J/K result"};
+      throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "nonfinite direct J/K result"};
 }
 /** Fence before local download buffers unwind on a CUDA exception. The outer
  * status guard alone runs too late to protect buffers owned inside its lambda.
@@ -71,11 +71,12 @@ struct DirectJkDownloadFence {
 };
 /** Always fence failed uploads too: caller-owned pageable buffers may die on return. */
 template <class Function>
-vibeqc_status direct_jk_guard(CudaDirectJkPlan* plan, std::string& detail, Function function) {
+generativeqc_status direct_jk_guard(CudaDirectJkPlan* plan, std::string& detail,
+                                    Function function) {
   detail.clear();
   try {
     function();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const DirectJkFailure& failure) {
     if (plan && plan->stream) (void)cudaStreamSynchronize(plan->stream);
     detail = failure.detail;
@@ -83,7 +84,7 @@ vibeqc_status direct_jk_guard(CudaDirectJkPlan* plan, std::string& detail, Funct
   } catch (const std::bad_alloc&) {
     if (plan && plan->stream) (void)cudaStreamSynchronize(plan->stream);
     detail = "direct J/K allocation exceeds available capacity";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (cudaError_t error) {
     if (plan && plan->stream) (void)cudaStreamSynchronize(plan->stream);
     detail = cudaGetErrorString(error);
@@ -91,7 +92,7 @@ vibeqc_status direct_jk_guard(CudaDirectJkPlan* plan, std::string& detail, Funct
   } catch (const std::exception& error) {
     if (plan && plan->stream) (void)cudaStreamSynchronize(plan->stream);
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 }
 
@@ -152,14 +153,14 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
   std::size_t bytes = sizeof(int);
   const auto add = [&](std::size_t count, std::size_t width) {
     const auto term = direct_jk_product(count, width);
-    if (!vibeqc::runtime::checked_add(bytes, term, bytes)) throw std::bad_alloc();
+    if (!generativeqc::runtime::checked_add(bytes, term, bytes)) throw std::bad_alloc();
   };
   const auto aos = direct_jk_product(batch, nao);
   const auto matrices = direct_jk_product(aos, nao);
   direct_jk_require(matrices <= static_cast<std::size_t>(std::numeric_limits<int>::max()) &&
                         atoms <= static_cast<std::size_t>(std::numeric_limits<int>::max()) / 3,
                     "direct J/K resource shape exceeds launch dimensions");
-  // These are the VIBEQC_DIRECT_METADATA fields, with the packer's fixed
+  // These are the GENERATIVEQC_DIRECT_METADATA fields, with the packer's fixed
   // three-term public AO expansion. No Cartesian quartet task table uploads.
   add(batch, sizeof(std::int64_t));
   add(1, sizeof(std::int64_t));  // terminal atom offset
@@ -200,10 +201,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   return bytes;
 }
 
-vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::System>& systems,
-                                         unsigned derivative_order, double screening_tolerance,
-                                         std::size_t budget, CudaDirectJkPlan** output,
-                                         CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+generativeqc_status create_cuda_direct_jk_plan(
+    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
+    double screening_tolerance, std::size_t budget, CudaDirectJkPlan** output,
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
   if (output) *output = nullptr;
   diagnostic = {};
   return direct_jk_guard(nullptr, detail, [&] {
@@ -216,8 +217,8 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
     for (const auto& system : systems) {
       direct_jk_require(system.atoms.size() == systems.front().atoms.size(),
                         "direct J/K coordinate counts differ");
-      direct_jk_require(system.basis_representation == VIBEQC_BASIS_CARTESIAN ||
-                            system.basis_representation == VIBEQC_BASIS_SPHERICAL,
+      direct_jk_require(system.basis_representation == GENERATIVEQC_BASIS_CARTESIAN ||
+                            system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL,
                         "unknown direct J/K AO representation");
       // Check direct C++ inputs before AO counting/packing or any CUDA work.
       for (const auto& atom : system.atoms)
@@ -249,32 +250,32 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
     std::size_t metadata = 0;
     auto count = [&](const auto& values) {
       const auto bytes = direct_jk_product(values.size(), sizeof(values[0]));
-      if (!vibeqc::runtime::checked_add(metadata, bytes, metadata)) throw std::bad_alloc();
+      if (!generativeqc::runtime::checked_add(metadata, bytes, metadata)) throw std::bad_alloc();
     };
-#define VIBEQC_DIRECT_METADATA(F) \
-  F(atom_offsets);                \
-  F(atom_systems);                \
-  F(positions);                   \
-  F(shell_atoms);                 \
-  F(shell_angular);               \
-  F(shell_primitive_offsets);     \
-  F(ao_shells);                   \
-  F(ao_term_counts);              \
-  F(ao_term_angular);             \
-  F(ao_term_coefficients);        \
-  F(primitive_exponents);         \
+#define GENERATIVEQC_DIRECT_METADATA(F) \
+  F(atom_offsets);                      \
+  F(atom_systems);                      \
+  F(positions);                         \
+  F(shell_atoms);                       \
+  F(shell_angular);                     \
+  F(shell_primitive_offsets);           \
+  F(ao_shells);                         \
+  F(ao_term_counts);                    \
+  F(ao_term_angular);                   \
+  F(ao_term_coefficients);              \
+  F(primitive_exponents);               \
   F(primitive_coefficients)
-#define VIBEQC_DIRECT_COUNT(field) count(host.field)
-    VIBEQC_DIRECT_METADATA(VIBEQC_DIRECT_COUNT);
-#undef VIBEQC_DIRECT_COUNT
+#define GENERATIVEQC_DIRECT_COUNT(field) count(host.field)
+    GENERATIVEQC_DIRECT_METADATA(GENERATIVEQC_DIRECT_COUNT);
+#undef GENERATIVEQC_DIRECT_COUNT
     const auto matrix_bytes = direct_jk_product(elements, sizeof(double));
     const auto gradient_bytes =
         derivative_order ? direct_jk_product(direct_jk_product(coord_elements, 3), sizeof(double))
                          : 0;
     std::size_t required = direct_jk_product(matrix_bytes, 6);
-    if (!vibeqc::runtime::checked_add(required, gradient_bytes, required) ||
-        !vibeqc::runtime::checked_add(required, sizeof(int), required) ||
-        !vibeqc::runtime::checked_add(required, metadata, required) || required > budget)
+    if (!generativeqc::runtime::checked_add(required, gradient_bytes, required) ||
+        !generativeqc::runtime::checked_add(required, sizeof(int), required) ||
+        !generativeqc::runtime::checked_add(required, metadata, required) || required > budget)
       throw std::bad_alloc();
     direct_jk_require(
         required == cuda_direct_jk_device_bytes(systems.size(), host.nbf,
@@ -298,15 +299,15 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
     auto upload = [&](const void* values, std::size_t bytes) -> void* {
       void* pointer{};
       const auto status = source_upload(*plan, values, bytes, &pointer, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) throw DirectJkFailure{status, detail};
+      if (status != GENERATIVEQC_STATUS_SUCCESS) throw DirectJkFailure{status, detail};
       return pointer;
     };
-#define VIBEQC_DIRECT_UPLOAD(field)                             \
+#define GENERATIVEQC_DIRECT_UPLOAD(field)                       \
   plan->batch.field = static_cast<decltype(plan->batch.field)>( \
       upload(host.field.data(), host.field.size() * sizeof(host.field[0])))
-    VIBEQC_DIRECT_METADATA(VIBEQC_DIRECT_UPLOAD);
-#undef VIBEQC_DIRECT_UPLOAD
-#undef VIBEQC_DIRECT_METADATA
+    GENERATIVEQC_DIRECT_METADATA(GENERATIVEQC_DIRECT_UPLOAD);
+#undef GENERATIVEQC_DIRECT_UPLOAD
+#undef GENERATIVEQC_DIRECT_METADATA
     // source_upload is a shared metadata helper; scratch has no host initializer.
     auto scratch = [&](std::size_t bytes) -> double* {
       if (!bytes) return nullptr;
@@ -340,7 +341,8 @@ vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::
                                     cudaMemcpyDeviceToHost, plan->stream));
     direct_jk_check(cudaStreamSynchronize(plan->stream));
     if (numerical_failure)
-      throw DirectJkFailure{VIBEQC_STATUS_NUMERICAL_FAILURE, "nonfinite direct J/K Schwarz bound"};
+      throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                            "nonfinite direct J/K Schwarz bound"};
     // Derivative capability is orthogonal to the value schedule. Retained
     // first-derivative owners may still use the generated shell-Coulomb path,
     // while value-only owners continue to prefer generated full-range exchange.
@@ -407,12 +409,10 @@ int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept {
   return plan ? plan->device_id : -1;
 }
 
-static vibeqc_status enqueue_cuda_direct_jk_device_impl(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                                        const double* density, const double* beta,
-                                                        std::size_t elements, double* coulomb,
-                                                        double* alpha_exchange,
-                                                        double* beta_exchange, int* numerical_error,
-                                                        bool mixed_j, std::string& detail) {
+static generativeqc_status enqueue_cuda_direct_jk_device_impl(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
+    std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, bool mixed_j, std::string& detail) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
     spec = direct_jk_strategy(plan, spec, 0, plan->diagnostic.batch_size);
@@ -496,27 +496,26 @@ static vibeqc_status enqueue_cuda_direct_jk_device_impl(CudaDirectJkPlan* plan, 
   });
 }
 
-vibeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                            const double* density, const double* beta,
-                                            std::size_t elements, double* coulomb,
-                                            double* alpha_exchange, double* beta_exchange,
-                                            int* numerical_error, std::string& detail) {
+generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBuildSpec spec,
+                                                  const double* density, const double* beta,
+                                                  std::size_t elements, double* coulomb,
+                                                  double* alpha_exchange, double* beta_exchange,
+                                                  int* numerical_error, std::string& detail) {
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, false,
                                             detail);
 }
 
-vibeqc_status enqueue_cuda_direct_jk_device_mixed_j(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                                    const double* density, const double* beta,
-                                                    std::size_t elements, double* coulomb,
-                                                    double* alpha_exchange, double* beta_exchange,
-                                                    int* numerical_error, std::string& detail) {
+generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
+    std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, std::string& detail) {
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, true,
                                             detail);
 }
 
-static vibeqc_status execute_cuda_direct_jk_range(
+static generativeqc_status execute_cuda_direct_jk_range(
     CudaDirectJkPlan* plan, std::size_t begin, std::size_t count, FockBuildSpec spec,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& coulomb, std::vector<double>& alpha_exchange,
@@ -557,7 +556,7 @@ static vibeqc_status execute_cuda_direct_jk_range(
   });
 }
 
-static vibeqc_status execute_cuda_direct_energy_derivative_range(
+static generativeqc_status execute_cuda_direct_energy_derivative_range(
     CudaDirectJkPlan* plan, std::size_t begin, std::size_t count, FockBuildSpec spec,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivative, std::string& detail) {
@@ -593,40 +592,39 @@ static vibeqc_status execute_cuda_direct_energy_derivative_range(
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept {
   return plan ? plan->diagnostic : CudaDirectJkDiagnostic{};
 }
-vibeqc_status execute_cuda_direct_jk(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                     const std::vector<double>& density,
-                                     const std::vector<double>& beta, std::vector<double>& j,
-                                     std::vector<double>& ka, std::vector<double>& kb,
-                                     std::string& detail) {
+generativeqc_status execute_cuda_direct_jk(CudaDirectJkPlan* plan, FockBuildSpec spec,
+                                           const std::vector<double>& density,
+                                           const std::vector<double>& beta, std::vector<double>& j,
+                                           std::vector<double>& ka, std::vector<double>& kb,
+                                           std::string& detail) {
   return execute_cuda_direct_jk_range(plan, 0, plan ? plan->diagnostic.batch_size : 0, spec,
                                       density, beta, j, ka, kb, detail);
 }
-vibeqc_status execute_cuda_direct_jk_item(CudaDirectJkPlan* plan, std::size_t item,
-                                          FockBuildSpec spec, const std::vector<double>& density,
-                                          const std::vector<double>& beta, std::vector<double>& j,
-                                          std::vector<double>& ka, std::vector<double>& kb,
-                                          std::string& detail) {
+generativeqc_status execute_cuda_direct_jk_item(CudaDirectJkPlan* plan, std::size_t item,
+                                                FockBuildSpec spec,
+                                                const std::vector<double>& density,
+                                                const std::vector<double>& beta,
+                                                std::vector<double>& j, std::vector<double>& ka,
+                                                std::vector<double>& kb, std::string& detail) {
   return execute_cuda_direct_jk_range(plan, item, 1, spec, density, beta, j, ka, kb, detail);
 }
-vibeqc_status execute_cuda_direct_energy_derivative(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                                    const std::vector<double>& density,
-                                                    const std::vector<double>& beta,
-                                                    std::vector<double>& derivative,
-                                                    std::string& detail) {
+generativeqc_status execute_cuda_direct_energy_derivative(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector<double>& density,
+    const std::vector<double>& beta, std::vector<double>& derivative, std::string& detail) {
   return execute_cuda_direct_energy_derivative_range(
       plan, 0, plan ? plan->diagnostic.batch_size : 0, spec, density, beta, derivative, detail);
 }
-vibeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan* plan, std::size_t item,
-                                                         FockBuildSpec spec,
-                                                         const std::vector<double>& density,
-                                                         const std::vector<double>& beta,
-                                                         std::vector<double>& derivative,
-                                                         std::string& detail) {
+generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan* plan,
+                                                               std::size_t item, FockBuildSpec spec,
+                                                               const std::vector<double>& density,
+                                                               const std::vector<double>& beta,
+                                                               std::vector<double>& derivative,
+                                                               std::string& detail) {
   return execute_cuda_direct_energy_derivative_range(plan, item, 1, spec, density, beta, derivative,
                                                      detail);
 }
 
-vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
+generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const double* density, const double* beta, std::size_t matrix_elements,
@@ -674,7 +672,7 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
   });
 }
 
-vibeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
+generativeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
     CudaDirectJkPlan* plan, std::size_t item, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const std::vector<double>& density, const std::vector<double>& beta,
@@ -736,4 +734,4 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
   });
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

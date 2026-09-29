@@ -1,5 +1,5 @@
-#ifndef VIBEQC_API_HANDLES_HPP
-#define VIBEQC_API_HANDLES_HPP
+#ifndef GENERATIVEQC_API_HANDLES_HPP
+#define GENERATIVEQC_API_HANDLES_HPP
 
 #include <cstdint>
 #include <memory>
@@ -12,43 +12,43 @@
 #include "methods/method.hpp"
 #include "scf/types.hpp"
 
-struct vibeqc_context {
+struct generativeqc_context {
   mutable std::recursive_mutex mutex;
-  vibeqc::core::ContextState state;
+  generativeqc::core::ContextState state;
   // Borrowed by the public error getter: mutate only when recording a failure.
   std::string last_detail;
 };
 
-struct vibeqc_system {
-  vibeqc::core::System data;
+struct generativeqc_system {
+  generativeqc::core::System data;
 };
 
-struct vibeqc_calculation {
-  vibeqc_context* context{};
-  std::unique_ptr<vibeqc::methods::PreparedCalculation> plan;
+struct generativeqc_calculation {
+  generativeqc_context* context{};
+  std::unique_ptr<generativeqc::methods::PreparedCalculation> plan;
   /** How the precision policy resolved for the most recent successful run. */
-  vibeqc::scf::PrecisionProvenance precision{};
+  generativeqc::scf::PrecisionProvenance precision{};
   /** True only after a run completes and populates \p precision. */
   bool precision_available{false};
   /** Versioned detailed record for the same completed run. */
-  std::optional<vibeqc::scf::PrecisionWork> precision_work;
+  std::optional<generativeqc::scf::PrecisionWork> precision_work;
   /** Completed-run SCF measures; cleared before a new backend execution. */
-  std::optional<vibeqc_scf_diagnostic> scf_diagnostic;
-  std::optional<vibeqc::dft::ScfDiagnostic> ks_diagnostic;
+  std::optional<generativeqc_scf_diagnostic> scf_diagnostic;
+  std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
 };
 
-struct vibeqc_batch {
-  vibeqc_context* context{};
-  std::unique_ptr<vibeqc::methods::PreparedBatch> plan;
-  vibeqc_batch_flags flags{};
+struct generativeqc_batch {
+  generativeqc_context* context{};
+  std::unique_ptr<generativeqc::methods::PreparedBatch> plan;
+  generativeqc_batch_flags flags{};
   std::vector<std::uint32_t> atom_counts;
   std::vector<std::uint64_t> last_fock_builds;
   /** Input-ordered completed-run records; invalid/throwing items stay unavailable. */
-  std::vector<std::optional<vibeqc::scf::PrecisionProvenance>> precision;
-  std::vector<std::optional<vibeqc::scf::PrecisionWork>> precision_work;
+  std::vector<std::optional<generativeqc::scf::PrecisionProvenance>> precision;
+  std::vector<std::optional<generativeqc::scf::PrecisionWork>> precision_work;
   /** Separate from the fixed-stride legacy batch output array. */
-  std::vector<std::optional<vibeqc_scf_diagnostic>> scf_diagnostics;
-  std::vector<std::optional<vibeqc::dft::ScfDiagnostic>> ks_diagnostics;
+  std::vector<std::optional<generativeqc_scf_diagnostic>> scf_diagnostics;
+  std::vector<std::optional<generativeqc::dft::ScfDiagnostic>> ks_diagnostics;
 };
 
 #endif

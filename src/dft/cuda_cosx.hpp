@@ -8,7 +8,7 @@
 #include "core/types.hpp"
 #include "dft/cosx_reference.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 struct CudaCosxStagingDiagnostic {
   std::size_t nbf{}, npoint{}, tile_points{};
@@ -74,4 +74,4 @@ class CudaCosxStagingPlan {
   std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

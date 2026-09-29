@@ -1,7 +1,7 @@
 #include "generated_direct_pair_cache.cuh"
 #include "scf/cuda/direct_pair_cache.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 void launch_build_shell_primitive_pair_cache_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                                     cudaStream_t stream, DeviceBatch batch,
@@ -10,4 +10,4 @@ void launch_build_shell_primitive_pair_cache_kernel(dim3 grid, dim3 block, std::
       batch, shell_primitive_pairs);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

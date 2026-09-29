@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.gfn2_sdq import (
+from generativeqc_compiler.integral.gfn2_sdq import (
     GFN2_SDQ_COMPONENTS,
     build_gfn2_sdq_primitive_kernel,
     evaluate_gfn2_sdq_primitive,

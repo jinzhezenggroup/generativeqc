@@ -9,14 +9,14 @@
 #include "cc/solver.hpp"
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::core {
+namespace generativeqc::core {
 struct System;
 }
-namespace vibeqc::hf {
+namespace generativeqc::hf {
 struct PhysicalReference;
 }
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 
 /** Conservative simultaneous numeric peaks for the serialized force phases.
  * Every phase includes borrowed molecule/CC/reference inputs once and all earlier
@@ -105,4 +105,4 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     int device_id, std::size_t derivative_stage_budget,
                                     double denominator_threshold = 1e-10);
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

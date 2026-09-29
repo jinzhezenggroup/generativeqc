@@ -1,6 +1,6 @@
 # Performance engineering
 
-VibeQC performance work must optimize scientific work and data movement, not
+GenerativeQC performance work must optimize scientific work and data movement, not
 only kernel throughput or peak scratch size. This document records cross-cutting
 rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 

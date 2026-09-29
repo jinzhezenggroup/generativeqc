@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace
 from benchmarks.df_host_workloads import validate_final_eigen_counts
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -25,11 +25,11 @@ def test_tiny_final_provider_budget_rejects_without_reference_retry(
     tmp_path: typing.Any,
 ) -> None:
     """The fixed library scratch cannot be hidden behind an old smaller budget."""
-    from vibeqc import _native
+    from generativeqc import _native
 
     assert os.environ.get("SLURM_JOB_ID")
     # Provider substitution must hold final work fixed after candidate reuse.
-    monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     calc = Calculator(
         method=method,
@@ -40,9 +40,9 @@ def test_tiny_final_provider_budget_rejects_without_reference_retry(
     )
     with calc.prepare_batch([atoms]) as batch:
         path = tmp_path / "rejected.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+        monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
         result = batch.execute(strict=False, properties=("energy",))
-        monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+        monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
         assert result.items[0].status == _native.STATUS_OUT_OF_MEMORY
         assert not result.items[0].warm_start_fallback
         calls = aggregate_host(read_host_trace(path))["eigensolves_by_reason"]
@@ -72,7 +72,7 @@ def test_final_provider_matches_reference_across_replans(
     """
     assert os.environ.get("SLURM_JOB_ID")
     # Provider substitution must hold final work fixed after candidate reuse.
-    monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
     atoms = [("O", (0, 0, 0)), ("H", (0, 0, 1.8))]
     if method == "rhf":
         atoms.append(("H", (1.7, 0, -0.6)))
@@ -107,16 +107,16 @@ def test_final_provider_matches_reference_across_replans(
             for reference, owner in ((True, oracle), (False, device)):
                 path = tmp_path / f"{step}-{reference}.jsonl"
                 monkeypatch.setenv(
-                    "VIBEQC_DF_REFERENCE_FINAL_EIGEN", "1" if reference else "0"
+                    "GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN", "1" if reference else "0"
                 )
-                monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+                monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
                 try:
                     result = owner.execute(
                         positions, strict=True, properties=properties
                     )
                 finally:
-                    monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
-                    monkeypatch.delenv("VIBEQC_DF_REFERENCE_FINAL_EIGEN")
+                    monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
+                    monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN")
                 components = aggregate_host(read_host_trace(path))
                 validate_final_eigen_counts(
                     components,

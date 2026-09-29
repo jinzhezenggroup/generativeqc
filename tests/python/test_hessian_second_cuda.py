@@ -6,16 +6,21 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_hessian import NativeRHFState, rhf_hessian, rhf_hvp, rhf_hvp_many
-from tools.vibeqc_hessian.analytic import provider_hvp_components
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_hessian import (
+    NativeRHFState,
+    rhf_hessian,
+    rhf_hvp,
+    rhf_hvp_many,
+)
+from tools.generativeqc_hessian.analytic import provider_hvp_components
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="explicit real-GPU qualification",
 )
 
@@ -27,7 +32,7 @@ def compiler() -> CudaCompilerAdapter:
     assert nvcc, "selected CUDA qualification needs nvcc on PATH"
     return CudaCompilerAdapter(
         Path(nvcc),
-        cuda_target_info(os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120")),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120")),
     )
 
 
@@ -70,7 +75,7 @@ def test_complete_hvp_uses_cuda_second_provider_without_cpu_substitution(
     compiler: CudaCompilerAdapter,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from tools.vibeqc_hessian import analytic
+    from tools.generativeqc_hessian import analytic
 
     state, vector = h2_case
     expected = rhf_hvp(state, vector)

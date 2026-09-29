@@ -8,7 +8,7 @@ import os
 import statistics
 import time
 
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 
 def main() -> None:
@@ -43,9 +43,9 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "schema": "vibeqc.issue351.cpu-st-endpoint.v1",
+                "schema": "generativeqc.issue351.cpu-st-endpoint.v1",
                 "label": args.label,
-                "library": os.environ.get("VIBEQC_LIBRARY"),
+                "library": os.environ.get("GENERATIVEQC_LIBRARY"),
                 "samples_s": timings,
                 "warmup": args.warmup,
                 "median_s": statistics.median(retained),

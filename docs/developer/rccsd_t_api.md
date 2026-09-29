@@ -1,6 +1,6 @@
 # Composed RCCSD(T) energy + analytic-force API (#150 C / #155 C binding slice)
 
-`tools.vibeqc_cc.ccsd_t_api` composes the independently validated RCCSD and
+`tools.generativeqc_cc.ccsd_t_api` composes the independently validated RCCSD and
 standard perturbative-triples implementations for energy and now exposes a thin
 analytic-force binding over the complete #746 RCCSD(T) gradient owner. It does
 not introduce another CC, Lambda, Z-vector, or nuclear-derivative equation stack.
@@ -17,7 +17,7 @@ composition's `energy` and `forces`; `"ccsd(t)"` is an alias.
 `native_public=False` still describes that internal force facade. Separately,
 the public native registry exposes qualified conventional small-system
 `RCCSD(T)` energy and analytic forces on CPU and CUDA through
-`VIBEQC_METHOD_RCCSD_T` / `Calculator("ccsd(t)")`. Homogeneous prepared
+`GENERATIVEQC_METHOD_RCCSD_T` / `Calculator("ccsd(t)")`. Homogeneous prepared
 batches follow the selected backend capability. The CUDA force route executes the generated corrected-Lambda RHS/J^T actions and
 fixed-orbital parameter VJPs on CUDA, then routes Hamiltonian/Fock pullbacks and
 the orbital JVP through one reusable CUDA response owner. Lambda GMRES and the
@@ -131,7 +131,7 @@ timings; CPU tiles supply no internal timing breakdown. HF generation precedes
 this endpoint and is outside its timing scope.
 
 `result.write(path)` returns and writes a compact JSON record with
-`schema="vibeqc.rccsd-t.endpoint/1"`. `record_hash` is the SHA-256 of canonical
+`schema="generativeqc.rccsd-t.endpoint/1"`. `record_hash` is the SHA-256 of canonical
 JSON of every other field, including timings. Consequently repeated identical
 scientific results can have different artifact hashes. Serialization uses
 `allow_nan=False`; nonfinite values fail before opening the destination.
@@ -173,11 +173,11 @@ Krylov, or device state is shared between items.
 
 ## Public native boundary
 
-`VIBEQC_METHOD_RCCSD_T` is now active for the qualified native **CPU energy**
+`GENERATIVEQC_METHOD_RCCSD_T` is now active for the qualified native **CPU energy**
 path. `Calculator("rccsd(t)")` and its `"ccsd(t)"` alias execute a native owner
 that reuses the existing native RCCSD solve, retains the exact canonical orbital
 energies from that reference, and evaluates standard `(T)` with a C++ header
-generated from the audited `tools/vibeqc_cc/triples.py` inventory. The generator
+generated from the audited `tools/generativeqc_cc/triples.py` inventory. The generator
 AST-reads only the literal scientific inventory and recomputes the same canonical
 inventory hash, so build-time code generation has no NumPy/PySCF runtime
 dependency and does not introduce a second handwritten triples table.

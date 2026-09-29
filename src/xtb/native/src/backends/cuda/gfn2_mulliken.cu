@@ -8,7 +8,7 @@
 
 #include "backends/cuda/gfn2_mulliken.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 64;
@@ -1395,4 +1395,4 @@ cudaError_t evaluate_gfn2_mulliken_population_spin_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

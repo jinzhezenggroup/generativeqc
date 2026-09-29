@@ -7,7 +7,7 @@
 #include "cc/solver.hpp"
 #include "tensor/cuda_runtime.cuh"
 
-namespace vibeqc::cc::generated {
+namespace generativeqc::cc::generated {
 
 struct CudaState {
   std::size_t o{}, v{};
@@ -75,4 +75,4 @@ DeviceHamiltonianOutputs run_hamiltonian_weights_cuda(CudaState& state);
 DeviceHamiltonianOutputs run_fock_weights_cuda(CudaState& state);
 DeviceOrbitalJvpOutput run_orbital_jvp_cuda(CudaState& state);
 
-}  // namespace vibeqc::cc::generated
+}  // namespace generativeqc::cc::generated

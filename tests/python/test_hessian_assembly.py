@@ -5,7 +5,7 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import assemble_frozen_skeleton
+from tools.generativeqc_hessian import assemble_frozen_skeleton
 
 
 def _component(seed: typing.Any, n: typing.Any = 2) -> typing.Any:

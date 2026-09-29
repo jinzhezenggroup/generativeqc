@@ -1,7 +1,7 @@
 """Static resource accounting for the production D3(BJ) owner."""
 
-from vibeqc.resources_d3 import d3_resource_request
-from vibeqc_compiler.method import resolve_method
+from generativeqc.resources_d3 import d3_resource_request
+from generativeqc_compiler.method import resolve_method
 
 
 def _decisions(backend: str) -> dict[str, str]:

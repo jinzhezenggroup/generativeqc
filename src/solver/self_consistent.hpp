@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SOLVER_SELF_CONSISTENT_HPP
-#define VIBEQC_SOLVER_SELF_CONSISTENT_HPP
+#ifndef GENERATIVEQC_SOLVER_SELF_CONSISTENT_HPP
+#define GENERATIVEQC_SOLVER_SELF_CONSISTENT_HPP
 
 #include <cmath>
 #include <limits>
@@ -7,7 +7,7 @@
 
 #include "solver/iteration_control.hpp"
 
-namespace vibeqc::solver {
+namespace generativeqc::solver {
 
 /** Method-neutral fixed-point convergence policy.
  *
@@ -95,6 +95,6 @@ SelfConsistentOutcome<State> run_self_consistent(State initial_state,
   return {std::move(state), latest, converged};
 }
 
-}  // namespace vibeqc::solver
+}  // namespace generativeqc::solver
 
 #endif

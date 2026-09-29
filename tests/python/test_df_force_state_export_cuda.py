@@ -13,7 +13,7 @@ from benchmarks.df_scf_state_checks import validate_scf_export
 from benchmarks.issue308_stage_probe import prepare
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -26,7 +26,7 @@ def scf_export_probe(tmp_path_factory: typing.Any) -> typing.Any:
     if not compiler:
         pytest.skip("host C++ compiler unavailable")
     root = Path(__file__).resolve().parents[2]
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     directory = tmp_path_factory.mktemp("force-state")
     fixture = directory / "input"
     prepare("water-def2-svp-spherical", fixture, None)

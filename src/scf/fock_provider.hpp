@@ -1,12 +1,12 @@
-#ifndef VIBEQC_SCF_FOCK_PROVIDER_HPP
-#define VIBEQC_SCF_FOCK_PROVIDER_HPP
+#ifndef GENERATIVEQC_SCF_FOCK_PROVIDER_HPP
+#define GENERATIVEQC_SCF_FOCK_PROVIDER_HPP
 
 #include <optional>
 
 #include "scf/density_fitting.hpp"
 #include "scf/fock_build.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 template <class Provider>
 class BasicFockPlanView;
@@ -79,5 +79,5 @@ class BasicFockPlanView {
 
 using CpuFockPlanView = BasicFockPlanView<CpuFockProviderView>;
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

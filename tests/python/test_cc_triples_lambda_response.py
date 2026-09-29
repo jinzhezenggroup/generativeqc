@@ -9,15 +9,15 @@ import numpy as np
 import pytest
 from test_cc_lambda_response import _STRICT, _direction, _state
 
-from tools.vibeqc_cc import PreparedCCSD
-from tools.vibeqc_cc import solver as solver_module
-from tools.vibeqc_cc.triples import triples_energy
-from tools.vibeqc_cc.triples_lambda_response import (
+from tools.generativeqc_cc import PreparedCCSD
+from tools.generativeqc_cc import solver as solver_module
+from tools.generativeqc_cc.triples import triples_energy
+from tools.generativeqc_cc.triples_lambda_response import (
     BoundCCSDTResponse,
     solve_corrected_lambda,
 )
-from tools.vibeqc_response.implicit import ImplicitSolveError
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_response.implicit import ImplicitSolveError
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 @lru_cache(maxsize=2)

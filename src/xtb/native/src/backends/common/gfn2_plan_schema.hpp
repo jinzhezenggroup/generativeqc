@@ -1,12 +1,12 @@
-#ifndef VIBEQC_XTB_BACKENDS_COMMON_GFN2_PLAN_SCHEMA_HPP
+#ifndef GENERATIVEQC_XTB_BACKENDS_COMMON_GFN2_PLAN_SCHEMA_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_COMMON_GFN2_PLAN_SCHEMA_HPP
+#define GENERATIVEQC_XTB_BACKENDS_COMMON_GFN2_PLAN_SCHEMA_HPP
 
 #include <cstdint>
 #include <type_traits>
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 
 /*
  * The common schema deliberately contains no CUDA or HIP types.  A topology
@@ -624,6 +624,6 @@ static_assert(std::is_standard_layout_v<Gfn2ElementIdentityProjectionView>);
     const std::int32_t* atomic_numbers, std::int64_t atomic_number_count, std::uint64_t plan_token,
     Gfn2ElementIdentityProjectionView& projection) noexcept;
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail
 
-#endif  // VIBEQC_XTB_BACKENDS_COMMON_GFN2_PLAN_SCHEMA_HPP
+#endif  // GENERATIVEQC_XTB_BACKENDS_COMMON_GFN2_PLAN_SCHEMA_HPP

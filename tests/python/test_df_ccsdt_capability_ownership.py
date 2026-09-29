@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from tools.vibeqc_cc.df_api import DFRCCSDTCapabilities
+from tools.generativeqc_cc.df_api import DFRCCSDTCapabilities
 
 
 @pytest.mark.parametrize("operation", ["clear", "force"])

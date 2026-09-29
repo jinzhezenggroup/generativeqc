@@ -9,7 +9,7 @@ three different providers later.
 
 ## Current implementation status
 
-The native tools path now consumes a VibeQC RHF snapshot and generated
+The native tools path now consumes a GenerativeQC RHF snapshot and generated
 first/second integral derivatives, with native J/K response. In addition to the
 tiny dense analytic reference, `rhf_hvp` composes #178's direct
 `weighted_hvp` consumers with one directional #179 CPHF solve and shell-local
@@ -56,8 +56,8 @@ inside an already qualified LDA/GGA primitive family must not add
 Hessian-specific scientific source code.
 
 Molecular execution is a separate method-neutral layer. Its canonical
-installed owner is now `vibeqc.second_order`; the former
-`tools.vibeqc_hessian.stationary_executor` module is a compatibility re-export
+installed owner is now `generativeqc.second_order`; the former
+`tools.generativeqc_hessian.stationary_executor` module is a compatibility re-export
 and contains no second implementation. `StationarySecondOrderExecutor` accepts
 only a plan identity and complete ordered source inventory, one perturbation
 provider, one opaque stationary response driver and exactly one contributor per
@@ -123,7 +123,7 @@ The two upstream layers are needed here, and both stop short of a molecular
 Hessian. Keeping that boundary explicit is the point of this section.
 
 **#178 — second integral derivatives**
-(`python/vibeqc_compiler/integral/second_derivatives.py`,
+(`python/generativeqc_compiler/integral/second_derivatives.py`,
 `docs/developer/second_integral_derivatives.md`)
 
 Supplies S/T/V and four-center Coulomb second derivative **integral primitives**
@@ -141,7 +141,7 @@ The caller therefore owns, and must fold itself:
 - basis-representation conversion for spherical inputs.
 
 **#179 — shared orbital response**
-(`tools/vibeqc_response/`, `docs/developer/response.md`)
+(`tools/generativeqc_response/`, `docs/developer/response.md`)
 
 Supplies the matrix-free CPHF operator (`RHFResponseOperator`), a true-residual
 Krylov solver with multi-RHS strategies, and two independent oracles
@@ -206,7 +206,7 @@ which is written out rather than abbreviated.
 ``½ Σ W2 ∂²(μν|λσ)`` on top of this ``W2`` would halve both the Coulomb and the
 exchange contribution — the row below therefore carries no further factor. The
 folding is implemented as ``two_electron_weight`` in
-:mod:`tools.vibeqc_hessian.weights` and checked against a direct
+:mod:`tools.generativeqc_hessian.weights` and checked against a direct
 ``½ Tr[P G(P)]`` evaluation, so the factor is verified where it is consumed
 rather than only asserted here.
 
@@ -301,7 +301,7 @@ inside a default.
 ## Frozen skeleton assembly
 
 The A2 assembly boundary is now represented by
-``tools.vibeqc_hessian.assemble_frozen_skeleton``. It accepts the nuclear,
+``tools.generativeqc_hessian.assemble_frozen_skeleton``. It accepts the nuclear,
 one-electron, overlap/Pulay, and folded two-electron second-derivative
 components in the canonical ``(atom, xyz, atom, xyz)`` layout, validates that
 they are finite and shape-compatible, and returns each component alongside
@@ -335,7 +335,7 @@ HF or energy-only quantity.
 
 ## Independent semi-numerical reference
 
-`tools.vibeqc_hessian.reference` supplies a tiny CPU oracle with an independent
+`tools.generativeqc_hessian.reference` supplies a tiny CPU oracle with an independent
 dense CPHF solve and finite-difference first/second integral derivatives. It
 requires optional PySCF, all-electron closed-shell RHF, Cartesian AOs, at most
 18 AOs and four atoms, and a nonzero occupied/virtual gap. Invalid steps,
@@ -431,8 +431,8 @@ occupied metric contribution, not redundant iteration, that must be retained.
 ### Usage and resource boundaries
 
 ```python
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_hessian import NativeRHFState, analytic_hessian
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_hessian import NativeRHFState, analytic_hessian
 
 with NativeSource([(1, (0, 0, 0)), (1, (0, 0, 1.4))], basis="sto-3g") as source:
     state = NativeRHFState.from_source(source, tolerance=1e-12)
@@ -469,7 +469,7 @@ closed/mismatched sources fail before derivative-provider execution.
   native derivative oracle used only on the assertion side.
 - The final Hessian and individual components are compared with optional external
   PySCF analytic and finite-difference references at the same exact basis records.
-- Three-step directional differences of VibeQC analytic forces independently
+- Three-step directional differences of GenerativeQC analytic forces independently
   test the total Hessian; raw symmetry and per-axis translation identities are
   checked before any presentation operation.
 - Wrong relaxation tensors, out-of-domain sizes, unrelated references, repeated
@@ -505,8 +505,8 @@ particular, the occupied-energy response cannot be replaced with only its
 diagonal or omitted from the latter.
 
 ```python
-from tools.vibeqc_hessian import NativeRHFState, directional_rhf_response
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_hessian import NativeRHFState, directional_rhf_response
+from tools.generativeqc_posthf.sources import NativeSource
 
 with NativeSource([(1, (0, 0, 0)), (1, (0.1, 0.2, 1.4))]) as source:
     state = NativeRHFState.from_source(source)
@@ -549,7 +549,7 @@ of frozen Fock/overlap and reconverged density/energy-weighted density, occupied
 metric identities, translation/linearity, omitted-metric negatives and failed
 call recovery. Device qualification additionally runs
 `tests/python/test_hessian_directional_cuda.py` with
-`VIBEQC_RESPONSE_CUDA_TEST=1` inside a finite Slurm allocation. It forbids CPU
+`GENERATIVEQC_RESPONSE_CUDA_TEST=1` inside a finite Slurm allocation. It forbids CPU
 J/K and all-coordinate/dense-input fallbacks and checks the CUDA-assisted
 response against independently reconverged density differences.
 
@@ -659,8 +659,8 @@ For explicit CUDA first-source qualification, add these arguments to the
 
 ```python
 from pathlib import Path
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
 # Select the actual installed toolkit and target; compilation does not probe GPUs.
 compiler = CudaCompilerAdapter(Path("/path/to/nvcc"), cuda_target_info("sm_120"))
@@ -679,7 +679,7 @@ CUDA execution side. `tests/python/test_first_directional_cuda.py` independently
 checks a selected f-shell contraction, repeated centers, signed weights, runtime
 compatibility, invalid/partial records, nonfinite arithmetic and failed-call
 recovery. Run these opt-in tests under a finite GPU allocation with
-`VIBEQC_RESPONSE_CUDA_TEST=1` and the selected `nvcc` on `PATH`.
+`GENERATIVEQC_RESPONSE_CUDA_TEST=1` and the selected `nvcc` on `PATH`.
 
 `tests/python/test_hessian_relaxation_cuda.py` separately qualifies the generated
 weighted-gradient relaxation consumer on a real NVIDIA device. It compares the

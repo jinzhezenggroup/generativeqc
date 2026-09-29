@@ -6,7 +6,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_response import (
+from tools.generativeqc_response import (
     CudaDFJKBackend,
     CudaDirectJKBackend,
     DenseAOResponseBackend,
@@ -226,8 +226,8 @@ def test_one_electron_doublet_has_a_zero_sized_beta_response_block() -> None:
 
 def test_native_one_electron_uhf_export_accepts_an_empty_beta_spin() -> None:
     """Export a real N-beta=0 SCF state through the response boundary."""
-    from tools.vibeqc_posthf.export import export_uhf
-    from tools.vibeqc_posthf.sources import NativeSource
+    from tools.generativeqc_posthf.export import export_uhf
+    from tools.generativeqc_posthf.sources import NativeSource
 
     try:
         source = NativeSource([("H", (0.0, 0.0, 0.0))], "sto-3g", multiplicity=2)
@@ -264,8 +264,8 @@ def test_native_one_electron_uhf_export_accepts_an_empty_beta_spin() -> None:
 
 def test_native_open_shell_uhf_export_builds_a_response_problem() -> None:
     """Export Li doublet UHF from native SCF into the shared response layer."""
-    from tools.vibeqc_posthf.export import export_uhf
-    from tools.vibeqc_posthf.sources import NativeSource
+    from tools.generativeqc_posthf.export import export_uhf
+    from tools.generativeqc_posthf.sources import NativeSource
 
     try:
         source = NativeSource([("Li", (0.0, 0.0, 0.0))], "sto-3g", multiplicity=2)

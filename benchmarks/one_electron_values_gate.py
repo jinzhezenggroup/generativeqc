@@ -25,11 +25,14 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator, Primitive, Shell, _native
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
-from vibeqc_compiler.common.performance import assess_comparison, measure_interleaved
-from vibeqc_compiler.common.resources import ResourceBudget
+from generativeqc import Calculator, Primitive, Shell, _native
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.performance import (
+    assess_comparison,
+    measure_interleaved,
+)
+from generativeqc_compiler.common.resources import ResourceBudget
 
 from benchmarks._cases import benchmark_cases
 
@@ -89,7 +92,7 @@ def main() -> None:
             "one-electron derivatives use thread/shell_warp/nucleus_cooperative mapping"
         )
     case = cases[args.case]
-    basis = case.vibeqc_basis
+    basis = case.generativeqc_basis
     if args.contraction_length:
         if args.contraction_length < 1 or isinstance(basis, str):
             parser.error(
@@ -140,10 +143,10 @@ def main() -> None:
             "basis": repr(basis),
         }
     )
-    mapping_variable = "VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING"
+    mapping_variable = "GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING"
     library = _native.load_library()
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    if library.vibeqc_get_source_identity().decode() != source_identity(ROOT):
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    if library.generativeqc_get_source_identity().decode() != source_identity(ROOT):
         raise RuntimeError(
             "native library does not match the current scientific source"
         )
@@ -280,9 +283,9 @@ def main() -> None:
         e["energy"] <= 3e-10 and e["force"] <= 3e-9 for e in paired_errors.values()
     )
     report = {
-        "schema": "vibeqc.df_derivative_endpoint"
+        "schema": "generativeqc.df_derivative_endpoint"
         if args.df_derivatives
-        else "vibeqc.one_electron_endpoint",
+        else "generativeqc.one_electron_endpoint",
         "version": 1,
         "case": args.case,
         "batch": args.batch,

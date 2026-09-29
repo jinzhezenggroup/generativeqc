@@ -47,7 +47,7 @@ closed before code emission.
   retained; CPU expansions use vectors. Existing s–f coefficients are untouched.
 * Native shell-radial and component normalization already generalize to g.
   Signed contractions, all nine spherical functions, orthonormality, and
-  mixed-center raw blocks are compared to PySCF/libcint without using VibeQC's
+  mixed-center raw blocks are compared to PySCF/libcint without using GenerativeQC's
   transform to manufacture the reference.
 * CPU Hermite/Coulomb workspaces depend on actual angular orders. g/g kinetic
   values require internal powers through six; g/g/g/g Coulomb values require
@@ -88,11 +88,11 @@ closed before code emission.
 ## Opt-in generated components
 
 ```python
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
-from vibeqc_compiler.integral.bounded_component import emit_bounded_component
-from vibeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.bounded_component import emit_bounded_component
+from generativeqc_compiler.integral.capabilities import query_integral_capability
 
 ir = build_one_electron_derivative_ir("nuclear_attraction", (4, 4))
 report = query_integral_capability(
@@ -141,7 +141,7 @@ path; endpoint retirement still requires matched performance evidence.
 ## Reproduce validation
 
 Build the CPU library normally and install the pinned `reference-test` extra
-(PySCF 2.14.0). Set `PYTHONPATH=python:.` and `VIBEQC_LIBRARY` to the resulting
+(PySCF 2.14.0). Set `PYTHONPATH=python:.` and `GENERATIVEQC_LIBRARY` to the resulting
 library. Use one BLAS/OpenMP thread for reproducible small-oracle timings.
 
 ```bash
@@ -156,12 +156,12 @@ python -m pytest -q tests/python/test_first_derivatives_native.py
 python benchmarks/issue351_full_shell_cpu.py --samples 50
 
 # Complete loaded-basis RHF molecular energy/force evidence.
-VIBEQC_HIGH_L_MOLECULAR_TEST=1 python -m pytest -q -s \
+GENERATIVEQC_HIGH_L_MOLECULAR_TEST=1 python -m pytest -q -s \
   tests/python/test_high_angular.py -k loaded_g
 
 # Explicit allocated RTX 4090 tier (nvcc sm_89); logs compile time, source/
 # binary size, registers, stack and spills. This is not compile-only testing.
-VIBEQC_HIGH_L_CUDA_ARCH=sm_89 VIBEQC_HIGH_L_CUDA_TEST=1 \
+GENERATIVEQC_HIGH_L_CUDA_ARCH=sm_89 GENERATIVEQC_HIGH_L_CUDA_TEST=1 \
   python -m pytest -q -s tests/python/test_high_angular.py -k bounded
 ```
 

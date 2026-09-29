@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
     ],
 )
 def test_resident_lease_closes_on_every_post_allocation_exit(mode: str) -> None:
-    source = (ROOT / "tools/vibeqc_cc/triples_orbital_response.py").read_text()
+    source = (ROOT / "tools/generativeqc_cc/triples_orbital_response.py").read_text()
     start = source.index("        resident_owner = None\n")
     stop = source.index("        independent_z_residual =", start)
     region = textwrap.dedent(source[start:stop])

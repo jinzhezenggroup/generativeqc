@@ -23,14 +23,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.common.evidence import file_hash
-from vibeqc_compiler.integral.shell_class import build_weighted_shell_contraction_kernel
-from vibeqc_compiler.integral.shell_spec import PSSS_SPEC
-from vibeqc_compiler.integral.weighted_eri import (
+from generativeqc_compiler.common.evidence import file_hash
+from generativeqc_compiler.integral.shell_class import (
+    build_weighted_shell_contraction_kernel,
+)
+from generativeqc_compiler.integral.shell_spec import PSSS_SPEC
+from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
-from vibeqc_compiler.integral.weighted_eri_cuda import emit_psss_weighted_header
+from generativeqc_compiler.integral.weighted_eri_cuda import emit_psss_weighted_header
 
 
 def main() -> None:
@@ -58,7 +60,7 @@ def main() -> None:
         source.write_text(
             f'#include "{header.name}"\n'
             + """
-using namespace vibeqc::scf::generated_weighted_eri;
+using namespace generativeqc::scf::generated_weighted_eri;
 extern "C" __global__ void weighted_screen(const Geometry* geometry,
                                            const double* weights, Gradient* results) {
   const unsigned i = blockIdx.x * blockDim.x + threadIdx.x;

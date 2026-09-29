@@ -9,19 +9,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.ecp import build_ecp_ir, gaussian_roots
-from vibeqc_compiler.integral.ecp_grid import harmonic_roots, radial_map_roots
-from vibeqc_compiler.integral.ecp_projector import (
+from generativeqc_compiler.integral.ecp import build_ecp_ir, gaussian_roots
+from generativeqc_compiler.integral.ecp_grid import harmonic_roots, radial_map_roots
+from generativeqc_compiler.integral.ecp_projector import (
     emit_ecp_quadrature_cpp,
     pair_roots,
     radial_roots,
 )
-from vibeqc_compiler.integral.ir import EcpRadialTerm, OperatorSpec
-from vibeqc_compiler.integral.ir_serialization import (
+from generativeqc_compiler.integral.ir import EcpRadialTerm, OperatorSpec
+from generativeqc_compiler.integral.ir_serialization import (
     integral_from_payload,
     integral_to_payload,
 )
-from vibeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 
 def test_ecp_codegen_without_site_packages(tmp_path: typing.Any) -> None:

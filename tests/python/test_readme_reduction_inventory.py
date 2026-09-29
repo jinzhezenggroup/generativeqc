@@ -52,7 +52,7 @@ def _hf(*, forces: bool, passed: bool) -> dict:
         "gate": {"passed": passed},
         "accuracy": {"gate_selection": {}, "paired_warm_repeats": []},
         "settings": {"gates": {}, "density_fitting_metric_diagnostics": {}},
-        "vibeqc": engine,
+        "generativeqc": engine,
         "gpu4pyscf": engine,
     }
 
@@ -104,7 +104,7 @@ def test_hf_energy_and_force_records_are_both_retained(
             row["raw_sha256"]
             == hashlib.sha256((root / row["raw_file"]).read_bytes()).hexdigest()
         )
-        assert row["engines"]["VibeQC"]["samples"][0]["ms"] == 250
+        assert row["engines"]["GenerativeQC"]["samples"][0]["ms"] == 250
     assert {row["endpoint"] for row in rows} == {
         "SCF energy",
         "energy + analytic forces",

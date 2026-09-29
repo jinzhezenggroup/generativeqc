@@ -1,15 +1,15 @@
-#ifndef VIBEQC_SCF_CUDA_RHF_POLICY_HPP
-#define VIBEQC_SCF_CUDA_RHF_POLICY_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_RHF_POLICY_HPP
+#define GENERATIVEQC_SCF_CUDA_RHF_POLICY_HPP
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 
+#include "generativeqc/generativeqc.h"
 #include "runtime/cuda_provider.hpp"
 #include "runtime/cuda_target_info.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::scf::cuda_policy {
+namespace generativeqc::scf::cuda_policy {
 
 /**
  * Explicit Direct-J/K tuning evidence.
@@ -214,14 +214,14 @@ MixedPrecisionItemPolicy resolve_mixed_precision_item(const MixedPrecisionFockPo
 /**
  * Resolve the mixed-precision Fock policy from the requested public policy and
  * the tolerances. \p nullopt preserves the legacy
- * VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch verbatim. An explicit
- * \p VIBEQC_PRECISION_FP64 keeps the pure double path (the environment cannot
- * relax it). An explicit \p VIBEQC_PRECISION_AUTO derives the threshold from the
+ * GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch verbatim. An explicit
+ * \p GENERATIVEQC_PRECISION_FP64 keeps the pure double path (the environment cannot
+ * relax it). An explicit \p GENERATIVEQC_PRECISION_AUTO derives the threshold from the
  * budget-aware admission above, with an explicit numeric environment value
  * acting as a hard diagnostic override that bypasses the budget.
  */
 MixedPrecisionFockPolicy resolve_mixed_precision_fock_policy(
-    std::optional<vibeqc_precision_mode> precision_mode, double energy_tolerance,
+    std::optional<generativeqc_precision_mode> precision_mode, double energy_tolerance,
     double screening_tolerance, double eligible_tiles) noexcept;
 bool graph_native_eigensolver_override_requested() noexcept;
 bool xsyev_probe_skip_diagnostic_requested() noexcept;
@@ -245,7 +245,7 @@ bool aot_shell_class_selection_override_requested() noexcept;
 struct DirectTileValidationPolicy {
   bool requested{};
   bool produces_numerical_endpoint{true};
-  vibeqc_status endpoint_status{VIBEQC_STATUS_SUCCESS};
+  generativeqc_status endpoint_status{GENERATIVEQC_STATUS_SUCCESS};
 };
 DirectTileValidationPolicy resolve_direct_tile_validation_policy() noexcept;
 bool direct_tile_validation_requested() noexcept;
@@ -286,6 +286,6 @@ inline constexpr unsigned kDfCandidateRawSchedule = 0;
 /** Raw export uses 1/4/32 lanes or kDfCandidateRawSchedule; auto stays scalar. */
 bool df_value_raw_lanes_requested(unsigned& lanes) noexcept;
 
-}  // namespace vibeqc::scf::cuda_policy
+}  // namespace generativeqc::scf::cuda_policy
 
 #endif

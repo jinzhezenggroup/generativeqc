@@ -6,11 +6,11 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
-from tools.vibeqc_numerics.audit import ProbeControls, StrictHFAudit, probe_hf
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.fixtures import calculator_inputs, load_fixtures
+from tools.generativeqc_numerics.audit import ProbeControls, StrictHFAudit, probe_hf
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.fixtures import calculator_inputs, load_fixtures
 
 
 @pytest.mark.parametrize("name", ["h2", "he", "h2o", "nh3", "ch4", "hf-plus-uhf"])
@@ -95,7 +95,7 @@ def test_probe_rejects_mixed_override_before_gpu_execution(
 ) -> None:
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     model = Calculator().resolved_model(atoms)
-    monkeypatch.setenv("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1e-6")
+    monkeypatch.setenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1e-6")
     with (
         NativeSource(atoms) as source,
         pytest.raises(ValueError, match="mixed-precision"),
@@ -108,7 +108,7 @@ def test_explicit_arithmetic_experiment_requires_matching_settings(
 ) -> None:
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     model = Calculator().resolved_model(atoms)
-    monkeypatch.setenv("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1e-6")
+    monkeypatch.setenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1e-6")
     with NativeSource(atoms) as source:
         with pytest.raises(ValueError, match="process settings"):
             probe_hf(
@@ -123,17 +123,17 @@ def test_explicit_arithmetic_experiment_requires_matching_settings(
 def test_arithmetic_driver_restores_policy_after_failure(
     monkeypatch: typing.Any,
 ) -> None:
-    from tools.vibeqc_numerics.precision_experiment import _mixed_override
+    from tools.generativeqc_numerics.precision_experiment import _mixed_override
 
-    monkeypatch.setenv("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "0")
+    monkeypatch.setenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "0")
     with pytest.raises(RuntimeError), _mixed_override(1e-6):
-        assert os.environ["VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD"] == "1e-06"
+        assert os.environ["GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD"] == "1e-06"
         raise RuntimeError("failed native experiment")
-    assert os.environ["VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD"] == "0"
+    assert os.environ["GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD"] == "0"
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_ACCURACY_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_ACCURACY_CUDA_TEST") != "1",
     reason="requires an explicitly allocated GPU",
 )
 @pytest.mark.parametrize("name", ["h2o", "hf-plus-uhf"])

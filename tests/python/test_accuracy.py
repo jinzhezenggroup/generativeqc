@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     AccuracyAssessment,
     Calculator,
     ErrorEvidence,
@@ -17,7 +17,7 @@ from vibeqc import (
     compare_observables,
 )
 
-from tools.vibeqc_validation.fixtures import calculator_inputs, load_fixtures
+from tools.generativeqc_validation.fixtures import calculator_inputs, load_fixtures
 
 MODEL = ResolvedModel("rhf", "geometry", "basis", 2)
 ENERGY = ObservableTarget("energy", "absolute", "Eh", absolute=1e-6)

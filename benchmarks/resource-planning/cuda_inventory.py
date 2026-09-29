@@ -27,7 +27,7 @@ _BENCHMARKS_DIR = next(
 _compiler_sys.path.insert(0, str(_BENCHMARKS_DIR))
 import numpy as np
 from _retention import raw_output_path
-from vibeqc import (
+from generativeqc import (
     Calculator,
     ResourceBudget,
     ResourcePlan,
@@ -35,11 +35,11 @@ from vibeqc import (
     _native,
     plan_resources,
 )
-from vibeqc.autotune import source_identity
-from vibeqc.profiles import file_hash, find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc.autotune import source_identity
+from generativeqc.profiles import file_hash, find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -48,7 +48,7 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.resources import tensor_resource_choices
+from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
 H2 = [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]
 WATER = [(8, (0, 0, 0)), (1, (1.43, 0, 1.11)), (1, (-1.43, 0, 1.11))]
@@ -233,20 +233,20 @@ def main() -> None:
     build = args.build.resolve()
     cache = (build / "CMakeCache.txt").read_text()
     for required in (
-        "VIBEQC_ENABLE_CUDA:BOOL=ON",
-        "VIBEQC_CUDA_FAST_COMPILE:BOOL=OFF",
+        "GENERATIVEQC_ENABLE_CUDA:BOOL=ON",
+        "GENERATIVEQC_CUDA_FAST_COMPILE:BOOL=OFF",
         "CMAKE_BUILD_TYPE:STRING=Release",
     ):
         if required not in cache:
             raise ValueError(
                 f"resource receipts require production configuration: {required}"
             )
-    library = build / "libvibeqc.so"
-    os.environ["VIBEQC_LIBRARY"] = str(library)
-    os.environ["VIBEQC_PROFILE"] = "off"
+    library = build / "libgenerativeqc.so"
+    os.environ["GENERATIVEQC_LIBRARY"] = str(library)
+    os.environ["GENERATIVEQC_PROFILE"] = "off"
     native = _native.load_library(device="cpu")
-    native.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    native_source = native.vibeqc_get_source_identity().decode()
+    native.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    native_source = native.generativeqc_get_source_identity().decode()
     if native_source != source_identity(Path(__file__).resolve().parents[2]):
         raise ValueError("rebuild the native library after the final source edits")
     records = []
@@ -257,7 +257,7 @@ def main() -> None:
             print(f"validated {record['case']}", flush=True)
     nvcc = find_nvcc()
     if nvcc is None:
-        raise RuntimeError("set VIBEQC_NVCC to the production CUDA compiler")
+        raise RuntimeError("set GENERATIVEQC_NVCC to the production CUDA compiler")
     compiler = CudaCompilerAdapter(nvcc, cuda_target_info(args.architecture))
     records.append(shared_case(compiler, args.cache))
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -276,7 +276,7 @@ def main() -> None:
                             "CMAKE_BUILD_TYPE:",
                             "CMAKE_CUDA_",
                             "CMAKE_CXX_FLAGS",
-                            "VIBEQC_",
+                            "GENERATIVEQC_",
                         )
                     )
                 ],

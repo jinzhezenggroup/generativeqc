@@ -10,23 +10,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_scc_free_energy_runtime import (
+from generativeqc_compiler.method.gfn2_scc_free_energy_runtime import (
     GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
     build_gfn2_scc_free_energy_program,
     build_gfn2_scc_internal_energy_program,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 _INTERNAL_INPUTS = (
     "core",
@@ -45,7 +47,7 @@ _FREE_INPUTS = ("electronic_temperature", "entropy", "internal_energy")
 def _host_device(source: str, function_name: str) -> str:
     return source.replace(
         f"inline bool {function_name}(",
-        f"VIBEQC_GFN2_SCC_FREE_ENERGY_HD inline bool {function_name}(",
+        f"GENERATIVEQC_GFN2_SCC_FREE_ENERGY_HD inline bool {function_name}(",
         1,
     )
 
@@ -78,18 +80,18 @@ def native_header() -> str:
             "#pragma once",
             "#include <cmath>",
             "#if defined(__CUDACC__)",
-            "#define VIBEQC_GFN2_SCC_FREE_ENERGY_HD __host__ __device__",
+            "#define GENERATIVEQC_GFN2_SCC_FREE_ENERGY_HD __host__ __device__",
             "#else",
-            "#define VIBEQC_GFN2_SCC_FREE_ENERGY_HD",
+            "#define GENERATIVEQC_GFN2_SCC_FREE_ENERGY_HD",
             "#endif",
-            "namespace vibeqc::xtb::generated {",
+            "namespace generativeqc::xtb::generated {",
             f'inline constexpr const char* gfn2_scc_free_energy_runtime_version = "{GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION}";',
             f'inline constexpr const char* gfn2_scc_internal_energy_hash = "{internal.logical_hash}";',
             f'inline constexpr const char* gfn2_scc_free_energy_hash = "{free.logical_hash}";',
             internal_body,
             free_body,
-            "}  // namespace vibeqc::xtb::generated",
-            "#undef VIBEQC_GFN2_SCC_FREE_ENERGY_HD",
+            "}  // namespace generativeqc::xtb::generated",
+            "#undef GENERATIVEQC_GFN2_SCC_FREE_ENERGY_HD",
             "",
         ]
     )

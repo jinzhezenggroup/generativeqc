@@ -57,7 +57,7 @@ def archive(
     manifest.write_text(
         json.dumps(
             {
-                "schema": "vibeqc.git-object-snapshot.v1",
+                "schema": "generativeqc.git-object-snapshot.v1",
                 "source_revision": revision,
                 "file_count": len(payloads),
                 "total_bytes": sum(map(len, payloads.values())),

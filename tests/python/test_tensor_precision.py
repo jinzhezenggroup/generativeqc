@@ -4,8 +4,8 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     PASSES,
     Index,
     IndexSpace,
@@ -31,9 +31,12 @@ from vibeqc_compiler.tensor import (
     transpose_program,
     vjp,
 )
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_search import estimate_schedule, plan_schedule_search
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_search import (
+    estimate_schedule,
+    plan_schedule_search,
+)
 
 
 def _parameter(name: str, *, dtype: str = "float64") -> typing.Any:
@@ -328,7 +331,9 @@ def test_qualified_fp32_reduce_uses_fp64_accumulation_reference_oracle() -> None
 
     schedule = describe_precision(lowered)
     reduction = next(value for value in schedule.values if value.op == "reduce")
-    assert schedule.to_payload()["schema"] == "vibeqc.tensor.precision-schedule.v3"
+    assert (
+        schedule.to_payload()["schema"] == "generativeqc.tensor.precision-schedule.v3"
+    )
     assert schedule.execution_scope == ((program.debug_names[reduced], reduction.name),)
     assert (
         reduction.storage_dtype,
@@ -744,7 +749,7 @@ def _qualified_reduction(scope: str) -> Program:
 
 
 def test_qualification_scope_is_part_of_schedule_plan_and_search_identity() -> None:
-    from vibeqc_compiler.tensor.cuda_search import execution_key
+    from generativeqc_compiler.tensor.cuda_search import execution_key
 
     first = _qualified_reduction("workload-a/sm80/evidence-a")
     second = _qualified_reduction("workload-b/sm120/evidence-b")

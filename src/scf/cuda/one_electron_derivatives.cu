@@ -6,7 +6,7 @@
 #include "molecule/basis.hpp"
 #include "scf/cuda/one_electron_derivatives.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 namespace generated = generated_one_electron_derivatives;
 namespace derivative_policy = generated_one_electron_derivative_policy;
@@ -337,4 +337,4 @@ cudaError_t launch_generated_one_electron_gradient(
   return cudaPeekAtLastError();
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

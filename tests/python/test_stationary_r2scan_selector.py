@@ -5,9 +5,9 @@ from fractions import Fraction
 from typing import NoReturn
 
 import pytest
-from vibeqc_compiler.xc import geometry_cuda
-from vibeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILIES
-from vibeqc_compiler.xc.spec import FunctionalSpec, functional
+from generativeqc_compiler.xc import geometry_cuda
+from generativeqc_compiler.xc._generated_native_semilocal import SEMILOCAL_FAMILIES
+from generativeqc_compiler.xc.spec import FunctionalSpec, functional
 
 R2SCAN_CODE = next(
     item["code"] for item in SEMILOCAL_FAMILIES if item["name"] == "R2SCAN"

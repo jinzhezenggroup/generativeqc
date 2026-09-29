@@ -4,12 +4,12 @@ import json
 import typing
 from dataclasses import replace
 
+import generativeqc_compiler.dft.features as feature_module
 import numpy as np
 import pytest
-import vibeqc_compiler.dft.features as feature_module
-from vibeqc import Atom
-from vibeqc_compiler.common.evidence import block_error
-from vibeqc_compiler.dft import (
+from generativeqc import Atom
+from generativeqc_compiler.common.evidence import block_error
+from generativeqc_compiler.dft import (
     ExplicitGrid,
     GridPolicy,
     GridSpec,
@@ -21,7 +21,12 @@ from vibeqc_compiler.dft import (
     orbital_features,
     partition_weights,
 )
-from vibeqc_compiler.dft.fixtures import NAMES, ROOT, basis_arguments, load_fixture
+from generativeqc_compiler.dft.fixtures import (
+    NAMES,
+    ROOT,
+    basis_arguments,
+    load_fixture,
+)
 
 
 def check(actual: typing.Any, expected: typing.Any) -> None:

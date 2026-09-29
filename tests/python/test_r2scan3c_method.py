@@ -5,8 +5,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from vibeqc import load_r2scan3c_basis
-from vibeqc_compiler.method import (
+from generativeqc import load_r2scan3c_basis
+from generativeqc_compiler.method import (
     METHOD_CATALOG,
     BackendCapability,
     DispersionCorrectionPrimitive,
@@ -158,7 +158,7 @@ def test_r2scan3c_audit_manifest_hashes_match_catalog() -> None:
 
 
 def test_custom_r2scan3c_keeps_nonlocal_dispersion_and_gcp_distinct() -> None:
-    from vibeqc_compiler.method import VV10, original_nonlocal_correlation
+    from generativeqc_compiler.method import VV10, original_nonlocal_correlation
 
     spec = replace(
         METHOD_CATALOG["R2SCAN-3c"],

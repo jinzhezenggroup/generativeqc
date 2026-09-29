@@ -4,30 +4,31 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
-#include "vibeqc/vibeqc.h"
 
-extern "C" vibeqc_status vibeqc_system_one_electron_gradient_cuda(
-    vibeqc_context* context, const vibeqc_system* system, const double* overlap_weights,
+extern "C" generativeqc_status generativeqc_system_one_electron_gradient_cuda(
+    generativeqc_context* context, const generativeqc_system* system, const double* overlap_weights,
     const double* kinetic_weights, const double* attraction_weights, size_t matrix_count,
     unsigned schedule, size_t maximum_bytes, double* gradient, size_t gradient_count,
-    vibeqc_one_electron_gradient_resources* resources) {
+    generativeqc_one_electron_gradient_resources* resources) {
   if (!context || !system || !gradient || schedule > 3 || !maximum_bytes)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (resources && !vibeqc::api::valid_descriptor(resources)) return VIBEQC_STATUS_ABI_MISMATCH;
-  const auto n = vibeqc::molecule::ao_count(system->data);
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (resources && !generativeqc::api::valid_descriptor(resources))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  const auto n = generativeqc::molecule::ao_count(system->data);
   if (!n || n > std::numeric_limits<std::size_t>::max() / n || matrix_count != n * n ||
       gradient_count != system->data.atoms.size() * 3)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   if (resources) {
-    *resources = {sizeof(*resources), VIBEQC_ABI_VERSION, 0, 0, 0, 0, 0, 0};
+    *resources = {sizeof(*resources), GENERATIVEQC_ABI_VERSION, 0, 0, 0, 0, 0, 0};
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
-#if VIBEQC_HAS_CUDA
-  if (context->state.executed_backend != VIBEQC_BACKEND_CUDA) {
+#if GENERATIVEQC_HAS_CUDA
+  if (context->state.executed_backend != GENERATIVEQC_BACKEND_CUDA) {
     context->last_detail = "generic generated gradients require a CUDA context";
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   try {
     auto weights = [&](const double* p) {
@@ -36,11 +37,11 @@ extern "C" vibeqc_status vibeqc_system_one_electron_gradient_cuda(
     std::vector<double> result;
     // Keep backend scratch diagnostics separate from the last public failure.
     std::string detail;
-    vibeqc::scf::OneElectronGradientResources measured;
-    auto status = vibeqc::scf::execute_cuda_one_electron_gradient(
+    generativeqc::scf::OneElectronGradientResources measured;
+    auto status = generativeqc::scf::execute_cuda_one_electron_gradient(
         context->state.device_id, system->data, weights(overlap_weights), weights(kinetic_weights),
         weights(attraction_weights), schedule, maximum_bytes, result, detail, &measured);
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       context->last_detail = std::move(detail);
       return status;
     }
@@ -53,15 +54,15 @@ extern "C" vibeqc_status vibeqc_system_one_electron_gradient_cuda(
       resources->synchronous_uploads = measured.synchronous_uploads;
       resources->stream_synchronizations = measured.stream_synchronizations;
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&context->last_detail);
+    return generativeqc::api::map_exception(&context->last_detail);
   }
 #else
   (void)overlap_weights;
   (void)kinetic_weights;
   (void)attraction_weights;
   context->last_detail = "CUDA one-electron gradients are unavailable in this build";
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }

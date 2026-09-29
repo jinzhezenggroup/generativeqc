@@ -14,9 +14,9 @@ from pathlib import Path
 root = Path(sys.argv[1])
 sys.path[:0] = [str(root / "python"), str(root)]
 sys.modules["typing_extensions"] = None
-from tools.vibeqc_cc import PreparedCUDALambda, CudaTriplesResponseTiles
-assert PreparedCUDALambda.__module__ == "tools.vibeqc_cc.lambda_cuda"
-assert CudaTriplesResponseTiles.__module__ == "tools.vibeqc_cc.triples_response_cuda"
+from tools.generativeqc_cc import PreparedCUDALambda, CudaTriplesResponseTiles
+assert PreparedCUDALambda.__module__ == "tools.generativeqc_cc.lambda_cuda"
+assert CudaTriplesResponseTiles.__module__ == "tools.generativeqc_cc.triples_response_cuda"
 """
     result = subprocess.run(
         [sys.executable, "-I", "-c", code, str(ROOT)],

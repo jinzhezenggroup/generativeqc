@@ -35,7 +35,7 @@
     "vdw_radii_source_sha256": "3f08b5755bfd643d6dbb56fd544c117145473a4b27138978a25d0475af985575"
   },
   "method": "r2SCAN-3c",
-  "schema": "vibeqc.r2scan3c-audit-manifest",
+  "schema": "generativeqc.r2scan3c-audit-manifest",
   "schema_version": 1,
   "supported_atomic_numbers": [
     1,

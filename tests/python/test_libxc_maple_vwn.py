@@ -9,15 +9,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.cuda import CudaEmitter
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.xc.expression_dispatch import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.xc.expression_dispatch import (
     build_energy_expression as energy_expression,
 )
-from vibeqc_compiler.xc.libxc_maple import import_maple_file
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.xc.libxc_maple import import_maple_file
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBXC_ROOT = ROOT / "upstream/libxc/7.0.0"
@@ -38,7 +38,7 @@ _ENTRIES = {
 
 # Independent high-precision evaluations of the original VWN closed forms.
 # The values were produced from the published rs/z equations directly, not
-# from the VibeQC Graph or Maple importer. Output order is E, feature gradient,
+# from the GenerativeQC Graph or Maple importer. Output order is E, feature gradient,
 # then the packed upper feature Hessian.
 _INDEPENDENT = {
     ("LDA_C_VWN", "polarized"): (

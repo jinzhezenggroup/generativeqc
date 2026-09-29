@@ -69,7 +69,7 @@ capacity-rejection detail, rather than assumed from the asymptotic formula.
 
 ## Causal measurement
 
-The private diagnostic `VIBEQC_DF_REFERENCE_FINAL_EIGEN=1` restores the actual
+The private diagnostic `GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN=1` restores the actual
 independent reference final solves. The existing #206 runner exposes
 `--host-workloads --final-eigen-ablation`: baseline uses that reference control,
 candidate uses ordinary device solves, and both retain identical lazy/cached

@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.resources import ResourceBudget, plan_resources
-from vibeqc_compiler.dft.cuda import CudaGrid
-from vibeqc_compiler.dft.plan import plan_tiles
+from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+from generativeqc_compiler.dft.cuda import CudaGrid
+from generativeqc_compiler.dft.plan import plan_tiles
 
 
 def basis() -> typing.Any:
@@ -55,7 +55,7 @@ def test_shared_budget_rejects_before_loading_or_allocating_cuda(
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         raise AssertionError("CUDA must not load before resource preflight")
 
-    monkeypatch.setattr("vibeqc_compiler.dft.cuda.ct.CDLL", forbidden)
+    monkeypatch.setattr("generativeqc_compiler.dft.cuda.ct.CDLL", forbidden)
     with pytest.raises(MemoryError):
         CudaGrid(basis(), None, orbital_capacity=(7, 0), resource_budget=budget)
 

@@ -17,16 +17,17 @@
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 using runtime::cuda_trace::trace_call;
 using runtime::cuda_trace::TraceOperation;
 
 // Exchange contraction preserves row/auxiliary tiling and cuBLAS layout.
-vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* density,
-                             double* exchange, std::string& detail, bool density_is_column_major,
-                             std::size_t system_begin, std::size_t system_end) {
+generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* density,
+                                   double* exchange, std::string& detail,
+                                   bool density_is_column_major, std::size_t system_begin,
+                                   std::size_t system_end) {
   system_end = std::min(system_end, plan.batch_size);
-  if (system_begin >= system_end) return VIBEQC_STATUS_SUCCESS;
+  if (system_begin >= system_end) return GENERATIVEQC_STATUS_SUCCESS;
   plan.final_projection_token.reset();
   TraceOperation trace("ri_k", plan.stream,
                        {system_end - system_begin, plan.nbf, plan.naux,
@@ -89,12 +90,12 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
             const std::size_t row_count = std::min(row_tile, plan.nbf - row_begin);
             const std::size_t pair_count = row_count * plan.nbf;
             if (pair_count > pair_capacity) {
-              return VIBEQC_STATUS_INTERNAL_ERROR;
+              return GENERATIVEQC_STATUS_INTERNAL_ERROR;
             }
-            vibeqc_status source_status = generate_metric_panel(
+            generativeqc_status source_status = generate_metric_panel(
                 plan, system, row_begin * plan.nbf, pair_count, auxiliary_begin, auxiliary_count,
                 plan.auxiliary_tile_values, plan.exchange_tile_output, detail);
-            if (source_status != VIBEQC_STATUS_SUCCESS) return source_status;
+            if (source_status != GENERATIVEQC_STATUS_SUCCESS) return source_status;
             launch_transpose_streamed_df_tile_kernel(
                 blocks_for(pair_count * auxiliary_count), kThreads, 0, plan.stream, pair_count,
                 auxiliary_count, plan.auxiliary_tile_values, plan.exchange_intermediate);
@@ -127,7 +128,7 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
                 source_status = generate_metric_panel(
                     plan, system, column_begin * plan.nbf, column_pair_count, auxiliary_begin,
                     auxiliary_count, plan.auxiliary_tile_values, plan.exchange_tile_output, detail);
-                if (source_status != VIBEQC_STATUS_SUCCESS) return source_status;
+                if (source_status != GENERATIVEQC_STATUS_SUCCESS) return source_status;
                 launch_transpose_streamed_df_tile_kernel(
                     blocks_for(column_pair_count * auxiliary_count), kThreads, 0, plan.stream,
                     column_pair_count, auxiliary_count, plan.auxiliary_tile_values,
@@ -165,7 +166,7 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
           }
         }
       }
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     const std::size_t pair_capacity = plan.row_tile * plan.nbf;
     std::vector<double> host_tile;
@@ -173,7 +174,7 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
       host_tile.resize(plan.auxiliary_tile * pair_capacity);
     } catch (const std::bad_alloc&) {
       detail = "host allocation for streamed CUDA DF exchange tile failed";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
 
     // cuBLAS consumes column-major matrices while public host densities and
@@ -316,7 +317,7 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
         }
       }
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
   const int nbf = static_cast<int>(plan.nbf);
@@ -429,7 +430,7 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
       }
     }
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

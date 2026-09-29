@@ -4,8 +4,8 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry.ir import GeometryIR
-from vibeqc_compiler.geometry.triplet import (
+from generativeqc_compiler.geometry.ir import GeometryIR
+from generativeqc_compiler.geometry.triplet import (
     TRIPLET_CONVENTION,
     TRIPLET_OWNERSHIP,
     TripletTopology,
@@ -13,7 +13,7 @@ from vibeqc_compiler.geometry.triplet import (
     lower_triplet_geometry,
     triplet_to_system,
 )
-from vibeqc_compiler.tensor import Program, TensorSpec, execute, input_tensor
+from generativeqc_compiler.tensor import Program, TensorSpec, execute, input_tensor
 
 
 def _geometry() -> GeometryIR:
@@ -204,9 +204,9 @@ def test_triplet_identity_invalidates_topology_parameter_and_role_changes() -> N
 
 
 def test_primal_and_generated_reverse_lower_through_shared_cuda_tensorir() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     triplet_program = cosine_angle_program(
         _geometry(),

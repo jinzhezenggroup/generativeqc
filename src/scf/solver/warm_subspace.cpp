@@ -5,7 +5,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 namespace {
 bool finite_vector(const std::vector<double>& values) {
   return std::all_of(values.begin(), values.end(),
@@ -108,4 +108,4 @@ bool accept_warm_occupied_subspace(const WarmSubspaceResidual& diagnostic, doubl
   return true;
 }
 
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver

@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_PUBLIC_RESULT_BRIDGE_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PUBLIC_RESULT_BRIDGE_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_PUBLIC_RESULT_BRIDGE_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PUBLIC_RESULT_BRIDGE_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::uint32_t kGfn2PublicResultBridgeAbiVersion = 2u;
 
@@ -71,7 +71,7 @@ struct Gfn2PublicResultBridgeDeviceInput {
 
   const std::int32_t* iterations = nullptr;
   const std::uint8_t* converged = nullptr;
-  const vibeqc_xtb_status_t* system_statuses = nullptr;
+  const generativeqc_xtb_status_t* system_statuses = nullptr;
   std::int64_t batch_elements = 0;
 
   /* Control values produced by internal inference publication. */
@@ -107,7 +107,7 @@ struct Gfn2PublicResultBridgeDeviceStaging {
 
   std::int32_t* iterations = nullptr;
   std::uint8_t* converged = nullptr;
-  vibeqc_xtb_status_t* system_statuses = nullptr;
+  generativeqc_xtb_status_t* system_statuses = nullptr;
   std::int64_t batch_elements = 0;
   std::uint64_t plan_token = 0u;
 
@@ -229,6 +229,6 @@ cudaError_t commit_gfn2_public_results_cuda(
     const Gfn2PublicResultBridgeDeviceDiagnostics& diagnostics,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_PUBLIC_RESULT_BRIDGE_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PUBLIC_RESULT_BRIDGE_CUH

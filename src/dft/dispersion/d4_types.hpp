@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace vibeqc::dft::dispersion::data {
+namespace generativeqc::dft::dispersion::data {
 
 struct D4ElementData {
   std::uint16_t reference_offset;
@@ -20,4 +20,4 @@ struct D4ReferenceData {
   std::uint8_t gaussian_count;
 };
 
-}  // namespace vibeqc::dft::dispersion::data
+}  // namespace generativeqc::dft::dispersion::data

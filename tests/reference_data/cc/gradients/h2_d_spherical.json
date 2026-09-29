@@ -147,7 +147,7 @@
     "direct_scf_tol": 1e-14,
     "max_cycle": 150
   },
-  "schema": "vibeqc.ccsd.gradient_reference",
+  "schema": "generativeqc.ccsd.gradient_reference",
   "schema_version": 1,
   "total_energy": -1.1378333456034886,
   "units": {

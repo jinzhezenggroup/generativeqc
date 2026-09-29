@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from vibeqc.resources_ks import _item_host_inventory
+from generativeqc.resources_ks import _item_host_inventory
 
 
 def inventory(

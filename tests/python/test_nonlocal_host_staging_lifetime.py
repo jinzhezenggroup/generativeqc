@@ -18,7 +18,7 @@ def staging_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     body = source[
         source.index("Vv10CudaDeviceLayout vv10_cuda_device_layout(") :
-    ].rsplit("}  // namespace vibeqc::dft::nlc", 1)[0]
+    ].rsplit("}  // namespace generativeqc::dft::nlc", 1)[0]
     body = re.sub(r"<<<.*?>>>", "", body, flags=re.DOTALL)
     folder = tmp_path_factory.mktemp("nonlocal-host-staging")
     cpp, binary = folder / "probe.cpp", folder / "probe"
@@ -149,7 +149,7 @@ template<class T> struct OwnedCudaBuffer {
  ~OwnedCudaBuffer() {pending=false;std::free(data);}
 };
 }
-namespace vibeqc::dft::nlc {
+namespace generativeqc::dft::nlc {
 enum class Vv10Variant {vv10=1,rvv10=2};
 struct Vv10Parameters {Vv10Variant variant=Vv10Variant::vv10;double b=6.0,c=0.01,coefficient=1.0;};
 struct Vv10CudaDeviceLayout {
@@ -171,7 +171,7 @@ int main(int argc,char** argv) {
  double points[3]{},weight=1.0,density=1.0,gradient[3]{},energy=0.0;
  double vrho=0.0,vsigma=0.0,point[3]{},weight_derivative=0.0;
  bool threw=false;
- try {vibeqc::dft::nlc::execute_vv10_cuda(points,&weight,&density,gradient,1,1,{},0,
+ try {generativeqc::dft::nlc::execute_vv10_cuda(points,&weight,&density,gradient,1,1,{},0,
   energy,&vrho,&vsigma,point,&weight_derivative);}
  catch(const std::exception&) {threw=true;}
  if(threw!=(fail_download!=0)) {std::cerr<<"unexpected status";return 2;}

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 FIXTURE = Path(__file__).resolve().parents[1] / "data/gfn2_native_tblite.json"
 CASES = json.loads(FIXTURE.read_text())["cases"]
@@ -20,7 +20,7 @@ CASES = json.loads(FIXTURE.read_text())["cases"]
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
 def test_gfn2_native_energy_force_against_tblite(case: dict, device: str) -> None:
     if device == "cuda":
-        if os.environ.get("VIBEQC_TEST_GFN2_CUDA") != "1":
+        if os.environ.get("GENERATIVEQC_TEST_GFN2_CUDA") != "1":
             pytest.skip("explicit GFN2 CUDA qualification is disabled")
         if not os.environ.get("SLURM_JOB_ID"):
             pytest.fail("GFN2 CUDA qualification requires a Slurm allocation")

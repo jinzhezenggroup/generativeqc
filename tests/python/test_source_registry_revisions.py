@@ -18,7 +18,7 @@ def test_registered_floating_revision_is_rejected(
 ) -> None:
     data = b"pinned bytes\n"
     payload = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {
             "sample": {

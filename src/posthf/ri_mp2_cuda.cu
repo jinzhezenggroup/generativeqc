@@ -20,7 +20,7 @@
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 namespace {
 
 constexpr unsigned kThreads = 256;
@@ -218,8 +218,8 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
   const auto source_status = scf::create_cuda_density_fitting_integral_source(
       device, {source.orbital()}, {source.auxiliary()}, &source_owner.pointer, metric, source_n,
       source_na, detail);
-  if (source_status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (source_status != VIBEQC_STATUS_SUCCESS)
+  if (source_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (source_status != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error(detail.empty() ? "CUDA RI-MP2 DF source setup failed" : detail);
   if (source_n != n || source_na != na)
     throw std::runtime_error("CUDA RI-MP2 DF source dimensions changed during setup");
@@ -241,8 +241,8 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
       &plan_owner.pointer, diagnostics, detail, false);
   // The source-backed plan consumes/destroys the transferred handle on every outcome.
   transferred_source = nullptr;
-  if (plan_status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (plan_status != VIBEQC_STATUS_SUCCESS)
+  if (plan_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (plan_status != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error(detail.empty() ? "CUDA RI-MP2 metric factorization failed" : detail);
   auto& plan = *plan_owner.pointer;
   if (!plan.streamed || !plan.integral_source || !plan.inverse_square_roots || plan.nbf != n ||
@@ -360,7 +360,7 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
       const auto status = scf::generate_cuda_density_fitting_transformed_tile(
           plan.integral_source, 0, mu * n, n, 0, na, -1, plan.inverse_square_roots, stream,
           row_device.get(), detail);
-      if (status != VIBEQC_STATUS_SUCCESS)
+      if (status != GENERATIVEQC_STATUS_SUCCESS)
         throw std::runtime_error(detail.empty() ? "CUDA RI-MP2 transformed DF row failed" : detail);
       blas_check(
           cublasDgemm(plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(na),
@@ -517,4 +517,4 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
   return result;
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.integral.direct_cartesian_contraction_cuda import (
+from generativeqc_compiler.integral.direct_cartesian_contraction_cuda import (
     emit_direct_cartesian_contraction_headers,
 )
 
@@ -33,8 +33,8 @@ def test_native_cartesian_contraction_owners_are_retired() -> None:
 def test_cartesian_and_contraction_consumers_use_generated_headers() -> None:
     cartesian_consumers = (
         "src/scf/cuda/weighted_eri_kernels.cu",
-        "python/vibeqc_compiler/integral/direct_recurrence_cuda.py",
-        "python/vibeqc_compiler/integral/direct_source_contraction_cuda.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py",
     )
     for relative in cartesian_consumers:
         source = (ROOT / relative).read_text(encoding="utf-8")
@@ -54,10 +54,10 @@ def test_cartesian_and_contraction_consumers_use_generated_headers() -> None:
 
 
 def test_direct_cartesian_contraction_generation_is_registered() -> None:
-    generated = (ROOT / "cmake/VibeQCGeneratedSources.cmake").read_text(
+    generated = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text(
         encoding="utf-8"
     )
-    cuda = (ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
-    assert "VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS" in generated
+    cuda = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
+    assert "GENERATIVEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS" in generated
     assert "generate_direct_cartesian_contraction.py" in generated
-    assert cuda.count("VIBEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS") == 2
+    assert cuda.count("GENERATIVEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS") == 2

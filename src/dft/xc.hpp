@@ -1,5 +1,5 @@
-#ifndef VIBEQC_DFT_XC_HPP
-#define VIBEQC_DFT_XC_HPP
+#ifndef GENERATIVEQC_DFT_XC_HPP
+#define GENERATIVEQC_DFT_XC_HPP
 
 #include <array>
 #include <cstddef>
@@ -9,7 +9,7 @@
 #include "dft/density_source.hpp"
 #include "dft/grid.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** LDA tail-v1: exact positive-density formula, analytic zero-density limit,
  * and explicit rejection of negative or non-finite density. No clipping or
@@ -241,6 +241,6 @@ SpinXcIntegral integrate_pbe_uks_with_tail(const AoBasis& basis, const Molecular
                                            const std::vector<double>& beta_density,
                                            std::size_t tile_points = 256);
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft
 
 #endif

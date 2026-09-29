@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_repulsion.cuh"
 #include "generated_gfn2_pair_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -110,8 +110,8 @@ __global__ void gfn2_repulsion_kernel(Gfn2RepulsionDeviceBatch batch, double* en
       const bool light_pair = first_atomic_number <= 2 && second_atomic_number <= 2;
       const double pair_alpha = first_sqrt_alpha * sqrt(second_element.arep);
       const double pair_charge = first_element.zeff * second_element.zeff;
-      vibeqc::xtb::generated::Gfn2RepulsionPairResult pair{};
-      if (!vibeqc::xtb::generated::evaluate_gfn2_repulsion_pair(
+      generativeqc::xtb::generated::Gfn2RepulsionPairResult pair{};
+      if (!generativeqc::xtb::generated::evaluate_gfn2_repulsion_pair(
               distance, pair_alpha, pair_charge, light_pair, pair)) {
         record_error(device_error, Gfn2RepulsionDeviceError::kNonfinitePairArithmetic);
         continue;
@@ -181,4 +181,4 @@ cudaError_t add_gfn2_repulsion_cuda(const Gfn2RepulsionDeviceBatch& batch, doubl
   return cudaGetLastError();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

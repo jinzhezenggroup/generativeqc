@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _function(name: str, namespace: dict[str, typing.Any]) -> typing.Callable:
-    path = ROOT / "python/vibeqc/ks.py"
+    path = ROOT / "python/generativeqc/ks.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(
         item

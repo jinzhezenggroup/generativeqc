@@ -6,10 +6,10 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.evidence import block_error, new_evidence, outcome
+from generativeqc_compiler.common.evidence import block_error, new_evidence, outcome
 
-from tools.vibeqc_validation.publication import publish, validate_publication
-from tools.vibeqc_validation.retention import (
+from tools.generativeqc_validation.publication import publish, validate_publication
+from tools.generativeqc_validation.retention import (
     check,
     classify,
     digest,
@@ -52,7 +52,7 @@ def test_cli_publication_uses_git_paths_on_windows(
 
 def policy(**exceptions: typing.Any) -> typing.Any:
     return {
-        "schema": "vibeqc.retention-policy.v1",
+        "schema": "generativeqc.retention-policy.v1",
         "review_size_bytes": 32,
         "exceptions": exceptions,
     }

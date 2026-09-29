@@ -5,7 +5,7 @@ import weakref
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc import df_triples as module
+from tools.generativeqc_cc import df_triples as module
 
 
 def inputs(o: int = 2, v: int = 3, q: int = 2) -> tuple[np.ndarray, ...]:

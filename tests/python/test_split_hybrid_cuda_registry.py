@@ -4,7 +4,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from vibeqc.ks import (
+from generativeqc.ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
     KsOptions,
     native_ks_options,
@@ -12,9 +12,9 @@ from vibeqc.ks import (
     resolve_ks_method,
     resolve_ks_options,
 )
-from vibeqc_compiler.dft.grid import GridSpec
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from generativeqc_compiler.dft.grid import GridSpec
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
 from tools.generate_xc_split_hybrid_registry import (
     GGA_CODE_BASE,
@@ -70,7 +70,7 @@ def test_split_hybrid_registry_is_host_safe_and_device_generated() -> None:
     ):
         assert token in source
     assert source.index("#include <cmath>") < source.index(
-        "namespace vibeqc::dft::generated"
+        "namespace generativeqc::dft::generated"
     )
 
 
@@ -79,7 +79,7 @@ def test_split_hybrid_registry_generation_is_deterministic() -> None:
 
 
 def test_split_hybrid_python_registry_is_fresh() -> None:
-    committed = ROOT / "python/vibeqc_compiler/xc/_generated_split_hybrids.py"
+    committed = ROOT / "python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     assert emit_python_registry() == committed.read_text(encoding="utf-8")
 
 

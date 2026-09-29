@@ -49,7 +49,7 @@ def validate_retirement_ledger(
     ownership: dict[str, Any],
 ) -> dict[str, Any]:
     """Fail closed on stale, duplicate, or newly unclassified Direct science."""
-    if retirement.get("schema") != "vibeqc.direct-hf-retirement.v1":
+    if retirement.get("schema") != "generativeqc.direct-hf-retirement.v1":
         raise ValueError("unsupported Direct-HF retirement ledger schema")
     if retirement.get("issue") != 356:
         raise ValueError("Direct-HF retirement ledger must be bound to issue #356")

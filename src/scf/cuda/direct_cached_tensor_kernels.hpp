@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 void launch_build_eri_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
@@ -27,4 +27,4 @@ void launch_build_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   const double* hcore, const double* eri, const double* density,
                                   const std::uint8_t* active, double* fock);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

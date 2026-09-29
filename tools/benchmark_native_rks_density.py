@@ -18,15 +18,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.evidence import (
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.evidence import (
     block_error,
     new_evidence,
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 
 from tools.density_workload_matrix import load_workloads
 
@@ -43,7 +43,7 @@ BRIDGE = r"""
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
-using namespace vibeqc;
+using namespace generativeqc;
 using Clock = std::chrono::steady_clock;
 double seconds(Clock::time_point begin) {
   return std::chrono::duration<double>(Clock::now()-begin).count();
@@ -59,7 +59,7 @@ extern "C" int measure(const char* destination, unsigned repeats) {
   for (auto& [name, system] : inputs) {
     auto started = Clock::now();
     std::string detail;
-    if (molecule::validate_and_normalize(system,detail) != VIBEQC_STATUS_SUCCESS)
+    if (molecule::validate_and_normalize(system,detail) != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail);
     scf::FockBuildSpec spec;
     spec.derivative_order=0;
@@ -131,7 +131,7 @@ def bridge_source(workloads: typing.Any) -> typing.Any:
             "{ core::System system;",
             f"system.charge={inputs['charge']};",
             f"system.multiplicity={inputs['multiplicity']};",
-            "system.basis_representation=VIBEQC_BASIS_SPHERICAL;",
+            "system.basis_representation=GENERATIVEQC_BASIS_SPHERICAL;",
         ]
         for z, xyz in zip(inputs["atomic_numbers"], inputs["coordinates"], strict=True):
             lines.append(
@@ -174,8 +174,8 @@ def run(args: typing.Any) -> None:
     import ctypes
 
     native = ctypes.CDLL(str(library))
-    native.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    if native.vibeqc_get_source_identity().decode() != source_identity(ROOT):
+    native.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    if native.generativeqc_get_source_identity().decode() != source_identity(ROOT):
         raise ValueError("native source/library identity mismatch")
     output = args.output.resolve()
     compiler = CppCompilerAdapter(Path(shutil.which("c++")))
@@ -183,7 +183,7 @@ def run(args: typing.Any) -> None:
         source,
         output / "bridge.so",
         includes=(ROOT / "include", ROOT / "src"),
-        libraries=("vibeqc",),
+        libraries=("generativeqc",),
         options=("-std=c++20", f"-L{library.parent}", f"-Wl,-rpath,{library.parent}"),
     )
     if built.returncode:

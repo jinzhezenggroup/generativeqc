@@ -12,25 +12,27 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
 
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_es3_runtime import (
+from generativeqc_compiler.method.gfn2_es3_runtime import (
     GFN2_ES3_RUNTIME_VERSION,
     build_gfn2_es3_kernel,
     build_gfn2_es3_primal,
 )
-from vibeqc_compiler.tensor.ad_program import linearize
-from vibeqc_compiler.tensor.program import Program
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.ad_program import linearize
+from generativeqc_compiler.tensor.program import Program
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 INPUT_ORDER = ("gamma3", "charge")
 
@@ -46,7 +48,7 @@ def _subprogram(parent: Program, output: str, kind: str) -> Program:
 def _host_device(source: str, function_name: str) -> str:
     source = source.replace(
         f"inline bool {function_name}(",
-        f"VIBEQC_GFN2_ES3_HD inline bool {function_name}(",
+        f"GENERATIVEQC_GFN2_ES3_HD inline bool {function_name}(",
         1,
     )
     return source.replace("std::isfinite(", "gfn2_es3_isfinite(")
@@ -85,12 +87,12 @@ def native_header() -> str:
 #include <limits>
 
 #if defined(__CUDACC__)
-#define VIBEQC_GFN2_ES3_HD __host__ __device__
+#define GENERATIVEQC_GFN2_ES3_HD __host__ __device__
 #else
-#define VIBEQC_GFN2_ES3_HD
+#define GENERATIVEQC_GFN2_ES3_HD
 #endif
 
-namespace vibeqc::xtb::generated {{
+namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_es3_runtime_version =
     "{GFN2_ES3_RUNTIME_VERSION}";
@@ -101,7 +103,7 @@ inline constexpr const char* gfn2_es3_charge_jvp_hash =
 inline constexpr const char* gfn2_es3_kernel_logical_hash =
     "{kernel.logical_hash}";
 
-VIBEQC_GFN2_ES3_HD inline bool gfn2_es3_isfinite(double value) noexcept {{
+GENERATIVEQC_GFN2_ES3_HD inline bool gfn2_es3_isfinite(double value) noexcept {{
 #if defined(__CUDA_ARCH__)
   return isfinite(value);
 #else
@@ -109,7 +111,7 @@ VIBEQC_GFN2_ES3_HD inline bool gfn2_es3_isfinite(double value) noexcept {{
 #endif
 }}
 
-VIBEQC_GFN2_ES3_HD inline bool gfn2_es3_isnormal(double value) noexcept {{
+GENERATIVEQC_GFN2_ES3_HD inline bool gfn2_es3_isnormal(double value) noexcept {{
   constexpr double kMinNormalDouble = 0x1p-1022;
 #if defined(__CUDA_ARCH__)
   return isfinite(value) && fabs(value) >= kMinNormalDouble;
@@ -120,7 +122,7 @@ VIBEQC_GFN2_ES3_HD inline bool gfn2_es3_isnormal(double value) noexcept {{
 
 {potential_body}
 {energy_body}
-VIBEQC_GFN2_ES3_HD inline bool evaluate_gfn2_es3_potential(
+GENERATIVEQC_GFN2_ES3_HD inline bool evaluate_gfn2_es3_potential(
     double gamma3, double shell_charge, double* result) noexcept {{
   if (result == nullptr || !gfn2_es3_isfinite(gamma3) ||
       !gfn2_es3_isfinite(shell_charge)) {{
@@ -164,7 +166,7 @@ VIBEQC_GFN2_ES3_HD inline bool evaluate_gfn2_es3_potential(
   return gfn2_es3_isfinite(*result);
 }}
 
-VIBEQC_GFN2_ES3_HD inline bool evaluate_gfn2_es3_energy(
+GENERATIVEQC_GFN2_ES3_HD inline bool evaluate_gfn2_es3_energy(
     double gamma3, double shell_charge, double* result) noexcept {{
   if (result == nullptr || !gfn2_es3_isfinite(gamma3) ||
       !gfn2_es3_isfinite(shell_charge)) {{
@@ -212,9 +214,9 @@ VIBEQC_GFN2_ES3_HD inline bool evaluate_gfn2_es3_energy(
   return gfn2_es3_isfinite(*result);
 }}
 
-}}  // namespace vibeqc::xtb::generated
+}}  // namespace generativeqc::xtb::generated
 
-#undef VIBEQC_GFN2_ES3_HD
+#undef GENERATIVEQC_GFN2_ES3_HD
 """
 
 

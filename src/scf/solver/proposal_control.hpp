@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_SOLVER_PROPOSAL_CONTROL_HPP
-#define VIBEQC_SCF_SOLVER_PROPOSAL_CONTROL_HPP
+#ifndef GENERATIVEQC_SCF_SOLVER_PROPOSAL_CONTROL_HPP
+#define GENERATIVEQC_SCF_SOLVER_PROPOSAL_CONTROL_HPP
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include "scf/solver/diis.hpp"
 #include "scf/types.hpp"
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 using reference::Matrix;
 using reference::residual_rms;
 using ScfClock = std::chrono::steady_clock;
@@ -120,5 +120,5 @@ Matrix safeguarded_update(const ScfOptions& options, std::uint64_t generation, u
   return baseline;
 }
 
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver
 #endif

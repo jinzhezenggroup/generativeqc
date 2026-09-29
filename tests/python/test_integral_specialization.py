@@ -3,7 +3,7 @@
 from math import comb
 
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DPPP_SPEC,
     FUSED_SHELL_SPEC_BY_NAME,
     PSSS_SPEC,
@@ -18,7 +18,7 @@ from vibeqc_compiler.integral import (
     specialize_fock_integral,
     specialize_integral_ir,
 )
-from vibeqc_compiler.integral.lowering.dispatch import _specialize_fock_plan
+from generativeqc_compiler.integral.lowering.dispatch import _specialize_fock_plan
 
 
 def test_fock_output_pruning_removes_derivative_intent_without_mutating_source() -> (
@@ -47,7 +47,7 @@ def test_fock_output_pruning_removes_derivative_intent_without_mutating_source()
     assert specialized.maximum_coulomb_order < mixed.maximum_coulomb_order
 
     diagnostics = integral_specialization_diagnostics(mixed, specialized)
-    assert diagnostics["schema"] == "vibeqc.compiler.integral-pruning.v1"
+    assert diagnostics["schema"] == "generativeqc.compiler.integral-pruning.v1"
     assert diagnostics["outputs_before"] == ["fock", "force"]
     assert diagnostics["outputs_after"] == ["fock"]
     assert diagnostics["removed_outputs"] == ["force"]

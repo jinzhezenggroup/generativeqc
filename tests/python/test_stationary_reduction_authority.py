@@ -3,14 +3,16 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_cuda import emit_stationary_scientific_kernels
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import (
+    emit_stationary_scientific_kernels,
+)
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.tensor import Program
+from generativeqc_compiler.tensor import Program
 
 
 def plan(ecp: bool = False) -> StationaryGradientPlan:
@@ -52,7 +54,7 @@ def test_native_reduction_cannot_ignore_changed_program_coefficients(
 
 
 def test_native_reduction_rejects_unsupported_external_source_inventory() -> None:
-    from vibeqc_compiler.method.stationary_cuda import emit_stationary_cuda
+    from generativeqc_compiler.method.stationary_cuda import emit_stationary_cuda
 
     source = emit_stationary_cuda("", functional=1, plan=plan(ecp=True))
     assert "constexpr bool stationary_native_reduction_supported = false;" in source

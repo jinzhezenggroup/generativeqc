@@ -6,10 +6,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.native_runtime import compile_runtime_bundle
-from vibeqc_compiler.common.paths import asset_path
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.native_runtime import compile_runtime_bundle
+from generativeqc_compiler.common.paths import asset_path
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -33,7 +33,7 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
+from generativeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
 
 
 def tensor(
@@ -356,7 +356,7 @@ import ctypes
 import subprocess
 class BlockRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'vibeqc', 'pyscf', 'cupy', 'torch'}:
+        if fullname.split('.')[0] in {'generativeqc', 'pyscf', 'cupy', 'torch'}:
             raise AssertionError('unexpected runtime import: ' + fullname)
 sys.meta_path.insert(0, BlockRuntime())
 def blocked(*args, **kwargs):
@@ -365,12 +365,12 @@ ctypes.CDLL = blocked
 subprocess.run = blocked
 subprocess.Popen = blocked
 subprocess.check_output = blocked
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan, StationaryMeanField, SCF_POINT_MODEL,
 )
-from vibeqc_compiler.tensor.cpu import emit_cpu
-from vibeqc_compiler.xc.grid_native import emit_grid_contraction
+from generativeqc_compiler.tensor.cpu import emit_cpu
+from generativeqc_compiler.xc.grid_native import emit_grid_contraction
 plan = StationaryGradientPlan(resolve_method('PBE'), StationaryMeanField(SCF_POINT_MODEL))
 program = plan.integral_block('coulomb', terms=3).weights
 first = emit_cpu(program)
@@ -379,7 +379,7 @@ assert 'tensor_cpu' in first[0]
 first = emit_grid_contraction(3)
 assert first == emit_grid_contraction(3)
 assert 'grid_contract' in first
-assert 'namespace vibeqc_grid_adjoint {' in first
+assert 'namespace generativeqc_grid_adjoint {' in first
 assert 'grid_response_adjoint.hpp' not in first
 """
     subprocess.run(

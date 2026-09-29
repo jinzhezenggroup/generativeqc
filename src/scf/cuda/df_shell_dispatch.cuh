@@ -2,7 +2,7 @@
 
 #include "scf/cuda/df_shell_derivatives.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 /** Host-only launch arguments. No numerical implementation or policy is included. */
 struct DfShellLaunch {
   const double* positions;
@@ -25,4 +25,4 @@ struct DfShellDispatch {
   cudaError_t (*packets)(std::span<const DfShellBasisView>, std::span<const DfShellBasisView>,
                          const DfShellLaunch&);
 };
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

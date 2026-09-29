@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc._cpu_force_resources import CPU_FORCE_HOST_CAP, cpu_force_inventory
-from vibeqc._stationary_cpu import _admit_work
-from vibeqc_compiler.method import resolve_method
+from generativeqc._cpu_force_resources import CPU_FORCE_HOST_CAP, cpu_force_inventory
+from generativeqc._stationary_cpu import _admit_work
+from generativeqc_compiler.method import resolve_method
 
 
 def inputs(*, ecp: bool = True) -> tuple[typing.Any, typing.Any, tuple[int, ...]]:
@@ -148,7 +148,7 @@ def test_f_shell_rejected_before_work() -> None:
 def test_component_executor_rejects_invalid_metadata_before_compilation(
     invalid: str, monkeypatch: typing.Any, tmp_path: typing.Any
 ) -> None:
-    from vibeqc import _stationary_cpu_components as module
+    from generativeqc import _stationary_cpu_components as module
 
     _, basis, _ = inputs()
     tile = 1

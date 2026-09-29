@@ -17,7 +17,7 @@ DEVICES = [
     pytest.param(
         "cuda",
         marks=pytest.mark.skipif(
-            os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1",
+            os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1",
             reason="explicit real-device ECP gate",
         ),
     ),
@@ -62,7 +62,7 @@ def select_fixture(
         if spin:
             # The cationic doublet has a symmetry-degenerate pi hole and
             # oscillates between equivalent integer occupations in both
-            # VibeQC and an independent PySCF solve. The anionic doublet has
+            # GenerativeQC and an independent PySCF solve. The anionic doublet has
             # a nondegenerate sigma* frontier while retaining the same pinned
             # two-center LANL2DZ/STO-3G ECP fixture.
             mol.charge = -1
@@ -90,7 +90,7 @@ def select_fixture(
         if not method.endswith("uks"):
             return original_reference(mol, state, method)
         # The independent atomic guess avoids the slowly rotating open-shell
-        # basin reached from the one-electron guess. Do not seed from VibeQC.
+        # basin reached from the one-electron guess. Do not seed from GenerativeQC.
         record_property("independent_initial_guess", "atom")
         record_property("independent_maximum_cycles", 600)
         return original_reference(
@@ -149,7 +149,7 @@ def test_halogen_recovery_energy_certifies_exportable_physical_projector(
     representation: str,
 ) -> None:
     """A recovered energy success must certify the same state used by forces."""
-    from vibeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc._ks_snapshot import NativeKsSnapshot
 
     atoms, basis, mol = heavy_fixture("I", spin=1)
     basis = replace(basis, representation=representation)

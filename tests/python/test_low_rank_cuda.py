@@ -6,27 +6,27 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
 from test_low_rank import DenseColumns, factors
 from test_low_rank_consumers import dense_approximation
 from test_low_rank_source import source_for
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
 
-from tools.vibeqc_posthf.coulomb_columns import CoulombColumns
-from tools.vibeqc_posthf.low_rank import IncrementalCholesky
-from tools.vibeqc_posthf.low_rank_consumers import LowRankProvider
-from tools.vibeqc_posthf.low_rank_cuda import (
+from tools.generativeqc_posthf.coulomb_columns import CoulombColumns
+from tools.generativeqc_posthf.low_rank import IncrementalCholesky
+from tools.generativeqc_posthf.low_rank_consumers import LowRankProvider
+from tools.generativeqc_posthf.low_rank_cuda import (
     CudaIncrementalCholesky,
     compile_cholesky_cuda,
 )
-from tools.vibeqc_posthf.sources import pointer
+from tools.generativeqc_posthf.sources import pointer
 
 
 @pytest.fixture(scope="module")
 def artifact(tmp_path_factory: typing.Any) -> typing.Any:
-    if os.environ.get("VIBEQC_TEST_LOW_RANK_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_LOW_RANK_CUDA=1 in a scheduled GPU job")
+    if os.environ.get("GENERATIVEQC_TEST_LOW_RANK_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_LOW_RANK_CUDA=1 in a scheduled GPU job")
     if not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("low-rank real GPU tests require Slurm")
     compiler = CudaCompilerAdapter(
@@ -152,10 +152,10 @@ def test_cuda_rejected_schur_column_preserves_native_prefix(
 def test_cuda_staged_initializer_matches_exact_cleanup_under_budget(
     artifact: typing.Any,
 ) -> None:
+    from generativeqc.fock import FockPlan
     from test_low_rank_refinement import basis_for
-    from vibeqc.fock import FockPlan
 
-    from tools.vibeqc_posthf.low_rank_refinement import (
+    from tools.generativeqc_posthf.low_rank_refinement import (
         RefinementStage,
         solve_refined_rhf,
     )

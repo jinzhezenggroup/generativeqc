@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc.gpu_state import AmplitudeSnapshot
-from tools.vibeqc_cc.history_transport import (
+from tools.generativeqc_cc.gpu_state import AmplitudeSnapshot
+from tools.generativeqc_cc.history_transport import (
     HistoryRecyclePolicy,
     TargetResidualEvaluator,
     recycle_diis_history,
 )
-from tools.vibeqc_cc.state_transport import (
+from tools.generativeqc_cc.state_transport import (
     StateIdentity,
     StateTransport,
     StateTransportRequest,

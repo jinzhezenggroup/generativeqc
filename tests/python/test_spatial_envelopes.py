@@ -4,10 +4,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.ao import jet_indices
-from vibeqc_compiler.dft.envelopes import ao_region_envelopes, derivative_domain
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.ao import jet_indices
+from generativeqc_compiler.dft.envelopes import ao_region_envelopes, derivative_domain
 
 
 @pytest.fixture(params=["cartesian", "spherical"])

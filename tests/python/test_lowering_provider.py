@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.lowering_provider import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.lowering_provider import (
     LoweringCandidate,
     LoweringRequest,
     ProviderDescriptor,
     collect_lowering_candidates,
     lowering_diagnostics,
 )
-from vibeqc_compiler.common.schedule import ScheduleContract
-from vibeqc_compiler.common.specialization import TargetCapabilities
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.schedule import ScheduleContract
+from generativeqc_compiler.common.specialization import TargetCapabilities
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -23,13 +23,13 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_providers import (
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_providers import (
     CubReductionProvider,
     reduction_provider_candidates,
     tensor_lowering_diagnostics,
 )
-from vibeqc_compiler.tensor.cuda_search import estimate_schedule
+from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
 TARGET = cuda_target_info("sm_80")
 
@@ -137,7 +137,7 @@ def test_lowering_diagnostics_canonicalizes_candidate_order() -> None:
         shape=(17, 129),
     )
     generated = ProviderDescriptor(
-        name="vibeqc.generated_cuda",
+        name="generativeqc.generated_cuda",
         kind="generated",
         implementation="tensor-cuda-emitter",
     )
@@ -237,10 +237,10 @@ def test_tensor_generated_cuda_provider_is_explicit() -> None:
     plan = plan_cuda(_vector_program(), TARGET)
     report = tensor_lowering_diagnostics(plan)
 
-    assert report["providers"] == ["vibeqc.generated_cuda"]
+    assert report["providers"] == ["generativeqc.generated_cuda"]
     assert report["candidates"]
     assert all(
-        candidate["providers"][0]["name"] == "vibeqc.generated_cuda"
+        candidate["providers"][0]["name"] == "generativeqc.generated_cuda"
         for candidate in report["candidates"]
     )
 
@@ -260,7 +260,7 @@ def test_tensor_cublas_is_explicit_composite_lowering(
 
     assert [provider["name"] for provider in candidate["providers"]] == [
         "nvidia.cublas",
-        "vibeqc.generated_cuda",
+        "generativeqc.generated_cuda",
     ]
     assert candidate["workspace_bytes"] == plan.library_bytes
     assert candidate["provider_bytes"] == plan.provider_bytes
@@ -313,7 +313,7 @@ def test_generated_and_cub_reduction_providers_share_one_request() -> None:
     assert candidates[1].implementation == "tensor-reduce-cub-block-reduce"
     assert [provider.name for provider in candidates[1].providers] == [
         "nvidia.cccl.cub",
-        "vibeqc.generated_cuda",
+        "generativeqc.generated_cuda",
     ]
 
     cub = plan_cuda(
@@ -332,7 +332,7 @@ def test_generated_and_cub_reduction_providers_share_one_request() -> None:
     )
     assert [provider["name"] for provider in selected["providers"]] == [
         "nvidia.cccl.cub",
-        "vibeqc.generated_cuda",
+        "generativeqc.generated_cuda",
     ]
 
 
@@ -345,7 +345,9 @@ def test_schedule_contract_carries_resolved_lowering_identity() -> None:
     provenance = dict(contract.provenance)
 
     assert provenance["lowering_identity"] == lowering["identity"]
-    assert provenance["lowering_providers"] == "nvidia.cublas,vibeqc.generated_cuda"
+    assert (
+        provenance["lowering_providers"] == "nvidia.cublas,generativeqc.generated_cuda"
+    )
 
 
 @pytest.mark.parametrize("evidence", [None, False, 0, 1, "true"])

@@ -1,7 +1,7 @@
 """Keep CUDA resource admission conservative for complete PTXAS stack reports."""
 
 import pytest
-from vibeqc_compiler.common.cuda_resources import parse_resources
+from generativeqc_compiler.common.cuda_resources import parse_resources
 
 
 def _record(frame: int, cumulative: int | None, newline: str = "\n") -> str:

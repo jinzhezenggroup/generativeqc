@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_DF_GRADIENT_HPP
-#define VIBEQC_SCF_CUDA_DF_GRADIENT_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_DF_GRADIENT_HPP
+#define GENERATIVEQC_SCF_CUDA_DF_GRADIENT_HPP
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +11,7 @@
 #include "core/types.hpp"
 #include "runtime/strided_range.hpp"
 #include "scf/df_response_weights.hpp"
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 struct CudaDensityFittingIntegralSource;
 struct CudaDensityFittingJkPlan;
 /** Bind the prepared owner's immutable source after copying that source into
@@ -176,12 +176,11 @@ struct DfGradientResources {
  * Each domain is tiled independently; maximum_bytes bounds host numeric
  * staging and device allocations separately. Output changes only on success.
  */
-vibeqc_status execute_cuda_df_gradient(int device, const core::System& orbital,
-                                       const core::System& auxiliary, std::span<const double> bar_a,
-                                       std::span<const double> bar_m, unsigned schedule,
-                                       std::size_t maximum_bytes, std::size_t maximum_tile_elements,
-                                       std::vector<double>& gradient, std::string& detail,
-                                       DfGradientResources* resources = nullptr);
+generativeqc_status execute_cuda_df_gradient(
+    int device, const core::System& orbital, const core::System& auxiliary,
+    std::span<const double> bar_a, std::span<const double> bar_m, unsigned schedule,
+    std::size_t maximum_bytes, std::size_t maximum_tile_elements, std::vector<double>& gradient,
+    std::string& detail, DfGradientResources* resources = nullptr);
 /** Contract one caller-owned A/M weight tile into a detached partial gradient.
  * kind=0 maps
  * A[mu,nu,P], kind=1 maps M[P,Q]. The strided range addresses the
@@ -190,13 +189,11 @@ vibeqc_status execute_cuda_df_gradient(int device, const core::System& orbital,
  * This call owns only bounded metadata/device staging
  * and one O(Natom) result.
  */
-vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbital,
-                                            const core::System& auxiliary, unsigned kind,
-                                            runtime::StridedRange range,
-                                            std::span<const double> weights, unsigned schedule,
-                                            std::size_t maximum_bytes,
-                                            std::vector<double>& gradient, std::string& detail,
-                                            DfGradientResources* resources = nullptr);
+generativeqc_status execute_cuda_df_gradient_tile(
+    int device, const core::System& orbital, const core::System& auxiliary, unsigned kind,
+    runtime::StridedRange range, std::span<const double> weights, unsigned schedule,
+    std::size_t maximum_bytes, std::vector<double>& gradient, std::string& detail,
+    DfGradientResources* resources = nullptr);
 /** HF adapter using the same generic derivative consumer on the plan's stream.
  * Values are borrowed from raw_a when resident, or regenerated from source.
  * device_metric selects device response contractions, with source generation
@@ -214,7 +211,7 @@ vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbi
  * Insufficient projection space and explicit scalar ablations keep the
  * general bounded route; receiving a view alone does not prove its execution.
  */
-vibeqc_status execute_cuda_df_hf_gradient(
+generativeqc_status execute_cuda_df_hf_gradient(
     int device, void* stream, CudaDensityFittingIntegralSource* source, std::size_t source_index,
     const core::System& orbital, const core::System& auxiliary, std::span<const double> raw_a,
     const std::vector<double>& metric, const std::vector<double>& inverse,
@@ -226,5 +223,5 @@ vibeqc_status execute_cuda_df_hf_gradient(
     const CudaDfPackedRawTensorView* packed_raw = nullptr,
     const CudaDfWhitenedTensorView* whitened = nullptr,
     const CudaDfOccupiedResponseView* occupied = nullptr);
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

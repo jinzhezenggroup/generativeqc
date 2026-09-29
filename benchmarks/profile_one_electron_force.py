@@ -1,4 +1,4 @@
-"""Capture warm VibeQC energy-plus-force replays for kernel attribution.
+"""Capture warm GenerativeQC energy-plus-force replays for kernel attribution.
 
 Run this helper under Nsight Systems with ``--capture-range=cudaProfilerApi``.
 The cold execution prepares the fixed-topology plan and warm density before the
@@ -23,7 +23,7 @@ try:
 except ModuleNotFoundError:
     from _retention import raw_output_path
 from compare_gpu4pyscf_batch import scaled_geometries
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 
 def main() -> None:
@@ -73,7 +73,7 @@ def main() -> None:
                 "coordinate-wise DF response was retired; use an archived source checkout"
             )
 
-    os.environ["VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING"] = args.mode.removeprefix(
+    os.environ["GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING"] = args.mode.removeprefix(
         "generated_"
     )
 
@@ -93,7 +93,7 @@ def main() -> None:
     systems = scaled_geometries(case.atoms, args.batch)
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=100,

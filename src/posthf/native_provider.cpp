@@ -11,7 +11,7 @@
 #include "posthf/cuda_transform.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
                                          const hf::PhysicalReference& reference, std::size_t budget,
                                          unsigned axis_tile)
@@ -29,7 +29,7 @@ NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSou
   std::size_t largest_shell = 0;
   for (const auto& shell : source_.orbital().shells) {
     const auto l = shell.angular_momentum;
-    const auto count = source_.orbital().basis_representation == VIBEQC_BASIS_SPHERICAL
+    const auto count = source_.orbital().basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                            ? 2 * l + 1
                            : (l + 1) * (l + 2) / 2;
     largest_shell = std::max(largest_shell, static_cast<std::size_t>(count));
@@ -86,10 +86,9 @@ std::size_t NativeBlockProvider::batch_capacity(const std::array<std::size_t, 4>
   return (budget_ - common) / per_request;
 }
 
-std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector<MOSlots>& requests,
-                                                               bool cuda, int device,
-                                                               vibeqc_tensor::Metrics* metrics,
-                                                               ProviderWork* work) const {
+std::vector<std::vector<double>> NativeBlockProvider::get_many(
+    const std::vector<MOSlots>& requests, bool cuda, int device,
+    generativeqc_tensor::Metrics* metrics, ProviderWork* work) const {
   if (requests.empty()) return {};
   const auto provider_started = std::chrono::steady_clock::now();
 
@@ -182,12 +181,12 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
   struct DeviceBatch {
     void* pointer{};
     ~DeviceBatch() {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
       if (pointer) posthf_cuda_batch_destroy_v1(pointer);
 #endif
     }
   } device_batch;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   char error[2048]{};
   auto check = [&](int status) {
     if (status == 2) throw std::bad_alloc();
@@ -195,7 +194,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
   };
 #endif
   if (cuda) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     std::vector<std::size_t> batch_shapes;
     std::vector<std::size_t> prefix_leaders;
     std::vector<double> panels;
@@ -275,7 +274,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
             }
           }
           if (cuda) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
             if (work) {
               work->cuda_transform_calls = checked_add(work->cuda_transform_calls, states.size());
               work->cuda_batch_calls = checked_add(work->cuda_batch_calls, 1);
@@ -320,7 +319,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
         }
 
   if (cuda) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     std::vector<double*> output_pointers;
     std::vector<std::size_t> output_sizes;
     output_pointers.reserve(states.size());
@@ -336,7 +335,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
                                         output_sizes.data(), output_sizes.size(), error,
                                         sizeof(error)));
     if (metrics) {
-      vibeqc_tensor::Metrics measured{};
+      generativeqc_tensor::Metrics measured{};
       check(posthf_cuda_batch_metrics_v1(device_batch.pointer, &measured, error, sizeof(error)));
       metrics->input_ms += measured.input_ms;
       metrics->output_ms += measured.output_ms;
@@ -362,7 +361,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(const std::vector
 }
 
 std::vector<double> NativeBlockProvider::get(const MOSlots& slots, bool cuda, int device,
-                                             vibeqc_tensor::Metrics* metrics,
+                                             generativeqc_tensor::Metrics* metrics,
                                              ProviderWork* work) const {
   std::vector<MOSlots> requests{slots};
   auto outputs = get_many(requests, cuda, device, metrics, work);
@@ -449,7 +448,7 @@ DensityFittedBlockProvider::DensityFittedBlockProvider(const RawSource& source,
 }
 
 std::vector<double> DensityFittedBlockProvider::get(const MOSlots& slots, bool cuda, int device,
-                                                    vibeqc_tensor::Metrics* metrics) const {
+                                                    generativeqc_tensor::Metrics* metrics) const {
   (void)device;
   (void)metrics;
   if (cuda) throw std::runtime_error("CUDA density-fitted MO block execution is not implemented");
@@ -493,4 +492,4 @@ std::vector<double> DensityFittedBlockProvider::get(const MOSlots& slots, bool c
   return output;
 }
 
-}  // namespace vibeqc::posthf
+}  // namespace generativeqc::posthf

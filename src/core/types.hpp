@@ -1,14 +1,14 @@
-#ifndef VIBEQC_CORE_TYPES_HPP
-#define VIBEQC_CORE_TYPES_HPP
+#ifndef GENERATIVEQC_CORE_TYPES_HPP
+#define GENERATIVEQC_CORE_TYPES_HPP
 
 #include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-namespace vibeqc::core {
+namespace generativeqc::core {
 
 struct Atom {
   int atomic_number{};
@@ -42,13 +42,13 @@ struct System {
   int charge{};
   unsigned multiplicity{1};
   int electron_count{};
-  vibeqc_basis_representation basis_representation{VIBEQC_BASIS_CARTESIAN};
+  generativeqc_basis_representation basis_representation{GENERATIVEQC_BASIS_CARTESIAN};
   std::vector<EcpTerm> ecp_terms;
 };
 
 struct ContextState {
-  vibeqc_backend requested_backend{VIBEQC_BACKEND_CPU_REFERENCE};
-  vibeqc_backend executed_backend{VIBEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend requested_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   int device_id{0};
   std::string device_name;
   int compute_capability_major{};
@@ -67,6 +67,6 @@ struct ContextState {
   bool aot_profile_compatible{};
 };
 
-}  // namespace vibeqc::core
+}  // namespace generativeqc::core
 
 #endif

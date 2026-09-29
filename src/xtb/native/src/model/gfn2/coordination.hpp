@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_COORDINATION_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_COORDINATION_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_COORDINATION_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_COORDINATION_HPP
 
 #include <cstdint>
 #include <string>
@@ -9,7 +9,7 @@
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 /*
  * Geometry-independent data for the GFN2 double-exponential coordination
@@ -24,7 +24,7 @@ struct CoordinationPlan {
 };
 
 /* Build a reusable ragged-batch plan from atomic numbers and molecule offsets. */
-vibeqc_xtb_status_t make_coordination_plan(std::int64_t batch_size, std::int64_t total_atoms,
+generativeqc_xtb_status_t make_coordination_plan(std::int64_t batch_size, std::int64_t total_atoms,
                                            const std::int64_t* atom_offsets,
                                            const std::int32_t* atomic_numbers,
                                            CoordinationPlan& plan, std::string& error);
@@ -34,7 +34,7 @@ vibeqc_xtb_status_t make_coordination_plan(std::int64_t batch_size, std::int64_t
  * layout in bohr. The output contains total_atoms values and is overwritten.
  * A successful steady-state call does not allocate.
  */
-vibeqc_xtb_status_t evaluate_coordination_cpu(const CoordinationPlan& plan, const double* positions,
+generativeqc_xtb_status_t evaluate_coordination_cpu(const CoordinationPlan& plan, const double* positions,
                                               double* coordination_numbers, std::string& error);
 
 /*
@@ -46,10 +46,10 @@ vibeqc_xtb_status_t evaluate_coordination_cpu(const CoordinationPlan& plan, cons
  * an O(n_atom^2) Jacobian. Gradients are dE/dR (not forces), in atom-major xyz
  * layout, and are accumulated into the caller-owned buffer.
  */
-vibeqc_xtb_status_t add_coordination_gradient_cpu(const CoordinationPlan& plan,
+generativeqc_xtb_status_t add_coordination_gradient_cpu(const CoordinationPlan& plan,
                                                   const double* positions, const double* dE_dcn,
                                                   double* gradients, std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_COORDINATION_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_COORDINATION_HPP

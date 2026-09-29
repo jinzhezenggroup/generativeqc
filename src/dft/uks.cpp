@@ -21,7 +21,7 @@
 #include "solver/self_consistent.hpp"
 #include "xc_cpu_generated.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 using namespace reference;
 
@@ -281,10 +281,10 @@ ScfResult run_uks_impl(
     bool stabilized{};
   };
 
-  const ::vibeqc::solver::SelfConsistentPolicy policy{
+  const ::generativeqc::solver::SelfConsistentPolicy policy{
       options.max_iterations, options.energy_tolerance, options.density_tolerance, residual_gate,
       true};
-  auto outcome = ::vibeqc::solver::run_self_consistent(
+  auto outcome = ::generativeqc::solver::run_self_consistent(
       UksState{std::move(alpha), std::move(beta)}, policy,
       [&](const UksState& state, unsigned) {
         const bool stabilized = stabilize_occupations;
@@ -323,7 +323,7 @@ ScfResult run_uks_impl(
                                  stabilized};
       },
       [&](UksState& state, UksLoopEvaluation evaluation,
-          const ::vibeqc::solver::SelfConsistentProgress& progress) {
+          const ::generativeqc::solver::SelfConsistentProgress& progress) {
         runtime::sample_cpu_capacity(runtime::add_capacity(
             runtime::add_capacity(
                 runtime::add_capacity(
@@ -352,7 +352,7 @@ ScfResult run_uks_impl(
           return UksState{std::move(state.alpha), std::move(state.beta)};
         return UksState{std::move(evaluation.next_alpha), std::move(evaluation.next_beta)};
       },
-      [&](const ::vibeqc::solver::SelfConsistentProgress& progress,
+      [&](const ::generativeqc::solver::SelfConsistentProgress& progress,
           const UksLoopEvaluation& evaluation) {
         result.energy = progress.energy;
         result.iterations = progress.iteration;
@@ -487,7 +487,7 @@ ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const std::vector<double>* initial_density) {
   auto spec =
       make_global_hybrid_fock_spec(FockSpin::Unrestricted, dft::generated::kB3lypExactExchange);
-  if (options.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE) {
+  if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
     spec.coulomb.approximation = FockApproximation::DensityFitted;
     spec.exchange.approximation = FockApproximation::DensityFitted;
   }
@@ -504,7 +504,7 @@ ScfResult run_wb97mv_uks(const PreparedFockPlan& primary, const PreparedFockPlan
                          const ScfOptions& options, dft::nlc::Vv10Plan& nonlocal,
                          const std::vector<double>* initial_density) {
   require_wb97mv_composition(primary.strategy(), correction.strategy(), nonlocal.parameters());
-  if (nonlocal.backend() != VIBEQC_BACKEND_CPU_REFERENCE ||
+  if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
       nonlocal.resources().point_count != grid.point_count())
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
   return run_uks_impl(primary, &correction, basis, grid, options, evaluate_wb97mv_xc_uks, "WB97M-V",
@@ -529,4 +529,4 @@ ScfResult run_cam_b3lyp_uks(const PreparedFockPlan& primary,
   return run_uks_impl(primary, &long_range_correction, basis, grid, options,
                       evaluate_cam_b3lyp_xc_uks, "CAM-B3LYP", initial_density, nullptr);
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

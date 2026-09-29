@@ -10,8 +10,8 @@ use the generated kernels without rebuilding them.
 
 Install the optional reference dependency with `pip install -e '.[autotune]'`.
 Tuning requires NVCC, PTXAS, CUOBJDump, CMake, Ninja, a C++ compiler, and the
-matching VibeQC source checkout. The baseline native library must be a Release
-build with `VIBEQC_CUDA_FAST_COMPILE=OFF`. Rebuild it after changing native code,
+matching GenerativeQC source checkout. The baseline native library must be a Release
+build with `GENERATIVEQC_CUDA_FAST_COMPILE=OFF`. Rebuild it after changing native code,
 generator code, or Python runtime policy; the command checks its source identity
 before starting a search. A wheel installation can pass `--source-dir` pointing
 to the matching source checkout. CPU use and profile management do not require
@@ -24,16 +24,16 @@ logical CUDA device 0 within the allocated visibility.
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=02:00:00 env VIBEQC_LIBRARY="$PWD/build/libvibeqc.so" \
-  vibeqc autotune --quick water.xyz --basis def2-svp
+  --time=02:00:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  generativeqc autotune --quick water.xyz --basis def2-svp
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=04:00:00 env VIBEQC_LIBRARY="$PWD/build/libvibeqc.so" \
-  vibeqc autotune --full water.xyz --basis def2-tzvp --batch 4 \
+  --time=04:00:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+  generativeqc autotune --full water.xyz --basis def2-tzvp --batch 4 \
   --budget-seconds 14000 --export local-profile.zip
 ```
 
-The same commands are available through `python -m vibeqc`. On systems without
+The same commands are available through `python -m generativeqc`. On systems without
 Slurm, run inside the allocation provided by the local scheduler. The tuner and
 its child processes preserve `CUDA_VISIBLE_DEVICES`; they do not request a
 second allocation. Set `CUDA_PATH` or `--nvcc` to select a toolkit.
@@ -121,7 +121,7 @@ functional, spin, source and target architecture without materializing another
 quadrature. A validated local bundle may replace the portable schedule only
 when every batch item has an exact workload match and all matched items select
 the same resolved schedule, including its point tile. A changed geometry or
-mixed batch with any miss keeps the portable default. `VIBEQC_PROFILE=off`
+mixed batch with any miss keeps the portable default. `GENERATIVEQC_PROFILE=off`
 continues to provide the tuning/A-B bypass.
 
 Real-device component qualification has exercised this boundary on an NVIDIA
@@ -152,15 +152,15 @@ records and resolved schedule identity.
 
 ## Reuse and diagnostics
 
-Profiles live under `$XDG_CACHE_HOME/vibeqc/profiles`, defaulting to
-`~/.cache/vibeqc/profiles`. `VIBEQC_PROFILE_CACHE` can select another directory.
+Profiles live under `$XDG_CACHE_HOME/generativeqc/profiles`, defaulting to
+`~/.cache/generativeqc/profiles`. `GENERATIVEQC_PROFILE_CACHE` can select another directory.
 Python CUDA calculators use this precedence:
 
-1. A compatible explicit `VIBEQC_PROFILE=/path/to/accepted/bundle`.
+1. A compatible explicit `GENERATIVEQC_PROFILE=/path/to/accepted/bundle`.
 2. A compatible validated local profile selected by its exact identity.
 3. The baseline library's exact official profile or portable CUDA fallback.
 
-`VIBEQC_PROFILE=off` selects the baseline library directly. `VIBEQC_LIBRARY`
+`GENERATIVEQC_PROFILE=off` selects the baseline library directly. `GENERATIVEQC_LIBRARY`
 locates that baseline and does not disable local profile reuse. CPU calculators
 do not consult CUDA profiles or probe hardware.
 
@@ -173,7 +173,7 @@ NVCC/PTXAS must match the recorded compiler identities; reuse of an immutable
 accepted binary does not require those compilers to be installed.
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 calculator = Calculator(method="rhf", basis="def2-svp", device="cuda")
 print(calculator.profile_diagnostics)
@@ -181,14 +181,14 @@ print(calculator.profile_diagnostics)
 
 Diagnostics report `official`, `local`, or `portable`, the selected identity,
 tuned consumers, optional validated DFT schedule winners, and incompatible-cache
-rejection reasons. `vibeqc profile
+rejection reasons. `generativeqc profile
 diagnose` probes the allocated GPU and prints the same selection. Static
 management commands require no GPU:
 
 ```bash
-vibeqc autotune --show-profile
-vibeqc profile show
-vibeqc autotune --clear-profile
+generativeqc autotune --show-profile
+generativeqc profile show
+generativeqc autotune --clear-profile
 ```
 
 Clearing profiles deactivates them while preserving immutable binaries already
@@ -199,9 +199,9 @@ loaded by live processes. Those processes retain their selected library.
 Export/import carries the binary, manifest, and evidence together:
 
 ```bash
-vibeqc profile export /path/to/accepted/bundle local-profile.zip
+generativeqc profile export /path/to/accepted/bundle local-profile.zip
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=00:02:00 vibeqc profile install local-profile.zip
+  --time=00:02:00 generativeqc profile install local-profile.zip
 ```
 
 Installation checks the same hardware, source, ABI, toolchain, and artifact
@@ -212,5 +212,5 @@ installed because it contains no executable kernels or matching evidence.
 
 Local results describe the user's measured workload. Official repository
 profiles remain the source for published benchmark claims. Native C/C++ clients
-can load the exported `libvibeqc.so` explicitly; automatic cache selection is
+can load the exported `libgenerativeqc.so` explicitly; automatic cache selection is
 provided by the Python CUDA calculator interface.

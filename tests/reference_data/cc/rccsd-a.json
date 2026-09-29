@@ -6507,7 +6507,7 @@
   "numpy": "2.2.6",
   "pyscf": "2.14.0",
   "python": "3.11.16",
-  "schema": "vibeqc.rccsd.fixed-amplitude-reference",
+  "schema": "generativeqc.rccsd.fixed-amplitude-reference",
   "scipy": "1.15.3",
   "stability": {
     "identical_cases": true,
@@ -6516,7 +6516,7 @@
   "threads": [
     {
       "architecture": "SkylakeX",
-      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/vibeqc-148-a/.venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-56d6093b.so",
+      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/generativeqc-148-a/.venv/lib/python3.11/site-packages/numpy.libs/libscipy_openblas64_-56d6093b.so",
       "internal_api": "openblas",
       "num_threads": 1,
       "prefix": "libscipy_openblas",
@@ -6526,7 +6526,7 @@
     },
     {
       "architecture": "SkylakeX",
-      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/vibeqc-148-a/.venv/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-68440149.so",
+      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/generativeqc-148-a/.venv/lib/python3.11/site-packages/scipy.libs/libscipy_openblas-68440149.so",
       "internal_api": "openblas",
       "num_threads": 1,
       "prefix": "libscipy_openblas",
@@ -6536,7 +6536,7 @@
     },
     {
       "architecture": "Prescott",
-      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/vibeqc-148-a/.venv/lib/python3.11/site-packages/pyscf/lib/libopenblas-r0-f650aae0.3.3.so",
+      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/generativeqc-148-a/.venv/lib/python3.11/site-packages/pyscf/lib/libopenblas-r0-f650aae0.3.3.so",
       "internal_api": "openblas",
       "num_threads": 1,
       "prefix": "libopenblas",
@@ -6545,7 +6545,7 @@
       "version": null
     },
     {
-      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/vibeqc-148-a/.venv/lib/python3.11/site-packages/pyscf/lib/libgomp-a34b3233.so.1.0.0",
+      "filepath": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/generativeqc-148-a/.venv/lib/python3.11/site-packages/pyscf/lib/libgomp-a34b3233.so.1.0.0",
       "internal_api": "openmp",
       "num_threads": 1,
       "prefix": "libgomp",

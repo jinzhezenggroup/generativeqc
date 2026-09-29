@@ -6,9 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_cuda import emit_stationary_cuda
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import emit_stationary_cuda
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,

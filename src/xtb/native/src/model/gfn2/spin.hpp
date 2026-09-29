@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_SPIN_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_SPIN_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_SPIN_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_SPIN_HPP
 
 #include <cstdint>
 #include <string>
@@ -12,7 +12,7 @@
 #include "model/gfn2/wavefunction.hpp"
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 /*
  * Geometry-independent, atom-local GFN2 spin-polarization parameters.
@@ -75,7 +75,7 @@ static_assert(std::is_standard_layout_v<SpinPolarizationView>);
  * not. The supplied basis and wavefunction must describe one identical ragged
  * topology and chemical identity.
  */
-vibeqc_xtb_status_t make_spin_polarization_plan(const BasisPlan& basis,
+generativeqc_xtb_status_t make_spin_polarization_plan(const BasisPlan& basis,
                                              const WavefunctionLayout& wavefunction,
                                              SpinPolarizationPlan& plan, std::string& error);
 
@@ -93,7 +93,7 @@ vibeqc_xtb_status_t make_spin_polarization_plan(const BasisPlan& basis,
  * arithmetic are preflighted before either output is modified, providing
  * batch-atomic failure without dynamic allocation or caller scratch.
  */
-vibeqc_xtb_status_t evaluate_spin_polarization_cpu(SpinPolarizationView view,
+generativeqc_xtb_status_t evaluate_spin_polarization_cpu(SpinPolarizationView view,
                                                 const double* shell_populations,
                                                 double* spin_energies, double* shell_potentials,
                                                 std::string& error);
@@ -113,7 +113,7 @@ vibeqc_xtb_status_t evaluate_spin_polarization_cpu(SpinPolarizationView view,
  *  energy is unchanged, so callers must treat the whole target system as
  *  failed. The routine allocates no memory and needs no scratch.
  */
-vibeqc_xtb_status_t evaluate_spin_polarization_system_cpu(
+generativeqc_xtb_status_t evaluate_spin_polarization_system_cpu(
     SpinPolarizationView view, std::int64_t system, const double* shell_populations,
     double& spin_energy, double* shell_potentials, std::string& error);
 
@@ -123,12 +123,12 @@ vibeqc_xtb_status_t evaluate_spin_polarization_system_cpu(
  * multipoles while failed or inactive peers remain untouched. The accumulator
  * is unchanged on every failure.
  */
-vibeqc_xtb_status_t add_spin_polarization_energy_system_cpu(SpinPolarizationView view,
+generativeqc_xtb_status_t add_spin_polarization_energy_system_cpu(SpinPolarizationView view,
                                                          std::int64_t system,
                                                          const double* shell_populations,
                                                          double& accumulated_energy,
                                                          std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_SPIN_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_SPIN_HPP

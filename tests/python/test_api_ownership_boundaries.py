@@ -5,13 +5,13 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import generativeqc._generated_methods as method_manifest
 import numpy as np
-import vibeqc._generated_methods as method_manifest
-from vibeqc import Atom
-from vibeqc._api_types import Result
-from vibeqc._model_resolution import ModelResolutionInput, resolve_model_identity
-from vibeqc._result_translation import backend_name, copy_force_array
-from vibeqc._warm_state import WarmStartState
+from generativeqc import Atom
+from generativeqc._api_types import Result
+from generativeqc._model_resolution import ModelResolutionInput, resolve_model_identity
+from generativeqc._result_translation import backend_name, copy_force_array
+from generativeqc._warm_state import WarmStartState
 
 
 def test_model_resolution_is_native_free_and_preserves_identity() -> None:
@@ -64,8 +64,8 @@ def test_warm_state_owns_restart_metadata_and_origin() -> None:
 
 
 def test_public_record_types_are_reexported_from_legacy_module() -> None:
-    from vibeqc.calculator import Atom as LegacyAtom
-    from vibeqc.calculator import Result as LegacyResult
+    from generativeqc.calculator import Atom as LegacyAtom
+    from generativeqc.calculator import Result as LegacyResult
 
     assert LegacyAtom is Atom
     assert LegacyResult is Result
@@ -74,7 +74,7 @@ def test_public_record_types_are_reexported_from_legacy_module() -> None:
 def test_internal_owners_do_not_import_execution_facades() -> None:
     """Keep model/result/state owners one-way and independent of the facades."""
 
-    root = Path(__file__).parents[2] / "python" / "vibeqc"
+    root = Path(__file__).parents[2] / "python" / "generativeqc"
     forbidden = {".calculator", ".batch"}
     for name in ("_model_resolution.py", "_result_translation.py", "_warm_state.py"):
         tree = ast.parse((root / name).read_text(encoding="utf-8"))

@@ -32,14 +32,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.common.evidence import file_hash
+from generativeqc_compiler.common.evidence import file_hash
 
-from tools.vibeqc_validation.f_shell_numerics import numerical_error
+from tools.generativeqc_validation.f_shell_numerics import numerical_error
 
 
 def endpoint(config: typing.Any) -> typing.Any:
     """Execute cold, fixed warm, changed cold, and explicit changed warm phases."""
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     method, batch = config["method"], config["batch"]
     water = [
@@ -203,9 +203,9 @@ def main() -> None:
         parser.error("output, positive repeats, and positive batches are required")
     if args.baseline_library is None:
         parser.error(
-            "--baseline-library is required after retirement of VIBEQC_PSSS_WEIGHTED"
+            "--baseline-library is required after retirement of GENERATIVEQC_PSSS_WEIGHTED"
         )
-    current_library = Path(os.environ["VIBEQC_LIBRARY"])
+    current_library = Path(os.environ["GENERATIVEQC_LIBRARY"])
     report = {
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
         "library_sha256": file_hash(current_library),
@@ -233,12 +233,12 @@ def main() -> None:
                     for route in routes:
                         env = {
                             **os.environ,
-                            "VIBEQC_PSSS_WEIGHTED": route,
-                            "VIBEQC_PSSS_RESIDENT_BRA": str(int(resident)),
-                            "VIBEQC_BOUNDED_DIRECT_STREAMING": "force"
+                            "GENERATIVEQC_PSSS_WEIGHTED": route,
+                            "GENERATIVEQC_PSSS_RESIDENT_BRA": str(int(resident)),
+                            "GENERATIVEQC_BOUNDED_DIRECT_STREAMING": "force"
                             if schedule == "paged"
                             else "none",
-                            "VIBEQC_LIBRARY": str(
+                            "GENERATIVEQC_LIBRARY": str(
                                 args.baseline_library
                                 if route == "reference"
                                 else current_library
@@ -275,7 +275,7 @@ def main() -> None:
                         ],
                         # Native class counters currently cover fixed queues;
                         # page traversal is gated separately by endpoint equality.
-                        env={**env, "VIBEQC_BOUNDED_DIRECT_STREAMING": "none"},
+                        env={**env, "GENERATIVEQC_BOUNDED_DIRECT_STREAMING": "none"},
                         text=True,
                         capture_output=True,
                         check=True,

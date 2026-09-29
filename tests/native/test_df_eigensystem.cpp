@@ -21,7 +21,7 @@
 #include "scf/solver/eigen_frame.hpp"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 using namespace scf;
 using Matrix = std::vector<double>;
 void require(bool value, const std::string& detail) {
@@ -67,9 +67,9 @@ Plan make_plan(std::size_t n, std::size_t batch) {
   CudaDensityFittingJkPlan* raw{};
   std::vector<CudaDensityFittingMetricDiagnostic> diagnostic;
   std::string detail;
-  require(create_cuda_density_fitting_jk_plan_tiled(0, batch, n, 1, Matrix(batch, 1),
-                                                    Matrix(batch * n * n, 0), 1e-10, 1, n * n, &raw,
-                                                    diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+  require(create_cuda_density_fitting_jk_plan_tiled(
+              0, batch, n, 1, Matrix(batch, 1), Matrix(batch * n * n, 0), 1e-10, 1, n * n, &raw,
+              diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   return {raw, &destroy_cuda_density_fitting_jk_plan};
 }
@@ -102,7 +102,7 @@ void known_frame(std::size_t n, std::size_t batch) {
   reference_solves = 0;
   require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
                                            coefficients, diagnostic, detail,
-                                           batch - 1) == VIBEQC_STATUS_SUCCESS,
+                                           batch - 1) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   require(reference_solves == 0 && diagnostic.solver_calls == 1 && !diagnostic.workspace_reused,
           "ordinary provider fell back or lost its actual call/lifetime record");
@@ -129,7 +129,7 @@ void known_frame(std::size_t n, std::size_t batch) {
   const auto replay_status = solve_cuda_density_fitting_eigen(
       plan.get(), fixture.f, &fixture.s, &fixture.x, values, coefficients, diagnostic, detail);
   runtime::active_device_resource_ledger.reset();
-  require(replay_status == VIBEQC_STATUS_SUCCESS, detail);
+  require(replay_status == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(diagnostic.workspace_reused && ledger->allocations == 0 && ledger->rejected == 0,
           "ordinary warm eigen replay queried/allocated another workspace");
   for (std::size_t i = 0; i < n; ++i)
@@ -140,17 +140,17 @@ void known_frame(std::size_t n, std::size_t batch) {
   bad_x[0] *= 1.1;
   require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &bad_x, values,
                                            coefficients, diagnostic,
-                                           detail) == VIBEQC_STATUS_NUMERICAL_FAILURE,
+                                           detail) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
           "stale X passed physical eigen/metric checks");
   require(values.empty() && coefficients.empty(), "failed eigen validation published a frame");
-  require(
-      solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
-                                       coefficients, diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
+                                           coefficients, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   verify_projection(fixture, coefficients);
   require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
                                            coefficients, diagnostic, detail,
-                                           batch) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                           batch) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "invalid batch item passed ordinary eigen validation");
   std::cout << "checked ordinary FP64 n=" << n << " batch=" << batch << '\n';
 }
@@ -169,13 +169,13 @@ void rejected_allocation_and_info() {
   const auto status = solve_cuda_density_fitting_eigen(
       plan.get(), fixture.f, &fixture.s, &fixture.x, values, coefficients, diagnostic, detail);
   runtime::active_device_resource_ledger.reset();
-  require(status == VIBEQC_STATUS_OUT_OF_MEMORY && ledger->rejected == 1 && ledger->live == 0,
+  require(status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && ledger->rejected == 1 && ledger->live == 0,
           "ordinary eigen allocation bypassed the global budget or leaked partial state");
   require(values.empty() && coefficients.empty(), "OOM eigen call leaked old output");
-  require(
-      solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
-                                       coefficients, diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
+                                           coefficients, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   for (int info : {-1, 1}) {
     diagnostic.solver_info = info;
     require(!solver::validate_eigen_frame(fixture.f, &fixture.s, values, coefficients, fixture.n,
@@ -186,29 +186,29 @@ void rejected_allocation_and_info() {
   bad_f[0] = std::numeric_limits<double>::quiet_NaN();
   require(solve_cuda_density_fitting_eigen(plan.get(), bad_f, &fixture.s, &fixture.x, values,
                                            coefficients, diagnostic,
-                                           detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "nonfinite input reached ordinary device solver");
   bad_f = fixture.f;
   bad_f[1] += .1;
   require(solve_cuda_density_fitting_eigen(plan.get(), bad_f, &fixture.s, &fixture.x, values,
                                            coefficients, diagnostic,
-                                           detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "nonsymmetric matrix silently selected one triangle");
   // The same adapter supports ordinary symmetric setup solves without S/X.
-  require(
-      solve_cuda_density_fitting_eigen(plan.get(), fixture.f, nullptr, nullptr, values,
-                                       coefficients, diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, nullptr, nullptr, values,
+                                           coefficients, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   const auto original = fixture.f;
   require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
                                            fixture.f, diagnostic,
-                                           detail) == VIBEQC_STATUS_INVALID_ARGUMENT &&
+                                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               fixture.f == original,
           "alias rejection corrupted an eigen input");
   const auto prior = values;
   require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
                                            values, diagnostic,
-                                           detail) == VIBEQC_STATUS_INVALID_ARGUMENT &&
+                                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               values == prior,
           "aliased eigen outputs were modified");
   require(cudaStreamBeginCapture(plan->stream, cudaStreamCaptureModeThreadLocal) == cudaSuccess,
@@ -218,12 +218,12 @@ void rejected_allocation_and_info() {
   cudaGraph_t graph{};
   const auto ended = cudaStreamEndCapture(plan->stream, &graph);
   if (graph) (void)cudaGraphDestroy(graph);
-  require(ended == cudaSuccess && captured == VIBEQC_STATUS_INVALID_ARGUMENT,
+  require(ended == cudaSuccess && captured == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "ordinary eigen operation submitted work into a captured stream");
-  require(
-      solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
-                                       coefficients, diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(solve_cuda_density_fitting_eigen(plan.get(), fixture.f, &fixture.s, &fixture.x, values,
+                                           coefficients, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
 }
 
 void device_overlap_cutoff() {
@@ -238,7 +238,7 @@ void device_overlap_cutoff() {
     std::string detail;
     require(
         solve_cuda_density_fitting_eigen(plan.get(), matrix, s, x, result.values, result.vectors,
-                                         diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+                                         diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
         detail);
     return result;
   };
@@ -262,7 +262,7 @@ void device_overlap_cutoff() {
 void physical_reference_export() {
   // Explicit d polarization distinguishes the two layouts without relying on
   // the device/reference solver to construct any expected invariant.
-  for (auto representation : {VIBEQC_BASIS_CARTESIAN, VIBEQC_BASIS_SPHERICAL}) {
+  for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
     core::System system;
     system.atoms = {{1, {0, 0, -.7}}, {1, {0, 0, .7}}};
     const std::vector<core::Primitive> primitives{
@@ -271,7 +271,8 @@ void physical_reference_export() {
         {0, 0, primitives}, {1, 0, primitives}, {0, 2, {{.6, 1.0}}}, {1, 2, {{.6, 1.0}}}};
     system.basis_representation = representation;
     std::string detail;
-    require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+    require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
     ScfOptions options;
     options.export_physical_reference = true;
     options.screening_tolerance = 0;
@@ -286,16 +287,16 @@ void physical_reference_export() {
                               "test_cuda_export_device_rebuild",
                               "test_cuda_export_reference_rebuild"};
       for (unsigned mode = 0; mode < 4; ++mode) {
-        setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", mode >= 2 ? "1" : "0", 1);
-        setenv("VIBEQC_DF_REFERENCE_FINAL_EIGEN", mode == 3 ? "1" : "0", 1);
+        setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", mode >= 2 ? "1" : "0", 1);
+        setenv("GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN", mode == 3 ? "1" : "0", 1);
         ScfResult actual;
         {
           runtime::host_trace::Region trace(labels[mode]);
           actual = run_rhf_density_fitting_cuda(system, system, options, 0,
                                                 mode ? &expected.density : nullptr);
         }
-        unsetenv("VIBEQC_DF_FORCE_FINAL_REBUILD");
-        unsetenv("VIBEQC_DF_REFERENCE_FINAL_EIGEN");
+        unsetenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD");
+        unsetenv("GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN");
         require(actual.converged && actual.reference && expected.reference,
                 "DF reference export did not retain a converged frame");
         auto frame = *actual.reference;

@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.native-semilocal-families.v1",
+  "schema": "generativeqc.native-semilocal-families.v1",
   "families": [
     {
       "symbol": "Lda",

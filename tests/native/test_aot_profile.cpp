@@ -12,8 +12,8 @@ int main() {
 
   // Context initialization uses the same one-time per-device selector. Calling
   // it explicitly here makes profile identity and fallback behavior observable.
-  vibeqc::scf::generated::select_profile_for_device(0, properties.major, properties.minor);
-  const auto& profile = vibeqc::scf::generated::selected_profile();
+  generativeqc::scf::generated::select_profile_for_device(0, properties.major, properties.minor);
+  const auto& profile = generativeqc::scf::generated::selected_profile();
   std::cout << profile.name << ' ' << profile.target_architecture << '\n';
 
   if (properties.major == 12 && properties.minor == 0) {
@@ -21,7 +21,7 @@ int main() {
         profile.compatible) {
       return 3;
     }
-    if (vibeqc::scf::generated::enabled_shell_class_mask() == 0) return 4;
+    if (generativeqc::scf::generated::enabled_shell_class_mask() == 0) return 4;
   } else if (profile.tuned) {
     // A binary must never select the RTX 5090 schedule on another SM.
     return 5;

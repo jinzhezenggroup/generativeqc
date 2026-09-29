@@ -22,7 +22,7 @@ It never queries BSE or installs an external quantum-chemistry backend.
 
 ```python
 from pathlib import Path
-from vibeqc import Calculator, load_basis, basis_capability
+from generativeqc import Calculator, load_basis, basis_capability
 
 basis = load_basis(Path("local-basis.json"))
 atoms = [("O", (0, 0, 0)), ("H", (0, -1.43, 1.1)), ("H", (0, 1.43, 1.1))]
@@ -49,7 +49,7 @@ adds a SHA-256 checksum over canonical sorted JSON excluding `checksum`.
 
 | Field | Contract |
 | --- | --- |
-| `schema`, `schema_version` | `vibeqc.basis`, integer `1` |
+| `schema`, `schema_version` | `generativeqc.basis`, integer `1` |
 | `name`, `elements` | Nonempty name; unique element records sorted by Z |
 | `representation` | `cartesian` or `spherical` (real AOs) |
 | `exponent_units` | `bohr^-2`; coordinates supplied to calculations are Bohr |
@@ -162,7 +162,7 @@ on both backends. Metadata preserves those existing behaviors.
 `4adaf1372c7101620ca1a9f3130be9ae97fb8f30`, its BSD-3-Clause license bytes,
 PySCF 2.14.0, NumPy, fixture bytes and the independent generator. Regenerate with
 `tools/generate_external_basis_references.py --bse-source <pinned-checkout>`.
-The generator does not import a VibeQC parser or evaluator. It supplies overlap,
+The generator does not import a GenerativeQC parser or evaluator. It supplies overlap,
 kinetic, hcore, RHF energies and forces at original and changed geometries in
 both representations. CPU AO quadrature checks S/T with separate radial/angular
 refinement; the HF gates are 1e-8 Eh and 1e-7 Eh/Bohr.

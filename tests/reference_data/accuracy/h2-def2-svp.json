@@ -824,6 +824,6 @@
     "threads": 1
   },
   "provenance_hash": "3988e4da1cd982bbdd1ae53bf24cd7449dce364f47a1a9cd6dc633a4e07a20e0",
-  "schema": "vibeqc.reference",
+  "schema": "generativeqc.reference",
   "schema_version": 1
 }

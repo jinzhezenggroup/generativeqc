@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.integral.cuda_schedule import ScheduleKind
-from vibeqc_compiler.integral.direct_resident_schedule import (
+from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
+from generativeqc_compiler.integral.direct_resident_schedule import (
     emit_direct_resident_psss_schedule_header,
     resident_psss_schedule_profile,
 )

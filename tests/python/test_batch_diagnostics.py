@@ -7,11 +7,11 @@ import pickle
 import typing
 from pathlib import Path
 
+import generativeqc
+import generativeqc._batch_diagnostics as diagnostics
+import generativeqc.batch as batch_facade
 import pytest
-import vibeqc
-import vibeqc._batch_diagnostics as diagnostics
-import vibeqc.batch as batch_facade
-from vibeqc import _native
+from generativeqc import _native
 
 PUBLIC_RECORDS = (
     "ShellClassProfileEntry",
@@ -24,12 +24,12 @@ PUBLIC_RECORDS = (
 
 def test_public_record_identity_and_pickle_path_remain_compatible() -> None:
     for name in PUBLIC_RECORDS:
-        public = getattr(vibeqc, name)
+        public = getattr(generativeqc, name)
         assert public is getattr(batch_facade, name)
         assert public is getattr(diagnostics, name)
-        assert public.__module__ == "vibeqc.batch"
+        assert public.__module__ == "generativeqc.batch"
 
-    record = vibeqc.ShellClassProfileEntry(54, (3, 3, 3, 3), 1, 2, 3, 4)
+    record = generativeqc.ShellClassProfileEntry(54, (3, 3, 3, 3), 1, 2, 3, 4)
     assert pickle.loads(pickle.dumps(record)) == record  # noqa: S301
     assert json.loads(json.dumps(record.__dict__)) == {
         "shell_class": 54,
@@ -164,7 +164,7 @@ class _VariableDiagnosticLibrary:
         self.written = count if written is None else written
         self.calls = 0
 
-    def vibeqc_batch_get_last_eigensolver_diagnostics(
+    def generativeqc_batch_get_last_eigensolver_diagnostics(
         self,
         handle: typing.Any,
         entries: typing.Any,
@@ -181,7 +181,7 @@ class _EmptyDiagnosticLibrary:
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def vibeqc_batch_get_last_shell_class_profile(
+    def generativeqc_batch_get_last_shell_class_profile(
         self,
         handle: typing.Any,
         entries: typing.Any,
@@ -192,7 +192,7 @@ class _EmptyDiagnosticLibrary:
         self.calls.append("shell")
         return _native.STATUS_SUCCESS
 
-    def vibeqc_batch_get_last_ppps_queue_profile(
+    def generativeqc_batch_get_last_ppps_queue_profile(
         self, handle: typing.Any, output: typing.Any
     ) -> int:
         del handle, output
@@ -213,7 +213,7 @@ class _EmptyDiagnosticLibrary:
         output_count._obj.value = 0
         return _native.STATUS_SUCCESS
 
-    def vibeqc_batch_get_last_eigensolver_diagnostics(
+    def generativeqc_batch_get_last_eigensolver_diagnostics(
         self,
         handle: typing.Any,
         entries: typing.Any,
@@ -224,7 +224,7 @@ class _EmptyDiagnosticLibrary:
             "eigensolver", handle, entries, capacity, output_count
         )
 
-    def vibeqc_batch_get_last_density_fitting_metric_diagnostics(
+    def generativeqc_batch_get_last_density_fitting_metric_diagnostics(
         self,
         handle: typing.Any,
         entries: typing.Any,
@@ -233,7 +233,7 @@ class _EmptyDiagnosticLibrary:
     ) -> int:
         return self._empty_variable("df", handle, entries, capacity, output_count)
 
-    def vibeqc_batch_get_last_inactive_eigensolver_profile(
+    def generativeqc_batch_get_last_inactive_eigensolver_profile(
         self,
         handle: typing.Any,
         entries: typing.Any,
@@ -281,11 +281,11 @@ def test_reader_preserves_native_status_error_and_call_count() -> None:
         calls = 0
 
         @staticmethod
-        def vibeqc_status_message(status: int) -> bytes:
+        def generativeqc_status_message(status: int) -> bytes:
             assert status == _native.STATUS_NOT_IMPLEMENTED
             return b"not implemented"
 
-        def vibeqc_batch_get_last_eigensolver_diagnostics(
+        def generativeqc_batch_get_last_eigensolver_diagnostics(
             self,
             handle: typing.Any,
             entries: typing.Any,
@@ -297,7 +297,9 @@ def test_reader_preserves_native_status_error_and_call_count() -> None:
             return _native.STATUS_NOT_IMPLEMENTED
 
     library = Unsupported()
-    with pytest.raises(NotImplementedError, match="VIBEQC error 3: not implemented"):
+    with pytest.raises(
+        NotImplementedError, match="GENERATIVEQC error 3: not implemented"
+    ):
         diagnostics.read_eigensolver_diagnostics(library, object())
     assert library.calls == 1
 

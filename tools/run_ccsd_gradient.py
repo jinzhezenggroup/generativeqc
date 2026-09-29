@@ -14,16 +14,16 @@ from dataclasses import asdict
 from pathlib import Path
 
 from tools.cc_gradient_fixtures import CASES, inputs, source_arguments
-from tools.vibeqc_cc.complete_gradient import (
+from tools.generativeqc_cc.complete_gradient import (
     CCSDGradientOptions,
     complete_gradient_validation,
 )
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def record(result: typing.Any, options: typing.Any) -> typing.Any:
     return {
-        "schema": "vibeqc.ccsd.complete_gradient_validation",
+        "schema": "generativeqc.ccsd.complete_gradient_validation",
         "schema_version": 1,
         "method": "conventional closed-shell all-electron CCSD",
         "backend": (

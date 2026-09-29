@@ -8,7 +8,7 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 struct ShellPairDensityBounds;
 
@@ -83,4 +83,4 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestr
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

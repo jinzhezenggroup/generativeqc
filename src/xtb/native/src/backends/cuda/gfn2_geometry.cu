@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_geometry.cuh"
 #include "generated_gfn2_pair_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -77,8 +77,8 @@ __device__ bool evaluate_pair(double dx, double dy, double dz, double radius, Pa
     return true;
   }
 
-  vibeqc::xtb::generated::Gfn2CoordinationPairResult pair{};
-  if (!vibeqc::xtb::generated::evaluate_gfn2_coordination_pair(values->distance, radius, pair)) {
+  generativeqc::xtb::generated::Gfn2CoordinationPairResult pair{};
+  if (!generativeqc::xtb::generated::evaluate_gfn2_coordination_pair(values->distance, radius, pair)) {
     return false;
   }
   values->count = pair.value;
@@ -741,4 +741,4 @@ cudaError_t add_gfn2_coordination_vjp_cuda(
                                    system_errors, device_error, stream);
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

@@ -1,8 +1,8 @@
 """Independent production DFT grid convergence and point-cost qualification.
 
-The gate intentionally does not call VibeQC's native KS implementation. PySCF
+The gate intentionally does not call GenerativeQC's native KS implementation. PySCF
 performs independent RKS SCF and analytic grid-response gradients on explicit
-VibeQC quadratures. A 96x32x64 reference is first checked against a denser
+GenerativeQC quadratures. A 96x32x64 reference is first checked against a denser
 120x40x80 grid before standard/tight profiles are admitted against it.
 """
 
@@ -18,8 +18,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
-from vibeqc import Atom
-from vibeqc_compiler.dft.grid import GridPolicy, GridSpec, MolecularGrid
+from generativeqc import Atom
+from generativeqc_compiler.dft.grid import GridPolicy, GridSpec, MolecularGrid
 
 try:
     from benchmarks._retention import raw_output_path
@@ -157,7 +157,7 @@ def qualify() -> dict[str, typing.Any]:
     dense_spec = _spec(DENSE_SHAPE, radii)
     ultra_spec = _spec(ULTRA_SHAPE, radii)
     result: dict[str, typing.Any] = {
-        "schema": "vibeqc.production-grid-convergence",
+        "schema": "generativeqc.production-grid-convergence",
         "version": 2,
         "molecule": {"atoms_bohr": ATOMS, "basis": "sto-3g"},
         "pyscf_version": pyscf.__version__,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from vibeqc_compiler.integral import production, production_selection
+from generativeqc_compiler.integral import production, production_selection
 
 
 def test_production_preserves_selection_compatibility_reexports() -> None:

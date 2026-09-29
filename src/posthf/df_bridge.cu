@@ -19,15 +19,15 @@
 #include "scf/cuda_density_fitting.hpp"
 
 namespace {
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 void check(cudaError_t s) {
   if (s != cudaSuccess) throw std::runtime_error(cudaGetErrorString(s));
 }
 struct DFSource {
   CudaDensityFittingIntegralSource* source = nullptr;
-  vibeqc::runtime::OwnedCudaStream stream;
-  vibeqc::runtime::OwnedCudaEvent begin, end;
-  vibeqc::runtime::OwnedCudaBuffer<double> tile;
+  generativeqc::runtime::OwnedCudaStream stream;
+  generativeqc::runtime::OwnedCudaEvent begin, end;
+  generativeqc::runtime::OwnedCudaBuffer<double> tile;
   double generation_ms = 0, transfer_ms = 0, endpoint_ms = 0;
   std::uint64_t d2h_bytes = 0, host_staged_tiles = 0;
   std::uint64_t generated_bytes_snapshot = 0, generated_tiles_snapshot = 0;
@@ -75,14 +75,14 @@ int guarded(char* error, size_t size, F f) noexcept {
 }
 }  // namespace
 extern "C" {
-int vibeqc_posthf_df_create_v1(void* raw, int device, size_t capacity, size_t budget, void** out,
-                               size_t* diagnostic, char* error, size_t size) {
+int generativeqc_posthf_df_create_v1(void* raw, int device, size_t capacity, size_t budget,
+                                     void** out, size_t* diagnostic, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!out) throw std::invalid_argument("null DF output");
     *out = nullptr;
     if (!raw || !capacity || capacity > SIZE_MAX / 8 || !diagnostic)
       throw std::invalid_argument("invalid DF source");
-    const auto& base = *static_cast<vibeqc::posthf::RawSource*>(raw);
+    const auto& base = *static_cast<generativeqc::posthf::RawSource*>(raw);
     if (capacity * 8 > budget) throw std::invalid_argument("DF tile exceeds source budget");
     auto p = std::make_unique<DFSource>();
     p->device = device;
@@ -91,7 +91,7 @@ int vibeqc_posthf_df_create_v1(void* raw, int device, size_t capacity, size_t bu
     std::string detail;
     if (create_cuda_density_fitting_integral_source(device, {base.orbital()}, {base.auxiliary()},
                                                     &p->source, p->metric, p->nbf, p->naux,
-                                                    detail) != VIBEQC_STATUS_SUCCESS)
+                                                    detail) != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail);
     const auto placement = cuda_density_fitting_integral_source_diagnostic(p->source);
     if (std::strcmp(placement.value_backend, "generated_rys") != 0)
@@ -116,9 +116,9 @@ int vibeqc_posthf_df_create_v1(void* raw, int device, size_t capacity, size_t bu
     *out = p.release();
   });
 }
-void vibeqc_posthf_df_destroy_v1(void* p) { delete static_cast<DFSource*>(p); }
-int vibeqc_posthf_df_read_v1(void* pointer, int kind, const size_t* b, const size_t* n, double* out,
-                             size_t elements, char* error, size_t size) {
+void generativeqc_posthf_df_destroy_v1(void* p) { delete static_cast<DFSource*>(p); }
+int generativeqc_posthf_df_read_v1(void* pointer, int kind, const size_t* b, const size_t* n,
+                                   double* out, size_t elements, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !b || !n || !out) throw std::invalid_argument("null DF tile");
     auto& p = *static_cast<DFSource*>(pointer);
@@ -152,7 +152,7 @@ int vibeqc_posthf_df_read_v1(void* pointer, int kind, const size_t* b, const siz
     for (size_t i = 0; i < n[0]; ++i) {
       if (generate_cuda_density_fitting_raw_tile(
               p.source, 0, (b[0] + i) * p.nbf + b[1], n[1], b[2], n[2], -1, p.stream.get(),
-              p.tile.get() + i * n[1] * n[2], detail) != VIBEQC_STATUS_SUCCESS)
+              p.tile.get() + i * n[1] * n[2], detail) != GENERATIVEQC_STATUS_SUCCESS)
         throw std::runtime_error(detail);
     }
     p.end.record(p.stream.get());
@@ -172,7 +172,7 @@ int vibeqc_posthf_df_read_v1(void* pointer, int kind, const size_t* b, const siz
             .count();
   });
 }
-int vibeqc_posthf_df_metrics_v1(void* pointer, double* values, char* error, size_t size) {
+int generativeqc_posthf_df_metrics_v1(void* pointer, double* values, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !values) throw std::invalid_argument("null DF source metrics");
     auto& p = *static_cast<DFSource*>(pointer);
@@ -182,8 +182,9 @@ int vibeqc_posthf_df_metrics_v1(void* pointer, double* values, char* error, size
   });
 }
 
-int vibeqc_posthf_df_metrics_v2(void* pointer, std::uint64_t* counters, size_t counter_count,
-                                double* values, size_t value_count, char* error, size_t size) {
+int generativeqc_posthf_df_metrics_v2(void* pointer, std::uint64_t* counters, size_t counter_count,
+                                      double* values, size_t value_count, char* error,
+                                      size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !counters || counter_count < 5 || !values || value_count < 3)
       throw std::invalid_argument("invalid DF source metrics");
@@ -206,8 +207,8 @@ int vibeqc_posthf_df_metrics_v2(void* pointer, std::uint64_t* counters, size_t c
   });
 }
 
-int vibeqc_posthf_df_rhf_jk_plan_create_v1(void* pointer, double threshold, void** out,
-                                           double* diagnostics, char* error, size_t size) {
+int generativeqc_posthf_df_rhf_jk_plan_create_v1(void* pointer, double threshold, void** out,
+                                                 double* diagnostics, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !out || !diagnostics || !(threshold > 0.0) || !(threshold < 1.0))
       throw std::invalid_argument("invalid device-resident DF J/K plan request");
@@ -230,7 +231,7 @@ int vibeqc_posthf_df_rhf_jk_plan_create_v1(void* pointer, double threshold, void
         p.device, &p.source, 1U, p.nbf, p.naux, p.metric, threshold, 0U, 0U, &candidate->plan,
         plan_diagnostics, detail);
     p.device_handoff = true;
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "device-resident DF J/K preparation failed"
                                               : detail);
     candidate->nbf = p.nbf;
@@ -254,9 +255,9 @@ int vibeqc_posthf_df_rhf_jk_plan_create_v1(void* pointer, double threshold, void
   });
 }
 
-int vibeqc_posthf_df_rhf_jk_plan_execute_v1(void* pointer, const double* density, size_t elements,
-                                            double* coulomb, double* exchange, char* error,
-                                            size_t size) {
+int generativeqc_posthf_df_rhf_jk_plan_execute_v1(void* pointer, const double* density,
+                                                  size_t elements, double* coulomb,
+                                                  double* exchange, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer) throw std::invalid_argument("null device-resident DF J/K plan");
     auto& p = *static_cast<DFJkPlan*>(pointer);
@@ -268,7 +269,7 @@ int vibeqc_posthf_df_rhf_jk_plan_execute_v1(void* pointer, const double* density
     std::string detail;
     const auto status = execute_cuda_density_fitting_rhf_jk(p.plan, density_vector, coulomb_vector,
                                                             exchange_vector, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "device-resident DF J/K execution failed" : detail);
     if (coulomb_vector.size() != elements || exchange_vector.size() != elements)
       throw std::runtime_error("device-resident DF J/K output size mismatch");
@@ -282,9 +283,9 @@ int vibeqc_posthf_df_rhf_jk_plan_execute_v1(void* pointer, const double* density
   });
 }
 
-int vibeqc_posthf_df_rhf_jk_plan_metrics_v1(void* pointer, std::uint64_t* counters,
-                                            size_t counter_count, double* values,
-                                            size_t value_count, char* error, size_t size) {
+int generativeqc_posthf_df_rhf_jk_plan_metrics_v1(void* pointer, std::uint64_t* counters,
+                                                  size_t counter_count, double* values,
+                                                  size_t value_count, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !counters || counter_count < 7 || !values || value_count < 1)
       throw std::invalid_argument("invalid device-resident DF J/K metrics");
@@ -301,7 +302,7 @@ int vibeqc_posthf_df_rhf_jk_plan_metrics_v1(void* pointer, std::uint64_t* counte
   });
 }
 
-void vibeqc_posthf_df_rhf_jk_plan_destroy_v1(void* pointer) {
+void generativeqc_posthf_df_rhf_jk_plan_destroy_v1(void* pointer) {
   delete static_cast<DFJkPlan*>(pointer);
 }
 }

@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_CANDIDATE_DOMAIN,
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
-from vibeqc_compiler.xc.libxc_bulk import read_catalog
-from vibeqc_compiler.xc.spec import UnsupportedXC
+from generativeqc_compiler.xc.libxc_bulk import read_catalog
+from generativeqc_compiler.xc.spec import UnsupportedXC
 
 if TYPE_CHECKING:
-    from vibeqc_compiler.xc.bulk_runtime import BulkRuntimeProgram
+    from generativeqc_compiler.xc.bulk_runtime import BulkRuntimeProgram
 
 
 def _vacuum(program: BulkRuntimeProgram) -> np.ndarray:

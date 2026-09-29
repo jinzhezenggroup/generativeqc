@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::dft::cuda_ks_detail {
+namespace generativeqc::dft::cuda_ks_detail {
 struct Scalars {
   double one_electron{}, hartree{}, exact_exchange{}, xc{}, residual{}, density_change{};
   double residual_rms{}, density_rms{};
@@ -44,4 +44,4 @@ void advance(cudaStream_t stream, std::size_t n, unsigned spins, double nuclear_
              double density_tolerance, unsigned max_iterations, bool warm_updates, Scalars* current,
              Control* control, const double* proposal, double* density, double* warm,
              std::uint8_t* enabled, std::uint8_t* spin_enabled);
-}  // namespace vibeqc::dft::cuda_ks_detail
+}  // namespace generativeqc::dft::cuda_ks_detail

@@ -26,7 +26,7 @@
 #include "solver/self_consistent.hpp"
 #include "xc_cpu_generated.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 FockBuildSpec make_global_hybrid_fock_spec(FockSpin spin, double exact_exchange) {
   if (!std::isfinite(exact_exchange))
@@ -227,7 +227,7 @@ struct IncrementalPbeRksModelIdentity {
   double exchange_scale{1.0};
   double correlation_scale{1.0};
   double screening_tolerance{};
-  int32_t requested_precision{VIBEQC_PRECISION_FP64};
+  int32_t requested_precision{GENERATIVEQC_PRECISION_FP64};
   std::uint32_t effective_precision_bits{64};
   ScfOptions::XcExecutionSchedule math_mode{ScfOptions::XcExecutionSchedule::DeviceFused};
   dft::XcDensityRoute source{dft::XcDensityRoute::DensityMatrix};
@@ -606,7 +606,7 @@ ScfResult run_rks(
         owner, geometry_fingerprint(system), basis_fingerprint(basis), grid.spec(),
         grid.point_count(), 1U, ks.scf_domain_version, options.semilocal_exchange_scale,
         options.semilocal_correlation_scale, options.screening_tolerance,
-        static_cast<int32_t>(options.precision_mode.value_or(VIBEQC_PRECISION_FP64)), 64U,
+        static_cast<int32_t>(options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64)), 64U,
         options.xc_execution_schedule, dft::XcDensityRoute::DensityMatrix});
     ks.incremental_xc.model_identity = owner;
     incremental_state.emplace(IncrementalPbeRksState{
@@ -737,10 +737,10 @@ ScfResult run_rks(
     const double residual_tolerance = std::min(1.0e-9, options.density_tolerance);
     const auto run_stage = [&](Matrix stage_density, bool strict_full, unsigned iteration_offset,
                                unsigned iteration_budget) {
-      const ::vibeqc::solver::SelfConsistentPolicy stage_policy{
+      const ::generativeqc::solver::SelfConsistentPolicy stage_policy{
           iteration_budget, options.energy_tolerance, options.density_tolerance, residual_tolerance,
           true};
-      return ::vibeqc::solver::run_self_consistent(
+      return ::generativeqc::solver::run_self_consistent(
           std::move(stage_density), stage_policy,
           [&](const Matrix& current_density, unsigned) {
             const auto current_factor = factor;
@@ -765,7 +765,7 @@ ScfResult run_rks(
                                      physical_residual,       spin_electrons};
           },
           [&](Matrix& current_density, RksLoopEvaluation evaluation,
-              const ::vibeqc::solver::SelfConsistentProgress& progress) {
+              const ::generativeqc::solver::SelfConsistentProgress& progress) {
             if (strict_full && progress.converged) {
               // The independent final audit must rebuild the exact density that
               // actually passed the strict physical criteria, not an unchecked
@@ -781,7 +781,7 @@ ScfResult run_rks(
             }
             return std::move(evaluation.next_density);
           },
-          [&](const ::vibeqc::solver::SelfConsistentProgress& progress,
+          [&](const ::generativeqc::solver::SelfConsistentProgress& progress,
               const RksLoopEvaluation& evaluation) {
             const unsigned reported_iteration = iteration_offset + progress.iteration;
             result.iterations = reported_iteration;
@@ -864,10 +864,10 @@ ScfResult run_rks(
     return result;
   }
 
-  const ::vibeqc::solver::SelfConsistentPolicy policy{
+  const ::generativeqc::solver::SelfConsistentPolicy policy{
       options.max_iterations, options.energy_tolerance, options.density_tolerance,
       std::min(1.0e-9, options.density_tolerance), true};
-  auto outcome = ::vibeqc::solver::run_self_consistent(
+  auto outcome = ::generativeqc::solver::run_self_consistent(
       std::move(density), policy,
       [&](const Matrix& current_density, unsigned) {
         const auto current_factor = factor;
@@ -893,7 +893,7 @@ ScfResult run_rks(
                                  physical_residual,       spin_electrons};
       },
       [&](Matrix& current_density, RksLoopEvaluation evaluation,
-          const ::vibeqc::solver::SelfConsistentProgress& progress) {
+          const ::generativeqc::solver::SelfConsistentProgress& progress) {
         if (!progress.converged && progress.iteration == options.max_iterations) {
           // A failed return must keep E/residual/D/factor on the same physical
           // generation rather than publishing the last unchecked proposal.
@@ -903,7 +903,7 @@ ScfResult run_rks(
         }
         return std::move(evaluation.next_density);
       },
-      [&](const ::vibeqc::solver::SelfConsistentProgress& progress,
+      [&](const ::generativeqc::solver::SelfConsistentProgress& progress,
           const RksLoopEvaluation& evaluation) {
         result.iterations = progress.iteration;
         result.energy = progress.energy;
@@ -1037,7 +1037,7 @@ ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const std::vector<double>* initial_density) {
   auto spec =
       make_global_hybrid_fock_spec(FockSpin::Restricted, dft::generated::kB3lypExactExchange);
-  if (options.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE) {
+  if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
     spec.coulomb.approximation = FockApproximation::DensityFitted;
     spec.exchange.approximation = FockApproximation::DensityFitted;
   }
@@ -1054,7 +1054,7 @@ ScfResult run_wb97mv_rks(const PreparedFockPlan& primary, const PreparedFockPlan
                          const ScfOptions& options, dft::nlc::Vv10Plan& nonlocal,
                          const std::vector<double>* initial_density) {
   require_wb97mv_composition(primary.strategy(), correction.strategy(), nonlocal.parameters());
-  if (nonlocal.backend() != VIBEQC_BACKEND_CPU_REFERENCE ||
+  if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
       nonlocal.resources().point_count != grid.point_count())
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
   return run_rks(primary, &correction, basis, grid, options, initial_density,
@@ -1081,4 +1081,4 @@ ScfResult run_cam_b3lyp_rks(const PreparedFockPlan& primary,
                  evaluate_cam_b3lyp_xc_rks, "CAM-B3LYP", nullptr);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

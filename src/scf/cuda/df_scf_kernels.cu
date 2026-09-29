@@ -13,7 +13,7 @@
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/scf_convergence_policy.cuh"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 using cuda_execution::hf_iteration_converged;
 using cuda_execution::maximum_physical_residual;
 
@@ -407,4 +407,4 @@ void launch_update_device_uhf_convergence_kernel(
       next_beta, alpha_density, beta_density, active, converged, iterations, energy_change,
       density_rms, physical_residual);
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

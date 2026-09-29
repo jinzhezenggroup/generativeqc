@@ -12,7 +12,7 @@
 
 #include "dft/dispersion/d3_runtime.hpp"
 
-#if defined(VIBEQC_D3_REPLAY_TEST_INTERPOSE)
+#if defined(GENERATIVEQC_D3_REPLAY_TEST_INTERPOSE)
 namespace fault_injection {
 enum class FailurePoint {
   none,
@@ -106,14 +106,14 @@ extern "C" cudaError_t __wrap_cudaStreamSynchronize(cudaStream_t stream) {
 
 namespace {
 
-using vibeqc::dft::dispersion::create_d3_cuda_owner;
-using vibeqc::dft::dispersion::D3CudaOwner;
-using vibeqc::dft::dispersion::D3ModelParameters;
-using vibeqc::dft::dispersion::D3Parameters;
-using vibeqc::dft::dispersion::D3ResourceUsage;
-using vibeqc::dft::dispersion::D3Status;
-using vibeqc::dft::dispersion::destroy_d3_cuda_owner;
-using vibeqc::dft::dispersion::execute_d3_cuda;
+using generativeqc::dft::dispersion::create_d3_cuda_owner;
+using generativeqc::dft::dispersion::D3CudaOwner;
+using generativeqc::dft::dispersion::D3ModelParameters;
+using generativeqc::dft::dispersion::D3Parameters;
+using generativeqc::dft::dispersion::D3ResourceUsage;
+using generativeqc::dft::dispersion::D3Status;
+using generativeqc::dft::dispersion::destroy_d3_cuda_owner;
+using generativeqc::dft::dispersion::execute_d3_cuda;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -135,9 +135,9 @@ Owner make_owner() {
   resources.system_count = 1;
   resources.maximum_bytes = std::numeric_limits<std::uint64_t>::max();
   std::string detail;
-  vibeqc_status status = VIBEQC_STATUS_INTERNAL_ERROR;
+  generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
   auto* owner = create_d3_cuda_owner(0, offsets, numbers, resources, detail, status);
-  require(owner && status == VIBEQC_STATUS_SUCCESS, detail.c_str());
+  require(owner && status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
   return {owner};
 }
 
@@ -147,7 +147,7 @@ D3ModelParameters model() {
   return parameters;
 }
 
-vibeqc_status replay(D3CudaOwner* owner, bool gradient, std::string& detail) {
+generativeqc_status replay(D3CudaOwner* owner, bool gradient, std::string& detail) {
   std::vector<double> xyz(24);
   for (std::size_t atom = 0; atom < 8; ++atom) xyz[3 * atom] = 2.0 * atom;
   std::array<std::uint8_t, 1> active{1};
@@ -159,12 +159,13 @@ vibeqc_status replay(D3CudaOwner* owner, bool gradient, std::string& detail) {
                          detail);
 }
 
-#if defined(VIBEQC_D3_REPLAY_TEST_INTERPOSE)
+#if defined(GENERATIVEQC_D3_REPLAY_TEST_INTERPOSE)
 void expect_failure_drain(D3CudaOwner* owner, fault_injection::FailurePoint point, bool gradient) {
   fault_injection::reset(point);
   std::string detail;
   const auto status = replay(owner, gradient, detail);
-  require(status == VIBEQC_STATUS_CUDA_ERROR, "fault-injected D3 replay unexpectedly succeeded");
+  require(status == GENERATIVEQC_STATUS_CUDA_ERROR,
+          "fault-injected D3 replay unexpectedly succeeded");
   require(fault_injection::injected, "D3 replay did not reach requested injected CUDA failure");
   require(!fault_injection::queued_host_reference,
           "D3 replay returned while stream retained a caller host reference");
@@ -180,7 +181,7 @@ int main() {
     auto owner = make_owner();
     if (!owner.value) return 77;
 
-#if defined(VIBEQC_D3_REPLAY_TEST_INTERPOSE)
+#if defined(GENERATIVEQC_D3_REPLAY_TEST_INTERPOSE)
     using fault_injection::FailurePoint;
     expect_failure_drain(owner.value, FailurePoint::second_upload, false);
     expect_failure_drain(owner.value, FailurePoint::gradient_clear, false);
@@ -190,11 +191,11 @@ int main() {
 
     fault_injection::reset(FailurePoint::none);
     std::string detail;
-    require(replay(owner.value, true, detail) == VIBEQC_STATUS_SUCCESS, detail.c_str());
+    require(replay(owner.value, true, detail) == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
     require(fault_injection::syncs == 1, "successful D3 replay synchronized more than once");
 #else
     std::string detail;
-    require(replay(owner.value, true, detail) == VIBEQC_STATUS_SUCCESS, detail.c_str());
+    require(replay(owner.value, true, detail) == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
 #endif
 
     std::cout << "D3 CUDA replay failures drain retained stream before host buffers expire\n";

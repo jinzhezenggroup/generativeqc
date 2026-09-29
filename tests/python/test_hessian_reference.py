@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("pyscf")
 
-from tools.vibeqc_hessian.reference import (
+from tools.generativeqc_hessian.reference import (
     System,
     build_mol,
     fd_hessian,
@@ -222,7 +222,7 @@ def _sto3g_water() -> typing.Any:
 def test_reference_matches_analytic_hessian_and_gradient_differences(
     mol_fn: typing.Any,
 ) -> None:
-    from tools.vibeqc_hessian.reference import _converged_rhf
+    from tools.generativeqc_hessian.reference import _converged_rhf
 
     mol = mol_fn()
     state = System(mol)
@@ -260,7 +260,7 @@ def test_invalid_steps_rejected(step: typing.Any) -> None:
 
 
 def test_unconverged_reference_is_rejected(monkeypatch: typing.Any) -> None:
-    from tools.vibeqc_hessian import reference
+    from tools.generativeqc_hessian import reference
 
     class FailedRHF:
         converged = False

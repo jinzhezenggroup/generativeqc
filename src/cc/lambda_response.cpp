@@ -8,7 +8,7 @@
 
 #include "generated_rccsd_cpu.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 namespace {
 
 std::size_t checked_add(std::size_t a, std::size_t b) { return generated::checked_add(a, b); }
@@ -294,4 +294,4 @@ LambdaResult solve_lambda_cpu_with_energy_source(const Problem& problem,
   return solve_lambda_cpu_impl(problem, cc_result, t1_source, t2_source, options);
 }
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

@@ -918,7 +918,7 @@
       "sha256": "fcbd00dbd2680e566d4f7c7cbbe7c6c89b140712afeb3b3237d864d8e77c5b93"
     }
   ],
-  "schema": "vibeqc.legacy-large-evidence-review.v1",
+  "schema": "generativeqc.legacy-large-evidence-review.v1",
   "scope": "Retained current-tree benchmark evidence at or above the review threshold; storage review only, not scientific re-acceptance.",
   "threshold_bytes": 131072
 }

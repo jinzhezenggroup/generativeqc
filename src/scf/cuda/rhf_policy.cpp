@@ -9,7 +9,7 @@
 
 #include "generated_one_electron_derivative_policy.cuh"
 
-namespace vibeqc::scf::cuda_policy {
+namespace generativeqc::scf::cuda_policy {
 namespace {
 
 constexpr std::size_t kUnknownTargetFixedTopologyArenaBytes = std::size_t{256} << 20;
@@ -96,7 +96,7 @@ std::size_t resolve_target_memory_budget(std::size_t total_global_memory,
 std::optional<double> parsed_mixed_precision_override(double screening_tolerance) noexcept {
   // A user-supplied explicit numeric threshold from the legacy switch; the
   // absent / 0 / none / auto / invalid spellings yield std::nullopt.
-  const char* selection = std::getenv("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD");
+  const char* selection = std::getenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD");
   if (selection == nullptr) return std::nullopt;
   if (std::strcmp(selection, "0") == 0 || std::strcmp(selection, "none") == 0 ||
       std::strcmp(selection, "auto") == 0) {
@@ -232,14 +232,14 @@ std::size_t direct_jk_bounded_streaming_task_capacity_limit(
 }
 
 bool reuse_converged_fock_requested() noexcept {
-  const char* force_rebuild = std::getenv("VIBEQC_FINAL_FOCK_REBUILD");
+  const char* force_rebuild = std::getenv("GENERATIVEQC_FINAL_FOCK_REBUILD");
   return force_rebuild == nullptr || std::strcmp(force_rebuild, "0") == 0 ||
          std::strcmp(force_rebuild, "none") == 0;
 }
 
 std::optional<double> configured_mixed_precision_fock_threshold(
     double screening_tolerance) noexcept {
-  const char* selection = std::getenv("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD");
+  const char* selection = std::getenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD");
   if (selection == nullptr || std::strcmp(selection, "0") == 0 ||
       std::strcmp(selection, "none") == 0) {
     return std::nullopt;
@@ -289,7 +289,7 @@ AutoMixedPrecisionAdmission admit_auto_mixed_precision_fock(double energy_tolera
   return admission;
 }
 MixedPrecisionFockPolicy resolve_mixed_precision_fock_policy(
-    std::optional<vibeqc_precision_mode> precision_mode, double energy_tolerance,
+    std::optional<generativeqc_precision_mode> precision_mode, double energy_tolerance,
     double screening_tolerance, double eligible_tiles) noexcept {
   MixedPrecisionFockPolicy policy;
   if (!precision_mode.has_value()) {
@@ -300,9 +300,9 @@ MixedPrecisionFockPolicy resolve_mixed_precision_fock_policy(
     return policy;
   }
   switch (*precision_mode) {
-    case VIBEQC_PRECISION_FP64:
+    case GENERATIVEQC_PRECISION_FP64:
       return policy;
-    case VIBEQC_PRECISION_AUTO: {
+    case GENERATIVEQC_PRECISION_AUTO: {
       const std::optional<double> override_value =
           parsed_mixed_precision_override(screening_tolerance);
       if (override_value.has_value()) {
@@ -362,32 +362,32 @@ MixedPrecisionItemPolicy resolve_mixed_precision_item(const MixedPrecisionFockPo
 }
 
 bool graph_native_eigensolver_override_requested() noexcept {
-  const char* selection = std::getenv("VIBEQC_GRAPH_EIGENSOLVER_OVERRIDE");
+  const char* selection = std::getenv("GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE");
   return selection != nullptr && std::strcmp(selection, "graph_native") == 0;
 }
 
 bool xsyev_probe_skip_diagnostic_requested() noexcept {
-  return selected("VIBEQC_XSYEV_PROBE_SKIP_DIAGNOSTIC", "skip");
+  return selected("GENERATIVEQC_XSYEV_PROBE_SKIP_DIAGNOSTIC", "skip");
 }
 
 bool bounded_direct_streaming_override_requested() noexcept {
-  return selected("VIBEQC_BOUNDED_DIRECT_STREAMING", "force");
+  return selected("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force");
 }
 
 bool bounded_direct_count_diagnostic_requested() noexcept {
-  return selected("VIBEQC_BOUNDED_DIRECT_COUNT_DIAGNOSTIC", "count");
+  return selected("GENERATIVEQC_BOUNDED_DIRECT_COUNT_DIAGNOSTIC", "count");
 }
 
 bool bounded_direct_aot_only_diagnostic_requested() noexcept {
-  return selected("VIBEQC_BOUNDED_DIRECT_AOT_ONLY_DIAGNOSTIC", "aot");
+  return selected("GENERATIVEQC_BOUNDED_DIRECT_AOT_ONLY_DIAGNOSTIC", "aot");
 }
 
 bool bounded_direct_fock_only_diagnostic_requested() noexcept {
-  return selected("VIBEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC", "fock");
+  return selected("GENERATIVEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC", "fock");
 }
 
 std::optional<std::uint64_t> bounded_direct_primary_streaming_fock_mask_requested() noexcept {
-  const char* selection = std::getenv("VIBEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK");
+  const char* selection = std::getenv("GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK");
   if (selection == nullptr || *selection == '\0' || std::strcmp(selection, "0") == 0 ||
       std::strcmp(selection, "none") == 0 || *selection == '-') {
     return std::nullopt;
@@ -409,11 +409,11 @@ std::optional<std::uint64_t> bounded_direct_primary_streaming_fock_mask_requeste
 }
 
 bool bounded_fock_class_timing_requested() noexcept {
-  return selected("VIBEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE", "profile");
+  return selected("GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE", "profile");
 }
 
 bool aot_shell_class_selection_override_requested() noexcept {
-  const char* selection = std::getenv("VIBEQC_AOT_SHELL_CLASSES");
+  const char* selection = std::getenv("GENERATIVEQC_AOT_SHELL_CLASSES");
   // Match the generated registry: absent, empty, and "all" all mean the full
   // compiled profile. Any other spelling intentionally narrows the force
   // registry and may therefore exercise the generic fallback for diagnostics.
@@ -421,11 +421,12 @@ bool aot_shell_class_selection_override_requested() noexcept {
 }
 
 DirectTileValidationPolicy resolve_direct_tile_validation_policy() noexcept {
-  const bool requested = selected("VIBEQC_DIRECT_TILE_VALIDATION", "validate");
+  const bool requested = selected("GENERATIVEQC_DIRECT_TILE_VALIDATION", "validate");
   return {
       .requested = requested,
       .produces_numerical_endpoint = !requested,
-      .endpoint_status = requested ? VIBEQC_STATUS_NOT_IMPLEMENTED : VIBEQC_STATUS_SUCCESS,
+      .endpoint_status =
+          requested ? GENERATIVEQC_STATUS_NOT_IMPLEMENTED : GENERATIVEQC_STATUS_SUCCESS,
   };
 }
 
@@ -440,25 +441,25 @@ double converged_fock_reuse_density_rms(double density_tolerance) noexcept {
 }
 
 bool force_density_product_screening_requested() noexcept {
-  return enabled("VIBEQC_FORCE_DENSITY_PRODUCT_SCREENING");
+  return enabled("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING");
 }
 
-bool resident_ppps_bra_requested() noexcept { return enabled("VIBEQC_PPPS_RESIDENT_BRA"); }
+bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }
 
 bool ppps_signature_bucketing_requested() noexcept {
-  return enabled("VIBEQC_PPPS_SIGNATURE_BUCKETING");
+  return enabled("GENERATIVEQC_PPPS_SIGNATURE_BUCKETING");
 }
 
 bool psps_signature_bucketing_requested() noexcept {
-  return enabled("VIBEQC_PSPS_SIGNATURE_BUCKETING");
+  return enabled("GENERATIVEQC_PSPS_SIGNATURE_BUCKETING");
 }
 
 bool ppss_signature_bucketing_requested() noexcept {
-  return enabled("VIBEQC_PPSS_SIGNATURE_BUCKETING");
+  return enabled("GENERATIVEQC_PPSS_SIGNATURE_BUCKETING");
 }
 
 unsigned ppps_resident_block_threads_requested() noexcept {
-  const char* selection = std::getenv("VIBEQC_PPPS_BLOCK_THREADS");
+  const char* selection = std::getenv("GENERATIVEQC_PPPS_BLOCK_THREADS");
   if (selection == nullptr || std::strcmp(selection, "256") == 0) return 256U;
   if (std::strcmp(selection, "128") == 0) return 128U;
   if (std::strcmp(selection, "64") == 0) return 64U;
@@ -469,7 +470,7 @@ unsigned ppps_resident_block_threads_requested() noexcept {
 OneElectronValuePolicy resolve_one_electron_value_policy(
     const runtime::CudaProviderCapabilities& provider) noexcept {
   OneElectronValuePolicy policy;
-  const char* selection = std::getenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING");
+  const char* selection = std::getenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING");
   if (selection == nullptr) {
     policy.mapping = provider.templated_shell_warp_one_electron ? 1U : 0U;
     return policy;
@@ -490,7 +491,7 @@ unsigned one_electron_value_mapping_requested() noexcept {
 }
 
 unsigned one_electron_derivative_mapping_requested() noexcept {
-  const char* selection = std::getenv("VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING");
+  const char* selection = std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING");
   if (selection == nullptr) return NucleusCooperativeSchedule::schedule_code;
   if (std::strcmp(selection, "serial") == 0 || std::strcmp(selection, "2") == 0) return 2U;
   if (std::strcmp(selection, "nucleus_cooperative") == 0 ||
@@ -500,27 +501,27 @@ unsigned one_electron_derivative_mapping_requested() noexcept {
   return 0U;
 }
 
-bool resident_psss_bra_requested() noexcept { return enabled("VIBEQC_PSSS_RESIDENT_BRA"); }
+bool resident_psss_bra_requested() noexcept { return enabled("GENERATIVEQC_PSSS_RESIDENT_BRA"); }
 
 unsigned df_derivative_mapping_requested() noexcept {
-  return selected("VIBEQC_DF_DERIVATIVE_MAPPING", "serial") ? 1U : 0U;
+  return selected("GENERATIVEQC_DF_DERIVATIVE_MAPPING", "serial") ? 1U : 0U;
 }
 
 bool df_value_math_requested(unsigned& math) noexcept {
   math = 0;
-  const char* value = std::getenv("VIBEQC_DF_VALUE_MATH");
-  if (!value || selected("VIBEQC_DF_VALUE_MATH", "auto") ||
-      selected("VIBEQC_DF_VALUE_MATH", "generic"))
+  const char* value = std::getenv("GENERATIVEQC_DF_VALUE_MATH");
+  if (!value || selected("GENERATIVEQC_DF_VALUE_MATH", "auto") ||
+      selected("GENERATIVEQC_DF_VALUE_MATH", "generic"))
     return true;
-  if (selected("VIBEQC_DF_VALUE_MATH", "candidate")) {
+  if (selected("GENERATIVEQC_DF_VALUE_MATH", "candidate")) {
     math = 3;
     return true;
   }
-  if (selected("VIBEQC_DF_VALUE_MATH", "polynomial")) {
+  if (selected("GENERATIVEQC_DF_VALUE_MATH", "polynomial")) {
     math = 1;
     return true;
   }
-  if (selected("VIBEQC_DF_VALUE_MATH", "rys")) {
+  if (selected("GENERATIVEQC_DF_VALUE_MATH", "rys")) {
     math = 2;
     return true;
   }
@@ -529,19 +530,19 @@ bool df_value_math_requested(unsigned& math) noexcept {
 
 bool df_value_raw_lanes_requested(unsigned& lanes) noexcept {
   lanes = 1;
-  const char* value = std::getenv("VIBEQC_DF_VALUE_RAW_MAPPING");
-  if (!value || selected("VIBEQC_DF_VALUE_RAW_MAPPING", "auto") ||
-      selected("VIBEQC_DF_VALUE_RAW_MAPPING", "scalar"))
+  const char* value = std::getenv("GENERATIVEQC_DF_VALUE_RAW_MAPPING");
+  if (!value || selected("GENERATIVEQC_DF_VALUE_RAW_MAPPING", "auto") ||
+      selected("GENERATIVEQC_DF_VALUE_RAW_MAPPING", "scalar"))
     return true;
-  if (selected("VIBEQC_DF_VALUE_RAW_MAPPING", "candidate")) {
+  if (selected("GENERATIVEQC_DF_VALUE_RAW_MAPPING", "candidate")) {
     lanes = kDfCandidateRawSchedule;
     return true;
   }
-  if (selected("VIBEQC_DF_VALUE_RAW_MAPPING", "subgroup")) {
+  if (selected("GENERATIVEQC_DF_VALUE_RAW_MAPPING", "subgroup")) {
     lanes = 4;
     return true;
   }
-  if (selected("VIBEQC_DF_VALUE_RAW_MAPPING", "warp")) {
+  if (selected("GENERATIVEQC_DF_VALUE_RAW_MAPPING", "warp")) {
     lanes = 32;
     return true;
   }
@@ -552,12 +553,12 @@ unsigned df_value_mapping_requested() noexcept {
   // Auto is resolved by the compiler separately for raw and transformed
   // consumers. A transformed output's auxiliary reduction is absent in raw
   // tiles; sharing its full warp schedule wastes lanes on short contractions.
-  if (std::getenv("VIBEQC_DF_VALUE_MAPPING") == nullptr ||
-      selected("VIBEQC_DF_VALUE_MAPPING", "auto"))
+  if (std::getenv("GENERATIVEQC_DF_VALUE_MAPPING") == nullptr ||
+      selected("GENERATIVEQC_DF_VALUE_MAPPING", "auto"))
     return 3U;
-  if (selected("VIBEQC_DF_VALUE_MAPPING", "component")) return 1U;
-  if (selected("VIBEQC_DF_VALUE_MAPPING", "primitive")) return 2U;
+  if (selected("GENERATIVEQC_DF_VALUE_MAPPING", "component")) return 1U;
+  if (selected("GENERATIVEQC_DF_VALUE_MAPPING", "primitive")) return 2U;
   return 0U;
 }
 
-}  // namespace vibeqc::scf::cuda_policy
+}  // namespace generativeqc::scf::cuda_policy

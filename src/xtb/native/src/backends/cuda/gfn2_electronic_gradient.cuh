@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_ELECTRONIC_GRADIENT_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ELECTRONIC_GRADIENT_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_ELECTRONIC_GRADIENT_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ELECTRONIC_GRADIENT_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -12,7 +12,7 @@
 #include "backends/cuda/gfn2_hamiltonian_force.cuh"
 #include "backends/cuda/gfn2_integral_force.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* A zero request is the energy-only fast path and binds no force storage. */
 struct Gfn2ElectronicGradientRequest {
@@ -78,6 +78,6 @@ cudaError_t compose_gfn2_electronic_gradient_cuda(
     const Gfn2ElectronicGradientDeviceDiagnostics& diagnostics,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_ELECTRONIC_GRADIENT_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ELECTRONIC_GRADIENT_CUH

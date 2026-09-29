@@ -32,7 +32,7 @@ def test_generated_es2_preserves_native_finite_range(tmp_path: Path, case: str) 
     source = tmp_path / "probe.cpp"
     source.write_text(
         '#include <cmath>\n#include "generated_gfn2_es2_native.hpp"\n'
-        "int main() { using namespace vibeqc::xtb::generated; double actual=0; "
+        "int main() { using namespace generativeqc::xtb::generated; double actual=0; "
         f"if (!{calls[case]}) return 1; "
         f"return std::isfinite(actual) && std::abs(actual/{expected}-1)<2e-15 ? 0:2; }}\n"
     )

@@ -5,7 +5,7 @@
 #include "scf/cuda/direct_queue_diagnostics.hpp"
 #include "scf/cuda/direct_queue_profile.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Add one compacted page count to a profiling-only 64-bit accumulator. */
 __global__ void accumulate_fock_precision_work_kernel(const std::uint32_t* page_count,
@@ -153,4 +153,4 @@ void launch_profile_bounded_generated_tasks_kernel(dim3 grid, dim3 block, std::s
       batch, tasks, task_offset, task_count, profile);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -18,11 +18,14 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator, projected_singlepoint
-from vibeqc.autotune import source_identity
-from vibeqc.progressive import _retained_density
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
-from vibeqc_compiler.common.performance import assess_comparison, measure_interleaved
+from generativeqc import Calculator, projected_singlepoint
+from generativeqc.autotune import source_identity
+from generativeqc.progressive import _retained_density
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.performance import (
+    assess_comparison,
+    measure_interleaved,
+)
 
 CASES = {
     "h2-rhf-small-large": ("rhf", "sto-3g", "def2-svp", 0, 1),
@@ -75,9 +78,9 @@ def main() -> None:
         Calculator(basis=target_basis, **settings),
     )
     library = target._library
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
     identity = source_identity(ROOT)
-    if library.vibeqc_get_source_identity().decode() != identity:
+    if library.generativeqc_get_source_identity().decode() != identity:
         raise RuntimeError(
             "benchmark library does not match the current source identity"
         )
@@ -190,7 +193,7 @@ def main() -> None:
             else None,
         }
     report = {
-        "schema": "vibeqc.basis_projection_endpoint",
+        "schema": "generativeqc.basis_projection_endpoint",
         "version": 1,
         "case": args.case,
         "inputs": inputs,

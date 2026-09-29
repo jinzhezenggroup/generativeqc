@@ -13,12 +13,12 @@ remains an oracle.
 Set these variables **before creating a prepared batch**:
 
 ```bash
-export VIBEQC_ONE_ELECTRON_VALUES=generated
-export VIBEQC_ONE_ELECTRON_VALUE_MAPPING=thread
+export GENERATIVEQC_ONE_ELECTRON_VALUES=generated
+export GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING=thread
 ```
 
-`VIBEQC_ONE_ELECTRON_VALUE_MAPPING=shell_warp` selects the alternative
-shell-pair schedule. `VIBEQC_ONE_ELECTRON_VALUES=reference` selects the
+`GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING=shell_warp` selects the alternative
+shell-pair schedule. `GENERATIVEQC_ONE_ELECTRON_VALUES=reference` selects the
 handwritten implementation in the same binary. Unrecognized explicit value
 selections also retain that implementation. These controls participate in
 prepared resource and checkpoint runtime-policy identities. Changing either
@@ -33,7 +33,7 @@ through the existing analytic/handwritten implementation.
 
 ## Scientific and execution boundaries
 
-`python/vibeqc_compiler/integral/one_electron_values.py` builds traceable, pruned Hermite
+`python/generativeqc_compiler/integral/one_electron_values.py` builds traceable, pruned Hermite
 DAGs from `IntegralIR`. It includes Gaussian decay and radial prefactors.
 Kinetic raising can reach internal ket powers of six for a public g shell
 without widening the declared output dimensions. Attraction carries an
@@ -113,8 +113,8 @@ PYTHONPATH=python:. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:20:00 bash -lc 'PYTHONPATH=python:. \
-  VIBEQC_LIBRARY=$PWD/build-cuda/libvibeqc.so \
-  VIBEQC_ONE_ELECTRON_CUDA_TEST=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  GENERATIVEQC_LIBRARY=$PWD/build-cuda/libgenerativeqc.so \
+  GENERATIVEQC_ONE_ELECTRON_CUDA_TEST=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python -m pytest tests/python/test_one_electron_values_cuda.py -q'
 ```
 

@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from tools.vibeqc_local_cc.coupling import pair_transfer, project_pair_matrix
-from tools.vibeqc_local_cc.spaces import PairSpace
+from tools.generativeqc_local_cc.coupling import pair_transfer, project_pair_matrix
+from tools.generativeqc_local_cc.spaces import PairSpace
 
 
 def _pair_space(

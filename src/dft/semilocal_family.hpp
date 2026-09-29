@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Native curated semilocal execution identity shared by CPU and CUDA KS.
  *
@@ -159,4 +159,4 @@ static_assert(semilocal_family_code(SemilocalFamily::Lda) == 0U);
 static_assert(semilocal_family_code(SemilocalFamily::Wb97mv) + 1U ==
               kSemilocalFamilyMetadata.size());
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

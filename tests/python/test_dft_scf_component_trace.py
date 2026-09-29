@@ -14,7 +14,7 @@ from benchmarks.dft_force_components import (
 
 def _trace(operation: str, gpu_ms: float, identifier: int) -> dict:
     return {
-        "schema": "vibeqc.df_trace",
+        "schema": "generativeqc.df_trace",
         "version": 1,
         "id": identifier,
         "operation": operation,

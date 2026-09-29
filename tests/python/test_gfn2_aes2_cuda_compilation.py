@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_aes2_cuda_uses_device_callable_constants(
     tmp_path: Path, consumer: bool
 ) -> None:
-    compiler = os.environ.get("VIBEQC_NVCC") or shutil.which("nvcc")
+    compiler = os.environ.get("GENERATIVEQC_NVCC") or shutil.which("nvcc")
     if not compiler:
         pytest.skip("NVCC required for the AES2 device compilation gate")
     header = tmp_path / "generated_gfn2_aes2_native.cuh"

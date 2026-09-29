@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_PREPROCESSING_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PREPROCESSING_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_PREPROCESSING_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PREPROCESSING_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -15,7 +15,7 @@
 #include "backends/cuda/gfn2_integrals.cuh"
 #include "backends/cuda/gfn2_pairlist.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::uint32_t kGfn2PreprocessingAbiVersion = 1u;
 
@@ -328,6 +328,6 @@ static_assert(std::is_standard_layout_v<Gfn2PreprocessingLaunchDiagnostic>);
 [[nodiscard]] Gfn2PreprocessingLaunchDiagnostic gate_gfn2_sparse_coordination_cuda(
     Gfn2PreprocessingDeviceBinding& binding, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_PREPROCESSING_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PREPROCESSING_CUH

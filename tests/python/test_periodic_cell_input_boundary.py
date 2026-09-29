@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.periodic import PeriodicCell
+from generativeqc_compiler.periodic import PeriodicCell
 
 
 @pytest.mark.parametrize("imaginary", (1.0, float("nan"), float("inf")))

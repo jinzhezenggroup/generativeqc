@@ -7,7 +7,7 @@
 #include "d3_data.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 struct D3CudaOwner {
   int device_id{-1};
@@ -54,10 +54,10 @@ class DeviceScope {
   cudaError_t error_{cudaSuccess};
 };
 
-vibeqc_status cuda_failure(cudaError_t error, const char* action, std::string& detail) {
+generativeqc_status cuda_failure(cudaError_t error, const char* action, std::string& detail) {
   detail = std::string(action) + ": " + cudaGetErrorString(error);
-  return error == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                            : VIBEQC_STATUS_CUDA_ERROR;
+  return error == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                            : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
 template <typename T>
@@ -324,8 +324,8 @@ __global__ void d3_ragged_kernel(std::uint32_t systems, const std::uint32_t* off
 D3CudaOwner* create_d3_cuda_owner(int device_id, std::span<const std::uint32_t> offsets,
                                   std::span<const std::int32_t> atomic_numbers,
                                   const D3ResourceUsage& resources, std::string& detail,
-                                  vibeqc_status& status) {
-  status = VIBEQC_STATUS_CUDA_ERROR;
+                                  generativeqc_status& status) {
+  status = GENERATIVEQC_STATUS_CUDA_ERROR;
   DeviceScope scope(device_id);
   if (scope.error() != cudaSuccess) {
     status = cuda_failure(scope.error(), "select D3 CUDA device", detail);
@@ -357,7 +357,7 @@ D3CudaOwner* create_d3_cuda_owner(int device_id, std::span<const std::uint32_t> 
       !allocate(owner->pairs, d3_data::kPairs.size(), detail) ||
       !allocate(owner->reference_cn, d3_data::kReferenceCn.size(), detail) ||
       !allocate(owner->reference_c6, d3_data::kReferenceC6.size(), detail)) {
-    status = VIBEQC_STATUS_OUT_OF_MEMORY;
+    status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     destroy_d3_cuda_owner(owner.release());
     return nullptr;
   }
@@ -384,7 +384,7 @@ D3CudaOwner* create_d3_cuda_owner(int device_id, std::span<const std::uint32_t> 
   }
 
   (void)resources;
-  status = VIBEQC_STATUS_SUCCESS;
+  status = GENERATIVEQC_STATUS_SUCCESS;
   return owner.release();
 }
 
@@ -411,16 +411,16 @@ void destroy_d3_cuda_owner(D3CudaOwner* owner) noexcept {
   delete owner;
 }
 
-vibeqc_status execute_d3_cuda(D3CudaOwner* owner, const D3ModelParameters& parameters,
-                              std::span<const double> coordinates,
-                              std::span<const std::uint8_t> active,
-                              std::span<const std::uint8_t> want_gradient,
-                              std::vector<D3Status>& statuses, std::vector<double>& energies,
-                              std::vector<double>& gradients, std::string& detail) {
+generativeqc_status execute_d3_cuda(D3CudaOwner* owner, const D3ModelParameters& parameters,
+                                    std::span<const double> coordinates,
+                                    std::span<const std::uint8_t> active,
+                                    std::span<const std::uint8_t> want_gradient,
+                                    std::vector<D3Status>& statuses, std::vector<double>& energies,
+                                    std::vector<double>& gradients, std::string& detail) {
   if (!owner || coordinates.size() != 3 * owner->atoms || active.size() != owner->systems ||
       want_gradient.size() != owner->systems) {
     detail = "invalid D3 CUDA replay shape";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   DeviceScope scope(owner->device_id);
@@ -436,20 +436,20 @@ vibeqc_status execute_d3_cuda(D3CudaOwner* owner, const D3ModelParameters& param
   } replay_drain{owner->stream};
 
   auto copy_h2d = [&](void* destination, const void* source, std::size_t bytes,
-                      const char* action) -> vibeqc_status {
+                      const char* action) -> generativeqc_status {
     const auto error =
         cudaMemcpyAsync(destination, source, bytes, cudaMemcpyHostToDevice, owner->stream);
-    return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS : cuda_failure(error, action, detail);
+    return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS : cuda_failure(error, action, detail);
   };
 
-  vibeqc_status status = copy_h2d(owner->coordinates, coordinates.data(), coordinates.size_bytes(),
-                                  "upload D3 changed coordinates");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  generativeqc_status status = copy_h2d(owner->coordinates, coordinates.data(),
+                                        coordinates.size_bytes(), "upload D3 changed coordinates");
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = copy_h2d(owner->active, active.data(), active.size_bytes(), "upload D3 active mask");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = copy_h2d(owner->want_gradient, want_gradient.data(), want_gradient.size_bytes(),
                     "upload D3 gradient mask");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
 
   // Failed, inactive and energy-only rows are copied with successful peers.
   // Initialize every publication slot rather than returning stale device data.
@@ -465,30 +465,30 @@ vibeqc_status execute_d3_cuda(D3CudaOwner* owner, const D3ModelParameters& param
   if (error != cudaSuccess) return cuda_failure(error, "launch D3 ragged CUDA kernel", detail);
 
   auto copy_d2h = [&](void* destination, const void* source, std::size_t bytes,
-                      const char* action) -> vibeqc_status {
+                      const char* action) -> generativeqc_status {
     const auto copy_error =
         cudaMemcpyAsync(destination, source, bytes, cudaMemcpyDeviceToHost, owner->stream);
-    return copy_error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+    return copy_error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                                      : cuda_failure(copy_error, action, detail);
   };
 
   status = copy_d2h(statuses.data(), owner->statuses, statuses.size() * sizeof(D3Status),
                     "download D3 statuses");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = copy_d2h(energies.data(), owner->energies, energies.size() * sizeof(double),
                     "download D3 energies");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (std::any_of(want_gradient.begin(), want_gradient.end(),
                   [](std::uint8_t value) { return value != 0; })) {
     status = copy_d2h(gradients.data(), owner->gradients, gradients.size() * sizeof(double),
                       "download D3 gradients");
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   }
 
   error = cudaStreamSynchronize(owner->stream);
   replay_drain.drained = true;
-  return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+  return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                               : cuda_failure(error, "synchronize D3 CUDA replay", detail);
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

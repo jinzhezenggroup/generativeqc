@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /**
  * Runtime-enriched CUDA resource facts shared by compiler/runtime policies.
@@ -45,4 +45,4 @@ CudaTargetInfo cuda_target_info_from_properties(const DeviceProperties& properti
   return target;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

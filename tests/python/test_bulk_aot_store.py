@@ -4,8 +4,8 @@ import json
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.xc import bulk_aot_cache, bulk_aot_store
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc import bulk_aot_cache, bulk_aot_store
 
 if TYPE_CHECKING:
     from pathlib import Path

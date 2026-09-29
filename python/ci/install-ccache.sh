@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install a CUDA-capable ccache into the manylinux build container used by
 # cibuildwheel. This is copied from xTBloom's reviewed wheel infrastructure so
-# repeated VibeQC PR runs can reuse compiled C++ and CUDA objects.
+# repeated GenerativeQC PR runs can reuse compiled C++ and CUDA objects.
 #
 # AlmaLinux-8-based manylinux_2_28 images ship ccache 3.7, which predates
 # nvcc/CUDA support (added in ccache 4.1). Use the pinned upstream musl-static

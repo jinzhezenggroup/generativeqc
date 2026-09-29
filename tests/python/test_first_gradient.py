@@ -5,16 +5,16 @@ from __future__ import annotations
 import typing
 
 import pytest
-from vibeqc_compiler.integral.first_gradient import (
+from generativeqc_compiler.integral.first_gradient import (
     FirstGradientTerm,
     FirstGradientWeight,
     emit_first_gradient,
     first_gradient_identity,
 )
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
 
 def test_weighted_gradient_source_is_generic_and_accumulates_atomic_output() -> None:

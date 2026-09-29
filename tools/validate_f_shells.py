@@ -17,7 +17,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.vibeqc_validation.f_shell import (
+from tools.generativeqc_validation.f_shell import (
     F_SHELL_CLASSES,
     SMOKE_CLASSES,
     catalog,
@@ -81,7 +81,7 @@ def main() -> int:
             ),
         )
     if args.tier == "numerical":
-        from tools.vibeqc_validation.f_shell_numerics import numerical_matrix
+        from tools.generativeqc_validation.f_shell_numerics import numerical_matrix
 
         report = numerical_matrix(
             report,

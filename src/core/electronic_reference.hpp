@@ -6,7 +6,7 @@
 #include <span>
 #include <stdexcept>
 
-namespace vibeqc::core {
+namespace generativeqc::core {
 
 /** Borrowed canonical-orbital data for one spin channel.
  * Storage remains owned by the producing method state. */
@@ -67,4 +67,4 @@ inline void validate_electronic_reference_shape(const ElectronicReferenceView& r
     throw std::invalid_argument("invalid electronic reference shape");
 }
 
-}  // namespace vibeqc::core
+}  // namespace generativeqc::core

@@ -14,7 +14,7 @@
         2,
         3
       ],
-      "schema": "vibeqc.tensor.packing",
+      "schema": "generativeqc.tensor.packing",
       "schema_version": 1,
       "signs": [
         1,
@@ -93,7 +93,7 @@
         13,
         15
       ],
-      "schema": "vibeqc.tensor.packing",
+      "schema": "generativeqc.tensor.packing",
       "schema_version": 1,
       "signs": [
         1,
@@ -3707,7 +3707,7 @@
       "slice": "A",
       "source": "PySCF 2.14.0 rccsd + rintermediates; see source_manifest.json"
     },
-    "schema": "vibeqc.tensor",
+    "schema": "generativeqc.tensor",
     "schema_version": 1
   },
   "terms": {

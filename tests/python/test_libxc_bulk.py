@@ -12,9 +12,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.xc import libxc_bulk
-from vibeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.xc import libxc_bulk
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
 
 from tools import import_libxc_bulk
 
@@ -81,8 +81,8 @@ def test_unknown_and_blocked_names_do_not_fall_back() -> None:
 def test_bulk_representation_enters_default_dispatch_without_catalog_row() -> None:
     from fractions import Fraction
 
-    from vibeqc_compiler.xc.program import build_program
-    from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec
+    from generativeqc_compiler.xc.program import build_program
+    from generativeqc_compiler.xc.spec import CATALOG, FunctionalSpec
 
     spec = FunctionalSpec("BULK_ONLY", (("GGA_X_PBE_SOL", Fraction(1)),))
     assert spec.to_payload()["production_admitted"] is False
@@ -177,9 +177,9 @@ def test_existing_emitters_and_compiled_c_hessian(name: str, tmp_path: Path) -> 
 def test_packaged_compiler_imports_without_site_runtime_or_network(
     tmp_path: Path,
 ) -> None:
-    package = tmp_path / "site/vibeqc_compiler"
+    package = tmp_path / "site/generativeqc_compiler"
     shutil.copytree(
-        ROOT / "python/vibeqc_compiler",
+        ROOT / "python/generativeqc_compiler",
         package,
         ignore=shutil.ignore_patterns("__pycache__", "assets"),
     )
@@ -191,10 +191,10 @@ def no_network(*args, **kwargs):
     raise AssertionError("offline compilation attempted network access")
 socket.socket = no_network
 socket.create_connection = no_network
-from vibeqc_compiler.xc.libxc_bulk import build_bulk_program
+from generativeqc_compiler.xc.libxc_bulk import build_bulk_program
 program = build_bulk_program("GGA_X_PBE_SOL")
 assert program.roots(2)
-assert not {"vibeqc", "pyscf", "torch", "cupy", "numpy"}.intersection(sys.modules)
+assert not {"generativeqc", "pyscf", "torch", "cupy", "numpy"}.intersection(sys.modules)
 print(program.identity)
 """
     result = subprocess.run(
@@ -211,7 +211,7 @@ print(program.identity)
 
 
 def test_bulk_source_projection_does_not_shadow_production_adapters() -> None:
-    from vibeqc_compiler.xc import b88_vwn_maple, pbe_maple, rsh_maple, scan_maple
+    from generativeqc_compiler.xc import b88_vwn_maple, pbe_maple, rsh_maple, scan_maple
 
     for adapter in (b88_vwn_maple, pbe_maple, rsh_maple, scan_maple):
         assert adapter._libxc_root().resolve() != SOURCE.resolve()

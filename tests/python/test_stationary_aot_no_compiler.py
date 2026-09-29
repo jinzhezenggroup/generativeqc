@@ -7,11 +7,11 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from vibeqc import _dft_gradient, _stationary_cuda
-from vibeqc.batch import PreparedBatch
-from vibeqc_compiler import dft
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.method import resolve_method
+from generativeqc import _dft_gradient, _stationary_cuda
+from generativeqc.batch import PreparedBatch
+from generativeqc_compiler import dft
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.method import resolve_method
 
 
 def _evaluate_selector(node: ast.expr, values: dict[str, object]) -> object:
@@ -34,7 +34,9 @@ def _evaluate_selector(node: ast.expr, values: dict[str, object]) -> object:
 
 
 def _artifact_selector(function_name: str, artifact_name: str) -> ast.IfExp:
-    source = Path(__file__).resolve().parents[2] / "python/vibeqc/_stationary_cuda.py"
+    source = (
+        Path(__file__).resolve().parents[2] / "python/generativeqc/_stationary_cuda.py"
+    )
     tree = ast.parse(source.read_text(encoding="utf-8"))
     functions = [
         node
@@ -176,7 +178,7 @@ def test_public_aot_force_does_not_probe_nvcc(
         _stationary_cuda_execution=object(),
         _charges=[0],
         _multiplicities=[1],
-        _library=SimpleNamespace(_name=str(tmp_path / "libvibeqc.so")),
+        _library=SimpleNamespace(_name=str(tmp_path / "libgenerativeqc.so")),
         _stationary_cuda_compiler=lambda: pytest.fail("NVCC discovery before AOT load"),
         _stationary_cuda_target=lambda: target,
     )
@@ -219,7 +221,7 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
         assert kwargs["compiler"] is None
         assert kwargs["target"] is target
         assert kwargs["aot_directory"] == tmp_path
-        assert kwargs["native_grid_library"] == tmp_path / "libvibeqc.so"
+        assert kwargs["native_grid_library"] == tmp_path / "libgenerativeqc.so"
         return SimpleNamespace(gradient=np.ones((2, 3)), work={"tensor_executions": 0})
 
     monkeypatch.setattr(
@@ -234,7 +236,7 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
         _stationary_cuda_execution=object(),
         _charges=[0],
         _multiplicities=[1],
-        _library=SimpleNamespace(_name=str(tmp_path / "libvibeqc.so")),
+        _library=SimpleNamespace(_name=str(tmp_path / "libgenerativeqc.so")),
         _stationary_cuda_compiler=lambda: pytest.fail(
             "NVCC discovery before component AOT load"
         ),

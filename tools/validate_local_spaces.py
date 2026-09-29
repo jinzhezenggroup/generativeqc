@@ -19,18 +19,21 @@ from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
-from vibeqc import Calculator
-from vibeqc.profiles import canonical_hash, file_hash
+from generativeqc import Calculator
+from generativeqc.profiles import canonical_hash, file_hash
 
-from tools.vibeqc_local_cc.localization import localize_occupied
-from tools.vibeqc_local_cc.mp2 import build_local_mp2, recover_canonical_amplitudes
-from tools.vibeqc_local_cc.spaces import projected_virtual_space
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
-from tools.vibeqc_posthf.mp2 import restricted_mp2
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_local_cc.localization import localize_occupied
+from tools.generativeqc_local_cc.mp2 import (
+    build_local_mp2,
+    recover_canonical_amplitudes,
+)
+from tools.generativeqc_local_cc.spaces import projected_virtual_space
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.mp2 import restricted_mp2
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def run(
@@ -221,16 +224,16 @@ def run(
     archive = output / "states.npz"
     np.savez_compressed(archive, **states)
     library = Calculator()._library
-    library.vibeqc_get_source_identity.restype = ct.c_char_p
+    library.generativeqc_get_source_identity.restype = ct.c_char_p
     result = {
-        "schema": "vibeqc.local_space_experiment",
+        "schema": "generativeqc.local_space_experiment",
         "version": 1,
         "cases": rows,
-        "source_identity": library.vibeqc_get_source_identity().decode(),
+        "source_identity": library.generativeqc_get_source_identity().decode(),
         "runner_sha256": file_hash(Path(__file__)),
         "module_sha256": {
             str(path.relative_to(Path(__file__).parent)): file_hash(path)
-            for package in ("vibeqc_local_cc", "vibeqc_posthf")
+            for package in ("generativeqc_local_cc", "generativeqc_posthf")
             for path in sorted((Path(__file__).parent / package).glob("*.py"))
         },
         "python": platform.python_version(),

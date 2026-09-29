@@ -7,18 +7,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import find_nvcc
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft.cuda import CudaGrid, compile_cuda
+from generativeqc_compiler.dft.features import density_features
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 from test_spatial_execution import local_case  # noqa: F401
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import find_nvcc
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft.cuda import CudaGrid, compile_cuda
-from vibeqc_compiler.dft.features import density_features
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_GRID_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GRID_CUDA_TEST") != "1",
     reason="opt-in finite Slurm CUDA gate",
 )
 

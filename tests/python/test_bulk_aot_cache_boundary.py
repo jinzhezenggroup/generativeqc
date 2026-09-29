@@ -4,8 +4,8 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.xc.bulk_aot_cache import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.bulk_aot_cache import (
     CacheClosure,
     CacheDependency,
     closure_from_probe_recipe,

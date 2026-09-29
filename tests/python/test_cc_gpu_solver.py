@@ -3,7 +3,7 @@
 Preparation and ordinary-stream plan contracts run on CPU and are always
 active. Real-device execution compiles the #148 physical equations through the
 #146 planner and requires an explicitly allocated GPU validation window
-(``VIBEQC_CC_CUDA_TEST=1`` plus ``VIBEQC_TENSOR_ARCH``/``VIBEQC_NVCC`` and a
+(``GENERATIVEQC_CC_CUDA_TEST=1`` plus ``GENERATIVEQC_TENSOR_ARCH``/``GENERATIVEQC_NVCC`` and a
 tensor cache). Without that window the device tests are skipped, never faked.
 """
 
@@ -13,16 +13,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from test_cc_api import FixtureProvider, fixture_problem  # noqa: F401  (same fixtures)
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_cc.gpu_solver import PreparedGPUSolver, solve_gpu
-from tools.vibeqc_cc.solver import SolverOptions
+from tools.generativeqc_cc.gpu_solver import PreparedGPUSolver, solve_gpu
+from tools.generativeqc_cc.solver import SolverOptions
 
 
 def test_gpu_solver_plans_compose_under_budget() -> None:
-    from tools.vibeqc_cc.gpu_state import solver_plans
+    from tools.generativeqc_cc.gpu_state import solver_plans
 
     s, _p, _meta, _ = fixture_problem("h2o")
     target = cuda_target_info("sm_90")
@@ -70,7 +70,7 @@ def test_replay_preparation_failure_releases_primary(
     monkeypatch: typing.Any, tmp_path: typing.Any
 ) -> None:
     """Retaining a failed constructor traceback must not retain device memory."""
-    from tools.vibeqc_cc import gpu_solver
+    from tools.generativeqc_cc import gpu_solver
 
     closed = []
 
@@ -102,20 +102,20 @@ def test_replay_preparation_failure_releases_primary(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_CC_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_CC_CUDA_TEST") != "1",
     reason="requires explicitly allocated GPU validation window",
 )
 @pytest.mark.parametrize("name", ["h2", "h2o", "ch4"])
 def test_real_device_gpu_solver_converges_and_replays(
     name: typing.Any, tmp_path: typing.Any
 ) -> None:
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     s, p, meta, _ = fixture_problem(name)
     compiler = CudaCompilerAdapter(
-        find_nvcc(), cuda_target_info(os.environ["VIBEQC_TENSOR_ARCH"])
+        find_nvcc(), cuda_target_info(os.environ["GENERATIVEQC_TENSOR_ARCH"])
     )
-    cache = Path(os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path / "cache"))
+    cache = Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path / "cache"))
 
     result = solve_gpu(
         s,
@@ -152,19 +152,19 @@ def test_real_device_gpu_solver_converges_and_replays(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_CC_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_CC_CUDA_TEST") != "1",
     reason="requires explicitly allocated GPU validation window",
 )
 def test_real_device_gpu_nonconvergence_is_an_explicit_failure_state(
     tmp_path: typing.Any,
 ) -> None:
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     s, p, _meta, _ = fixture_problem("ch4")
     compiler = CudaCompilerAdapter(
-        find_nvcc(), cuda_target_info(os.environ["VIBEQC_TENSOR_ARCH"])
+        find_nvcc(), cuda_target_info(os.environ["GENERATIVEQC_TENSOR_ARCH"])
     )
-    cache = Path(os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path / "cache"))
+    cache = Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path / "cache"))
 
     result = solve_gpu(
         s,
@@ -178,23 +178,23 @@ def test_real_device_gpu_nonconvergence_is_an_explicit_failure_state(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_CC_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_CC_CUDA_TEST") != "1",
     reason="requires explicitly allocated GPU validation window",
 )
 def test_real_device_gpu_overflow_retains_serializable_failure(
     tmp_path: typing.Any,
 ) -> None:
     """Native arithmetic failure returns the last finite input for replay."""
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     s, p, _, a = fixture_problem("h2")
     result = solve_gpu(
         s,
         p,
         compiler=CudaCompilerAdapter(
-            find_nvcc(), cuda_target_info(os.environ["VIBEQC_TENSOR_ARCH"])
+            find_nvcc(), cuda_target_info(os.environ["GENERATIVEQC_TENSOR_ARCH"])
         ),
-        cache=Path(os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path / "cache")),
+        cache=Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path / "cache")),
         t1=np.full_like(a["t1"], 1e100),
         t2=np.full_like(a["t2"], 1e100),
     )

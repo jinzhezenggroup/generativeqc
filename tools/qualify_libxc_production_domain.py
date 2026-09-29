@@ -1,7 +1,7 @@
 """Qualify one imported Libxc functional against the production-domain matrix.
 
 This is an optional evidence producer.  The independent oracle is PySCF 2.14.0
-backed by Libxc 7.0.0; the candidate is the pinned VibeQC bulk Graph/runtime
+backed by Libxc 7.0.0; the candidate is the pinned GenerativeQC bulk Graph/runtime
 contract.  The tool writes a complete fail-closed receipt even when boundary or
 control rows are not yet admissible.
 """
@@ -15,28 +15,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
-from vibeqc_compiler.xc.production_domain_cases import (
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.production_domain_cases import (
     ProductionDomainCase,
     control_case_ids,
     numerical_cases,
 )
-from vibeqc_compiler.xc.production_domain_controls import run_control_case
-from vibeqc_compiler.xc.production_domain_evidence import (
+from generativeqc_compiler.xc.production_domain_controls import run_control_case
+from generativeqc_compiler.xc.production_domain_evidence import (
     build_execution_binding,
     build_result,
     stage_evidence,
 )
 
 if TYPE_CHECKING:
-    from vibeqc_compiler.xc.bulk_runtime import BulkRuntimeProgram
-    from vibeqc_compiler.xc.libxc_production_domain import ProductionDomainProfile
+    from generativeqc_compiler.xc.bulk_runtime import BulkRuntimeProgram
+    from generativeqc_compiler.xc.libxc_production_domain import ProductionDomainProfile
 
-CAMPAIGN_SCHEMA = "vibeqc.libxc-production-domain-campaign/v2"
+CAMPAIGN_SCHEMA = "generativeqc.libxc-production-domain-campaign/v2"
 
 
 def _reference(

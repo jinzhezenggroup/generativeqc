@@ -5,13 +5,13 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from vibeqc_compiler.xc import production_domain_catalog
-from vibeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
-from vibeqc_compiler.xc.libxc_bulk_capabilities import (
+from generativeqc_compiler.xc import production_domain_catalog
+from generativeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
+from generativeqc_compiler.xc.libxc_bulk_capabilities import (
     available_capabilities,
     functional_capability,
 )
-from vibeqc_compiler.xc.production_domain_evidence import (
+from generativeqc_compiler.xc.production_domain_evidence import (
     build_execution_binding,
     build_result,
     required_matrix,
@@ -203,10 +203,10 @@ def test_receipt_binds_exact_execution_identity() -> None:
         execution=execution,
     )
 
-    assert result["schema"] == "vibeqc.libxc-production-domain-result.v3"
+    assert result["schema"] == "generativeqc.libxc-production-domain-result.v3"
     assert result["execution"] == execution
     assert result["execution"]["schema"] == (
-        "vibeqc.libxc-production-domain-execution/v2"
+        "generativeqc.libxc-production-domain-execution/v2"
     )
     assert [item["spin"] for item in execution["programs"]] == [
         "polarized",

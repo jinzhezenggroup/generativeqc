@@ -1,17 +1,17 @@
-#ifndef VIBEQC_INTEGRALS_ERI_GEOMETRY_HPP
-#define VIBEQC_INTEGRALS_ERI_GEOMETRY_HPP
+#ifndef GENERATIVEQC_INTEGRALS_ERI_GEOMETRY_HPP
+#define GENERATIVEQC_INTEGRALS_ERI_GEOMETRY_HPP
 
 #include <type_traits>
 
 #include "integrals/range_moments.hpp"
 
 #ifdef __CUDACC__
-#define VIBEQC_ERI_HD __host__ __device__
+#define GENERATIVEQC_ERI_HD __host__ __device__
 #else
-#define VIBEQC_ERI_HD
+#define GENERATIVEQC_ERI_HD
 #endif
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 
 /** Bind unnormalized primitive geometry to a generated Hermite/AD callable.
  * The caller supplies four positive exponents and twelve center coordinates.
@@ -24,9 +24,9 @@ namespace vibeqc::integrals {
  * overflow is reported to the caller; there is no fallback to another kernel.
  */
 template <typename Geometry, unsigned MaximumOrder = 13>
-VIBEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double* centers,
-                                     unsigned maximum_order, CoulombRange range, double omega,
-                                     Geometry& geometry) {
+GENERATIVEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double* centers,
+                                           unsigned maximum_order, CoulombRange range, double omega,
+                                           Geometry& geometry) {
   // The explicit bound protects both legacy fourteen-moment geometry and
   // second-order geometry. A smaller caller array cannot silently overflow.
   static_assert(std::extent<decltype(geometry.boys)>::value > MaximumOrder,
@@ -69,6 +69,6 @@ VIBEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double* cent
          bounded_range_moments<MaximumOrder>(maximum_order, geometry.rho * distance, geometry.rho,
                                              range, omega, geometry.boys);
 }
-}  // namespace vibeqc::integrals
-#undef VIBEQC_ERI_HD
+}  // namespace generativeqc::integrals
+#undef GENERATIVEQC_ERI_HD
 #endif

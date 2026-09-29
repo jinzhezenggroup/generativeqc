@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from vibeqc_compiler.common.reference_sources import reference_source_matches
+from generativeqc_compiler.common.reference_sources import reference_source_matches
 
 ROOT = Path(__file__).resolve().parents[2]
 RECEIPT = Path("tests/reference_data/reference_source_import_migrations.json")

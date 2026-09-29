@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.xc._generated_native_semilocal import (
+from generativeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_BY_CODE,
@@ -20,7 +20,7 @@ def test_native_semilocal_generated_outputs_are_current() -> None:
         encoding="utf-8"
     ) == generator.emit_cpp(families)
     assert (
-        ROOT / "python/vibeqc_compiler/xc/_generated_native_semilocal.py"
+        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
     ).read_text(encoding="utf-8") == generator.emit_python(families)
 
 

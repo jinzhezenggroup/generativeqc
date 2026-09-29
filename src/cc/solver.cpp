@@ -10,7 +10,7 @@
 #include "solver/diis.hpp"
 #include "solver/iteration_control.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 namespace {
 
 std::size_t checked_add(std::size_t a, std::size_t b) { return generated::checked_add(a, b); }
@@ -128,7 +128,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   current.reserve(elements);
   current.insert(current.end(), p.initial_t1.begin(), p.initial_t1.end());
   current.insert(current.end(), p.initial_t2.begin(), p.initial_t2.end());
-  vibeqc::solver::Diis diis(options.diis_size, elements);
+  generativeqc::solver::Diis diis(options.diis_size, elements);
   double previous = std::numeric_limits<double>::quiet_NaN();
   SolverResult result;
   result.diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, capacity);
@@ -138,7 +138,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   const unsigned iteration_budget = options.max_iterations == std::numeric_limits<unsigned>::max()
                                         ? options.max_iterations
                                         : options.max_iterations + 1;
-  vibeqc::solver::run_bounded_iterations(iteration_budget, [&](unsigned ordinal) {
+  generativeqc::solver::run_bounded_iterations(iteration_budget, [&](unsigned ordinal) {
     const unsigned iteration = ordinal - 1;
     try {
       auto in = inputs(p, current.data(), current.data() + n1);
@@ -219,10 +219,10 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   return result;
 }
 
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
 SolverResult solve_cuda(const Problem&, const SolverOptions&, int) {
   throw std::runtime_error("CUDA RCCSD is not compiled");
 }
 #endif
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

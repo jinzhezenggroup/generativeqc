@@ -15,10 +15,10 @@
 #include "runtime/df_progress_trace.hpp"
 #include "scf/reference/observation.hpp"
 
-namespace vibeqc::runtime::host_trace {
+namespace generativeqc::runtime::host_trace {
 
 /** Host counterpart of #206's CUDA component ledger. Opt in with a fresh
- * VIBEQC_DF_HOST_TRACE JSONL path. Nested wall/thread-CPU intervals are
+ * GENERATIVEQC_DF_HOST_TRACE JSONL path. Nested wall/thread-CPU intervals are
  * inclusive; consumers subtract immediate children and never add CPU/GPU
  * clocks. No allocation, clock read, file I/O or CUDA fence occurs disabled.
  * Diagnostic runs include tracing overhead and cannot replace clean timings.
@@ -131,7 +131,7 @@ inline void write(const State& state) {
   auto* file = std::fopen(state.path.c_str(), "a");
   if (!file) return;  // The runner rejects missing/incomplete trace evidence.
   std::fprintf(file,
-               "{\"schema\":\"vibeqc.df_host_trace\",\"version\":1,\"id\":%llu,"
+               "{\"schema\":\"generativeqc.df_host_trace\",\"version\":1,\"id\":%llu,"
                "\"valid\":%s,\"regions\":[",
                static_cast<unsigned long long>(state.id), state.valid ? "true" : "false");
   bool comma = false;
@@ -167,7 +167,7 @@ class Region {
     auto* state = detail::active;
     try {
       if (!state) {
-        const char* path = std::getenv("VIBEQC_DF_HOST_TRACE");
+        const char* path = std::getenv("GENERATIVEQC_DF_HOST_TRACE");
         if (!path || !*path) return;
         owner_ = std::make_unique<detail::State>();
         state = owner_.get();
@@ -236,4 +236,4 @@ decltype(auto) with_reason(EigenReason reason, Function&& function) {
   Reason scope(reason);
   return function();
 }
-}  // namespace vibeqc::runtime::host_trace
+}  // namespace generativeqc::runtime::host_trace

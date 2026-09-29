@@ -8,10 +8,10 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.schedule import ScheduleContract
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.schedule import ScheduleContract
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -24,9 +24,13 @@ from vibeqc_compiler.tensor import (
     multiply,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_plan import Reservations, TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_search import (
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_plan import (
+    Reservations,
+    TensorSchedule,
+    plan_cuda,
+)
+from generativeqc_compiler.tensor.cuda_search import (
     TensorScheduleSpace,
     TensorScreeningPolicy,
     TensorSearchLimits,
@@ -36,7 +40,7 @@ from vibeqc_compiler.tensor.cuda_search import (
     plan_schedule_search,
     require_compiled_resources,
 )
-from vibeqc_compiler.tensor.interpreter import execute
+from generativeqc_compiler.tensor.interpreter import execute
 
 TARGET = cuda_target_info("sm_80")
 
@@ -259,7 +263,7 @@ def test_new_schedule_dimensions_change_generated_execution_without_changing_def
     assert cub_contract.resources.shared_bytes == 128 * 8
     assert (
         dict(cub_contract.provenance)["lowering_providers"]
-        == "nvidia.cccl.cub,vibeqc.generated_cuda"
+        == "nvidia.cccl.cub,generativeqc.generated_cuda"
     )
 
     packed = plan_cuda(
@@ -297,7 +301,7 @@ def test_default_search_prunes_equivalent_plans_and_preserves_baseline() -> None
 
 
 def test_duplicate_does_not_even_emit_source(monkeypatch: typing.Any) -> None:
-    import vibeqc_compiler.tensor.cuda_search as search
+    import generativeqc_compiler.tensor.cuda_search as search
 
     baseline = plan_cuda(vector_program(), TARGET)
     monkeypatch.setattr(search, "emit_cuda", lambda _: pytest.fail("duplicate emitted"))
@@ -798,8 +802,8 @@ def test_candidate_overflow_fails_before_any_compilation(
 def test_promotion_profiles_use_shared_selector_and_reject_unmeasured_layout(
     tmp_path: typing.Any, fake_cuda: typing.Any
 ) -> None:
-    from vibeqc_compiler.common.backend import TargetInfo
-    from vibeqc_compiler.common.specialization import (
+    from generativeqc_compiler.common.backend import TargetInfo
+    from generativeqc_compiler.common.specialization import (
         CompilationIdentity,
         GuardPredicate,
         ImplementationProfile,
@@ -922,7 +926,7 @@ def test_candidate_numerical_failure_never_creates_a_profile(
 def test_unemittable_candidate_does_not_abort_other_candidates(
     monkeypatch: typing.Any,
 ) -> None:
-    import vibeqc_compiler.tensor.cuda_search as search
+    import generativeqc_compiler.tensor.cuda_search as search
 
     emit = search.emit_cuda
 
@@ -1202,7 +1206,7 @@ def test_cooperative_reduction_is_not_rejected_as_scalar(
 
 
 def test_mixed_accumulation_without_legal_gemm_stays_eligible() -> None:
-    from vibeqc_compiler.tensor import PrecisionDirective, lower_precision
+    from generativeqc_compiler.tensor import PrecisionDirective, lower_precision
 
     index = Index("i", IndexSpace("long_dot", "batch", 4096))
     spec = TensorSpec((index,), role="input")

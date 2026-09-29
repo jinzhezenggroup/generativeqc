@@ -6,9 +6,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry import D3CompilerSpec, compile_d3_bj, execute_d3_bj
+from generativeqc_compiler.geometry import D3CompilerSpec, compile_d3_bj, execute_d3_bj
 
-from tools.vibeqc_d3.reference import gfn1_compatibility, make_spec
+from tools.generativeqc_d3.reference import gfn1_compatibility, make_spec
 
 _GOLDENS = json.loads(
     (Path(__file__).parents[1] / "data/d3_bj_reference.json").read_text()
@@ -161,9 +161,9 @@ def test_checked_execution_handles_empty_pair_state(
 
 
 def test_d3_primal_and_generated_vjp_lower_through_shared_cuda_tensorir() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     spec = make_spec(
         s6=1.0,

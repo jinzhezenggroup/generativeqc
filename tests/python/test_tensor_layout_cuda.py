@@ -7,16 +7,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import execute, linearize, transpose_program
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_resident import (
+    PreparedResident,
+    compile_resident,
+)
 from test_tensor_layout import gemm_producer_case, producer_case
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import execute, linearize, transpose_program
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_resident import PreparedResident, compile_resident
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 
@@ -24,16 +27,16 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def compiler() -> typing.Any:
     return CudaCompilerAdapter(
-        Path(os.environ["VIBEQC_NVCC"]),
-        cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120")),
+        Path(os.environ["GENERATIVEQC_NVCC"]),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120")),
     )
 
 
 @pytest.fixture(scope="module")
 def cache(tmp_path_factory: typing.Any) -> typing.Any:
     return (
-        Path(os.environ["VIBEQC_TENSOR_CACHE"])
-        if "VIBEQC_TENSOR_CACHE" in os.environ
+        Path(os.environ["GENERATIVEQC_TENSOR_CACHE"])
+        if "GENERATIVEQC_TENSOR_CACHE" in os.environ
         else tmp_path_factory.mktemp("layout-cuda")
     )
 

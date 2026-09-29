@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -27,8 +27,8 @@ def test_occupied_response_independent_replay(
     consumer: str,
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "GPU work must use a finite Slurm allocation"
+    from generativeqc import Calculator
     from pyscf import gto, scf
-    from vibeqc import Calculator
 
     from benchmarks.df_component_ledger import read_trace
 
@@ -49,29 +49,30 @@ def test_occupied_response_independent_replay(
     fixed = 4 * a * a + 4 * n * n + 2 * a
     budget = 135000 if auxiliary == "def2-svp" else 8 * (fixed + 3 * a * n * n // 4)
     for name in (
-        "VIBEQC_DF_WEIGHTED_EXECUTION",
-        "VIBEQC_DF_DERIVATIVE_PAIRS",
-        "VIBEQC_DF_SHELL_SCHEDULE",
-        "VIBEQC_DF_PRIMITIVE_BUCKETS",
-        "VIBEQC_DF_RESPONSE_UPLOAD_PROBE",
-        "VIBEQC_DF_RESPONSE_SCATTER_PROBE",
-        "VIBEQC_DF_SERIAL_RESPONSE_DOT",
-        "VIBEQC_DF_RAW_REUSE",
-        "VIBEQC_DF_RESPONSE_BATCHING",
-        "VIBEQC_DF_SOURCE_PROJECTION",
+        "GENERATIVEQC_DF_WEIGHTED_EXECUTION",
+        "GENERATIVEQC_DF_DERIVATIVE_PAIRS",
+        "GENERATIVEQC_DF_SHELL_SCHEDULE",
+        "GENERATIVEQC_DF_PRIMITIVE_BUCKETS",
+        "GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE",
+        "GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE",
+        "GENERATIVEQC_DF_SERIAL_RESPONSE_DOT",
+        "GENERATIVEQC_DF_RAW_REUSE",
+        "GENERATIVEQC_DF_RESPONSE_BATCHING",
+        "GENERATIVEQC_DF_SOURCE_PROJECTION",
     ):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "packed-single")
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_ALGEBRA", "blas")
-    monkeypatch.setenv("VIBEQC_DF_SOURCE_DERIVATIVE_SCHEDULE", consumer)
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", str(budget))
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas")
+    monkeypatch.setenv("GENERATIVEQC_DF_SOURCE_DERIVATIVE_SCHEDULE", consumer)
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(budget))
     monkeypatch.setenv(
-        "VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted" if route == "fitted" else "raw"
+        "GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE",
+        "fitted" if route == "fitted" else "raw",
     )
     if route == "raw-batched":
-        monkeypatch.setenv("VIBEQC_DF_SOURCE_PROJECTION", "batched")
+        monkeypatch.setenv("GENERATIVEQC_DF_SOURCE_PROJECTION", "batched")
     # The practical auxiliary is an external record, not a bundled basis name.
     auxiliary_record = (
         auxiliary
@@ -93,7 +94,7 @@ def test_occupied_response_independent_replay(
         # None restores the prepared geometry, so replay moved coordinates explicitly.
         for phase, geometry in enumerate((None, None, moved, moved)):
             trace = tmp_path / f"{route}-{auxiliary}-{consumer}-{phase}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = batch.execute(
                 None if geometry is None else [np.asarray([p for _, p in geometry])],
                 strict=True,

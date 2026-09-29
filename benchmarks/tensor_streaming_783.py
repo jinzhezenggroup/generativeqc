@@ -11,18 +11,18 @@ import time
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import Program, execute
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from vibeqc_compiler.tensor.cuda_plan import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+from generativeqc_compiler.tensor.cuda_plan import (
     TensorSchedule,
     estimated_cuda_launches,
     plan_cuda,
 )
 
 from benchmarks._support import raw_output_path, write_result
-from tools.vibeqc_cc.triples_tiles import (
+from tools.generativeqc_cc.triples_tiles import (
     TileSpec,
     build_runtime_tile_triples_program,
     runtime_tile_controls,
@@ -76,7 +76,7 @@ def _variant(
         max_bytes=max_bytes,
     )
     plan_seconds = time.perf_counter() - plan_start
-    with tempfile.TemporaryDirectory(prefix=f"vibeqc-783-{label}-") as directory:
+    with tempfile.TemporaryDirectory(prefix=f"generativeqc-783-{label}-") as directory:
         start = time.perf_counter()
         artifact = compile_cuda(plan, compiler, Path(directory))
         compile_seconds = time.perf_counter() - start
@@ -253,7 +253,7 @@ def main() -> None:
         ),
     ]
     result = {
-        "schema": "vibeqc.tensor.streaming-reduction-qualification/1",
+        "schema": "generativeqc.tensor.streaming-reduction-qualification/1",
         "issue": 783,
         "git_head": _command_output(["git", "rev-parse", "HEAD"]),
         "git_status": _command_output(["git", "status", "--porcelain"]),

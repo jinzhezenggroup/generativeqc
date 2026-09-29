@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
   const std::vector<std::uint8_t> host_final_audit_mask{static_cast<std::uint8_t>(audited)};
   const std::vector<std::uint8_t> host_final_fock_reuse_mask{0};
   const struct { double item_budget_error; } requested_precision_policy{0};
-  vibeqc::scf::ScfResult result;
+  generativeqc::scf::ScfResult result;
 """
         + publication
         + r"""

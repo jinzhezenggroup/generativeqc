@@ -6,13 +6,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -61,18 +61,20 @@ def test_resident_source_reuses_values_for_full_and_partial_force_panels(
     assert os.environ.get("SLURM_JOB_ID")
     case, moved, records = reference
     for key in list(os.environ):
-        if key.startswith("VIBEQC_DF_"):
+        if key.startswith("GENERATIVEQC_DF_"):
             monkeypatch.delenv(key)
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     if response_budget is not None:
-        monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", str(response_budget))
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(response_budget)
+        )
     calc = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
-        auxiliary_basis=case.vibeqc_basis,
+        auxiliary_basis=case.generativeqc_basis,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
@@ -89,7 +91,7 @@ def test_resident_source_reuses_values_for_full_and_partial_force_panels(
         batch.execute(strict=True, properties=("energy", "forces"))
         for step, changed in enumerate((False, True, False)):
             path = tmp_path / f"response-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(path))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(path))
             coordinates = moved if changed else np.array([r for _, r in case.atoms])
             item = batch.execute(
                 [coordinates], strict=True, properties=("energy", "forces")
@@ -125,7 +127,7 @@ def test_resident_source_reuses_values_for_full_and_partial_force_panels(
                     assert (counters["response_auxiliary_blocks"] == 1) == (
                         response_budget is None
                     )
-            monkeypatch.delenv("VIBEQC_DF_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_TRACE")
             if response_budget is None:
                 # Each replay's coordinates are explicit; omitting them uses
                 # the prepared geometry, not the prior call's displaced frame.

@@ -6,7 +6,7 @@
 #include "integrals/electron_interaction_source.hpp"
 #include "posthf/capacity.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 
 /** Values-only public-AO tiles from the independent contracted CPU evaluator.
  *
@@ -56,4 +56,4 @@ class RawSource final : public integrals::ElectronInteractionSource {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
-}  // namespace vibeqc::posthf
+}  // namespace generativeqc::posthf

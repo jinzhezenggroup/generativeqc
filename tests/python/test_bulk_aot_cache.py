@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.xc import bulk_aot_cache
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc import bulk_aot_cache
 
 
 def _digest(label: str) -> str:
