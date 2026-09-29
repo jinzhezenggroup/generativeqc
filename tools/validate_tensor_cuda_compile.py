@@ -104,11 +104,7 @@ def main() -> None:
     ordinary = compile_cuda(plan, compiler, args.cache / "ordinary")
     resident = compile_resident(plan, compiler, args.cache / "resident")
 
-    rank2_plan = plan_cuda(
-        _rank2_program(),
-        compiler.target,
-        reassociate_contractions=True,
-    )
+    rank2_plan = plan_cuda(_rank2_program(), compiler.target)
     rank2_gemms = [step for step in rank2_plan.steps if step.gemm != "none"]
     if len(rank2_gemms) != 2:
         raise RuntimeError(
