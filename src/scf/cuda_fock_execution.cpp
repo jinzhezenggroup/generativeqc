@@ -132,43 +132,17 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
     detail = "prepared CUDA resident RSH derivative has incompatible scientific identity";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
-  std::vector<double> full_range;
-  auto status = execute_cuda_direct_shell_full_range_derivatives_device(
-      source, p.spin, p.coulomb.coefficient, p.exchange.coefficient, density, beta, matrix_elements,
-      full_range, detail);
+  auto status = execute_cuda_direct_shell_rsh_energy_derivatives_device(
+      source, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
+      p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
+      matrix_elements, derivatives, detail);
   if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
     return execute_cuda_direct_rsh_energy_derivatives_device(
         source, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
         p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
         matrix_elements, derivatives, detail);
   }
-  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-
-  // The retained shell scheduler supplies full-range J and the primary
-  // full-range exchange derivative. Evaluate only one unit-coefficient LR
-  // recurrence in the public-AO fallback, then reconstruct the requested
-  // short/long source split without another full-range AO^4 derivative pass.
-  std::vector<double> unit_long_range;
-  status = execute_cuda_direct_rsh_energy_derivatives_device(
-      source, p.spin, 0.0, 0.0, 1.0, c.exchange.omega, density, beta, matrix_elements,
-      unit_long_range, detail);
-  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-  const auto coordinates = binding.coordinates_per_item;
-  if (full_range.size() != 2 * coordinates || unit_long_range.size() != 3 * coordinates) {
-    detail = "prepared CUDA shell/RSH derivative source shape mismatch";
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
-  derivatives.assign(3 * coordinates, 0.0);
-  const double long_coefficient = p.exchange.coefficient + c.exchange.coefficient;
-  for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
-    const double long_unit = unit_long_range[2 * coordinates + coordinate];
-    derivatives[coordinate] = full_range[coordinate];
-    derivatives[coordinates + coordinate] =
-        full_range[coordinates + coordinate] - p.exchange.coefficient * long_unit;
-    derivatives[2 * coordinates + coordinate] = long_coefficient * long_unit;
-  }
-  detail.clear();
-  return GENERATIVEQC_STATUS_SUCCESS;
+  return status;
 }
 
 generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
