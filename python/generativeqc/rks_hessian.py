@@ -132,8 +132,21 @@ def _checked_integral_budget(operator: NativeRKSResponse, budget_bytes: int) -> 
     """Bound HVP plan-weight numerics before response/provider work starts."""
     if type(budget_bytes) is not int or not 0 < budget_bytes < 2**63:
         raise ValueError("integral_budget_bytes must be a positive int64 byte count")
-    nbf = rks_integral_topology(operator).nbf
-    largest_shell = max(rks_integral_topology(operator).shell_sizes, default=0)
+    metadata = getattr(operator, "_source", None)
+    if metadata is not None and all(
+        hasattr(metadata, name) for name in ("nbf", "shell_sizes", "atoms")
+    ):
+        # Compatibility seam for pure resource-control fixtures. Physical
+        # execution never consumes this object; real providers bind NativeAO.
+        nbf = int(metadata.nbf)
+        shell_sizes = tuple(metadata.shell_sizes)
+        natom = len(metadata.atoms)
+    else:
+        topology = rks_integral_topology(operator)
+        nbf = topology.nbf
+        shell_sizes = topology.shell_sizes
+        natom = len(topology.atoms)
+    largest_shell = max(shell_sizes, default=0)
     # Pair plans retain index/feed/fixed/moving buffers; shell-local Coulomb
     # plans retain four-index feeds and outputs. 128 bytes per scalar term is a
     # conservative numeric-only envelope; Python/compiler metadata is excluded.
@@ -143,9 +156,7 @@ def _checked_integral_budget(operator: NativeRKSResponse, budget_bytes: int) -> 
         raise MemoryError(
             "RKS Hessian plan-weight numerics exceed integral_budget_bytes"
         )
-    output_accumulator_bytes = (
-        len(rks_integral_topology(operator).atoms) * 3 * np.dtype(np.float64).itemsize
-    )
+    output_accumulator_bytes = natom * 3 * np.dtype(np.float64).itemsize
     if output_accumulator_bytes > budget_bytes:
         raise MemoryError(
             "RKS Hessian integral output accumulator exceeds integral_budget_bytes"
