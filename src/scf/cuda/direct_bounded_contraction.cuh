@@ -167,8 +167,7 @@ __device__ inline __noinline__ void contract_bounded_direct_rsh_force_subtile_im
     double coulomb_coefficient, double short_exchange_coefficient, double long_exchange_coefficient,
     double runtime_omega, std::size_t subtile, unsigned lane) {
   static_assert(OmegaMilli >= 0);
-  const double omega =
-      OmegaMilli == 0 ? runtime_omega : static_cast<double>(OmegaMilli) / 1000.0;
+  const double omega = OmegaMilli == 0 ? runtime_omega : static_cast<double>(OmegaMilli) / 1000.0;
 #define GENERATIVEQC_BOUNDED_RSH_FORCE_CASE(order)                                                 \
   case order:                                                                                      \
     contract_two_electron_force_quartet_subtile_rsh_scaled<Unrestricted, order>(                   \
