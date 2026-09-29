@@ -17,11 +17,11 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
 
-# Build-time generation must not execute the NumPy-backed TensorIR facade or
-# tools.generativeqc_cc.__init__.  Load only the immutable IR/type/program modules
-# needed to build #148's algebra, then expose their small public surface to the
-# equation modules.  The optimized/interpreter/packing paths are never entered
-# by this AOT generator (shared + expanded forms only).
+# Build-time generation must remain independent of the NumPy-backed TensorIR
+# interpreter and tools.generativeqc_cc.__init__. Load the immutable compiler
+# modules needed to build and optimize #148's algebra, then expose their small
+# public surface to the equation modules. Production preparation is compiler-only
+# and must remain NumPy-free.
 import types
 from fractions import Fraction
 
