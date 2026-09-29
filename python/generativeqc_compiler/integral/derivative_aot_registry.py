@@ -174,19 +174,24 @@ class DerivativeShellAotKey:
             not isinstance(self.angular, tuple)
             or len(self.angular) != 4
             or any(
-                type(value) is not int or not 0 <= value <= 3
-                for value in self.angular
+                type(value) is not int or not 0 <= value <= 3 for value in self.angular
             )
         ):
-            raise ValueError("derivative shell AOT requires one canonical s/p/d/f quartet")
+            raise ValueError(
+                "derivative shell AOT requires one canonical s/p/d/f quartet"
+            )
         spec = ShellClassSpec(
             "".join("spdf"[value] for value in self.angular), self.angular
         )
 
-        if type(self.shell_class) is not int or self.shell_class != shell_class_index(spec):
+        if type(self.shell_class) is not int or self.shell_class != shell_class_index(
+            spec
+        ):
             raise ValueError("derivative shell AOT class index is not canonical")
         if self.derivative_order != AOT_DERIVATIVE_ORDER:
-            raise ValueError("derivative shell AOT currently packages first derivatives only")
+            raise ValueError(
+                "derivative shell AOT currently packages first derivatives only"
+            )
 
     @property
     def shell_name(self) -> str:
@@ -219,7 +224,6 @@ def make_shell_key(
     backend: str,
 ) -> DerivativeShellAotKey:
     """Build an exact-shell derivative identity from the canonical shell ABI."""
-
 
     return DerivativeShellAotKey(
         backend=backend,

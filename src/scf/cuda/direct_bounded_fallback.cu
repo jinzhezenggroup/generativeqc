@@ -7,9 +7,9 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_derivative_cuda_shell_aot.cuh"
 #include "scf/cuda/direct_bounded_contraction.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
-#include "generated_derivative_cuda_shell_aot.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
@@ -233,9 +233,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     schwarz_bounds, density, active, output, coulomb_coefficient,
                     exchange_coefficient, subtile, lane);
               } else if (contract_packaged_derivative_shell_aot<Unrestricted>(
-                             shell_class, radial_operator, omega, batch, &queue_count,
-                             queue + slot, screening_tolerance, schwarz_bounds, density, active,
-                             output, exchange_coefficient, subtile, lane)) {
+                             shell_class, radial_operator, omega, batch, &queue_count, queue + slot,
+                             screening_tolerance, schwarz_bounds, density, active, output,
+                             exchange_coefficient, subtile, lane)) {
                 // Exact shell-class package consumed this SR/LR subtile.
               } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Long) {
                 contract_bounded_direct_force_subtile_range_aot_scaled<

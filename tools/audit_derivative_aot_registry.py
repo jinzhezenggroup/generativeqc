@@ -37,8 +37,8 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
     cpu_aot_symbol,
     derivative_cpu_aot_sources,
 )
-from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
 
@@ -230,8 +230,7 @@ def main() -> None:
         "--production-manifest",
         type=Path,
         default=(
-            ROOT
-            / "python/generativeqc_compiler/integral/production_shell_classes.json"
+            ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
         ),
     )
     parser.add_argument("--cuda-target", default="sm_120")

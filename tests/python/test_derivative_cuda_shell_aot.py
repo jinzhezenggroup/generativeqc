@@ -40,9 +40,11 @@ def test_cuda_shell_inventory_covers_same_force_classes_for_full_sr_lr() -> None
     assert force_classes
     assert len(packages) == 3 * len(force_classes)
     assert {package.key.shell_name for package in packages} == force_classes
-    assert {
-        package.key.radial.family.value for package in packages
-    } == {"full_range", "short_range", "long_range"}
+    assert {package.key.radial.family.value for package in packages} == {
+        "full_range",
+        "short_range",
+        "long_range",
+    }
     assert len({package.key.identity for package in packages}) == len(packages)
     assert len({package.package_key.identity for package in packages}) == len(packages)
 
@@ -51,7 +53,9 @@ def test_generated_selector_binds_exact_shell_and_fails_closed_off_target() -> N
     profile, radials = _inputs()
     source = emit_cuda_derivative_shell_aot_header(profile, radials)
     assert "__CUDA_ARCH__ == 1200" in source
-    assert "contract_two_electron_force_quartet_subtile_range_shell_aot_scaled" in source
+    assert (
+        "contract_two_electron_force_quartet_subtile_range_shell_aot_scaled" in source
+    )
     assert "generated-full-force" in source
     assert "bounded-range-shell-aot" in source
     assert "DirectRangeOperator::Short" in source

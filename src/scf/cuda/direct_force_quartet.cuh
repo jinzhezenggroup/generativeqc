@@ -300,13 +300,12 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
           contracted_eri_cartesian_source_shell_class<static_cast<unsigned>(PackagedShellClass),
                                                       Dual3>(
               batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate,
-              PackagedRange, packaged_omega);
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate, PackagedRange,
+              packaged_omega);
     } else {
       derivative = dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
-          shell_class, batch, system, static_cast<std::int32_t>(i),
-          static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
-          static_cast<std::int32_t>(l), coordinate, range, omega);
+          shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+          static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate, range, omega);
     }
     const double value[3] = {
         derivative.derivative_x,
@@ -342,8 +341,8 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
       ao_quartet_lane);
 }
 
-template <bool Unrestricted, unsigned ShellClass,
-          generativeqc::integrals::CoulombRange Range, int OmegaMilli>
+template <bool Unrestricted, unsigned ShellClass, generativeqc::integrals::CoulombRange Range,
+          int OmegaMilli>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_range_shell_aot_scaled(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,

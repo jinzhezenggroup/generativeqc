@@ -119,7 +119,9 @@ def emit_cuda_derivative_shell_aot_header(
 
     packages = cuda_derivative_shell_packages(profile, radials)
     if not packages:
-        raise ValueError("CUDA derivative shell AOT requires a non-portable force profile")
+        raise ValueError(
+            "CUDA derivative shell AOT requires a non-portable force profile"
+        )
     target_arch = profile.target.architecture
     target_code = (
         profile.target.compute_capability_major * 100
@@ -160,7 +162,9 @@ def emit_cuda_derivative_shell_aot_header(
     ):
         omega_milli = round(omega * 1000)
         if abs(omega - omega_milli / 1000.0) > 1e-15:
-            raise ValueError("CUDA shell AOT currently requires millibohr omega identity")
+            raise ValueError(
+                "CUDA shell AOT currently requires millibohr omega identity"
+            )
         cases = []
         for package in sorted(items, key=lambda item: item.key.shell_class):
             shell_class = package.key.shell_class

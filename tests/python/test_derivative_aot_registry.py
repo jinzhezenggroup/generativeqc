@@ -24,8 +24,8 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
 )
 from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.range_separation import CoulombKernel
-from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 from generativeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
+from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -275,9 +275,7 @@ def test_cuda_radial_manifest_matches_native_compile_time_specializations() -> N
 
 def test_exact_shell_package_identity_uses_canonical_shell_abi() -> None:
     spec = FUSED_SHELL_SPEC_BY_NAME["dppp"]
-    key = make_shell_key(
-        CoulombKernel("long_range", 0.3), spec, backend="cuda"
-    )
+    key = make_shell_key(CoulombKernel("long_range", 0.3), spec, backend="cuda")
     payload = key.to_payload()
     assert isinstance(key, DerivativeShellAotKey)
     assert payload["shell_name"] == "dppp"

@@ -31,8 +31,7 @@ def main() -> None:
         "--production-manifest",
         type=Path,
         default=(
-            ROOT
-            / "python/generativeqc_compiler/integral/production_shell_classes.json"
+            ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
         ),
     )
     parser.add_argument("--target-architecture", default="sm_120")

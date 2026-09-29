@@ -91,8 +91,7 @@ def test_repository_audit_reports_cuda_shell_package_inventory() -> None:
     result = audit.audit(
         radial_manifest=root / "manifests/derivative_aot_radials.json",
         production_manifest=(
-            root
-            / "python/generativeqc_compiler/integral/production_shell_classes.json"
+            root / "python/generativeqc_compiler/integral/production_shell_classes.json"
         ),
     )
     cuda = result["cuda_shell"]
