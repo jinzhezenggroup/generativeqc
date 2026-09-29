@@ -366,7 +366,18 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None
         == "common.gpu_profitability"
     )
 
-    wrong_source = replace(compiled, source_identity="different-source")
+    wrong_source = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            npoint=shape.npoint,
+            tile_points=shape.tile_points,
+            nao=shape.nao,
+            spins=shape.spins,
+        ),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity="different-source",
+    )
     with pytest.raises(ValueError, match="target/source"):
         assess_grid_xc_schedule(
             DEVICE_FUSED,
