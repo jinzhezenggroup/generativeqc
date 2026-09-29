@@ -18,6 +18,7 @@ _SOURCE = r"""#pragma once
 #include <cstdint>
 #include <type_traits>
 
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/cartesian_angular.cuh"
 #include "generated_direct_cartesian.cuh"
 #include "generated_direct_order2_shell.cuh"
@@ -186,43 +187,43 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
   if constexpr (ShellClass == 2 || ShellClass == 3 || ShellClass == 6) {
     if (range == generativeqc::integrals::CoulombRange::Full) {
       const unsigned first_count = (static_cast<unsigned>(FirstShellAngular) + 1U) *
-                                 (static_cast<unsigned>(FirstShellAngular) + 2U) / 2U;
-    const unsigned second_count = (static_cast<unsigned>(SecondShellAngular) + 1U) *
-                                  (static_cast<unsigned>(SecondShellAngular) + 2U) / 2U;
-    const unsigned third_count = (static_cast<unsigned>(ThirdShellAngular) + 1U) *
-                                 (static_cast<unsigned>(ThirdShellAngular) + 2U) / 2U;
-    const unsigned fourth_count = (static_cast<unsigned>(FourthShellAngular) + 1U) *
-                                  (static_cast<unsigned>(FourthShellAngular) + 2U) / 2U;
-    unsigned first_component = 0U;
-    unsigned second_component = 0U;
-    unsigned third_component = 0U;
-    unsigned fourth_component = 0U;
-    if (!direct_shell_component_index(batch, base, shell_i, i, first_component) ||
-        !direct_shell_component_index(batch, base, shell_j, j, second_component) ||
-        !direct_shell_component_index(batch, base, shell_k, k, third_component) ||
-        !direct_shell_component_index(batch, base, shell_l, l, fourth_component)) {
-      return scalar<Scalar>(0.0);
-    }
-    if (first_component >= first_count || second_component >= second_count ||
-        third_component >= third_count || fourth_component >= fourth_count) {
-      return scalar<Scalar>(0.0);
-    }
-    const unsigned component =
-        (((first_component * second_count + second_component) * third_count + third_component) *
-             fourth_count +
-         fourth_component);
-    const unsigned active_component_mask = 1U << component;
-    Order2IntegralVector integral{};
-    if constexpr (ShellClass == 2) {
-      integral = contracted_eri_cartesian_source_order2_shell<1, 0, 1, 0>(
-          batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
-    } else if constexpr (ShellClass == 3) {
-      integral = contracted_eri_cartesian_source_order2_shell<1, 1, 0, 0>(
-          batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
-    } else {
-      integral = contracted_eri_cartesian_source_order2_shell<2, 0, 0, 0>(
-          batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
-    }
+                                   (static_cast<unsigned>(FirstShellAngular) + 2U) / 2U;
+      const unsigned second_count = (static_cast<unsigned>(SecondShellAngular) + 1U) *
+                                    (static_cast<unsigned>(SecondShellAngular) + 2U) / 2U;
+      const unsigned third_count = (static_cast<unsigned>(ThirdShellAngular) + 1U) *
+                                   (static_cast<unsigned>(ThirdShellAngular) + 2U) / 2U;
+      const unsigned fourth_count = (static_cast<unsigned>(FourthShellAngular) + 1U) *
+                                    (static_cast<unsigned>(FourthShellAngular) + 2U) / 2U;
+      unsigned first_component = 0U;
+      unsigned second_component = 0U;
+      unsigned third_component = 0U;
+      unsigned fourth_component = 0U;
+      if (!direct_shell_component_index(batch, base, shell_i, i, first_component) ||
+          !direct_shell_component_index(batch, base, shell_j, j, second_component) ||
+          !direct_shell_component_index(batch, base, shell_k, k, third_component) ||
+          !direct_shell_component_index(batch, base, shell_l, l, fourth_component)) {
+        return scalar<Scalar>(0.0);
+      }
+      if (first_component >= first_count || second_component >= second_count ||
+          third_component >= third_count || fourth_component >= fourth_count) {
+        return scalar<Scalar>(0.0);
+      }
+      const unsigned component =
+          (((first_component * second_count + second_component) * third_count + third_component) *
+               fourth_count +
+           fourth_component);
+      const unsigned active_component_mask = 1U << component;
+      Order2IntegralVector integral{};
+      if constexpr (ShellClass == 2) {
+        integral = contracted_eri_cartesian_source_order2_shell<1, 0, 1, 0>(
+            batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
+      } else if constexpr (ShellClass == 3) {
+        integral = contracted_eri_cartesian_source_order2_shell<1, 1, 0, 0>(
+            batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
+      } else {
+        integral = contracted_eri_cartesian_source_order2_shell<2, 0, 0, 0>(
+            batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
+      }
       return static_cast<Scalar>(integral.component[component]);
     }
   }
