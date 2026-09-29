@@ -56,7 +56,8 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
                                       generativeqc::integrals::CoulombRange exchange_range,
                                       double exchange_omega, double screening, const double* bounds,
                                       const double* density, const double* beta, double* j_out,
-                                      double* ka_out, double* kb_out) {
+                                      double* ka_out, double* kb_out,
+                                      std::uint64_t* mixed_coulomb_work_count) {
   __shared__ double sums[3][kIndependentJkThreads];
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t item = system_begin * matrix + blockIdx.x;
@@ -65,6 +66,7 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
   const auto i = static_cast<std::int32_t>((item % matrix) / n);
   const auto j = static_cast<std::int32_t>(item % n);
   double coulomb = 0.0, alpha_exchange = 0.0, beta_exchange = 0.0;
+  unsigned long long mixed_coulomb_work = 0;
   for (std::size_t kl = threadIdx.x; kl < matrix; kl += blockDim.x) {
     const auto k = static_cast<std::int32_t>(kl / n), l = static_cast<std::int32_t>(kl % n);
     const double a = density[offset + kl], b = unrestricted ? beta[offset + kl] : 0.0;
@@ -73,6 +75,7 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
           MixedJ ? scalar_value(contracted_eri<MixedPrecisionFloat>(batch, system, i, j, k, l, -1))
                  : contracted_eri<double>(batch, system, i, j, k, l, -1);
       coulomb += (a + b) * value;
+      if constexpr (MixedJ) ++mixed_coulomb_work;
     }
     if (want_k && bounds[offset + i * n + k] * bounds[offset + j * n + l] >= screening &&
         (a != 0.0 || b != 0.0)) {
@@ -80,6 +83,15 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
           contracted_eri<double>(batch, system, i, k, j, l, -1, exchange_range, exchange_omega);
       alpha_exchange += a * value;
       beta_exchange += b * value;
+    }
+  }
+  if constexpr (MixedJ) {
+    if (mixed_coulomb_work_count) {
+      for (unsigned offset = warpSize / 2; offset; offset /= 2)
+        mixed_coulomb_work += __shfl_down_sync(0xffffffffU, mixed_coulomb_work, offset);
+      if (threadIdx.x == 0)
+        atomicAdd(reinterpret_cast<unsigned long long*>(mixed_coulomb_work_count),
+                  mixed_coulomb_work);
     }
   }
   sums[0][threadIdx.x] = coulomb;
@@ -335,15 +347,16 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   DirectCoulombRange exchange_range, double exchange_omega,
                                   double screening, const double* bounds, const double* density,
                                   const double* beta, double* j_out, double* ka_out,
-                                  double* kb_out) {
+                                  double* kb_out, std::uint64_t* mixed_coulomb_work_count) {
   if (mixed_j)
     independent_jk_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch, system_begin, want_j, want_k, unrestricted, integral_range(exchange_range),
-        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out);
+        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out,
+        mixed_coulomb_work_count);
   else
     independent_jk_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch, system_begin, want_j, want_k, unrestricted, integral_range(exchange_range),
-        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out);
+        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out, nullptr);
 }
 
 void launch_independent_jk_derivative_kernel(

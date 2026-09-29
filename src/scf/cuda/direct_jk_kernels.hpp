@@ -30,7 +30,7 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   DirectCoulombRange exchange_range, double exchange_omega,
                                   double screening, const double* bounds, const double* density,
                                   const double* beta, double* j_out, double* ka_out,
-                                  double* kb_out);
+                                  double* kb_out, std::uint64_t* mixed_coulomb_work_count);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_derivative_kernel(
