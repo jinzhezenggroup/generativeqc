@@ -163,6 +163,40 @@ static bool close(const double* actual,const double* expected,std::size_t n){
 """
 
 
+@pytest.mark.parametrize(("o", "v"), ((1, 2), (2, 2)))
+def test_same_space_fock_seed_folds_into_hamiltonian_parameter_blocks(
+    o: int, v: int
+) -> None:
+    rng = np.random.default_rng(1575 + 10 * o + v)
+    n = o + v
+    programs = build_hamiltonian_programs(o, v, explicit_density_input=True)
+    fock_program = build_fock_weight_program(o, v, explicit_density_input=True)
+
+    hamiltonian_feeds = _feeds(programs.weights, o, v, rng)
+    fock_feeds = _feeds(fock_program, o, v, rng)
+    for name in ("h", "g", "density", "rotation"):
+        fock_feeds[name] = hamiltonian_feeds[name]
+
+    bar_fock = np.zeros((n, n))
+    oo = rng.normal(size=(o, o))
+    vv = rng.normal(size=(v, v))
+    bar_fock[:o, :o] = oo
+    bar_fock[o:, o:] = vv
+    fock_feeds["bar_fock"] = bar_fock
+
+    for name in tuple(hamiltonian_feeds):
+        if name.startswith("bar_"):
+            hamiltonian_feeds[name] = np.zeros_like(hamiltonian_feeds[name])
+    hamiltonian_feeds["bar_foo"] = oo
+    hamiltonian_feeds["bar_fvv"] = vv
+
+    folded = execute(programs.weights, hamiltonian_feeds).outputs
+    direct = execute(fock_program, fock_feeds).outputs
+    assert set(folded) == set(direct)
+    for name in folded:
+        np.testing.assert_allclose(folded[name], direct[name], atol=2e-12, rtol=2e-12)
+
+
 def test_runtime_shape_hamiltonian_response_matches_tensorir(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
