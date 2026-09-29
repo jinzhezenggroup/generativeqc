@@ -343,7 +343,8 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
 
 template <bool Unrestricted, unsigned ShellClass, generativeqc::integrals::CoulombRange Range,
           int OmegaMilli>
-__device__ inline __noinline__ void contract_two_electron_force_quartet_subtile_range_shell_aot_scaled(
+__device__ inline __noinline__ void
+contract_two_electron_force_quartet_subtile_range_shell_aot_scaled(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
