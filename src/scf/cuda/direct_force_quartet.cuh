@@ -196,6 +196,113 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
   }
 }
 
+/**
+ * Generic Cartesian source fallback for range-separated exchange derivatives.
+ *
+ * Full-range Direct force keeps its qualified generated/specialized kernels.
+ * SR/LR work reuses the same compact shell tasks and density contraction but
+ * evaluates the explicit radial operator through the shared range-moment
+ * Cartesian source recurrence.
+ */
+template <bool Unrestricted, unsigned AngularOrder>
+__device__ __forceinline__ void contract_two_electron_force_quartet_subtile_range_scaled(
+    DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
+    const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    double exchange_coefficient, generativeqc::integrals::CoulombRange range, double omega,
+    std::size_t active_subtile, unsigned ao_quartet_lane) {
+  static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
+  constexpr std::size_t subtiles_per_tile = detail::direct_quartet_subtiles_per_tile(AngularOrder);
+  const std::size_t active_tile = active_subtile / subtiles_per_tile;
+  if (active_tile >= static_cast<std::size_t>(*active_shell_quartet_tile_count)) return;
+  if (range == generativeqc::integrals::CoulombRange::Full) return;
+
+  const std::size_t subtile = active_subtile % subtiles_per_tile;
+  const ActiveShellQuartetTile task = active_shell_quartet_tiles[active_tile];
+  const std::size_t first_pair = task.first_pair;
+  const std::size_t second_pair = task.second_pair;
+  const std::int32_t system = batch.shell_pair_systems[first_pair];
+  if (active[system] == 0) return;
+
+  const std::size_t n = static_cast<std::size_t>(batch.direct_nbf);
+  const std::size_t matrix_size = n * n;
+  const std::size_t physical_offset = static_cast<std::size_t>(system) * matrix_size;
+  const std::size_t spin_offset = static_cast<std::size_t>(system) * 2 * matrix_size;
+  const std::size_t system_ao_begin = static_cast<std::size_t>(system) * n;
+  const std::size_t first_ao_pair_count = shell_ao_pair_count(batch, first_pair);
+  const std::size_t second_ao_pair_count = shell_ao_pair_count(batch, second_pair);
+  const bool same_shell_pair = first_pair == second_pair;
+  const std::size_t ao_quartet_count = same_shell_pair
+                                           ? first_ao_pair_count * (first_ao_pair_count + 1) / 2
+                                           : first_ao_pair_count * second_ao_pair_count;
+
+  const std::size_t ordinal = static_cast<std::size_t>(task.tile) * detail::kDirectQuartetTileSize +
+                              subtile * detail::kDirectQuartetThreads + ao_quartet_lane;
+  if (ordinal >= ao_quartet_count) return;
+
+  std::size_t first_ao_pair = 0;
+  std::size_t second_ao_pair = 0;
+  if (same_shell_pair) {
+    decode_lower_triangle(ordinal, first_ao_pair, second_ao_pair);
+  } else {
+    first_ao_pair = ordinal / second_ao_pair_count;
+    second_ao_pair = ordinal % second_ao_pair_count;
+  }
+  std::size_t i = 0, j = 0, k = 0, l = 0;
+  decode_shell_ao_pair(batch, first_pair, first_ao_pair, system_ao_begin, i, j);
+  decode_shell_ao_pair(batch, second_pair, second_ao_pair, system_ao_begin, k, l);
+  if (schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
+          schwarz_bounds[physical_offset + matrix_index(k, l, n)] <
+      screening_tolerance)
+    return;
+
+  const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
+      n, physical_offset, spin_offset, density, i, j, k, l, 0.0, exchange_coefficient);
+  if (coefficient == 0.0) return;
+
+  const std::int32_t first_shell = batch.shell_pair_first[first_pair];
+  const std::int32_t second_shell = batch.shell_pair_second[first_pair];
+  const std::int32_t third_shell = batch.shell_pair_first[second_pair];
+  const std::int32_t fourth_shell = batch.shell_pair_second[second_pair];
+  const std::int32_t center_atoms[4] = {
+      batch.shell_atoms[first_shell], batch.shell_atoms[second_shell],
+      batch.shell_atoms[third_shell], batch.shell_atoms[fourth_shell]};
+  const unsigned shell_class = direct_quartet_shell_class_device(
+      batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+      batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+  std::int32_t unique_center_atoms[4];
+  const unsigned unique_center_count =
+      direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
+  if (unique_center_count <= 1U) return;
+
+  double derivative_sum[3]{};
+  for (unsigned center = 0; center + 1U < unique_center_count; ++center) {
+    const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[center]) * 3;
+    const Dual3 derivative =
+        dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
+            shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate, range, omega);
+    const double value[3] = {
+        derivative.derivative_x,
+        derivative.derivative_y,
+        derivative.derivative_z,
+    };
+#pragma unroll
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      derivative_sum[axis] += value[axis];
+      if (value[axis] != 0.0)
+        atomicAdd(forces + static_cast<std::size_t>(coordinate) + axis, -coefficient * value[axis]);
+    }
+  }
+
+  const std::size_t final_coordinate =
+      static_cast<std::size_t>(unique_center_atoms[unique_center_count - 1U]) * 3U;
+#pragma unroll
+  for (unsigned axis = 0; axis < 3; ++axis)
+    if (derivative_sum[axis] != 0.0)
+      atomicAdd(forces + final_coordinate + axis, coefficient * derivative_sum[axis]);
+}
+
 template <bool Unrestricted, unsigned AngularOrder>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
