@@ -708,9 +708,7 @@ def cpu_header() -> str:
     )
     hamiltonian_control_input_names = tuple(
         sorted(
-            n.attrs["name"]
-            for n in hamiltonian_control.live_nodes
-            if n.op == "input"
+            n.attrs["name"] for n in hamiltonian_control.live_nodes if n.op == "input"
         )
     )
     orbital_jvp_input_names = tuple(
@@ -890,8 +888,7 @@ def cpu_header() -> str:
                 "HamiltonianControlOutputs",
                 signature="const HamiltonianWeightInputs& inputs",
                 input_overrides={
-                    name: f"inputs.{name}"
-                    for name in hamiltonian_control_input_names
+                    name: f"inputs.{name}" for name in hamiltonian_control_input_names
                 },
             ),
             _cpu_function(
