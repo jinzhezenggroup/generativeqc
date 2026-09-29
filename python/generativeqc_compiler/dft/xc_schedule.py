@@ -336,9 +336,7 @@ def aggregate_grid_xc_compiled_evidence(
         values = [row[field] for row in compiled.values() if row[field] is not None]
         return max(values) if values else None
 
-    occupancies = [
-        row["compiled_occupancy_upper_bound"] for row in compiled.values()
-    ]
+    occupancies = [row["compiled_occupancy_upper_bound"] for row in compiled.values()]
     occupancy = (
         None
         if any(value is None for value in occupancies)

@@ -69,7 +69,10 @@ def compiled_gpu_profitability(
 
     if not isinstance(target, CudaTargetInfo):
         raise TypeError("compiled GPU profitability requires CudaTargetInfo")
-    if type(block_threads) is not int or not 0 < block_threads <= target.maximum_threads_per_block:
+    if (
+        type(block_threads) is not int
+        or not 0 < block_threads <= target.maximum_threads_per_block
+    ):
         raise ValueError("compiled GPU profitability requires a valid block size")
     materialized = tuple(resources)
     if not materialized:
@@ -104,11 +107,14 @@ def compiled_gpu_profitability(
 
     local_values = tuple(resource.local_bytes for resource in materialized)
     local_bytes = (
-        None if any(value is None for value in local_values)
+        None
+        if any(value is None for value in local_values)
         else max(typing.cast("tuple[int, ...]", local_values), default=0)
     )
     return GpuProfitability(
-        compiled_registers_per_thread=max(resource.registers for resource in materialized),
+        compiled_registers_per_thread=max(
+            resource.registers for resource in materialized
+        ),
         spill_store_bytes=max(resource.spill_store_bytes for resource in materialized),
         spill_load_bytes=max(resource.spill_load_bytes for resource in materialized),
         local_bytes=local_bytes,
