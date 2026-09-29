@@ -350,15 +350,21 @@ def _region_schedule(
     provenance = dict(contract.provenance)
     provenance["program_region"] = region.identity
     provenance["region_source_consumer"] = contract.consumer
-    profitability = replace(
-        contract.profitability,
-        endpoint_seconds=endpoint_seconds,
+    profitability_fields: dict[str, typing.Any] = {
+        "endpoint_seconds": endpoint_seconds,
         **(
             {}
             if semantic_traffic_bytes is None
             else {"semantic_traffic_bytes": semantic_traffic_bytes}
         ),
-    )
+    }
+    if contract.fallback:
+        # The host-unfused XC region owns copies plus CPU work, but no custom
+        # GPU compute kernel. Keep registers/occupancy unknown while making the
+        # absence of region-owned spill traffic explicit for relative gating.
+        profitability_fields.update(spill_store_bytes=0, spill_load_bytes=0)
+        provenance["region_gpu_compute"] = "none"
+    profitability = replace(contract.profitability, **profitability_fields)
     return replace(
         contract,
         consumer=region.consumer,
