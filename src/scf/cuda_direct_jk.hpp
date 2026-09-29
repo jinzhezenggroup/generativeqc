@@ -113,4 +113,13 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
+
+/** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
+ * explicit omega. The retained owner performs one density transform and three
+ * screened shell traversals; no public-AO quartet traversal is used. */
+generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail);
 }  // namespace generativeqc::scf
