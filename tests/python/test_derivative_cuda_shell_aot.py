@@ -17,7 +17,9 @@ from generativeqc_compiler.integral.ir import KernelConsumer
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
 if TYPE_CHECKING:
-    from generativeqc_compiler.integral.production_profile import ResolvedProductionProfile
+    from generativeqc_compiler.integral.production_profile import (
+        ResolvedProductionProfile,
+    )
     from generativeqc_compiler.integral.range_separation import CoulombKernel
 
 ROOT = Path(__file__).resolve().parents[2]
