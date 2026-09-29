@@ -211,6 +211,8 @@ def test_resident_force_hot_path_has_no_host_transfer_or_fence() -> None:
         assert forbidden not in hot
     assert "enqueue_vv10_collect_total_features_cuda" in hot
     assert "cudaMemcpyDeviceToDevice" in hot
+    assert "owner->source_ready.record(source_stream)" in hot
+    assert "cudaStreamWaitEvent(owner->stream, owner->source_ready.get(), 0)" in hot
     assert "enqueue_vv10_molecular_domain_cuda" in hot
     assert "enqueue_vv10_cuda_device" in hot
     assert "enqueue_vv10_pack_force_seeds_cuda" in hot
@@ -231,3 +233,8 @@ def test_resident_force_helpers_are_all_device_only() -> None:
     assert "collect_total_features_kernel" in body
     assert "pack_force_seeds_kernel" in body
     assert "effective_weights" in body
+
+
+def test_resident_feature_handoff_imports_cuda_stream_wait_event() -> None:
+    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
+    assert "cudaStreamWaitEvent" in cmake
