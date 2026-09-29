@@ -20,6 +20,7 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "scf/types.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -177,18 +178,19 @@ RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& sourc
   if (source.nbf() != n || !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD(T) raw Hamiltonian source/reference mismatch");
   const auto n2 = square(n), n4 = fourth(n);
-  const auto required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto retained_required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto transform_required = bytes(checked_mul(2, n2));
+  const auto required = std::max(retained_required, transform_required);
   if (required > max_bytes) throw std::length_error("RCCSD(T) raw Hamiltonian exceeds host budget");
   if (ref.coefficients.size() != n2 || ref.hcore.size() != n2)
     throw std::invalid_argument("RCCSD(T) reference one-electron shape mismatch");
   RawHamiltonian out;
   out.h.assign(n2, 0.0);
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q)
-      for (std::size_t mu = 0; mu < n; ++mu)
-        for (std::size_t nu = 0; nu < n; ++nu)
-          out.h[p * n + q] +=
-              ref.coefficients[mu * n + p] * ref.hcore[mu * n + nu] * ref.coefficients[nu * n + q];
+  {
+    std::vector<double> workspace(n2);
+    tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
+                           workspace.data());
+  }
   posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
   const auto all = range(n);
   out.g = provider.get({all, all, all, all}, false, 0);
@@ -436,8 +438,10 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // Ask the generated provider plan only for its additional staging/output buffers.
   const auto provider =
       posthf::numeric_block_plan(n, 0, 0, {n, n, n, n}, {tile, tile, tile, tile}, false);
-  plan.raw_phase_bytes = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
-                              checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
+  const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
+                                   checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  plan.raw_phase_bytes = std::max(rank2_transform_phase, provider_phase);
   const auto raw_retained = bytes(sum({n4, checked_mul(3, n2)}));
   const auto response_retained = bytes(sum({n4, checked_mul(4, n2), ov}));
   const auto hamiltonian_arena = bytes(generated::hamiltonian_weights_arena_elements(o, v));
@@ -465,7 +469,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                     checked_mul(2, response_retained)});
   const auto coordinates = checked_mul(3, system.atoms.size());
   const auto derivative_staging =
-      bytes(sum({checked_mul(2, n2), checked_mul(shell, checked_mul(n, n2)),
+      bytes(sum({checked_mul(3, n2), checked_mul(shell, checked_mul(n, n2)),
                  checked_mul(square(shell), n2), checked_mul(checked_mul(shell, square(shell)), n),
                  fourth(shell), checked_mul(2, coordinates)}));
   plan.derivative_phase_bytes =
