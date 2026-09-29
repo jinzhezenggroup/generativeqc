@@ -371,8 +371,8 @@ void launch_angular_force_quartets(
         persistent_worker_blocks, psss_resident_tasks, psss_resident_ket_pairs,
         psss_resident_task_count, resident_psss_bra_primitive_pairs, screening_tolerance,
         shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-        schwarz_bounds, density, active, forces, generated_shell_class_mask,
-        coulomb_coefficient, exchange_coefficient);
+        schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
+        exchange_coefficient);
   }
 }
 
