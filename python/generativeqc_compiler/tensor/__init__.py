@@ -60,7 +60,7 @@ from .ir import (
     sqrt,
     transpose,
 )
-from .optimize import PASSES, optimize, rewrite
+from .optimize import PASSES, optimize, prepare_for_backend, rewrite
 from .precision import (
     CastBoundary,
     PrecisionDirective,
@@ -194,6 +194,7 @@ __all__ = [
     "node_complexity",
     "optimize",
     "power",
+    "prepare_for_backend",
     "reassociate_einsums",
     "reduce_sum",
     "reshape",
