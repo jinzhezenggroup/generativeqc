@@ -620,6 +620,14 @@ def prepare_for_backend(
         requested_outputs=requested_outputs,
         reassociate_contractions=allow_reassociation,
     )
+    unchanged = (
+        requested_outputs is None
+        and tuple(prepared.outputs) == tuple(program.outputs)
+        and prepared.logical_hash == program.logical_hash
+        and len(prepared.nodes) == len(program.nodes)
+    )
+    if unchanged:
+        return program
     return Program(
         prepared.outputs,
         provenance={
