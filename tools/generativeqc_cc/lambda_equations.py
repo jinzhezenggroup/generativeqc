@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import BLOCKS
 from generativeqc_compiler.tensor import (
     JVPProgram,
     Program,
@@ -16,9 +18,6 @@ from generativeqc_compiler.tensor import (
     linearize,
     transpose_program,
 )
-
-from generativeqc_compiler.cc.doubles import build_ccsd_program
-from generativeqc_compiler.cc.equations import BLOCKS
 
 AMPLITUDES = ("t1", "t2")
 RESIDUALS = ("singles_residual", "doubles_residual")

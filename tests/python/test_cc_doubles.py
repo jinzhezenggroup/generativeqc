@@ -4,9 +4,9 @@ import typing
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.doubles import build_ccsd_program
 from generativeqc_compiler.tensor import Program, add, execute
 
-from generativeqc_compiler.cc.doubles import build_ccsd_program
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 
 

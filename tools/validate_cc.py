@@ -16,6 +16,8 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
+from generativeqc_compiler.cc.inventory import TERMS
 from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
@@ -26,8 +28,6 @@ from generativeqc_compiler.common.evidence import (
 )
 from generativeqc_compiler.tensor import Program, execute, optimize
 
-from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
-from generativeqc_compiler.cc.inventory import TERMS
 from tools.generativeqc_cc.oracle import dense_feeds, homogeneous_groups, random_case
 
 ROOT = Path(__file__).resolve().parents[1]

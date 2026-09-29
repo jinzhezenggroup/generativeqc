@@ -12,13 +12,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.mp2.equations import energy_program
 from generativeqc_compiler.tensor import Program, execute
 from generativeqc_compiler.tensor.cuda_emit import emit_cuda
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
 from tools.generativeqc_mp2 import PreparedMP2Energy
 from tools.generativeqc_mp2.energy import denominator_check
-from generativeqc_compiler.mp2.equations import energy_program
 from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 
 

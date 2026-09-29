@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+from generativeqc_compiler.cc.doubles import DEFINITIONS, build_ccsd_program
 from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
@@ -26,7 +27,6 @@ from generativeqc_compiler.common.evidence import (
 )
 from generativeqc_compiler.tensor import execute
 
-from generativeqc_compiler.cc.doubles import DEFINITIONS, build_ccsd_program
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 from tools.validate_cc import load_references
 

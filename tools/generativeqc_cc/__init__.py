@@ -10,6 +10,9 @@ owner; the C ABI remains fail-closed until the generated response graph has that
 owner.
 """
 
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
+
 from .api import (
     BatchItemResult,
     BatchRCCSDResult,
@@ -61,8 +64,6 @@ from .df_triples import (
     factorized_triples_workspace_bytes,
     solve_df_ccsdt,
 )
-from generativeqc_compiler.cc.doubles import build_ccsd_program
-from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
 from .evaluate import evaluate
 from .lambda_cuda import PreparedCUDALambda
 from .lambda_equations import (

@@ -126,8 +126,7 @@ def test_production_scientific_owner_cannot_live_under_tools(tmp_path: Path) -> 
     errors = validate_production_path_ledger(payload, root=tmp_path)
     assert (
         "hf-energy-cpu-direct.scientific_owner production science must not live "
-        "under tools/: tools/science.py"
-        in errors
+        "under tools/: tools/science.py" in errors
     )
 
 

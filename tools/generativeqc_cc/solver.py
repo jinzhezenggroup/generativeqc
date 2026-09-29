@@ -10,6 +10,8 @@ from hashlib import sha256
 from pathlib import Path
 
 import numpy as np
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_layouts
 from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
 from generativeqc_compiler.common.solver_region import (
@@ -23,9 +25,6 @@ from generativeqc_compiler.tensor import Program, execute
 from tools.generativeqc_posthf import MOBlock, ReferenceSnapshot
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.reference import immutable
-
-from generativeqc_compiler.cc.doubles import build_ccsd_program
-from generativeqc_compiler.cc.equations import amplitude_layouts
 
 
 def _provider_blocks(

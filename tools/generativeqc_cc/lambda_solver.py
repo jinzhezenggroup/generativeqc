@@ -15,6 +15,7 @@ from hashlib import sha256
 from types import MappingProxyType
 
 import numpy as np
+from generativeqc_compiler.cc.equations import amplitude_layouts
 from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.solver_region import SolverRegion
 from generativeqc_compiler.tensor import execute
@@ -32,7 +33,6 @@ from tools.generativeqc_response.implicit import (
 from tools.generativeqc_response.krylov import GMRESOptions, _vector_norm
 from tools.generativeqc_response.problem import ResponseCompatibilityError
 
-from generativeqc_compiler.cc.equations import amplitude_layouts
 from .lambda_equations import build_lambda_programs
 from .native_tensor_cpu import NativeCCTensorExecutor
 from .solver import CCSDResult, _ccsd_programs
