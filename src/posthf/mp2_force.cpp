@@ -9,6 +9,7 @@
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/mp2_derivative.hpp"
+#include "posthf/mp2_force_workspace.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
@@ -107,15 +108,24 @@ ConventionalForceResult conventional_force_impl(
   }
   const auto coordinate_count = posthf::checked_mul(source.orbital().atoms.size(), 3);
   const auto provider_bytes = provider.provider_bytes();
+  const auto streamed_workspace = detail::streamed_force_workspace_bytes(
+      reference.nbf, reference.nocc, [&](const std::array<std::size_t, 4>& shape) {
+        const auto block = provider.plan(shape, cuda);
+        const auto peak = posthf::checked_add(block.host_bytes, block.device_bytes);
+        if (peak < provider_bytes)
+          throw std::logic_error("MP2 provider workspace accounting underflow");
+        return peak - provider_bytes;
+      });
+  const auto endpoint_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
   const auto base_resources = conventional_gradient_plan(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
-      posthf::checked_mul(coordinate_count, sizeof(double)), budget_bytes);
-  const auto backend_stage_bytes = cuda ? budget_bytes - base_resources.peak_bytes : 0;
+      posthf::checked_mul(coordinate_count, sizeof(double)), endpoint_budget);
+  const auto backend_stage_bytes = cuda ? endpoint_budget - base_resources.peak_bytes : 0;
   if (cuda && !backend_stage_bytes)
     throw std::length_error("conventional MP2 CUDA derivative has no staging budget");
   const auto resources = conventional_gradient_plan(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
-      posthf::checked_mul(coordinate_count, sizeof(double)), budget_bytes, backend_stage_bytes);
+      posthf::checked_mul(coordinate_count, sizeof(double)), endpoint_budget, backend_stage_bytes);
   const auto h = hcore_mo(reference);
   auto adjoint = energy_adjoint(reference, provider, denominator_threshold, cuda, device_id);
   auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
@@ -146,7 +156,8 @@ ConventionalForceResult conventional_force_impl(
   result.weighted_eri_shell_tiles = square(square(shells));
   result.derivative_workspace_bytes = posthf::checked_add(
       resources.derivative_staging_bytes, resources.derivative_backend_staging_bytes);
-  result.planned_endpoint_peak_bytes = resources.peak_bytes;
+  result.planned_endpoint_peak_bytes =
+      posthf::checked_add(resources.peak_bytes, streamed_workspace);
   // No allocator-level endpoint telemetry is available in this slice. Zero
   // means unmeasured, not zero allocation; never copy the plan into a measurement.
   result.measured_endpoint_peak_bytes = 0;
@@ -189,11 +200,20 @@ ConventionalForceResult density_fitted_force_cpu(
   const auto response_plan = response::prepare_response(problem, response_options);
   const auto coordinate_count = posthf::checked_mul(source.orbital().atoms.size(), std::size_t{3});
   const auto candidate_output_bytes = posthf::checked_mul(coordinate_count, sizeof(double));
+  // The RI provider reconstructs each block directly into its output vector;
+  // it owns no per-call transform scratch beyond that returned allocation.
+  const auto streamed_workspace = detail::streamed_force_workspace_bytes(
+      reference.nbf, reference.nocc, [](const std::array<std::size_t, 4>& shape) {
+        std::size_t bytes = sizeof(double);
+        for (const auto extent : shape) bytes = posthf::checked_mul(bytes, extent);
+        return bytes;
+      });
+  const auto endpoint_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
   const auto resources = density_fitted_gradient_plan(
       reference.nbf, reference.nocc, provider.auxiliary_count(), provider.provider_bytes(),
       response_plan, molecule::cartesian_ao_count(source.orbital()),
       molecule::cartesian_ao_count(source.auxiliary()), coordinate_count, candidate_output_bytes,
-      budget_bytes);
+      endpoint_budget);
 
   const auto h = hcore_mo(reference);
   auto adjoint = energy_adjoint(reference, provider, denominator_threshold, false, 0);
@@ -215,7 +235,7 @@ ConventionalForceResult density_fitted_force_cpu(
                                                        same_space_threshold, false, 0);
   if (!std::isfinite(weights.stationarity_residual) || weights.stationarity_residual > 1e-7)
     throw std::runtime_error("RI-MP2 relaxed Lagrangian is not stationary");
-  auto fitted = density_fitted_lagrangian_weights(reference, provider, weights, budget_bytes);
+  auto fitted = density_fitted_lagrangian_weights(reference, provider, weights, endpoint_budget);
   if (fitted.planned_peak_bytes > resources.peak_bytes)
     throw std::runtime_error("RI-MP2 reverse exceeded its composed resource plan");
 
@@ -229,7 +249,8 @@ ConventionalForceResult density_fitted_force_cpu(
   result.stationarity_residual = weights.stationarity_residual;
   result.derivative_workspace_bytes =
       posthf::checked_add(fitted.workspace_bytes, resources.derivative_staging_bytes);
-  result.planned_endpoint_peak_bytes = resources.peak_bytes;
+  result.planned_endpoint_peak_bytes =
+      posthf::checked_add(resources.peak_bytes, streamed_workspace);
   result.measured_endpoint_peak_bytes = 0;
   return result;
 }
