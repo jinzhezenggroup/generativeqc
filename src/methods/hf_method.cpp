@@ -179,6 +179,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.incremental_direct_jk = native.incremental_direct_jk;
   return result;
 }
 
