@@ -863,8 +863,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if GENERATIVEQC_HAS_CUDA
-    if (!cuda_ || !execution_plan_.range_exchange || !range_strategy_ ||
-        !system_.ecp_terms.empty())
+    if (!cuda_ || !execution_plan_.range_exchange || !range_strategy_ || !system_.ecp_terms.empty())
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
       detail = "cached CUDA stationary D/W must be supplied together";
