@@ -659,7 +659,10 @@ def assess_grid_xc_schedule(
             ("resource_scope", "grid-xc-admission"),
         )
         + (
-            (("compiled_resource_evidence", "common.gpu_profitability"),)
+            (
+                ("compiled_resource_evidence", "dft.grid_xc.compiled_region"),
+                ("compiled_profitability_contract", "common.gpu_profitability"),
+            )
             if compiled_evidence is not None
             else ()
         ),
