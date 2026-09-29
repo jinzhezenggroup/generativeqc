@@ -95,12 +95,12 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   F(system_shell_offsets);         \
   F(system_shell_pair_offsets);    \
   F(shell_direct_ao_offsets);      \
-  F(shell_pair_systems);           \
-  F(shell_pair_first);             \
-  F(shell_pair_second);            \
-  F(shell_pair_primitive_offsets); \
-  F(direct_ao_shells);             \
-  F(direct_ao_angular);            \
+  F(shell_pair_systems);                      \
+  F(shell_pair_first);                        \
+  F(shell_pair_second);                       \
+  F(shell_pair_primitive_offsets);            \
+  F(direct_ao_shells);                        \
+  F(direct_ao_angular);                       \
   F(direct_ao_coefficients)
 #define COUNT(field) charge(host.field.size(), sizeof(host.field[0]))
   COULOMB_METADATA(COUNT);
@@ -334,15 +334,18 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     plan->shell_pair_block_bounds = doubles(pair_blocks);
     plan->force = doubles(product(atoms, 3));
     plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
-    plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
+    plan->shared->batch.total_shell_pair_blocks =
+        host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
         host.system_shell_pair_block_quartet_offsets.back();
-    plan->shared->batch.system_shell_pair_block_offsets = static_cast<const std::int64_t*>(
-        allocate(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t),
-                 host.system_shell_pair_block_offsets.data()));
-    plan->shared->batch.system_shell_pair_block_quartet_offsets = static_cast<const std::int64_t*>(
-        allocate(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t),
-                 host.system_shell_pair_block_quartet_offsets.data()));
+    plan->shared->batch.system_shell_pair_block_offsets =
+        static_cast<const std::int64_t*>(
+            allocate(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t),
+                     host.system_shell_pair_block_offsets.data()));
+    plan->shared->batch.system_shell_pair_block_quartet_offsets =
+        static_cast<const std::int64_t*>(
+            allocate(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t),
+                     host.system_shell_pair_block_quartet_offsets.data()));
   }
 
   const auto& b = plan->shared->batch;
@@ -560,6 +563,65 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   if (error != cudaSuccess) return error;
   // Native shell force kernels accumulate -dE/dR. This API publishes the
   // derivative convention used by the stationary integral-source reducer.
+  for (double& value : result) value = -value;
+  derivatives = std::move(result);
+  return cudaSuccess;
+}
+
+cudaError_t execute_generated_rsh_energy_derivatives(
+    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double short_exchange_coefficient,
+    double long_exchange_coefficient, double omega, std::vector<double>& derivatives) {
+  if (!p.force_capability || p.bounded_pair_order == nullptr ||
+      p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
+      !std::isfinite(coulomb_coefficient) || !std::isfinite(short_exchange_coefficient) ||
+      !std::isfinite(long_exchange_coefficient) || !std::isfinite(omega) || omega <= 0.0)
+    return cudaErrorInvalidValue;
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (error != cudaSuccess) return error;
+
+  auto& shared = *p.shared;
+  const auto b = shared.batch;
+  const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
+  std::vector<double> result(3U * coordinates);
+  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+                          shared.stream);
+  if (error != cudaSuccess) return error;
+
+  struct Source {
+    double cj;
+    double ck;
+    DirectCoulombRange range;
+    double omega;
+  };
+  const Source sources[3] = {
+      {coulomb_coefficient, 0.0, DirectCoulombRange::Full, 0.0},
+      {0.0, short_exchange_coefficient, DirectCoulombRange::Short, omega},
+      {0.0, long_exchange_coefficient, DirectCoulombRange::Long, omega},
+  };
+  for (unsigned source = 0; source < 3; ++source) {
+    if (sources[source].cj == 0.0 && sources[source].ck == 0.0) continue;
+    error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    launch_bounded_shell_energy_derivative(
+        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
+        p.force_cursor, sources[source].cj, sources[source].ck, sources[source].range,
+        sources[source].omega);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    error = cudaMemcpyAsync(result.data() + source * coordinates, p.force,
+                            coordinates * sizeof(double), cudaMemcpyDeviceToHost, shared.stream);
+    if (error != cudaSuccess) return error;
+  }
+  error = cudaStreamSynchronize(shared.stream);
+  if (error != cudaSuccess) return error;
+
+  // Native shell force kernels accumulate -dE/dR. Each source already carries
+  // its physical MethodIR coefficient and exact radial identity.
   for (double& value : result) value = -value;
   derivatives = std::move(result);
   return cudaSuccess;
