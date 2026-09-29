@@ -33,9 +33,8 @@ std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points) {
   return q::sum(layout.device_bytes, cuda_resident_grid_bytes(points));
 }
 
-MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec,
-                                       int device,
- bool retain_device) {
+MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec, int device,
+                                       bool retain_device) {
   MolecularGrid result(system, spec, Deferred{});
   const auto per_atom =
       q::product(q::product(spec.radial_points, spec.angular_polar), spec.angular_azimuth);
