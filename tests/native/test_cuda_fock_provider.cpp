@@ -787,13 +787,19 @@ void direct_providers(bool through_f_response) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
+      mixed_coulomb_work_census();
+      std::cout << "CUDA mixed Coulomb work census PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {
       range_exchange_derivatives();
       std::cout << "CUDA s/p/d/f SR/LR derivative gates PASS\n";
       return 0;
     }
     require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--through-f-response"),
-            "expected optional --through-f-response");
+            "expected optional --mixed-census-only, --range-response-only, or "
+            "--through-f-response");
     const bool through_f_response = argc == 2;
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
