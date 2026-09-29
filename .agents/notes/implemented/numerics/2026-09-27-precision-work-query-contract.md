@@ -86,6 +86,7 @@ never replace it with aggregate reconstruction.
 
 ## References
 
+- [Count mixed Coulomb work at the executing provider](2026-09-29-executed-mixed-coulomb-census.md)
 - #1303
 - #1189
 - #1190

@@ -4,6 +4,7 @@
 #include <cuda_runtime_api.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -91,13 +92,17 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.
  * mixed_coulomb changes only the qualified exact-Coulomb recurrence precision;
  * fitted execution remains strict FP64. It never changes K, scientific
- * coefficients, screening, or provider selection.
+ * coefficients, screening, or provider selection. When supplied for a mixed
+ * Direct execution, mixed_coulomb_work_count is a caller-owned device counter
+ * for actually evaluated mixed Coulomb AO-ERI recurrences. Supplying it for a
+ * strict execution fails closed.
  */
 generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
                                                const double* beta, std::size_t matrix_elements,
                                                double* coulomb, double* alpha_exchange,
                                                double* beta_exchange, int* numerical_error,
-                                               bool mixed_coulomb, std::string& detail);
+                                               bool mixed_coulomb, std::string& detail,
+                                               std::uint64_t* mixed_coulomb_work_count = nullptr);
 
 /** Enqueue a separately resolved long-range exact-exchange correction through
  * the same resident direct-J/K source as the primary prepared owner. The
