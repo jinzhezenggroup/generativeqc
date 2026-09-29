@@ -673,22 +673,29 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 #endif
     return hamiltonian_pullback(bar, reference_seed, raw, o, v, max_bytes);
   };
-  auto fock_dispatch = [&](std::span<const double> bar_fock) -> ResponseWeights {
+  auto control_dispatch = [&](const ParameterWeights& bar,
+                              double reference_seed) -> ControlWeights {
 #if GENERATIVEQC_HAS_CUDA
-    if (cuda_response) return detach_cuda_response(cuda_response->fock(bar_fock));
+    if (cuda_response) {
+      auto full =
+          detach_cuda_response(cuda_response->hamiltonian(cuda_parameter_view(bar), reference_seed));
+      return {std::move(full.stationarity), std::move(full.orbital_rhs)};
+    }
 #endif
-    return fock_pullback(bar_fock, raw, o, v, max_bytes);
+    return hamiltonian_control_pullback(bar, reference_seed, raw, o, v, max_bytes);
   };
-  auto correlation = hamiltonian_dispatch(parameters, 0.0);
 
+  // Canonical-orbital denominator sources are same-space Fock cotangents.
+  // Fold them into the already-declared foo/fvv parameter seeds so every
+  // intermediate orbital-control query can use the pruned Hamiltonian VJP.
   std::vector<double> bar_fock(square(n), 0.0);
   if (triples) {
     for (std::size_t i = 0; i < o; ++i) bar_fock[i * n + i] = triples->eps_o[i];
     for (std::size_t a = 0; a < v; ++a) bar_fock[(o + a) * n + o + a] = triples->eps_v[a];
-    const auto denominator = fock_dispatch(bar_fock);
-    add_in_place(correlation, denominator);
+    add_same_space_fock_seed(parameters, bar_fock, o, v);
     std::fill(bar_fock.begin(), bar_fock.end(), 0.0);
   }
+  auto correlation = control_dispatch(parameters, 0.0);
 
   double minimum_same_space_gap = std::numeric_limits<double>::infinity();
   for (const auto& bounds :
@@ -704,8 +711,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
         bar_fock[q * n + p] = value;
       }
   }
-  const auto canonicalization = fock_dispatch(bar_fock);
-  add_in_place(correlation, canonicalization);
+  add_same_space_fock_seed(parameters, bar_fock, o, v);
+  correlation = control_dispatch(parameters, 0.0);
   double same_space_stationarity = 0.0;
   for (const auto& bounds :
        {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}})
@@ -791,13 +798,13 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   if (std::max(z.residual_norm, independent_residual) > kOrbitalResidualTolerance)
     throw std::runtime_error("independent RCCSD(T) physical Z-vector residual failed");
 
-  auto orbital_parameters = zero_parameters(o, v);
   for (std::size_t index = 0; index < dimension; ++index)
-    orbital_parameters.fov[index] = -z.solution[index];
-  const auto orbital = hamiltonian_dispatch(orbital_parameters, 0.0);
-  auto total = hamiltonian_dispatch(zero_parameters(o, v), 1.0);
-  add_in_place(total, correlation);
-  add_in_place(total, orbital);
+    parameters.fov[index] -= z.solution[index];
+
+  // All CC, (T)-denominator, same-space canonicalization and physical-Z seeds
+  // now live in one parameter source. Publish the complete h/g/S cotangent
+  // exactly once, only for the final nuclear derivative.
+  auto total = hamiltonian_dispatch(parameters, 1.0);
   const double stationarity = max_abs(total.stationarity);
   if (stationarity > kStationarityTolerance)
     throw std::runtime_error("complete HF+RCCSD(T)+Z orbital stationarity failed");
