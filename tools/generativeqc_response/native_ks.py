@@ -16,8 +16,8 @@ from generativeqc.fock import FockBuildSpec, FockTerm
 from generativeqc.ks import resolve_ks_method
 from generativeqc.profiles import canonical_hash
 from generativeqc.response_problem import ResponseUnsupported
-from generativeqc.rks_response import NativeRKSResponse as NativeRKSResponse
 from generativeqc.response_xc import FixedDensityXCDerivativeKernel
+from generativeqc.rks_response import NativeRKSResponse as NativeRKSResponse
 from generativeqc_compiler.dft.features import density_features, spin_densities
 from generativeqc_compiler.xc.potential import assemble_coefficients
 
