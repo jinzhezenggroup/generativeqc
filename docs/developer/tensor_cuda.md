@@ -529,17 +529,25 @@ The shared topology layout and admission boundary are recorded in the
 
 ## Symbolic contraction reassociation
 
-CUDA planning can explicitly run the compiler-owned symbolic contraction-tree rewrite before
+CUDA planning runs the compiler-owned symbolic contraction-tree rewrite by default before
 storage, layout, and provider admission:
 
 ```python
-plan = plan_cuda(program, target, reassociate_contractions=True)
+plan = plan_cuda(program, target)
 ```
 
-This option is intentionally separate from `TensorSchedule`: it changes the floating-point
-reduction tree of the logical equation rather than only choosing an execution schedule. The
-default remains `False`. When enabled, only contractions with a provably lower symbolic degree
-are rewritten; retained high-order outputs are diagnosed rather than approximated away.
+Only contractions with a provably lower symbolic degree are rewritten; retained high-order
+outputs are diagnosed rather than approximated away. To preserve the original contraction tree
+for bitwise/order-sensitive auditing, explicitly opt out:
+
+```python
+plan = plan_cuda(program, target, reassociate_contractions=False)
+```
+
+This switch is intentionally separate from `TensorSchedule`: it changes the floating-point
+reduction tree of the logical equation rather than only choosing an execution schedule. Programs
+with an explicit `precision_execution` contract currently preserve their original contraction
+tree automatically until precision propagation through newly introduced intermediates is defined.
 
 The rewritten `Program` is stored on `TensorPlan.program`, so plan identity, emitted CUDA,
 resource accounting, and cuBLAS admission all bind to the same lowered equation. In particular,
