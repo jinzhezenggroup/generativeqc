@@ -343,8 +343,8 @@ OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<con
                 "same-space canonical MP2 response has a nonstationary degenerate subspace");
           continue;
         }
-        add_negative_fock_multiplier_factorized(result.one_electron, result.fock_weights, n, q, p,
-                                                derivative / denominator);
+        add_negative_fock_multiplier(result.one_electron, result.two_electron, n, occupied, q, p,
+                                     derivative / denominator);
       }
   };
   correct_block(0, occupied);
@@ -396,8 +396,8 @@ OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference
                 "same-space streamed MP2 response has a nonstationary degenerate subspace");
           continue;
         }
-        add_negative_fock_multiplier(result.one_electron, result.two_electron, n, occupied, q, p,
-                                     derivative / denominator);
+        add_negative_fock_multiplier_factorized(result.one_electron, result.fock_weights, n, q, p,
+                                                derivative / denominator);
       }
   };
   correct_block(0, occupied);
@@ -503,12 +503,15 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
     throw std::invalid_argument("RI-MP2 Lagrangian/reference/provider mismatch");
   const auto n2 = square(n), n4 = fourth_power(n), a2 = square(na);
   const auto three = posthf::checked_mul(n2, na);
+  const bool dense_two = weights.two_electron.size() == n4 && finite(weights.two_electron);
+  const bool factorized_two =
+      weights.two_electron.empty() && valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (reference.coefficients.size() != n2 || weights.one_electron.size() != n2 ||
-      weights.overlap.size() != n2 || weights.two_electron.size() != n4 ||
+      weights.overlap.size() != n2 || (!dense_two && !factorized_two) ||
       provider.metric().size() != a2 || provider.inverse_square_root().size() != a2 ||
       provider.transformed_three_center().size() != three ||
       provider.whitened_three_center().size() != three || !finite(reference.coefficients) ||
-      !finite(weights.one_electron) || !finite(weights.overlap) || !finite(weights.two_electron))
+      !finite(weights.one_electron) || !finite(weights.overlap))
     throw std::invalid_argument("RI-MP2 Lagrangian weights have inconsistent dimensions");
 
   // Result: S/H/A/M. Scratch: bar_B, bar_A_MO and bar_X plus conservative
@@ -524,7 +527,15 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
   scratch_elements = posthf::checked_add(scratch_elements, posthf::checked_mul(6, a2));
   scratch_elements = posthf::checked_add(scratch_elements, posthf::checked_mul(2, na));
   scratch_elements = posthf::checked_add(scratch_elements, n2);
-  auto weight_elements = posthf::checked_add(posthf::checked_mul(2, n2), n4);
+  auto weight_elements = posthf::checked_mul(2, n2);
+  if (dense_two) {
+    weight_elements = posthf::checked_add(weight_elements, n4);
+  } else {
+    weight_elements =
+        posthf::checked_add(weight_elements, weights.two_electron_factors.fock.size());
+    weight_elements =
+        posthf::checked_add(weight_elements, weights.two_electron_factors.correlation_iajb.size());
+  }
   auto required = provider.provider_bytes();
   required = posthf::checked_add(required, posthf::checked_mul(weight_elements, sizeof(double)));
   required = posthf::checked_add(required, posthf::checked_mul(result_elements, sizeof(double)));
@@ -547,8 +558,8 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
         for (std::size_t r = 0; r < n; ++r)
           for (std::size_t t = 0; t < n; ++t)
             bar_whitened[three_index(p, q, aux)] +=
-                (weights.two_electron[eri_index(n, p, q, r, t)] +
-                 weights.two_electron[eri_index(n, r, t, p, q)]) *
+                (two_electron_weight(weights, p, q, r, t) +
+                 two_electron_weight(weights, r, t, p, q)) *
                 whitened[three_index(r, t, aux)];
 
   std::vector<double> bar_transformed(three, 0.0);
@@ -606,7 +617,7 @@ GradientResourcePlan conventional_gradient_plan(
       response_plan.dimension != posthf::checked_mul(occupied, orbitals - occupied))
     throw std::invalid_argument("invalid conventional MP2 gradient resource dimensions");
   const auto virtuals = orbitals - occupied;
-  const auto n2 = square(orbitals), n4 = fourth_power(orbitals);
+  const auto n2 = square(orbitals);
   const auto rotations = posthf::checked_mul(occupied, virtuals);
   const auto amplitudes = posthf::checked_mul(square(occupied), square(virtuals));
   GradientResourcePlan plan;
@@ -617,8 +628,10 @@ GradientResourcePlan conventional_gradient_plan(
       response_plan.workspace_bytes,
       posthf::checked_mul(sizeof(double),
                           posthf::checked_add(posthf::checked_mul(6, rotations), n2)));
-  auto relaxed_elements =
-      posthf::checked_add(posthf::checked_mul(2, n4), posthf::checked_mul(3, n2));
+  // The ijab correlation adjoint is already charged in adjoint_bytes and is
+  // ownership-transferred into the final factorized weights. Relaxed-weight
+  // storage adds only rank-2 one/overlap/Fock-like state and rotation vectors.
+  auto relaxed_elements = posthf::checked_mul(4, n2);
   relaxed_elements = posthf::checked_add(relaxed_elements, posthf::checked_mul(2, rotations));
   plan.relaxed_weight_bytes = posthf::checked_mul(sizeof(double), relaxed_elements);
   plan.shell_cotangent_bytes =
@@ -670,8 +683,10 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
       response_plan.workspace_bytes,
       posthf::checked_mul(sizeof(double),
                           posthf::checked_add(posthf::checked_mul(6, rotations), n2)));
-  auto relaxed_elements =
-      posthf::checked_add(posthf::checked_mul(2, n4), posthf::checked_mul(3, n2));
+  // The ijab correlation adjoint is already charged in adjoint_bytes and is
+  // ownership-transferred into the final factorized weights. Relaxed-weight
+  // storage adds only rank-2 one/overlap/Fock-like state and rotation vectors.
+  auto relaxed_elements = posthf::checked_mul(4, n2);
   relaxed_elements = posthf::checked_add(relaxed_elements, posthf::checked_mul(2, rotations));
   plan.relaxed_weight_bytes = posthf::checked_mul(sizeof(double), relaxed_elements);
 
