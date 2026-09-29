@@ -271,6 +271,9 @@ double two_electron_weight(const LagrangianWeights& weights, std::size_t p, std:
       throw std::invalid_argument("invalid dense MP2 two-electron weight lookup");
     return weights.two_electron[eri_index(n, p, q, r, s)];
   }
+  if (weights.two_electron_factors.orbitals != n ||
+      weights.two_electron_factors.occupied != weights.occupied)
+    throw std::invalid_argument("factorized MP2 weights have a different orbital population");
   return factorized_two_electron_weight(weights.two_electron_factors, p, q, r, s);
 }
 
@@ -513,6 +516,8 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
   if (!weights.two_electron.empty())
     dense_two = weights.two_electron.size() == fourth_power(n) && finite(weights.two_electron);
   const bool factorized_two = weights.two_electron.empty() &&
+                              weights.two_electron_factors.orbitals == n &&
+                              weights.two_electron_factors.occupied == reference.nocc &&
                               valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (reference.coefficients.size() != n2 || weights.one_electron.size() != n2 ||
       weights.overlap.size() != n2 || (!dense_two && !factorized_two) ||

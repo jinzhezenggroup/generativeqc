@@ -48,6 +48,7 @@ PREFIX = r"""
 #include <numeric>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 namespace trace {
@@ -193,7 +194,7 @@ struct DensityFittedLagrangianWeights {
 MAIN = r"""
 } // namespace generativeqc::mp2
 int main(int argc,char** argv) {
-  if(argc!=3) return 2;
+  if(argc!=3 && argc!=4) return 2;
   using namespace generativeqc;
   const std::size_t n=std::strtoul(argv[1],nullptr,10),na=std::strtoul(argv[2],nullptr,10);
   hf::PhysicalReference ref{n,1,std::vector<double>(n*n)};
@@ -212,6 +213,23 @@ int main(int argc,char** argv) {
     weights.two_electron_factors.fock[i]=0.001*(int(i%11)-5);
   for(std::size_t i=0;i<weights.two_electron_factors.correlation_iajb.size();++i)
     weights.two_electron_factors.correlation_iajb[i]=0.002*(int(i%7)-3);
+  if(argc==4) {
+    auto& factors=weights.two_electron_factors;
+    if(std::string(argv[3])=="orbitals") factors.orbitals=n+1;
+    else factors.occupied=2;
+    const auto fn=factors.orbitals,fo=factors.occupied,fv=fn-fo;
+    factors.fock.assign(fn*fn,0.001);
+    factors.correlation_iajb.assign(fo*fo*fv*fv,0.002);
+    if(!mp2::valid_factorized_two_electron_weights(factors)) return 8;
+    trace::start();
+    bool rejected=false;
+    try {
+      (void)mp2::density_fitted_lagrangian_weights(
+          ref,provider,weights,std::numeric_limits<std::size_t>::max());
+    } catch(const std::invalid_argument&) { rejected=true; }
+    trace::active=false;
+    return rejected && !trace::gemms && !trace::eigensolves ? 0 : 9;
+  }
   const std::size_t retained=provider.provider_bytes()+sizeof(double)*
       (3*n*n+(n-1)*(n-1));
   std::size_t planned=0;
@@ -290,6 +308,20 @@ def test_reverse_budget_covers_measured_nested_peak(
 ) -> None:
     process = subprocess.run(
         [str(reverse_probe), str(n), str(na)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+
+
+@pytest.mark.parametrize("mismatch", ("orbitals", "occupied"))
+def test_reverse_rejects_factor_population_mismatch_before_numerics(
+    reverse_probe: Path, mismatch: str
+) -> None:
+    process = subprocess.run(
+        [str(reverse_probe), "4", "8", mismatch],
         capture_output=True,
         text=True,
         timeout=30,

@@ -106,6 +106,8 @@ std::vector<double> conventional_derivative(const core::System& system,
   if (!weights.two_electron.empty())
     dense_two = weights.two_electron.size() == fourth(n) && finite(weights.two_electron);
   const bool factorized_two = weights.two_electron.empty() &&
+                              weights.two_electron_factors.orbitals == n &&
+                              weights.two_electron_factors.occupied == reference.nocc &&
                               valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (!n || molecule::ao_count(system) != n || reference.coefficients.size() != square(n) ||
       weights.orbitals != n || weights.occupied != reference.nocc ||

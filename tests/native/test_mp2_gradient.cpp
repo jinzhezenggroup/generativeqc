@@ -12,6 +12,7 @@
 
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
+#include "posthf/mp2_derivative_common.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
@@ -619,6 +620,61 @@ void orbital_rhs_and_relaxed_weights_match_independent_oracles() {
           "overlap weight is not symmetric");
 }
 
+void factorized_consumer_population_guards() {
+  auto system = h2();
+  system.shells.push_back({0, 0, {{0.13, 1.0}}});
+  system.shells.push_back({1, 0, {{0.17, 1.0}}});
+  std::string detail;
+  require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          "factorized population fixture is invalid");
+  generativeqc::hf::PhysicalReference reference;
+  reference.nbf = generativeqc::molecule::ao_count(system);
+  reference.nocc = 1;
+  const auto n = reference.nbf;
+  reference.coefficients.assign(n * n, 0.0);
+  for (std::size_t i = 0; i < n; ++i) reference.coefficients[i * n + i] = 1.0;
+  generativeqc::mp2::LagrangianWeights weights;
+  weights.orbitals = n;
+  weights.occupied = 1;
+  weights.one_electron.assign(n * n, 0.0);
+  weights.overlap.assign(n * n, 0.0);
+  for (unsigned mismatch = 0; mismatch < 3; ++mismatch) {
+    auto& factors = weights.two_electron_factors;
+    factors.orbitals = n + (mismatch == 1);
+    factors.occupied = mismatch == 2 ? 2 : 1;
+    const auto fn = factors.orbitals, fo = factors.occupied, fv = fn - fo;
+    factors.fock.assign(fn * fn, 0.0);
+    factors.correlation_iajb.assign(fo * fo * fv * fv, 0.0);
+    require(generativeqc::mp2::valid_factorized_two_electron_weights(factors),
+            "factor fixture must be internally valid");
+    bool rejected = false, called = false;
+    try {
+      (void)generativeqc::mp2::detail::conventional_derivative(
+          system, reference, weights,
+          [&](std::span<const double>, std::span<const double>) {
+            called = true;
+            return std::vector<double>(3 * system.atoms.size(), 0.0);
+          },
+          [&](const std::array<std::size_t, 4>&, std::span<const double>) {
+            called = true;
+            return std::array<double, 12>{};
+          });
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(mismatch ? rejected && !called : !rejected && called,
+            "conventional factor population mismatch was not rejected before contraction");
+    rejected = false;
+    try {
+      (void)generativeqc::mp2::two_electron_weight(weights, 0, 0, 0, 0);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected == (mismatch != 0), "factor lookup accepted a different population");
+  }
+}
+
 void invalid_inputs_and_resource_boundaries() {
   bool rejected = false;
   const std::array<double, 1> unit_integral{1.0};
@@ -694,6 +750,7 @@ int main() {
     orbital_rhs_and_relaxed_weights_match_independent_oracles();
     streamed_provider_matches_dense_oracle();
     density_fitted_provider_matches_dense_ri_oracle();
+    factorized_consumer_population_guards();
     invalid_inputs_and_resource_boundaries();
     std::cout << "MP2 native gradient contracts passed\n";
     return 0;
