@@ -109,14 +109,32 @@ def emit_cpu(
     max_nodes: typing.Any = 4096,
     symbol: str = "tensor_cpu",
 ) -> typing.Any:
-    """Return source and exact bounded storage/work requirements without runtime imports.
+    """Prepare and emit one bounded CPU program without discovering a compiler."""
+    program = prepare_for_backend(program, "cpu")
+    return _emit_prepared_cpu(
+        program,
+        max_bytes=max_bytes,
+        max_work=max_work,
+        max_nodes=max_nodes,
+        symbol=symbol,
+    )
+
+
+def _emit_prepared_cpu(
+    program: typing.Any,
+    *,
+    max_bytes: typing.Any = 8 * 1024 * 1024,
+    max_work: typing.Any = 100_000_000,
+    max_nodes: typing.Any = 4096,
+    symbol: str = "tensor_cpu",
+) -> typing.Any:
+    """Emit the supplied graph unchanged, preserving its input/output ABI.
 
     No packed-storage semantics or implicit dtype conversion are admitted.
     Index expressions are shared with CUDA; CUDA emission bytes are unchanged.
     """
     if not isinstance(program, Program):
         raise TypeError("CPU lowering requires a TensorIR Program")
-    program = prepare_for_backend(program, "cpu")
     if (
         not isinstance(symbol, str)
         or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", symbol) is None
@@ -354,7 +372,8 @@ class NativeTensorProgram:
         max_nodes: typing.Any = 4096,
         symbol: str = "tensor_cpu",
     ) -> None:
-        source, self.resources = emit_cpu(
+        program = prepare_for_backend(program, "cpu")
+        source, self.resources = _emit_prepared_cpu(
             program,
             max_bytes=max_bytes,
             max_work=max_work,
