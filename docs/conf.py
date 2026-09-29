@@ -36,6 +36,15 @@ exclude_patterns = [
 
 html_theme = "sphinx_book_theme"
 html_title = "GenerativeQC documentation"
+html_logo = "../assets/generativeqc-logo.svg"
+html_favicon = "../assets/generativeqc-icon.svg"
+html_theme_options = {
+    "logo": {
+        "image_light": "../assets/generativeqc-logo.svg",
+        "image_dark": "../assets/generativeqc-logo-dark.svg",
+        "alt_text": "GenerativeQC - Home",
+    },
+}
 
 myst_enable_extensions = [
     "amsmath",
