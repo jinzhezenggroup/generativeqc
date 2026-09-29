@@ -362,10 +362,14 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rsh_
       screening_tolerance)
     return;
 
-  const double coulomb_density = direct_force_density_coefficient_scaled<Unrestricted>(
-      n, physical_offset, spin_offset, density, i, j, k, l, 1.0, 0.0);
-  const double exchange_density = direct_force_density_coefficient_scaled<Unrestricted>(
-      n, physical_offset, spin_offset, density, i, j, k, l, 0.0, 1.0);
+  double coulomb_density = 0.0;
+  if (coulomb_coefficient != 0.0)
+    coulomb_density = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, i, j, k, l, 1.0, 0.0);
+  double exchange_density = 0.0;
+  if (short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0)
+    exchange_density = direct_force_density_coefficient_scaled<Unrestricted>(
+        n, physical_offset, spin_offset, density, i, j, k, l, 0.0, 1.0);
   const double source_coefficient[3] = {
       coulomb_coefficient * coulomb_density,
       short_exchange_coefficient * exchange_density,
