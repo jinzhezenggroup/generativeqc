@@ -95,6 +95,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/posthf/mp2_force.cpp
     src/posthf/mp2_gradient.cpp
     src/posthf/native_provider.cpp
+    src/posthf/rank2_transform.cpp
     src/response/native_gmres.cpp
     src/response/resident_gmres.cpp
     src/methods/gfn2_runtime_bridge.cpp
