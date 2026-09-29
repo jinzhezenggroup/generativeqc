@@ -828,11 +828,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
   generativeqc_status resident_nonlocal_features(const dft::CudaKsFinalStateToken& expected,
                                                  int& device, const double*& density,
                                                  const double*& gradient, std::size_t& point_count,
-                                                 std::string& detail) {
+                                                 void*& source_stream, std::string& detail) {
     device = -1;
     density = nullptr;
     gradient = nullptr;
     point_count = 0;
+    source_stream = nullptr;
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_) {
       detail = "resident nonlocal features require a CUDA KS owner";
@@ -849,6 +850,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     density = binding.density;
     gradient = binding.gradient;
     point_count = binding.point_count;
+    source_stream = binding.stream;
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
     detail = "resident nonlocal features require a CUDA build";
@@ -1540,14 +1542,15 @@ class KsPreparedBatch final : public PreparedBatch {
                                                  const dft::CudaKsFinalStateToken& expected,
                                                  int& device, const double*& density,
                                                  const double*& gradient, std::size_t& point_count,
-                                                 std::string& detail) {
+                                                 void*& source_stream, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
-      return items_[index].plan->resident_nonlocal_features(expected, device, density, gradient,
-                                                            point_count, detail);
+      return items_[index].plan->resident_nonlocal_features(
+          expected, device, density, gradient, point_count, source_stream, detail);
     device = -1;
     density = nullptr;
     gradient = nullptr;
     point_count = 0;
+    source_stream = nullptr;
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -1722,15 +1725,17 @@ generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, st
                                                         int& device, const double*& density,
                                                         const double*& gradient,
                                                         std::size_t& point_count,
+                                                        void*& source_stream,
                                                         std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->resident_nonlocal_features(index, expected, device, density, gradient, point_count,
-                                          detail);
+                                          source_stream, detail);
   device = -1;
   density = nullptr;
   gradient = nullptr;
   point_count = 0;
+  source_stream = nullptr;
   detail = "resident nonlocal features require a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
