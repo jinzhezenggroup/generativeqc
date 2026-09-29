@@ -76,12 +76,12 @@ def compiled_xc_profitability(artifact: XCArtifact) -> typing.Any:
     resource_rows = metadata.get("resources")
     identity = metadata.get("identity")
     if not isinstance(resource_rows, list) or not isinstance(identity, dict):
-        raise ValueError("XC artifact lacks PTXAS resource identity")
+        raise TypeError("XC artifact lacks PTXAS resource identity")
     target_payload = identity.get("target")
     if not isinstance(target_payload, dict) or not isinstance(
         target_payload.get("architecture"), str
     ):
-        raise ValueError("XC artifact lacks CUDA target identity")
+        raise TypeError("XC artifact lacks CUDA target identity")
     resources = tuple(
         KernelResources(**row)
         for row in resource_rows
