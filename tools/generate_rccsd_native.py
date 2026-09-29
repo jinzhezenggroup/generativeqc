@@ -18,7 +18,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 # Build-time generation must not execute the NumPy-backed TensorIR facade or
-# tools.generativeqc_cc.__init__.  Load only the immutable IR/type/program modules
+# the tools CC facade. Load only the immutable IR/type/program modules
 # needed to build #148's algebra, then expose their small public surface to the
 # equation modules.  The optimized/interpreter/packing paths are never entered
 # by this AOT generator (shared + expanded forms only).
@@ -96,7 +96,7 @@ for _name, _value in {
 }.items():
     setattr(_tensor_package, _name, _value)
 
-# CC equation modules import the real canonical evidence module. Its numerical
+# Compiler-owned CC equation modules import the real canonical evidence module. Its numerical
 # comparison routines load NumPy only when executed; no module replacement is
 # required for immutable AOT equation construction.
 
@@ -106,7 +106,7 @@ _cc_package.__path__ = [str(_cc_path)]
 _cc_package.__package__ = "tools.generativeqc_cc"
 sys.modules.setdefault("tools.generativeqc_cc", _cc_package)
 
-from tools.generativeqc_cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.doubles import build_ccsd_program
 from tools.generativeqc_cc.gradient_equations import (
     build_fock_weight_program,
     build_hamiltonian_programs,

@@ -16,7 +16,7 @@ from tools.generativeqc_mp2.complete_gradient import (
     _tiled_correlation_energy,
     complete_gradient_validation,
 )
-from tools.generativeqc_mp2.equations import energy_program
+from generativeqc_compiler.mp2.equations import energy_program
 from tools.generativeqc_mp2.gradient import (
     _ri_gradient_tile_ranges,
     ao_lagrangian_weights,

@@ -93,6 +93,18 @@ def test_dependency_directions() -> None:
     assert audit_structure()["errors"] == []
 
 
+def test_correlated_equation_compatibility_aliases_are_canonical() -> None:
+    import importlib
+
+    for legacy, canonical in (
+        ("tools.generativeqc_cc.inventory", "generativeqc_compiler.cc.inventory"),
+        ("tools.generativeqc_cc.equations", "generativeqc_compiler.cc.equations"),
+        ("tools.generativeqc_cc.doubles", "generativeqc_compiler.cc.doubles"),
+        ("tools.generativeqc_mp2.equations", "generativeqc_compiler.mp2.equations"),
+    ):
+        assert importlib.import_module(legacy) is importlib.import_module(canonical)
+
+
 def test_method_composition_is_above_xc_and_dft(tmp_path: typing.Any) -> None:
     method = tmp_path / "method"
     method.mkdir()

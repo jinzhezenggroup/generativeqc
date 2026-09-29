@@ -18,7 +18,7 @@ from tools.generativeqc_cc.df_factorized import (
     solve_df_ccsd,
     virtual_corrections,
 )
-from tools.generativeqc_cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.doubles import build_ccsd_program
 from tools.generativeqc_cc.solver import SolverOptions
 from tools.generativeqc_posthf.df import DFProvider, MetricFactor
 from tools.generativeqc_posthf.providers import BlockResult

@@ -73,6 +73,7 @@ def run(
         p.relative_to(ROOT).as_posix(): file_hash(p)
         for p in [
             *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
+            *sorted((ROOT / "python/generativeqc_compiler/cc").glob("*.py")),
             Path(__file__),
         ]
     }

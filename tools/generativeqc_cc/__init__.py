@@ -61,8 +61,8 @@ from .df_triples import (
     factorized_triples_workspace_bytes,
     solve_df_ccsdt,
 )
-from .doubles import build_ccsd_program
-from .equations import amplitude_layouts, build_program
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
 from .evaluate import evaluate
 from .lambda_cuda import PreparedCUDALambda
 from .lambda_equations import (

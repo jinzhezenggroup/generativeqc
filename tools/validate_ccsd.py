@@ -26,7 +26,7 @@ from generativeqc_compiler.common.evidence import (
 )
 from generativeqc_compiler.tensor import execute
 
-from tools.generativeqc_cc.doubles import DEFINITIONS, build_ccsd_program
+from generativeqc_compiler.cc.doubles import DEFINITIONS, build_ccsd_program
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 from tools.validate_cc import load_references
 
@@ -61,6 +61,7 @@ def run(output: typing.Any) -> typing.Any:
         str(p.relative_to(ROOT)).replace("\\", "/"): file_hash(p)
         for p in [
             *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
+            *sorted((ROOT / "python/generativeqc_compiler/cc").glob("*.py")),
             *sorted((ROOT / "python/generativeqc_compiler/tensor").glob("*.py")),
             ROOT / "tools/generate_cc_references.py",
             Path(__file__).resolve(),

@@ -18,7 +18,7 @@ from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
 from tools.generativeqc_mp2 import PreparedMP2Energy
 from tools.generativeqc_mp2.energy import denominator_check
-from tools.generativeqc_mp2.equations import energy_program
+from generativeqc_compiler.mp2.equations import energy_program
 from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 
 

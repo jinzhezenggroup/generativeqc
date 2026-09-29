@@ -10,7 +10,7 @@ from generativeqc_compiler.tensor import Program, execute
 from tools.generativeqc_posthf import MOBlock
 from tools.generativeqc_posthf.providers import ConventionalProvider
 
-from .equations import BLOCKS, build_program
+from generativeqc_compiler.cc.equations import BLOCKS, build_program
 
 
 def evaluate(

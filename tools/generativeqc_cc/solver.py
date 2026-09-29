@@ -24,8 +24,8 @@ from tools.generativeqc_posthf import MOBlock, ReferenceSnapshot
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.reference import immutable
 
-from .doubles import build_ccsd_program
-from .equations import amplitude_layouts
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_layouts
 
 
 def _provider_blocks(

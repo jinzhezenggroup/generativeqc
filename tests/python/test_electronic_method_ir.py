@@ -17,7 +17,7 @@ from generativeqc_compiler.method import (
     rks_electronic_method_ir,
 )
 
-from tools.generativeqc_cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.doubles import build_ccsd_program
 
 
 def _before(order: tuple[str, ...], first: str, second: str) -> bool:

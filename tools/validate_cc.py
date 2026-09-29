@@ -26,8 +26,8 @@ from generativeqc_compiler.common.evidence import (
 )
 from generativeqc_compiler.tensor import Program, execute, optimize
 
-from tools.generativeqc_cc import amplitude_layouts, build_program
-from tools.generativeqc_cc.inventory import TERMS
+from generativeqc_compiler.cc.equations import amplitude_layouts, build_program
+from generativeqc_compiler.cc.inventory import TERMS
 from tools.generativeqc_cc.oracle import dense_feeds, homogeneous_groups, random_case
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,6 +93,7 @@ def run(output: typing.Any, references: typing.Any) -> typing.Any:
         )
     source_paths = [
         *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
+        *sorted((ROOT / "python/generativeqc_compiler/cc").glob("*.py")),
         *sorted((ROOT / "python/generativeqc_compiler/tensor").glob("*.py")),
         ROOT / "tools/validate_cc.py",
         ROOT / "tools/generate_cc_references.py",

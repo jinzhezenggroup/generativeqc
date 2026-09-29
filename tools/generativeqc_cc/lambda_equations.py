@@ -17,8 +17,8 @@ from generativeqc_compiler.tensor import (
     transpose_program,
 )
 
-from .doubles import build_ccsd_program
-from .equations import BLOCKS
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import BLOCKS
 
 AMPLITUDES = ("t1", "t2")
 RESIDUALS = ("singles_residual", "doubles_residual")

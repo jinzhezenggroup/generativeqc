@@ -21,8 +21,8 @@ from generativeqc_compiler.tensor.types import checked_size
 
 from tools.generativeqc_posthf.reference import ReferenceSnapshot, immutable
 
-from .doubles import build_ccsd_program
-from .equations import amplitude_specs
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_specs
 from .solver import SolverOptions
 
 

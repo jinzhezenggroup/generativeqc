@@ -22,7 +22,7 @@ from tools.generativeqc_posthf.conventions import MOBlock
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.reference import ReferenceSnapshot
 
-from .equations import cpu_capacity, energy_program
+from generativeqc_compiler.mp2.equations import cpu_capacity, energy_program
 
 
 @dataclass(frozen=True)

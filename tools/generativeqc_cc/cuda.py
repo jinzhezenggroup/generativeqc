@@ -11,7 +11,7 @@ from generativeqc_compiler.tensor import Program
 from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
-from .doubles import build_ccsd_program
+from generativeqc_compiler.cc.doubles import build_ccsd_program
 
 
 def rccsd_program(

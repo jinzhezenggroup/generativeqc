@@ -23,8 +23,8 @@ from tools.generativeqc_posthf.df import DFProvider
 from tools.generativeqc_posthf.reference import immutable
 
 from .df_contract import DFCCSDTMethodContract
-from .doubles import build_ccsd_program
-from .equations import amplitude_layouts
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_layouts
 from .solver import _DIIS, SolverOptions, _ccsd_solver_region
 
 _DENSE_BLOCKS = ("ovov", "ovvo", "oovv", "ovoo", "oooo")
