@@ -142,6 +142,7 @@ def fixture(
         "state": state,
         "raw_weights": np.ones(5),
         "tile_points": 2,
+        "ao_count": 2,
         "functional": 4,
         "ingredients": ("rho", "gradient", "tau"),
     }
