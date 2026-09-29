@@ -13,6 +13,7 @@ from generativeqc.stationary_nuclear import (
     RHFNuclearResponse,
     StationaryNuclearBatchResponse,
     StationaryNuclearResponse,
+    metric_density_response_mo,
 )
 from generativeqc.stationary_nuclear import (
     solve_stationary_nuclear_perturbation as _production_solve_one,
@@ -28,6 +29,7 @@ __all__ = [
     "RHFNuclearResponse",
     "StationaryNuclearBatchResponse",
     "StationaryNuclearResponse",
+    "metric_density_response_mo",
     "solve_rhf_nuclear_perturbation",
     "solve_rhf_nuclear_perturbations",
     "solve_stationary_nuclear_perturbation",
@@ -59,6 +61,7 @@ def solve_stationary_nuclear_perturbation(
         solver=solve,
         options=_checked_options(options),
         resident_reconstruction_consumer=resident_reconstruction_consumer,
+        metric_response=metric_density_response_mo,
     )
 
 
@@ -80,6 +83,7 @@ def solve_stationary_nuclear_perturbations(
         strategy=strategy,
         options=_checked_options(options),
         resident_reconstruction_consumers=resident_reconstruction_consumers,
+        metric_response=metric_density_response_mo,
     )
 
 
