@@ -640,6 +640,8 @@ def _cpu_function(
             outputs["stationarity"],
             outputs["orbital_rhs"],
         ]
+    elif output_type == "HamiltonianControlOutputs":
+        returned = [outputs["stationarity"], outputs["orbital_rhs"]]
     elif output_type == "OrbitalJvpOutput":
         returned = [outputs["d_fov"]]
     elif output_type == "TriplesResponseOutputs":
@@ -685,6 +687,16 @@ def cpu_header() -> str:
         *REPRESENTATIVE, explicit_density_input=True
     )
     hamiltonian_weights = hamiltonian.weights
+    hamiltonian_control = Program(
+        {
+            name: hamiltonian_weights.outputs[name]
+            for name in ("stationarity", "orbital_rhs")
+        },
+        provenance={
+            "parent": hamiltonian_weights.logical_hash,
+            "scope": "orbital-control response without retained ERI cotangent",
+        },
+    )
     orbital_jvp = hamiltonian.orbital_jvp.program
     fock_weights = build_fock_weight_program(
         *REPRESENTATIVE, explicit_density_input=True
@@ -692,6 +704,13 @@ def cpu_header() -> str:
     hamiltonian_input_names = tuple(
         sorted(
             n.attrs["name"] for n in hamiltonian_weights.live_nodes if n.op == "input"
+        )
+    )
+    hamiltonian_control_input_names = tuple(
+        sorted(
+            n.attrs["name"]
+            for n in hamiltonian_control.live_nodes
+            if n.op == "input"
         )
     )
     orbital_jvp_input_names = tuple(
@@ -758,7 +777,8 @@ def cpu_header() -> str:
             ],
             "};",
             "struct HamiltonianOutputs { const double* hcore{}; const double* eri{}; const double* overlap{}; const double* rotation_gradient{}; const double* stationarity{}; const double* orbital_rhs{}; };",
-            "struct OrbitalJvpOutput { const double* d_fov{}; };",
+            "struct HamiltonianControlOutputs { const double* stationarity{}; const double* orbital_rhs{}; };",
+            "struct OrbitalJvpOutput { const double* d_fov{}; };
             "struct TriplesResponseOutputs {",
             *[f"  const double* {name}{{}};" for name in TRIPLES_RESPONSE_INPUTS],
             "};",
@@ -774,7 +794,8 @@ def cpu_header() -> str:
                 for parameter, program in parameter_vjps.items()
             ],
             f'inline constexpr const char* hamiltonian_weights_program_hash="{hamiltonian_weights.logical_hash}";',
-            f'inline constexpr const char* orbital_jvp_program_hash="{orbital_jvp.logical_hash}";',
+            f'inline constexpr const char* hamiltonian_control_program_hash="{hamiltonian_control.logical_hash}";',
+            f'inline constexpr const char* orbital_jvp_program_hash="{orbital_jvp.logical_hash}";
             f'inline constexpr const char* fock_weights_program_hash="{fock_weights.logical_hash}";',
             f'inline constexpr const char* triples_response_program_hash="{triples_response.logical_hash}";',
             _required_function(iteration, "iteration_arena_elements"),
@@ -793,6 +814,9 @@ def cpu_header() -> str:
             ],
             _required_function(
                 hamiltonian_weights, "hamiltonian_weights_arena_elements"
+            ),
+            _required_function(
+                hamiltonian_control, "hamiltonian_control_arena_elements"
             ),
             _required_function(orbital_jvp, "orbital_jvp_arena_elements"),
             _required_function(fock_weights, "fock_weights_arena_elements"),
@@ -858,6 +882,16 @@ def cpu_header() -> str:
                 signature="const HamiltonianWeightInputs& inputs",
                 input_overrides={
                     name: f"inputs.{name}" for name in hamiltonian_input_names
+                },
+            ),
+            _cpu_function(
+                hamiltonian_control,
+                "run_hamiltonian_control_cpu",
+                "HamiltonianControlOutputs",
+                signature="const HamiltonianWeightInputs& inputs",
+                input_overrides={
+                    name: f"inputs.{name}"
+                    for name in hamiltonian_control_input_names
                 },
             ),
             _cpu_function(
