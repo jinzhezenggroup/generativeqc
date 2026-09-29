@@ -99,9 +99,10 @@ def test_complete_cuda_force_matches_independent_engine(
             "short-range",
             "long-range",
         ]
-        assert "public-AO quartet domain is not materialized" in work[
-            "two_electron_work_scope"
-        ]
+        assert (
+            "public-AO quartet domain is not materialized"
+            in work["two_electron_work_scope"]
+        )
         native = work["native_integral_resources"]
         assert native["final_state_export_d2h_bytes"] == 0
         assert native["final_state_export_reads"] == 0

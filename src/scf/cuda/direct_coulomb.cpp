@@ -565,10 +565,12 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   return cudaSuccess;
 }
 
-cudaError_t execute_generated_rsh_energy_derivatives(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double short_exchange_coefficient,
-    double long_exchange_coefficient, double omega, std::vector<double>& derivatives) {
+cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double coulomb_coefficient,
+                                                     double short_exchange_coefficient,
+                                                     double long_exchange_coefficient, double omega,
+                                                     std::vector<double>& derivatives) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(short_exchange_coefficient) ||

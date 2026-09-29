@@ -89,11 +89,11 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* forces, double exchange_coefficient,
     generativeqc::integrals::CoulombRange range, double omega, std::size_t subtile, unsigned lane) {
-#define GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(order)                                           \
-  case order:                                                                                  \
-    contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(             \
+#define GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(order)                                            \
+  case order:                                                                                   \
+    contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(              \
         batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
-        exchange_coefficient, range, omega, subtile, lane);                                    \
+        exchange_coefficient, range, omega, subtile, lane);                                     \
     break
   switch (angular_order) {
     GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(0);

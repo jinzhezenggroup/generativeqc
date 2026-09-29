@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "integrals/range_moments.hpp"
 #include "generated_direct_high_order_pair_gradient.cuh"
 #include "generated_direct_source_contraction.cuh"
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/direct_force_density.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
@@ -281,9 +281,8 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
     const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[center]) * 3;
     const Dual3 derivative =
         dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
-            shell_class, batch, system, static_cast<std::int32_t>(i),
-            static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
-            static_cast<std::int32_t>(l), coordinate, range, omega);
+            shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate, range, omega);
     const double value[3] = {
         derivative.derivative_x,
         derivative.derivative_y,
@@ -293,8 +292,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
     for (unsigned axis = 0; axis < 3; ++axis) {
       derivative_sum[axis] += value[axis];
       if (value[axis] != 0.0)
-        atomicAdd(forces + static_cast<std::size_t>(coordinate) + axis,
-                  -coefficient * value[axis]);
+        atomicAdd(forces + static_cast<std::size_t>(coordinate) + axis, -coefficient * value[axis]);
     }
   }
 

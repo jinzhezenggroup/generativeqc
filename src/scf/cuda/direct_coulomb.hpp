@@ -98,9 +98,11 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner and one public-to-Cartesian density transform. */
-cudaError_t execute_generated_rsh_energy_derivatives(
-    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double short_exchange_coefficient,
-    double long_exchange_coefficient, double omega, std::vector<double>& derivatives);
+cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& plan, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double coulomb_coefficient,
+                                                     double short_exchange_coefficient,
+                                                     double long_exchange_coefficient, double omega,
+                                                     std::vector<double>& derivatives);
 
 }  // namespace generativeqc::scf::cuda_execution
