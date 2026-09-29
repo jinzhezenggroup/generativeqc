@@ -9,10 +9,6 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace generativeqc::integrals {
-enum class CoulombRange;
-}
-
 namespace generativeqc::scf::cuda_execution {
 
 /** Force-output fallback; purpose selects screening semantics, not the scientific output. */
@@ -28,7 +24,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient,
-    generativeqc::integrals::CoulombRange radial_range, double radial_omega);
+    DirectCoulombRange radial_range, double radial_omega);
 
 void launch_bounded_direct_shell_quartet_kernel(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
