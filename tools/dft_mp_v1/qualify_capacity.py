@@ -49,8 +49,8 @@ class _DftMpSourceOnlyFinder:
         path: Sequence[str] | None = None,
         target: ModuleType | None = None,
     ) -> ModuleSpec | None:
-        if fullname not in ("vibeqc", "vibeqc_compiler") and not fullname.startswith(
-            ("vibeqc.", "vibeqc_compiler.")
+        if fullname not in ("generativeqc", "generativeqc_compiler") and not fullname.startswith(
+            ("generativeqc.", "generativeqc_compiler.")
         ):
             return None
         spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
@@ -101,25 +101,25 @@ if source_python in sys.path:
 sys.path.insert(0, source_python)
 
 import numpy as np
-from vibeqc import Atom
-from vibeqc import _generated_methods as generated_methods
-from vibeqc._model_resolution import snapshot_basis
-from vibeqc._stationary_cuda import (
+from generativeqc import Atom
+from generativeqc import _generated_methods as generated_methods
+from generativeqc._model_resolution import snapshot_basis
+from generativeqc._stationary_cuda import (
     COMPONENT_LABELS,
     complete_rks_cuda_gradient_diagnostic,
 )
-from vibeqc.basis import BasisSet
-from vibeqc.basis_capabilities import resolved_basis_metadata
-from vibeqc.calculator import _basis_pack, _named_basis_record
-from vibeqc.ks import (
+from generativeqc.basis import BasisSet
+from generativeqc.basis_capabilities import resolved_basis_metadata
+from generativeqc.calculator import _basis_pack, _named_basis_record
+from generativeqc.ks import (
     native_xc_functional_code,
     resolve_ks_method,
     resolve_ks_options,
 )
-from vibeqc_compiler.dft.ao import jet_indices
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
-from vibeqc_compiler.dft.plan import plan_tiles
-from vibeqc_compiler.method.stationary_cuda import (
+from generativeqc_compiler.dft.ao import jet_indices
+from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
+from generativeqc_compiler.dft.plan import plan_tiles
+from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_COMPONENTS,
     STATIONARY_RUNTIME_SOURCE_NAMES,
     _qualified_aot_plan,
@@ -128,7 +128,7 @@ from vibeqc_compiler.method.stationary_cuda import (
     stationary_aot_contract_identity,
     stationary_runtime_sources,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -196,7 +196,7 @@ _IMPORTED_LOCAL_MODULE_SOURCES = {
     and (path := Path(source).resolve()).is_relative_to(SOURCE_PYTHON)
 }
 
-SCHEMA = "vibeqc.dft-mp-v1.stationary-capacity.v1"
+SCHEMA = "generativeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
 SEMILOCAL_ABI_IDS = {
     "lda-rks": 6,
@@ -402,7 +402,7 @@ BASIS_NUMERIC_CAPACITY_DEFINITION = (
     "32 * len(self.shells) + 16 * self.nprimitive"
 )
 STATIONARY_OWNER = {
-    "file": "python/vibeqc/_stationary_cuda.py",
+    "file": "python/generativeqc/_stationary_cuda.py",
     "function": "_complete_rks_cuda_gradient_diagnostic",
 }
 
@@ -548,7 +548,7 @@ def _cpp_block_sha256(source: str, marker: str) -> str:
 def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     """Bind native snapshot selector provenance consumed by stationary CUDA."""
 
-    source = (repository / "python/vibeqc/_ks_snapshot.py").read_text(encoding="utf-8")
+    source = (repository / "python/generativeqc/_ks_snapshot.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     owners = [
         node
@@ -999,7 +999,7 @@ def _grid_spec(payload: dict[str, Any]) -> GridSpec:
 
 
 def _basis_layout_contract(repository: Path) -> dict[str, str]:
-    source = (repository / "python/vibeqc_compiler/dft/ao.py").read_text(
+    source = (repository / "python/generativeqc_compiler/dft/ao.py").read_text(
         encoding="utf-8"
     )
     tree = ast.parse(source)
@@ -1075,24 +1075,24 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
         return digest
 
     snapshot_digest = function_digest(
-        "python/vibeqc/_model_resolution.py",
+        "python/generativeqc/_model_resolution.py",
         "snapshot_basis",
         BASIS_SNAPSHOT_CONTRACT_SHA256,
     )
     expansion_digest = function_digest(
-        "python/vibeqc/basis.py",
+        "python/generativeqc/basis.py",
         "shells_for",
         BASIS_SHELL_EXPANSION_CONTRACT_SHA256,
         class_name="BasisSet",
     )
     shell_forwarding_digest = function_digest(
-        "python/vibeqc/calculator.py",
+        "python/generativeqc/calculator.py",
         "_shells_for_atoms",
         CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256,
         class_name="Calculator",
     )
     native_system_digest = function_digest(
-        "python/vibeqc/calculator.py",
+        "python/generativeqc/calculator.py",
         "_create_native_system",
         NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256,
         class_name="Calculator",
@@ -1136,9 +1136,9 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
 
     bridge_source = (repository / "src/dft/bridge.cpp").read_text(encoding="utf-8")
     try:
-        bridge_begin = bridge_source.index("VIBEQC_API int vibeqc_grid_basis_create_v1")
+        bridge_begin = bridge_source.index("GENERATIVEQC_API int generativeqc_grid_basis_create_v1")
         bridge_end = bridge_source.index(
-            "VIBEQC_API int vibeqc_grid_ao_v1", bridge_begin
+            "GENERATIVEQC_API int generativeqc_grid_ao_v1", bridge_begin
         )
     except ValueError as error:
         raise RuntimeError("native AO pack bridge is missing") from error
@@ -1155,7 +1155,7 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     if ao_count_digest != NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256:
         raise RuntimeError("native spherical AO count contract changed")
 
-    stationary_source = (repository / "python/vibeqc/_stationary_cuda.py").read_text(
+    stationary_source = (repository / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
     stationary_tree = ast.parse(stationary_source)
@@ -1183,7 +1183,7 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
         },
         "spd_expansion_owner": (
             "basis.cpp::cartesian_components+ao_expansions -> "
-            "ao_grid.cpp::AoBasis -> bridge.cpp::vibeqc_grid_basis_pack_v1 -> "
+            "ao_grid.cpp::AoBasis -> bridge.cpp::generativeqc_grid_basis_pack_v1 -> "
             "_stationary_cuda.py::_layout"
         ),
     }
@@ -1437,11 +1437,11 @@ def _admission_record(failures: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _source_package_inventory(repository: Path) -> dict[str, Any]:
-    cmake = (repository / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
+    cmake = (repository / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
     names = ("lda_rks", "lda_uks", "pbe_rks", "pbe_uks", "r2scan_rks", "r2scan_uks")
     required = (
-        "vibeqc_stationary_spd_primitives",
-        'OUTPUT_NAME "vibeqc_stationary_${_vibeqc_stationary_name}_spd"',
+        "generativeqc_stationary_spd_primitives",
+        'OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd"',
         *names,
     )
     missing = [token for token in required if token not in cmake]
@@ -1452,7 +1452,7 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     contract_digest = _source_span_sha256(
         cmake,
         begin=("    # Component-expanded s/p/d derivatives are shared compiler output"),
-        end=("  if(VIBEQC_PYTHON_WHEEL)\n    vibeqc_attach_cuda_implib(${target})"),
+        end=("  if(GENERATIVEQC_PYTHON_WHEEL)\n    generativeqc_attach_cuda_implib(${target})"),
         label="stationary packaged-AOT CMake",
     )
     if contract_digest != STATIONARY_AOT_CMAKE_CONTRACT_SHA256:
@@ -1467,10 +1467,10 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
 def _source_public_route(repository: Path) -> dict[str, str]:
     """Fail closed if the source predicates supporting the reported route move."""
 
-    calculator = (repository / "python/vibeqc/calculator.py").read_text(
+    calculator = (repository / "python/generativeqc/calculator.py").read_text(
         encoding="utf-8"
     )
-    batch = (repository / "python/vibeqc/batch.py").read_text(encoding="utf-8")
+    batch = (repository / "python/generativeqc/batch.py").read_text(encoding="utf-8")
     calculator_tree = ast.parse(calculator)
     calculator_classes = [
         node
@@ -1541,7 +1541,7 @@ def _source_public_route(repository: Path) -> dict[str, str]:
 def _grid_count_contract(repository: Path) -> dict[str, str]:
     """Bind the source-only point count to the native CUDA grid owner."""
 
-    python_grid = (repository / "python/vibeqc_compiler/dft/grid.py").read_text(
+    python_grid = (repository / "python/generativeqc_compiler/dft/grid.py").read_text(
         encoding="utf-8"
     )
     python_tree = ast.parse(python_grid)
@@ -1563,7 +1563,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
         )
     python_digest = _source_node_sha256(python_grid, post_init[0])
 
-    public_ks = (repository / "python/vibeqc/ks.py").read_text(encoding="utf-8")
+    public_ks = (repository / "python/generativeqc/ks.py").read_text(encoding="utf-8")
     public_ks_tree = ast.parse(public_ks)
     public_lowerers = [
         node
@@ -1575,7 +1575,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     public_abi_digest = _source_node_sha256(public_ks, public_lowerers[0])
 
     quadrature_source = (
-        repository / "python/vibeqc_compiler/xc/quadrature_cuda.py"
+        repository / "python/generativeqc_compiler/xc/quadrature_cuda.py"
     ).read_text(encoding="utf-8")
     quadrature_tree = ast.parse(quadrature_source)
     layouts = [
@@ -1597,7 +1597,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     cuda_digest = _source_span_sha256(
         cuda_source,
         begin="MolecularGrid MolecularGrid::from_cuda(",
-        end="}  // namespace vibeqc::dft",
+        end="}  // namespace generativeqc::dft",
         label="native CUDA grid",
     )
     route_source = (repository / "src/methods/dft_method.cpp").read_text(
@@ -1654,7 +1654,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
 def _prepared_aot_route_contract(repository: Path) -> str:
     """Bind no-runtime-compilation claims to the prepared production owner."""
 
-    source = (repository / "python/vibeqc/_stationary_cuda.py").read_text(
+    source = (repository / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
     tree = ast.parse(source)
@@ -1832,7 +1832,7 @@ def _build_report(
     if frozen_hash != _canonical_sha256(unhashed):
         raise ValueError("DFT-MP-v1 frozen contract hash mismatch")
 
-    basis_pack = repository / "python/vibeqc/data/basis_pack.json"
+    basis_pack = repository / "python/generativeqc/data/basis_pack.json"
     basis_pack_sha = _lf_sha256(basis_pack.read_bytes())
     basis_pack_matches = basis_pack_sha == manifest["basis"]["basis_pack_sha256"]
     if not basis_pack_matches:
@@ -2058,14 +2058,14 @@ def _build_report(
                     "forces": True,
                     "native_registry_properties": native_properties,
                     "promotion": "python semilocal direct-CUDA stationary-force predicate",
-                    "owner": "python/vibeqc/calculator.py::Calculator.__init__",
+                    "owner": "python/generativeqc/calculator.py::Calculator.__init__",
                     "source_audited": True,
                     "selector_contract": selector_cache[selector],
                 },
                 "public_route": {
                     "scientific_runtime_compilation_required": False,
                     "selection": "all-electron semilocal packaged stationary CUDA",
-                    "owner": "python/vibeqc/batch.py::_public_dft_cuda_force",
+                    "owner": "python/generativeqc/batch.py::_public_dft_cuda_force",
                     "missing_aot_behavior": "fail closed; no NVCC fallback",
                     "source_audited": True,
                 },
@@ -2077,7 +2077,7 @@ def _build_report(
                     ),
                     "architecture": "sm_120",
                     "source_package_declared": True,
-                    "source_owner": "cmake/VibeQCCuda.cmake",
+                    "source_owner": "cmake/GenerativeQCCuda.cmake",
                     "contract_identity": stationary_aot_contract_identity(
                         functional,
                         spin=spin,
@@ -2092,14 +2092,14 @@ def _build_report(
         )
 
     owner_files = (
-        "python/vibeqc/_stationary_cuda.py",
-        "python/vibeqc/calculator.py",
-        "python/vibeqc/batch.py",
-        "python/vibeqc/ks.py",
-        "python/vibeqc_compiler/method/stationary_cuda.py",
-        "python/vibeqc_compiler/dft/ao.py",
-        "python/vibeqc_compiler/dft/grid.py",
-        "python/vibeqc_compiler/xc/quadrature_cuda.py",
+        "python/generativeqc/_stationary_cuda.py",
+        "python/generativeqc/calculator.py",
+        "python/generativeqc/batch.py",
+        "python/generativeqc/ks.py",
+        "python/generativeqc_compiler/method/stationary_cuda.py",
+        "python/generativeqc_compiler/dft/ao.py",
+        "python/generativeqc_compiler/dft/grid.py",
+        "python/generativeqc_compiler/xc/quadrature_cuda.py",
         "src/molecule/basis.cpp",
         "src/dft/ao_grid.cpp",
         "src/dft/bridge.cpp",
@@ -2107,7 +2107,7 @@ def _build_report(
         "src/dft/cuda_quadrature.cu",
         "src/dft/stationary_gradient_cuda.cuh",
         "src/methods/dft_method.cpp",
-        "cmake/VibeQCCuda.cmake",
+        "cmake/GenerativeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)
     return {
