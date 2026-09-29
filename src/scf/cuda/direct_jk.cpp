@@ -673,6 +673,39 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
   });
 }
 
+generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail) {
+  if (plan == nullptr || plan->generated_exchange == nullptr ||
+      !plan->generated_exchange->force_capability) {
+    detail = "prepared Direct owner has no retained shell derivative lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan->diagnostic.batch_size == 1,
+                      "resident shell RSH derivative requires one prepared item");
+    direct_jk_require(plan->diagnostic.derivative_order >= 1,
+                      "direct shell first derivatives were not retained");
+    direct_jk_require(
+        std::isfinite(coulomb_coefficient) && std::isfinite(short_exchange_coefficient) &&
+            std::isfinite(long_exchange_coefficient) && std::isfinite(omega) && omega > 0.0,
+        "nonfinite resident shell RSH derivative identity");
+    const auto n = plan->diagnostic.nbf;
+    direct_jk_require(density != nullptr && matrix_elements == n * n,
+                      "resident shell RSH derivative density shape is invalid");
+    const bool unrestricted = spin == FockSpin::Unrestricted;
+    direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
+                      "resident shell RSH derivative spin storage is invalid");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    direct_jk_check(cuda_execution::execute_generated_rsh_energy_derivatives(
+        *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
+        short_exchange_coefficient, long_exchange_coefficient, omega, derivatives));
+    direct_jk_finite_result(derivatives);
+  });
+}
+
 generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
