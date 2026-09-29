@@ -102,12 +102,15 @@ std::vector<double> conventional_derivative(const core::System& system,
                                             const OneElectronDerivativeContract& one_electron,
                                             const EriShellDerivativeContract& eri_shell) {
   const auto n = reference.nbf;
+  const bool dense_two =
+      weights.two_electron.size() == fourth(n) && finite(weights.two_electron);
+  const bool factorized_two =
+      weights.two_electron.empty() && valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (!n || molecule::ao_count(system) != n || reference.coefficients.size() != square(n) ||
       weights.orbitals != n || weights.occupied != reference.nocc ||
       weights.one_electron.size() != square(n) || weights.overlap.size() != square(n) ||
-      weights.two_electron.size() != fourth(n) || !finite(reference.coefficients) ||
-      !finite(weights.one_electron) || !finite(weights.overlap) || !finite(weights.two_electron) ||
-      !one_electron || !eri_shell)
+      (!dense_two && !factorized_two) || !finite(reference.coefficients) ||
+      !finite(weights.one_electron) || !finite(weights.overlap) || !one_electron || !eri_shell)
     throw std::invalid_argument("conventional derivative reference/weight mismatch");
 
   const auto one_ao = pullback_matrix(reference.coefficients, weights.one_electron, n);
@@ -130,7 +133,7 @@ std::vector<double> conventional_derivative(const core::System& system,
             for (std::size_t p = 0; p < n; ++p)
               first[((iu * n + q) * n + r) * n + s] +=
                   reference.coefficients[(offsets[si] + iu) * n + p] *
-                  weights.two_electron[((p * n + q) * n + r) * n + s];
+                  two_electron_weight(weights, p, q, r, s);
     transform_remaining_shells(system, reference, offsets, si, first, eri_shell, derivative);
   }
   if (!finite(derivative)) throw std::runtime_error("conventional derivative is nonfinite");
