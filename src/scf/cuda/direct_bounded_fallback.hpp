@@ -23,8 +23,8 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     std::uint64_t enabled_mask, const std::uint32_t* bounded_generated_overflow,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
-    double coulomb_coefficient, double exchange_coefficient,
-    DirectCoulombRange radial_range, double radial_omega);
+    double coulomb_coefficient, double exchange_coefficient, DirectCoulombRange radial_range,
+    double radial_omega);
 
 void launch_bounded_direct_shell_quartet_kernel(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,

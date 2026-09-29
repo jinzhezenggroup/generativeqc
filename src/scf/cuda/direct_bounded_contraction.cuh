@@ -58,9 +58,7 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* forces, double coulomb_coefficient,
     double exchange_coefficient, std::size_t subtile, unsigned lane,
-    DirectCoulombRange radial_range =
-        DirectCoulombRange::Full,
-    double radial_omega = 0.0) {
+    DirectCoulombRange radial_range = DirectCoulombRange::Full, double radial_omega = 0.0) {
 #define GENERATIVEQC_BOUNDED_FORCE_CASE(order)                                                     \
   case order:                                                                                      \
     contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order>(                       \
