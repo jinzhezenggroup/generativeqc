@@ -40,10 +40,13 @@ def fixture(
         def feature_task(
             self,
             points: np.ndarray,
-            ids: np.ndarray,
+            ids: np.ndarray | None,
             ingredients: tuple[str, ...],
+            *,
+            defer_error_to_consumer: bool = False,
         ) -> typing.Iterator[SimpleNamespace]:
-            assert tuple(ids) == (0, 1)
+            assert ids is None
+            assert defer_error_to_consumer is True
             assert ingredients == ("rho", "gradient", "tau")
             lease = SimpleNamespace(alive=True, view=SimpleNamespace(stream=stream))
             events.append(("borrow", len(points)))

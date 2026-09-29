@@ -15,7 +15,7 @@ import typing
 from collections.abc import Mapping
 from pathlib import Path
 
-from benchmarks.dft_force_components import normalize_force_work
+from benchmarks.dft_force_components import WORK_STAGES, normalize_force_work
 
 
 def _sha256(path: Path) -> str:
@@ -47,6 +47,8 @@ def _metadata(record: Mapping[str, typing.Any]) -> dict[str, typing.Any]:
         "method_identity",
         "ks_options_identity",
         "library_sha256",
+        "measurement_boundary",
+        "scf_replayed",
     )
     return {key: record[key] for key in keys if key in record}
 
@@ -265,6 +267,11 @@ def _matrix_records(
         warm = case.get("warm")
         if isinstance(warm, list):
             samples.extend(value for value in warm if isinstance(value, Mapping))
+        fixed_final_state = case.get("fixed_final_state")
+        if isinstance(fixed_final_state, list):
+            samples.extend(
+                value for value in fixed_final_state if isinstance(value, Mapping)
+            )
 
         for sample in samples:
             metadata = {**base, **_metadata(sample)}
@@ -301,28 +308,60 @@ def _matrix_records(
                 )
 
         scf_profile = case.get("scf_profile")
-        if not isinstance(scf_profile, Mapping):
-            continue
-        profile_status = str(scf_profile.get("status", "unknown"))
-        if profile_status == "measured" and isinstance(
-            scf_profile.get("profile"), Mapping
-        ):
-            result.append(
-                {
-                    "metadata": {**base, "scenario": "diagnostic_scf_profile"},
-                    "status": "measured",
-                    "scf_profile": dict(
-                        typing.cast("Mapping[str, typing.Any]", scf_profile["profile"])
-                    ),
-                    "trace": scf_profile.get("trace"),
-                }
-            )
+        if isinstance(scf_profile, Mapping):
+            profile_status = str(scf_profile.get("status", "unknown"))
         else:
+            profile_status = "missing"
+        profile_metadata = {
+            **base,
+            "scenario": "diagnostic_scf_profile",
+        }
+        if isinstance(scf_profile, Mapping):
+            for key in ("measurement_boundary", "fixed_density", "iterations"):
+                if key in scf_profile:
+                    profile_metadata[key] = scf_profile[key]
+
+        if isinstance(scf_profile, Mapping):
+            if profile_status == "measured" and isinstance(
+                scf_profile.get("profile"), Mapping
+            ):
+                result.append(
+                    {
+                        "metadata": profile_metadata,
+                        "status": "measured",
+                        "scf_profile": dict(
+                            typing.cast(
+                                "Mapping[str, typing.Any]", scf_profile["profile"]
+                            )
+                        ),
+                        "trace": scf_profile.get("trace"),
+                    }
+                )
+            else:
+                result.append(
+                    {
+                        "metadata": profile_metadata,
+                        "status": profile_status,
+                        "error": scf_profile.get("reason"),
+                    }
+                )
+
+        fixed_density_profile = case.get("fixed_density_scf_profile")
+        if isinstance(fixed_density_profile, Mapping):
             result.append(
                 {
-                    "metadata": {**base, "scenario": "diagnostic_scf_profile"},
-                    "status": profile_status,
-                    "error": scf_profile.get("reason"),
+                    "metadata": {
+                        **base,
+                        "scenario": "diagnostic_fixed_density_scf_profile",
+                        "measurement_boundary": fixed_density_profile.get(
+                            "measurement_boundary"
+                        ),
+                    },
+                    "status": str(fixed_density_profile.get("status", "unknown")),
+                    "expected_components": list(
+                        fixed_density_profile.get("expected_components", ())
+                    ),
+                    "error": fixed_density_profile.get("reason"),
                 }
             )
     return result
@@ -362,12 +401,35 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
     external_methods: set[str] = set()
     external_boundaries: set[str] = set()
     external_count = 0
+    work_stages: set[str] = set()
+    capacity_metrics: set[str] = set()
+    fixed_final_state_records = 0
+    fixed_density_missing: set[str] = set()
     for row in records:
         status = str(row.get("status", "unknown"))
         outcomes[status] = outcomes.get(status, 0) + 1
+        metadata = row.get("metadata")
+        scenario = (
+            str(metadata.get("scenario", "")) if isinstance(metadata, Mapping) else ""
+        )
+        if scenario.startswith("fixed_final_state_"):
+            fixed_final_state_records += 1
+        if scenario == "diagnostic_fixed_density_scf_profile":
+            expected = row.get("expected_components")
+            if isinstance(expected, list):
+                fixed_density_missing.update(str(name) for name in expected)
         components = row.get("components")
         if isinstance(components, Mapping):
             routes.add(str(components.get("source_route")))
+            work_counts = components.get("work_counts")
+            if isinstance(work_counts, Mapping):
+                for stage in WORK_STAGES:
+                    values = work_counts.get(stage)
+                    if isinstance(values, Mapping) and values:
+                        work_stages.add(stage)
+                capacity = work_counts.get("capacity")
+                if isinstance(capacity, Mapping):
+                    capacity_metrics.update(str(name) for name in capacity)
             coverage = components.get("coverage")
             if isinstance(coverage, Mapping):
                 component_names.update(
@@ -403,6 +465,10 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         "external_comparison_records": external_count,
         "external_comparison_methods": sorted(external_methods),
         "external_comparison_boundaries": sorted(external_boundaries),
+        "work_count_stages_observed": sorted(work_stages),
+        "work_capacity_metrics_observed": sorted(capacity_metrics),
+        "fixed_final_state_records": fixed_final_state_records,
+        "fixed_density_scf_expected_components_missing": sorted(fixed_density_missing),
     }
 
 

@@ -84,11 +84,14 @@ int evaluate(double first_weight, double first_density, double* out) {
     local_scales_kernel<Variant, true>(n, 6.0, 0.01, ew, rho, grad, omega, kappa,
                                       wrho, wsigma, krho, weighted, &pair_error);
   }
+  std::uint64_t active[n]{}, active_count = 0;
+  for (std::size_t j = 0; j < n; ++j)
+    if (weighted[j] != 0.0) active[active_count++] = j;
   const double beta = std::pow(3.0/36.0, 0.75)/32.0;
   for (std::size_t i = 0; i < n; ++i) {
     threadIdx.x = i;
-    pair_kernel_ordered<Variant, true, true, Mask>(0, n, n, 1.0, points, rho, omega,
-        kappa, wrho, wsigma, krho, weighted, beta, energy, vrho, vsigma,
+    pair_kernel_ordered<Variant, true, true, Mask>(0, n, 1.0, points, rho, omega, kappa,
+        wrho, wsigma, krho, weighted, active, &active_count, beta, energy, vrho, vsigma,
         point_derivative, weight_derivative, &pair_error);
   }
   double seeds[6*n]{};
@@ -205,3 +208,17 @@ def test_density_screened_row_keeps_negative_zero_and_zero_seeds(
     assert actual[5:7] == [1.0, 1.0]
     assert actual[1:5] == [0.0] * 4
     assert actual[7:] == [0.0] * 6
+
+
+def test_pair_kernel_consumes_stable_compacted_partner_domain() -> None:
+    source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
+    pair = _definition(
+        source,
+        "template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>",
+    )
+    assert "active_indices[slot]" in pair
+    assert "slot < nactive" in pair
+    assert "for (std::size_t j = 0; j < npoint; ++j)" not in pair
+    assert "count_active_partner_blocks_kernel" in source
+    assert "prefix_active_partner_blocks_kernel" in source
+    assert "scatter_active_partners_ordered_kernel" in source

@@ -301,3 +301,73 @@ def test_external_comparison_rejects_invalid_duration(seconds: float) -> None:
 
     with pytest.raises(ValueError, match="finite and nonnegative"):
         extract_records(payload)
+
+
+def test_extract_matrix_retains_fixed_final_state_and_fixed_density_gap() -> None:
+    components = {
+        "schema": "generativeqc.dft-force-components.v1",
+        "source_route": "stationary-exclusive-wall",
+        "wall_seconds": {},
+        "profiled_ms": {},
+        "coverage": {
+            "wall_seconds": [],
+            "profiled_ms": [],
+            "missing_wall_seconds": [],
+        },
+        "work_counts": {
+            "generated": {"coulomb_public_ao_quartets": 16},
+            "screened": {},
+            "compacted": {},
+            "executed": {"semilocal_geometry_points": 40},
+            "capacity": {"ordered_quartets": 16},
+            "observed": {},
+        },
+    }
+    payload = {
+        "schema": "generativeqc.dft-force-matrix.v1",
+        "records": [
+            {
+                "status": "measured",
+                "method": "pbe-rks",
+                "system": "water-3",
+                "fixed_final_state": [
+                    {
+                        "scenario": "fixed_final_state_0",
+                        "measurement_boundary": "fixed_final_state_force",
+                        "scf_replayed": False,
+                        "force_status": "ok",
+                        "force_components": components,
+                    }
+                ],
+                "fixed_density_scf_profile": {
+                    "status": "unavailable",
+                    "measurement_boundary": "fixed_density_scf_components",
+                    "expected_components": ["scf_fock_j", "semilocal_ao_grid_xc"],
+                    "reason": "no fixed-density boundary",
+                },
+            }
+        ],
+    }
+
+    rows = extract_records(payload)
+    fixed = next(
+        row for row in rows if row["metadata"]["scenario"] == "fixed_final_state_0"
+    )
+    missing = next(
+        row
+        for row in rows
+        if row["metadata"]["scenario"] == "diagnostic_fixed_density_scf_profile"
+    )
+    coverage = _coverage(rows)
+
+    assert fixed["metadata"]["measurement_boundary"] == "fixed_final_state_force"
+    assert fixed["metadata"]["scf_replayed"] is False
+    assert missing["status"] == "unavailable"
+    assert missing["expected_components"] == ["scf_fock_j", "semilocal_ao_grid_xc"]
+    assert coverage["fixed_final_state_records"] == 1
+    assert coverage["work_count_stages_observed"] == ["executed", "generated"]
+    assert coverage["work_capacity_metrics_observed"] == ["ordered_quartets"]
+    assert coverage["fixed_density_scf_expected_components_missing"] == [
+        "scf_fock_j",
+        "semilocal_ao_grid_xc",
+    ]

@@ -309,6 +309,48 @@ def _clean_sample(
     }
 
 
+def _fixed_final_state_force_sample(
+    batch: typing.Any,
+    atoms: tuple[tuple[str, tuple[float, float, float]], ...],
+    cupy_module: typing.Any,
+    *,
+    scenario: str,
+) -> dict[str, typing.Any]:
+    """Measure the force owner against the current converged state without SCF re-entry."""
+
+    force_status = "ok"
+    force_error = None
+    force = None
+    work = None
+    components = None
+    cupy_module.cuda.Stream.null.synchronize()
+    started = perf_counter()
+    try:
+        force, work = _force_diagnostic(batch, atoms)
+        cupy_module.cuda.Stream.null.synchronize()
+        force_seconds = perf_counter() - started
+        if force.shape != (len(atoms), 3) or not np.isfinite(force).all():
+            raise RuntimeError("stationary force must be finite atom-by-three")
+        components = normalize_force_work(work)
+    except NotImplementedError as error:
+        cupy_module.cuda.Stream.null.synchronize()
+        force_seconds = perf_counter() - started
+        force_status = "unsupported"
+        force_error = str(error)
+
+    return {
+        "scenario": scenario,
+        "measurement_boundary": "fixed_final_state_force",
+        "scf_replayed": False,
+        "force_seconds": force_seconds,
+        "force_status": force_status,
+        "force_error": force_error,
+        "forces_hartree_per_bohr": None if force is None else force.tolist(),
+        "force_work": work,
+        "force_components": components,
+    }
+
+
 def _scf_trace_profile(
     batch: typing.Any,
     cupy_module: typing.Any,
@@ -327,7 +369,8 @@ def _scf_trace_profile(
         cupy_module.cuda.Stream.null.synchronize()
         result = batch.execute(strict=True, properties=("energy",))
         cupy_module.cuda.Stream.null.synchronize()
-        if not result.items[0].converged:
+        item = result.items[0]
+        if not item.converged:
             raise RuntimeError("traced SCF replay did not converge")
     finally:
         if previous is None:
@@ -338,6 +381,9 @@ def _scf_trace_profile(
     if path.stat().st_size == 0:
         return {
             "status": "unavailable",
+            "measurement_boundary": "full_scf_replay",
+            "fixed_density": False,
+            "iterations": int(item.iterations),
             "reason": "selected SCF provider emitted no GENERATIVEQC_DF_TRACE roots",
             "expected_exchange_operators": list(exchange_operators),
             "expected_components": list(
@@ -350,6 +396,9 @@ def _scf_trace_profile(
     records = read_trace(path)
     return {
         "status": "measured",
+        "measurement_boundary": "full_scf_replay",
+        "fixed_density": False,
+        "iterations": int(item.iterations),
         "trace": trace_identity(path),
         "profile": normalize_scf_trace(
             records,
@@ -443,10 +492,19 @@ def benchmark_case(
                 break
 
         scf_profile = None
+        fixed_density_scf_profile = None
+        fixed_final_state: list[dict[str, typing.Any]] = []
         if warm_failed:
             if trace_directory is not None:
                 scf_profile = {
                     "status": "skipped",
+                    "measurement_boundary": "full_scf_replay",
+                    "fixed_density": False,
+                    "reason": "not run after warm replay failure",
+                }
+                fixed_density_scf_profile = {
+                    "status": "skipped",
+                    "measurement_boundary": "fixed_density_scf_components",
                     "reason": "not run after warm replay failure",
                 }
             changed = {
@@ -455,7 +513,55 @@ def benchmark_case(
                 "error": "not run after warm replay failure",
             }
         else:
+            for repeat in range(repeats):
+                scenario = f"fixed_final_state_{repeat}"
+                try:
+                    fixed_final_state.append(
+                        _fixed_final_state_force_sample(
+                            batch,
+                            atoms,
+                            cupy_module,
+                            scenario=scenario,
+                        )
+                    )
+                except (
+                    NotImplementedError,
+                    ValueError,
+                    RuntimeError,
+                    MemoryError,
+                    OSError,
+                ) as error:
+                    fixed_final_state.append(
+                        {
+                            "scenario": scenario,
+                            "measurement_boundary": "fixed_final_state_force",
+                            "scf_replayed": False,
+                            "status": (
+                                "unsupported"
+                                if isinstance(error, NotImplementedError)
+                                else "failed"
+                            ),
+                            "error_type": type(error).__name__,
+                            "error": str(error),
+                        }
+                    )
+                    break
             if trace_directory is not None:
+                fixed_density_scf_profile = {
+                    "status": "unavailable",
+                    "measurement_boundary": "fixed_density_scf_components",
+                    "expected_components": list(
+                        expected_scf_components(
+                            exchange_operators,
+                            nonlocal_correlation=nonlocal_correlation,
+                        )
+                    ),
+                    "reason": (
+                        "no method-neutral fixed-density SCF J/K/XC replay boundary "
+                        "is exposed; the full-SCF trace remains separate diagnostic "
+                        "evidence rather than being relabeled"
+                    ),
+                }
                 try:
                     scf_profile = _scf_trace_profile(
                         batch,
@@ -477,6 +583,8 @@ def benchmark_case(
                             if isinstance(error, NotImplementedError)
                             else "failed"
                         ),
+                        "measurement_boundary": "full_scf_replay",
+                        "fixed_density": False,
                         "error_type": type(error).__name__,
                         "reason": str(error),
                     }
@@ -524,8 +632,10 @@ def benchmark_case(
                 "cold": cold,
                 "priming": priming,
                 "warm": warm,
+                "fixed_final_state": fixed_final_state,
                 "changed_geometry": changed,
                 "scf_profile": scf_profile,
+                "fixed_density_scf_profile": fixed_density_scf_profile,
                 "library": str(library),
                 "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
                 "resource_diagnostics": batch.resource_diagnostics,
@@ -654,6 +764,15 @@ def main() -> None:
             "profile": (
                 "separate optional GENERATIVEQC_DF_TRACE replay; CUDA-event timings are "
                 "diagnostic and never added to clean endpoint seconds"
+            ),
+            "fixed_final_state": (
+                "force-only replay reuses the current converged native final state and "
+                "does not call batch.execute, so SCF iteration count cannot enter the "
+                "force component timing"
+            ),
+            "fixed_density_scf": (
+                "reported unavailable until a method-neutral fixed-density J/K/XC "
+                "component replay boundary exists; full-SCF tracing is not relabeled"
             ),
             "unsupported": (
                 "unsupported functional/provider combinations are retained as records"

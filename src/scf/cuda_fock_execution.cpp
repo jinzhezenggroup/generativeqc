@@ -173,7 +173,12 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                                const double* beta, std::size_t matrix_elements,
                                                double* coulomb, double* alpha_exchange,
                                                double* beta_exchange, int* numerical_error,
-                                               bool mixed_coulomb, std::string& detail) {
+                                               bool mixed_coulomb, std::string& detail,
+                                               std::uint64_t* mixed_coulomb_work_count) {
+  if (!mixed_coulomb && mixed_coulomb_work_count) {
+    detail = "prepared CUDA Fock received a mixed-work counter for strict execution";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   const auto binding = prepared_cuda_fock_binding(plan);
   if (!binding) {
     detail = "prepared CUDA Fock owner has no single-provider resident value execution";
@@ -189,7 +194,8 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
     }
     return mixed_coulomb ? enqueue_cuda_direct_jk_device_mixed_j(
                                exact, plan.strategy().spec, density, beta, matrix_elements, coulomb,
-                               alpha_exchange, beta_exchange, numerical_error, detail)
+                               alpha_exchange, beta_exchange, numerical_error, detail,
+                               mixed_coulomb_work_count)
                          : enqueue_cuda_direct_jk_device(exact, plan.strategy().spec, density, beta,
                                                          matrix_elements, coulomb, alpha_exchange,
                                                          beta_exchange, numerical_error, detail);

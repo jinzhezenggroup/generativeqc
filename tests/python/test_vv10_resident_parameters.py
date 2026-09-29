@@ -30,12 +30,13 @@ int main(int argc,char** argv) {
   }
  }
  double points[3]{},weight=1.0,rho=1.0,gradient[3]{},energy=-13.0;
- double workspace[4]{};
+ const auto layout=vv10_cuda_device_layout(1,1,false,false);
+ std::vector<double> workspace(layout.workspace_bytes/sizeof(double));
  int error=41;
  bool rejected=false;
  try {
-  enqueue_vv10_cuda_device(vv10_cuda_device_layout(1,1,false,false),parameters,
-   0,&test_stream,points,&weight,&rho,gradient,workspace,sizeof(workspace),
+  enqueue_vv10_cuda_device(layout,parameters,
+   0,&test_stream,points,&weight,&rho,gradient,workspace.data(),layout.workspace_bytes,
    &energy,nullptr,nullptr,nullptr,nullptr,&error);
  } catch(const std::invalid_argument&) {rejected=true;}
  if(rejected!=(test>=2)) {std::cerr<<"incorrect parameter admission";return 1;}

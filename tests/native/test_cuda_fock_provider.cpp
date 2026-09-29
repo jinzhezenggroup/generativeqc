@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -44,6 +45,22 @@ struct DeviceMatrix {
     for (std::size_t i = 0; i < actual.size(); ++i)
       require(std::isfinite(actual[i]) && std::abs(actual[i] - expected[i]) < 3e-12,
               "independent device provider matrix differs from CPU");
+  }
+};
+
+struct DeviceCounter {
+  std::uint64_t* pointer{};
+  DeviceCounter() { check(cudaMalloc(reinterpret_cast<void**>(&pointer), sizeof(*pointer))); }
+  ~DeviceCounter() { cudaFree(pointer); }
+  DeviceCounter(const DeviceCounter&) = delete;
+  DeviceCounter& operator=(const DeviceCounter&) = delete;
+  void set(std::uint64_t value) const {
+    check(cudaMemcpy(pointer, &value, sizeof(value), cudaMemcpyHostToDevice));
+  }
+  std::uint64_t get() const {
+    std::uint64_t value{};
+    check(cudaMemcpy(&value, pointer, sizeof(value), cudaMemcpyDeviceToHost));
+    return value;
   }
 };
 
@@ -110,6 +127,95 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
     require(recover ? failure == 0 : failure != 0,
             "resident J/K failure state was lost or not reset");
   }
+}
+
+void mixed_coulomb_work_census() {
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+
+  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
+  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+  const std::vector<double> zero_density(matrix, 0.0), sentinel(matrix, 123.0);
+  require(density.size() == matrix, "mixed-work fixture density shape changed");
+
+  const auto make_plan = [&](double screening) {
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 0, screening, 32U * 1024U * 1024U, &raw,
+                                       diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    return raw;
+  };
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+      make_plan(0.0), &destroy_cuda_direct_jk_plan);
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> screened(
+      make_plan(std::numeric_limits<double>::max()), &destroy_cuda_direct_jk_plan);
+
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  spec.exchange.present = false;
+  DeviceMatrix device_density(density), uninstrumented(sentinel), instrumented(sentinel),
+      error({0.0});
+  DeviceCounter count;
+  auto* failure = reinterpret_cast<int*>(error.pointer);
+  require(enqueue_cuda_direct_jk_device_mixed_j(plan.get(), spec, device_density.pointer, nullptr,
+                                                matrix, uninstrumented.pointer, nullptr, nullptr,
+                                                failure, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() == matrix * matrix,
+          "mixed Coulomb census did not count evaluated AO-ERI recurrences");
+  std::vector<double> first(matrix), second(matrix);
+  check(cudaMemcpy(first.data(), uninstrumented.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  check(cudaMemcpy(second.data(), instrumented.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  require(first == second, "mixed Coulomb instrumentation changed the J result");
+
+  check(cudaMemcpy(device_density.pointer, zero_density.data(), matrix * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() == 0, "mixed Coulomb replay leaked its prior recurrence count");
+
+  check(cudaMemcpy(device_density.pointer, density.data(), matrix * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              screened.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(screened.get())));
+  require(count.get() == 0, "screened mixed Coulomb recurrences were counted as executed");
+
+  require(
+      enqueue_cuda_direct_jk_device_mixed_j(
+          plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer, nullptr,
+          nullptr, failure, detail, reinterpret_cast<std::uint64_t*>(device_density.pointer)) ==
+          GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+      "mixed Coulomb census accepted a counter aliasing its density");
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail,
+              reinterpret_cast<std::uint64_t*>(reinterpret_cast<char*>(count.pointer) + 1)) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "mixed Coulomb census accepted a misaligned counter");
 }
 
 void direct_value_dispatch_selection() {
@@ -681,15 +787,22 @@ void direct_providers(bool through_f_response) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
+      mixed_coulomb_work_census();
+      std::cout << "CUDA mixed Coulomb work census PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {
       range_exchange_derivatives();
       std::cout << "CUDA s/p/d/f SR/LR derivative gates PASS\n";
       return 0;
     }
     require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--through-f-response"),
-            "expected optional --through-f-response");
+            "expected optional --mixed-census-only, --range-response-only, or "
+            "--through-f-response");
     const bool through_f_response = argc == 2;
     direct_value_dispatch_selection();
+    mixed_coulomb_work_census();
     device_selection();
     range_exchange_provider();
     range_exchange_derivatives();
