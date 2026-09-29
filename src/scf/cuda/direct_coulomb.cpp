@@ -14,8 +14,8 @@
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/direct_bounded_dddd.hpp"
-#include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
@@ -536,12 +536,11 @@ cudaError_t execute_generated_full_range_energy_derivatives(
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
-    launch_bounded_direct_shell_quartet_kernel_scaled(
-        unrestricted, DirectScreeningPurpose::Force, shared.worker_blocks, kBoundedDirectThreads, 0,
-        shared.stream, b, shared.screening, shared.shell_bounds, p.shell_pair_density_bounds,
-        p.bounded_pair_order, p.shell_pair_block_bounds, p.system_density_bounds, nullptr, 0U,
-        p.heads, shared.schwarz, p.direct_spin, shared.active, p.force, p.force_cursor, nullptr,
-        coefficients[source][0], coefficients[source][1]);
+    launch_bounded_shell_energy_derivative(
+        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
+        p.force_cursor, coefficients[source][0], coefficients[source][1]);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
     error = cudaMemcpyAsync(result.data() + source * coordinates, p.force,
