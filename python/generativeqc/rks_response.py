@@ -74,6 +74,7 @@ class RKSResponseReference:
     precision: str = "float64"
     screening_tolerance: float = 0.0
     converged: bool = True
+    frozen_mask: tuple[int, ...] = ()
     validation_tolerance: float = 1e-8
     overlap_threshold: float = 1e-10
     identity: str = field(init=False)
@@ -86,6 +87,9 @@ class RKSResponseReference:
             raise ValueError("unknown RKS response AO representation")
         if not self.converged:
             raise ValueError("unconverged KS state cannot enter response")
+        if self.frozen_mask:
+            raise ValueError("frozen-core RKS response is unsupported")
+        object.__setattr__(self, "frozen_mask", tuple(self.frozen_mask))
         for name in (
             "geometry_hash",
             "basis_hash",
@@ -218,6 +222,7 @@ class RKSResponseReference:
                 "algorithm",
                 "precision",
                 "screening_tolerance",
+                "frozen_mask",
                 "validation_tolerance",
                 "overlap_threshold",
             )
