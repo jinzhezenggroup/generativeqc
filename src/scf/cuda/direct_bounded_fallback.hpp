@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "scf/cuda/direct_metadata.hpp"
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -23,7 +24,10 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     std::uint64_t enabled_mask, const std::uint32_t* bounded_generated_overflow,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
-    double coulomb_coefficient, double exchange_coefficient);
+    double coulomb_coefficient, double exchange_coefficient,
+    generativeqc::integrals::CoulombRange radial_range =
+        generativeqc::integrals::CoulombRange::Full,
+    double radial_omega = 0.0);
 
 void launch_bounded_direct_shell_quartet_kernel(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
