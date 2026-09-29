@@ -371,7 +371,8 @@ def solve_stationary_nuclear_perturbations(
             reconstruct = getattr(engine, "reconstruct_nuclear_response", None)
             if reconstruct is None:
                 raise ValueError(
-                    "resident reconstruction requires a compatible resident response engine"
+                    "resident reconstruction requires a compatible "
+                    "resident response engine"
                 )
             consumer(reconstruct(solution, item.frozen_mo, item.overlap_mo))
 
