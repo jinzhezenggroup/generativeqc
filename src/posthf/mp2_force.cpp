@@ -119,7 +119,7 @@ ConventionalForceResult conventional_force_impl(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
       posthf::checked_mul(coordinate_count, sizeof(double)), budget_bytes, backend_stage_bytes);
   const auto h = hcore_mo(reference);
-  const auto adjoint = energy_adjoint(reference, provider, denominator_threshold, cuda, device_id);
+  auto adjoint = energy_adjoint(reference, provider, denominator_threshold, cuda, device_id);
   const auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
                                                       same_space_threshold, cuda, device_id);
   std::vector<double> diagonal(dimension);
@@ -198,7 +198,7 @@ ConventionalForceResult density_fitted_force_cpu(
       budget_bytes);
 
   const auto h = hcore_mo(reference);
-  const auto adjoint = energy_adjoint(reference, provider, denominator_threshold, false, 0);
+  auto adjoint = energy_adjoint(reference, provider, denominator_threshold, false, 0);
   const auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
                                                       same_space_threshold, false, 0);
   const auto virtuals = reference.nbf - reference.nocc;
