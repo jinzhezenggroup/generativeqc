@@ -1575,7 +1575,7 @@ def test_grid_count_fails_closed_when_native_backend_route_moves(
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
     target = tmp_path / "src/methods/dft_method.cpp"
     source = target.read_text(encoding="utf-8")
-    old = "return dft::MolecularGrid::from_cuda(system, spec, device);"
+    old = "return dft::MolecularGrid::from_cuda(system, spec, device, retain_device);"
     assert old in source
     target.write_text(
         source.replace(old, "return dft::MolecularGrid(system, spec);", 1),
