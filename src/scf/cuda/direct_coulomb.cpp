@@ -286,7 +286,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (force_capability) {
     charge(pairs, sizeof(std::uint32_t));
     charge(pair_blocks, sizeof(double));
-    charge(product(atoms, 3), sizeof(double));
+    charge(product(atoms, 9), sizeof(double));
     charge(1, sizeof(unsigned long long));
     charge(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t));
     charge(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t));
@@ -332,7 +332,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     plan->bounded_pair_order = static_cast<const std::uint32_t*>(
         allocate(pairs, sizeof(std::uint32_t), bounded_pair_order.data()));
     plan->shell_pair_block_bounds = doubles(pair_blocks);
-    plan->force = doubles(product(atoms, 3));
+    plan->force = doubles(product(atoms, 9));
     plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
     plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
@@ -586,39 +586,21 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
-
-  const double coefficients[3] = {
-      coulomb_coefficient,
-      short_exchange_coefficient,
-      long_exchange_coefficient,
-  };
-  for (unsigned source = 0; source < 3; ++source) {
-    if (coefficients[source] == 0.0) continue;
-    error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
-    if (error != cudaSuccess) return error;
-    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
-    if (error != cudaSuccess) return error;
-    if (source == 0U) {
-      launch_bounded_shell_energy_derivative(
-          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
-          p.direct_spin, shared.active, p.force, p.force_cursor, coefficients[source], 0.0);
-    } else {
-      launch_bounded_shell_range_exchange_derivative(
-          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
-          p.direct_spin, shared.active, p.force, p.force_cursor,
-          source == 1U ? DirectCoulombRange::Short : DirectCoulombRange::Long, omega,
-          coefficients[source]);
-    }
-    error = cudaGetLastError();
-    if (error != cudaSuccess) return error;
-    error = cudaMemcpyAsync(result.data() + source * coordinates, p.force,
-                            coordinates * sizeof(double), cudaMemcpyDeviceToHost, shared.stream);
-    if (error != cudaSuccess) return error;
-  }
+  error = cudaMemsetAsync(p.force, 0, 3U * coordinates * sizeof(double), shared.stream);
+  if (error != cudaSuccess) return error;
+  error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+  if (error != cudaSuccess) return error;
+  launch_bounded_shell_rsh_derivatives(
+      unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+      p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+      p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
+      p.force_cursor, omega, coulomb_coefficient, short_exchange_coefficient,
+      long_exchange_coefficient);
+  error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+  error = cudaMemcpyAsync(result.data(), p.force, 3U * coordinates * sizeof(double),
+                          cudaMemcpyDeviceToHost, shared.stream);
+  if (error != cudaSuccess) return error;
   error = cudaStreamSynchronize(shared.stream);
   if (error != cudaSuccess) return error;
   for (double& value : result) value = -value;
