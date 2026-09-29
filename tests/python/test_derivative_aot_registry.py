@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from generativeqc_compiler.integral.derivative_aot_registry import (
     DerivativeAotKey,
     component_group,
@@ -19,6 +22,8 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
 )
 from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_registry_identity_covers_backend_radial_shell_and_group() -> None:
@@ -236,3 +241,29 @@ def test_cuda_packaged_selection_requires_explicit_target() -> None:
     assert selected is not None
     assert selected.target == "sm_120"
     assert selected.package_key.to_payload()["target"] == "sm_120"
+
+
+def test_cuda_radial_manifest_matches_native_compile_time_specializations() -> None:
+    payload = json.loads(
+        (ROOT / "manifests/derivative_aot_radials.json").read_text(encoding="utf-8")
+    )
+    assert radial_inventory_from_payload(payload, backend="cuda") == (
+        CoulombKernel("short_range", 0.3),
+        CoulombKernel("long_range", 0.3),
+    )
+
+    contraction = (ROOT / "src/scf/cuda/direct_bounded_contraction.cuh").read_text(
+        encoding="utf-8"
+    )
+    bounded = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
+        encoding="utf-8"
+    )
+    assert "contract_bounded_direct_force_subtile_range_aot_scaled" in contraction
+    assert (
+        "constexpr double omega = static_cast<double>(OmegaMilli) / 1000.0"
+        in contraction
+    )
+    assert "CoulombRange::Long, 300" in bounded
+    assert "CoulombRange::Short, 300" in bounded
+    assert "omega == 0.3" in bounded
+    assert "wb97" not in bounded.lower()
