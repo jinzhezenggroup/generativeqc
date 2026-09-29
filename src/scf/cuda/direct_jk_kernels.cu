@@ -346,8 +346,8 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   bool want_j, bool want_k, bool unrestricted, bool mixed_j,
                                   DirectCoulombRange exchange_range, double exchange_omega,
                                   double screening, const double* bounds, const double* density,
-                                  const double* beta, double* j_out, double* ka_out,
-                                  double* kb_out, std::uint64_t* mixed_coulomb_work_count) {
+                                  const double* beta, double* j_out, double* ka_out, double* kb_out,
+                                  std::uint64_t* mixed_coulomb_work_count) {
   if (mixed_j)
     independent_jk_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch, system_begin, want_j, want_k, unrestricted, integral_range(exchange_range),

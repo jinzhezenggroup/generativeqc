@@ -47,6 +47,5 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail,
-    std::uint64_t* mixed_coulomb_work_count = nullptr);
+    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count = nullptr);
 }  // namespace generativeqc::scf

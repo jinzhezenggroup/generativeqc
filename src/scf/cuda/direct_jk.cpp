@@ -442,10 +442,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     if (unrestricted) pointer(beta);
     if (mixed_coulomb_work_count) {
       pointer(mixed_coulomb_work_count);
-      direct_jk_require(reinterpret_cast<std::uintptr_t>(mixed_coulomb_work_count) %
-                                alignof(std::uint64_t) ==
-                            0,
-                        "device direct J/K mixed-work counter is misaligned");
+      direct_jk_require(
+          reinterpret_cast<std::uintptr_t>(mixed_coulomb_work_count) % alignof(std::uint64_t) == 0,
+          "device direct J/K mixed-work counter is misaligned");
     }
     const auto bytes = direct_jk_product(elements, sizeof(double));
     const auto disjoint = [&](const void* a, std::size_t na, const void* b, std::size_t nb) {
@@ -473,8 +472,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     }
     direct_jk_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), plan->stream));
     if (mixed_coulomb_work_count)
-      direct_jk_check(cudaMemsetAsync(mixed_coulomb_work_count, 0, sizeof(std::uint64_t),
-                                     plan->stream));
+      direct_jk_check(
+          cudaMemsetAsync(mixed_coulomb_work_count, 0, sizeof(std::uint64_t), plan->stream));
     for (const auto* input : inputs)
       if (input) {
         launch_independent_jk_finite_kernel(plan->stream, input, elements, numerical_error);

@@ -204,12 +204,12 @@ void mixed_coulomb_work_census() {
   check(cudaStreamSynchronize(cuda_direct_jk_stream(screened.get())));
   require(count.get() == 0, "screened mixed Coulomb recurrences were counted as executed");
 
-  require(enqueue_cuda_direct_jk_device_mixed_j(
-              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
-              nullptr, nullptr, failure, detail,
-              reinterpret_cast<std::uint64_t*>(device_density.pointer)) ==
-              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-          "mixed Coulomb census accepted a counter aliasing its density");
+  require(
+      enqueue_cuda_direct_jk_device_mixed_j(
+          plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer, nullptr,
+          nullptr, failure, detail, reinterpret_cast<std::uint64_t*>(device_density.pointer)) ==
+          GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+      "mixed Coulomb census accepted a counter aliasing its density");
   require(enqueue_cuda_direct_jk_device_mixed_j(
               plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
               nullptr, nullptr, failure, detail,
