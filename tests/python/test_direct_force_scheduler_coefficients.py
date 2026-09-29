@@ -111,3 +111,13 @@ def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
     assert "contract_bounded_direct_rsh_force_subtile" in contraction
     assert "contract_two_electron_force_quartet_subtile_rsh_scaled" in quartet
     assert "launch_bounded_shell_rsh_derivatives" in provider
+    fused_begin = quartet.index(
+        "contract_two_electron_force_quartet_subtile_rsh_scaled("
+    )
+    fused = quartet[fused_begin:]
+    assert "if (coulomb_coefficient != 0.0)" in fused
+    assert (
+        "short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0"
+        in fused
+    )
+    assert "CoulombRange::Long, omega" in fused
