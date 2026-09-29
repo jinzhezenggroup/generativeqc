@@ -252,9 +252,7 @@ def _active_scopes(
     )
 
 
-def _kernel_threads(
-    function: str, shape: GridXcCompiledResourceShape, functional: str
-) -> int:
+def _kernel_threads(function: str, functional: str) -> int:
     name = _leaf(function)
     if name.startswith("tiled_density_product") or name.startswith("tiled_potential"):
         return DEFAULT_XC_MATRIX_SCHEDULE.threads
@@ -286,7 +284,6 @@ def _occupancy(
 def _pressure_envelope(
     rows: tuple[KernelResources, ...],
     *,
-    shape: GridXcCompiledResourceShape,
     functional: str,
     target: CudaTargetInfo,
 ) -> GpuProfitability:
@@ -339,7 +336,6 @@ def native_grid_xc_compiled_region_evidence(
     scope_profitability = tuple(
         _pressure_envelope(
             rows,
-            shape=shape,
             functional=functional,
             target=target,
         )
