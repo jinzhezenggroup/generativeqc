@@ -123,11 +123,17 @@ def resident_nonlocal_geometry(
     for suffix in ("ao", "grid", "weight"):
         components["nonlocal_" + suffix] = nonlocal_parts["xc_" + suffix]
 
+    # These host-wall intervals are additive: the enclosing pass includes the
+    # separately reported seed and pair submission intervals. Keep asynchronous
+    # pair execution/drain in the shared tail, not in the enqueue measurements.
+    geometry_and_drain_seconds = (
+        perf_counter() - pass_began - seed_seconds - pair_seconds
+    )
     seconds = {
         "nonlocal_reset": reset_seconds,
         "resident_feature_seed_enqueue": seed_seconds,
         "vv10_pair_enqueue": pair_seconds,
-        "single_pass_geometry_and_pair_drain": perf_counter() - pass_began,
+        "single_pass_geometry_and_pair_drain": geometry_and_drain_seconds,
     }
     work = {
         "nonlocal_execution": "resident-full-grid-device-seeds",

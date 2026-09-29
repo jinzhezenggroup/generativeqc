@@ -23,13 +23,14 @@ def staging_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp("nonlocal-host-staging")
     cpp, binary = folder / "probe.cpp", folder / "probe"
     cpp.write_text(PREFIX + body + SUFFIX)
-    subprocess.run(
+    result = subprocess.run(
         [compiler, "-std=c++20", "-O0", str(cpp), "-o", str(binary)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=60,
     )
+    assert result.returncode == 0, result.stderr
     return binary
 
 
@@ -161,6 +162,10 @@ Vv10CudaDeviceLayout vv10_cuda_device_layout(
 unsigned launch_blocks(std::size_t,unsigned) {return 1;}
 template<Vv10Variant, bool, class... T> void local_scales_kernel(T&&...) {}
 template<Vv10Variant, bool, bool, class... T> void launch_pair_rows(T&&...) {}
+// Numerical kernels are inert here: this probe isolates wrapper ownership.
+template<class... T> void count_active_partner_blocks_kernel(T&&...) {}
+template<class... T> void prefix_active_partner_blocks_kernel(T&&...) {}
+template<class... T> void scatter_active_partners_ordered_kernel(T&&...) {}
 template<class... T> void reduce_energy_ordered_kernel(T&&...) {}
 """
 

@@ -7,7 +7,10 @@ benchmarks/results/ instead of expanding this file.
 -->
 
 <p align="center">
-  <img src="assets/generativeqc-logo.svg" width="180" alt="GenerativeQC logo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/generativeqc-logo-dark.svg">
+    <img src="assets/generativeqc-logo.svg" width="640" alt="GenerativeQC — AI-assisted creation and compiler-generated quantum chemistry">
+  </picture>
 </p>
 
 <h1 align="center">GenerativeQC</h1>
