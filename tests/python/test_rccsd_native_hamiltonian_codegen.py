@@ -115,7 +115,7 @@ def _case_cpp(o: int, v: int) -> str:
             )
         sections.extend(section)
 
-    control_feeds, control_expected = groups[0]
+    control_feeds = groups[0][0]
     control_inputs = sorted(control_feeds)
     sections.extend(
         [
