@@ -91,12 +91,10 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   const auto charge = [&](std::size_t count, std::size_t width) {
     required = runtime::size_add(required, product(count, width));
   };
-#define COULOMB_METADATA(F)                   \
-  F(system_shell_offsets);                    \
-  F(system_shell_pair_offsets);               \
-  F(system_shell_pair_block_offsets);         \
-  F(system_shell_pair_block_quartet_offsets); \
-  F(shell_direct_ao_offsets);                 \
+#define COULOMB_METADATA(F)        \
+  F(system_shell_offsets);         \
+  F(system_shell_pair_offsets);    \
+  F(shell_direct_ao_offsets);      \
   F(shell_pair_systems);                      \
   F(shell_pair_first);                        \
   F(shell_pair_second);                       \
@@ -122,8 +120,6 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
   plan->batch.total_shell_pairs = pairs;
-  plan->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
-  plan->batch.total_shell_pair_block_quartets = host.system_shell_pair_block_quartet_offsets.back();
   plan->stream = stream;
   plan->screening = screening;
   plan->class_mask = present;
@@ -292,6 +288,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     charge(pair_blocks, sizeof(double));
     charge(product(atoms, 3), sizeof(double));
     charge(1, sizeof(unsigned long long));
+    charge(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t));
+    charge(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t));
   }
   if (shared->device_bytes > budget || additional > budget - shared->device_bytes) return {};
 
@@ -336,6 +334,18 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     plan->shell_pair_block_bounds = doubles(pair_blocks);
     plan->force = doubles(product(atoms, 3));
     plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
+    plan->shared->batch.total_shell_pair_blocks =
+        host.system_shell_pair_block_offsets.back();
+    plan->shared->batch.total_shell_pair_block_quartets =
+        host.system_shell_pair_block_quartet_offsets.back();
+    plan->shared->batch.system_shell_pair_block_offsets =
+        static_cast<const std::int64_t*>(
+            allocate(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t),
+                     host.system_shell_pair_block_offsets.data()));
+    plan->shared->batch.system_shell_pair_block_quartet_offsets =
+        static_cast<const std::int64_t*>(
+            allocate(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t),
+                     host.system_shell_pair_block_quartet_offsets.data()));
   }
 
   const auto& b = plan->shared->batch;
