@@ -524,6 +524,7 @@ GradientResourcePlan conventional_gradient_plan(
       response_plan.workspace_bytes,
       posthf::checked_mul(sizeof(double),
                           posthf::checked_add(posthf::checked_mul(6, rotations), n2)));
+  plan.rank2_transform_bytes = posthf::checked_mul(sizeof(double), n2);
   auto relaxed_elements =
       posthf::checked_add(posthf::checked_mul(2, n4), posthf::checked_mul(3, n2));
   relaxed_elements = posthf::checked_add(relaxed_elements, posthf::checked_mul(2, rotations));
@@ -544,8 +545,9 @@ GradientResourcePlan conventional_gradient_plan(
   plan.derivative_backend_staging_bytes = derivative_backend_staging_bytes;
   plan.candidate_output_bytes = candidate_output_bytes;
   plan.peak_bytes = provider_bytes;
-  for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
-                     plan.shell_cotangent_bytes, plan.derivative_staging_bytes,
+  for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.rank2_transform_bytes,
+                     plan.relaxed_weight_bytes, plan.shell_cotangent_bytes,
+                     plan.derivative_staging_bytes,
                      plan.derivative_backend_staging_bytes, plan.candidate_output_bytes})
     plan.peak_bytes = posthf::checked_add(plan.peak_bytes, bytes);
   if (plan.peak_bytes > budget_bytes)
@@ -577,6 +579,7 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
       response_plan.workspace_bytes,
       posthf::checked_mul(sizeof(double),
                           posthf::checked_add(posthf::checked_mul(6, rotations), n2)));
+  plan.rank2_transform_bytes = posthf::checked_mul(sizeof(double), n2);
   auto relaxed_elements =
       posthf::checked_add(posthf::checked_mul(2, n4), posthf::checked_mul(3, n2));
   relaxed_elements = posthf::checked_add(relaxed_elements, posthf::checked_mul(2, rotations));
@@ -602,8 +605,9 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
   plan.candidate_output_bytes = candidate_output_bytes;
 
   plan.peak_bytes = provider_bytes;
-  for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
-                     plan.reverse_result_bytes, plan.reverse_workspace_bytes,
+  for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.rank2_transform_bytes,
+                     plan.relaxed_weight_bytes, plan.reverse_result_bytes,
+                     plan.reverse_workspace_bytes,
                      plan.derivative_staging_bytes, plan.candidate_output_bytes})
     plan.peak_bytes = posthf::checked_add(plan.peak_bytes, bytes);
   if (plan.peak_bytes > budget_bytes)
