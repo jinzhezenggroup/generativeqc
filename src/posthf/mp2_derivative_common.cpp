@@ -126,14 +126,47 @@ std::vector<double> conventional_derivative(const core::System& system,
   for (std::size_t si = 0; si < system.shells.size(); ++si) {
     const auto di = offsets[si + 1] - offsets[si];
     std::vector<double> first(posthf::checked_mul(di, posthf::checked_mul(n, square(n))), 0.0);
-    for (std::size_t iu = 0; iu < di; ++iu)
-      for (std::size_t q = 0; q < n; ++q)
-        for (std::size_t r = 0; r < n; ++r)
-          for (std::size_t s = 0; s < n; ++s)
-            for (std::size_t p = 0; p < n; ++p)
-              first[((iu * n + q) * n + r) * n + s] +=
-                  reference.coefficients[(offsets[si] + iu) * n + p] *
-                  two_electron_weight(weights, p, q, r, s);
+    if (dense_two) {
+      for (std::size_t iu = 0; iu < di; ++iu)
+        for (std::size_t q = 0; q < n; ++q)
+          for (std::size_t r = 0; r < n; ++r)
+            for (std::size_t s = 0; s < n; ++s)
+              for (std::size_t p = 0; p < n; ++p)
+                first[((iu * n + q) * n + r) * n + s] +=
+                    reference.coefficients[(offsets[si] + iu) * n + p] *
+                    weights.two_electron[((p * n + q) * n + r) * n + s];
+    } else {
+      const auto& factors = weights.two_electron_factors;
+      const auto occupied = factors.occupied, virtuals = n - occupied;
+      auto g_index = [occupied, virtuals](std::size_t i, std::size_t j, std::size_t a,
+                                         std::size_t b) {
+        return ((i * occupied + j) * virtuals + a) * virtuals + b;
+      };
+      for (std::size_t iu = 0; iu < di; ++iu) {
+        const auto mu = offsets[si] + iu;
+        for (std::size_t p = 0; p < n; ++p) {
+          const double coefficient = reference.coefficients[mu * n + p];
+          if (coefficient == 0.0) continue;
+          for (std::size_t q = 0; q < n; ++q) {
+            const double weight = factors.fock[p * n + q];
+            if (weight == 0.0) continue;
+            for (std::size_t i = 0; i < occupied; ++i) {
+              first[((iu * n + q) * n + i) * n + i] += 2.0 * coefficient * weight;
+              first[((iu * n + i) * n + i) * n + q] -= coefficient * weight;
+            }
+          }
+        }
+        for (std::size_t i = 0; i < occupied; ++i) {
+          const double coefficient = reference.coefficients[mu * n + i];
+          if (coefficient == 0.0) continue;
+          for (std::size_t j = 0; j < occupied; ++j)
+            for (std::size_t a = 0; a < virtuals; ++a)
+              for (std::size_t b = 0; b < virtuals; ++b)
+                first[((iu * n + occupied + a) * n + j) * n + occupied + b] +=
+                    coefficient * factors.correlation_iajb[g_index(i, j, a, b)];
+        }
+      }
+    }
     transform_remaining_shells(system, reference, offsets, si, first, eri_shell, derivative);
   }
   if (!finite(derivative)) throw std::runtime_error("conventional derivative is nonfinite");
