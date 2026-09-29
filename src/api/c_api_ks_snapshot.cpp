@@ -504,6 +504,36 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
   }
 }
 
+generativeqc_status generativeqc_ks_snapshot_cuda_shell_full_range_gradient_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count, std::uint64_t* work, std::size_t work_count) {
+  if (!batch || !snapshot || !values || !work || work_count != 4 ||
+      count != 6 * snapshot->atoms)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::vector<double> candidate;
+    std::array<std::uint64_t, 4> usage{};
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_shell_full_range_gradient(
+        *batch->plan, snapshot->index, snapshot->token, candidate, usage, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    if (candidate.size() != count) return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy(candidate.begin(), candidate.end(), values);
+    std::copy(usage.begin(), usage.end(), work);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy) {

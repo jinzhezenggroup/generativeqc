@@ -44,6 +44,13 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
     std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
 
+/** Method-neutral full-range stationary J'/K' from the prepared Direct shell owner.
+ * Output is source-major [J,K], each 3*Natom. Pure semilocal plans retain a zero K block.
+ * No public-AO derivative task domain or density transfer is constructed here. */
+generativeqc_status dft_cuda_shell_full_range_gradient(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::vector<double>& output, std::array<std::uint64_t, 4>& work, std::string& detail);
+
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
                                         std::string& detail);
 

@@ -960,6 +960,58 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  generativeqc_status cuda_shell_full_range_gradient(
+      const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::array<std::uint64_t, 4>& work, std::string& detail) {
+#if GENERATIVEQC_HAS_CUDA
+    output.clear();
+    work = {};
+    if (!cuda_ || !system_.ecp_terms.empty() || range_strategy_ ||
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      detail = "CUDA shell full-range derivative requires an all-electron exact Direct KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
+    if (!derivative_source) {
+      detail = "CUDA shell full-range derivative owner was not retained";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsResidentDensityBinding resident_density;
+    const auto before = cuda_->transfers();
+    auto status = cuda_->resident_final_density(expected, resident_density, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!resident_density || resident_density.device_id != derivative_source.device_id ||
+        resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+      detail = "CUDA shell full-range derivative density is incompatible with the Direct owner";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+        fock_, resident_density.alpha, resident_density.beta, resident_density.matrix_elements,
+        output, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto expected_values = 6 * system_.atoms.size();
+    if (output.size() != expected_values ||
+        !std::all_of(output.begin(), output.end(),
+                     [](double value) { return std::isfinite(value); })) {
+      output.clear();
+      detail = "CUDA shell full-range derivative returned an invalid source shape";
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    const auto after = cuda_->transfers();
+    work = {derivative_source.retained_device_bytes,
+            after.final_state_d2h_bytes - before.final_state_d2h_bytes,
+            after.final_state_reads - before.final_state_reads,
+            after.synchronizations - before.synchronizations};
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    (void)expected;
+    (void)output;
+    (void)work;
+    (void)detail;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
   Result execute(bool compute_forces) override {
     invalidate_final_state();
     const char* method_name = semilocal_family_name(execution_plan_);
@@ -1530,6 +1582,15 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status cuda_shell_full_range_gradient(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::array<std::uint64_t, 4>& work, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->cuda_shell_full_range_gradient(expected, output, work, detail);
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   // These profiles describe HF graph/provider layouts, not this method's
   // ordinary-stream schedule. Absence is explicit at the common interface.
   std::optional<std::vector<DirectShellClassProfileEntry>> last_direct_shell_class_profile()
@@ -1670,6 +1731,17 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
                                       &density, &weighted_density);
   detail = "CUDA integral gradient requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_shell_full_range_gradient(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::vector<double>& output, std::array<std::uint64_t, 4>& work, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->cuda_shell_full_range_gradient(index, expected, output, work, detail);
+  output.clear();
+  work = {};
+  detail = "CUDA shell full-range gradient requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 

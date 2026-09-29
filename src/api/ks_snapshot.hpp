@@ -25,6 +25,11 @@ void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+/** Method-neutral prepared Direct shell J'/K' consumer.
+ * values is [2, Natom, 3]; work is retained bytes + final-state D2H/read/sync deltas. */
+generativeqc_status generativeqc_ks_snapshot_cuda_shell_full_range_gradient_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count, std::uint64_t* work, std::size_t work_count);
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy);

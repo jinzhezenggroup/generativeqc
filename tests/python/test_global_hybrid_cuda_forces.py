@@ -144,12 +144,11 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
             ]
         np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
         assert batch._stationary_cuda_execution._lease.executions == 2
-        # Work contains a complete second quartet traversal for exact exchange;
-        # the bounded implementation makes no fused-J/K performance claim.
         assert "exact_exchange" in batch._stationary_cuda_execution.sources.source_names
+        # Full-range J'/K' are now owned by the prepared Direct shell scheduler,
+        # so the stationary AO task owner executes only one-electron/Pulay/nuclear work.
         per_execution = (
-            2 * primitive_count**4
-            + (len(atoms) + 2) * primitive_count**2
+            (len(atoms) + 2) * primitive_count**2
             + len(atoms) * (len(atoms) - 1) // 2
         )
         assert (

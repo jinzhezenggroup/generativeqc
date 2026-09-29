@@ -194,6 +194,11 @@ def test_complete_cuda_independent_analytic(
         assert result.work["stationary_state_dw_upload_bytes"] == (
             state.density.nbytes + state.weighted_density.nbytes
         )
+        assert (
+            result.work["stationary_full_range_integral_route"]
+            == "prepared-direct-shell-v1"
+        )
+        assert result.work["stationary_shell_ao4_capacity_avoided"] == basis.nao**4
         assert result.work["xc_points"] == len(state.grid.points)
         assert (
             result.work["additional_device_peak_bound"]

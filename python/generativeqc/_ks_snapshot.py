@@ -753,6 +753,67 @@ class NativeKsSnapshot:
             ),
         }
 
+    def cuda_shell_full_range_derivatives(
+        self,
+    ) -> tuple[typing.Any, MappingProxyType] | None:
+        """Borrow prepared Direct shell J'/K' under this snapshot's exact token.
+
+        Returns None only when the current KS owner has no qualified exact Direct
+        first-derivative lease. Other native failures remain hard errors.
+        """
+        self.check_current()
+        if self.backend != "cuda" or self.hamiltonian != "all-electron":
+            return None
+        try:
+            evaluate = (
+                self._library.generativeqc_ks_snapshot_cuda_shell_full_range_gradient_v1
+            )
+        except AttributeError:
+            return None
+        pointer = ct.POINTER(ct.c_double)
+        evaluate.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            pointer,
+            ct.c_size_t,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        evaluate.restype = ct.c_int
+        natom = int(self.metadata[3])
+        output = np.empty((2, natom, 3), dtype=np.float64)
+        work = (ct.c_uint64 * 4)()
+        status = evaluate(
+            self._batch._batch,
+            self._handle,
+            output.ctypes.data_as(pointer),
+            output.size,
+            work,
+            4,
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            self.check_current()
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        if not np.isfinite(output).all():
+            raise ArithmeticError("nonfinite native shell full-range derivatives")
+        diagnostics = MappingProxyType(
+            dict(
+                zip(
+                    (
+                        "retained_device_bytes",
+                        "final_state_d2h_bytes",
+                        "final_state_reads",
+                        "final_state_synchronizations",
+                    ),
+                    map(int, work),
+                    strict=True,
+                )
+            )
+        )
+        return immutable(output), diagnostics
+
     def ecp_derivatives(self) -> typing.Any:
         """Backend-specific provider bound to this live owner's exact ECP model.
 
