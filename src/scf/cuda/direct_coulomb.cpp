@@ -384,14 +384,12 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   return {};
 }
 
-cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
-                                       const double* alpha, const double* beta,
-                                       double* alpha_exchange, double* beta_exchange) {
-  if (alpha == nullptr || alpha_exchange == nullptr ||
-      (unrestricted ? (beta == nullptr || beta_exchange == nullptr)
-                    : (beta != nullptr || beta_exchange != nullptr)))
-    return cudaErrorInvalidValue;
+namespace {
 
+cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool unrestricted,
+                                               const double* alpha, const double* beta) {
+  if (alpha == nullptr || (unrestricted ? beta == nullptr : beta != nullptr))
+    return cudaErrorInvalidValue;
   auto& shared = *p.shared;
   const auto b = shared.batch;
   const std::size_t batch = static_cast<std::size_t>(b.batch_size);
@@ -399,7 +397,6 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   const std::size_t direct_matrix = product(static_cast<std::size_t>(b.direct_nbf), b.direct_nbf);
   const std::size_t public_rectangular = product(static_cast<std::size_t>(b.nbf), b.direct_nbf);
   const std::size_t spin_count = unrestricted ? 2U : 1U;
-  const std::size_t matrix = product(batch, public_matrix);
   const std::size_t cartesian = product(batch, direct_matrix);
   const std::size_t rectangular = product(batch, public_rectangular);
 
@@ -436,8 +433,30 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
       static_cast<unsigned>(batch), threads,
       detail::kDirectShellPairClassCount * threads * sizeof(double), shared.stream, b,
       p.shell_pair_density_bounds, p.system_density_bounds, p.system_pair_density_bounds);
-  error = cudaGetLastError();
+  return cudaGetLastError();
+}
+
+}  // namespace
+
+cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
+                                       const double* alpha, const double* beta,
+                                       double* alpha_exchange, double* beta_exchange) {
+  if (alpha_exchange == nullptr ||
+      (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr))
+    return cudaErrorInvalidValue;
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   if (error != cudaSuccess) return error;
+
+  auto& shared = *p.shared;
+  const auto b = shared.batch;
+  const std::size_t batch = static_cast<std::size_t>(b.batch_size);
+  const std::size_t public_matrix = product(static_cast<std::size_t>(b.nbf), b.nbf);
+  const std::size_t direct_matrix = product(static_cast<std::size_t>(b.direct_nbf), b.direct_nbf);
+  const std::size_t public_rectangular = product(static_cast<std::size_t>(b.nbf), b.direct_nbf);
+  const std::size_t spin_count = unrestricted ? 2U : 1U;
+  const std::size_t matrix = product(batch, public_matrix);
+  const std::size_t cartesian = product(batch, direct_matrix);
+  const std::size_t rectangular = product(batch, public_rectangular);
 
   error = cudaMemsetAsync(p.direct_exchange, 0,
                           product(product(spin_count, cartesian), sizeof(double)), shared.stream);
@@ -494,6 +513,47 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
     }
   }
   return cudaGetLastError();
+}
+
+cudaError_t execute_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives) {
+  if (!p.force_capability || p.bounded_pair_order == nullptr ||
+      p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
+      !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
+    return cudaErrorInvalidValue;
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (error != cudaSuccess) return error;
+
+  auto& shared = *p.shared;
+  const auto b = shared.batch;
+  const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
+  std::vector<double> result(2U * coordinates);
+  const double coefficients[2][2] = {{coulomb_coefficient, 0.0}, {0.0, exchange_coefficient}};
+  for (unsigned source = 0; source < 2; ++source) {
+    error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    launch_bounded_direct_shell_quartet_kernel_scaled(
+        unrestricted, DirectScreeningPurpose::Force, shared.worker_blocks, kBoundedDirectThreads,
+        0, shared.stream, b, shared.screening, shared.shell_bounds, p.shell_pair_density_bounds,
+        p.bounded_pair_order, p.shell_pair_block_bounds, p.system_density_bounds, nullptr, 0U,
+        p.heads, shared.schwarz, p.direct_spin, shared.active, p.force, p.force_cursor, nullptr,
+        coefficients[source][0], coefficients[source][1]);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    error = cudaMemcpyAsync(result.data() + source * coordinates, p.force,
+                            coordinates * sizeof(double), cudaMemcpyDeviceToHost, shared.stream);
+    if (error != cudaSuccess) return error;
+  }
+  error = cudaStreamSynchronize(shared.stream);
+  if (error != cudaSuccess) return error;
+  // Native shell force kernels accumulate -dE/dR. This API publishes the
+  // derivative convention used by the stationary integral-source reducer.
+  for (double& value : result) value = -value;
+  derivatives = std::move(result);
+  return cudaSuccess;
 }
 
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
