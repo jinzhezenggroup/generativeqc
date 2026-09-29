@@ -42,12 +42,8 @@ def test_response_operator_shim_reuses_installed_objects() -> None:
 
 
 def test_top_level_tools_response_api_reuses_installed_closed_shell_objects() -> None:
-    assert (
-        response_api.CPKSResponseOperator is production_operator.CPKSResponseOperator
-    )
-    assert (
-        response_api.RHFResponseOperator is production_operator.RHFResponseOperator
-    )
+    assert response_api.CPKSResponseOperator is production_operator.CPKSResponseOperator
+    assert response_api.RHFResponseOperator is production_operator.RHFResponseOperator
     assert response_api.ResponseProblem is production_problem.ResponseProblem
     assert (
         response_api.FixedDensityXCDerivativeKernel
