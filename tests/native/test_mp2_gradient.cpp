@@ -38,16 +38,53 @@ bool factorized_matches_dense(const generativeqc::mp2::FactorizedTwoElectronWeig
                               std::span<const double> dense, double tolerance) {
   const auto n = factorized.orbitals;
   if (!generativeqc::mp2::valid_factorized_two_electron_weights(factorized) ||
-      dense.size() != n * n * n * n)
+      dense.size() != n * n * n * n || !std::isfinite(tolerance) || tolerance < 0.0)
     return false;
   for (std::size_t p = 0; p < n; ++p)
     for (std::size_t q = 0; q < n; ++q)
       for (std::size_t r = 0; r < n; ++r)
-        for (std::size_t s = 0; s < n; ++s)
-          if (std::abs(generativeqc::mp2::factorized_two_electron_weight(factorized, p, q, r, s) -
-                       dense[eri_index(n, p, q, r, s)]) > tolerance)
+        for (std::size_t s = 0; s < n; ++s) {
+          const double actual =
+              generativeqc::mp2::factorized_two_electron_weight(factorized, p, q, r, s);
+          const double expected = dense[eri_index(n, p, q, r, s)];
+          if (!std::isfinite(actual) || !std::isfinite(expected) ||
+              !(std::abs(actual - expected) <= tolerance))
             return false;
+        }
   return true;
+}
+
+void factorized_comparison_rejects_nonfinite_oracles() {
+  generativeqc::mp2::FactorizedTwoElectronWeights factors;
+  factors.orbitals = 2;
+  factors.occupied = 1;
+  factors.fock.assign(4, 0.0);
+  factors.correlation_iajb.assign(1, 0.0);
+  std::vector<double> dense(16, 0.0);
+  require(factorized_matches_dense(factors, dense, 0.0), "finite zero oracle did not match");
+  for (const double invalid :
+       {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity()}) {
+    for (std::size_t index = 0; index < dense.size(); ++index) {
+      dense[index] = invalid;
+      require(!factorized_matches_dense(factors, dense, 2e-11),
+              "factorized comparison accepted a nonfinite dense oracle");
+      dense[index] = 0.0;
+    }
+    require(!factorized_matches_dense(factors, dense, invalid),
+            "factorized comparison accepted a nonfinite tolerance");
+    factors.fock[0] = invalid;
+    require(!factorized_matches_dense(factors, dense, 2e-11),
+            "factorized comparison accepted a nonfinite compact input");
+    factors.fock[0] = 0.0;
+  }
+  require(!factorized_matches_dense(factors, dense, -1.0),
+          "factorized comparison accepted a negative tolerance");
+  dense[0] = 1e-6;
+  require(!factorized_matches_dense(factors, dense, 2e-11),
+          "factorized comparison accepted a finite mismatch");
+  require(factorized_matches_dense(factors, dense, 1e-6),
+          "factorized comparison changed the inclusive tolerance boundary");
 }
 
 double mp2_energy(std::span<const double> g, std::span<const double> eps, std::size_t no) {
@@ -259,7 +296,9 @@ void streamed_provider_matches_dense_oracle() {
   auto close = [](std::span<const double> first, std::span<const double> second) {
     if (first.size() != second.size()) return false;
     for (std::size_t i = 0; i < first.size(); ++i)
-      if (std::abs(first[i] - second[i]) > 2e-11) return false;
+      if (!std::isfinite(first[i]) || !std::isfinite(second[i]) ||
+          !(std::abs(first[i] - second[i]) <= 2e-11))
+        return false;
     return true;
   };
   generativeqc::mp2::FactorizedTwoElectronWeights orbital_factors;
@@ -364,9 +403,11 @@ void density_fitted_provider_matches_dense_ri_oracle() {
             expected_eri[eri_index(n, p, q, r, t)] +=
                 whitened[three(p, q, Q)] * whitened[three(r, t, Q)];
   auto close = [](std::span<const double> first, std::span<const double> second, double tolerance) {
-    if (first.size() != second.size()) return false;
+    if (first.size() != second.size() || !std::isfinite(tolerance) || tolerance < 0.0) return false;
     for (std::size_t i = 0; i < first.size(); ++i)
-      if (std::abs(first[i] - second[i]) > tolerance) return false;
+      if (!std::isfinite(first[i]) || !std::isfinite(second[i]) ||
+          !(std::abs(first[i] - second[i]) <= tolerance))
+        return false;
     return true;
   };
   require(close(actual_eri, expected_eri, 2e-12),
@@ -746,6 +787,7 @@ void invalid_inputs_and_resource_boundaries() {
 
 int main() {
   try {
+    factorized_comparison_rejects_nonfinite_oracles();
     energy_adjoint_matches_independent_finite_difference();
     orbital_rhs_and_relaxed_weights_match_independent_oracles();
     streamed_provider_matches_dense_oracle();
