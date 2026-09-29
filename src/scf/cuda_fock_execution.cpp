@@ -141,8 +141,9 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
       source, p.spin, p.coulomb.coefficient, p.exchange.coefficient,
       p.exchange.coefficient + c.exchange.coefficient, c.exchange.omega, density, beta,
       matrix_elements, derivatives, detail);
+}
 
-  generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
       const PreparedFockPlan& plan, const double* density, const double* beta,
       std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
     const auto binding = prepared_cuda_direct_derivative_binding(plan);
