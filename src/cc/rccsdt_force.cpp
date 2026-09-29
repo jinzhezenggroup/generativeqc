@@ -168,6 +168,36 @@ void add_projected_triples(ParameterWeights& target, const TriplesResponseResult
         }
 }
 
+// A borrowed interaction source must describe the same nuclear Hamiltonian.
+// Compare metadata before memory admission or reads, without allocating a second
+// identity vector or accepting equal AO counts as proof of source equivalence.
+bool force_source_matches_system(const core::System& a, const core::System& b) noexcept {
+  if (a.basis_representation != b.basis_representation || a.charge != b.charge ||
+      a.multiplicity != b.multiplicity || a.electron_count != b.electron_count ||
+      a.atoms.size() != b.atoms.size() || a.shells.size() != b.shells.size() ||
+      a.ecp_terms != b.ecp_terms)
+    return false;
+  for (std::size_t i = 0; i < a.atoms.size(); ++i) {
+    const auto& left = a.atoms[i];
+    const auto& right = b.atoms[i];
+    if (left.atomic_number != right.atomic_number || left.ecp_core != right.ecp_core ||
+        left.position != right.position)
+      return false;
+  }
+  for (std::size_t i = 0; i < a.shells.size(); ++i) {
+    const auto& left = a.shells[i];
+    const auto& right = b.shells[i];
+    if (left.atom_index != right.atom_index || left.angular_momentum != right.angular_momentum ||
+        left.primitives.size() != right.primitives.size())
+      return false;
+    for (std::size_t j = 0; j < left.primitives.size(); ++j)
+      if (left.primitives[j].exponent != right.primitives[j].exponent ||
+          left.primitives[j].coefficient != right.primitives[j].coefficient)
+        return false;
+  }
+  return true;
+}
+
 struct RawHamiltonian {
   std::vector<double> h, g, density, rotation;
 };
@@ -489,7 +519,8 @@ RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
                                      const hf::PhysicalReference& reference, const Problem& p,
                                      const SolverResult& cc, std::size_t max_bytes) {
   if (source.nbf() != reference.nbf ||
-      !source.supports(integrals::ElectronInteractionOperator::eri))
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
     throw std::invalid_argument("RCCSD force interaction source/reference mismatch");
   return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false,
                                       source.retained_numeric_bytes());
@@ -507,7 +538,8 @@ RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
                                       const hf::PhysicalReference& reference, const Problem& p,
                                       const SolverResult& cc, std::size_t max_bytes) {
   if (source.nbf() != reference.nbf ||
-      !source.supports(integrals::ElectronInteractionOperator::eri))
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
     throw std::invalid_argument("RCCSD(T) force interaction source/reference mismatch");
   return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true,
                                       source.retained_numeric_bytes());

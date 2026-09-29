@@ -89,6 +89,14 @@ scf::ResolvedFockBuild exact_exchange_strategy(bool restricted, scf::FockBackend
   return scf::resolve_fock_build(spec, backend, 1e-12);
 }
 
+scf::ResolvedFockBuild fitted_exchange_strategy(bool restricted, scf::FockBackend backend) {
+  auto spec = scf::make_global_hybrid_fock_spec(
+      restricted ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted, 0.25);
+  spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+  return scf::resolve_fock_build(spec, backend, 1e-12, 1e-10);
+}
+
 struct RshStrategies {
   scf::ResolvedFockBuild primary;
   scf::ResolvedFockBuild correction;
@@ -132,6 +140,19 @@ void prepared_cuda_fock_seam() {
   require(fitted_binding && fitted_binding.nbf == fitted.one_electron().nbf &&
               fitted_binding.stream != nullptr && fitted_binding.source_identity != nullptr,
           "prepared density-fitted CUDA J owner lacks the method-neutral execution binding");
+  require(!scf::prepared_cuda_occupied_fock_binding(fitted),
+          "J-only fitted owner exposed an occupied exchange binding");
+
+  auto fitted_hybrid_spec = spec;
+  fitted_hybrid_spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  fitted_hybrid_spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+  const auto fitted_hybrid_resolved =
+      scf::resolve_fock_build(fitted_hybrid_spec, scf::FockBackend::Cuda, 1e-12, 1e-10);
+  const scf::PreparedFockPlan fitted_hybrid(system, &system, fitted_hybrid_resolved, 0);
+  const auto fitted_hybrid_binding = scf::prepared_cuda_occupied_fock_binding(fitted_hybrid);
+  require(fitted_hybrid_binding && fitted_hybrid_binding.nbf == fitted_hybrid.one_electron().nbf &&
+              !fitted_hybrid_binding.unrestricted,
+          "full-range fitted J/K owner lacks the occupied-factor execution binding");
 
   auto mixed_spec = spec;
   mixed_spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
@@ -287,6 +308,52 @@ void run_exact_exchange_case(bool restricted) {
               std::abs(snapshot.components.exact_exchange -
                        result.dft_diagnostic.components.exact_exchange) < 1e-10,
           "CUDA exact-exchange final state lost the converged model or energy");
+}
+
+void run_density_fitted_exchange_case(bool restricted) {
+  const auto system = hydrogens(restricted ? 2U : 3U, restricted);
+  const dft::AoBasis basis(system);
+  const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
+  const dft::MolecularGrid grid(system, grid_spec);
+  const scf::PreparedFockPlan cpu(system, &system,
+                                  fitted_exchange_strategy(restricted, scf::FockBackend::Cpu));
+  const scf::PreparedFockPlan gpu(system, &system,
+                                  fitted_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.max_iterations = 200;
+
+  dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
+  const auto result = plan.run(nullptr, false);
+  require(result.converged && !plan.failed(), "CUDA density-fitted hybrid KS did not converge");
+  const auto reference = restricted ? scf::run_pbe_rks(cpu, basis, grid, options)
+                                    : scf::run_uks(cpu, basis, grid, options, true);
+  require(reference.converged && std::abs(reference.energy - result.energy) < 1e-10,
+          "CUDA density-fitted hybrid KS endpoint disagrees with CPU");
+  require(std::abs(result.dft_diagnostic.components.exact_exchange -
+                   reference.dft_diagnostic.components.exact_exchange) < 1e-10,
+          "CUDA density-fitted hybrid exchange component disagrees with CPU");
+  const auto movement = plan.transfers();
+  require(movement.fitted_dense_exchange_builds >= 1 &&
+              movement.fitted_dense_exchange_builds + movement.fitted_occupied_exchange_builds ==
+                  result.iterations,
+          "density-fitted hybrid K provenance does not cover every KS Fock build");
+  if (result.iterations > 1)
+    require(movement.fitted_occupied_exchange_builds > 0,
+            "density-fitted hybrid never reused the accepted canonical occupied factor");
+  physical_check(cpu, basis, grid, 1U, result);
+
+  dft::CudaKsFinalStateToken token;
+  std::string detail;
+  require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  dft::VerifiedKsFinalState snapshot;
+  require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  require(snapshot.identity.determinant.model == gpu.strategy() &&
+              std::abs(snapshot.components.total() - result.energy) < 1e-10,
+          "density-fitted hybrid final state lost its model or energy");
 }
 
 void run_range_exchange_case(bool restricted) {
@@ -1264,6 +1331,8 @@ int main() {
     rejected_api_requests_revoke_tokens();
     run_exact_exchange_case(true);
     run_exact_exchange_case(false);
+    run_density_fitted_exchange_case(true);
+    run_density_fitted_exchange_case(false);
     run_range_exchange_case(true);
     run_range_exchange_case(false);
     run_wb97mv_semilocal_rsh_case(true);
