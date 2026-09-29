@@ -411,6 +411,82 @@ void retained_direct_derivative_reuse() {
   matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
+
+void retained_range_shell_d_parity() {
+  for (const auto representation :
+       {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+    System system;
+    system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+    system.shells = {
+        {0, 0, {{0.8, 0.7}, {0.2, 0.3}}},
+        {0, 1, {{0.6, 1.0}}},
+        {0, 2, {{0.52, 0.8}, {0.17, 0.2}}},
+        {1, 0, {{0.75, 1.0}}},
+        {1, 1, {{0.4, 1.0}}},
+        {1, 2, {{0.47, 0.9}, {0.16, 0.1}}},
+    };
+    system.electron_count = 2;
+    system.basis_representation = representation;
+    std::string detail;
+    require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+
+    constexpr double omega = 0.4;
+    const auto strategy =
+        resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
+                           FockBackend::Cuda, 0.0);
+    const auto correction =
+        resolve_fock_build(make_rsh_correction_fock_spec(FockSpin::Restricted, 0.2, 0.5, omega),
+                           FockBackend::Cuda, 0.0);
+    std::size_t primitives = 0;
+    for (const auto& shell : system.shells) primitives += shell.primitives.size();
+    const auto budget =
+        cuda_direct_coulomb_device_bytes(1, generativeqc::molecule::ao_count(system),
+                                         system.atoms.size(), system.shells.size(), primitives, 1);
+    PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
+    const auto derivative = prepared_cuda_direct_derivative_binding(plan);
+    require(derivative, "d-shell Direct derivative owner was not retained");
+
+    const auto n = generativeqc::molecule::ao_count(system);
+    std::vector<double> density(n * n);
+    for (std::size_t i = 0; i < n; ++i)
+      for (std::size_t j = 0; j <= i; ++j) {
+        const double value =
+            (0.31 * std::cos(0.27 * static_cast<double>(i + 1) +
+                             0.19 * static_cast<double>(j + 1)) +
+             (i == j ? 0.7 : 0.0)) /
+            static_cast<double>(n);
+        density[i * n + j] = value;
+        density[j * n + i] = value;
+      }
+
+    std::vector<double> reference;
+    require(execute_prepared_cuda_direct_rsh_energy_derivatives(
+                plan, correction, density, {}, reference, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+
+    double* device_density = nullptr;
+    require(cudaSetDevice(derivative.device_id) == cudaSuccess, "CUDA device selection failed");
+    require(cudaMalloc(reinterpret_cast<void**>(&device_density), density.size() * sizeof(double)) ==
+                cudaSuccess,
+            "d-shell device density allocation failed");
+    require(cudaMemcpyAsync(device_density, density.data(), density.size() * sizeof(double),
+                            cudaMemcpyHostToDevice, derivative.stream) == cudaSuccess,
+            "d-shell device density upload failed");
+    std::vector<double> shell;
+    require(execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+                plan, correction, device_density, nullptr, density.size(), shell, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    require(cudaFree(device_density) == cudaSuccess, "d-shell device density free failed");
+    matrix(shell, reference,
+           representation == GENERATIVEQC_BASIS_SPHERICAL
+               ? "spherical d-shell shell-native RSH derivative"
+               : "Cartesian d-shell shell-native RSH derivative");
+  }
+}
+
 void independent_reference_export() {
   // Calling the prepared entry directly exercises the independent host driver
   // even for a standard fitted HF pair. Its exported physical frame must not
@@ -456,6 +532,7 @@ int main() {
     ragged_replay();
     prepared_replay();
     retained_direct_derivative_reuse();
+    retained_range_shell_d_parity();
     independent_reference_export();
     std::cout << "CUDA common Fock composition: exact/DF/absent pairs, signed gradients, batch "
                  "items, SCF/replay/geometry PASS\n";
