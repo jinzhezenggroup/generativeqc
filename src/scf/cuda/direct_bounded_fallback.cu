@@ -228,6 +228,16 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     batch, angular_order, &queue_count, queue + slot, screening_tolerance,
                     schwarz_bounds, density, active, output, coulomb_coefficient,
                     exchange_coefficient, subtile, lane);
+              } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Long) {
+                contract_bounded_direct_force_subtile_range_aot_scaled<
+                    Unrestricted, generativeqc::integrals::CoulombRange::Long, 300>(
+                    batch, angular_order, &queue_count, queue + slot, screening_tolerance,
+                    schwarz_bounds, density, active, output, exchange_coefficient, subtile, lane);
+              } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Short) {
+                contract_bounded_direct_force_subtile_range_aot_scaled<
+                    Unrestricted, generativeqc::integrals::CoulombRange::Short, 300>(
+                    batch, angular_order, &queue_count, queue + slot, screening_tolerance,
+                    schwarz_bounds, density, active, output, exchange_coefficient, subtile, lane);
               } else {
                 const auto range = radial_operator == DirectRangeOperator::Long
                                        ? generativeqc::integrals::CoulombRange::Long
