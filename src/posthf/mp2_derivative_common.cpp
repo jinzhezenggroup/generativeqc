@@ -8,7 +8,7 @@
 #include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
-#include "posthf/rank2_transform.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::mp2::detail {
 namespace {
@@ -29,6 +29,16 @@ std::vector<std::size_t> shell_offsets(const core::System& system) {
     offsets[shell + 1] = posthf::checked_add(offsets[shell], count);
   }
   return offsets;
+}
+
+std::vector<double> pullback_matrix(std::span<const double> coefficients,
+                                    std::span<const double> mo, std::size_t n) {
+  const auto n2 = square(n);
+  if (coefficients.size() != n2 || mo.size() != n2)
+    throw std::invalid_argument("rank-2 AO pullback shape mismatch");
+  std::vector<double> ao(n2), workspace(n2);
+  tensor::cpu_congruence('N', n, coefficients.data(), mo.data(), ao.data(), workspace.data());
+  return ao;
 }
 
 void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
@@ -100,8 +110,8 @@ std::vector<double> conventional_derivative(const core::System& system,
       !one_electron || !eri_shell)
     throw std::invalid_argument("conventional derivative reference/weight mismatch");
 
-  const auto one_ao = posthf::rank2_mo_to_ao(reference.coefficients, weights.one_electron, n);
-  const auto overlap_ao = posthf::rank2_mo_to_ao(reference.coefficients, weights.overlap, n);
+  const auto one_ao = pullback_matrix(reference.coefficients, weights.one_electron, n);
+  const auto overlap_ao = pullback_matrix(reference.coefficients, weights.overlap, n);
   auto derivative = one_electron(overlap_ao, one_ao);
   if (derivative.size() != posthf::checked_mul(system.atoms.size(), std::size_t{3}) ||
       !finite(derivative))

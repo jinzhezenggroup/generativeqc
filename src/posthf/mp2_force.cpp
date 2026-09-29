@@ -11,9 +11,9 @@
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
-#include "posthf/rank2_transform.hpp"
 #include "posthf/raw_source.hpp"
 #include "response/solve.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::mp2 {
 namespace {
@@ -27,9 +27,13 @@ std::vector<std::size_t> range(std::size_t begin, std::size_t end) {
 
 std::vector<double> hcore_mo(const hf::PhysicalReference& reference) {
   const auto n = reference.nbf;
-  if (reference.hcore.size() != square(n) || reference.coefficients.size() != square(n))
+  const auto n2 = square(n);
+  if (reference.hcore.size() != n2 || reference.coefficients.size() != n2)
     throw std::invalid_argument("MP2 force reference has inconsistent one-electron data");
-  return posthf::rank2_ao_to_mo(reference.coefficients, reference.hcore, n);
+  std::vector<double> result(n2), workspace(n2);
+  tensor::cpu_congruence('T', n, reference.coefficients.data(), reference.hcore.data(),
+                         result.data(), workspace.data());
+  return result;
 }
 
 EnergyAdjoint energy_adjoint(const hf::PhysicalReference& reference,

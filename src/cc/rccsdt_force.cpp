@@ -18,9 +18,9 @@
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
-#include "posthf/rank2_transform.hpp"
 #include "posthf/raw_source.hpp"
 #include "scf/types.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -176,12 +176,19 @@ RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalRef
                                std::size_t max_bytes) {
   const auto n = ref.nbf;
   const auto n2 = square(n), n4 = fourth(n);
-  const auto required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto retained_required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto transform_required = bytes(checked_mul(2, n2));
+  const auto required = std::max(retained_required, transform_required);
   if (required > max_bytes) throw std::length_error("RCCSD(T) raw Hamiltonian exceeds host budget");
   if (ref.coefficients.size() != n2 || ref.hcore.size() != n2)
     throw std::invalid_argument("RCCSD(T) reference one-electron shape mismatch");
   RawHamiltonian out;
-  out.h = posthf::rank2_ao_to_mo(ref.coefficients, ref.hcore, n);
+  out.h.assign(n2, 0.0);
+  {
+    std::vector<double> workspace(n2);
+    tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
+                           workspace.data());
+  }
   posthf::RawSource source(system);
   posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
   const auto all = range(n);
@@ -428,12 +435,10 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // in retained_input_bytes, so request only its additional buffers here.
   const auto provider = posthf::numeric_block_plan(n, 0, posthf::source_capacity(system),
                                                    {n, n, n, n}, {tile, tile, tile, tile}, false);
-  const auto raw_retained_and_provider =
-      sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
-           checked_mul(checked_mul(13, n), sizeof(std::size_t))});
-  const auto rank2_transform_peak =
-      sum({before_raw, bytes(n2), posthf::rank2_transform_workspace_bytes(n)});
-  plan.raw_phase_bytes = std::max(raw_retained_and_provider, rank2_transform_peak);
+  const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
+  const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
+                                   checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  plan.raw_phase_bytes = std::max(rank2_transform_phase, provider_phase);
   const auto raw_retained = bytes(sum({n4, checked_mul(3, n2)}));
   const auto response_retained = bytes(sum({n4, checked_mul(4, n2), ov}));
   const auto hamiltonian_arena = bytes(generated::hamiltonian_weights_arena_elements(o, v));
@@ -461,7 +466,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                     checked_mul(2, response_retained)});
   const auto coordinates = checked_mul(3, system.atoms.size());
   const auto derivative_staging =
-      bytes(sum({checked_mul(2, n2), checked_mul(shell, checked_mul(n, n2)),
+      bytes(sum({checked_mul(3, n2), checked_mul(shell, checked_mul(n, n2)),
                  checked_mul(square(shell), n2), checked_mul(checked_mul(shell, square(shell)), n),
                  fourth(shell), checked_mul(2, coordinates)}));
   plan.derivative_phase_bytes =

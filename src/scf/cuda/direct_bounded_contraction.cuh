@@ -159,13 +159,15 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_
 #undef GENERATIVEQC_BOUNDED_RANGE_AOT_FORCE_CASE
 }
 
-template <bool Unrestricted>
-__device__ inline __noinline__ void contract_bounded_direct_rsh_force_subtile(
+template <bool Unrestricted, int OmegaMilli>
+__device__ inline __noinline__ void contract_bounded_direct_rsh_force_subtile_impl(
     DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* source_forces,
     double coulomb_coefficient, double short_exchange_coefficient, double long_exchange_coefficient,
-    double omega, std::size_t subtile, unsigned lane) {
+    double runtime_omega, std::size_t subtile, unsigned lane) {
+  static_assert(OmegaMilli >= 0);
+  const double omega = OmegaMilli == 0 ? runtime_omega : static_cast<double>(OmegaMilli) / 1000.0;
 #define GENERATIVEQC_BOUNDED_RSH_FORCE_CASE(order)                                                 \
   case order:                                                                                      \
     contract_two_electron_force_quartet_subtile_rsh_scaled<Unrestricted, order>(                   \
@@ -191,6 +193,28 @@ __device__ inline __noinline__ void contract_bounded_direct_rsh_force_subtile(
       break;
   }
 #undef GENERATIVEQC_BOUNDED_RSH_FORCE_CASE
+}
+
+// Preserve the registered radial identity across the noinline angular dispatcher.
+// Nearby/custom values must keep their exact runtime omega, not be quantized.
+template <bool Unrestricted>
+__device__ __forceinline__ void contract_bounded_direct_rsh_force_subtile(
+    DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
+    const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
+    const double* density, const std::uint8_t* active, double* source_forces,
+    double coulomb_coefficient, double short_exchange_coefficient, double long_exchange_coefficient,
+    double omega, std::size_t subtile, unsigned lane) {
+  if (omega == 0.3) {
+    contract_bounded_direct_rsh_force_subtile_impl<Unrestricted, 300>(
+        batch, angular_order, queue_count, task, screening_tolerance, schwarz_bounds, density,
+        active, source_forces, coulomb_coefficient, short_exchange_coefficient,
+        long_exchange_coefficient, omega, subtile, lane);
+  } else {
+    contract_bounded_direct_rsh_force_subtile_impl<Unrestricted, 0>(
+        batch, angular_order, queue_count, task, screening_tolerance, schwarz_bounds, density,
+        active, source_forces, coulomb_coefficient, short_exchange_coefficient,
+        long_exchange_coefficient, omega, subtile, lane);
+  }
 }
 
 template <bool Unrestricted>
