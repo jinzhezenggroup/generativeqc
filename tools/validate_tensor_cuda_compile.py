@@ -111,11 +111,15 @@ def main() -> None:
     )
     rank2_gemms = [step for step in rank2_plan.steps if step.gemm != "none"]
     if len(rank2_gemms) != 2:
-        raise RuntimeError("rank-2 CUDA reassociation did not produce exactly two GEMMs")
+        raise RuntimeError(
+            "rank-2 CUDA reassociation did not produce exactly two GEMMs"
+        )
     rank2 = compile_cuda(rank2_plan, compiler, args.cache / "rank2-reassociated")
     rank2_source = (rank2.library.parent / "program.cu").read_text()
     if rank2_source.count("gemm(ctx,") != 2:
-        raise RuntimeError("rank-2 CUDA source does not contain exactly two GEMM launches")
+        raise RuntimeError(
+            "rank-2 CUDA source does not contain exactly two GEMM launches"
+        )
 
     reduction = _reduction_program()
     generated_reduction_plan = plan_cuda(
