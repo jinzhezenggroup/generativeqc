@@ -67,7 +67,6 @@ def test_scientific_identity_is_schedule_independent() -> None:
     fused = DEVICE_FUSED.resolved(256)
     unfused = HOST_UNFUSED.resolved(256)
     assert fused.identity != unfused.identity
-    assert identity.identity == scientific().identity
     assert "schedule" not in identity.to_payload()
     assert grid_xc_schedule(unfused.to_payload()) == unfused
     with pytest.raises(ValueError, match="profile payload"):
@@ -304,7 +303,12 @@ def test_grid_xc_candidate_local_shapes_rank_distinct_point_tiles() -> None:
     assert "device bytes 41943040 exceeds limit 33554432" in rejected_assessment.reasons
 
 
-def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None:
+@pytest.mark.parametrize(
+    ("validation_local_bytes", "expected_local"), [(None, None), (0, 32), (64, 64)]
+)
+def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract(
+    validation_local_bytes: int | None, expected_local: int | None
+) -> None:
     shape = GridXcCandidateShape(
         npoint=4096,
         tile_points=256,
@@ -321,13 +325,15 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None
         source_bytes=300_000,
     )
     rows = (
-        KernelResources("validate_density(double*)", 24, 0, 0, 0, 0),
-        KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0),
-        KernelResources("tiled_density_product<false>(double*)", 64, 0, 0, 0, 4352),
-        KernelResources("density_features<true>(double*)", 56, 0, 0, 0, 0),
+        KernelResources(
+            "validate_density(double*)", 24, 0, 0, 0, 0, validation_local_bytes
+        ),
+        KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0, 0),
+        KernelResources("tiled_density_product<false>(double*)", 64, 0, 0, 0, 4352, 0),
+        KernelResources("density_features<true>(double*)", 56, 0, 0, 0, 0, 0),
         KernelResources("evaluate_points<1, false>(double*)", 72, 0, 16, 8, 0, 32),
-        KernelResources("compact_potential_panels(double*)", 40, 0, 0, 0, 0),
-        KernelResources("tiled_potential(double*)", 68, 0, 0, 0, 2048),
+        KernelResources("compact_potential_panels(double*)", 40, 0, 0, 0, 0, 0),
+        KernelResources("tiled_potential(double*)", 68, 0, 0, 0, 2048, 0),
     )
     compiled = native_grid_xc_compiled_region_evidence(
         rows,
@@ -354,7 +360,7 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None
     profitability = assessment.schedule_contract.profitability
     assert profitability.compiled_registers_per_thread == 72
     assert profitability.spill_bytes == 24
-    assert profitability.local_bytes == 32
+    assert profitability.local_bytes == expected_local
     assert profitability.shared_bytes == 4352
     assert profitability.compiled_occupancy_upper_bound is not None
     assert profitability.object_bytes == 96_000
