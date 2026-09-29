@@ -390,18 +390,55 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rsh_
       direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
   if (unique_center_count <= 1U) return;
 
+  const bool want_full = source_coefficient[0] != 0.0 || source_coefficient[1] != 0.0;
+  const bool want_long = source_coefficient[1] != 0.0 || source_coefficient[2] != 0.0;
+  double explicit_unique_gradient[4][3]{};
+  if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
+    if (want_full) {
+      CartesianQuartetGradient explicit_gradient{};
+      if constexpr (AngularOrder == 2U) {
+        explicit_gradient = contracted_eri_cartesian_source_order2_generated_gradient(
+            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+      } else if constexpr (AngularOrder == 4U) {
+        explicit_gradient = contracted_eri_cartesian_source_order4_gradient(
+            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+      } else if constexpr (AngularOrder == 5U) {
+        explicit_gradient = contracted_eri_cartesian_source_order5_gradient(
+            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+      } else {
+        explicit_gradient = contracted_eri_cartesian_source_order6_gradient(
+            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+      }
+      for (unsigned shell_center = 0; shell_center < 4; ++shell_center) {
+        unsigned unique_center = 0;
+        while (unique_center_atoms[unique_center] != center_atoms[shell_center]) ++unique_center;
+        for (unsigned axis = 0; axis < 3; ++axis)
+          explicit_unique_gradient[unique_center][axis] +=
+              explicit_gradient.center[shell_center][axis];
+      }
+    }
+  }
+
   const std::size_t source_stride = static_cast<std::size_t>(batch.total_atoms) * 3U;
   double reconstructed[3][3]{};
   for (unsigned center = 0; center + 1U < unique_center_count; ++center) {
     const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[center]) * 3;
-    const bool want_full = source_coefficient[0] != 0.0 || source_coefficient[1] != 0.0;
-    const bool want_long = source_coefficient[1] != 0.0 || source_coefficient[2] != 0.0;
     Dual3 full{};
     Dual3 long_range{};
     if (want_full) {
-      full = dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
-          shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-          static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate);
+      if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
+        full.derivative_x = explicit_unique_gradient[center][0];
+        full.derivative_y = explicit_unique_gradient[center][1];
+        full.derivative_z = explicit_unique_gradient[center][2];
+      } else {
+        full = dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
+            shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate);
+      }
     }
     if (want_long) {
       long_range = dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
