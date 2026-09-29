@@ -389,6 +389,7 @@ class _ResidentNonlocalForceOwner:
     _CREATE = "generativeqc_internal_nonlocal_cuda_force_create_v1"
     _DESTROY = "generativeqc_internal_nonlocal_cuda_force_destroy_v1"
     _COLLECT = "generativeqc_internal_nonlocal_cuda_force_collect_v1"
+    _SEED_SNAPSHOT = "generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1"
     _EXECUTE = "generativeqc_internal_nonlocal_cuda_force_execute_v1"
     _SEED_VIEW = "generativeqc_internal_nonlocal_cuda_force_seed_view_v1"
     _RESET = "generativeqc_internal_nonlocal_cuda_force_reset_v1"
@@ -446,6 +447,7 @@ class _ResidentNonlocalForceOwner:
             self._CREATE,
             self._DESTROY,
             self._COLLECT,
+            self._SEED_SNAPSHOT,
             self._EXECUTE,
             self._SEED_VIEW,
             self._RESET,
@@ -492,6 +494,12 @@ class _ResidentNonlocalForceOwner:
             ctypes.c_void_p,
             ctypes.c_size_t,
         ]
+        getattr(library, self._SEED_SNAPSHOT).argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+        ]
         getattr(library, self._EXECUTE).argtypes = [ctypes.c_void_p]
         getattr(library, self._SEED_VIEW).argtypes = [
             ctypes.c_void_p,
@@ -509,6 +517,7 @@ class _ResidentNonlocalForceOwner:
         for name in (
             self._CREATE,
             self._COLLECT,
+            self._SEED_SNAPSHOT,
             self._EXECUTE,
             self._SEED_VIEW,
             self._RESET,
@@ -559,6 +568,28 @@ class _ResidentNonlocalForceOwner:
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
         self.close()
+
+    def seed_from_snapshot(self, snapshot: typing.Any, task: typing.Any) -> None:
+        """Seed full-grid rho/grad-rho D2D from the exact current CUDA KS owner."""
+        self._require_open()
+        batch = getattr(snapshot, "_batch", None)
+        handle = getattr(snapshot, "_handle", 0)
+        if batch is None or not handle or getattr(snapshot, "backend", None) != "cuda":
+            raise ValueError("resident nonlocal feature seed requires a live CUDA KS snapshot")
+        if int(snapshot.metadata[12]) != self.device_id:
+            raise ValueError("resident nonlocal/snapshot device mismatch")
+        if task._owner.device_id != self.device_id:
+            raise ValueError("resident nonlocal/grid current owner device mismatch")
+        _native.check(
+            self._library,
+            getattr(self._library, self._SEED_SNAPSHOT)(
+                batch._batch,
+                ctypes.c_void_p(handle),
+                self._owner,
+                ctypes.byref(task.view),
+            ),
+            context=self._context,
+        )
 
     def collect(self, task: typing.Any, offset: int) -> None:
         """Enqueue one ordered resident feature tile without a host fence."""
