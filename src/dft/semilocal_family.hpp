@@ -20,6 +20,7 @@ enum class SemilocalFamily : std::uint32_t {
   R2scan = 2,
   B3lyp = 3,
   Wb97mv = 4,
+  CamB3lyp = 5,
 };
 
 struct SemilocalFamilyMetadata {
@@ -38,7 +39,7 @@ struct SemilocalFamilyMetadata {
   bool component_coefficients_are_native_scales;
 };
 
-inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata{{
+inline constexpr std::array<SemilocalFamilyMetadata, 6> kSemilocalFamilyMetadata{{
     {SemilocalFamily::Lda,
      "LDA",
      "semilocal-scaled-v1/pbe-spin-c2-1e-18",
@@ -104,6 +105,19 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      2U,
      0.3,
      false},
+    {SemilocalFamily::CamB3lyp,
+     "CAM-B3LYP",
+     "libxc-7.0.0/rsh-interior-v1",
+     5U,
+     false,
+     true,
+     false,
+     false,
+     {"GGA_X_B88", "GGA_X_ITYH", "LDA_C_VWN", "GGA_C_LYP"},
+     {0.35, 0.46, 0.19, 0.81},
+     4U,
+     0.33,
+     false},
 }};
 
 constexpr std::uint32_t semilocal_family_code(SemilocalFamily family) noexcept {
@@ -156,7 +170,7 @@ inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {
 }
 
 static_assert(semilocal_family_code(SemilocalFamily::Lda) == 0U);
-static_assert(semilocal_family_code(SemilocalFamily::Wb97mv) + 1U ==
+static_assert(semilocal_family_code(SemilocalFamily::CamB3lyp) + 1U ==
               kSemilocalFamilyMetadata.size());
 
 }  // namespace generativeqc::dft
