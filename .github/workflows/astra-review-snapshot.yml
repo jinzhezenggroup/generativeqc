@@ -1,0 +1,66 @@
+name: Astra review source snapshot
+on:
+  push:
+    branches: [review/astra-snapshot-20260929]
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+  checks: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture repository source and review evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/review-snapshot
+          python3 - <<'PY'
+          import concurrent.futures, json, pathlib, subprocess
+          root = pathlib.Path('/tmp/review-snapshot')
+          repo = 'jinzhezenggroup/generativeqc'
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+          prs = []
+          for page in range(1, 20):
+              batch = api(f'repos/{repo}/pulls?state=open&per_page=100&page={page}')
+              prs.extend(batch)
+              if len(batch) < 100:
+                  break
+          else:
+              raise RuntimeError('PR pagination not exhausted')
+          (root / 'open-prs.json').write_text(json.dumps(prs, indent=2))
+          refs = [f'+refs/pull/{int(pr["number"])}/head:refs/remotes/review-pr/{int(pr["number"])}' for pr in prs]
+          subprocess.run(['git', 'fetch', '--no-tags', 'origin', '+refs/heads/master:refs/remotes/origin/master', *refs], check=True)
+          def capture(pr):
+              number = int(pr['number'])
+              target = root / str(number)
+              target.mkdir()
+              detail = api(f'repos/{repo}/pulls/{number}')
+              sha = detail['head']['sha']
+              data = {
+                  'pr': detail,
+                  'checks': api(f'repos/{repo}/commits/{sha}/check-runs?per_page=100'),
+                  'status': api(f'repos/{repo}/commits/{sha}/status?per_page=100'),
+                  'reviews': api(f'repos/{repo}/pulls/{number}/reviews?per_page=100'),
+                  'inline_comments': api(f'repos/{repo}/pulls/{number}/comments?per_page=100'),
+                  'comments': api(f'repos/{repo}/issues/{number}/comments?per_page=100'),
+              }
+              (target / 'evidence.json').write_text(json.dumps(data, indent=2))
+              print(number, sha, detail['title'])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+              list(pool.map(capture, prs))
+          subprocess.run(['git', 'bundle', 'create', str(root / 'repository.bundle'), '--all'], check=True)
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: astra-review-source-${{ github.run_id }}
+          path: /tmp/review-snapshot/
+          retention-days: 3
+          if-no-files-found: error
