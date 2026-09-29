@@ -30,12 +30,23 @@ Vv10ResourceUsage resource_usage(generativeqc_backend backend, std::uint32_t poi
   const auto host =
       checked_array_bytes(point_count, backend == GENERATIVEQC_BACKEND_CUDA ? 7u : 12u);
   std::uint64_t device = 0;
+#if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
-    device = checked_array_bytes(point_count, 21u);
+    // Full transactional CUDA execution retains fourteen I/O arrays plus the
+    // exact resident pair workspace. Keep this accounting derived from the
+    // same layout function so active-partner compaction cannot drift from
+    // maximum_bytes admission.
+    device = checked_array_bytes(point_count, 14u);
+    const auto resident = static_cast<std::uint64_t>(
+        vv10_cuda_device_layout(point_count, tile_points, true, true).workspace_bytes);
+    if (resident > std::numeric_limits<std::uint64_t>::max() - device)
+      throw std::overflow_error("VV10 CUDA resident workspace extent overflow");
+    device += resident;
     if (device > std::numeric_limits<std::uint64_t>::max() - sizeof(double))
       throw std::overflow_error("VV10 CUDA failure-flag extent overflow");
     device += sizeof(double);
   }
+#endif
   if (host > std::numeric_limits<std::uint64_t>::max() - device)
     throw std::overflow_error("VV10 total workspace extent overflow");
   const auto workspace = host + device;

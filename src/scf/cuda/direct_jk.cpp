@@ -428,7 +428,8 @@ int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept {
 static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, bool mixed_j, std::string& detail) {
+    int* numerical_error, bool mixed_j, std::uint64_t* mixed_coulomb_work_count,
+    std::string& detail) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
     spec = direct_jk_strategy(plan, spec, 0, plan->diagnostic.batch_size);
@@ -455,6 +456,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     pointer(density);
     pointer(numerical_error);
     if (unrestricted) pointer(beta);
+    if (mixed_coulomb_work_count) {
+      pointer(mixed_coulomb_work_count);
+      direct_jk_require(
+          reinterpret_cast<std::uintptr_t>(mixed_coulomb_work_count) % alignof(std::uint64_t) == 0,
+          "device direct J/K mixed-work counter is misaligned");
+    }
     const auto bytes = direct_jk_product(elements, sizeof(double));
     const auto disjoint = [&](const void* a, std::size_t na, const void* b, std::size_t nb) {
       if (!a || !b) return;
@@ -466,15 +473,23 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     };
     const double* inputs[]{density, beta};
     double* outputs[]{coulomb, alpha_exchange, beta_exchange};
-    for (const auto* input : inputs) disjoint(input, bytes, numerical_error, sizeof(int));
+    for (const auto* input : inputs) {
+      disjoint(input, bytes, numerical_error, sizeof(int));
+      disjoint(input, bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
+    }
+    disjoint(numerical_error, sizeof(int), mixed_coulomb_work_count, sizeof(std::uint64_t));
     for (unsigned i = 0; i < 3; ++i) {
       if (!outputs[i]) continue;
       pointer(outputs[i]);
       for (const auto* input : inputs) disjoint(input, bytes, outputs[i], bytes);
       disjoint(outputs[i], bytes, numerical_error, sizeof(int));
+      disjoint(outputs[i], bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
       for (unsigned j = 0; j < i; ++j) disjoint(outputs[i], bytes, outputs[j], bytes);
     }
     direct_jk_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), plan->stream));
+    if (mixed_coulomb_work_count)
+      direct_jk_check(
+          cudaMemsetAsync(mixed_coulomb_work_count, 0, sizeof(std::uint64_t), plan->stream));
     for (const auto* input : inputs)
       if (input) {
         launch_independent_jk_finite_kernel(plan->stream, input, elements, numerical_error);
@@ -503,7 +518,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
             dispatch.generic_coulomb, dispatch.generic_exchange, unrestricted, mixed_j,
             direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0,
             plan->screening_tolerance, plan->bounds, density, beta, coulomb, alpha_exchange,
-            beta_exchange);
+            beta_exchange, mixed_coulomb_work_count);
         direct_jk_check(cudaGetLastError());
       }
       for (const auto* output : outputs)
@@ -522,16 +537,16 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                                   int* numerical_error, std::string& detail) {
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, false,
-                                            detail);
+                                            nullptr, detail);
 }
 
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail) {
+    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count) {
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, true,
-                                            detail);
+                                            mixed_coulomb_work_count, detail);
 }
 
 static generativeqc_status execute_cuda_direct_jk_range(
@@ -554,7 +569,7 @@ static generativeqc_status execute_cuda_direct_jk_range(
           plan->batch, begin, spec.coulomb.present, spec.exchange.present, unrestricted, false,
           direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0,
           plan->screening_tolerance, plan->bounds, plan->density, plan->beta, plan->coulomb,
-          plan->alpha_exchange, plan->beta_exchange);
+          plan->alpha_exchange, plan->beta_exchange, nullptr);
       direct_jk_check(cudaGetLastError());
       auto download = [&](std::vector<double>& out, const double* input) {
         if (!out.empty())

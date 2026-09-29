@@ -465,6 +465,33 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
     dft::CudaKsFinalStateToken token;
     std::string detail;
     require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    const auto before_features = plan.transfers();
+    dft::CudaKsResidentNonlocalFeaturesBinding features;
+    const auto feature_status = plan.resident_final_nonlocal_features(token, features, detail);
+    if (schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
+      require(feature_status == GENERATIVEQC_STATUS_SUCCESS, detail);
+      require(features && features.device_id == token.identity.model.device &&
+                  features.point_count == grid.point_count() &&
+                  features.owner == token.identity.model.owner &&
+                  features.solve_epoch == token.identity.determinant.solve_epoch &&
+                  features.generation == token.identity.determinant.factor.density_generation,
+              "resident WB97M-V features lost final-state identity or grid shape");
+      auto stale = token;
+      ++stale.identity.determinant.factor.density_generation;
+      dft::CudaKsResidentNonlocalFeaturesBinding rejected;
+      require(plan.resident_final_nonlocal_features(stale, rejected, detail) ==
+                      GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                  !rejected,
+              "stale WB97M-V token borrowed resident nonlocal features");
+    } else {
+      require(feature_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && !features,
+              "host-unfused WB97M-V unexpectedly exposed resident nonlocal features");
+    }
+    const auto after_features = plan.transfers();
+    require(after_features.final_state_d2h_bytes == before_features.final_state_d2h_bytes &&
+                after_features.final_state_reads == before_features.final_state_reads &&
+                after_features.synchronizations == before_features.synchronizations,
+            "resident WB97M-V feature binding transferred or synchronized");
     dft::VerifiedKsFinalState snapshot;
     require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail);

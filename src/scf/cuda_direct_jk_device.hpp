@@ -2,6 +2,8 @@
 
 #include <cuda_runtime_api.h>
 
+#include <cstdint>
+
 #include "scf/cuda_direct_jk.hpp"
 
 namespace generativeqc::scf {
@@ -38,10 +40,12 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
 
 /** Experimental value-only variant: evaluate Coulomb ERI recurrences in FP32
  * while retaining FP64 density reads, screening, accumulation and output.
- * Exchange remains FP64. The caller must perform a strict FP64 target audit
- * before publishing a converged state. */
+ * Exchange remains FP64. The optional caller-owned device counter is cleared
+ * on the provider stream and counts only AO-ERI values actually evaluated by
+ * the mixed recurrence after screening and zero-density rejection. The caller
+ * must perform a strict FP64 target audit before publishing a converged state. */
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail);
+    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count = nullptr);
 }  // namespace generativeqc::scf

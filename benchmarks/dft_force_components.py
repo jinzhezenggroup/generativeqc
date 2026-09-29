@@ -28,6 +28,13 @@ COMPONENTS = (
     "final_reduction_assembly",
 )
 
+WORK_STAGES = ("generated", "screened", "compacted", "executed")
+WORK_COUNT_POLICY = (
+    "only counters with an attributable runtime meaning are promoted into "
+    "generated/screened/compacted/executed; logical/capacity bounds remain under "
+    "capacity, and unavailable stages are left empty rather than inferred"
+)
+
 
 def _finite_nonnegative(value: typing.Any, *, field: str) -> float | None:
     if value is None:
@@ -66,6 +73,94 @@ def _int_or_none(value: typing.Any) -> int | None:
     if result < 0:
         raise ValueError("work counter must be nonnegative")
     return result
+
+
+def _empty_work_counts() -> dict[str, dict[str, int]]:
+    return {name: {} for name in (*WORK_STAGES, "capacity", "observed")}
+
+
+def _store_counter(target: dict[str, int], key: str, value: typing.Any) -> None:
+    measured = _int_or_none(value)
+    if measured is not None:
+        target[key] = measured
+
+
+def _stationary_work_counts(
+    work: Mapping[str, typing.Any],
+) -> dict[str, dict[str, int]]:
+    counts = _empty_work_counts()
+    executor = _mapping(work.get("stationary_task_executor"))
+    sources = executor.get("sources")
+    if isinstance(sources, Sequence) and not isinstance(
+        sources, (str, bytes, bytearray)
+    ):
+        for source_record in sources:
+            if not isinstance(source_record, Mapping):
+                continue
+            source = str(source_record.get("source", "unknown"))
+            rank = source_record.get("rank")
+            unit = "pairs" if rank == 2 else "quartets" if rank == 4 else "tuples"
+            _store_counter(
+                counts["generated"],
+                f"{source}_public_ao_{unit}",
+                source_record.get("logical_tasks"),
+            )
+    _store_counter(
+        counts["generated"],
+        "primitive_records",
+        executor.get("logical_primitive_records"),
+    )
+    for key in (
+        "fixed_capacity",
+        "resident_capacity",
+        "page_capacity",
+        "primitive_record_page_budget",
+    ):
+        _store_counter(counts["capacity"], key, executor.get(key))
+    for key in ("ordered_quartets", "exchange_ordered_quartets"):
+        _store_counter(counts["capacity"], key, work.get(key))
+    for output_key, source_key in (
+        ("semilocal_geometry_points", "xc_points"),
+        ("partition_grid_pair_visits", "grid_pair_visits"),
+    ):
+        _store_counter(counts["executed"], output_key, work.get(source_key))
+    for output_key, source_key in (
+        ("native_primitive_records", "primitive_records"),
+        ("native_task_descriptors", "task_descriptors"),
+        ("native_task_batches", "task_batches"),
+        ("native_launches", "launches"),
+        ("primitive_pages", "primitive_pages"),
+        ("bulk_pack_chunks", "bulk_pack_chunks"),
+        ("bulk_packed_descriptors", "bulk_packed_descriptors"),
+        ("scalar_packed_descriptors", "scalar_packed_descriptors"),
+        ("geometry_batches", "geometry_batches"),
+    ):
+        _store_counter(counts["observed"], output_key, work.get(source_key))
+    return counts
+
+
+def _wb97mv_work_counts(
+    work: Mapping[str, typing.Any],
+) -> dict[str, dict[str, int]]:
+    counts = _empty_work_counts()
+    for key in (
+        "symmetry_unique_quartets_per_integral_source",
+        "maximum_center_dual3_evaluations_total",
+        "nonlocal_dense_pair_capacity",
+    ):
+        _store_counter(counts["capacity"], key, work.get(key))
+    for output_key, source_key in (
+        ("two_electron_quartet_traversals", "two_electron_quartet_traversals"),
+        (
+            "range_recurrences_per_participating_center",
+            "range_recurrences_per_participating_center",
+        ),
+        ("partition_pair_visits_scheduled", "partition_pair_visits"),
+        ("ao_collocation_point_visits_scheduled", "ao_collocation_point_visits"),
+        ("nonlocal_geometry_point_visits_scheduled", "geometry_point_visits"),
+    ):
+        _store_counter(counts["observed"], output_key, work.get(source_key))
+    return counts
 
 
 def _first_present(*values: typing.Any) -> typing.Any:
@@ -197,6 +292,20 @@ def _normalize_wb97mv(
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": _wb97mv_work_counts(work),
+        "work_count_policy": WORK_COUNT_POLICY,
+        "work_count_notes": {
+            "stationary_integral_derivatives": (
+                "public-AO quartet quantities are capacity bounds; native screening "
+                "happens inside the derivative kernel and no post-screen quartet count "
+                "is currently exposed"
+            ),
+            "vv10_rvv10": (
+                work.get("nonlocal_active_count_scope")
+                or "dense pair capacity is not promoted to executed pair work"
+            ),
+        },
         "source_component_seconds": dict(component),
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
@@ -322,6 +431,15 @@ def _normalize_stationary(
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": _stationary_work_counts(work),
+        "work_count_policy": WORK_COUNT_POLICY,
+        "work_count_notes": {
+            "stationary_integral_derivatives": (
+                "generated public-AO task domains and native submission counters are "
+                "not post-screen integral execution counts"
+            ),
+        },
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
         "unattributed_wall_seconds": _unattributed(endpoint, attributed),

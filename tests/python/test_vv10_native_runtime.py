@@ -183,7 +183,11 @@ def test_native_cuda_matches_cpu_on_real_device_when_available(
         cuda.weight_derivative, cpu.weight_derivative, rtol=5e-13, atol=5e-15
     )
     assert diagnostic.host_workspace_bytes == 7 * len(density) * 8
-    assert diagnostic.device_workspace_bytes == (21 * len(density) + 1) * 8
+    partner_blocks = (len(density) + 127) // 128
+    assert (
+        diagnostic.device_workspace_bytes
+        == (22 * len(density) + partner_blocks + 2) * 8
+    )
     assert diagnostic.workspace_bytes == (
         diagnostic.host_workspace_bytes + diagnostic.device_workspace_bytes
     )

@@ -79,6 +79,24 @@ struct CudaKsResidentDensityBinding {
   }
 };
 
+/** Borrowed full-grid total rho/grad-rho retained by the device-fused
+ * nonlocal KS owner for its successful final generation. These arrays are
+ * read-only inputs for downstream resident nonlocal force composition; the
+ * owner keeps allocation/lifetime responsibility and invalidates the lease
+ * with the same exact final-state token as resident D. */
+struct CudaKsResidentNonlocalFeaturesBinding {
+  int device_id{-1};
+  const double* density{};
+  const double* gradient{};
+  std::size_t point_count{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && density != nullptr && gradient != nullptr && point_count != 0 &&
+           owner != 0 && solve_epoch != 0 && generation != 0;
+  }
+};
+
 /** Native ordinary-stream LDA/PBE RKS/UKS trajectory. The borrowed common
  * Fock plan must outlive it. Model/grid/functional identity is immutable;
  * changing it requires a new owner. Symmetric overlap and core initial density
@@ -139,6 +157,12 @@ class CudaKsPlan {
   generativeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
                                              CudaKsResidentDensityBinding& binding,
                                              std::string& detail) const;
+  /** Borrow final total rho/grad-rho already produced by device-fused
+   * nonlocal XC. The binding is available only for the exact current token
+   * and performs no transfer, synchronization or numerical launch. */
+  generativeqc_status resident_final_nonlocal_features(
+      const CudaKsFinalStateToken& expected, CudaKsResidentNonlocalFeaturesBinding& binding,
+      std::string& detail) const;
   /** Export a detached, strictly validated current physical state. Exact-token
    * comparison
    * precedes transfer; eligibility is rechecked before publication.
