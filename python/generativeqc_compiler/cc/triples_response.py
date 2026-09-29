@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 import numpy as np
+
 from generativeqc_compiler.tensor import execute, optimize, transpose_program
 
 from .triples import _check_denominators, _validate, build_triples_program
