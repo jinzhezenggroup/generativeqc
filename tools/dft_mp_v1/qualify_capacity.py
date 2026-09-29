@@ -49,9 +49,10 @@ class _DftMpSourceOnlyFinder:
         path: Sequence[str] | None = None,
         target: ModuleType | None = None,
     ) -> ModuleSpec | None:
-        if fullname not in ("generativeqc", "generativeqc_compiler") and not fullname.startswith(
-            ("generativeqc.", "generativeqc_compiler.")
-        ):
+        if fullname not in (
+            "generativeqc",
+            "generativeqc_compiler",
+        ) and not fullname.startswith(("generativeqc.", "generativeqc_compiler.")):
             return None
         spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
         if spec is None or spec.origin is None or not spec.origin.endswith(".py"):
@@ -548,7 +549,9 @@ def _cpp_block_sha256(source: str, marker: str) -> str:
 def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     """Bind native snapshot selector provenance consumed by stationary CUDA."""
 
-    source = (repository / "python/generativeqc/_ks_snapshot.py").read_text(encoding="utf-8")
+    source = (repository / "python/generativeqc/_ks_snapshot.py").read_text(
+        encoding="utf-8"
+    )
     tree = ast.parse(source)
     owners = [
         node
@@ -1136,7 +1139,9 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
 
     bridge_source = (repository / "src/dft/bridge.cpp").read_text(encoding="utf-8")
     try:
-        bridge_begin = bridge_source.index("GENERATIVEQC_API int generativeqc_grid_basis_create_v1")
+        bridge_begin = bridge_source.index(
+            "GENERATIVEQC_API int generativeqc_grid_basis_create_v1"
+        )
         bridge_end = bridge_source.index(
             "GENERATIVEQC_API int generativeqc_grid_ao_v1", bridge_begin
         )
@@ -1155,9 +1160,9 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     if ao_count_digest != NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256:
         raise RuntimeError("native spherical AO count contract changed")
 
-    stationary_source = (repository / "python/generativeqc/_stationary_cuda.py").read_text(
-        encoding="utf-8"
-    )
+    stationary_source = (
+        repository / "python/generativeqc/_stationary_cuda.py"
+    ).read_text(encoding="utf-8")
     stationary_tree = ast.parse(stationary_source)
     layouts = [
         node
@@ -1452,7 +1457,9 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     contract_digest = _source_span_sha256(
         cmake,
         begin=("    # Component-expanded s/p/d derivatives are shared compiler output"),
-        end=("  if(GENERATIVEQC_PYTHON_WHEEL)\n    generativeqc_attach_cuda_implib(${target})"),
+        end=(
+            "  if(GENERATIVEQC_PYTHON_WHEEL)\n    generativeqc_attach_cuda_implib(${target})"
+        ),
         label="stationary packaged-AOT CMake",
     )
     if contract_digest != STATIONARY_AOT_CMAKE_CONTRACT_SHA256:

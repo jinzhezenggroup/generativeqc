@@ -833,7 +833,9 @@ def test_report_rejects_symlinked_aot_directory_ancestor(tmp_path: Path) -> None
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     whole_force_gate = (
         "    if records > max_primitive_records:\n"
         '        raise ValueError("primitive work budget exceeded")\n'
@@ -852,7 +854,9 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
 def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "if np.any(primitive_work > self.page_work_budget):"
     assert old in source
     stationary_contract_tree(
@@ -867,7 +871,9 @@ def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
 def test_primitive_budget_scope_fails_closed_when_component_work_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "primitive_work *= int(row[2])"
     assert old in source
     stationary_contract_tree(
@@ -881,7 +887,9 @@ def test_primitive_budget_scope_fails_closed_when_component_work_moves(
 def test_primitive_page_gate_order_fails_closed_when_execution_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     original = (
         "            execution = task_executor.execute_pages(domain, submit_page)"
     )
@@ -902,7 +910,9 @@ def test_primitive_page_gate_order_fails_closed_when_execution_moves(
 def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "sources.integral_page("
     assert source.count(old) == 2
     stationary_contract_tree(tmp_path, source.replace(old, "sources.integral(", 1))
@@ -914,7 +924,9 @@ def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
 def test_primitive_page_gate_fails_closed_when_budget_initialization_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "self.page_work_budget = int(page_work_budget)"
     assert old in source
     stationary_contract_tree(
@@ -929,7 +941,9 @@ def test_primitive_page_gate_fails_closed_when_budget_initialization_moves(
 def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -947,7 +961,9 @@ def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
 def test_nuclear_pair_work_fails_closed_when_python_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = '        self.flush()\n        kind = self.kinds["nuclear", ()]'
     assert old in source
     stationary_contract_tree(
@@ -962,7 +978,9 @@ def test_nuclear_pair_work_fails_closed_when_python_consumer_moves(
 def test_nuclear_pair_work_fails_closed_when_endpoint_loop_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "            for other in range(atom):\n                sources.nuclear("
     assert old in source
     stationary_contract_tree(
@@ -981,7 +999,9 @@ def test_nuclear_pair_work_fails_closed_when_endpoint_loop_moves(
 def test_nuclear_pair_work_fails_closed_when_native_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -999,7 +1019,9 @@ def test_nuclear_pair_work_fails_closed_when_native_consumer_moves(
 def test_primitive_work_fails_closed_when_endpoint_enumeration_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = '("coulomb", 4, "four_center_eri")'
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1014,7 +1036,9 @@ def test_primitive_work_fails_closed_when_endpoint_enumeration_moves(
 def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "for begin in range(0, len(grid.points), tile_points):"
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1033,7 +1057,9 @@ def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
 def test_grid_pair_work_fails_closed_when_python_geometry_route_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = 'else "stationary_geometry_enqueue"'
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1048,7 +1074,9 @@ def test_grid_pair_work_fails_closed_when_python_geometry_route_moves(
 def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -1072,7 +1100,9 @@ def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
 def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -1089,7 +1119,9 @@ def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -1107,7 +1139,9 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
 def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "(1 + int(has_exchange)) * primitive_sum**4"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "primitive_sum**3", 1))
@@ -1119,7 +1153,9 @@ def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
 def test_limit_defaults_fail_closed_when_public_forwarding_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = '"max_grid_points": max_grid_points,'
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1134,7 +1170,9 @@ def test_limit_defaults_fail_closed_when_public_forwarding_moves(
 def test_memory_bounds_fail_closed_when_production_definition_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "22 * primitive_tile"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "23 * primitive_tile", 1))
@@ -1200,7 +1238,9 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
 def test_grid_memory_fails_closed_when_production_plan_inputs_move(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "order=2 if needs_first else 1"
     first = source.index(old)
     production = source.index(old, first + len(old))
@@ -1216,7 +1256,9 @@ def test_grid_memory_fails_closed_when_production_plan_inputs_move(
 def test_grid_memory_fails_closed_when_functional_lowering_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "functional = int(state._source.metadata[6])"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "functional = 0", 1))
@@ -1241,7 +1283,9 @@ def test_public_selector_contract_rejects_changed_functional_lowering(
 
 
 def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     old = "if host_bound > max_host_bytes:"
     assert old in source
     stationary_contract_tree(
@@ -1255,7 +1299,9 @@ def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
 def test_admission_gate_order_fails_closed_when_leading_gates_move(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     small = (
         "    if not 1 <= na <= 32 or not 1 <= n <= 128:\n"
         '        raise ValueError("CUDA diagnostic small-domain atom/AO cap exceeded")\n'
@@ -1276,7 +1322,9 @@ def test_admission_gate_order_fails_closed_when_leading_gates_move(
 def test_admission_gate_order_fails_closed_when_memory_gates_move(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
     device = (
         "    if available <= 0:\n"
         '        raise ValueError("stationary additional-device budget exceeded")\n'
@@ -1314,7 +1362,9 @@ def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/generativeqc_compiler/dft/ao.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc_compiler/dft/ao.py").read_text(
+        encoding="utf-8"
+    )
     old = "2 * self.packed.nbytes"
     assert old in source
     target = tmp_path / "python/generativeqc_compiler/dft/ao.py"
@@ -1659,7 +1709,9 @@ def test_report_requires_a_fresh_interpreter_after_qualifier_source_moves(
 def test_report_rejects_transitive_imported_module_source_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    path, _ = qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES["generativeqc_compiler.dft.ao"]
+    path, _ = qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES[
+        "generativeqc_compiler.dft.ao"
+    ]
     monkeypatch.setitem(
         qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES,
         "generativeqc_compiler.dft.ao",
