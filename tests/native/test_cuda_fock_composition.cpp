@@ -370,6 +370,37 @@ void retained_direct_derivative_reuse() {
     require(cudaSetDevice(alternate_device) == cudaSuccess,
             "alternate CUDA device selection failed");
   }
+  std::vector<double> shell_full_range;
+  require(execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+              plan, device_density, nullptr, density.size(), shell_full_range, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  require(shell_full_range.size() == 2 * derivative.coordinates_per_item,
+          "prepared shell full-range derivative returned the wrong shape");
+
+  auto j_spec = strategy.spec;
+  j_spec.derivative_order = 1;
+  j_spec.exchange.present = false;
+  std::vector<double> expected_j;
+  require(execute_cuda_direct_energy_derivative(plan.cuda_direct_source(), j_spec, density, {},
+                                                expected_j, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  auto k_spec = strategy.spec;
+  k_spec.derivative_order = 1;
+  k_spec.coulomb.present = false;
+  std::vector<double> expected_k;
+  require(execute_cuda_direct_energy_derivative(plan.cuda_direct_source(), k_spec, density, {},
+                                                expected_k, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  matrix(std::vector<double>(shell_full_range.begin(),
+                             shell_full_range.begin() + derivative.coordinates_per_item),
+         expected_j, "prepared shell J derivative");
+  matrix(std::vector<double>(shell_full_range.begin() + derivative.coordinates_per_item,
+                             shell_full_range.end()),
+         expected_k, "prepared shell K derivative");
+
   std::vector<double> resident_response;
   require(execute_prepared_cuda_direct_rsh_energy_derivatives_device(
               plan, correction, device_density, nullptr, density.size(), resident_response,
