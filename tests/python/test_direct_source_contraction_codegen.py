@@ -22,6 +22,15 @@ def test_direct_source_contraction_is_compiler_owned() -> None:
     assert "direct_native_source_contraction.cuh" not in source
 
 
+def test_cartesian_source_contraction_accepts_runtime_radial_identity() -> None:
+    source = emit_direct_source_contraction_header()
+    assert "generativeqc::integrals::CoulombRange range" in source
+    assert "double omega = 0.0" in source
+    assert "primitive_eri_cartesian<MaximumAngular>" in source
+    assert "angular_fourth, range, omega" in source
+    assert "range == generativeqc::integrals::CoulombRange::Full" in source
+
+
 def test_native_source_contraction_owner_is_retired() -> None:
     native = ROOT / "src/scf/cuda/direct_native_source_contraction.cuh"
     assert not native.exists()

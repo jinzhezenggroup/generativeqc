@@ -385,14 +385,23 @@ class PreparedWb97mvCudaGradient:
             "grid_points": npnt,
             **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
-            "symmetry_unique_quartets_per_integral_source": (
-                (n * (n + 1) // 2) * (n * (n + 1) // 2 + 1) // 2
+            # The native v1 result does not identify whether optional shell
+            # capability or its public-AO fallback executed. Do not infer work
+            # from the method name or turn unavailable evidence into zero.
+            "symmetry_unique_quartets_per_integral_source": None,
+            "two_electron_quartet_traversals": None,
+            "maximum_center_dual3_evaluations_total": None,
+            "two_electron_shell_traversals": None,
+            "two_electron_radial_operators": [
+                "full-range",
+                "short-range",
+                "long-range",
+            ],
+            "range_recurrences_per_participating_center": None,
+            "two_electron_work_scope": (
+                "unavailable: native execution route is not exported; screened shell "
+                "scheduler and public-AO capability fallback are both supported"
             ),
-            "two_electron_quartet_traversals": 1,
-            "maximum_center_dual3_evaluations_total": (
-                6 * (n * (n + 1) // 2) * (n * (n + 1) // 2 + 1) // 2
-            ),
-            "range_recurrences_per_participating_center": 2,
             "additional_device_peak_bound": device_bound,
             "additional_host_numeric_bound": host_bound,
             "native_integral_resources": dict(

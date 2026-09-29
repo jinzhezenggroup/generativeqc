@@ -264,12 +264,13 @@ __device__ inline Scalar contracted_eri_order(
   const std::int32_t shell_k = batch.ao_shells[ao_k];
   const std::int32_t shell_l = batch.ao_shells[ao_l];
   if (range != generativeqc::integrals::CoulombRange::Full) {
-    if constexpr (std::is_same_v<Scalar, double>)
-      return contracted_eri_cartesian<MaximumAngular, Scalar>(batch, ao_i, ao_j, ao_k, ao_l,
-                                                              shell_i, shell_j, shell_k, shell_l,
-                                                              derivative_coordinate, range, omega);
-    else
+    if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
       return scalar<Scalar>(NAN);
+    } else {
+      return contracted_eri_cartesian<MaximumAngular, Scalar>(
+          batch, ao_i, ao_j, ao_k, ao_l, shell_i, shell_j, shell_k, shell_l,
+          derivative_coordinate, range, omega);
+    }
   }
   if constexpr (MaximumAngular == 0) {
     const Vec3<Scalar> first =
