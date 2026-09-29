@@ -52,8 +52,15 @@ recurrence count.
 
 The CUDA Fock provider test covers the exact unscreened recurrence count,
 screened and zero-density zero counts, replay clearing, numerical identity, and
-alias/alignment rejection. CUDA compilation and device execution remain required
-qualification gates for the implementing change.
+alias/alignment rejection. On exact head `43b34f21b3b151b27f8c70febeff9b4c196f952d`,
+the complete provider target built with CUDA 12.9.86 for `sm_90`, and the focused
+`--mixed-census-only` gate passed on an NVIDIA H100 80GB HBM3 (driver 595.58.03).
+
+The target's pre-existing range-derivative gate failed afterward with `CUDA
+radial derivative disagrees with displaced CPU range energy`. The same failure
+reproduced on exact base `e3907be9a72db15f3edce30f2c9e82bb17422c07` in the
+same build and device environment. This evidence qualifies the new census but
+does not claim that the full provider target passes on H100.
 
 ## Consequences
 
