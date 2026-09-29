@@ -13,10 +13,10 @@ from generativeqc_compiler.tensor import (
     Program,
     TensorSpec,
     add,
+    cpu,
     einsum,
     input_tensor,
 )
-from generativeqc_compiler.tensor import cpu
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 
@@ -35,7 +35,9 @@ def _inputs() -> tuple:
 
 
 def _input_names(program: Program) -> tuple[str, ...]:
-    return tuple(node.attrs["name"] for node in program.live_nodes if node.op == "input")
+    return tuple(
+        node.attrs["name"] for node in program.live_nodes if node.op == "input"
+    )
 
 
 @pytest.mark.parametrize("seed", [2, 7])
@@ -63,13 +65,22 @@ def test_native_cpu_reassociation_packs_lowered_input_order(
     assert tuple(node.attrs["name"] for node in native.inputs) == _input_names(
         native.program
     )
-    assert native.resources["input_count"] == sum(node.spec.size for node in native.inputs)
+    assert native.resources["input_count"] == sum(
+        node.spec.size for node in native.inputs
+    )
 
     random = np.random.default_rng(seed)
-    feeds = {"a": random.normal(size=(2, 3)), "b": random.normal(size=(10, 20)),
-             "c": random.normal(size=(3, 10))}
-    expected = np.einsum("ij,kl,jk->il", feeds["a"], feeds["b"], feeds["c"], optimize=False)
-    np.testing.assert_allclose(native.execute(feeds)["out"], expected, atol=1e-12, rtol=1e-12)
+    feeds = {
+        "a": random.normal(size=(2, 3)),
+        "b": random.normal(size=(10, 20)),
+        "c": random.normal(size=(3, 10)),
+    }
+    expected = np.einsum(
+        "ij,kl,jk->il", feeds["a"], feeds["b"], feeds["c"], optimize=False
+    )
+    np.testing.assert_allclose(
+        native.execute(feeds)["out"], expected, atol=1e-12, rtol=1e-12
+    )
 
 
 def test_native_cpu_projected_graph_owns_input_count_and_output_names(
@@ -110,5 +121,7 @@ def test_native_cpu_admission_still_precedes_compiler_discovery(tmp_path: Path) 
         return CppCompilerAdapter(Path("c++"))
 
     with pytest.raises(ValueError, match="byte/work budget"):
-        cpu.NativeTensorProgram(original, compiler=compiler, cache=tmp_path, max_bytes=1)
+        cpu.NativeTensorProgram(
+            original, compiler=compiler, cache=tmp_path, max_bytes=1
+        )
     assert discovered == []
