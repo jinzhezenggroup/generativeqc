@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 import generativeqc.stationary_nuclear as production
+
 from tools.generativeqc_hessian import perturbation as perturbation_shim
 from tools.generativeqc_hessian import response as response_shim
 
@@ -23,8 +24,7 @@ def test_hessian_shims_reuse_production_stationary_nuclear_objects() -> None:
     )
     assert perturbation_shim.RHFNuclearResponse is production.RHFNuclearResponse
     assert (
-        perturbation_shim.RHFNuclearBatchResponse
-        is production.RHFNuclearBatchResponse
+        perturbation_shim.RHFNuclearBatchResponse is production.RHFNuclearBatchResponse
     )
     assert (
         response_shim.metric_density_response_mo

@@ -241,22 +241,14 @@ def _reconstruct_stationary_nuclear_response(
     mo1 = -0.5 * prepared.overlap_mo[:, :nocc]
     mo1[nocc:, :] += x_ia.T
     c1 = coefficients @ mo1
-    density = 2.0 * (
-        c1 @ occupied_coefficients.T + occupied_coefficients @ c1.T
-    )
+    density = 2.0 * (c1 @ occupied_coefficients.T + occupied_coefficients @ c1.T)
     hs = (
         prepared.frozen_mo[:, :nocc]
         - prepared.overlap_mo[:, :nocc] * occupied_energies[None, :]
     )
-    hs += (
-        coefficients.T
-        @ operator.induced_fock(density)
-        @ occupied_coefficients
-    )
-    e1 = (
-        hs[:nocc, :]
-        + mo1[:nocc, :]
-        * (occupied_energies[:, None] - occupied_energies[None, :])
+    hs += coefficients.T @ operator.induced_fock(density) @ occupied_coefficients
+    e1 = hs[:nocc, :] + mo1[:nocc, :] * (
+        occupied_energies[:, None] - occupied_energies[None, :]
     )
     left = (c1 * occupied_energies[None, :]) @ occupied_coefficients.T
     energy_density = 2.0 * (
