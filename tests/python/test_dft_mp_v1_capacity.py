@@ -89,7 +89,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["contract"] == {
         "id": "DFT-MP-v1",
         "version": "1.0.0",
-        "sha256": "a9d439261a08007a296862e8869d35c1b127e6725e7bd73e294fa9ccc9b602a0",
+        "sha256": "de6c847b1ed93e537c1422679ae3df53a4cca3cd13e7268483e419afbf2faa00",
     }
 
     assert result["basis"]["manifest_ao_counts_match"] is True
