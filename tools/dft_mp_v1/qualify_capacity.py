@@ -111,7 +111,11 @@ from vibeqc._stationary_cuda import (
 from vibeqc.basis import BasisSet
 from vibeqc.basis_capabilities import resolved_basis_metadata
 from vibeqc.calculator import _basis_pack, _named_basis_record
-from vibeqc.ks import _native_semilocal_family, resolve_ks_method, resolve_ks_options
+from vibeqc.ks import (
+    native_xc_functional_code,
+    resolve_ks_method,
+    resolve_ks_options,
+)
 from vibeqc_compiler.dft.ao import jet_indices
 from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from vibeqc_compiler.dft.plan import plan_tiles
@@ -140,7 +144,7 @@ _LOCAL_HELPERS = {
     "BasisSet": BasisSet,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
     "resolved_basis_metadata": resolved_basis_metadata,
-    "_native_semilocal_family": _native_semilocal_family,
+    "native_xc_functional_code": native_xc_functional_code,
     "resolve_ks_method": resolve_ks_method,
     "resolve_ks_options": resolve_ks_options,
     "_basis_pack": _basis_pack,
@@ -303,7 +307,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "3c4b114f6d33b41f577268209218fbc89d95524dbf280ca5f54f01687cb3fcde"
+    "b3d827509e231c851a3729b47d77132d54ba06b1814105c102fd2e34d57b8a10"
+)
+NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
+    "8ca4c03c87157777c7f05de836e9b2d77c88dc7ec2c96df28532713b96bdd68d"
+)
+NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
+    "1514138c9b75b5c0f6735bf5ed9d20a4beb1f9fca0b6f8435006537848ec9a28"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
@@ -354,8 +364,9 @@ PRIMITIVE_RECORDS_DEFINITION = (
 )
 GRID_PAIR_VISITS_DEFINITION = "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
 METHOD_IR_DEFINITION = "state._source.method_ir"
-FUNCTIONAL_LOWERING_DEFINITION = "_native_semilocal_family(method)"
-NEEDS_FIRST_DEFINITION = "functional != 0"
+FUNCTIONAL_LOWERING_DEFINITION = "int(state._source.metadata[6])"
+INGREDIENTS_DEFINITION = "state._source.functional.ingredients"
+NEEDS_FIRST_DEFINITION = "'sigma' in ingredients"
 GRID_PLAN_DEFINITION = (
     "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
@@ -534,9 +545,46 @@ def _cpp_block_sha256(source: str, marker: str) -> str:
     raise RuntimeError(f"native source block is unterminated: {marker}")
 
 
+def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
+    """Bind native snapshot selector provenance consumed by stationary CUDA."""
+
+    source = (repository / "python/vibeqc/_ks_snapshot.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    owners = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "NativeKsSnapshot"
+    ]
+    if len(owners) != 1:
+        raise RuntimeError("native KS snapshot owner is missing or ambiguous")
+    methods = {}
+    expected = {
+        "__init__": NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256,
+        "decode": NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256,
+    }
+    for name, expected_digest in expected.items():
+        candidates = [
+            node
+            for node in owners[0].body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
+        if len(candidates) != 1:
+            raise RuntimeError(
+                f"native KS snapshot {name} contract is missing or ambiguous"
+            )
+        digest = _source_node_sha256(source, candidates[0])
+        if digest != expected_digest:
+            raise RuntimeError("native KS snapshot functional contract changed")
+        methods[f"{name}_sha256"] = digest
+    return methods
+
+
 def _source_limits(repository: Path) -> dict[str, Any]:
     """Read the current owner's literal shape caps and public work defaults."""
 
+    snapshot_functional_contract = _snapshot_functional_contract(repository)
     source_path = repository / STATIONARY_OWNER["file"]
     source = source_path.read_text(encoding="utf-8")
     small = re.search(
@@ -716,6 +764,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "pair_visits",
             "method",
             "functional",
+            "ingredients",
             "needs_first",
             "grid_plan",
             "source_bytes",
@@ -736,6 +785,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "pair_visits": GRID_PAIR_VISITS_DEFINITION,
         "method": METHOD_IR_DEFINITION,
         "functional": FUNCTIONAL_LOWERING_DEFINITION,
+        "ingredients": INGREDIENTS_DEFINITION,
         "needs_first": NEEDS_FIRST_DEFINITION,
         "grid_plan": GRID_PLAN_DEFINITION,
         "source_bytes": SOURCE_BYTES_DEFINITION,
@@ -747,7 +797,8 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "records": "primitive-record",
         "pair_visits": "grid-pair-visits",
         "method": "stationary MethodIR",
-        "functional": "native functional-family lowering",
+        "functional": "native snapshot functional-code lowering",
+        "ingredients": "native semilocal ingredient provenance",
         "needs_first": "grid derivative-order",
         "grid_plan": "grid-plan input",
         "source_bytes": "source-bytes",
@@ -899,6 +950,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "primitive_logical_metric_limit": (1 << 64) - 1,
         "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
         "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
+        "snapshot_functional_contract_sha256": snapshot_functional_contract,
         "primitive_page_contract_sha256": page_contract,
         "primitive_page_budget_bindings": list(page_budget_bindings),
         "fixed_task_capacity_definition": expected_executor_definitions[
@@ -911,6 +963,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "grid_pair_visits_definition": GRID_PAIR_VISITS_DEFINITION,
         "method_ir_definition": METHOD_IR_DEFINITION,
         "functional_lowering_definition": FUNCTIONAL_LOWERING_DEFINITION,
+        "functional_ingredients_definition": INGREDIENTS_DEFINITION,
         "grid_derivative_order_definition": NEEDS_FIRST_DEFINITION,
         "grid_plan_definition": GRID_PLAN_DEFINITION,
         "source_bytes_definition": SOURCE_BYTES_DEFINITION,
@@ -1645,7 +1698,7 @@ def _public_selector_contract(
         raise RuntimeError(f"unrecognized frozen public selector {selector}") from error
     method_ir, functional = resolve_ks_method(selector)
     options = resolve_ks_options(selector)
-    native_functional = int(_native_semilocal_family(method_ir))
+    native_functional = int(native_xc_functional_code(selector))
     public_stationary = StationaryGradientPlan(
         method_ir,
         StationaryMeanField(SCF_POINT_MODEL),
