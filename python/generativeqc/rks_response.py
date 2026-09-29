@@ -546,11 +546,6 @@ class NativeRKSResponse(CPKSResponseOperator):
                 or not electrons.is_integer()
             ):
                 raise ValueError("native RKS response has invalid electron count")
-            device_id = (
-                None
-                if state._source.backend == "cpu"
-                else int(state._source.metadata[12])
-            )
             reference = RKSResponseReference(
                 overlap=state.overlap,
                 hcore=backend.hcore,
@@ -568,7 +563,6 @@ class NativeRKSResponse(CPKSResponseOperator):
                 grid_identity=state.grid.identity,
                 representation=basis.representation,
                 hf_backend=f"native-{state._source.backend}-rks",
-                device_id=device_id,
             )
             problem = cls.build_problem(
                 reference,
