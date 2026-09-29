@@ -51,7 +51,7 @@ def _solve_one(
     *,
     options: typing.Any = None,
 ) -> StationaryNuclearResponse:
-    return __solve_one(
+    return _solve_stationary_nuclear_perturbation(
         operator,
         frozen_fock,
         overlap,
@@ -68,7 +68,7 @@ def _solve_many(
     strategy: str,
     options: typing.Any = None,
 ) -> typing.Any:
-    return __solve_many(
+    return _solve_stationary_nuclear_perturbations(
         operator,
         frozen_focks,
         overlaps,
