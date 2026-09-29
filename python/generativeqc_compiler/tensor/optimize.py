@@ -464,23 +464,23 @@ def optimize(
     if type(reassociate_contractions) is not bool:
         raise TypeError("reassociate_contractions must be a Boolean")
     requested = _project_requested_outputs(program, requested_outputs)
-    specialized = (
-        reassociate_einsums(requested) if reassociate_contractions else requested
-    )
     value_numbering_diagnostics: list[ValueNumberingDiagnostics] = []
-    run = _optimizer(value_numbering_diagnostics).run(specialized)
-    result = run.value
-    pruning = _pruning_diagnostics(program, requested, result)
+    run = _optimizer(value_numbering_diagnostics).run(requested)
+    baseline = run.value
+    pruning = _pruning_diagnostics(program, requested, baseline)
+    result = (
+        reassociate_einsums(baseline) if reassociate_contractions else baseline
+    )
     complexity_diagnostics = None
     if reassociate_contractions:
         complexity_diagnostics = {
             "requested": analyze_complexity(requested).summary_payload(),
-            "reassociated": analyze_complexity(specialized).summary_payload(),
+            "reassociated": analyze_complexity(result).summary_payload(),
             "optimized": analyze_complexity(result).summary_payload(),
             "reassociation": {
                 "enabled": True,
-                "changed": requested.logical_hash != specialized.logical_hash,
-                "logical_hash": specialized.logical_hash,
+                "changed": baseline.logical_hash != result.logical_hash,
+                "logical_hash": result.logical_hash,
             },
         }
     return Program(
