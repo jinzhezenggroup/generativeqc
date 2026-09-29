@@ -19,39 +19,64 @@ jobs:
         with:
           fetch-depth: 1
       - name: Apply exact reviewed merges to scratch refs
-        env:
-          PACKED: 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YVUSuwDgBHYPBOERcWijscMqZtqqBZamSdLpZXNNPNmyDOovurFRJfJApoRJPGNUMtUqcHAcSLbjyzmoqDsNhAOStwhptJBWRkkrCMukqJJcfsKDglJRsRjzyyPhAEbjMBDlDSYeROexRXAeVXKNqcGEtjlwHbLIDXZCRmMuDoQffQNROErICbBdOFYnAJmuSjaIEbHEZbtFehlRJTHvoJiDvUfLtEyxExLoWdRMJEzyRTWUJGUcyTOChXmtClrUlFtocgzIrkfwdSzvpGuLgQLUXPYJaLbPrYDboPCrVSQFtRpAVZMukJRLhXPnzQoApUkKvZAywkiSbHyAJpLvIaVHEmqiRRriGIhNWuAUJXIJlxygMtZIqwfeBGtxyBDSLjOTotfoRmxeCDnJRsgOEjiPeZaQgpYeZJTjhzUylRoeXJByyvPbSKVygPNbhKxVuyaPJhuqiEVswDfilTqvqUZwpEVDowVBVMRWnOvSKPLFZIJeRPgQXBJSuFsSBnyIyovVHFPYIiAHzaeYuGRhhjMLVIAYgCSgyzNPABObfmVTmgQYOcuVLBRIJJAvSiAFKhzHyxiCqCIauKNrpNbXuCziAUpviZRQyhBEUwrMbqMjQgqaJoRWilieyoVpKdbzwmlOtBDDjEXskstgbcaUKMJvgOOpYsQQIjIIEDutTJQOVGrRBONLDGhGKGayninxrYqEHewEUZxuKpmuFzqSkDaKgTEPHFNBWBgXmqhqLZJOldrIqdxKUirnwGKbaouwPcwrDwCmdnQHVsYeqlALNYOpVAHHNGszJtXsGXRBkOpTmemtcdBBNbIOiKakAvXdGbWhIKBkJAmcyLvYHUJMBNSOVULRxglRJJGmFLGFvATlvdiNUJVKURmXtzRyxcIvWFhvMWCuWUkfhYrgkRVqMSDtuXdbYNlAXTHiwJvmuVrNzjCiLNqiNxboiLNneIAIzRdTClUtMKgtBkNbJPnxOHvxPYpTemCyqbAMtTTMWprCkSVnArXJeCgiQCyyvrxzvbBJLuJWFYVJsIFWxPBRgVFwhSCzxapvlRJvwWBcIyLKmKYhgXPLXKOVSHFSaiZUAFMWfCaOMsBPDBOpFFOaVPEnpAUFCfyLbeMqvNuMKJchqPODAYTexCaQhBPwQNMaYxKmPavKbWFcULVWcEexgzWVEpyiZMKBjBlyVvhSSEMuBiRWnuzkXDmFIUYSCwnaTKOGDcTJpbSLxyIMkPDQFPJXiEUTKeOVLmaLIRbngOBMNijDOFwJBwlGKXPRgfViSDwbWJMOxfSdkNOTrmbVfCzThhUMkcgOWMoEyyPsujSjlcDHBoCOuMSfgFwtWHJJYTmioUgsnhWRTaqKUspUgKlVPWDVmibfzWdftdfRFZICgxzhxrOMcyTpfKGJMklVVAIlyNoDZGbTmRgPhLMnuiWIdudICKWSObQUwUKTeAwMrVXnusSsxsdkInadlfMMZeNjBsgMJcdilLAIDuSuiTlqJQReCiAGYiIcAwWIrOSOjle
         run: |
-          echo 'Manifest intentionally fails closed unless the exact local digest matches.'
           python3 - <<'PY'
-          import base64,gzip,hashlib,json,os,subprocess
+          import json,subprocess
           from pathlib import Path
-          packed=base64.b64decode(os.environ['PACKED'],validate=True)
-          if hashlib.sha256(packed).hexdigest()!='1a87979cde577a11ef1c14f3e399871599a2125c5f6ee02d2b92a2770f5a8a16':
-              raise SystemExit('review manifest digest mismatch')
-          records=json.loads(gzip.decompress(packed))['records']
+          master='634f9c60d72ce99d8ea0b9525aa474bdeb84906e'
+          repair='6f37c4785fd73e53f8ccaba6ac549f903ee5bed6'
+          records=[
+            (1582,'00d398cd161c7b44ab8092b9b84ade0f97fbde3d','d4d85d4744838c357fccfbf7587d281718486ee9','4408ba522e0baf39a312c59388dcc7003db9878f'),
+            (1586,'29fbc79e9e0c5336fafd81e80ac880ad2e3f0e96','b55e4beee402cb319ab06a0f39dad56cd2dd52a2','850e588dfe2362c9b1a11b172851efa9425f3cca'),
+            (1590,'b0604d437a1871c25694d4eb816e1a7881e285c4','150f8a95365722cc62d65ba71c74209a2e508ed3','590ea1404e140859ed38efc46e9f3f6336095126'),
+            (1592,'4402714536c85ba7a04ab51c53b78ba3c0d09482','2a077f76d043962c5780492fc163855f72f2c34a','2a077f76d043962c5780492fc163855f72f2c34a'),
+          ]
           def git(*args,input=None,check=True):
               return subprocess.run(['git',*args],input=input,text=True,capture_output=True,check=check)
-          git('fetch','--no-tags','--depth=128','origin',*sorted({r['head'] for r in records}|{r['master'] for r in records}))
+          git('fetch','--no-tags','--depth=128','origin',master,repair,*[r[1] for r in records])
           git('config','merge.conflictStyle','merge');git('config','core.autocrlf','false')
           results=[]
-          for r in records:
+          for pr,head,pre_tree,expected in records:
               try:
-                  git('reset','--hard');git('checkout','--detach',r['head'])
-                  git('update-ref','refs/remotes/fresh/master',r['master'])
+                  git('reset','--hard');git('checkout','--detach',head)
+                  git('update-ref','refs/remotes/fresh/master',master)
                   merged=git('merge','--no-commit','--no-ff','fresh/master',check=False)
                   if merged.returncode not in (0,1):raise RuntimeError(merged.stderr)
                   git('add','-A')
-                  if git('write-tree').stdout.strip()!=r['pre_tree']:raise RuntimeError('unreviewed pre-merge tree')
-                  if r['patch']:git('apply','--index','-',input=r['patch'])
+                  if git('write-tree').stdout.strip()!=pre_tree:raise RuntimeError('unreviewed pre-merge tree')
+                  if pr==1582:
+                      # The only conflict is the documentation paragraph advanced
+                      # by this response-core slice over its now-merged parent.
+                      git('checkout',head,'--','docs/developer/hessian.md')
+                  elif pr==1586:
+                      # Exact reviewed/tested source-identity repair blobs. The
+                      # current head's other changes and master stay untouched.
+                      git('checkout',repair,'--','src/cc/rccsdt_force.cpp','tests/python/test_cc_force_source_identity.py')
+                  elif pr==1590:
+                      path=Path('tests/native/test_mp2_gradient.cpp')
+                      text=path.read_text()
+                      if text.count('<<<<<<< HEAD\n')!=1 or text.count('>>>>>>> fresh/master\n')!=1:
+                          raise RuntimeError('unexpected MP2 conflict shape')
+                      prefix,rest=text.split('<<<<<<< HEAD\n',1)
+                      ours,rest=rest.split('=======\n',1)
+                      theirs,suffix=rest.split('>>>>>>> fresh/master\n',1)
+                      # Keep both factorized-weight and canonical GEMM workspace
+                      # assertions. The concurrent NaN/tolerance tests stay intact.
+                      path.write_text(prefix+ours+theirs+suffix)
+                  git('add','-A')
                   tree=git('write-tree').stdout.strip()
-                  if tree!=r['tree']:raise RuntimeError('unreviewed final tree')
+                  if tree!=expected:raise RuntimeError('unreviewed final tree: '+tree)
                   git('diff','--cached','--check')
-                  commit=git('commit-tree',tree,'-p',r['head'],'-p',r['master'],input=r['message']).stdout.strip()
-                  ref=f'agent/even-pr-v2-{r["pr"]}-{r["head"][:8]}'
+                  message=(f'fix(review): reconcile PR #{pr} with current master and reviewed repairs\n\n'
+                           'Preserve concurrent author changes. Exact pre-merge and final trees\n'
+                           'match local review/test evidence. Original PR refs are updated\n'
+                           'separately without force; required checks remain authoritative.\n\n'
+                           'Agent: ChatGPT\nModel: GPT-6 Astra Pro\n')
+                  commit=git('commit-tree',tree,'-p',head,'-p',master,input=message).stdout.strip()
+                  ref=f'agent/even-pr-v2-{pr}-{head[:8]}'
                   git('push','origin',f'{commit}:refs/heads/{ref}')
-                  result={'pr':r['pr'],'head':r['head'],'tree':tree,'commit':commit,'scratch_ref':ref}
-              except Exception as e:result={'pr':r['pr'],'error':str(e)}
+                  result={'pr':pr,'head':head,'tree':tree,'commit':commit,'scratch_ref':ref}
+              except Exception as error:result={'pr':pr,'error':str(error)}
               results.append(result);print('REVIEW_RESULT '+json.dumps(result),flush=True)
           Path('/tmp/review-round2.json').write_text(json.dumps(results,indent=2))
           if any('error' in r for r in results):raise SystemExit('failed closed; original PR refs unchanged')
