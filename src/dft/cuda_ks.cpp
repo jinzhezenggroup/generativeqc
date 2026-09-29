@@ -232,7 +232,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   nlc::Vv10DensityDomain nonlocal_domain{nlc::Vv10DensityDomain::StrictPositive};
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
-  bool final_state_ready{}, final_frame_ready{};
+  bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
   double previous_energy{std::numeric_limits<double>::infinity()};
   double warm_energy{std::numeric_limits<double>::infinity()};
@@ -616,7 +616,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void begin(const std::vector<double>* input, bool reuse_warm) {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
-    final_state_ready = final_frame_ready = false;
+    final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
     final_generation = 0;
     // #991's first KS slice is deliberately intra-trajectory only. A changed
     // geometry may reuse the last-good density, but its previous orthonormal
@@ -1378,6 +1378,38 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
+    // The derivative snapshot always asks for W. Stage both one-electron
+    // weights before the existing final-state drain so downstream native force
+    // consumers can borrow them without a D/W H2D round trip.
+    bool staged_stationary_weights = false;
+    if (compute_weighted_density && !final_stationary_weights_ready) {
+      constexpr unsigned threads = 128;
+      const auto weight_elements = spins == 1 ? matrix : elements;
+      const auto weight_blocks = static_cast<unsigned>((weight_elements + threads - 1) / threads);
+      if (spins == 1) {
+        launch_build_weighted_density_kernel(
+            weight_blocks, threads, 0, stream, 1, static_cast<std::int32_t>(n), occupied,
+            final_coefficients, final_eigenvalues, final_enabled, tmp1);
+        check(cudaGetLastError());
+      } else {
+        launch_build_spin_weighted_density_kernel(
+            weight_blocks, threads, 0, stream, 1, static_cast<std::int32_t>(n), occupied,
+            final_coefficients, final_eigenvalues, final_enabled, tmp1);
+        check(cudaGetLastError());
+        const auto matrix_blocks = static_cast<unsigned>((matrix + threads - 1) / threads);
+        // One batch permits the total to overwrite the first spin block.
+        launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
+                                            static_cast<std::int32_t>(n), tmp1, final_enabled,
+                                            tmp1);
+        check(cudaGetLastError());
+        launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
+                                            static_cast<std::int32_t>(n), density, final_enabled,
+                                            tmp2);
+        check(cudaGetLastError());
+      }
+      staged_stationary_weights = true;
+    }
+
     KsPhysicalState physical;
     KsFinalStateCandidate candidate;
     physical.identity = candidate.identity = current.identity;
@@ -1422,7 +1454,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     final_frame_ready = true;
     for (unsigned spin = 0; spin < spins; ++spin)
       if (info[spin] != 0) {
-        final_state_ready = false;
+        final_state_ready = final_stationary_weights_ready = false;
         throw std::runtime_error("CUDA KS final-state eigensolver reported failure");
       }
     // CUDA matrix products/eigensolvers store columns contiguously, whereas
@@ -1445,9 +1477,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!validate_ks_final_state(current.identity, provider.one_electron().overlap,
                                  provider.one_electron().hcore, physical, candidate, limits,
                                  compute_weighted_density, verified, detail)) {
-      final_state_ready = false;
+      final_state_ready = final_stationary_weights_ready = false;
       throw std::runtime_error(detail.empty() ? "CUDA KS final-state validation failed" : detail);
     }
+    if (staged_stationary_weights) final_stationary_weights_ready = true;
     return verified;
   }
 
@@ -1516,7 +1549,8 @@ std::vector<double> CudaKsPlan::warm_density() {
 void CudaKsPlan::set_warm_start_updates(bool enabled) noexcept { impl_->warm_updates = enabled; }
 void CudaKsPlan::clear_warm_start() noexcept { impl_->clear_warm_state(); }
 void CudaKsPlan::invalidate_final_state() noexcept {
-  impl_->final_state_ready = impl_->final_frame_ready = false;
+  impl_->final_state_ready = impl_->final_frame_ready = impl_->final_stationary_weights_ready =
+      false;
   impl_->final_generation = 0;
 }
 generativeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
@@ -1554,6 +1588,33 @@ generativeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateTok
                impl_->owner,
                impl_->solve_epoch,
                impl_->final_generation};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+generativeqc_status CudaKsPlan::resident_final_stationary_weights(
+    const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+    std::string& detail) const {
+  binding = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS resident stationary-weight token has stale owner, epoch, generation or model");
+    if (!impl_->final_stationary_weights_ready || !impl_->tmp1 || !impl_->matrix)
+      throw std::logic_error(
+          "CUDA KS resident stationary D/W requires a successful weighted final-state read");
+    const auto* total_density = impl_->spins == 1 ? impl_->density : impl_->tmp2;
+    if (!total_density)
+      throw std::logic_error("CUDA KS resident stationary density storage is unavailable");
+    binding = {impl_->device, total_density, impl_->tmp1,        impl_->matrix,
+               impl_->spins,  impl_->owner,  impl_->solve_epoch, impl_->final_generation};
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
