@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="gqc-title gqc-desc">
+  <title id="gqc-title">GenerativeQC symbol</title>
+  <desc id="gqc-desc">A molecular and computational graph opens into branching wave paths, which resolve into ordered strokes and a code chevron: AI-assisted creation and compiler generation for quantum chemistry.</desc>
+  <defs>
+    <linearGradient id="gqc-flow" gradientUnits="userSpaceOnUse" x1="36" y1="156" x2="202" y2="112">
+      <stop offset="0" stop-color="#079CB4"/>
+      <stop offset="0.5" stop-color="#268ED3"/>
+      <stop offset="1" stop-color="#6950D9"/>
+    </linearGradient>
+  </defs>
+  <!-- The open molecular/computational graph leaves room for generated output. -->
+  <g id="gqc-graph" fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M120 32 36 80v96l84 48 84-48" stroke="#235898"/>
+    <path d="m120 32 84 48" stroke="#079CB4"/>
+  </g>
+  <!-- One seed expands into wave-like alternatives, then structured code lines. -->
+  <g id="gqc-generation" fill="none" stroke="url(#gqc-flow)" stroke-linecap="round">
+    <path d="M36 176C70 176 65 82 102 86S144 100 172 100h6" stroke-width="8"/>
+    <path d="M36 176C68 176 70 100 102 111S144 128 174 128h30" stroke-width="11"/>
+    <path d="M36 176C70 176 79 123 108 139S146 156 172 156h6" stroke-width="8"/>
+  </g>
+  <!-- A visible output chevron, not an AI sparkle: lowering to executable code. -->
+  <path id="gqc-code" d="m190 110 18 18-18 18" fill="none" stroke="#6950D9" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <g id="gqc-nodes">
+    <circle cx="120" cy="32" r="12" fill="#079CB4"/>
+    <circle cx="36" cy="80" r="11" fill="#235898"/>
+    <circle cx="36" cy="176" r="14" fill="#079CB4"/>
+    <circle cx="120" cy="224" r="12" fill="#268ED3"/>
+    <circle cx="204" cy="80" r="12" fill="#6950D9"/>
+    <circle cx="204" cy="176" r="11" fill="#235898"/>
+  </g>
+</svg>
