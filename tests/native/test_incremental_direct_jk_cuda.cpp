@@ -138,6 +138,29 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
             "screened incremental periodic rebuild counters disagree");
   }
 
+  // Reuse the same incremental owner at changed geometry. The per-execution
+  // anchor must restart with a full-density build instead of treating the new
+  // geometry as a delta from the previous integral operator.
+  auto changed_system = system;
+  changed_system.atoms[1].position[2] += 0.03;
+  generativeqc::scf::CudaRhfBucketPlan* changed_baseline_plan = nullptr;
+  const auto changed_baseline =
+      run_cached(&changed_baseline_plan, changed_system, baseline_options, unrestricted);
+  generativeqc::scf::destroy_rhf_cuda_bucket_plan(changed_baseline_plan);
+  const auto changed_incremental =
+      run_cached(&plan, changed_system, incremental_options, unrestricted);
+  require(changed_baseline.status == GENERATIVEQC_STATUS_SUCCESS &&
+              changed_incremental.status == GENERATIVEQC_STATUS_SUCCESS,
+          "changed-geometry CUDA incremental replay failed");
+  compare_final_state(changed_baseline.scf, changed_incremental.scf,
+                      screening_tolerance == 0.0 ? 5.0e-10 : 5.0e-8);
+  require(changed_incremental.scf.incremental_direct_jk.anchor_full_builds != 0U,
+          "changed geometry reused a stale incremental Direct-J/K anchor");
+  if (screening_tolerance == 0.0 && requested_interval == 0U) {
+    require(changed_incremental.scf.incremental_direct_jk.anchor_full_builds == 1U,
+            "unscreened changed geometry established more than one full anchor");
+  }
+
   // Switch the same cached owner back to the ordinary policy. The bucket
   // identity must rebuild rather than replaying an incremental captured Graph.
   const auto ordinary_again = run_cached(&plan, system, baseline_options, unrestricted);
