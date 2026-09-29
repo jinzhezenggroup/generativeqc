@@ -32,6 +32,23 @@ std::size_t g_index(std::size_t no, std::size_t nv, std::size_t i, std::size_t j
   return ((i * no + j) * nv + a) * nv + b;
 }
 
+bool factorized_matches_dense(const generativeqc::mp2::FactorizedTwoElectronWeights& factorized,
+                              std::span<const double> dense, double tolerance) {
+  const auto n = factorized.orbitals;
+  if (!generativeqc::mp2::valid_factorized_two_electron_weights(factorized) ||
+      dense.size() != n * n * n * n)
+    return false;
+  for (std::size_t p = 0; p < n; ++p)
+    for (std::size_t q = 0; q < n; ++q)
+      for (std::size_t r = 0; r < n; ++r)
+        for (std::size_t s = 0; s < n; ++s)
+          if (std::abs(generativeqc::mp2::factorized_two_electron_weight(
+                           factorized, p, q, r, s) -
+                       dense[eri_index(n, p, q, r, s)]) > tolerance)
+            return false;
+  return true;
+}
+
 double mp2_energy(std::span<const double> g, std::span<const double> eps, std::size_t no) {
   const auto nv = eps.size() - no;
   double energy = 0.0;
@@ -244,11 +261,16 @@ void streamed_provider_matches_dense_oracle() {
       if (std::abs(first[i] - second[i]) > 2e-11) return false;
     return true;
   };
+  generativeqc::mp2::FactorizedTwoElectronWeights orbital_factors;
+  orbital_factors.orbitals = reference.nbf;
+  orbital_factors.occupied = reference.nocc;
+  orbital_factors.fock = streamed.fock_weights;
+  orbital_factors.correlation_iajb = adjoint.integrals_iajb;
   require(close(streamed.energy_gradient, dense.energy_gradient) &&
               close(streamed.response_rhs, dense.response_rhs) &&
-              close(streamed.one_electron, dense.one_electron) &&
-              close(streamed.two_electron, dense.two_electron),
-          "streamed native provider path differs from the dense oracle");
+              close(streamed.one_electron, dense.one_electron) && streamed.two_electron.empty() &&
+              factorized_matches_dense(orbital_factors, dense.two_electron, 2e-11),
+          "streamed native provider factorized weights differ from the dense oracle");
   const double response_denominator =
       reference.orbital_energies[reference.nocc] - reference.orbital_energies[0] +
       4.0 * eri[eri_index(reference.nbf, reference.nocc, 0, reference.nocc, 0)] -
@@ -260,11 +282,13 @@ void streamed_provider_matches_dense_oracle() {
   const auto streamed_weights = generativeqc::mp2::canonical_lagrangian_weights_streamed(
       reference, hcore_mo, provider, adjoint, response, 1e-10);
   require(close(streamed_weights.one_electron, dense_weights.one_electron) &&
-              close(streamed_weights.two_electron, dense_weights.two_electron) &&
+              streamed_weights.two_electron.empty() &&
+              factorized_matches_dense(streamed_weights.two_electron_factors,
+                                       dense_weights.two_electron, 2e-11) &&
               close(streamed_weights.overlap, dense_weights.overlap) &&
               std::abs(streamed_weights.stationarity_residual -
                        dense_weights.stationarity_residual) < 2e-11,
-          "streamed relaxed weights differ from the dense oracle");
+          "streamed factorized relaxed weights differ from the dense oracle");
   auto stale = reference;
   bool rejected = false;
   try {
@@ -371,11 +395,17 @@ void density_fitted_provider_matches_dense_ri_oracle() {
       generativeqc::mp2::canonical_orbital_rhs(hcore_mo, expected_eri, adjoint, 1e-10);
   const auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo,
                                                                           provider, adjoint, 1e-10);
+  generativeqc::mp2::FactorizedTwoElectronWeights ri_orbital_factors;
+  ri_orbital_factors.orbitals = n;
+  ri_orbital_factors.occupied = reference.nocc;
+  ri_orbital_factors.fock = streamed.fock_weights;
+  ri_orbital_factors.correlation_iajb = adjoint.integrals_iajb;
   require(close(streamed.energy_gradient, dense.energy_gradient, 2e-10) &&
               close(streamed.response_rhs, dense.response_rhs, 2e-10) &&
               close(streamed.one_electron, dense.one_electron, 2e-10) &&
-              close(streamed.two_electron, dense.two_electron, 2e-10),
-          "RI provider cannot drive the shared streamed MP2 orbital response");
+              streamed.two_electron.empty() &&
+              factorized_matches_dense(ri_orbital_factors, dense.two_electron, 2e-10),
+          "RI provider cannot drive the factorized streamed MP2 orbital response");
 
   // H2/STO-3G has one occupied and one virtual MO, so solve the response scalar
   // independently and compare the complete relaxed-weight construction.
@@ -390,11 +420,13 @@ void density_fitted_provider_matches_dense_ri_oracle() {
   const auto streamed_weights = generativeqc::mp2::canonical_lagrangian_weights_streamed(
       reference, hcore_mo, provider, adjoint, response, 1e-10);
   require(close(streamed_weights.one_electron, dense_weights.one_electron, 2e-10) &&
-              close(streamed_weights.two_electron, dense_weights.two_electron, 2e-10) &&
+              streamed_weights.two_electron.empty() &&
+              factorized_matches_dense(streamed_weights.two_electron_factors,
+                                       dense_weights.two_electron, 2e-10) &&
               close(streamed_weights.overlap, dense_weights.overlap, 2e-10) &&
               std::abs(streamed_weights.stationarity_residual -
                        dense_weights.stationarity_residual) < 2e-10,
-          "RI provider cannot drive the shared relaxed MP2 Lagrangian");
+          "RI provider cannot drive the factorized relaxed MP2 Lagrangian");
 
   const auto raw_weights = generativeqc::mp2::density_fitted_lagrangian_weights(
       reference, provider, streamed_weights, 256ULL << 20);
@@ -431,7 +463,8 @@ void density_fitted_provider_matches_dense_ri_oracle() {
             double eri = 0.0;
             for (std::size_t Q = 0; Q < na; ++Q)
               eri += local_whitened[three(p, q, Q)] * local_whitened[three(r, t, Q)];
-            value += streamed_weights.two_electron[eri_index(n, p, q, r, t)] * eri;
+            value +=
+                generativeqc::mp2::two_electron_weight(streamed_weights, p, q, r, t) * eri;
           }
     return value;
   };
@@ -617,6 +650,11 @@ void invalid_inputs_and_resource_boundaries() {
       static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
   require(probe.peak_bytes > probe.response_bytes && probe.shell_cotangent_bytes > 0,
           "gradient resource plan omitted a simultaneous owner");
+  const auto expected_relaxed = (4 * 4 * 4 + 2 * 2 * 2) * sizeof(double);
+  require(probe.relaxed_weight_bytes == expected_relaxed,
+          "gradient resource plan retained dense N^4 relaxed-weight storage");
+  require(probe.relaxed_weight_bytes < 4 * 4 * 4 * 4 * sizeof(double),
+          "factorized relaxed-weight storage is not below one dense N^4 tensor");
   require(probe.shell_cotangent_bytes == 81 * sizeof(double),
           "shell-quartet cotangent ownership is not isolated");
   require(probe.derivative_staging_bytes == 485 * sizeof(double),
