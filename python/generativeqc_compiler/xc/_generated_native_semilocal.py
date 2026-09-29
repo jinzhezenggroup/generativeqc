@@ -130,6 +130,28 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "exchange_policy": "canonical",
         "canonical_method": "WB97M-V",
     },
+    {
+        "symbol": "CamB3lyp",
+        "code": 5,
+        "name": "CAM-B3LYP",
+        "scf_domain": "libxc-7.0.0/rsh-interior-v1",
+        "domain_version": 5,
+        "cuda_ks": False,
+        "requires_gradient": True,
+        "requires_tau": False,
+        "stationary_kernel": "composed-interior",
+        "stationary_ecp_gradient": False,
+        "components": (
+            ("GGA_X_B88", "7/20"),
+            ("GGA_X_ITYH", "23/50"),
+            ("LDA_C_VWN", "19/100"),
+            ("GGA_C_LYP", "81/100"),
+        ),
+        "range_omega": "33/100",
+        "coefficient_policy": "exact",
+        "exchange_policy": "canonical",
+        "canonical_method": "CAM-B3LYP",
+    },
 )
 
 SEMILOCAL_FAMILY_CODES = frozenset(item["code"] for item in SEMILOCAL_FAMILIES)
@@ -138,4 +160,5 @@ SCF_DOMAIN_BY_VERSION = {
     1: "semilocal-scaled-v1/pbe-spin-c2-1e-18",
     2: "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18",
     3: "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
+    5: "libxc-7.0.0/rsh-interior-v1",
 }
