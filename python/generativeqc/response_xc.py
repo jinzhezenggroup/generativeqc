@@ -12,7 +12,7 @@ from hashlib import sha256
 from time import perf_counter
 
 import numpy as np
-from generativeqc.profiles import canonical_hash
+from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft import ExplicitGrid, MolecularGrid
 from generativeqc_compiler.dft.features import spin_densities
 from generativeqc_compiler.dft.grid import GridTile, checked_int
@@ -22,7 +22,7 @@ from generativeqc_compiler.xc.contractions import (
 )
 from generativeqc_compiler.xc.spec import UnsupportedXC
 
-from generativeqc_compiler.common.arrays import immutable
+from generativeqc.profiles import canonical_hash
 
 __all__ = ["FixedDensityXCDerivativeKernel", "density_feature_response"]
 

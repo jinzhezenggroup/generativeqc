@@ -10,6 +10,7 @@ import time
 import typing
 
 import numpy as np
+
 from generativeqc.profiles import canonical_hash
 
 from .response_problem import (
@@ -17,7 +18,6 @@ from .response_problem import (
     ResponseUnsupported,
     RotationLayout,
 )
-
 
 __all__ = [
     "CPKSResponseOperator",

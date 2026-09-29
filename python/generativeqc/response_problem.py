@@ -11,10 +11,9 @@ import typing
 from dataclasses import dataclass, field
 
 import numpy as np
-from generativeqc.profiles import canonical_hash
-
 from generativeqc_compiler.common.arrays import immutable
 
+from generativeqc.profiles import canonical_hash
 
 __all__ = [
     "ResponseCompatibilityError",
