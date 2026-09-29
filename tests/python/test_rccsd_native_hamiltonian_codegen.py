@@ -198,7 +198,6 @@ def test_split_hamiltonian_response_matches_dense_parent(o: int, v: int) -> None
         )
 
 
-
 @pytest.mark.parametrize("o,v", [(1, 2), (2, 2)])
 def test_combined_force_seed_matches_sum_of_response_vjps(o: int, v: int) -> None:
     """The compact force path is exactly the linear sum of the old response stages."""
@@ -231,8 +230,7 @@ def test_combined_force_seed_matches_sum_of_response_vjps(o: int, v: int) -> Non
     fock_response = execute(fock, fock_feeds).outputs
 
     zero_parameters = {
-        "bar_" + name: np.zeros_like(feeds["bar_" + name])
-        for name in PARAMETERS
+        "bar_" + name: np.zeros_like(feeds["bar_" + name]) for name in PARAMETERS
     }
     z = rng.normal(size=(o, v))
     orbital_feeds = {
@@ -253,9 +251,7 @@ def test_combined_force_seed_matches_sum_of_response_vjps(o: int, v: int) -> Non
     combined = dict(correlation_feeds)
     combined["bar_reference_electronic_energy"] = np.asarray(1.0)
     combined["bar_foo"] = np.asarray(combined["bar_foo"]) + bar_fock[:o, :o]
-    combined["bar_fov"] = (
-        np.asarray(combined["bar_fov"]) + bar_fock[:o, o:] - z
-    )
+    combined["bar_fov"] = np.asarray(combined["bar_fov"]) + bar_fock[:o, o:] - z
     combined["bar_fvv"] = np.asarray(combined["bar_fvv"]) + bar_fock[o:, o:]
     compact = execute(hamiltonian, combined).outputs
 
@@ -274,6 +270,7 @@ def test_combined_force_seed_matches_sum_of_response_vjps(o: int, v: int) -> Non
             + np.asarray(hf[name])
         )
         np.testing.assert_allclose(compact[name], expected, rtol=2e-12, atol=2e-11)
+
 
 def test_runtime_shape_hamiltonian_response_matches_tensorir(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
