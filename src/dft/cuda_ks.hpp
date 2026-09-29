@@ -53,6 +53,10 @@ struct CudaKsTransfers {
   std::uint64_t execution_region_fallbacks{};
   /** Explicit host-unfused XC staging, separate from ordinary setup/seed movement. */
   std::uint64_t xc_host_d2h_bytes{}, xc_host_h2d_bytes{}, xc_host_synchronizations{};
+  /** Full-range density-fitted exchange provenance. Dense includes the first
+   * cold/warm-seed build where no canonical factor is available; occupied
+   * counts only builds whose Cocc generated the exact current device density. */
+  std::uint64_t fitted_dense_exchange_builds{}, fitted_occupied_exchange_builds{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The
