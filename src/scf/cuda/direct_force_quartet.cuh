@@ -303,7 +303,6 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
       atomicAdd(forces + final_coordinate + axis, coefficient * derivative_sum[axis]);
 }
 
-
 /**
  * Fused RSH stationary sources over one screened shell quartet.
  *
@@ -375,8 +374,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rsh_
       short_exchange_coefficient * exchange_density,
       long_exchange_coefficient * exchange_density,
   };
-  if (source_coefficient[0] == 0.0 && source_coefficient[1] == 0.0 &&
-      source_coefficient[2] == 0.0)
+  if (source_coefficient[0] == 0.0 && source_coefficient[1] == 0.0 && source_coefficient[2] == 0.0)
     return;
 
   const std::int32_t first_shell = batch.shell_pair_first[first_pair];
@@ -471,9 +469,9 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rsh_
       for (unsigned source = 0; source < 3; ++source) {
         reconstructed[source][axis] += contribution[source];
         if (contribution[source] != 0.0)
-          atomicAdd(source_forces + source * source_stride +
-                        static_cast<std::size_t>(coordinate) + axis,
-                    -contribution[source]);
+          atomicAdd(
+              source_forces + source * source_stride + static_cast<std::size_t>(coordinate) + axis,
+              -contribution[source]);
       }
     }
   }
