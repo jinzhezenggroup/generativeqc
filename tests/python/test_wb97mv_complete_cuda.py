@@ -82,8 +82,10 @@ def test_complete_cuda_force_matches_independent_engine(
             assert warm.iterations == 1
         work = batch._stationary_cuda_execution.last_work
         assert work["prepared_execution_reused"]
-        assert work["ao_collocation_point_visits"] == 2 * work["grid_points"]
+        assert work["ao_collocation_point_visits"] == work["grid_points"]
+        assert work["geometry_point_visits"] == 2 * work["grid_points"]
         assert work["nonlocal_execution"] == "resident-full-grid-device-seeds"
+        assert work["nonlocal_feature_source"] == "exact-final-scf-device-binding"
         assert work["nonlocal_feature_d2h_bytes"] == 0
         assert work["nonlocal_seed_h2d_bytes"] == 0
         assert work["nonlocal_dense_pair_capacity"] == work["grid_points"] ** 2
