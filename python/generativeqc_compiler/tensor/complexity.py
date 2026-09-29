@@ -267,9 +267,7 @@ def _pareto_frontier(candidates: typing.Iterable[_TreePlan]) -> tuple[_TreePlan,
         if any(_dominates(existing, candidate) for existing in frontier):
             continue
         frontier = [
-            existing
-            for existing in frontier
-            if not _dominates(candidate, existing)
+            existing for existing in frontier if not _dominates(candidate, existing)
         ]
         frontier.append(candidate)
     return tuple(frontier)
@@ -372,17 +370,13 @@ def _reassociate_node(node: Node, *, max_operands: int) -> Node:
                     for right in plans[right_mask]:
                         work_labels = tuple(dict.fromkeys(left.labels + right.labels))
                         work = _monomial(domains[label] for label in work_labels)
-                        elements = prod(
-                            domains[label].extent for label in work_labels
-                        )
+                        elements = prod(domains[label].extent for label in work_labels)
                         output_elements = prod(
                             (domains[label].extent for label in output_labels),
                             start=1,
                         )
                         coefficient = (
-                            node.attrs["coefficient"]
-                            if mask == full_mask
-                            else (1, 1)
+                            node.attrs["coefficient"] if mask == full_mask else (1, 1)
                         )
                         candidate_node = _binary_einsum(
                             left,
@@ -397,9 +391,7 @@ def _reassociate_node(node: Node, *, max_operands: int) -> Node:
                                 candidate_node,
                                 output_labels,
                                 max(left.max_degree, right.max_degree, work.degree),
-                                left.concrete_work
-                                + right.concrete_work
-                                + 2 * elements,
+                                left.concrete_work + right.concrete_work + 2 * elements,
                                 max(
                                     left.peak_elements,
                                     right.peak_elements,
