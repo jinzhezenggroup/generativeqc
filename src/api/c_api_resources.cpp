@@ -105,8 +105,12 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
 #endif
 }
 
-/** Separate additive bridge preserves the KS v1 three-output ABI. Quadrature
- * scratch coexists with the Fock provider but retires before KS/XC state. */
+/** Separate additive bridge preserves the KS v1 three-output ABI. For the
+ * device-fused route this is the quadrature-preparation peak: bounded scratch
+ * plus the full-grid points/weights that remain resident after preparation.
+ * The KS v1 XC slot deliberately remains a combined XC+grid persistent bound,
+ * so the legacy three-output planner neither undercounts nor double-charges
+ * the retained grid. */
 int generativeqc_resource_quadrature_cuda_v1(std::size_t atoms, std::size_t points,
                                              std::uint64_t* bytes) {
   if (!bytes) return 1;
