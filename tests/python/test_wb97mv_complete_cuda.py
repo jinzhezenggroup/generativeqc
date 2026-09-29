@@ -93,11 +93,13 @@ def test_complete_cuda_force_matches_independent_engine(
         assert work["two_electron_quartet_traversals"] == 0
         assert work["symmetry_unique_quartets_per_integral_source"] == 0
         assert work["maximum_center_dual3_evaluations_total"] == 0
-        assert work["two_electron_shell_traversals"] == 3
-        assert work["two_electron_radial_operators"] == [
-            "full-range",
-            "short-range",
-            "long-range",
+        assert work["two_electron_shell_traversals"] == 1
+        assert work["two_electron_radial_operators"] == ["full-range", "long-range"]
+        assert work["range_recurrences_per_participating_center"] == 1
+        assert work["two_electron_source_outputs"] == [
+            "coulomb",
+            "short-range-exchange",
+            "long-range-exchange",
         ]
         assert (
             "public-AO quartet domain is not materialized"
