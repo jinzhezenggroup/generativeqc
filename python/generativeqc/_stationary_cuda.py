@@ -1666,9 +1666,7 @@ def _complete_rks_cuda_gradient_diagnostic(
     )
     has_exchange = bool(state._source.method_ir.full_range_exact_exchange)
     ao4_primitive_capacity = (1 + int(has_exchange)) * primitive_sum**4
-    non_ao4_primitive_records = (
-        (na + 2) * primitive_sum**2 + na * (na - 1) // 2
-    )
+    non_ao4_primitive_records = (na + 2) * primitive_sum**2 + na * (na - 1) // 2
     pair_visits = (1 + 2 * len(state.grid.points)) * na * (na - 1) // 2
     if len(state.grid.points) > max_grid_points:
         raise ValueError("grid point work budget exceeded")

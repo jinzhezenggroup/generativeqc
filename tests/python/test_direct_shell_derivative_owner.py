@@ -71,13 +71,13 @@ def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
 def test_generic_stationary_cuda_adopts_prepared_shell_jk_before_ao4_fallback() -> None:
     driver = _source("python/generativeqc/_stationary_cuda.py")
     assert "native_shell = state._source.cuda_shell_full_range_derivatives()" in driver
-    assert 'stationary_full_range_integral_route=(' in driver
+    assert "stationary_full_range_integral_route=(" in driver
     assert '"prepared-direct-shell-v1"' in driver
 
     begin = driver.index("task_sources = [")
     end = driver.index("for source, rank, operator in task_sources:", begin)
     selection = driver[begin:end]
-    assert 'if shell_full_range is None:' in selection
+    assert "if shell_full_range is None:" in selection
     assert 'task_sources.append(("coulomb", 4, "four_center_eri"))' in selection
     assert 'task_sources.append(("exact_exchange", 4, "four_center_eri"))' in selection
     assert '"mode": "native-shell"' in selection

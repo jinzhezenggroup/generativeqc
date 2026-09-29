@@ -507,8 +507,7 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
 generativeqc_status generativeqc_ks_snapshot_cuda_shell_full_range_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::uint64_t* work, std::size_t work_count) {
-  if (!batch || !snapshot || !values || !work || work_count != 4 ||
-      count != 6 * snapshot->atoms)
+  if (!batch || !snapshot || !values || !work || work_count != 4 || count != 6 * snapshot->atoms)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {

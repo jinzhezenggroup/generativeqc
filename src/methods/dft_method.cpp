@@ -960,9 +960,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
-  generativeqc_status cuda_shell_full_range_gradient(
-      const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
-      std::array<std::uint64_t, 4>& work, std::string& detail) {
+  generativeqc_status cuda_shell_full_range_gradient(const dft::CudaKsFinalStateToken& expected,
+                                                     std::vector<double>& output,
+                                                     std::array<std::uint64_t, 4>& work,
+                                                     std::string& detail) {
 #if GENERATIVEQC_HAS_CUDA
     output.clear();
     work = {};
@@ -1582,9 +1583,11 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  generativeqc_status cuda_shell_full_range_gradient(
-      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
-      std::array<std::uint64_t, 4>& work, std::string& detail) {
+  generativeqc_status cuda_shell_full_range_gradient(std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     std::vector<double>& output,
+                                                     std::array<std::uint64_t, 4>& work,
+                                                     std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->cuda_shell_full_range_gradient(expected, output, work, detail);
     detail = "KS batch item has no prepared final-state owner";
@@ -1734,9 +1737,11 @@ generativeqc_status dft_cuda_integral_gradient_cached(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-generativeqc_status dft_cuda_shell_full_range_gradient(
-    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
-    std::vector<double>& output, std::array<std::uint64_t, 4>& work, std::string& detail) {
+generativeqc_status dft_cuda_shell_full_range_gradient(PreparedBatch& batch, std::size_t index,
+                                                       const dft::CudaKsFinalStateToken& expected,
+                                                       std::vector<double>& output,
+                                                       std::array<std::uint64_t, 4>& work,
+                                                       std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->cuda_shell_full_range_gradient(index, expected, output, work, detail);
   output.clear();

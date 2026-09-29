@@ -147,10 +147,9 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
         assert "exact_exchange" in batch._stationary_cuda_execution.sources.source_names
         # Full-range J'/K' are now owned by the prepared Direct shell scheduler,
         # so the stationary AO task owner executes only one-electron/Pulay/nuclear work.
-        per_execution = (
-            (len(atoms) + 2) * primitive_count**2
-            + len(atoms) * (len(atoms) - 1) // 2
-        )
+        per_execution = (len(atoms) + 2) * primitive_count**2 + len(atoms) * (
+            len(atoms) - 1
+        ) // 2
         assert (
             batch._stationary_cuda_execution.sources.metrics()["primitive_records"]
             == 2 * per_execution
