@@ -198,6 +198,22 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   add(batch, sizeof(std::uint8_t));
   add(1, sizeof(cuda_execution::GeneratedShellPairStream) + 2 * sizeof(std::int64_t) +
              detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t));
+  if (derivative_order) {
+    // Retain the generated full-range exchange owner as a stationary shell
+    // derivative lease. Bounds use total shell counts as conservative shape-only
+    // envelopes; no topology enumeration occurs in this query.
+    const auto pairs = runtime::size_mul(shells, shells);
+    const auto rectangular = runtime::size_mul(batch, runtime::size_mul(nao, cart));
+    add(cart_elements, 4 * sizeof(double));
+    add(public_elements, 4 * sizeof(double));
+    add(rectangular, 4 * sizeof(double));
+    add(pairs, 3 * sizeof(double) + sizeof(std::uint32_t) + sizeof(double));
+    add(batch, 11 * sizeof(double));
+    add(detail::kDirectQuartetShellClassCount, sizeof(std::uint32_t));
+    add(atoms, 3 * sizeof(double));
+    add(batch + 1, 2 * sizeof(std::int64_t));
+    add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
+  }
   return bytes;
 }
 
@@ -343,14 +359,14 @@ generativeqc_status create_cuda_direct_jk_plan(
     if (numerical_failure)
       throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                             "nonfinite direct J/K Schwarz bound"};
-    // Derivative capability is orthogonal to the value schedule. Retained
-    // first-derivative owners may still use the generated shell-Coulomb path,
-    // while value-only owners continue to prefer generated full-range exchange.
+    // Derivative capability is orthogonal to the value schedule. When budgeted,
+    // retain the same generated full-range exchange owner for stationary shell
+    // derivatives; value-only plans keep its force scratch disabled.
     if (budget > required) {
       const auto optional_budget = budget - required;
-      if (derivative_order == 0)
-        plan->generated_exchange = prepare_generated_exchange(
-            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+      plan->generated_exchange = prepare_generated_exchange(
+          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
+          derivative_order != 0);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
@@ -622,6 +638,34 @@ generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan*
                                                                std::string& detail) {
   return execute_cuda_direct_energy_derivative_range(plan, item, 1, spec, density, beta, derivative,
                                                      detail);
+}
+
+generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
+    double exchange_coefficient, const double* density, const double* beta,
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan != nullptr && plan->diagnostic.batch_size == 1,
+                      "resident shell derivative requires one prepared item");
+    direct_jk_require(plan->diagnostic.derivative_order >= 1,
+                      "direct shell first derivatives were not retained");
+    direct_jk_require(plan->generated_exchange != nullptr &&
+                          plan->generated_exchange->force_capability,
+                      "prepared Direct owner has no retained shell derivative lease");
+    direct_jk_require(std::isfinite(coulomb_coefficient) && std::isfinite(exchange_coefficient),
+                      "nonfinite resident shell derivative coefficient");
+    const auto n = plan->diagnostic.nbf;
+    direct_jk_require(density != nullptr && matrix_elements == n * n,
+                      "resident shell derivative density shape is invalid");
+    const bool unrestricted = spin == FockSpin::Unrestricted;
+    direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
+                      "resident shell derivative spin storage is invalid");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
+        *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
+        exchange_coefficient, derivatives));
+    direct_jk_finite_result(derivatives);
+  });
 }
 
 generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
