@@ -15,6 +15,20 @@ from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 
 
+def test_native_cuda_rsh_integral_bridge_is_method_neutral() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
+    ).read_text(encoding="utf-8")
+    begin = source.index("generativeqc_status cuda_integral_gradient(")
+    end = source.index("Result execute(bool compute_forces)", begin)
+    bridge = source[begin:end]
+    assert "execution_plan_.range_exchange" in bridge
+    assert "range_strategy_" in bridge
+    assert "SemilocalFamily::Wb97mv" not in bridge
+    assert "execute_prepared_cuda_direct_rsh_energy_derivatives_device(" in bridge
+    assert "!system_.ecp_terms.empty()" in bridge
+
+
 def _fake_s_basis() -> SimpleNamespace:
     centers = np.array(
         [
