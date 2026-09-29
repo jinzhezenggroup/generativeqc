@@ -219,7 +219,7 @@ inline constexpr std::size_t kDerivativeShellAotInventoryCount =
     sizeof(kDerivativeShellAotInventory) / sizeof(kDerivativeShellAotInventory[0]);
 
 template <bool Unrestricted>
-__device__ inline bool contract_packaged_derivative_shell_aot(
+__device__ inline __noinline__ bool contract_packaged_derivative_shell_aot(
     unsigned shell_class, DirectRangeOperator radial_operator, double omega, DeviceBatch batch,
     const std::uint32_t* task_count, const ActiveShellQuartetTile* task,
     double screening_tolerance, const double* schwarz_bounds, const double* density,
