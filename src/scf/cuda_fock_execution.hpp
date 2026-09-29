@@ -43,6 +43,44 @@ struct PreparedCudaFockBinding {
  */
 PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan) noexcept;
 
+/** Device-resident occupied-factor execution binding for one full-range fitted
+ * provider. This is a capability view only: the method consumer still owns the
+ * proof that its canonical occupied coefficients reconstruct the supplied
+ * density. No final-state or force-response lease is implied by this binding. */
+struct PreparedCudaOccupiedFockBinding {
+  int device_id{-1};
+  cudaStream_t stream{};
+  const void* source_identity{};
+  std::size_t nbf{};
+  bool unrestricted{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && stream != nullptr && source_identity != nullptr && nbf != 0;
+  }
+};
+
+PreparedCudaOccupiedFockBinding prepared_cuda_occupied_fock_binding(
+    const PreparedFockPlan& plan) noexcept;
+
+/** Canonical occupied coefficients already resident on the prepared provider's
+ * device. Coefficients are column-major AO x orbital matrices. Restricted
+ * execution uses occupation two; unrestricted alpha/beta use occupation one. */
+struct PreparedCudaOccupiedFockInput {
+  const double* alpha_coefficients{};
+  const double* beta_coefficients{};
+  std::size_t alpha_rank{}, beta_rank{};
+};
+
+/** Enqueue full-range fitted J plus occupied-factor RI-K without staging the
+ * canonical coefficients through host memory. The caller must prove that the
+ * factors belong to the exact density pointers supplied here. Unsupported
+ * provider/model compositions fail closed; this call never creates a final
+ * projection lease by itself. */
+generativeqc_status enqueue_prepared_cuda_occupied_fock(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, const PreparedCudaOccupiedFockInput& occupied, double* coulomb,
+    double* alpha_exchange, double* beta_exchange, int* numerical_error, std::string& detail);
+
 /** Borrow the exact Direct source only when this prepared owner retained
  * first-derivative capability. The binding is an execution capability, not a
  * second scientific/provider owner; source_identity therefore matches the

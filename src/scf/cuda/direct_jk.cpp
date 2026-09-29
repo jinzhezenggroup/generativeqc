@@ -164,7 +164,8 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
   // three-term public AO expansion. No Cartesian quartet task table uploads.
   add(batch, sizeof(std::int64_t));
   add(1, sizeof(std::int64_t));  // terminal atom offset
-  add(atoms, sizeof(std::int32_t) + 3 * sizeof(double));
+  // atom_systems + atomic_numbers + Cartesian positions.
+  add(atoms, 2 * sizeof(std::int32_t) + 3 * sizeof(double));
   add(shells, sizeof(std::int32_t) + sizeof(std::uint8_t) + sizeof(std::int64_t));
   add(1, sizeof(std::int64_t));  // terminal primitive offset
   add(aos, sizeof(std::int32_t) + 10 * sizeof(std::uint8_t) + 3 * sizeof(double));
@@ -194,6 +195,9 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
       3 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint32_t) + sizeof(double));
   add(runtime::size_mul(primitives, primitives), sizeof(cuda_execution::PrimitivePairData));
   add(shells, sizeof(std::int64_t));
+  // Generated shell topology also retains public shell AO offsets so
+  // one-electron derivatives can borrow the same immutable geometry owner.
+  add(shells + 1, sizeof(std::int64_t));
   add(batch + 1, 2 * sizeof(std::int64_t) + 10 * sizeof(std::uint32_t));
   add(batch, sizeof(std::uint8_t));
   add(1, sizeof(cuda_execution::GeneratedShellPairStream) + 2 * sizeof(std::int64_t) +
@@ -210,7 +214,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(pairs, 3 * sizeof(double) + sizeof(std::uint32_t) + sizeof(double));
     add(batch, 11 * sizeof(double));
     add(detail::kDirectQuartetShellClassCount, sizeof(std::uint32_t));
-    add(atoms, 3 * sizeof(double));
+    add(atoms, 9 * sizeof(double));
     add(batch + 1, 2 * sizeof(std::int64_t));
     add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
   }
@@ -271,6 +275,7 @@ generativeqc_status create_cuda_direct_jk_plan(
 #define GENERATIVEQC_DIRECT_METADATA(F) \
   F(atom_offsets);                      \
   F(atom_systems);                      \
+  F(atomic_numbers);                    \
   F(positions);                         \
   F(shell_atoms);                       \
   F(shell_angular);                     \
