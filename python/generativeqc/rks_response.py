@@ -586,6 +586,11 @@ class NativeRKSResponse(CPKSResponseOperator):
             state._source.close()
             raise
 
+    @property
+    def basis(self) -> NativeAO:
+        """Borrowed AO owner shared with response and Hessian consumers."""
+        return self._basis
+
     def validate_current(self) -> None:
         """Reject a stale SCF state, basis, J owner, XC owner or model identity."""
         self._contract.validate(self.state)
