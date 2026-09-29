@@ -279,8 +279,7 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
   if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO && execution_plan.d4_correction)
     throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
   if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO &&
-      (execution_plan.semilocal_family == dft::SemilocalFamily::R2scan ||
-       execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv))
+      dft::semilocal_family_requires_tau(execution_plan.semilocal_family))
     throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "meta-GGA DFT currently requires strict FP64");
   options.precision_mode = descriptor.precision_mode;
 

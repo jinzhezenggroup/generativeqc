@@ -36,9 +36,7 @@ _SCF_DOMAIN_VERSION_BY_DOMAIN = {
     domain: version for version, domain in SCF_DOMAIN_BY_VERSION.items()
 }
 _META_GGA_CODES = frozenset(
-    item["code"]
-    for item in SEMILOCAL_FAMILIES
-    if any(name.startswith("MGGA") for name, _ in item["components"])
+    item["code"] for item in SEMILOCAL_FAMILIES if item["requires_tau"]
 )
 
 

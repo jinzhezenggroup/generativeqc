@@ -2,25 +2,30 @@
 
 import typing
 from dataclasses import replace
+from fractions import Fraction
 
 from vibeqc_compiler.dft.ao import jet_indices
 from vibeqc_compiler.dft.ao_cuda import emit_grid_policy
 from vibeqc_compiler.integral.expr import AlgebraForm
 from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
 
-from ._generated_native_semilocal import SEMILOCAL_FAMILY_CODES
+from ._generated_native_semilocal import (
+    SEMILOCAL_FAMILY_BY_CODE,
+    SEMILOCAL_FAMILY_CODES,
+)
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
 from .semilocal_codegen import emit_polarized_semilocal
 from .semilocal_family import energy_expression
-from .spec import WB97MV_COMPONENTS, FunctionalSpec
-from .spec import functional as resolve_functional
+from .spec import FunctionalSpec
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
 
-_REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
-    record["functional_code"] for record in SPLIT_HYBRIDS.values()
-)
+_SPLIT_HYBRID_BY_CODE = {
+    record["functional_code"]: (identifier, record)
+    for identifier, record in SPLIT_HYBRIDS.items()
+}
+_REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(_SPLIT_HYBRID_BY_CODE)
 
 
 def _functional_code(functional: typing.Any, pbe: typing.Any) -> int:
@@ -47,7 +52,10 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
     never differentiates clipping or substitutes an interior point formula.
     """
     polarized = replace(semilocal, spin="polarized")
-    if code == 3:
+    curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
+    if curated is not None:
+        if curated["stationary_kernel"] != "composed":
+            raise ValueError("curated stationary kernel is not composition-generated")
         raw_name = "stationary_semilocal_raw"
         body = emit_polarized_semilocal(
             polarized,
@@ -57,17 +65,14 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
             production=True,
             function_qualifier="__device__ inline",
         )
-        features = 5
+        features = 7 if curated["requires_tau"] else 5
     else:
-        from fractions import Fraction
-
         from .split_hybrid_codegen import emit_split_hybrid_device_body
 
-        identifier, record = next(
-            (name, record)
-            for name, record in SPLIT_HYBRIDS.items()
-            if record["functional_code"] == code
-        )
+        try:
+            identifier, record = _SPLIT_HYBRID_BY_CODE[code]
+        except KeyError as error:
+            raise ValueError("unknown composed stationary functional code") from error
         if dict(polarized.components) != {
             name: Fraction(weight) for name, weight in record["components"]
         }:
@@ -124,19 +129,30 @@ def _emit_stationary_point(
     functional: int, *, semilocal: FunctionalSpec | None = None
 ) -> str:
     """Emit the exact SCF-domain point differential consumed by geometry CUDA."""
-    if functional == 3 or functional >= 0x10000:
+    curated: typing.Mapping[str, typing.Any] | None = SEMILOCAL_FAMILY_BY_CODE.get(
+        functional
+    )
+    if functional in _SPLIT_HYBRID_BY_CODE:
         if not isinstance(semilocal, FunctionalSpec):
             raise ValueError("composed stationary point requires its FunctionalSpec")
         return _emit_composed_point(functional, semilocal)
-    if functional < 2:
-        pbe = "true" if functional == 1 else "false"
+    if curated is None:
+        raise ValueError("unknown stationary semilocal functional code")
+    kernel = curated["stationary_kernel"]
+    if kernel == "composed":
+        if not isinstance(semilocal, FunctionalSpec):
+            raise ValueError("composed stationary point requires its FunctionalSpec")
+        return _emit_composed_point(functional, semilocal)
+    if kernel in ("lda", "pbe"):
+        pbe = "true" if kernel == "pbe" else "false"
         scales = ""
         if semilocal is not None:
             components = dict(semilocal.components)
-            x_name, c_name = (
-                ("GGA_X_PBE", "GGA_C_PBE") if functional else ("LDA_X", "LDA_C_PW")
-            )
-            if not set(components) <= {x_name, c_name}:
+            component_names = tuple(name for name, _ in curated["components"])
+            if len(component_names) != 2:
+                raise ValueError("direct stationary point requires two components")
+            x_name, c_name = component_names
+            if not set(components) <= set(component_names):
                 raise ValueError(
                     "stationary point selector disagrees with semilocal components"
                 )
@@ -164,15 +180,16 @@ def _emit_stationary_point(
             ]
         )
 
-    if functional == 4:
+    if kernel == "wb97mv":
         if not isinstance(semilocal, FunctionalSpec):
             raise ValueError(
                 "omegaB97M-V stationary geometry requires its FunctionalSpec"
             )
         active = {name for name, coefficient in semilocal.components if coefficient}
-        if active != set(WB97MV_COMPONENTS):
+        expected_components = {name for name, _ in curated["components"]}
+        if active != expected_components:
             raise ValueError(
-                "functional=4 stationary geometry requires canonical omegaB97M-V semilocal components"
+                f"{curated['name']} stationary geometry requires its canonical semilocal components"
             )
         # GridTaskView always supplies alpha/beta features, splitting an RKS
         # density equally. Change only that ABI convention: the MethodIR owns
@@ -248,7 +265,26 @@ def _emit_stationary_point(
             ]
         )
 
-    spec = resolve_functional("R2SCAN", spin="polarized")
+    if kernel != "r2scan":
+        raise ValueError(f"unsupported stationary kernel {kernel!r}")
+    spec = FunctionalSpec(
+        "stationary-curated-semilocal",
+        tuple(
+            (name, Fraction(coefficient)) for name, coefficient in curated["components"]
+        ),
+        spin="polarized",
+        range_omega=Fraction(curated["range_omega"]),
+    )
+    if semilocal is not None and (
+        dict(semilocal.components) != dict(spec.components)
+        or semilocal.range_omega != spec.range_omega
+        or semilocal.exact_exchange != spec.exact_exchange
+        or semilocal.long_range_exchange != spec.long_range_exchange
+        or semilocal.version != spec.version
+    ):
+        raise ValueError(
+            "R2SCAN stationary geometry requires its canonical semilocal components and parameters"
+        )
     graph, energy, feature_variables = energy_expression(spec, production=True)
     roots = (
         energy,
@@ -328,17 +364,27 @@ def emit_geometry_cuda(
 ) -> typing.Any:
     """Lower AO bilinear AD; the caller supplies one exact semilocal selector."""
     code = _functional_code(functional, pbe)
-    family = (
-        (
+    if semilocal is not None:
+        family = (
             "mgga"
             if "tau" in semilocal.ingredients
             else "gga"
             if "sigma" in semilocal.ingredients
             else "lda"
         )
-        if semilocal is not None
-        else {0: "lda", 1: "gga", 2: "mgga", 4: "mgga"}[code]
-    )
+    else:
+        record = SEMILOCAL_FAMILY_BY_CODE.get(code)
+        if record is None:
+            raise ValueError(
+                "generated split-hybrid geometry lowering requires its FunctionalSpec"
+            )
+        family = (
+            "mgga"
+            if record["requires_tau"]
+            else "gga"
+            if record["requires_gradient"]
+            else "lda"
+        )
     program = jet_pullback_program(family)
     coefficient_count = {"lda": 1, "gga": 4, "mgga": 5}[family]
     variables = {
