@@ -138,6 +138,31 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
       matrix_elements, derivatives, detail);
 }
 
+generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
+  const auto binding = prepared_cuda_direct_derivative_binding(plan);
+  auto* source = plan.cuda_direct_source();
+  const auto& strategy = plan.strategy();
+  const auto& spec = strategy.spec;
+  const bool valid =
+      binding && source && strategy.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
+      spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact &&
+      spec.coulomb.op == FockOperator::FullRange &&
+      (!spec.exchange.present ||
+       (spec.exchange.approximation == FockApproximation::Exact &&
+        spec.exchange.op == FockOperator::FullRange)) &&
+      matrix_elements == binding.nbf * binding.nbf;
+  if (!valid) {
+    detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return execute_cuda_direct_shell_full_range_derivatives_device(
+      source, spec.spin, spec.coulomb.coefficient,
+      spec.exchange.present ? spec.exchange.coefficient : 0.0, density, beta, matrix_elements,
+      derivatives, detail);
+}
+
 generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
                                                const double* beta, std::size_t matrix_elements,
                                                double* coulomb, double* alpha_exchange,
