@@ -59,9 +59,12 @@ def test_native_cpu_reassociation_packs_lowered_input_order(
     )
     assert len(preparations) == 1
     assert native.program is preparations[0]
-    # A*C is the cheaper first contraction. Its tree visits inputs in a
-    # different order from the original A,B,C expression: this is not a no-op.
-    assert _input_names(native.program) != _input_names(original)
+    # Require a real binary-tree rewrite. Canonical content-hash ordering may
+    # preserve the input order even though A*C is the cheaper first contraction.
+    contractions = [node for node in native.program.live_nodes if node.op == "einsum"]
+    assert len(contractions) == 2
+    assert all(len(node.inputs) == 2 for node in contractions)
+    assert native.program.logical_hash != original.logical_hash
     assert tuple(node.attrs["name"] for node in native.inputs) == _input_names(
         native.program
     )
