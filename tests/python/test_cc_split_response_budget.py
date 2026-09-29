@@ -18,7 +18,7 @@ def _fragment(source: str) -> str:
 
 def _probe(fragment: str) -> str:
     return (
-        r'''
+        r"""
 #include <algorithm>
 #include <cstddef>
 #include <initializer_list>
@@ -62,9 +62,9 @@ int main() {
       if(dominant==2) fs=100000;
       if(dominant==3) oj=100000;
       struct {std::size_t response_phase_bytes{};} plan;
-'''
+"""
         + fragment
-        + r'''
+        + r"""
       // Independent inventory at the final calls: correlation/canonicalization,
       // two Fock seeds, d_rotation, the retained orbital arena, dense response
       // matrix, basis/action vectors, Z solution, and independent residual.
@@ -84,7 +84,7 @@ int main() {
   }
   std::cout<<"140 split-response live-owner budget cases passed\n";
 }
-'''
+"""
     )
 
 
@@ -104,6 +104,6 @@ def test_split_response_budget_covers_final_live_owners(tmp_path: Path) -> None:
         timeout=60,
     )
     result = subprocess.run(
-        [str(executable)], capture_output=True, text=True, timeout=10
+        [str(executable)], check=False, capture_output=True, text=True, timeout=10
     )
     assert result.returncode == 0, result.stdout + result.stderr
