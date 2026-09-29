@@ -32,6 +32,7 @@ def reverse_preflight(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 namespace posthf {
 std::size_t checked_add(std::size_t a, std::size_t b) {
   constexpr auto limit = static_cast<std::size_t>(INT64_MAX);
@@ -51,9 +52,22 @@ int main(int argc, char** argv) {
     const auto na = std::strtoull(argv[2], nullptr, 10);
     const auto maximum_bytes = std::strtoull(argv[3], nullptr, 10);
     const auto n2 = posthf::checked_mul(n, n);
-    const auto n4 = posthf::checked_mul(n2, n2);
     const auto a2 = posthf::checked_mul(na, na);
     const auto three = posthf::checked_mul(n2, na);
+    const auto occupied = n / 2;
+    const auto virtuals = n - occupied;
+    struct Factors {
+      std::vector<double> fock, correlation_iajb;
+    };
+    struct Weights {
+      std::vector<double> two_electron;
+      Factors two_electron_factors;
+    } weights;
+    weights.two_electron_factors.fock.resize(n2);
+    weights.two_electron_factors.correlation_iajb.resize(
+        posthf::checked_mul(posthf::checked_mul(occupied, occupied),
+                            posthf::checked_mul(virtuals, virtuals)));
+    const bool dense_two = false;
     struct Provider { std::size_t provider_bytes() const { return 4096; } } provider;
 """
         + preflight
@@ -95,7 +109,12 @@ def test_reverse_peak_covers_live_metric_pullback(
     # Independent live-buffer inventory at symmetric_matrix_function_vjp:
     # input H/S/ERI weights; result H/S/A; bar_B/bar_A; bar_X; eigenvectors;
     # four VJP matrices (including returned M); eigenvalues and uint8 rank mask.
-    live_bytes = 4096 + 8 * (4 * n**2 + n**4 + 3 * n**2 * na + 6 * na**2) + 9 * na
+    occupied = n // 2
+    virtuals = n - occupied
+    correlation = occupied**2 * virtuals**2
+    live_bytes = 4096 + 8 * (
+        5 * n**2 + correlation + 3 * n**2 * na + 6 * na**2
+    ) + 9 * na
     assert planned >= live_bytes
     assert run(planned).returncode == 0
     assert run(planned - 1).returncode == 2
