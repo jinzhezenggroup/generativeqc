@@ -134,6 +134,40 @@
       "requires_tau": true,
       "stationary_kernel": "wb97mv",
       "stationary_ecp_gradient": true
+    },
+    {
+      "symbol": "CamB3lyp",
+      "code": 5,
+      "name": "CAM-B3LYP",
+      "scf_domain": "libxc-7.0.0/rsh-interior-v1",
+      "domain_version": 5,
+      "cuda_ks": false,
+      "components": [
+        [
+          "GGA_X_B88",
+          "7/20"
+        ],
+        [
+          "GGA_X_ITYH",
+          "23/50"
+        ],
+        [
+          "LDA_C_VWN",
+          "19/100"
+        ],
+        [
+          "GGA_C_LYP",
+          "81/100"
+        ]
+      ],
+      "range_omega": "33/100",
+      "coefficient_policy": "exact",
+      "exchange_policy": "canonical",
+      "canonical_method": "CAM-B3LYP",
+      "requires_gradient": true,
+      "requires_tau": false,
+      "stationary_kernel": "composed-interior",
+      "stationary_ecp_gradient": false
     }
   ]
 }
