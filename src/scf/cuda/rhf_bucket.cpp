@@ -70,7 +70,7 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
   ArenaLayout layout{};
   if (!make_layout(1, nbf, direct_nbf, atoms, shells, pairs, blocks, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                    primitives, std::max<std::size_t>(1, diis_history), 0, spins, true, false, false,
-                   false, false, false, false, layout))
+                   false, false, false, false, false, layout))
     return false;
   arena_bytes = layout.bytes;
   plan_object_bytes = sizeof(CudaRhfBucketPlan);
@@ -194,7 +194,7 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   if (!make_layout(1, nbf, direct_nbf, atoms, shells, shell_pair_count, shell_pair_block_count, 0,
                    shell_pair_primitive_count, 0, 0, 0, 0, 0, 0, 0, primitive_count,
                    std::max<std::size_t>(1, diis_history), 0, spins, true, false, false, false,
-                   false, false, false, energy_layout)) {
+                   false, false, false, false, energy_layout)) {
     return false;
   }
 
@@ -235,7 +235,7 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
                    fp32_shell_quartet_tile_count, generated_shell_task_capacity,
                    ppps_resident_ket_task_capacity, generic_order5_tile_capacity, primitive_count,
                    std::max<std::size_t>(1, diis_history), 0, spins, false, direct_nbf != nbf,
-                   false, false, false, false, mixed_precision_fock, force_layout)) {
+                   false, false, false, false, mixed_precision_fock, false, force_layout)) {
     return false;
   }
 
