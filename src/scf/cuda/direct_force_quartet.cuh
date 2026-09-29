@@ -204,14 +204,26 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
  * evaluates the explicit radial operator through the shared range-moment
  * Cartesian source recurrence.
  */
-template <bool Unrestricted, unsigned AngularOrder>
-__device__ __forceinline__ void contract_two_electron_force_quartet_subtile_range_scaled(
+template <bool Unrestricted, unsigned AngularOrder, int PackagedShellClass = -1,
+          generativeqc::integrals::CoulombRange PackagedRange =
+              generativeqc::integrals::CoulombRange::Full,
+          int PackagedOmegaMilli = 0>
+__device__ __forceinline__ void contract_two_electron_force_quartet_subtile_range_impl(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     double exchange_coefficient, generativeqc::integrals::CoulombRange range, double omega,
     std::size_t active_subtile, unsigned ao_quartet_lane) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
+  static_assert(PackagedShellClass == -1 ||
+                (PackagedShellClass >= 0 &&
+                 PackagedShellClass < static_cast<int>(detail::kDirectQuartetShellClassCount)));
+  if constexpr (PackagedShellClass >= 0) {
+    static_assert(PackagedRange != generativeqc::integrals::CoulombRange::Full);
+    static_assert(PackagedOmegaMilli > 0);
+    range = PackagedRange;
+    omega = static_cast<double>(PackagedOmegaMilli) / 1000.0;
+  }
   constexpr std::size_t subtiles_per_tile = detail::direct_quartet_subtiles_per_tile(AngularOrder);
   const std::size_t active_tile = active_subtile / subtiles_per_tile;
   if (active_tile >= static_cast<std::size_t>(*active_shell_quartet_tile_count)) return;
@@ -270,6 +282,9 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
   const unsigned shell_class = direct_quartet_shell_class_device(
       batch.shell_angular[first_shell], batch.shell_angular[second_shell],
       batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+  if constexpr (PackagedShellClass >= 0) {
+    if (shell_class != static_cast<unsigned>(PackagedShellClass)) return;
+  }
   std::int32_t unique_center_atoms[4];
   const unsigned unique_center_count =
       direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
@@ -278,10 +293,21 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
   double derivative_sum[3]{};
   for (unsigned center = 0; center + 1U < unique_center_count; ++center) {
     const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[center]) * 3;
-    const Dual3 derivative =
-        dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
-            shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate, range, omega);
+    Dual3 derivative{};
+    if constexpr (PackagedShellClass >= 0) {
+      constexpr double packaged_omega = static_cast<double>(PackagedOmegaMilli) / 1000.0;
+      derivative =
+          contracted_eri_cartesian_source_shell_class<static_cast<unsigned>(PackagedShellClass),
+                                                      Dual3>(
+              batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate,
+              PackagedRange, packaged_omega);
+    } else {
+      derivative = dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
+          shell_class, batch, system, static_cast<std::int32_t>(i),
+          static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
+          static_cast<std::int32_t>(l), coordinate, range, omega);
+    }
     const double value[3] = {
         derivative.derivative_x,
         derivative.derivative_y,
@@ -301,6 +327,35 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
   for (unsigned axis = 0; axis < 3; ++axis)
     if (derivative_sum[axis] != 0.0)
       atomicAdd(forces + final_coordinate + axis, coefficient * derivative_sum[axis]);
+}
+
+template <bool Unrestricted, unsigned AngularOrder>
+__device__ __forceinline__ void contract_two_electron_force_quartet_subtile_range_scaled(
+    DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
+    const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    double exchange_coefficient, generativeqc::integrals::CoulombRange range, double omega,
+    std::size_t active_subtile, unsigned ao_quartet_lane) {
+  contract_two_electron_force_quartet_subtile_range_impl<Unrestricted, AngularOrder>(
+      batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
+      schwarz_bounds, density, active, forces, exchange_coefficient, range, omega, active_subtile,
+      ao_quartet_lane);
+}
+
+template <bool Unrestricted, unsigned ShellClass,
+          generativeqc::integrals::CoulombRange Range, int OmegaMilli>
+__device__ __forceinline__ void contract_two_electron_force_quartet_subtile_range_shell_aot_scaled(
+    DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
+    const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
+    double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane) {
+  constexpr unsigned angular_order = direct_shell_class_angular_order(ShellClass);
+  constexpr double omega = static_cast<double>(OmegaMilli) / 1000.0;
+  contract_two_electron_force_quartet_subtile_range_impl<
+      Unrestricted, angular_order, static_cast<int>(ShellClass), Range, OmegaMilli>(
+      batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
+      schwarz_bounds, density, active, forces, exchange_coefficient, Range, omega, active_subtile,
+      ao_quartet_lane);
 }
 
 template <bool Unrestricted, unsigned AngularOrder>
