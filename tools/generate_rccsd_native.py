@@ -778,7 +778,7 @@ def cpu_header() -> str:
             "};",
             "struct HamiltonianOutputs { const double* hcore{}; const double* eri{}; const double* overlap{}; const double* rotation_gradient{}; const double* stationarity{}; const double* orbital_rhs{}; };",
             "struct HamiltonianControlOutputs { const double* stationarity{}; const double* orbital_rhs{}; };",
-            "struct OrbitalJvpOutput { const double* d_fov{}; };
+            "struct OrbitalJvpOutput { const double* d_fov{}; };",
             "struct TriplesResponseOutputs {",
             *[f"  const double* {name}{{}};" for name in TRIPLES_RESPONSE_INPUTS],
             "};",
@@ -795,7 +795,7 @@ def cpu_header() -> str:
             ],
             f'inline constexpr const char* hamiltonian_weights_program_hash="{hamiltonian_weights.logical_hash}";',
             f'inline constexpr const char* hamiltonian_control_program_hash="{hamiltonian_control.logical_hash}";',
-            f'inline constexpr const char* orbital_jvp_program_hash="{orbital_jvp.logical_hash}";
+            f'inline constexpr const char* orbital_jvp_program_hash="{orbital_jvp.logical_hash}";',
             f'inline constexpr const char* fock_weights_program_hash="{fock_weights.logical_hash}";',
             f'inline constexpr const char* triples_response_program_hash="{triples_response.logical_hash}";',
             _required_function(iteration, "iteration_arena_elements"),
