@@ -86,7 +86,7 @@ def test_generic_stationary_cuda_adopts_prepared_full_range_shell_source() -> No
     assert "def cuda_full_range_derivatives(" in snapshot
     assert "_native.STATUS_NOT_IMPLEMENTED" in snapshot
 
-    assert 'full_range_derivative_route=(' in stationary
+    assert "full_range_derivative_route=(" in stationary
     assert '"prepared-direct-shell" if native_shell_full_range' in stationary
     assert "records -= ao_quartet_primitive_records" in stationary
     assert "if native_shell_full_range" in stationary
