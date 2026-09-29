@@ -125,6 +125,7 @@ LagrangianWeights canonical_lagrangian_weights_streamed(const hf::PhysicalRefere
                                                         std::span<const double> hcore_mo,
                                                         const posthf::MOBlockProvider& provider,
                                                         EnergyAdjoint adjoint,
+                                                        OrbitalRhs orbital,
                                                         std::span<const double> response,
                                                         double same_space_threshold,
                                                         bool cuda = false, int device_id = 0);
