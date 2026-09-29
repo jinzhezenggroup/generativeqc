@@ -20,7 +20,13 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
     begin = source.index("generativeqc_status cuda_integral_gradient(")
     end = source.index("Result execute(bool compute_forces)", begin)
     bridge = source[begin:end]
-    assert "execute_cuda_stationary_one_electron_pair(" in bridge
+    assert "resident_final_stationary_weights" in bridge
+    assert "resident_weights.density" in bridge
+    assert "resident_weights.weighted_density" in bridge
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in bridge
+    assert "fock_.cuda_direct_source()" in bridge
+    assert "execute_cuda_stationary_one_electron_pair(" in bridge  # bounded fallback
+    assert "auto density = (*cached_density)[0]" not in bridge
     assert "execute_cuda_one_electron_gradient(" not in bridge
 
 
@@ -107,6 +113,7 @@ def test_complete_cuda_force_matches_independent_engine(
         assert native["final_state_export_d2h_bytes"] == 0
         assert native["final_state_export_reads"] == 0
         assert native["final_state_export_synchronizations"] == 0
+        assert native["one_electron_h2d_bytes"] == 0
         energy_only = batch.execute(strict=True, properties=("energy",)).items[0]
         assert cold.executed_backend == warm.executed_backend == "cuda"
         assert energy_only.forces is None

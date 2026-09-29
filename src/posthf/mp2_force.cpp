@@ -13,6 +13,7 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "response/solve.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::mp2 {
 namespace {
@@ -26,15 +27,12 @@ std::vector<std::size_t> range(std::size_t begin, std::size_t end) {
 
 std::vector<double> hcore_mo(const hf::PhysicalReference& reference) {
   const auto n = reference.nbf;
-  if (reference.hcore.size() != square(n) || reference.coefficients.size() != square(n))
+  const auto n2 = square(n);
+  if (reference.hcore.size() != n2 || reference.coefficients.size() != n2)
     throw std::invalid_argument("MP2 force reference has inconsistent one-electron data");
-  std::vector<double> result(square(n), 0.0);
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q)
-      for (std::size_t mu = 0; mu < n; ++mu)
-        for (std::size_t nu = 0; nu < n; ++nu)
-          result[p * n + q] += reference.coefficients[mu * n + p] * reference.hcore[mu * n + nu] *
-                               reference.coefficients[nu * n + q];
+  std::vector<double> result(n2), workspace(n2);
+  tensor::cpu_congruence('T', n, reference.coefficients.data(), reference.hcore.data(),
+                         result.data(), workspace.data());
   return result;
 }
 

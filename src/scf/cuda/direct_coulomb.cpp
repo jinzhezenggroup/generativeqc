@@ -94,6 +94,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
 #define COULOMB_METADATA(F)        \
   F(system_shell_offsets);         \
   F(system_shell_pair_offsets);    \
+  F(shell_ao_offsets);             \
   F(shell_direct_ao_offsets);      \
   F(shell_pair_systems);           \
   F(shell_pair_first);             \

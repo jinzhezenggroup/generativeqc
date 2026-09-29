@@ -751,6 +751,8 @@ void invalid_inputs_and_resource_boundaries() {
           "gradient resource plan retained dense N^4 relaxed-weight storage");
   require(probe.relaxed_weight_bytes < 4 * 4 * 4 * 4 * sizeof(double),
           "factorized relaxed-weight storage is not below one dense N^4 tensor");
+  require(probe.rank2_transform_workspace_bytes == 16 * sizeof(double),
+          "rank-2 congruence workspace is not budgeted");
   require(probe.shell_cotangent_bytes == 81 * sizeof(double),
           "shell-quartet cotangent ownership is not isolated");
   require(probe.derivative_staging_bytes == 485 * sizeof(double),

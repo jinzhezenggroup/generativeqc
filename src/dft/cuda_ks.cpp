@@ -195,6 +195,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   const MolecularGrid& grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
+  scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
   cudaStream_t stream{};
   int device{};
   std::size_t n{}, matrix{}, elements{};
@@ -224,7 +225,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
-  bool fitted_coulomb{};
+  bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
   bool mixed_j{}, strict_refinement{}, pending_mixed_j{}, mixed_j_executed{}, device_nonlocal{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
@@ -232,7 +233,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   nlc::Vv10DensityDomain nonlocal_domain{nlc::Vv10DensityDomain::StrictPositive};
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
-  bool final_state_ready{}, final_frame_ready{};
+  bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
   double previous_energy{std::numeric_limits<double>::infinity()};
   double warm_energy{std::numeric_limits<double>::infinity()};
@@ -422,16 +423,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
       range_exchange_coefficient = range_correction->spec.exchange.coefficient;
     }
     fitted_coulomb = strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+    fitted_exchange = has_exchange &&
+                      strategy.spec.exchange.approximation == scf::FockApproximation::DensityFitted;
     fock_binding = scf::prepared_cuda_fock_binding(provider);
+    occupied_fock_binding = scf::prepared_cuda_occupied_fock_binding(provider);
     if (!owner || strategy.backend != scf::FockBackend::Cuda ||
         strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
         strategy.spec.coulomb.coefficient != 1.0 ||
         (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact && !fitted_coulomb) ||
-        (has_exchange && (strategy.spec.exchange.approximation != scf::FockApproximation::Exact ||
-                          strategy.spec.exchange.op != scf::FockOperator::FullRange)) ||
-        (has_exchange && fitted_coulomb) || !fock_binding)
+        (has_exchange && (strategy.spec.exchange.op != scf::FockOperator::FullRange ||
+                          (fitted_coulomb ? !fitted_exchange
+                                          : strategy.spec.exchange.approximation !=
+                                                scf::FockApproximation::Exact))) ||
+        !fock_binding || (fitted_exchange && !occupied_fock_binding))
       throw std::invalid_argument(
-          "CUDA KS requires one prepared Coulomb provider and optional exact full-range exchange");
+          "CUDA KS requires one prepared Coulomb provider and matching full-range exchange");
     if (has_range_correction) {
       const auto& correction = *range_correction;
       const auto& spec = correction.spec;
@@ -616,8 +622,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void begin(const std::vector<double>* input, bool reuse_warm) {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
-    final_state_ready = final_frame_ready = false;
+    final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
     final_generation = 0;
+    occupied_fitted_factor_ready = false;
     // #991's first KS slice is deliberately intra-trajectory only. A changed
     // geometry may reuse the last-good density, but its previous orthonormal
     // orbital frame is not projected across metrics until that route is
@@ -939,6 +946,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       else
         enqueue_legacy();
     } catch (...) {
+      occupied_fitted_factor_ready = false;
       invalidate_warm_orbitals();
       throw;
     }
@@ -948,9 +956,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // intermediate frame. Preserve the independent last-good warm density.
     try {
       const bool active = device_chunk_mode ? finish_device() : finish_legacy();
-      if (is_failed) invalidate_warm_orbitals();
+      if (is_failed) {
+        occupied_fitted_factor_ready = false;
+        invalidate_warm_orbitals();
+      }
       return active;
     } catch (...) {
+      occupied_fitted_factor_ready = false;
       invalidate_warm_orbitals();
       throw;
     }
@@ -1069,14 +1081,34 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       std::string detail;
       pending_mixed_j = mixed_j && !strict_refinement;
-      // Provider selection stays inside the prepared Fock facade: KS supplies
-      // resident densities and raw output buffers without knowing whether J is
-      // exact or density fitted.
-      const auto jk_status = scf::enqueue_prepared_cuda_fock(
-          provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
-          has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
-          detail);
+      // Provider selection stays inside the prepared Fock facade. For a fitted
+      // hybrid, the first cold/warm-seed build has no trusted canonical factor
+      // and stays dense. After a successful proposal becomes the current density,
+      // tmp1 still owns the exact AO canonical C that generated that proposal;
+      // borrow it on the next iteration without a host round trip.
+      const bool use_occupied_fitted =
+          fitted_exchange && occupied_fitted_factor_ready && occupied_fock_binding;
+      generativeqc_status jk_status;
+      if (use_occupied_fitted) {
+        const scf::PreparedCudaOccupiedFockInput occupied{
+            tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
+            spins == 2 ? occupations[1] : 0};
+        jk_status = scf::enqueue_prepared_cuda_occupied_fock(
+            provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
+            exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
+      } else {
+        jk_status = scf::enqueue_prepared_cuda_fock(
+            provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
+            has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
+            detail);
+      }
       check(jk_status, detail);
+      if (fitted_exchange) {
+        if (use_occupied_fitted)
+          ++movement.fitted_occupied_exchange_builds;
+        else
+          ++movement.fitted_dense_exchange_builds;
+      }
       if (has_range_correction)
         check(scf::enqueue_prepared_cuda_exchange_correction(
                   provider, *range_correction, density, spins == 2 ? density + matrix : nullptr,
@@ -1223,6 +1255,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         return true;
       }
       is_active = false;
+      occupied_fitted_factor_ready = false;
       return false;
     }
     // A stationary physical state can still alternate integer occupations.
@@ -1285,6 +1318,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               stream));
         warm_ready = true;
         warm_energy = output.energy;
+        occupied_fitted_factor_ready = false;
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
@@ -1296,7 +1330,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               cudaMemcpyDeviceToDevice, stream));
         warm_orbitals_ready = true;
         ++movement.warm_orbital_frames_retained;
+        occupied_fitted_factor_ready = fitted_exchange;
       } else {
+        occupied_fitted_factor_ready = false;
         invalidate_warm_orbitals();
       }
       if (output.converged) {
@@ -1308,6 +1344,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = false;
       is_failed = true;
       output.converged = false;
+      occupied_fitted_factor_ready = false;
       throw;
     }
     previous_energy = output.energy;
@@ -1378,6 +1415,38 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
+    // The derivative snapshot always asks for W. Stage both one-electron
+    // weights before the existing final-state drain so downstream native force
+    // consumers can borrow them without a D/W H2D round trip.
+    bool staged_stationary_weights = false;
+    if (compute_weighted_density && !final_stationary_weights_ready) {
+      constexpr unsigned threads = 128;
+      const auto weight_elements = spins == 1 ? matrix : elements;
+      const auto weight_blocks = static_cast<unsigned>((weight_elements + threads - 1) / threads);
+      if (spins == 1) {
+        launch_build_weighted_density_kernel(
+            weight_blocks, threads, 0, stream, 1, static_cast<std::int32_t>(n), occupied,
+            final_coefficients, final_eigenvalues, final_enabled, tmp1);
+        check(cudaGetLastError());
+      } else {
+        launch_build_spin_weighted_density_kernel(
+            weight_blocks, threads, 0, stream, 1, static_cast<std::int32_t>(n), occupied,
+            final_coefficients, final_eigenvalues, final_enabled, tmp1);
+        check(cudaGetLastError());
+        const auto matrix_blocks = static_cast<unsigned>((matrix + threads - 1) / threads);
+        // One batch permits the total to overwrite the first spin block.
+        launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
+                                            static_cast<std::int32_t>(n), tmp1, final_enabled,
+                                            tmp1);
+        check(cudaGetLastError());
+        launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
+                                            static_cast<std::int32_t>(n), density, final_enabled,
+                                            tmp2);
+        check(cudaGetLastError());
+      }
+      staged_stationary_weights = true;
+    }
+
     KsPhysicalState physical;
     KsFinalStateCandidate candidate;
     physical.identity = candidate.identity = current.identity;
@@ -1422,7 +1491,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     final_frame_ready = true;
     for (unsigned spin = 0; spin < spins; ++spin)
       if (info[spin] != 0) {
-        final_state_ready = false;
+        final_state_ready = final_stationary_weights_ready = false;
         throw std::runtime_error("CUDA KS final-state eigensolver reported failure");
       }
     // CUDA matrix products/eigensolvers store columns contiguously, whereas
@@ -1445,9 +1514,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!validate_ks_final_state(current.identity, provider.one_electron().overlap,
                                  provider.one_electron().hcore, physical, candidate, limits,
                                  compute_weighted_density, verified, detail)) {
-      final_state_ready = false;
+      final_state_ready = final_stationary_weights_ready = false;
       throw std::runtime_error(detail.empty() ? "CUDA KS final-state validation failed" : detail);
     }
+    if (staged_stationary_weights) final_stationary_weights_ready = true;
     return verified;
   }
 
@@ -1516,7 +1586,8 @@ std::vector<double> CudaKsPlan::warm_density() {
 void CudaKsPlan::set_warm_start_updates(bool enabled) noexcept { impl_->warm_updates = enabled; }
 void CudaKsPlan::clear_warm_start() noexcept { impl_->clear_warm_state(); }
 void CudaKsPlan::invalidate_final_state() noexcept {
-  impl_->final_state_ready = impl_->final_frame_ready = false;
+  impl_->final_state_ready = impl_->final_frame_ready = impl_->final_stationary_weights_ready =
+      false;
   impl_->final_generation = 0;
 }
 generativeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
@@ -1554,6 +1625,33 @@ generativeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateTok
                impl_->owner,
                impl_->solve_epoch,
                impl_->final_generation};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+generativeqc_status CudaKsPlan::resident_final_stationary_weights(
+    const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+    std::string& detail) const {
+  binding = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS resident stationary-weight token has stale owner, epoch, generation or model");
+    if (!impl_->final_stationary_weights_ready || !impl_->tmp1 || !impl_->matrix)
+      throw std::logic_error(
+          "CUDA KS resident stationary D/W requires a successful weighted final-state read");
+    const auto* total_density = impl_->spins == 1 ? impl_->density : impl_->tmp2;
+    if (!total_density)
+      throw std::logic_error("CUDA KS resident stationary density storage is unavailable");
+    binding = {impl_->device, total_density, impl_->tmp1,        impl_->matrix,
+               impl_->spins,  impl_->owner,  impl_->solve_epoch, impl_->final_generation};
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
