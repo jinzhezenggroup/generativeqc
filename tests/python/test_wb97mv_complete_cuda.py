@@ -20,7 +20,11 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
     begin = source.index("generativeqc_status cuda_integral_gradient(")
     end = source.index("Result execute(bool compute_forces)", begin)
     bridge = source[begin:end]
+    assert "resident_final_stationary_weights" in bridge
+    assert "resident_weights.density" in bridge
+    assert "resident_weights.weighted_density" in bridge
     assert "execute_cuda_stationary_one_electron_pair(" in bridge
+    assert "auto density = (*cached_density)[0]" not in bridge
     assert "execute_cuda_one_electron_gradient(" not in bridge
 
 

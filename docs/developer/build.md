@@ -1,0 +1,165 @@
+# Building GenerativeQC
+
+This page collects source-build, CUDA toolchain, generated-AOT, and native SDK
+details. For ordinary Python use, start with the [installation guide](../user/installation.md).
+
+## Requirements
+
+Source builds require CMake 3.24+, a C++20 compiler, and Python 3.10+ because
+repository code generation currently runs at build time. CUDA builds additionally
+require the supported CUDA toolchain; the current production configuration uses
+CUDA 12.9.
+
+An installed native SDK/runtime does not require Python. Ordinary built-in
+calculations are AOT-first. Explicit runtime JIT/autotuning requires the
+documented NVCC/PTXAS developer toolchain.
+
+## Python build from source
+
+`scikit-build-core` drives CMake and bundles the native library into the
+installed package:
+
+```bash
+python -m pip install .
+```
+
+Force a CPU-only Python build with:
+
+```bash
+GENERATIVEQC_ENABLE_CUDA=OFF python -m pip install .
+```
+
+For a CUDA build, set `CUDACXX` to the desired NVCC and select the target
+architecture, for example `GENERATIVEQC_CUDA_ARCHITECTURES=120`.
+
+The source-tree Python interface finds `build/libgenerativeqc.so`
+automatically. An installed wheel loads its bundled library first;
+`GENERATIVEQC_LIBRARY` remains the explicit override for a different
+development or benchmark build.
+
+Linux CUDA wheels keep NVIDIA user-space provider DSOs outside
+`libgenerativeqc.so`, but declare the reviewed CUDA 12 `nvidia-*` packages as
+runtime dependencies because NVCC registration runs when the CUDA-bearing native
+library is loaded. The historical `generativeqc[cuda12]` extra remains an empty
+compatibility alias. The NVIDIA kernel driver remains system-owned. See the
+[CUDA wheel decision note](../../.agents/notes/implemented/architecture/2026-09-18-provider-free-cuda-wheels.md)
+for the retained provider boundary and fallback rationale.
+
+## Native CMake builds
+
+For native development and benchmark builds, configure CMake directly:
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DCMAKE_CUDA_COMPILER=/path/to/cuda/bin/nvcc \
+  -DCMAKE_CUDA_ARCHITECTURES=120
+cmake --build build
+```
+
+For CPU-only development:
+
+```bash
+cmake -S . -B build -G Ninja -DGENERATIVEQC_ENABLE_CUDA=OFF
+cmake --build build -j10
+```
+
+## CUDA build profiles
+
+Two CMake presets make the build-time tradeoff explicit. `cuda-dev-fast`
+targets one real device image, keeps native CUDA compilation bounded, and uses a
+wider generated-AOT compile pool. `cuda-release-sm120` retains production
+optimization settings and the full AOT manifest.
+
+```bash
+cmake --preset cuda-dev-fast
+cmake --build --preset cuda-dev-fast
+```
+
+Set `GENERATIVEQC_CUDA_COMPILE_JOBS` to bound CUDA compilation. Generated AOT
+work shares that pool by default, preserving the same total compiler bound. Set
+`GENERATIVEQC_AOT_COMPILE_JOBS` only when an independent AOT pool is desired;
+when set, both limits should match the build host's available memory.
+
+The fast preset uses bounded NVCC split compilation for native and generated AOT
+kernels. The release preset keeps split compilation disabled by default.
+
+`GENERATIVEQC_ENABLE_CXX_PCH=ON` is an opt-in clean-build experiment that
+precompiles only stable standard-library headers for host C++ sources; CUDA
+translation units remain outside that PCH. Keep it off with the default compiler
+cache workflow unless the cache has been explicitly configured for PCH support.
+
+## CUDA architecture and AOT profiles
+
+CUDA 12.9 can build portable generic binaries for `80`, `86`, `89`, and
+`90`. Only `sm_120` currently has a measured generated-shell profile. The
+`auto` mode is fail-closed: a target without a tuned or explicitly compatible
+profile is a configuration error rather than an implicit generic fallback.
+
+A distributable fat binary can opt into portable kernels for untuned targets
+while overriding `sm_120` with its measured profile:
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DCMAKE_CUDA_COMPILER=/path/to/cuda/bin/nvcc \
+  -DGENERATIVEQC_CUDA_ARCHITECTURES="80;90;120" \
+  -DGENERATIVEQC_AOT_PROFILE=portable \
+  -DGENERATIVEQC_AOT_PROFILES="sm_120"
+```
+
+Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
+entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` only when the validated
+generic CUDA path is an intentional build choice.
+
+## Compiler cache, generated shards, and compile units
+
+Builds automatically use `sccache` or `ccache` when either is on `PATH`.
+Override this with `-DGENERATIVEQC_COMPILER_CACHE=off` or an explicit
+executable.
+
+Generated CUDA is split into eight stable shards by default. Tune this with
+`-DGENERATIVEQC_AOT_SHARDS=N` when local compile parallelism or memory is
+limited. Stable virtual slots preserve the historical 1/2/4/8-shard assignment
+while allowing larger counts such as 12 or 16 to use additional compile buckets.
+The base shard map is versioned and based on measured shell-class compile cost,
+so manifest insertion/removal does not move unrelated classes. Identical
+generated bytes retain their timestamps and compiler-cache keys.
+
+Development builds may set `-DGENERATIVEQC_AOT_UNIT_MODE=class` to expose one
+object target per manifest shell class; release presets retain
+`stable-shards`.
+
+## Device linking and split compilation
+
+NVIDIA builds device-link a small native direct-integral archive so its launch
+owners share retained numerical functions. The angular-force owner retains
+whole-program compilation to preserve its launch-bound register ceilings.
+Generated kernels and unrelated SCF/DF owners keep independent compilation.
+
+Set `-DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=OFF` to compare standalone direct
+modules. CuMetal and non-NVIDIA compilers use that standalone path
+automatically. Whole-library separable compilation remains optional through
+`-DGENERATIVEQC_CUDA_SEPARABLE_COMPILATION=ON`. The requested
+`120-real`/`120-virtual` suffix is retained for NVCC while profile directories
+continue to use the canonical `sm_120` identity.
+
+For compile-only CUDA experiments,
+`-DGENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS=N` enables NVCC split compilation of
+the native direct kernel owners, while
+`-DGENERATIVEQC_AOT_SPLIT_COMPILE_THREADS=N` does the same for generated AOT
+owners. Both default to `1` because split compilation can change optimizer
+resource choices; use the normal settings for performance and release binaries.
+
+## Install a native SDK/runtime
+
+Install a configured native build into a relocatable prefix:
+
+```bash
+cmake --install build --prefix /opt/generativeqc
+/opt/generativeqc/bin/generativeqc methods
+/opt/generativeqc/bin/generativeqc run molecule.xyz --method gfn2-xtb --forces
+```
+
+The native executable links the installed `libgenerativeqc` through a
+relocatable install RPATH. The first native `run` endpoint is GFN2-xTB, whose
+intrinsic basis lets the command consume XYZ directly; Gaussian-basis native CLI
+resolution remains a separate capability.
