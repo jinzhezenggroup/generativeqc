@@ -1,7 +1,7 @@
 """Empirical status does not permit relabeling the evaluated scientific model."""
 
 import pytest
-from vibeqc import (
+from generativeqc import (
     ObservableDelta,
     PairedCalibrationSample,
     PairedDifferenceEstimator,

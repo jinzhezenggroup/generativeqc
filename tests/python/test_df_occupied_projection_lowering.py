@@ -1,7 +1,7 @@
 """Exercise emitted production BLAS calls with an independent host BLAS stand-in.
 
 This verifies transpose/stride/output-region/error-propagation contracts, not
-CUDA compilation, GPU accuracy/performance or the full VibeQC runtime.
+CUDA compilation, GPU accuracy/performance or the full GenerativeQC runtime.
 """
 
 import ctypes as ct
@@ -14,7 +14,9 @@ import numpy as np
 import pytest
 
 HERE = Path(__file__).resolve()
-EMITTER = HERE.parents[2] / "python/vibeqc_compiler/method/df_occupied_response_cuda.py"
+EMITTER = (
+    HERE.parents[2] / "python/generativeqc_compiler/method/df_occupied_response_cuda.py"
+)
 
 HEADER = r"""
 #pragma once
@@ -67,14 +69,14 @@ WRAPPERS = r"""
 extern "C" int project(int n,int r,int a,int begin,int count,const double* c,
                          const double* values,double* temp,double* out,int fail) {
   calls=0;fail_on=fail;
-  return vibeqc::scf::generated::df_occupied_project_panel(
+  return generativeqc::scf::generated::df_occupied_project_panel(
       nullptr,n,r,a,begin,count,c,values,temp,out);
 }
 extern "C" int finish_project(int n,int r,int a,const double* c,
                                 const double* linear,double* out,int fail) {
   calls=0;fail_on=fail;
   std::vector<double> pair_major(static_cast<std::size_t>(a)*r*r);
-  auto result=vibeqc::scf::generated::df_occupied_finish_projection(
+  auto result=generativeqc::scf::generated::df_occupied_finish_projection(
       nullptr,n,r,a,c,linear,pair_major.data());
   if(result) return result;
   // Mirror the production gather from [i,j,Q] into [Q,i,j].
@@ -85,22 +87,22 @@ extern "C" int finish_project(int n,int r,int a,const double* c,
 extern "C" int call_count() { return calls; }
 extern "C" std::size_t tile_size(std::size_t n,std::size_t r,std::size_t a,
                          std::size_t capacity,std::size_t request,bool extra) {
-  return vibeqc::scf::generated::df_occupied_projection_tile(n,r,a,capacity,request,extra);
+  return generativeqc::scf::generated::df_occupied_projection_tile(n,r,a,capacity,request,extra);
 }
 extern "C" int small_metric(int a,int rr,const double* e,const double* eigenvalues,
                               const double* s,double* temp,double* out,int fail) {
   calls=0;fail_on=fail;
-  auto result=vibeqc::scf::generated::df_occupied_to_metric_eigenbasis(
+  auto result=generativeqc::scf::generated::df_occupied_to_metric_eigenbasis(
       nullptr,a,rr,e,s,temp);
   if(result) return result;
   for(int j=0;j<rr;++j) for(int q=0;q<a;++q) temp[q+j*a]/=std::sqrt(eigenvalues[q]);
-  return vibeqc::scf::generated::df_occupied_from_metric_eigenbasis(
+  return generativeqc::scf::generated::df_occupied_from_metric_eigenbasis(
       nullptr,a,rr,e,temp,out);
 }
 extern "C" int retained_metric(int a,int rr,const double* x,const double* s,
                                  double* out,int fail) {
   calls=0;fail_on=fail;
-  return vibeqc::scf::generated::df_occupied_apply_metric_root(nullptr,a,rr,x,s,out);
+  return generativeqc::scf::generated::df_occupied_apply_metric_root(nullptr,a,rr,x,s,out);
 }
 """
 
@@ -120,7 +122,7 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     (folder / "cublas_v2.h").write_text(HEADER)
     code = (
         STANDIN
-        + "\nnamespace vibeqc::scf::generated {\n"
+        + "\nnamespace generativeqc::scf::generated {\n"
         + module.emit_occupied_response_helpers()
         + "\n}\n"
         + WRAPPERS

@@ -8,7 +8,7 @@
 
 // Retained Coulomb auxiliary recurrence, bounded by the instantiated
 // angular order. Layout assertions guard the existing workspace contract.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar, unsigned MaximumAngular>
 struct CoulombAuxiliary {
@@ -111,10 +111,10 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
 template <unsigned MaximumAngular, typename Scalar>
 __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& product,
                                           const Vec3<Scalar>& center,
-                                          vibeqc::integrals::CoulombRange range, double omega,
+                                          generativeqc::integrals::CoulombRange range, double omega,
                                           CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
-  if (range == vibeqc::integrals::CoulombRange::Full) return false;
+  if (range == generativeqc::integrals::CoulombRange::Full) return false;
   for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item)
     auxiliary.data[item] = scalar<Scalar>(0.0);
 
@@ -122,7 +122,7 @@ __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& p
   const Scalar argument = exponent * distance_squared(product, center);
   constexpr unsigned extra = std::is_same_v<Scalar, double> ? 0U : 1U;
   double moments[MaximumAngular + extra + 1];
-  if (!vibeqc::integrals::bounded_range_moments<MaximumAngular + extra>(
+  if (!generativeqc::integrals::bounded_range_moments<MaximumAngular + extra>(
           MaximumAngular + extra, scalar_value(argument), exponent, range, omega, moments))
     return false;
 
@@ -172,4 +172,4 @@ __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& p
   return true;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

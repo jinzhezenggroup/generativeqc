@@ -33,7 +33,7 @@ def read_progress(path: Path) -> dict:
         lines.pop()
     for line in lines:
         row = json.loads(line)
-        if row.get("schema") != "vibeqc.df_progress" or row.get("version") != 1:
+        if row.get("schema") != "generativeqc.df_progress" or row.get("version") != 1:
             raise ValueError("unsupported progress schema")
         index, parent = row["id"], row["parent"]
         if type(index) is not int or index < 0 or type(parent) is not int:
@@ -115,7 +115,7 @@ def summarize_progress(journal: dict) -> dict:
         phase["inclusive_ms"] += elapsed
         phase["exclusive_ms"] += max(0.0, elapsed - children)
     return {
-        "schema": "vibeqc.df_progress_summary.v1",
+        "schema": "generativeqc.df_progress_summary.v1",
         "complete_journal": journal["complete"],
         "truncated_tail": journal["truncated_tail"],
         "pending": journal["pending"],

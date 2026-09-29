@@ -6,15 +6,15 @@
 
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 class MOBlockProvider;
 class DensityFittedBlockProvider;
-}  // namespace vibeqc::posthf
-namespace vibeqc::hf {
+}  // namespace generativeqc::posthf
+namespace generativeqc::hf {
 struct PhysicalReference;
 }
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 
 struct EnergyAdjoint {
   std::size_t orbitals{};
@@ -58,6 +58,7 @@ struct GradientResourcePlan {
   std::size_t adjoint_bytes{};
   std::size_t response_bytes{};
   std::size_t relaxed_weight_bytes{};
+  std::size_t rank2_transform_workspace_bytes{};
   std::size_t shell_cotangent_bytes{};
   std::size_t derivative_staging_bytes{};
   std::size_t derivative_backend_staging_bytes{};
@@ -70,6 +71,7 @@ struct DensityFittedGradientResourcePlan {
   std::size_t adjoint_bytes{};
   std::size_t response_bytes{};
   std::size_t relaxed_weight_bytes{};
+  std::size_t rank2_transform_workspace_bytes{};
   std::size_t reverse_result_bytes{};
   std::size_t reverse_workspace_bytes{};
   std::size_t derivative_staging_bytes{};
@@ -121,4 +123,4 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
     std::size_t cartesian_auxiliaries, std::size_t coordinate_count,
     std::size_t candidate_output_bytes, std::size_t budget_bytes);
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

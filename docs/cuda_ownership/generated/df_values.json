@@ -3,5 +3,5 @@
   "outputs": [
     "generated/df_values.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_cuda.py"
+  "owner": "python/generativeqc_compiler/integral/df_cuda.py"
 }

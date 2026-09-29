@@ -15,8 +15,8 @@ void require(bool condition, const char* message) {
 
 int main() {
   try {
-    using vibeqc::scf::xsyev_batched_api_eligibility;
-    using vibeqc::scf::XsyevBatchedEligibilityReason;
+    using generativeqc::scf::xsyev_batched_api_eligibility;
+    using generativeqc::scf::XsyevBatchedEligibilityReason;
 
     require(!xsyev_batched_api_eligibility(0, 0, 1).eligible,
             "XsyevBatched accepted a zero matrix dimension");
@@ -46,29 +46,32 @@ int main() {
                 XsyevBatchedEligibilityReason::documented_product_limit,
             "UHF solver-batch accounting ignored spin expansion");
 
-    vibeqc::scf::XsyevBatchedGraphProbeResult rejected_capture;
+    generativeqc::scf::XsyevBatchedGraphProbeResult rejected_capture;
     rejected_capture.ordinary_execution_passed = true;
     rejected_capture.graph_eligible = false;
-    const auto fallback = vibeqc::scf::select_xsyev_batched_dispatch(rejected_capture);
+    const auto fallback = generativeqc::scf::select_xsyev_batched_dispatch(rejected_capture);
     require(fallback.ordinary_stream_provider && !fallback.device_launch_graph_provider,
             "capture rejection disabled valid ordinary-stream cuSOLVER");
     rejected_capture.graph_eligible = true;
-    const auto qualified = vibeqc::scf::select_xsyev_batched_dispatch(rejected_capture);
+    const auto qualified = generativeqc::scf::select_xsyev_batched_dispatch(rejected_capture);
     require(qualified.ordinary_stream_provider && qualified.device_launch_graph_provider,
             "qualified provider was not selected for both execution modes");
 
-#if VIBEQC_HAS_CUDA
-    const auto device_probe = vibeqc::scf::probe_xsyev_batched_device_launch_graph(0, 512, 1);
-    if (device_probe.failure_stage == vibeqc::scf::XsyevBatchedGraphProbeStage::select_device ||
-        device_probe.failure_stage == vibeqc::scf::XsyevBatchedGraphProbeStage::device_identity) {
+#if GENERATIVEQC_HAS_CUDA
+    const auto device_probe = generativeqc::scf::probe_xsyev_batched_device_launch_graph(0, 512, 1);
+    if (device_probe.failure_stage ==
+            generativeqc::scf::XsyevBatchedGraphProbeStage::select_device ||
+        device_probe.failure_stage ==
+            generativeqc::scf::XsyevBatchedGraphProbeStage::device_identity) {
       std::cout << "CUDA XsyevBatched graph probe skipped: no allocated "
                    "device\n";
     } else {
       const std::array<std::uint64_t, 3> dimensions{512, 513, 768};
       for (const std::uint64_t dimension : dimensions) {
-        const auto probe = dimension == 512 ? device_probe
-                                            : vibeqc::scf::probe_xsyev_batched_device_launch_graph(
-                                                  0, dimension, 1);
+        const auto probe =
+            dimension == 512
+                ? device_probe
+                : generativeqc::scf::probe_xsyev_batched_device_launch_graph(0, dimension, 1);
         std::cout << "XsyevBatched n=" << dimension
                   << " ordinary=" << (probe.ordinary_execution_passed ? "pass" : "fail")
                   << " graph=" << (probe.graph_eligible ? "pass" : "fallback")
@@ -95,7 +98,7 @@ int main() {
                       probe.device_tail_replay_passed,
                   "graph-eligible probe omitted a required replay check");
         } else {
-          require(probe.failure_stage != vibeqc::scf::XsyevBatchedGraphProbeStage::none,
+          require(probe.failure_stage != generativeqc::scf::XsyevBatchedGraphProbeStage::none,
                   "rejected graph probe did not retain a failure stage");
         }
       }

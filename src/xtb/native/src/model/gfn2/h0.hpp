@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_H0_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_H0_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_H0_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_H0_HPP
 
 #include <cstdint>
 #include <string>
@@ -11,7 +11,7 @@
 #include "model/gfn2/integrals.hpp"
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 /*
  * Geometry-independent data for the GFN2 extended-Hueckel core
@@ -44,7 +44,7 @@ struct H0Plan {
 };
 
 /* Validate that an H0 plan still matches its basis and packed integral layout. */
-vibeqc_xtb_status_t validate_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
+generativeqc_xtb_status_t validate_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                                   const H0Plan& plan, std::string& error);
 
 /*
@@ -53,7 +53,7 @@ vibeqc_xtb_status_t validate_h0_plan(const BasisPlan& basis, const IntegralPlan&
  * levels and coordination shifts are converted from their parameter-file eV
  * convention to Hartree while constructing the plan.
  */
-vibeqc_xtb_status_t make_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
+generativeqc_xtb_status_t make_h0_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                               const std::int32_t* atomic_numbers, H0Plan& plan, std::string& error);
 
 /*
@@ -65,7 +65,7 @@ vibeqc_xtb_status_t make_h0_plan(const BasisPlan& basis, const IntegralPlan& int
  * arbitrary overlap matrix; using an all-ones matrix exposes the shell-pair
  * H0 scaling factors used by tblite's Hamiltonian tests.
  */
-vibeqc_xtb_status_t evaluate_h0_cpu(const BasisPlan& basis, const IntegralPlan& integrals,
+generativeqc_xtb_status_t evaluate_h0_cpu(const BasisPlan& basis, const IntegralPlan& integrals,
                                  const H0Plan& plan, const double* positions,
                                  const double* coordination_numbers, const double* overlap,
                                  double* hamiltonian, std::string& error);
@@ -83,12 +83,12 @@ vibeqc_xtb_status_t evaluate_h0_cpu(const BasisPlan& basis, const IntegralPlan& 
  * The caller composes dE_doverlap with add_overlap_gradient_cpu and dE_dcn
  * with add_coordination_gradient_cpu. gradients are dE/dR, not forces.
  */
-vibeqc_xtb_status_t add_h0_vjp_cpu(const BasisPlan& basis, const IntegralPlan& integrals,
+generativeqc_xtb_status_t add_h0_vjp_cpu(const BasisPlan& basis, const IntegralPlan& integrals,
                                 const H0Plan& plan, const double* positions,
                                 const double* coordination_numbers, const double* overlap,
                                 const double* dE_dhamiltonian, double* dE_doverlap, double* dE_dcn,
                                 double* gradients, std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_H0_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_H0_HPP

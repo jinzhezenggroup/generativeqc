@@ -5,10 +5,10 @@ from dataclasses import replace
 from fractions import Fraction
 from types import MappingProxyType
 
+import generativeqc_compiler.method.stationary_hvp as stationary_hvp_module
 import numpy as np
 import pytest
-import vibeqc_compiler.method.stationary_hvp as stationary_hvp_module
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     ExactExchangePrimitive,
     MethodSpec,
     SemilocalXCPrimitive,
@@ -17,8 +17,8 @@ from vibeqc_compiler.method import (
     UnsupportedMethod,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
-from vibeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
+from generativeqc_compiler.tensor import Program, execute
 
 
 def plan(

@@ -2,7 +2,7 @@
 
 CUDA DF-HF gradients use generated two-/three-center derivatives and contract
 external response weights before downloading the gradient. The former
-coordinate-wise CUDA force implementations and `VIBEQC_DF_DERIVATIVES` selector
+coordinate-wise CUDA force implementations and `GENERATIVEQC_DF_DERIVATIVES` selector
 are removed. CPU DF calculations and independent CPU/libcint validation remain
 available. Overlap, kinetic, and nuclear-attraction response now always uses the
 compiler-owned generated consumer; only its diagnostic schedule mapping remains selectable.
@@ -18,7 +18,7 @@ For raw three-center integrals `A[mu,nu,P]` and the auxiliary Coulomb metric
        +\sum_{PQ}\bar M_{PQ}\frac{\partial M_{PQ}}{\partial R_{ax}}.
 \]
 
-The C API `vibeqc_system_df_gradient_cuda` accepts full row-major weights,
+The C API `generativeqc_system_df_gradient_cuda` accepts full row-major weights,
 including arbitrary nonsymmetric matrices. The auxiliary index is contiguous
 in A: `((mu*nbf+nu)*naux+P)`. Each dense element contributes once; there are no
 implicit triangular factors. A null weight pointer denotes zero for that
@@ -36,7 +36,7 @@ calling thread's CUDA device after stream cleanup.
 
 ## Mathematical generation
 
-`python/vibeqc_compiler/integral/df_derivatives.py` differentiates the physical value DAG
+`python/generativeqc_compiler/integral/df_derivatives.py` differentiates the physical value DAG
 introduced by the generated DF value implementation. The interpreter covers
 the prefactor, Gaussian decay, shifts, and Boys argument; differentiating a
 Boys node uses `dF_m(T)/dT = -F_(m+1)(T)`.
@@ -146,7 +146,7 @@ four lanes split one element's primitive products, and eight elements progress
 per warp. Generic subgroup reduction combines center channels before one lane
 scatters them to physical atoms. Zero weights and ragged tile tails preserve
 complete participating subgroups. `serial` is an explicit deterministic traversal selected with
-`VIBEQC_DF_DERIVATIVE_MAPPING=serial`.
+`GENERATIVEQC_DF_DERIVATIVE_MAPPING=serial`.
 
 The standalone `maximum_bytes` limit bounds owned numeric host staging and
 owned device allocations separately. `maximum_tile_elements` can further
@@ -235,7 +235,7 @@ These final reports and exact identities are in `review-integration/`; the
 generated CUDA derivative header is unchanged by the iterative DAG-clone fix.
 
 Reproduction scripts resolve their checkout relative to their own location.
-Set `PYTHON` and optionally `CUDA_HOME`, `NSYS`, `CXX`, and `VIBEQC_LIBRARY` for
+Set `PYTHON` and optionally `CUDA_HOME`, `NSYS`, `CXX`, and `GENERATIVEQC_LIBRARY` for
 the local environment. Each hardware script creates a fresh directory under
 `/tmp`, named by Slurm job and script, and writes that run's source/binary
 provenance there. Set `OUTPUT_DIR` to choose a different new directory;

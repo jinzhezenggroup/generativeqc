@@ -20,7 +20,7 @@
 // Retained direct fock order2 contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** One canonical shell slot and its position in the original quartet. */
 struct Order2SourceSlot {
@@ -139,4 +139,4 @@ __device__ inline __noinline__ void contract_fock_direct_order2_task(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

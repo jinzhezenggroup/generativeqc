@@ -8,7 +8,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void two_electron_force_direct_kernel(
     DeviceBatch batch, double screening_tolerance, const std::int32_t* pair_first,
@@ -162,4 +162,4 @@ void launch_two_electron_uhf_force_direct_kernel(
       active, forces);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

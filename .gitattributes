@@ -34,14 +34,14 @@ manifests/libxc/7.0.0/manifest.json linguist-generated=true
 manifests/libxc/7.0.0/*-manifest.json linguist-generated=true
 tools/parameters/dispersion_parameter_sources.json linguist-generated=true
 src/dft/dispersion/*_data.hpp linguist-generated=true
-python/vibeqc_compiler/integral/rys*_data.py linguist-generated=true
+python/generativeqc_compiler/integral/rys*_data.py linguist-generated=true
 src/dft/dispersion/d4_eeq_r2scan3c_c6.hpp linguist-generated=true
-python/vibeqc_compiler/method/_generated_parameters.py linguist-generated=true
-python/vibeqc_compiler/method/_generated_libxc_methods.py linguist-generated=true
+python/generativeqc_compiler/method/_generated_parameters.py linguist-generated=true
+python/generativeqc_compiler/method/_generated_libxc_methods.py linguist-generated=true
 src/xtb/native/data/parameters/gfn1.hpp linguist-generated=true
-python/vibeqc_compiler/geometry/_gfn1_data.py text eol=lf linguist-generated=true
+python/generativeqc_compiler/geometry/_gfn1_data.py text eol=lf linguist-generated=true
 
 # Full-tree Libxc mathematical inputs; preserve upstream bytes, not runtime code.
 upstream/libxc-fulltree/7.0.0/** text eol=lf -whitespace linguist-vendored=true
-python/vibeqc_compiler/xc/libxc_bulk_catalog.json linguist-generated=true
+python/generativeqc_compiler/xc/libxc_bulk_catalog.json linguist-generated=true
 tests/data/xc/libxc-bulk/*.json linguist-generated=true

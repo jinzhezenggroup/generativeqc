@@ -60,20 +60,20 @@ def main() -> None:
             for n in args.aos
         }
     output.mkdir(parents=True, exist_ok=False)
-    env = {k: v for k, v in os.environ.items() if not k.startswith("VIBEQC_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GENERATIVEQC_")}
     env.update(
         PYTHONPATH=os.pathsep.join((str(ROOT / "python"), str(ROOT))),
         OMP_NUM_THREADS="1",
         OPENBLAS_NUM_THREADS="1",
-        VIBEQC_LIBRARY=str(library),
-        VIBEQC_DF_REFERENCE_FINAL_VALIDATION="0",
-        VIBEQC_DF_FINAL_PROJECTION="auto",
-        VIBEQC_DF_FORCE_SCREEN_ABS="off",
-        VIBEQC_DF_EXCHANGE="auto",
-        VIBEQC_DF_SEED_EXCHANGE="auto",
-        VIBEQC_DF_FINAL_EXCHANGE="auto",
-        VIBEQC_DF_RESIDENT_EXCHANGE="auto",
-        VIBEQC_DF_SHELL_POLICY="auto",
+        GENERATIVEQC_LIBRARY=str(library),
+        GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION="0",
+        GENERATIVEQC_DF_FINAL_PROJECTION="auto",
+        GENERATIVEQC_DF_FORCE_SCREEN_ABS="off",
+        GENERATIVEQC_DF_EXCHANGE="auto",
+        GENERATIVEQC_DF_SEED_EXCHANGE="auto",
+        GENERATIVEQC_DF_FINAL_EXCHANGE="auto",
+        GENERATIVEQC_DF_RESIDENT_EXCHANGE="auto",
+        GENERATIVEQC_DF_SHELL_POLICY="auto",
     )
     # The parent imports no CUDA package and owns no device context. The child
     # receives the scheduler's original CUDA_VISIBLE_DEVICES unchanged.
@@ -113,7 +113,7 @@ def main() -> None:
                 "--df-budget",
                 str(args.df_budget),
                 "--control",
-                "VIBEQC_DF_VALUE_STORAGE",
+                "GENERATIVEQC_DF_VALUE_STORAGE",
                 "--policies",
                 "dense",
                 "packed",

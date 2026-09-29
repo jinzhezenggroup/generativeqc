@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_HAMILTONIAN_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_HAMILTONIAN_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_HAMILTONIAN_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_HAMILTONIAN_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/common/gfn2_plan_schema.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::int64_t kGfn2HamiltonianDipoleComponents = 3;
 inline constexpr std::int64_t kGfn2HamiltonianQuadrupoleComponents = 6;
@@ -168,6 +168,6 @@ cudaError_t assemble_gfn2_spin_hamiltonian_cuda(
     std::uint32_t* system_errors, std::uint32_t* device_error,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_HAMILTONIAN_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_HAMILTONIAN_CUH

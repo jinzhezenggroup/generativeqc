@@ -15,7 +15,7 @@
 
 #include "tensor/cuda_runtime.cuh"
 
-namespace vibeqc::integrals::first_gradient {
+namespace generativeqc::integrals::first_gradient {
 inline std::size_t mul(std::size_t a, std::size_t b) {
   if (b && a > std::numeric_limits<std::size_t>::max() / b)
     throw std::invalid_argument("first-gradient storage overflow");
@@ -54,7 +54,7 @@ struct Plan {
       device_bytes;
   std::size_t output_offset, record_offset;
   bool valid = false;
-  vibeqc_tensor::Context context;
+  generativeqc_tensor::Context context;
   std::vector<double> candidate;
 
   Plan(int device, int major, int minor, std::size_t n, std::size_t atoms, std::size_t slots,
@@ -93,12 +93,12 @@ struct Plan {
     for (std::size_t i = 0; i < size; ++i)
       if (!std::isfinite(weights[i]))
         throw std::invalid_argument("nonfinite first-gradient weight");
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(data(), weights, size * sizeof(double),
-                                              cudaMemcpyHostToDevice, context.stream));
-    vibeqc_tensor::cuda_check(
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(data(), weights, size * sizeof(double),
+                                                    cudaMemcpyHostToDevice, context.stream));
+    generativeqc_tensor::cuda_check(
         cudaMemsetAsync(data() + output_offset, 0, output_size * sizeof(double), context.stream));
-    vibeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
-    vibeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
     valid = true;
   }
   void reset_mixed(const double* device_weights, std::size_t device_count,
@@ -112,21 +112,22 @@ struct Plan {
     for (std::size_t i = 0; i < host_count; ++i)
       if (!std::isfinite(host_weights[i]))
         throw std::invalid_argument("nonfinite first-gradient host weight");
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(data(), device_weights, device_count * sizeof(double),
-                                              cudaMemcpyDeviceToDevice, context.stream));
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(data() + device_count, host_weights,
-                                              host_count * sizeof(double), cudaMemcpyHostToDevice,
-                                              context.stream));
-    vibeqc_tensor::cuda_check(
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(data(), device_weights,
+                                                    device_count * sizeof(double),
+                                                    cudaMemcpyDeviceToDevice, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(data() + device_count, host_weights,
+                                                    host_count * sizeof(double),
+                                                    cudaMemcpyHostToDevice, context.stream));
+    generativeqc_tensor::cuda_check(
         cudaMemsetAsync(data() + output_offset, 0, output_size * sizeof(double), context.stream));
-    vibeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
-    validate_finite_weights<<<vibeqc_tensor::blocks(weight_size, 128), 128, 0, context.stream>>>(
-        data(), weight_size, context.error);
-    vibeqc_tensor::cuda_check(cudaGetLastError());
+    generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
+    validate_finite_weights<<<generativeqc_tensor::blocks(weight_size, 128), 128, 0,
+                              context.stream>>>(data(), weight_size, context.error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
     int error = 0;
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(&error, context.error, sizeof(int),
-                                              cudaMemcpyDeviceToHost, context.stream));
-    vibeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(&error, context.error, sizeof(int),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
     if (error) throw NumericalFailure("nonfinite first-gradient resident weight");
     valid = true;
   }
@@ -134,13 +135,13 @@ struct Plan {
     std::lock_guard<std::mutex> lock(context.mutex);
     check(identity);
     if (!valid) throw std::runtime_error("first-gradient plan requires successful reset/run");
-    validate_output<<<vibeqc_tensor::blocks(output_size, 128), 128, 0, context.stream>>>(
+    validate_output<<<generativeqc_tensor::blocks(output_size, 128), 128, 0, context.stream>>>(
         data() + output_offset, output_size, context.error);
-    vibeqc_tensor::cuda_check(cudaGetLastError());
+    generativeqc_tensor::cuda_check(cudaGetLastError());
     int error = 0;
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(&error, context.error, sizeof(int),
-                                              cudaMemcpyDeviceToHost, context.stream));
-    vibeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(&error, context.error, sizeof(int),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
     if (error) throw NumericalFailure("nonfinite first-gradient resident output");
     return data() + output_offset;
   }
@@ -153,12 +154,12 @@ struct Plan {
       throw std::invalid_argument("first-gradient output size mismatch");
     valid = false;
     int error = 0;
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(&error, context.error, sizeof(int),
-                                              cudaMemcpyDeviceToHost, context.stream));
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(candidate.data(), data() + output_offset,
-                                              size * sizeof(double), cudaMemcpyDeviceToHost,
-                                              context.stream));
-    vibeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(&error, context.error, sizeof(int),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(candidate.data(), data() + output_offset,
+                                                    size * sizeof(double), cudaMemcpyDeviceToHost,
+                                                    context.stream));
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
     if (error) throw NumericalFailure("nonfinite generated first-gradient contribution");
     for (double value : candidate)
       if (!std::isfinite(value)) throw NumericalFailure("nonfinite first-gradient accumulation");
@@ -201,20 +202,20 @@ void append(Plan& p, const double* records, std::size_t count, const Mapping& ma
   }
   if (count) {
     try {
-      vibeqc_tensor::cuda_check(cudaMemcpyAsync(p.data() + p.record_offset, records,
-                                                count * stride * sizeof(double),
-                                                cudaMemcpyHostToDevice, p.context.stream));
+      generativeqc_tensor::cuda_check(cudaMemcpyAsync(p.data() + p.record_offset, records,
+                                                      count * stride * sizeof(double),
+                                                      cudaMemcpyHostToDevice, p.context.stream));
       // The Python owner reuses its host record buffer as soon as append returns.
       // Fence only that H2D lifetime, not the generated device contraction that
       // follows it on the same stream. Later appends remain stream-ordered behind
       // the prior contraction before reusing the device record staging region.
-      vibeqc_tensor::cuda_check(cudaEventRecord(p.context.begin, p.context.stream));
+      generativeqc_tensor::cuda_check(cudaEventRecord(p.context.begin, p.context.stream));
       const auto work = count * Program::components;
-      execute<Program><<<vibeqc_tensor::blocks(work, 64), 64, 0, p.context.stream>>>(
+      execute<Program><<<generativeqc_tensor::blocks(work, 64), 64, 0, p.context.stream>>>(
           p.data() + p.record_offset, count, mapping, p.nbf, p.data(), p.data() + p.output_offset,
           p.context.error);
-      vibeqc_tensor::cuda_check(cudaGetLastError());
-      vibeqc_tensor::cuda_check(cudaEventSynchronize(p.context.begin));
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      generativeqc_tensor::cuda_check(cudaEventSynchronize(p.context.begin));
     } catch (...) {
       // Event recording or launch failure may leave H2D borrowing records.
       // Retire that input before returning the original error to its owner.
@@ -232,20 +233,20 @@ int boundary(Operation operation, char* detail, std::size_t size) {
     operation();
     return 0;
   } catch (const NumericalFailure& e) {
-    vibeqc_tensor::error_text(detail, size, e.what());
+    generativeqc_tensor::error_text(detail, size, e.what());
     return 5;
-  } catch (const vibeqc_tensor::DeviceAllocationError& e) {
-    vibeqc_tensor::error_text(detail, size, e.what());
+  } catch (const generativeqc_tensor::DeviceAllocationError& e) {
+    generativeqc_tensor::error_text(detail, size, e.what());
     return 7;
   } catch (const std::bad_alloc& e) {
-    vibeqc_tensor::error_text(detail, size, e.what());
+    generativeqc_tensor::error_text(detail, size, e.what());
     return 7;
   } catch (const std::invalid_argument& e) {
-    vibeqc_tensor::error_text(detail, size, e.what());
+    generativeqc_tensor::error_text(detail, size, e.what());
     return 1;
   } catch (const std::exception& e) {
-    vibeqc_tensor::error_text(detail, size, e.what());
+    generativeqc_tensor::error_text(detail, size, e.what());
     return 8;
   }
 }
-}  // namespace vibeqc::integrals::first_gradient
+}  // namespace generativeqc::integrals::first_gradient

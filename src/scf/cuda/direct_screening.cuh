@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Apply the AO-level Schwarz gate after task/ordinal decoding. */
 __device__ __forceinline__ bool direct_ao_quartet_survives_schwarz(
@@ -108,4 +108,4 @@ __device__ __forceinline__ bool bounded_direct_block_pair_survives_screening(
   return true;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

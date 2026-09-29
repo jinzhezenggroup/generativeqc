@@ -8,18 +8,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.common.evidence import block_error
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.xc.fixtures import load_fixture
-from vibeqc_compiler.xc.libxc_maple import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.common.evidence import block_error
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.xc.fixtures import load_fixture
+from generativeqc_compiler.xc.libxc_maple import (
     MapleImportError,
     import_maple_file,
     import_maple_source,
 )
-from vibeqc_compiler.xc.semilocal_family import energy_expression
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.xc.semilocal_family import energy_expression
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 ROOT = Path(__file__).resolve().parents[2]
 LIBXC_ROOT = ROOT / "upstream/libxc/7.0.0"

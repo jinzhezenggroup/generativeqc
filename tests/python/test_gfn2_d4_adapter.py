@@ -24,7 +24,7 @@ def adapter(tmp_path_factory: pytest.TempPathFactory) -> Path:
             sys.executable,
             str(ROOT / "tools/generate_method_parameters.py"),
             "--source",
-            str(ROOT / "python/vibeqc_compiler/method/method_parameters.json"),
+            str(ROOT / "python/generativeqc_compiler/method/method_parameters.json"),
             "--cpp-output",
             str(output.parent / "generated_method_parameters.hpp"),
         ],

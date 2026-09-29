@@ -11,17 +11,18 @@
 #include "runtime/bounded_workspace.hpp"
 #include "scf/cuda/direct_constants.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 std::size_t checked_expanded_primitive_references(const std::vector<core::System>& systems) {
   std::size_t expanded_primitive_references = 0;
   for (const core::System& system : systems) {
     for (const core::Shell& shell : system.shells) {
       std::size_t shell_references = 0;
-      if (!vibeqc::runtime::checked_multiply(molecule::cartesian_count(shell.angular_momentum),
-                                             shell.primitives.size(), shell_references) ||
-          !vibeqc::runtime::checked_add(expanded_primitive_references, shell_references,
-                                        expanded_primitive_references)) {
+      if (!generativeqc::runtime::checked_multiply(
+              molecule::cartesian_count(shell.angular_momentum), shell.primitives.size(),
+              shell_references) ||
+          !generativeqc::runtime::checked_add(expanded_primitive_references, shell_references,
+                                              expanded_primitive_references)) {
         throw std::overflow_error("expanded CUDA primitive reference count overflowed");
       }
     }
@@ -232,11 +233,11 @@ bool pack_host_batch(const std::vector<core::System>& systems,
         previous_block_offset + static_cast<std::int64_t>(system_shell_pair_block_count));
     std::size_t system_shell_pair_block_plus_one = 0;
     std::size_t system_shell_pair_block_quartet_count = 0;
-    if (!vibeqc::runtime::checked_add(system_shell_pair_block_count, 1,
-                                      system_shell_pair_block_plus_one) ||
-        !vibeqc::runtime::checked_multiply(system_shell_pair_block_count,
-                                           system_shell_pair_block_plus_one,
-                                           system_shell_pair_block_quartet_count)) {
+    if (!generativeqc::runtime::checked_add(system_shell_pair_block_count, 1,
+                                            system_shell_pair_block_plus_one) ||
+        !generativeqc::runtime::checked_multiply(system_shell_pair_block_count,
+                                                 system_shell_pair_block_plus_one,
+                                                 system_shell_pair_block_quartet_count)) {
       return false;
     }
     system_shell_pair_block_quartet_count /= 2;
@@ -252,9 +253,10 @@ bool pack_host_batch(const std::vector<core::System>& systems,
         static_cast<std::int64_t>(system_shell_pair_block_quartet_count));
     std::size_t system_shell_pair_plus_one = 0;
     std::size_t system_shell_quartet_count = 0;
-    if (!vibeqc::runtime::checked_add(system_shell_pair_count, 1, system_shell_pair_plus_one) ||
-        !vibeqc::runtime::checked_multiply(system_shell_pair_count, system_shell_pair_plus_one,
-                                           system_shell_quartet_count)) {
+    if (!generativeqc::runtime::checked_add(system_shell_pair_count, 1,
+                                            system_shell_pair_plus_one) ||
+        !generativeqc::runtime::checked_multiply(
+            system_shell_pair_count, system_shell_pair_plus_one, system_shell_quartet_count)) {
       return false;
     }
     system_shell_quartet_count /= 2;
@@ -326,4 +328,4 @@ bool same_topology(const HostBatch& first, const HostBatch& second) {
          first.occupied == second.occupied;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

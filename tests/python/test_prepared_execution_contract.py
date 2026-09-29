@@ -1,13 +1,13 @@
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.common.prepared_execution import (
+from generativeqc_compiler.common.prepared_execution import (
     PreparedArtifactBinding,
     PreparedExecutionLease,
     PreparedExecutionMismatch,
     PreparedExecutionRequest,
 )
-from vibeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.provenance import canonical_hash
 
 
 def digest(value: object) -> str:

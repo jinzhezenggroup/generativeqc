@@ -2,19 +2,19 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 
 def test_batch_precision_provenance_availability_abi_and_failed_replay() -> None:
     """Each public batch slot owns its record; failed replays cannot leak it."""
     import ctypes
 
-    from vibeqc import _native
+    from generativeqc import _native
 
     calculator = Calculator(precision="auto", device="cpu")
     with calculator.prepare_batch(systems()[:2]) as prepared:
-        getter = prepared._library.vibeqc_batch_get_precision_provenance
-        work_getter = prepared._library.vibeqc_batch_get_precision_work
+        getter = prepared._library.generativeqc_batch_get_precision_provenance
+        work_getter = prepared._library.generativeqc_batch_get_precision_work
         detail = _native.PrecisionWorkDetail(
             ctypes.sizeof(_native.PrecisionWorkDetail), _native.ABI_VERSION
         )
@@ -129,7 +129,9 @@ def test_batch_precision_provenance_availability_abi_and_failed_replay() -> None
         # successful neighbor populated its record in the previous call.
         outputs = (_native.BatchItemResultDescriptor * 1)()
         assert (
-            prepared._library.vibeqc_batch_execute(prepared._batch, None, 0, outputs, 1)
+            prepared._library.generativeqc_batch_execute(
+                prepared._batch, None, 0, outputs, 1
+            )
             == _native.STATUS_INVALID_ARGUMENT
         )
         assert getter(prepared._batch, 1, None) == _native.STATUS_PRECISION_UNAVAILABLE
@@ -501,9 +503,9 @@ def test_cuda_bounded_direct_streaming_matches_exact_replay(
     outputs = {}
     for mode in ("exact", "streaming"):
         if mode == "streaming":
-            monkeypatch.setenv("VIBEQC_BOUNDED_DIRECT_STREAMING", "force")
+            monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
         else:
-            monkeypatch.delenv("VIBEQC_BOUNDED_DIRECT_STREAMING", raising=False)
+            monkeypatch.delenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", raising=False)
         calculator = Calculator(
             method=method,
             basis=basis,

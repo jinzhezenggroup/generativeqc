@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_D4_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_D4_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_D4_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_D4_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +11,7 @@
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 inline constexpr std::size_t kD4WorkspaceAlignment = 64u;
 inline constexpr std::size_t kD4MaximumReferences = 7u;
@@ -54,7 +54,7 @@ class D4Plan {
   explicit D4Plan(std::shared_ptr<const D4PlanData> data) noexcept;
   std::shared_ptr<const D4PlanData> data_;
 
-  friend vibeqc_xtb_status_t make_d4_plan(std::int64_t, std::int64_t, const std::int64_t*,
+  friend generativeqc_xtb_status_t make_d4_plan(std::int64_t, std::int64_t, const std::int64_t*,
                                           const std::int32_t*, D4Plan&, std::string&);
 };
 
@@ -104,12 +104,12 @@ struct D4Workspace {
   const D4PlanData* plan_identity = nullptr;
 };
 
-vibeqc_xtb_status_t make_d4_plan(std::int64_t batch_size, std::int64_t total_atoms,
+generativeqc_xtb_status_t make_d4_plan(std::int64_t batch_size, std::int64_t total_atoms,
                                  const std::int64_t* atom_offsets,
                                  const std::int32_t* atomic_numbers, D4Plan& plan,
                                  std::string& error);
 
-vibeqc_xtb_status_t bind_d4_workspace(const D4Plan& plan, void* workspace,
+generativeqc_xtb_status_t bind_d4_workspace(const D4Plan& plan, void* workspace,
                                       std::size_t workspace_size, D4Workspace& view,
                                       std::string& error);
 
@@ -121,7 +121,7 @@ vibeqc_xtb_status_t bind_d4_workspace(const D4Plan& plan, void* workspace,
  * storage, and control descriptors must be mutually disjoint. The same output
  * arrays may be reused to refresh an existing cache generation.
  */
-vibeqc_xtb_status_t update_d4_geometry_cache_cpu(
+generativeqc_xtb_status_t update_d4_geometry_cache_cpu(
     const D4Plan& plan, const double* positions, std::uint64_t geometry_generation,
     double* pair_storage, std::size_t pair_storage_elements, double* coordination_storage,
     std::size_t coordination_storage_elements, const D4Workspace& workspace, D4GeometryCache& cache,
@@ -134,7 +134,7 @@ vibeqc_xtb_status_t update_d4_geometry_cache_cpu(
  * Active inputs, outputs, workspace, plan storage, and descriptors must not
  * overlap.
  */
-vibeqc_xtb_status_t evaluate_d4_two_body_cpu(const D4Plan& plan, const D4GeometryCache& cache,
+generativeqc_xtb_status_t evaluate_d4_two_body_cpu(const D4Plan& plan, const D4GeometryCache& cache,
                                              const double* atomic_charges, double* energies,
                                              double* atomic_potentials,
                                              const D4Workspace& workspace, std::string& error);
@@ -152,7 +152,7 @@ vibeqc_xtb_status_t evaluate_d4_two_body_cpu(const D4Plan& plan, const D4Geometr
  * optional target potential slice remain unchanged on every failure. The
  * operation uses canonical caller-owned scratch and allocates nothing.
  */
-vibeqc_xtb_status_t evaluate_d4_two_body_system_cpu(
+generativeqc_xtb_status_t evaluate_d4_two_body_system_cpu(
     const D4Plan& plan, const D4GeometryCache& cache, std::int64_t system,
     const double* atomic_charges, double& energy, double* atomic_potentials,
     const D4Workspace& workspace, std::string& error);
@@ -163,7 +163,7 @@ vibeqc_xtb_status_t evaluate_d4_two_body_system_cpu(
  * dE/dR in Hartree/bohr, not forces. The gradient output must not overlap the
  * charges, geometry cache, workspace, plan storage, or descriptors.
  */
-vibeqc_xtb_status_t add_d4_two_body_gradient_cpu(const D4Plan& plan, const D4GeometryCache& cache,
+generativeqc_xtb_status_t add_d4_two_body_gradient_cpu(const D4Plan& plan, const D4GeometryCache& cache,
                                                  const double* positions,
                                                  const double* atomic_charges, double* gradients,
                                                  const D4Workspace& workspace, std::string& error);
@@ -176,7 +176,7 @@ vibeqc_xtb_status_t add_d4_two_body_gradient_cpu(const D4Plan& plan, const D4Geo
  * must be disjoint from the geometry cache, workspace, plan storage, and
  * descriptors.
  */
-vibeqc_xtb_status_t evaluate_d4_atm_cpu(const D4Plan& plan, const D4GeometryCache& cache,
+generativeqc_xtb_status_t evaluate_d4_atm_cpu(const D4Plan& plan, const D4GeometryCache& cache,
                                         const double* positions, const double* atomic_charges,
                                         double* energies, const D4Workspace& workspace,
                                         std::string& error);
@@ -186,11 +186,11 @@ vibeqc_xtb_status_t evaluate_d4_atm_cpu(const D4Plan& plan, const D4GeometryCach
  * The gradient output obeys the same non-aliasing contract as the two-body
  * gradient operation.
  */
-vibeqc_xtb_status_t add_d4_atm_gradient_cpu(const D4Plan& plan, const D4GeometryCache& cache,
+generativeqc_xtb_status_t add_d4_atm_gradient_cpu(const D4Plan& plan, const D4GeometryCache& cache,
                                             const double* positions, const double* atomic_charges,
                                             double* gradients, const D4Workspace& workspace,
                                             std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_D4_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_D4_HPP

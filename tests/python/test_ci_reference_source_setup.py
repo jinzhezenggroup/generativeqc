@@ -19,7 +19,8 @@ def _preparation() -> tuple[str, str]:
     assert workflow.count(name) == 1
     step = workflow.split(name, 1)[1].split("      - name:", 1)[0]
     assert (
-        "if: (matrix.shard == 'core' || matrix.shard == 'compiler-heavy') && " in step
+        "if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && "
+        in step
     )
     assert "steps.gfn1_reference_sources.outputs.cache-hit != 'true'" in step
     commands = step.split("        run: |\n", 1)[1]
@@ -44,10 +45,13 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
     cache = python_job.split(
         "      - name: Cache pinned GFN1 and D3 reference inputs\n", 1
     )[1].split("      - name:", 1)[0]
-    assert "if: matrix.shard == 'core' || matrix.shard == 'compiler-heavy'" in cache
+    assert (
+        "if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy'"
+        in cache
+    )
     assert "upstream/manifest.json" in cache and "tools/source_registry.py" in cache
-    assert ".cache/vibeqc-sources/xtbloom-gfn1-parameters" in cache
-    assert ".cache/vibeqc-sources/xtbloom-gfn1-d3" in cache
+    assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in cache
+    assert ".cache/generativeqc-sources/xtbloom-gfn1-d3" in cache
     assert "restore-keys:" not in cache
     other_jobs = workflow.replace(python_job, "")
     assert "source_registry.py sync" not in other_jobs
@@ -91,7 +95,8 @@ def test_sync_commands_propagate_failure_before_testing(
 
 
 @pytest.mark.parametrize(
-    "shard", ["core", "compiler-heavy", "posthf", "runtime-heavy", "ecp-forces"]
+    "shard",
+    ["core-a", "core-b", "compiler-heavy", "posthf", "runtime-heavy", "ecp-forces"],
 )
 @pytest.mark.parametrize("cache_hit", ["true", "false", ""])
 def test_reference_guards_cover_both_consumers_and_cache_states(
@@ -101,11 +106,11 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
     for name, expected in (
         (
             "Cache pinned GFN1 and D3 reference inputs",
-            shard in {"core", "compiler-heavy"},
+            shard in {"core-a", "core-b", "compiler-heavy"},
         ),
         (
             "Prepare pinned GFN1 and D3 reference inputs",
-            shard in {"core", "compiler-heavy"} and cache_hit != "true",
+            shard in {"core-a", "core-b", "compiler-heavy"} and cache_hit != "true",
         ),
     ):
         step = workflow.split(f"      - name: {name}\n", 1)[1].split(

@@ -19,7 +19,7 @@
 #include "cuda_error.hpp"
 #include "metrics.hpp"
 
-namespace vibeqc_tensor {
+namespace generativeqc_tensor {
 using I = int64_t;
 
 inline void blas_check(cublasStatus_t status) {
@@ -48,9 +48,10 @@ struct Context {
   void prepare(int ordinal, int major, int minor, size_t bytes, size_t error_offset,
                size_t library_offset, size_t library_bytes, size_t provider_bytes,
                bool needs_blas) {
-    std::lock_guard<std::mutex> allocation_lock(vibeqc::runtime::allocation_measurement_mutex);
+    std::lock_guard<std::mutex> allocation_lock(
+        generativeqc::runtime::allocation_measurement_mutex);
     device = ordinal;
-    vibeqc::runtime::CudaDeviceScope guard(device, cuda_check);
+    generativeqc::runtime::CudaDeviceScope guard(device, cuda_check);
     cudaDeviceProp property{};
     cuda_check(cudaGetDeviceProperties(&property, device));
     if (property.major != major || property.minor != minor)
@@ -123,7 +124,8 @@ struct Context {
     }
   }
   ~Context() {
-    std::lock_guard<std::mutex> allocation_lock(vibeqc::runtime::allocation_measurement_mutex);
+    std::lock_guard<std::mutex> allocation_lock(
+        generativeqc::runtime::allocation_measurement_mutex);
     // Cleanup remains nonthrowing, including partial preparation failures.
     int previous = 0;
     cudaGetDevice(&previous);
@@ -210,4 +212,4 @@ inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int
                                          a, lda, a_stride, &beta, c, n, c_stride, batches));
   }
 }
-}  // namespace vibeqc_tensor
+}  // namespace generativeqc_tensor

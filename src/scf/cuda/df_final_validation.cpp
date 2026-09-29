@@ -13,7 +13,7 @@
 #include "scf/cuda/df_scf_state.hpp"
 #include "scf/cuda/final_validation_kernels.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 using reference::Matrix;
 namespace trace = runtime::cuda_trace;
@@ -38,9 +38,9 @@ void check(cudaError_t status, const char* operation) {
   if (status != cudaSuccess)
     throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
 }
-void check(vibeqc_status status, const std::string& detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void check(generativeqc_status status, const std::string& detail) {
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 Workspace& prepare(CudaDensityFittingJkPlan& plan) {
   check(cudaSetDevice(plan.device_id), "select final-validation device");
@@ -411,9 +411,9 @@ void destroy_final_validation(void*& opaque) noexcept {
   delete static_cast<Workspace*>(opaque);
   opaque = nullptr;
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 solver::PhysicalFockFrame evaluate_cuda_density_fitting_final_fock(
     CudaDensityFittingJkPlan* plan, const solver::FinalStateIdentity& current,
     const std::vector<reference::Matrix>& density, const reference::Matrix& hcore) {
@@ -544,4 +544,4 @@ bool validate_cuda_density_fitting_eigen_frame(CudaDensityFittingJkPlan* plan,
   return eigen_diagnostic(raw, diagnostic, detail) &&
          solver::accept_eigen_frame(diagnostic, detail);
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

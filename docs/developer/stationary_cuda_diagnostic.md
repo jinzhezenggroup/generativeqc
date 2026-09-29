@@ -1,6 +1,6 @@
 # Stationary CUDA RKS gradient diagnostic
 
-`vibeqc._stationary_cuda.complete_rks_cuda_gradient_diagnostic` executes all
+`generativeqc._stationary_cuda.complete_rks_cuda_gradient_diagnostic` executes all
 `StationaryGradientPlan` sources on CUDA: one-electron, Coulomb, XC AO motion,
 XC point motion, XC partition response, overlap/Pulay, and nuclear repulsion.
 Full-range global hybrids add an exact-exchange contribution from the same
@@ -53,9 +53,18 @@ The complete route retains these explicit host boundaries:
 - Native CUDA SCF constructs its grid and has existing provider setup boundaries.
   The final D/F/C/epsilon export, validation and W construction are explicit host
   operations. The derivative function consumes that exported snapshot.
-- Python enumerates ordered AO pairs/quartets and primitive records, gathers
-  density entries, and packs exponents, centers and normalization coefficients.
-  It does not evaluate a derivative or reduce scientific contributions.
+- Python consumes a versioned identity-bearing bounded task-source contract
+  (`to_payload().schema + identity + logical_size + pages(capacity)`). The identity
+  must equal the canonical hash of the versioned payload, and every page must bind
+  that same identity plus contiguous ordinal/offset metadata. A screened source may
+  explicitly publish `logical_size=0`, in which case it must yield no pages and is
+  recorded as `empty`. The current producer enumerates
+  ordered AO pairs/quartets through `RuntimeTaskDomain`; a compact shell-task
+  producer can replace it without changing the executor. Non-component-expanded
+  s/p paths fill each page of task descriptors in
+  one vectorized operation rather than one Python call per AO tuple; spherical
+  component expansion retains the scalar fallback. Primitive expansion remains
+  native. Python does not evaluate a derivative or reduce scientific contributions.
 - `plan_cuda`/`compile_cuda`/`PreparedCuda` execute source weights and the final
   complete-source reduction. Their inputs and small outputs stage through the host.
 - Existing `CudaGrid` evaluates AO jets and density features. The geometry
@@ -84,9 +93,13 @@ See the [preparation decision](../../.agents/notes/implemented/numerics/2026-09-
 
 ## Bounded resources and failure
 
-Preparation admits at most 32 atoms, 128 AOs, 4096 points per tile, 4096 primitive
-records per tile, and 128 source-weight terms. Defaults cap total primitive work
-at 16,000,000 records, grid points at 1,000,000 and grid pair visits at 100,000,000.
+Preparation admits at most 32 atoms, 128 AOs, 4096 points per tile, 4096 task
+descriptors per resident/native page, and 128 source-weight terms. The default
+`max_primitive_records=16,000,000` is a **per-native-page primitive-work budget**,
+not a cap on the total logical force traversal. Any number of individually admitted
+pages may contribute to one force execution; cumulative `primitive_records` remains
+an exact coverage metric and is checked against the analytically expected total.
+Grid points remain capped at 1,000,000 and grid pair visits at 100,000,000.
 For `A` atoms, `N` AOs, point capacity `P` and primitive capacity `R`, the new
 source arena owns exactly
 `8*(22*R + 2*Kp + 4*N + (579+3*S)*A + 3*P + 2*Ns*N*N) + 256`
@@ -95,10 +108,13 @@ spin blocks and `S` is the plan-owned source count (seven or eight). The Becke
 scratch has 32 atom-sized worker slices; there is no coordinate/grid/AO tensor.
 Ordered primitive work is `(1+H)*K**4 + (A+2)*K**2 + A*(A-1)/2`, where
 `H=1` when full-range exchange is present and `H=0` otherwise, and `K` sums each
-public AO's primitive count once per normalized Cartesian expansion term. The
-bounded implementation currently traverses ERI derivative tasks once per
-Coulomb/exchange contribution; it does not claim a fused-J/K speedup. Pair
-visits are `(1+2*grid_points)*A*(A-1)/2`.
+public AO's primitive count once per normalized Cartesian expansion term. Native
+submissions are cut adaptively by both descriptor capacity and primitive-work
+budget, so a high-primitive basis can shrink a page without changing the compiled
+scientific graph or introducing a whole-force work cap. The bounded implementation
+currently traverses ERI derivative tasks once per Coulomb/exchange contribution; it
+does not claim a fused-J/K speedup. Pair visits are
+`(1+2*grid_points)*A*(A-1)/2`.
 
 All TensorIR programs and the grid/source capacities are admitted before device
 allocation. Default additional-device and host-numeric bounds are 512 MiB and
@@ -114,7 +130,11 @@ must match the current CUDA device and borrowed owner. No visibility override is
 used. A native failure poisons the source transaction; reads fail until reset.
 The public diagnostic discards the owner and publishes no partial result.
 
-`result.work` records exact source launches, primitive/point/pair counts,
+`result.work` records exact source launches, cumulative primitive/point/pair counts,
+actual native primitive-page count and peak page work; bulk-packed page/descriptor
+counts and scalar-fallback descriptor counts identify the Python packing route. The
+bounded task-executor metadata separately records producer-page counts so logical
+enumeration pages are not confused with descriptor-reservoir flushes,
 source H2D/D2H bytes and call counts, explicit source-stream synchronization
 counts, snapshot export counters, streams, grid allocation/timing metrics,
 TensorIR execution/transfer totals, declared numeric bounds, endpoint time and
@@ -143,12 +163,12 @@ device; for example H100 uses `sm_90`, while RTX 4090 uses `sm_89`.
 
 ```python
 from pathlib import Path
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.dft import NativeAO
 
 atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
 compiler = CudaCompilerAdapter(
@@ -255,9 +275,9 @@ The provider re-reads and validates the native final state, causing an additiona
 explicit final-state export; this is not an entirely resident force path or a
 performance promotion. The public wrapper applies the same work/byte limits.
 
-Run the opt-in numerical gate on an allocated device with `VIBEQC_ECP_CUDA_TEST=1`,
-`VIBEQC_ECP_CUDA_TARGET` matching that device (for example `sm_89`), an explicit
-`CUDACXX` and current `VIBEQC_LIBRARY`:
+Run the opt-in numerical gate on an allocated device with `GENERATIVEQC_ECP_CUDA_TEST=1`,
+`GENERATIVEQC_ECP_CUDA_TARGET` matching that device (for example `sm_89`), an explicit
+`CUDACXX` and current `GENERATIVEQC_LIBRARY`:
 
 ```sh
 python -m pytest tests/python/test_ecp_stationary_cuda.py -q

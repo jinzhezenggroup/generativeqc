@@ -1,6 +1,6 @@
 #include "cc/solver.hpp"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 
 #include <cuda_runtime.h>
 
@@ -20,10 +20,10 @@
 #include "tensor/cuda_error.hpp"
 #include "tensor/cuda_runtime.cuh"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 namespace {
 
-using vibeqc_tensor::cuda_check;
+using generativeqc_tensor::cuda_check;
 
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a)
@@ -49,7 +49,7 @@ __global__ void damped_advance(const double* current, const double* undamped, st
                                double factor, double* output, int* error) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += std::size_t(blockDim.x) * gridDim.x)
-    output[i] = vibeqc_tensor::finite(
+    output[i] = generativeqc_tensor::finite(
         __dadd_rn(current[i], __dmul_rn(factor, __dsub_rn(undamped[i], current[i]))), error, 0);
 }
 
@@ -93,6 +93,7 @@ struct Owner {
   DeviceScope scope;
   int device{};
   cudaStream_t stream{};
+  cudaEvent_t trial_begin{}, trial_end{};
   unsigned char* base{};
   Layout layout;
   generated::CudaState state;
@@ -155,6 +156,10 @@ struct Owner {
       throw std::length_error("RCCSD CUDA resident state exceeds correlation memory budget");
     try {
       cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+      if (options.diis_size) {
+        cuda_check(cudaEventCreate(&trial_begin));
+        cuda_check(cudaEventCreate(&trial_end));
+      }
       cuda_check(cudaMalloc(reinterpret_cast<void**>(&base), layout.total));
 
       std::array<double**, 14> fields = {
@@ -204,6 +209,10 @@ struct Owner {
 
   void cleanup() noexcept {
     if (stream) cudaStreamSynchronize(stream);
+    if (trial_begin) cudaEventDestroy(trial_begin);
+    if (trial_end) cudaEventDestroy(trial_end);
+    trial_begin = nullptr;
+    trial_end = nullptr;
     if (base) cudaFree(base);
     if (stream) cudaStreamDestroy(stream);
     base = nullptr;
@@ -212,16 +221,18 @@ struct Owner {
 
   template <class Output>
   std::array<double, 3> read_status(const Output& out) {
-    vibeqc::cc::residual_partials<<<vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(n1), 256),
-                                    256, 0, stream>>>(out.r1, static_cast<vibeqc_tensor::I>(n1),
-                                                      r1_partials, state.error);
-    vibeqc::cc::residual_partials<<<vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(n2), 256),
-                                    256, 0, stream>>>(out.r2, static_cast<vibeqc_tensor::I>(n2),
-                                                      r2_partials, state.error);
-    vibeqc::cc::residual_finish<<<1, 1, 0, stream>>>(r1_partials, static_cast<int>(partial1),
-                                                     scalars);
-    vibeqc::cc::residual_finish<<<1, 1, 0, stream>>>(r2_partials, static_cast<int>(partial2),
-                                                     scalars + 1);
+    generativeqc::cc::residual_partials<<<generativeqc_tensor::blocks(
+                                              static_cast<generativeqc_tensor::I>(n1), 256),
+                                          256, 0, stream>>>(
+        out.r1, static_cast<generativeqc_tensor::I>(n1), r1_partials, state.error);
+    generativeqc::cc::residual_partials<<<generativeqc_tensor::blocks(
+                                              static_cast<generativeqc_tensor::I>(n2), 256),
+                                          256, 0, stream>>>(
+        out.r2, static_cast<generativeqc_tensor::I>(n2), r2_partials, state.error);
+    generativeqc::cc::residual_finish<<<1, 1, 0, stream>>>(r1_partials, static_cast<int>(partial1),
+                                                           scalars);
+    generativeqc::cc::residual_finish<<<1, 1, 0, stream>>>(r2_partials, static_cast<int>(partial2),
+                                                           scalars + 1);
     cuda_check(cudaGetLastError());
     std::array<double, 3> host{};
     int error = 0;
@@ -245,14 +256,15 @@ struct Owner {
     cuda_check(
         cudaMemcpyAsync(last_t2, state.t2, n2 * sizeof(double), cudaMemcpyDeviceToDevice, stream));
     cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
-    damped_advance<<<vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(n1), 256), 256, 0,
-                     stream>>>(last_t1, out.next_t1, n1, factor, state.t1, state.error);
-    damped_advance<<<vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(n2), 256), 256, 0,
-                     stream>>>(last_t2, out.next_t2, n2, factor, state.t2, state.error);
+    damped_advance<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n1), 256), 256,
+                     0, stream>>>(last_t1, out.next_t1, n1, factor, state.t1, state.error);
+    damped_advance<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n2), 256), 256,
+                     0, stream>>>(last_t2, out.next_t2, n2, factor, state.t2, state.error);
     cuda_check(cudaGetLastError());
   }
 
   void check_generated_error() {
+    ++diagnostic.generated_error_checks;
     int host_error = 0;
     cuda_check(
         cudaMemcpyAsync(&host_error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
@@ -270,12 +282,14 @@ void run_diis(Owner& s, const SolverOptions& options,
   if (!options.diis_size) return;
   int count = static_cast<int>(s.history);
   if (count == static_cast<int>(options.diis_size)) {
-    vibeqc::cc::history_shift<<<
-        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.elements), 256), 256, 0, s.stream>>>(
-        s.vectors, static_cast<vibeqc_tensor::I>(s.elements), count);
-    vibeqc::cc::history_shift<<<
-        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.elements), 256), 256, 0, s.stream>>>(
-        s.errors, static_cast<vibeqc_tensor::I>(s.elements), count);
+    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
+                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
+                                      256, 0, s.stream>>>(
+        s.vectors, static_cast<generativeqc_tensor::I>(s.elements), count);
+    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
+                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
+                                      256, 0, s.stream>>>(
+        s.errors, static_cast<generativeqc_tensor::I>(s.elements), count);
     --count;
   }
   const int slot = count++;
@@ -296,22 +310,27 @@ void run_diis(Owner& s, const SolverOptions& options,
   int generated_error = 0;
   while (count > 1) {
     gram_kernel<<<count * count, 256, 0, s.stream>>>(s.errors, s.elements, count, s.gram);
-    vibeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system, s.coefficients,
-                                                         s.status);
+    ++s.diagnostic.diis_gram_calls;
+    generativeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system,
+                                                               s.coefficients, s.status);
+    ++s.diagnostic.diis_coefficient_calls;
     // The combine kernels already guard on the device-side DIIS status. Queue
     // them before publishing control state so a successful extrapolation needs
     // only one host fence instead of one fence for coefficients and another
     // for arithmetic validation.
     cuda_check(cudaMemsetAsync(s.arithmetic, 0, sizeof(int), s.stream));
-    vibeqc::cc::diis_combine_slice<<<
-        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n1), 256), 256, 0, s.stream>>>(
-        s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements), 0,
-        static_cast<vibeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
-    vibeqc::cc::diis_combine_slice<<<
-        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.n2), 256), 256, 0, s.stream>>>(
-        s.vectors, s.coefficients, static_cast<vibeqc_tensor::I>(s.elements),
-        static_cast<vibeqc_tensor::I>(s.n1), static_cast<vibeqc_tensor::I>(s.n2), count, s.status,
-        s.state.t2, s.arithmetic);
+    generativeqc::cc::diis_combine_slice<<<generativeqc_tensor::blocks(
+                                               static_cast<generativeqc_tensor::I>(s.n1), 256),
+                                           256, 0, s.stream>>>(
+        s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.elements), 0,
+        static_cast<generativeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
+    generativeqc::cc::diis_combine_slice<<<generativeqc_tensor::blocks(
+                                               static_cast<generativeqc_tensor::I>(s.n2), 256),
+                                           256, 0, s.stream>>>(
+        s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.elements),
+        static_cast<generativeqc_tensor::I>(s.n1), static_cast<generativeqc_tensor::I>(s.n2), count,
+        s.status, s.state.t2, s.arithmetic);
+    s.diagnostic.diis_combine_calls += 2;
     int host_status = 1, arithmetic = 0;
     if (!generated_error_checked)
       cuda_check(cudaMemcpyAsync(&generated_error, s.state.error, sizeof(int),
@@ -334,12 +353,14 @@ void run_diis(Owner& s, const SolverOptions& options,
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
       break;
     }
-    vibeqc::cc::history_shift<<<
-        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.elements), 256), 256, 0, s.stream>>>(
-        s.vectors, static_cast<vibeqc_tensor::I>(s.elements), count);
-    vibeqc::cc::history_shift<<<
-        vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>(s.elements), 256), 256, 0, s.stream>>>(
-        s.errors, static_cast<vibeqc_tensor::I>(s.elements), count);
+    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
+                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
+                                      256, 0, s.stream>>>(
+        s.vectors, static_cast<generativeqc_tensor::I>(s.elements), count);
+    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
+                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
+                                      256, 0, s.stream>>>(
+        s.errors, static_cast<generativeqc_tensor::I>(s.elements), count);
     --count;
     ++s.restarts;
   }
@@ -363,8 +384,13 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
 
   for (unsigned iteration = 0; iteration <= options.max_iterations; ++iteration) {
     try {
+      const auto iteration_started = std::chrono::steady_clock::now();
       const auto output = generated::run_iteration_cuda(owner.state);
       const auto status = owner.read_status(output);
+      owner.diagnostic.iteration_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
+              .count();
+      ++owner.diagnostic.iteration_graph_calls;
       const double delta = std::isfinite(previous) ? std::abs(status[0] - previous)
                                                    : std::numeric_limits<double>::infinity();
       result.correlation_energy = status[0];
@@ -375,8 +401,13 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       owner.diagnostic.r2_max = status[2];
       if (std::isfinite(previous) && delta <= options.energy_tolerance &&
           std::max(status[1], status[2]) <= options.residual_tolerance) {
+        const auto replay_started = std::chrono::steady_clock::now();
         const auto replay = generated::run_replay_cuda(owner.state);
         const auto replay_status = owner.read_status(replay);
+        owner.diagnostic.replay_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started)
+                .count();
+        ++owner.diagnostic.replay_graph_calls;
         owner.diagnostic.replay_r1_max = replay_status[1];
         owner.diagnostic.replay_r2_max = replay_status[2];
         if (std::max(replay_status[1], replay_status[2]) <= options.residual_tolerance &&
@@ -387,11 +418,34 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         }
       }
       if (iteration == options.max_iterations) break;
+      const auto update_started = std::chrono::steady_clock::now();
       owner.advance(output, 1.0 - options.damping);
       owner.check_generated_error();
+      owner.diagnostic.update_seconds +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
+      ++owner.diagnostic.update_calls;
       if (options.diis_size) {
+        const auto trial_diis_started = std::chrono::steady_clock::now();
+        cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
         const auto trial = generated::run_iteration_cuda(owner.state);
+        cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
+        ++owner.diagnostic.iteration_graph_calls;
         run_diis(owner, options, trial);
+        // Every successful DIIS path, including the first history push, has
+        // already drained this stream past both events. Do not add a timing
+        // fence: the trial's completed device interval belongs to iteration,
+        // not to DIIS merely because DIIS performs the existing host drain.
+        const double trial_diis_seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_diis_started)
+                .count();
+        float trial_ms = 0.0F;
+        cuda_check(cudaEventElapsedTime(&trial_ms, owner.trial_begin, owner.trial_end));
+        // The remainder includes host enqueue/history/control overhead. Clamp
+        // across clock domains so neither phase is negative or double counted.
+        const double trial_seconds =
+            std::clamp(static_cast<double>(trial_ms) * 1e-3, 0.0, trial_diis_seconds);
+        owner.diagnostic.iteration_seconds += trial_seconds;
+        owner.diagnostic.diis_seconds += trial_diis_seconds - trial_seconds;
       }
       previous = status[0];
     } catch (const std::runtime_error& error) {
@@ -418,9 +472,11 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
   cuda_check(cudaStreamSynchronize(owner.stream));
   result.diagnostic.amplitude_d2h_bytes = (owner.n1 + owner.n2) * sizeof(double);
   ++result.diagnostic.synchronizations;
+  result.diagnostic.tensor_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
   return result;
 }
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc
 
 #endif

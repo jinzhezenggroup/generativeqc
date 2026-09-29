@@ -7,7 +7,7 @@ t2``), reconstructs the ``(T)`` inputs, computes the energy two independent
 ways, and writes ``tests/reference_data/cc/rccsd-t.json``:
 
 * ``via_triples_energy`` -- this repository's pure-NumPy audited reference
-  ``tools.vibeqc_cc.triples_energy`` (no PySCF).
+  ``tools.generativeqc_cc.triples_energy`` (no PySCF).
 * ``via_pyscf_ccsd_t`` -- pinned PySCF ``cc.CCSD(...).ccsd_t()``, which
   internally calls the production ``ccsd_t.kernel`` (source/hash checked).
 
@@ -16,7 +16,7 @@ Re-run with ``--compare`` to assert two-generation byte-for-byte stability.
 
 Correct invocation (from the repository root, on qz):
 
-    cd /inspire/.../vibeqc
+    cd /inspire/.../generativeqc
     source .venv/bin/activate
     export PYTHONPATH=.:python
     export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
@@ -35,10 +35,10 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
 
 from tools.cc_endpoint_fixtures import array_hash
-from tools.vibeqc_cc.triples import triples_energy
+from tools.generativeqc_cc.triples import triples_energy
 
 ROOT = Path(__file__).resolve().parents[1]
 ENDPOINTS = ROOT / "tests/reference_data/cc/endpoints"
@@ -158,7 +158,9 @@ def generate(output: Path, compare: Path | None = None) -> dict[str, typing.Any]
     if pyscf.__version__ != "2.14.0":
         raise ValueError("(T) references require pinned PySCF 2.14.0")
 
-    manifest = json.loads((ROOT / "tools/vibeqc_cc/source_manifest.json").read_text())
+    manifest = json.loads(
+        (ROOT / "tools/generativeqc_cc/source_manifest.json").read_text()
+    )
     upstream = {record["path"]: record for record in manifest["files"]}
     for path in ("pyscf/cc/ccsd_t_slow.py", "pyscf/cc/ccsd_t.py"):
         # import_module returns the leaf module, whose __file__ is the pinned
@@ -223,7 +225,7 @@ def generate(output: Path, compare: Path | None = None) -> dict[str, typing.Any]
             )
 
     result = {
-        "schema": "vibeqc.rccsd-t.reference",
+        "schema": "generativeqc.rccsd-t.reference",
         "version": 1,
         "pyscf": pyscf.__version__,
         "numpy": np.__version__,

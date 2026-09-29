@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, method_capabilities
+from generativeqc import Calculator, method_capabilities
 
+from tools.generativeqc_cc.triples import INVENTORY_HASH
 from tools.validate_ccsd_t_gradient import analytic_oracle
-from tools.vibeqc_cc.triples import INVENTORY_HASH
 
 ROOT = Path(__file__).resolve().parents[2]
 GRADIENTS = ROOT / "tests/reference_data/cc/gradients"
@@ -49,14 +49,17 @@ def _calculator(**kwargs: object) -> Calculator:
 
 @pytest.fixture(params=("cpu", "cuda"))
 def energy_device(request: pytest.FixtureRequest) -> str:
-    if request.param == "cuda" and os.environ.get("VIBEQC_RCCSDT_CUDA_TEST") != "1":
+    if (
+        request.param == "cuda"
+        and os.environ.get("GENERATIVEQC_RCCSDT_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires explicitly allocated CUDA native library")
     return request.param
 
 
 @pytest.fixture
 def cuda_device() -> str:
-    if os.environ.get("VIBEQC_RCCSDT_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_RCCSDT_CUDA_TEST") != "1":
         pytest.skip("requires explicitly allocated CUDA native library")
     return "cuda"
 
@@ -92,6 +95,15 @@ def test_public_native_rccsdt_matches_pinned_standard_triples(
     assert diag.ccsd_t_equation_hash == INVENTORY_HASH
     assert diag.ccsd_t_virtual_triples > 0
     assert diag.ccsd_t_workspace_bytes > 0
+    perf = result.cc_performance
+    assert perf is not None
+    assert perf.triples_seconds >= 0.0
+    assert perf.reference_seconds >= 0.0
+    assert perf.problem_seconds >= perf.provider_seconds >= 0.0
+    assert perf.source_scans > 0
+    assert perf.transform_stages > 0
+    assert perf.iteration_graph_calls >= diag.ccsd_iterations
+    assert perf.replay_graph_calls == 1
     assert diag.ccsd_replay_singles_residual_max <= 1e-11
     assert diag.ccsd_replay_doubles_residual_max <= 1e-11
     if energy_device == "cuda":

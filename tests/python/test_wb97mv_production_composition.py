@@ -3,8 +3,8 @@
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.xc import wb97mv_maple
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.xc import wb97mv_maple
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 X = "MGGA_X_WB97M_V"
 C = "MGGA_C_WB97M_V"
@@ -66,7 +66,7 @@ import runpy
 import sys
 from fractions import Fraction
 namespace = runpy.run_path('tools/generate_xc_cpu.py')
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.xc.spec import FunctionalSpec
 spec = FunctionalSpec('WB97M-V-test', (
     ('MGGA_X_WB97M_V', Fraction(1)), ('MGGA_C_WB97M_V', Fraction(1))),
     spin=sys.argv[1], range_omega=Fraction(3, 10))

@@ -7,11 +7,11 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
-from vibeqc_compiler.integral.df_screening import emit_sss_force_screening_cuda
+from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+from generativeqc_compiler.integral.df_screening import emit_sss_force_screening_cuda
 
 from tools.generate_validation_references import pyscf_molecule
-from tools.vibeqc_validation.f_shell_numerics import _normalized_primitives
+from tools.generativeqc_validation.f_shell_numerics import _normalized_primitives
 
 
 @pytest.fixture(scope="module")
@@ -27,7 +27,7 @@ def bound(tmp_path_factory: typing.Any) -> typing.Any:
 #define __noinline__ __attribute__((noinline))
 #include "screen.cuh"
 extern "C" double bound(const double* e,const double* r,double weight) {
-  using namespace vibeqc::scf::generated_df_derivatives;
+  using namespace generativeqc::scf::generated_df_derivatives;
   return sss_force_bound(e[0],{r[0],r[1],r[2]},e[1],{r[3],r[4],r[5]},
                         e[2],{r[6],r[7],r[8]},weight);
 }

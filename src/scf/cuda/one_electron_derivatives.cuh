@@ -1,9 +1,9 @@
-#ifndef VIBEQC_SCF_CUDA_ONE_ELECTRON_DERIVATIVES_CUH
-#define VIBEQC_SCF_CUDA_ONE_ELECTRON_DERIVATIVES_CUH
+#ifndef GENERATIVEQC_SCF_CUDA_ONE_ELECTRON_DERIVATIVES_CUH
+#define GENERATIVEQC_SCF_CUDA_ONE_ELECTRON_DERIVATIVES_CUH
 
 #include "scf/cuda/one_electron_values.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Non-owning full [system, AO, AO] weights held fixed during differentiation.
  * A null channel means zero. Triangular ownership uses W_ij + W_ji off the
@@ -35,6 +35,6 @@ cudaError_t launch_generated_one_electron_gradient(
     const std::uint8_t* active, unsigned schedule, double output_sign, double* gradient,
     cudaStream_t stream);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

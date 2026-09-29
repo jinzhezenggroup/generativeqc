@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.gfn2_aes2 import (
+from generativeqc_compiler.method.gfn2_aes2 import (
     PAIR_GEOMETRY_NAMES,
     PAIR_MULTIPOLE_NAMES,
     build_gfn2_aes2_kernel_program,
@@ -17,8 +17,8 @@ from vibeqc_compiler.method.gfn2_aes2 import (
     build_gfn2_aes2_pair_potential_program,
     build_gfn2_aes2_radius_from_fraction_program,
 )
-from vibeqc_compiler.tensor import execute
-from vibeqc_compiler.tensor.program import Program
+from generativeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor.program import Program
 
 ROOT = Path(__file__).resolve().parents[2]
 

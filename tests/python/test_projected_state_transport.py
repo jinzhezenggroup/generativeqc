@@ -5,11 +5,11 @@ import hashlib
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc.projected_transport import (
+from tools.generativeqc_cc.projected_transport import (
     ProjectedAmplitudePolicy,
     project_amplitude_guess,
 )
-from tools.vibeqc_cc.state_transport import (
+from tools.generativeqc_cc.state_transport import (
     StateIdentity,
     StateTransport,
     StateTransportRequest,

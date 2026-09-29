@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.method.df_hf_response_cuda import (
+from generativeqc_compiler.method.df_hf_response_cuda import (
     emit_df_hf_response_contract,
     emit_df_hf_response_cuda,
 )

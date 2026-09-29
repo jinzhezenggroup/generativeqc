@@ -1,14 +1,14 @@
 """Shared ScheduleIR contract adapters and cross-consumer diagnostics."""
 
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.schedule import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.schedule import (
     ScheduleContract,
     ScheduleResourceLimits,
     ScheduleResources,
     schedule_diagnostics,
     schedule_resource_rejections,
 )
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     GridXcCandidateLimits,
     GridXcCandidateShape,
@@ -16,10 +16,10 @@ from vibeqc_compiler.dft.xc_schedule import (
     assess_grid_xc_schedule,
     schedule_profile_key,
 )
-from vibeqc_compiler.integral.one_electron_derivative_policy_cuda import (
+from generativeqc_compiler.integral.one_electron_derivative_policy_cuda import (
     one_electron_derivative_schedule_contract,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -27,8 +27,8 @@ from vibeqc_compiler.tensor import (
     add,
     input_tensor,
 )
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
-from vibeqc_compiler.tensor.cuda_search import estimate_schedule
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
 
 def _tensor_contract() -> ScheduleContract:

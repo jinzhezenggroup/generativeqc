@@ -11,21 +11,22 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import DensitySource, density_features
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc_compiler.xc.spec import UnsupportedXC
 from test_density_cuda import artifact, check, factors, program  # noqa: F401
 from test_spatial_execution import local_case  # noqa: F401
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import DensitySource, density_features
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
-from vibeqc_compiler.xc.spec import UnsupportedXC
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_GRID_CUDA_TEST") != "1", reason="finite Slurm CUDA gate"
+    os.environ.get("GENERATIVEQC_GRID_CUDA_TEST") != "1",
+    reason="finite Slurm CUDA gate",
 )
 
 

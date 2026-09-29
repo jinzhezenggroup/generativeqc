@@ -12,7 +12,7 @@
 
 #include "runtime/cuda_resources.cuh"
 
-namespace vibeqc::integrals::hvp_assembly {
+namespace generativeqc::integrals::hvp_assembly {
 
 struct NumericalFailure : std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -29,9 +29,9 @@ inline unsigned blocks(std::size_t count, unsigned threads) {
 }
 
 inline void validate_target(int device, int major, int minor) {
-  vibeqc::runtime::CudaDeviceScope scope(device);
+  generativeqc::runtime::CudaDeviceScope scope(device);
   cudaDeviceProp properties{};
-  vibeqc::runtime::cuda_resource_check(cudaGetDeviceProperties(&properties, device));
+  generativeqc::runtime::cuda_resource_check(cudaGetDeviceProperties(&properties, device));
   if (properties.major != major || properties.minor != minor)
     throw std::invalid_argument("HVP assembly CUDA target/device mismatch");
 }
@@ -127,8 +127,8 @@ struct Owner {
   std::uint64_t h2d_bytes{}, d2h_bytes{}, synchronizations{}, dense_adds{}, scatters{};
   int device_id{-1};
   std::mutex mutex;
-  vibeqc::runtime::OwnedCudaStream stream;
-  vibeqc::runtime::OwnedCudaBuffer<unsigned char> arena;
+  generativeqc::runtime::OwnedCudaStream stream;
+  generativeqc::runtime::OwnedCudaBuffer<unsigned char> arena;
 
   Owner(int device, int major, int minor, std::size_t atoms, std::size_t budget)
       : natoms(atoms),
@@ -157,9 +157,9 @@ struct Owner {
 
   void check_error(const char* detail) {
     int numerical_error = 0;
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(&numerical_error, error(), sizeof(int),
-                                                         cudaMemcpyDeviceToHost, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        &numerical_error, error(), sizeof(int), cudaMemcpyDeviceToHost, stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
     ++synchronizations;
     if (numerical_error) throw NumericalFailure(detail);
   }
@@ -167,7 +167,7 @@ struct Owner {
   void reset_nuclear(const double* host_coords, const double* host_charges,
                      const double* host_direction, std::size_t atoms) {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
     if (!host_coords || !host_charges || !host_direction || atoms != natoms)
       throw std::invalid_argument("HVP nuclear input shape mismatch");
     for (std::size_t i = 0; i < coordinates; ++i)
@@ -176,30 +176,33 @@ struct Owner {
     for (std::size_t i = 0; i < natoms; ++i)
       if (!std::isfinite(host_charges[i]))
         throw std::invalid_argument("HVP nuclear charges must be finite");
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(result(), 0, result_bytes, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
-    vibeqc::runtime::cuda_resource_check(
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(result(), 0, result_bytes, stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::cuda_resource_check(
         cudaMemcpyAsync(coords(), host_coords, coord_bytes, cudaMemcpyHostToDevice, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(direction(), host_direction, result_bytes,
-                                                         cudaMemcpyHostToDevice, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(charges(), host_charges, charge_bytes,
-                                                         cudaMemcpyHostToDevice, stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        direction(), host_direction, result_bytes, cudaMemcpyHostToDevice, stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        charges(), host_charges, charge_bytes, cudaMemcpyHostToDevice, stream.get()));
     h2d_bytes += coord_bytes + result_bytes + charge_bytes;
     nuclear_kernel<<<blocks(natoms, 64), 64, 0, stream.get()>>>(coords(), charges(), direction(),
                                                                 natoms, result(), error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
     check_error("nonfinite CUDA nuclear HVP");
   }
 
   void add_dense(const double* source, std::size_t count, double coefficient) {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
     if (!source || count != coordinates || !std::isfinite(coefficient))
       throw std::invalid_argument("invalid dense HVP device contribution");
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
     add_dense_kernel<<<blocks(count, 128), 128, 0, stream.get()>>>(source, count, coefficient,
                                                                    result(), error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
     ++dense_adds;
     check_error("nonfinite dense CUDA HVP contribution");
   }
@@ -207,7 +210,7 @@ struct Owner {
   void scatter(const double* source, const std::uint32_t* output_indices, std::size_t source_count,
                const std::uint32_t* center_atoms, std::size_t center_count, double coefficient) {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
     if (!source || !output_indices || !center_atoms || !source_count || source_count > 12 ||
         !center_count || center_count > 4 || !std::isfinite(coefficient))
       throw std::invalid_argument("invalid compact HVP device contribution");
@@ -224,34 +227,37 @@ struct Owner {
         throw std::invalid_argument("compact HVP atom index out of bounds");
       mapping.center_atoms[i] = center_atoms[i];
     }
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
     scatter_kernel<<<1, 32, 0, stream.get()>>>(source, mapping, coefficient, result(), error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
     ++scatters;
     check_error("nonfinite compact CUDA HVP contribution");
   }
 
   const double* output_device() {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
     validate_kernel<<<blocks(coordinates, 128), 128, 0, stream.get()>>>(result(), coordinates,
                                                                         error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
     check_error("nonfinite final CUDA HVP");
     return result();
   }
 
   void download(double* output, std::size_t count) {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
     if (!output || count != coordinates)
       throw std::invalid_argument("HVP result download shape mismatch");
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
     validate_kernel<<<blocks(coordinates, 128), 128, 0, stream.get()>>>(result(), coordinates,
                                                                         error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
-    vibeqc::runtime::cuda_resource_check(
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(
         cudaMemcpyAsync(output, result(), result_bytes, cudaMemcpyDeviceToHost, stream.get()));
     d2h_bytes += result_bytes;
     check_error("nonfinite final CUDA HVP");
@@ -282,8 +288,8 @@ struct MatrixOwner {
   std::uint64_t d2h_bytes{}, synchronizations{}, column_copies{};
   int device_id{-1};
   std::mutex mutex;
-  vibeqc::runtime::OwnedCudaStream stream;
-  vibeqc::runtime::OwnedCudaBuffer<unsigned char> arena;
+  generativeqc::runtime::OwnedCudaStream stream;
+  generativeqc::runtime::OwnedCudaBuffer<unsigned char> arena;
 
   MatrixOwner(int device, int major, int minor, std::size_t row_count, std::size_t column_count,
               std::size_t budget)
@@ -308,28 +314,30 @@ struct MatrixOwner {
 
   void reset() {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(matrix(), 0, matrix_bytes, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(matrix(), 0, matrix_bytes, stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
     ++synchronizations;
   }
 
   void copy_column(const double* source, std::size_t count, std::size_t column) {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
     if (!source || count != rows || column >= columns)
       throw std::invalid_argument("invalid Hessian device column");
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(matrix() + column * rows, source,
-                                                         rows * sizeof(double),
-                                                         cudaMemcpyDeviceToDevice, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemcpyAsync(matrix() + column * rows, source, rows * sizeof(double),
+                        cudaMemcpyDeviceToDevice, stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
     validate_kernel<<<blocks(rows, 128), 128, 0, stream.get()>>>(matrix() + column * rows, rows,
                                                                  error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
     int numerical_error = 0;
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(&numerical_error, error(), sizeof(int),
-                                                         cudaMemcpyDeviceToHost, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        &numerical_error, error(), sizeof(int), cudaMemcpyDeviceToHost, stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
     ++synchronizations;
     if (numerical_error) throw NumericalFailure("nonfinite CUDA Hessian column");
     ++column_copies;
@@ -337,19 +345,20 @@ struct MatrixOwner {
 
   void download(double* output, std::size_t count) {
     std::lock_guard<std::mutex> lock(mutex);
-    vibeqc::runtime::CudaDeviceScope device_scope(device_id);
+    generativeqc::runtime::CudaDeviceScope device_scope(device_id);
     if (!output || count != values)
       throw std::invalid_argument("Hessian result download shape mismatch");
-    vibeqc::runtime::cuda_resource_check(cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(error(), 0, sizeof(int), stream.get()));
     validate_kernel<<<blocks(values, 128), 128, 0, stream.get()>>>(matrix(), values, error());
-    vibeqc::runtime::cuda_resource_check(cudaGetLastError());
-    vibeqc::runtime::cuda_resource_check(
+    generativeqc::runtime::cuda_resource_check(cudaGetLastError());
+    generativeqc::runtime::cuda_resource_check(
         cudaMemcpyAsync(output, matrix(), matrix_bytes, cudaMemcpyDeviceToHost, stream.get()));
     d2h_bytes += matrix_bytes;
     int numerical_error = 0;
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(&numerical_error, error(), sizeof(int),
-                                                         cudaMemcpyDeviceToHost, stream.get()));
-    vibeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        &numerical_error, error(), sizeof(int), cudaMemcpyDeviceToHost, stream.get()));
+    generativeqc::runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));
     ++synchronizations;
     if (numerical_error) throw NumericalFailure("nonfinite final CUDA Hessian");
   }
@@ -376,12 +385,12 @@ int boundary(Operation operation, char* detail, std::size_t size) {
   }
 }
 
-}  // namespace vibeqc::integrals::hvp_assembly
+}  // namespace generativeqc::integrals::hvp_assembly
 
-extern "C" int vibeqc_hvp_assembly_create_v1(int device, int major, int minor, std::size_t natoms,
-                                             std::size_t budget, void** output, char* detail,
-                                             std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hvp_assembly_create_v1(int device, int major, int minor,
+                                                   std::size_t natoms, std::size_t budget,
+                                                   void** output, char* detail, std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   if (output) *output = nullptr;
   return boundary(
       [&] {
@@ -392,14 +401,14 @@ extern "C" int vibeqc_hvp_assembly_create_v1(int device, int major, int minor, s
       detail, size);
 }
 
-extern "C" void vibeqc_hvp_assembly_destroy_v1(void* handle) {
-  delete static_cast<vibeqc::integrals::hvp_assembly::Owner*>(handle);
+extern "C" void generativeqc_hvp_assembly_destroy_v1(void* handle) {
+  delete static_cast<generativeqc::integrals::hvp_assembly::Owner*>(handle);
 }
 
-extern "C" int vibeqc_hvp_assembly_output_device_v1(void* handle, const double** output,
-                                                    std::size_t* count, char* detail,
-                                                    std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hvp_assembly_output_device_v1(void* handle, const double** output,
+                                                          std::size_t* count, char* detail,
+                                                          std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   if (output) *output = nullptr;
   if (count) *count = 0;
   return boundary(
@@ -413,11 +422,12 @@ extern "C" int vibeqc_hvp_assembly_output_device_v1(void* handle, const double**
       detail, size);
 }
 
-extern "C" int vibeqc_hvp_assembly_reset_nuclear_v1(void* handle, const double* coords,
-                                                    const double* charges, const double* direction,
-                                                    std::size_t natoms, char* detail,
-                                                    std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hvp_assembly_reset_nuclear_v1(void* handle, const double* coords,
+                                                          const double* charges,
+                                                          const double* direction,
+                                                          std::size_t natoms, char* detail,
+                                                          std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null HVP assembly handle");
@@ -426,10 +436,10 @@ extern "C" int vibeqc_hvp_assembly_reset_nuclear_v1(void* handle, const double* 
       detail, size);
 }
 
-extern "C" int vibeqc_hvp_assembly_add_dense_v1(void* handle, const double* source,
-                                                std::size_t count, double coefficient, char* detail,
-                                                std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hvp_assembly_add_dense_v1(void* handle, const double* source,
+                                                      std::size_t count, double coefficient,
+                                                      char* detail, std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null HVP assembly handle");
@@ -438,13 +448,13 @@ extern "C" int vibeqc_hvp_assembly_add_dense_v1(void* handle, const double* sour
       detail, size);
 }
 
-extern "C" int vibeqc_hvp_assembly_scatter_v1(void* handle, const double* source,
-                                              const std::uint32_t* output_indices,
-                                              std::size_t source_count,
-                                              const std::uint32_t* center_atoms,
-                                              std::size_t center_count, double coefficient,
-                                              char* detail, std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hvp_assembly_scatter_v1(void* handle, const double* source,
+                                                    const std::uint32_t* output_indices,
+                                                    std::size_t source_count,
+                                                    const std::uint32_t* center_atoms,
+                                                    std::size_t center_count, double coefficient,
+                                                    char* detail, std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null HVP assembly handle");
@@ -454,9 +464,10 @@ extern "C" int vibeqc_hvp_assembly_scatter_v1(void* handle, const double* source
       detail, size);
 }
 
-extern "C" int vibeqc_hvp_assembly_download_v1(void* handle, double* output, std::size_t count,
-                                               char* detail, std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hvp_assembly_download_v1(void* handle, double* output,
+                                                     std::size_t count, char* detail,
+                                                     std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null HVP assembly handle");
@@ -465,10 +476,10 @@ extern "C" int vibeqc_hvp_assembly_download_v1(void* handle, double* output, std
       detail, size);
 }
 
-extern "C" int vibeqc_hvp_assembly_diagnostics_v1(
-    void* handle, vibeqc::integrals::hvp_assembly::Diagnostics* output, char* detail,
+extern "C" int generativeqc_hvp_assembly_diagnostics_v1(
+    void* handle, generativeqc::integrals::hvp_assembly::Diagnostics* output, char* detail,
     std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle || !output) throw std::invalid_argument("null HVP assembly diagnostics");
@@ -480,10 +491,11 @@ extern "C" int vibeqc_hvp_assembly_diagnostics_v1(
       detail, size);
 }
 
-extern "C" int vibeqc_hessian_assembly_create_v1(int device, int major, int minor, std::size_t rows,
-                                                 std::size_t columns, std::size_t budget,
-                                                 void** output, char* detail, std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hessian_assembly_create_v1(int device, int major, int minor,
+                                                       std::size_t rows, std::size_t columns,
+                                                       std::size_t budget, void** output,
+                                                       char* detail, std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   if (output) *output = nullptr;
   return boundary(
       [&] {
@@ -494,12 +506,13 @@ extern "C" int vibeqc_hessian_assembly_create_v1(int device, int major, int mino
       detail, size);
 }
 
-extern "C" void vibeqc_hessian_assembly_destroy_v1(void* handle) {
-  delete static_cast<vibeqc::integrals::hvp_assembly::MatrixOwner*>(handle);
+extern "C" void generativeqc_hessian_assembly_destroy_v1(void* handle) {
+  delete static_cast<generativeqc::integrals::hvp_assembly::MatrixOwner*>(handle);
 }
 
-extern "C" int vibeqc_hessian_assembly_reset_v1(void* handle, char* detail, std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hessian_assembly_reset_v1(void* handle, char* detail,
+                                                      std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null Hessian assembly handle");
@@ -508,10 +521,10 @@ extern "C" int vibeqc_hessian_assembly_reset_v1(void* handle, char* detail, std:
       detail, size);
 }
 
-extern "C" int vibeqc_hessian_assembly_copy_column_v1(void* handle, const double* source,
-                                                      std::size_t count, std::size_t column,
-                                                      char* detail, std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hessian_assembly_copy_column_v1(void* handle, const double* source,
+                                                            std::size_t count, std::size_t column,
+                                                            char* detail, std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null Hessian assembly handle");
@@ -520,9 +533,10 @@ extern "C" int vibeqc_hessian_assembly_copy_column_v1(void* handle, const double
       detail, size);
 }
 
-extern "C" int vibeqc_hessian_assembly_download_v1(void* handle, double* output, std::size_t count,
-                                                   char* detail, std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+extern "C" int generativeqc_hessian_assembly_download_v1(void* handle, double* output,
+                                                         std::size_t count, char* detail,
+                                                         std::size_t size) {
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle) throw std::invalid_argument("null Hessian assembly handle");
@@ -531,10 +545,10 @@ extern "C" int vibeqc_hessian_assembly_download_v1(void* handle, double* output,
       detail, size);
 }
 
-extern "C" int vibeqc_hessian_assembly_diagnostics_v1(
-    void* handle, vibeqc::integrals::hvp_assembly::MatrixDiagnostics* output, char* detail,
+extern "C" int generativeqc_hessian_assembly_diagnostics_v1(
+    void* handle, generativeqc::integrals::hvp_assembly::MatrixDiagnostics* output, char* detail,
     std::size_t size) {
-  using namespace vibeqc::integrals::hvp_assembly;
+  using namespace generativeqc::integrals::hvp_assembly;
   return boundary(
       [&] {
         if (!handle || !output) throw std::invalid_argument("null Hessian assembly diagnostics");

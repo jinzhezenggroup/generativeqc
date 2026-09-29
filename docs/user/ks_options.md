@@ -7,7 +7,7 @@ grid and tile reproduce the original method behavior. The existing compiler
 tail/spin domain; a second functional catalog is not introduced.
 
 ```python
-from vibeqc import Calculator, GridSpec, KsOptions, ResourceBudget
+from generativeqc import Calculator, GridSpec, KsOptions, ResourceBudget
 
 options = KsOptions(
     grid=GridSpec(
@@ -66,8 +66,8 @@ physical result can run. Compatible coordinate changes keep the existing
 native rebuild and spin-normalization path.
 
 The C ABI appends a nullable `ks_options` pointer to
-`vibeqc_method_descriptor`. A missing tail field or NULL preserves defaults.
-`vibeqc_ks_options_version()` reports support without creating a context.
+`generativeqc_method_descriptor`. A missing tail field or NULL preserves defaults.
+`generativeqc_ks_options_version()` reports support without creating a context.
 Version 1 is the original grid/tile prefix, version 2 adds explicit semilocal
 scales/full-range exchange, and version 3 adds the XC execution schedule. Version
 4 appends the compiler-resolved self-consistent execution selector: spin-channel

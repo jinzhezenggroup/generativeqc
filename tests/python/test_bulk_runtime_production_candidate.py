@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc_compiler.xc import libxc_bulk
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.xc import libxc_bulk
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
-from vibeqc_compiler.xc.spec import UnsupportedXC
+from generativeqc_compiler.xc.spec import UnsupportedXC
 
 
 @pytest.mark.parametrize("spin", ("polarized", "unpolarized"))

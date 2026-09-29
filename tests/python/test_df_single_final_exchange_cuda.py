@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -32,8 +32,8 @@ def test_single_final_k_and_response_replay(
 ) -> None:
     """Final K accepts exact/corrected factors without lending an absent raw owner."""
     assert os.environ.get("SLURM_JOB_ID")
+    from generativeqc import Calculator
     from pyscf import gto, scf
-    from vibeqc import Calculator
 
     from benchmarks._cases import benchmark_cases
     from benchmarks.df_component_ledger import read_trace
@@ -53,7 +53,7 @@ def test_single_final_k_and_response_replay(
         references.append((mf.e_tot, -mf.nuc_grad_method().kernel()))
 
     for key in list(os.environ):
-        if key.startswith("VIBEQC_DF_"):
+        if key.startswith("GENERATIVEQC_DF_"):
             monkeypatch.delenv(key)
     for key, value in {
         "VALUE_STORAGE": "packed-single",
@@ -66,9 +66,9 @@ def test_single_final_k_and_response_replay(
         "RESPONSE_ALGEBRA": "blas",
         "RESPONSE_BUDGET_BYTES": str(64 << 20),
     }.items():
-        monkeypatch.setenv("VIBEQC_DF_" + key, value)
+        monkeypatch.setenv("GENERATIVEQC_DF_" + key, value)
     if corrected:
-        monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", "1")
+        monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
     record = (
         auxiliary
         if auxiliary == "def2-svp"
@@ -89,7 +89,7 @@ def test_single_final_k_and_response_replay(
     with calc.prepare_batch([atoms], warm_start=True) as owner:
         for phase, geometry in enumerate((None, None, moved, moved)):
             trace = tmp_path / f"phase-{phase}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             coords = (
                 None if geometry is None else [np.asarray([x for _, x in geometry])]
             )

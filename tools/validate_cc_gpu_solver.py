@@ -24,17 +24,20 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import file_hash
-from vibeqc_compiler.tensor.cuda_execute import compile_cuda, tensor_source_identity
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import file_hash
+from generativeqc_compiler.tensor.cuda_execute import (
+    compile_cuda,
+    tensor_source_identity,
+)
 
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture
+from tools.generativeqc_cc.gpu_solver import solve_gpu
+from tools.generativeqc_cc.gpu_state import solver_plans
+from tools.generativeqc_cc.solver import SolverOptions
+from tools.generativeqc_posthf.providers import BlockResult, ConventionalProvider
 from tools.replay_ccsd import replay
-from tools.vibeqc_cc.gpu_solver import solve_gpu
-from tools.vibeqc_cc.gpu_state import solver_plans
-from tools.vibeqc_cc.solver import SolverOptions
-from tools.vibeqc_posthf.providers import BlockResult, ConventionalProvider
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,7 +72,7 @@ def run(
     sources = {
         p.relative_to(ROOT).as_posix(): file_hash(p)
         for p in [
-            *sorted((ROOT / "tools/vibeqc_cc").glob("*.py")),
+            *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
             Path(__file__),
         ]
     }

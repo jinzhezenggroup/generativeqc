@@ -7,11 +7,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.dft.grid import partition_weights
+from generativeqc_compiler.xc.grid_native import NativeGridContraction
+from generativeqc_compiler.xc.grid_response import partition_response
 from test_grid_response import CENTERS, DC, POINTS, decimal_partition
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.dft.grid import partition_weights
-from vibeqc_compiler.xc.grid_native import NativeGridContraction
-from vibeqc_compiler.xc.grid_response import partition_response
 
 OWNERS = np.array([0, 1, 2], dtype=np.int64)
 SEEDS = np.array([0.3, -0.2, 0.7])

@@ -6,15 +6,15 @@
 
 #include "scf/types.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Result of constructing one reusable RHF/UHF host-controlled CUDA Graph. */
 struct RhfGraphCaptureResult {
-  vibeqc_status body_status{VIBEQC_STATUS_SUCCESS};
+  generativeqc_status body_status{GENERATIVEQC_STATUS_SUCCESS};
   cudaError_t cuda_error{cudaSuccess};
 
   bool ok() const noexcept {
-    return body_status == VIBEQC_STATUS_SUCCESS && cuda_error == cudaSuccess;
+    return body_status == GENERATIVEQC_STATUS_SUCCESS && cuda_error == cudaSuccess;
   }
 };
 
@@ -35,9 +35,9 @@ class RhfIterationGraphs {
   ~RhfIterationGraphs();
 
   RhfGraphCaptureResult capture_iteration(int device_id, cudaStream_t stream, bool device_launch,
-                                          const std::function<vibeqc_status()>& body);
+                                          const std::function<generativeqc_status()>& body);
   RhfGraphCaptureResult capture_post_eigensolver(int device_id, cudaStream_t stream,
-                                                 const std::function<vibeqc_status()>& body);
+                                                 const std::function<generativeqc_status()>& body);
 
   cudaError_t launch_iteration(cudaStream_t stream) const noexcept;
   cudaError_t launch_post_eigensolver(cudaStream_t stream) const noexcept;
@@ -46,7 +46,7 @@ class RhfIterationGraphs {
   RhfGraphCaptureResult capture(cudaStream_t stream, cudaGraph_t& graph,
                                 cudaGraphExec_t& executable, unsigned long long instantiate_flags,
                                 bool synchronize_before,
-                                const std::function<vibeqc_status()>& body);
+                                const std::function<generativeqc_status()>& body);
   static void destroy(cudaGraph_t& graph, cudaGraphExec_t& executable) noexcept;
 
   int device_id_{-1};
@@ -56,4 +56,4 @@ class RhfIterationGraphs {
   cudaGraphExec_t post_eigensolver_graph_exec_{};
 };
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

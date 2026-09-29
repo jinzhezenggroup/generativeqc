@@ -7,7 +7,9 @@
 
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
+
+struct ShellPairDensityBounds;
 
 enum class DirectCoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
 
@@ -29,8 +31,8 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   bool want_j, bool want_k, bool unrestricted, bool mixed_j,
                                   DirectCoulombRange exchange_range, double exchange_omega,
                                   double screening, const double* bounds, const double* density,
-                                  const double* beta, double* j_out, double* ka_out,
-                                  double* kb_out);
+                                  const double* beta, double* j_out, double* ka_out, double* kb_out,
+                                  std::uint64_t* mixed_coulomb_work_count);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_derivative_kernel(
@@ -48,4 +50,37 @@ void launch_independent_rsh_derivative_kernel(
     double cj, double short_ck, double long_ck, bool unrestricted, double omega, double screening,
     const double* bounds, const double* density, const double* beta, double* out);
 
-}  // namespace vibeqc::scf::cuda_execution
+/** Provider-facing shell derivative seam. Queue/numerical ownership remains in
+ * the Direct consumer layer; host source owners borrow only this launch ABI. */
+void launch_bounded_shell_energy_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    double coulomb_coefficient, double exchange_coefficient);
+
+/** SR/LR exchange derivative through the same bounded shell scheduler.
+ * The full-range Schwarz/density bounds remain conservative for both ranges. */
+void launch_bounded_shell_range_exchange_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DirectCoulombRange range, double omega, double exchange_coefficient);
+
+/** Fused [J', SR-K', LR-K'] over one screened shell traversal. */
+void launch_bounded_shell_rsh_derivatives(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* source_forces, unsigned long long* cursor, double omega,
+    double coulomb_coefficient, double short_exchange_coefficient,
+    double long_exchange_coefficient);
+
+}  // namespace generativeqc::scf::cuda_execution

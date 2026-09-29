@@ -3,9 +3,9 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.matrix_function import SymmetricMatrixFunctionSpec
+from generativeqc_compiler.method.matrix_function import SymmetricMatrixFunctionSpec
 
-from tools.vibeqc_cc.df_gradient import (
+from tools.generativeqc_cc.df_gradient import (
     DFThreeIndexCotangent,
     pullback_df_three_index,
 )

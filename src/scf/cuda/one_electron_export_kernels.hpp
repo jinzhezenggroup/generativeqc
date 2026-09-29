@@ -7,7 +7,7 @@
 
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the retained reference response or nuclear launch unchanged. */
 void launch_build_cuda_one_electron_derivatives_kernel(
@@ -22,4 +22,4 @@ void launch_build_cuda_nuclear_repulsion_kernel(bool derivative, dim3 grid, dim3
                                                 std::int64_t derivative_coordinate,
                                                 double* nuclear_repulsion);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

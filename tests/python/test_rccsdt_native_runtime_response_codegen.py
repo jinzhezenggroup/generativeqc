@@ -10,9 +10,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import execute, transpose_program
+from generativeqc_compiler.tensor import execute, transpose_program
 
-from tools.vibeqc_cc.triples_tiles import build_runtime_tile_triples_program
+from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_program
 
 INPUTS = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
 
@@ -88,7 +88,7 @@ def _case_cpp(o: int, v: int, q: int, seed: int) -> str:
         [
             f"static int case_{o}_{v}_{q}(){{",
             *declarations,
-            "using namespace vibeqc::cc::generated;",
+            "using namespace generativeqc::cc::generated;",
             "TriplesResponseInputs inputs{};",
             *assignments,
             f"constexpr std::size_t o={o},v={v},q={q};",

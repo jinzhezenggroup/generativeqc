@@ -1,12 +1,12 @@
-#ifndef VIBEQC_TENSOR_CPU_LINALG_HPP
-#define VIBEQC_TENSOR_CPU_LINALG_HPP
+#ifndef GENERATIVEQC_TENSOR_CPU_LINALG_HPP
+#define GENERATIVEQC_TENSOR_CPU_LINALG_HPP
 
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <vector>
 
-namespace vibeqc::tensor {
+namespace generativeqc::tensor {
 
 enum class CpuLinalgProvider : std::uint8_t { automatic, scalar, openblas };
 enum class CpuLinalgThreadOwnership : std::uint8_t { task_parallel, provider_parallel };
@@ -25,7 +25,7 @@ struct CpuLinalgDiagnostic {
   bool lapack_available{};
   bool local_thread_control{};
   bool global_thread_control{};
-  // VibeQC host-code build target. External BLAS may dispatch internally.
+  // GenerativeQC host-code build target. External BLAS may dispatch internally.
   std::string_view cpu_target{};
 };
 
@@ -47,6 +47,15 @@ struct CpuSymmetricEigenResult {
 void cpu_gemm(char a_trans, char b_trans, std::size_t m, std::size_t n, std::size_t k,
               const double* a, const double* b, double* c, double alpha = 1.0, double beta = 0.0,
               const CpuLinalgPlan& plan = {});
+
+/** Square rank-2 congruence transform with row-major storage.
+ * `coefficient_transpose == 'T'` computes result := C^T * A * C.
+ * `coefficient_transpose == 'N'` computes result := C * A * C^T.
+ * `workspace` must contain n*n doubles and must not alias C, A, or result.
+ */
+void cpu_congruence(char coefficient_transpose, std::size_t n, const double* coefficients,
+                    const double* matrix, double* result, double* workspace,
+                    const CpuLinalgPlan& plan = {});
 
 /** Matrix-vector product with row-major A.
  * `trans == 'N'` consumes an m-by-n A and n-vector x, producing an m-vector y.
@@ -120,6 +129,6 @@ int cpu_cholesky_lower(double* matrix, std::size_t n, const CpuLinalgPlan& plan 
 [[nodiscard]] CpuSymmetricEigenResult cpu_symmetric_eigen(std::vector<double> matrix, std::size_t n,
                                                           const CpuLinalgPlan& plan = {});
 
-}  // namespace vibeqc::tensor
+}  // namespace generativeqc::tensor
 
 #endif

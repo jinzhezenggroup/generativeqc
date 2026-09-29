@@ -178,7 +178,7 @@ def test_cold_endpoint_participates_in_cli_acceptance(
     calculator = SimpleNamespace(
         prepare_batch=lambda *args, **kwargs: nullcontext(batch)
     )
-    monkeypatch.setattr("vibeqc.Calculator", lambda **kwargs: calculator)
+    monkeypatch.setattr("generativeqc.Calculator", lambda **kwargs: calculator)
     cp = SimpleNamespace(asnumpy=np.asarray)
     monkeypatch.setitem(sys.modules, "cupy", cp)
     monkeypatch.setitem(sys.modules, "gpu4pyscf", SimpleNamespace())
@@ -240,7 +240,7 @@ def test_cold_endpoint_participates_in_cli_acceptance(
     library.touch()
     # main selects this library globally; register the key so teardown restores
     # the previous selection rather than poisoning later native tests.
-    monkeypatch.setenv("VIBEQC_LIBRARY", str(library))
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(library))
     monkeypatch.setattr(
         sys,
         "argv",
@@ -283,11 +283,11 @@ def test_cold_cli_stub_does_not_leak_library_selection(
 ) -> None:
     """A fake CLI run must not redirect later native tests to its empty .so."""
     if selected_library is None:
-        monkeypatch.delenv("VIBEQC_LIBRARY", raising=False)
+        monkeypatch.delenv("GENERATIVEQC_LIBRARY", raising=False)
     else:
-        monkeypatch.setenv("VIBEQC_LIBRARY", selected_library)
+        monkeypatch.setenv("GENERATIVEQC_LIBRARY", selected_library)
     with pytest.MonkeyPatch.context() as isolated:
         test_cold_endpoint_participates_in_cli_acceptance(
             tmp_path, isolated, cold_error
         )
-    assert os.environ.get("VIBEQC_LIBRARY") == selected_library
+    assert os.environ.get("GENERATIVEQC_LIBRARY") == selected_library

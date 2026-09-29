@@ -3,9 +3,9 @@
 import typing
 
 import pytest
-from vibeqc import Calculator, ResourceBudget, _native
-from vibeqc.batch import PreparedBatch
-from vibeqc_compiler.common.resources import ResourceAllocationError
+from generativeqc import Calculator, ResourceBudget, _native
+from generativeqc.batch import PreparedBatch
+from generativeqc_compiler.common.resources import ResourceAllocationError
 
 
 @pytest.mark.parametrize(
@@ -23,7 +23,7 @@ def test_preparation_failure_releases_native_owners(
         device="cpu", resource_budget=ResourceBudget() if resource_aware else None
     )
     library = calculator._library
-    native_prepare = library.vibeqc_batch_prepare
+    native_prepare = library.generativeqc_batch_prepare
     prepared = PreparedBatch.__new__(PreparedBatch)
     allocated = []
 
@@ -37,7 +37,7 @@ def test_preparation_failure_releases_native_owners(
         # Exercise the real resource-status conversion, not a mocked exception.
         return _native.STATUS_OUT_OF_MEMORY
 
-    monkeypatch.setattr(library, "vibeqc_batch_prepare", failed_prepare)
+    monkeypatch.setattr(library, "generativeqc_batch_prepare", failed_prepare)
     expected = type(failure) if failure is not None else ResourceAllocationError
     try:
         with pytest.raises(expected) as caught:
@@ -56,7 +56,7 @@ def test_preparation_failure_releases_native_owners(
         assert not prepared._batch.value
         assert not prepared._context.value
         assert prepared._resource_ledger is None
-        monkeypatch.setattr(library, "vibeqc_batch_prepare", native_prepare)
+        monkeypatch.setattr(library, "generativeqc_batch_prepare", native_prepare)
         with calculator.prepare_batch(
             [[("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]], warm_start=False
         ) as retry:

@@ -7,11 +7,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.xc import build_bulk_runtime_program
-from vibeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
-from vibeqc_compiler.xc.libxc_bulk import build_bulk_program
-from vibeqc_compiler.xc.libxc_bulk_capabilities import available_capabilities
-from vibeqc_compiler.xc.spec import UnsupportedXC
+from generativeqc_compiler.xc import build_bulk_runtime_program
+from generativeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
+from generativeqc_compiler.xc.libxc_bulk import build_bulk_program
+from generativeqc_compiler.xc.libxc_bulk_capabilities import available_capabilities
+from generativeqc_compiler.xc.spec import UnsupportedXC
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = [

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE = ROOT / "python/vibeqc_compiler/method/method_parameters.json"
+DEFAULT_SOURCE = ROOT / "python/generativeqc_compiler/method/method_parameters.json"
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _CPP_SYMBOL = re.compile(r"k[A-Z][A-Za-z0-9]*")
 
@@ -376,7 +376,7 @@ def _render_cpp_record(
     values = ", ".join(_cpp_float(params[field]) for field in fields)
     accessor = symbol[1].lower() + symbol[2:]
     return (
-        f"VIBEQC_METHOD_PARAMS_HD inline constexpr {struct_name} {accessor}() "
+        f"GENERATIVEQC_METHOD_PARAMS_HD inline constexpr {struct_name} {accessor}() "
         f"{{ return {{{values}}}; }}"
     )
 
@@ -385,16 +385,16 @@ def render_cpp(payload: dict[str, Any], source_sha256: str) -> str:
     lines = [
         "#pragma once",
         "",
-        "// Generated from python/vibeqc_compiler/method/method_parameters.json.",
+        "// Generated from python/generativeqc_compiler/method/method_parameters.json.",
         "// Do not edit by hand.",
         "",
         "#if defined(__CUDACC__)",
-        "#define VIBEQC_METHOD_PARAMS_HD __host__ __device__",
+        "#define GENERATIVEQC_METHOD_PARAMS_HD __host__ __device__",
         "#else",
-        "#define VIBEQC_METHOD_PARAMS_HD",
+        "#define GENERATIVEQC_METHOD_PARAMS_HD",
         "#endif",
         "",
-        "namespace vibeqc::generated::method_parameters {",
+        "namespace generativeqc::generated::method_parameters {",
         "",
         f'inline constexpr char kParameterSourceSha256[] = "{source_sha256}";',
         "",
@@ -449,7 +449,7 @@ def render_cpp(payload: dict[str, Any], source_sha256: str) -> str:
             accessor = record["cpp_symbol"][1].lower() + record["cpp_symbol"][2:]
             cutoff = _cpp_float(params["charge_cn_cutoff"])
             lines.append(
-                f"VIBEQC_METHOD_PARAMS_HD inline constexpr double {accessor}ChargeCnCutoff() "
+                f"GENERATIVEQC_METHOD_PARAMS_HD inline constexpr double {accessor}ChargeCnCutoff() "
                 f"{{ return {cutoff}; }}"
             )
     lines.extend(
@@ -476,15 +476,15 @@ def render_cpp(payload: dict[str, Any], source_sha256: str) -> str:
         else:
             expression = " || ".join(f"z == {z}" for z in supported)
         lines.append(
-            f"VIBEQC_METHOD_PARAMS_HD inline constexpr bool {accessor}SupportsAtomicNumber(int z) "
+            f"GENERATIVEQC_METHOD_PARAMS_HD inline constexpr bool {accessor}SupportsAtomicNumber(int z) "
             f"{{ return {expression}; }}"
         )
     lines.extend(
         [
             "",
-            "}  // namespace vibeqc::generated::method_parameters",
+            "}  // namespace generativeqc::generated::method_parameters",
             "",
-            "#undef VIBEQC_METHOD_PARAMS_HD",
+            "#undef GENERATIVEQC_METHOD_PARAMS_HD",
             "",
         ]
     )

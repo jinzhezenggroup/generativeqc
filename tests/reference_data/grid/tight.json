@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.grid-reference",
+  "schema": "generativeqc.grid-reference",
   "version": 1,
   "inputs": {
     "name": "tight",

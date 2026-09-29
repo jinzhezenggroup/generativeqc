@@ -5,7 +5,7 @@
 #include "scf/cuda/df_derivatives.cuh"
 #include "scf/cuda/df_shell_diagnostics.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 /** Compact angular-class shell lists; storage grows with shells, never triples.
  * AO offsets are in the original public Cartesian/spherical order. A host
  * owner may narrow each class list to the shells intersecting an active panel.
@@ -78,4 +78,4 @@ cudaError_t launch_df_shell_derivative_packets(std::span<const DfShellBasisView>
                                                unsigned variant, DfDerivativePairs pairs,
                                                DfShellDiagnostics* diagnostics = nullptr);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

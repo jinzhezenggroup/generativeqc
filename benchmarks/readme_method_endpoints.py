@@ -20,8 +20,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc_compiler.dft.grid import MolecularGrid
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc_compiler.dft.grid import MolecularGrid
 
 from benchmarks._endpoint_progress import EndpointProgress, save_record
 from benchmarks._gpu4pyscf_grid import preserve_reference_grid_order
@@ -31,8 +31,8 @@ from benchmarks._support import (
     raw_output_path,
 )
 from benchmarks.compare_gpu4pyscf_batch import (
+    _generativeqc_sample,
     _gpu_sample,
-    _vibeqc_sample,
     accuracy_gate_summary,
     fixed_warm_start_policy,
     interleaved_engine_order,
@@ -54,12 +54,12 @@ def binary_identity(calculator: Calculator) -> dict:
     path = Path(library._name).resolve()
     with path.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
-    library.vibeqc_get_source_identity.argtypes = []
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    library.generativeqc_get_source_identity.argtypes = []
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
     return {
         "library_sha256": digest,
         "library_path": str(path),
-        "source_identity": library.vibeqc_get_source_identity().decode(),
+        "source_identity": library.generativeqc_get_source_identity().decode(),
     }
 
 
@@ -210,7 +210,7 @@ def run_dft(args: argparse.Namespace, record: dict) -> None:
                 args.method == "pbe0"
                 and isinstance(error, NotImplementedError)
                 and str(error)
-                == "VIBEQC error 3: requested capability is not implemented"
+                == "GENERATIVEQC error 3: requested capability is not implemented"
             )
             # The C ABI reports only its generic status when native KS admission
             # rejects a global hybrid on CUDA. Keep this exception scoped to PBE0;
@@ -231,7 +231,7 @@ def run_dft(args: argparse.Namespace, record: dict) -> None:
     try:
         if batch is not None:
             with progress.measure("native/cold"):
-                record["native_cold"] = _vibeqc_sample(batch, cp, -2, False)
+                record["native_cold"] = _generativeqc_sample(batch, cp, -2, False)
             batch.set_warm_start_updates(False)
         # Cold reference has no dm0. Subsequent samples use one frozen post-cold
         # density, including an unmeasured priming call on both engines.
@@ -265,18 +265,18 @@ def run_dft(args: argparse.Namespace, record: dict) -> None:
             record["priming"]["reference"] = _gpu_sample([engine], [dm0], cp, -1, False)
         if batch is not None:
             with progress.measure("native/priming"):
-                record["priming"]["native"] = _vibeqc_sample(batch, cp, -1, False)
+                record["priming"]["native"] = _generativeqc_sample(batch, cp, -1, False)
         native, reference = [], []
         record["native_samples"], record["reference_samples"] = native, reference
         for index, name in enumerate(interleaved_engine_order(args.repeats)):
-            if name == "vibeqc" and batch is not None:
+            if name == "generativeqc" and batch is not None:
                 with progress.measure(f"native/repeat/{index}"):
-                    native.append(_vibeqc_sample(batch, cp, index, False))
+                    native.append(_generativeqc_sample(batch, cp, index, False))
             elif name == "gpu4pyscf":
                 with progress.measure(f"reference/repeat/{index}"):
                     reference.append(_gpu_sample([engine], [dm0], cp, index, False))
         record["branches"] = {
-            "vibeqc": branch_summary(native),
+            "generativeqc": branch_summary(native),
             "gpu4pyscf": branch_summary(reference),
         }
         if native:
@@ -304,14 +304,14 @@ def run_cc(args: argparse.Namespace, record: dict) -> None:
     import shutil
 
     import cupy as cp
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
 
     from tools.cc_gradient_fixtures import source_arguments
-    from tools.vibeqc_cc import SolverOptions, rccsd_t_energy
-    from tools.vibeqc_posthf.export import export_rhf
-    from tools.vibeqc_posthf.providers import ConventionalProvider
-    from tools.vibeqc_posthf.sources import NativeSource
+    from tools.generativeqc_cc import SolverOptions, rccsd_t_energy
+    from tools.generativeqc_posthf.export import export_rhf
+    from tools.generativeqc_posthf.providers import ConventionalProvider
+    from tools.generativeqc_posthf.sources import NativeSource
 
     fixture = ROOT / f"tests/reference_data/cc/gradients/{args.molecule}.json"
     reference = json.loads(fixture.read_text())
@@ -484,7 +484,7 @@ def main() -> None:
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("GPU endpoints require a Slurm GPU allocation")
     record: dict[str, Any] = {
-        "schema": "vibeqc.readme-endpoint.v1",
+        "schema": "generativeqc.readme-endpoint.v1",
         "benchmark_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "arguments": vars(args) | {"output": str(args.output)},
         "environment": environment_metadata(

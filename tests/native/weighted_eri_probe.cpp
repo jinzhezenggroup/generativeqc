@@ -15,7 +15,7 @@
 
 #include "scf/cuda_weighted_eri.hpp"
 
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 
 int main(int argc, char** argv) {
   try {
@@ -49,24 +49,24 @@ int main(int argc, char** argv) {
       invalid.output_tile = static_cast<std::uint32_t>(tiles);
       if (contract_cuda_weighted_eri_primitives(0, &invalid, 1, tiles, budget, generated, output,
                                                 diagnostic,
-                                                detail) != VIBEQC_STATUS_INVALID_ARGUMENT) {
+                                                detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
         throw std::runtime_error("out-of-range output tile was accepted");
       }
       invalid = records[0];
       invalid.angular[0][0] = 4;
       if (contract_cuda_weighted_eri_primitives(0, &invalid, 1, tiles, budget, generated, output,
                                                 diagnostic,
-                                                detail) != VIBEQC_STATUS_INVALID_ARGUMENT) {
+                                                detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
         throw std::runtime_error("unsupported angular component was accepted");
       }
       if (contract_cuda_weighted_eri_primitives(0, records.data(), count, tiles, 0, generated,
                                                 output, diagnostic,
-                                                detail) != VIBEQC_STATUS_INVALID_ARGUMENT) {
+                                                detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
         throw std::runtime_error("insufficient numeric budget was accepted");
       }
     }
     if (contract_cuda_weighted_eri_primitives(0, nullptr, 0, tiles, budget, generated, output,
-                                              diagnostic, detail) != VIBEQC_STATUS_SUCCESS) {
+                                              diagnostic, detail) != GENERATIVEQC_STATUS_SUCCESS) {
       throw std::runtime_error("valid empty primitive stream was rejected: " + detail);
     }
     for (const auto& result : output) {
@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     const auto begin = std::chrono::steady_clock::now();
     if (contract_cuda_weighted_eri_primitives(0, records.data(), count, tiles, budget, generated,
                                               output, diagnostic,
-                                              detail) != VIBEQC_STATUS_SUCCESS) {
+                                              detail) != GENERATIVEQC_STATUS_SUCCESS) {
       throw std::runtime_error(detail);
     }
     const double milliseconds =

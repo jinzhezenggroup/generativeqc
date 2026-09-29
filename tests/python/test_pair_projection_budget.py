@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.vibeqc_local_cc import coupling
-from tools.vibeqc_local_cc.spaces import PairSpace
+from tools.generativeqc_local_cc import coupling
+from tools.generativeqc_local_cc.spaces import PairSpace
 
 
 def _space(rank: int = 3, virtual_rank: int = 3) -> PairSpace:

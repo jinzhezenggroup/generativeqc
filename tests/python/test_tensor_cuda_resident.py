@@ -10,8 +10,8 @@ suite.
 import inspect
 import typing
 
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -21,12 +21,12 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     multiply,
 )
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
-from vibeqc_compiler.tensor.cuda_resident import (
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_resident import (
     DeviceTensor,
     _check_lease,
 )
-from vibeqc_compiler.tensor.cuda_resident_emit import resident_source
+from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
 
 TARGET = cuda_target_info("sm_80")
 
@@ -104,12 +104,12 @@ def test_resident_run_propagates_the_ordinary_status() -> None:
     out to ``tensor_run``.  The inline error boundary is identical: it
     reads ``arithmetic_error`` from the device, throws when non-zero, and
     the ``catch`` block synchronises the stream before returning through
-    ``vibeqc_tensor::error_text``.
+    ``generativeqc_tensor::error_text``.
     """
     plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
     source = resident_source(plan)
     assert "arithmetic_error" in source
-    assert "vibeqc_tensor::error_text(error, size, e.what()); return 1;" in source
+    assert "generativeqc_tensor::error_text(error, size, e.what()); return 1;" in source
     assert "try {" in source
     assert "throw std::runtime_error" in source
 
@@ -177,8 +177,8 @@ def test_resident_run_without_extension_has_no_undefined_hook() -> None:
     """The default source must not reference an undefined post-run symbol."""
     plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
     source = resident_source(plan)
-    assert "vibeqc_resident_action" not in source
-    assert "VIBEQC_RESIDENT_POST_RUN" not in source
+    assert "generativeqc_resident_action" not in source
+    assert "GENERATIVEQC_RESIDENT_POST_RUN" not in source
 
 
 def test_resident_extension_post_run_is_wired_only_when_declared() -> None:
@@ -186,11 +186,14 @@ def test_resident_extension_post_run_is_wired_only_when_declared() -> None:
     plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
     declared = resident_source(
         plan,
-        extension="__VIBEQC_RESIDENT_POST_RUN_DECL__\n"
-        "int vibeqc_resident_post_run(void*, int, Metrics*, char*, size_t) "
+        extension="__GENERATIVEQC_RESIDENT_POST_RUN_DECL__\n"
+        "int generativeqc_resident_post_run(void*, int, Metrics*, char*, size_t) "
         "{ return 0; }\n",
     )
-    assert "vibeqc_resident_post_run(pointer, profile, result, error, size)" in declared
+    assert (
+        "generativeqc_resident_post_run(pointer, profile, result, error, size)"
+        in declared
+    )
     assert "if (status) return status;" in declared
 
 
@@ -258,7 +261,7 @@ def test_compile_resident_source_identity_rejects_external_dependencies() -> Non
     or installed-package roots — a silent fallback to a relative path with
     `..` components would embed filesystem prefixes in the artifact identity
     and violate the compiler determinism contract."""
-    from vibeqc_compiler.tensor import cuda_resident as m
+    from generativeqc_compiler.tensor import cuda_resident as m
 
     # Locate the helper (it lives inside compile_resident).
     src = inspect.getsource(m.compile_resident)

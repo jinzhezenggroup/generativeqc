@@ -4,9 +4,9 @@ import inspect
 from types import SimpleNamespace
 
 import pytest
-from vibeqc import _stationary_cuda as runtime
-from vibeqc_compiler.common.prepared_execution import PreparedArtifactBinding
-from vibeqc_compiler.common.provenance import canonical_hash
+from generativeqc import _stationary_cuda as runtime
+from generativeqc_compiler.common.prepared_execution import PreparedArtifactBinding
+from generativeqc_compiler.common.provenance import canonical_hash
 
 
 def test_shared_tensor_artifact_is_bound_once_without_hiding_collisions() -> None:
@@ -81,7 +81,7 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         "tile_points": 4,
         "primitive_tile": 5,
         "integral_terms": 6,
-        "work_budget": 7,
+        "page_work_budget": 7,
         "max_device_bytes": 30,
         "max_host_bytes": 99,
         "host_bound": 80,
@@ -103,7 +103,7 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         tile_points=4,
         primitive_tile=5,
         integral_terms=6,
-        work_budget=7,
+        page_work_budget=7,
     )
     owner._lease.install(
         request,

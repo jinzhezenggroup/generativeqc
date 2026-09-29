@@ -8,7 +8,7 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 struct ShellPairDensityBounds;
 
@@ -52,7 +52,8 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
  * Value-only direct CUDA plans prefer this owner when the supported shell
  * classes and optional device budget admit it. Density screening uses the same
- * shell-pair reductions as Direct HF; no range-separated operator is represented here.
+ * shell-pair reductions as Direct HF. Value K remains full-range; the optional
+ * stationary-force lease may reuse this topology for explicit SR/LR operators.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
@@ -64,17 +65,21 @@ struct GeneratedExchangePlan {
   double *system_density_bounds{}, *system_pair_density_bounds{};
   std::uint32_t* heads{};
   GeneratedShellPairStream* topology{};
+  // Optional stationary-force lease. These buffers reuse the same immutable
+  // Cartesian topology and current density bounds as generated full-range K.
+  bool force_capability{};
+  const std::uint32_t* bounded_pair_order{};
+  double *shell_pair_block_bounds{}, *force{};
+  unsigned long long* force_cursor{};
   ~GeneratedExchangePlan();
 };
 
 /** Prepare the generated J+full-range-K owner within one explicit budget.
  * Unsupported classes or insufficient optional capacity return null.
  */
-std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatch& host,
-                                                                  DeviceBatch borrowed,
-                                                                  cudaStream_t stream, int device,
-                                                                  double screening,
-                                                                  std::size_t budget);
+std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
+    const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
+    std::size_t budget, bool force_capability = false);
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
@@ -83,4 +88,21 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestr
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange);
 
-}  // namespace vibeqc::scf::cuda_execution
+/** Execute separate full-range J' and K' fixed-density energy derivatives
+ * through the retained shell topology. Output is source-major [J,K], each
+ * containing 3*atom_count energy-gradient values. The public AO density stays
+ * resident; this routine transforms it to the owner's Cartesian basis once. */
+cudaError_t execute_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives);
+
+/** Stationary RSH sources [J(full), K(short), K(long)] through one retained
+ * shell owner and one public-to-Cartesian density transform. */
+cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& plan, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double coulomb_coefficient,
+                                                     double short_exchange_coefficient,
+                                                     double long_exchange_coefficient, double omega,
+                                                     std::vector<double>& derivatives);
+
+}  // namespace generativeqc::scf::cuda_execution

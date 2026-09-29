@@ -70,14 +70,14 @@ void operator delete[](void* p, std::align_val_t) noexcept { release(p); }
 void operator delete(void* p, std::size_t, std::align_val_t) noexcept { release(p); }
 void operator delete[](void* p, std::size_t, std::align_val_t) noexcept { release(p); }
 
-extern "C" int vibeqc_resource_tracking_begin_v1(unsigned);
-extern "C" int vibeqc_resource_tracking_end_v1(std::uint64_t*, std::uint64_t*);
+extern "C" int generativeqc_resource_tracking_begin_v1(unsigned);
+extern "C" int generativeqc_resource_tracking_end_v1(std::uint64_t*, std::uint64_t*);
 
 int main(int argc, char** argv) {
   std::size_t count = 0;
   int unrestricted = 0, fitted = 0;
   if (!(std::cin >> count >> unrestricted >> fitted) || count == 0 || count > 64) return 2;
-  std::vector<vibeqc::core::System> inputs(count);
+  std::vector<generativeqc::core::System> inputs(count);
   for (auto& system : inputs) {
     std::size_t atoms = 0, shells = 0;
     std::cin >> atoms >> shells >> system.charge >> system.multiplicity >> system.electron_count;
@@ -100,37 +100,39 @@ int main(int argc, char** argv) {
     // Match the public system-construction boundary before supplying caller
     // inputs to FleetPlan; raw BSE coefficients are not native coefficients.
     std::string detail;
-    if (vibeqc::molecule::validate_and_normalize(system, detail) != VIBEQC_STATUS_SUCCESS) return 2;
+    if (generativeqc::molecule::validate_and_normalize(system, detail) !=
+        GENERATIVEQC_STATUS_SUCCESS)
+      return 2;
   }
-  auto method = unrestricted ? VIBEQC_METHOD_UHF : VIBEQC_METHOD_RHF;
+  auto method = unrestricted ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF;
   const bool ks = argc == 2;
   if (ks) {
-    const auto* manifest = vibeqc::methods::generated::find_method(std::string_view(argv[1]));
+    const auto* manifest = generativeqc::methods::generated::find_method(std::string_view(argv[1]));
     if (manifest == nullptr ||
-        manifest->provider != vibeqc::methods::generated::PublicProvider::Dft)
+        manifest->provider != generativeqc::methods::generated::PublicProvider::Dft)
       return 2;
     method = manifest->method;
   }
-  vibeqc::scf::ScfOptions options;
+  generativeqc::scf::ScfOptions options;
   options.density_fitting_mode =
-      fitted ? VIBEQC_DENSITY_FITTING_CPU_REFERENCE : VIBEQC_DENSITY_FITTING_NONE;
+      fitted ? GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE : GENERATIVEQC_DENSITY_FITTING_NONE;
   std::array<double, 64> energies{};
   std::array<unsigned, 64> iterations{};
   bool success = true;
-  if (vibeqc_resource_tracking_begin_v1(1) != 0) return 2;
+  if (generativeqc_resource_tracking_begin_v1(1) != 0) return 2;
   recording = true;
   if (ks) {
     // Exercise the public method-family owner, including retained quadrature
     // and changed-geometry rebuilds. No HF fleet can stand in for these bytes.
-    vibeqc::core::ContextState context;
-    vibeqc_method_descriptor descriptor{};
+    generativeqc::core::ContextState context;
+    generativeqc_method_descriptor descriptor{};
     descriptor.struct_size = sizeof(descriptor);
-    descriptor.abi_version = VIBEQC_ABI_VERSION;
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
     descriptor.method = method;
-    auto batch = vibeqc::methods::prepare_batch(context, inputs, descriptor,
-                                                VIBEQC_BATCH_ENABLE_WARM_STARTS);
+    auto batch = generativeqc::methods::prepare_batch(context, inputs, descriptor,
+                                                      GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
     for (unsigned replay = 0; replay < 4; ++replay) {
-      vibeqc::methods::Coordinates coordinates;
+      generativeqc::methods::Coordinates coordinates;
       if (replay == 2) {
         coordinates.resize(count);
         for (std::size_t i = 0; i < count; ++i) {
@@ -144,7 +146,7 @@ int main(int argc, char** argv) {
       }
       const auto results = batch->execute(coordinates, false);
       for (std::size_t i = 0; i < count; ++i) {
-        success = success && results[i].status == VIBEQC_STATUS_SUCCESS;
+        success = success && results[i].status == GENERATIVEQC_STATUS_SUCCESS;
         energies[i] = results[i].calculation.energy;
         iterations[i] = results[i].calculation.convergence.iterations;
       }
@@ -152,11 +154,11 @@ int main(int argc, char** argv) {
   } else {
     // Pass by value so the prepared fleet owns a measured copy of caller
     // topology. The input parser and caller-retained inputs are outside scope.
-    vibeqc::scf::FleetPlan fleet(inputs, method, options, true, false, false, false, 0);
+    generativeqc::scf::FleetPlan fleet(inputs, method, options, true, false, false, false, 0);
     for (unsigned replay = 0; replay < 2; ++replay) {
       const auto results = fleet.execute({});
       for (std::size_t i = 0; i < count; ++i) {
-        success = success && results[i].status == VIBEQC_STATUS_SUCCESS;
+        success = success && results[i].status == GENERATIVEQC_STATUS_SUCCESS;
         energies[i] = results[i].scf.energy;
         iterations[i] = results[i].scf.iterations;
       }
@@ -164,7 +166,7 @@ int main(int argc, char** argv) {
   }
   recording = false;
   std::uint64_t sampled = 0, samples = 0;
-  if (vibeqc_resource_tracking_end_v1(&sampled, &samples) != 0) return 2;
+  if (generativeqc_resource_tracking_end_v1(&sampled, &samples) != 0) return 2;
   std::cout << "{\"peak_host_bytes\":" << peak << ",\"live_after_destroy\":" << live
             << ",\"allocations\":" << allocations << ",\"sampled_host_bytes\":" << sampled
             << ",\"energies\":[" << std::setprecision(17);

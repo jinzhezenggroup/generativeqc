@@ -11,18 +11,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.cosx_derivative_runtime import (
+from generativeqc_compiler.method.cosx_derivative_runtime import (
     COSX_DERIVATIVE_RUNTIME_VERSION,
     build_cosx_bidirectional_update_program,
     build_cosx_esp_derivative_update_program,
@@ -34,15 +36,15 @@ from vibeqc_compiler.method.cosx_derivative_runtime import (
     build_cosx_scale_program,
     build_cosx_symmetric_projection_update_program,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.tensor.program import Program
+    from generativeqc_compiler.tensor.program import Program
 
 
 def _device(source: str, function_name: str) -> str:
     needle = f"inline bool {function_name}("
-    replacement = f"VIBEQC_COSX_DERIVATIVE_HD inline bool {function_name}("
+    replacement = f"GENERATIVEQC_COSX_DERIVATIVE_HD inline bool {function_name}("
     if source.count(needle) != 1:
         raise ValueError(f"expected one generated declaration for {function_name}")
     return source.replace(needle, replacement, 1)
@@ -180,19 +182,19 @@ def native_header() -> str:
 #include <cmath>
 
 #if defined(__CUDACC__)
-#define VIBEQC_COSX_DERIVATIVE_HD __host__ __device__
+#define GENERATIVEQC_COSX_DERIVATIVE_HD __host__ __device__
 #else
-#define VIBEQC_COSX_DERIVATIVE_HD
+#define GENERATIVEQC_COSX_DERIVATIVE_HD
 #endif
 
-namespace vibeqc::dft::generated_cosx_derivative {{
+namespace generativeqc::dft::generated_cosx_derivative {{
 
 inline constexpr const char* runtime_version = "{COSX_DERIVATIVE_RUNTIME_VERSION}";
 {hashes}
 
 {generated}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_projection(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool accumulate_projection(
     double left, double right, double& accumulator) noexcept {{
   double updated = 0.0;
   if (!cosx_projection_update_tensor(accumulator, left, right, updated)) return false;
@@ -200,7 +202,7 @@ VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_projection(
   return true;
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_esp_derivative(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool accumulate_esp_derivative(
     double matrix_derivative, double projected_value, double matrix_value,
     double projected_derivative, double& accumulator) noexcept {{
   double updated = 0.0;
@@ -212,7 +214,7 @@ VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_esp_derivative(
   return true;
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_symmetric_projection(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool accumulate_symmetric_projection(
     double ao, double density_rc, double density_cr, double& accumulator) noexcept {{
   double updated = 0.0;
   if (!cosx_symmetric_projection_update_tensor(
@@ -222,7 +224,7 @@ VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_symmetric_projection(
   return true;
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_bidirectional(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool accumulate_bidirectional(
     double matrix_rc, double matrix_cr, double projected, double symmetric_projection,
     double& right, double& left) noexcept {{
   double right_updated = 0.0, left_updated = 0.0;
@@ -235,7 +237,7 @@ VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_bidirectional(
   return true;
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_point_gradient(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool accumulate_point_gradient(
     double density, double phi_derivative_row, double potential_column,
     double phi_row, double potential_derivative_column,
     double phi_derivative_column, double potential_row,
@@ -251,7 +253,7 @@ VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_point_gradient(
   return true;
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_molecular_ao(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool accumulate_molecular_ao(
     double density_rc, double density_cr, double potential, double left_potential,
     double& from_left, double& from_right) noexcept {{
   double from_left_updated = 0.0, from_right_updated = 0.0;
@@ -264,26 +266,26 @@ VIBEQC_COSX_DERIVATIVE_HD inline bool accumulate_molecular_ao(
   return true;
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool molecular_cotangent(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool molecular_cotangent(
     double energy_factor, double weight, double from_left, double from_right,
     double& cotangent) noexcept {{
   return cosx_molecular_cotangent_tensor(
       energy_factor, weight, from_left, from_right, cotangent);
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool scale(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool scale(
     double factor, double value, double& scaled) noexcept {{
   return cosx_scale_tensor(factor, value, scaled);
 }}
 
-VIBEQC_COSX_DERIVATIVE_HD inline bool scale_pair(
+GENERATIVEQC_COSX_DERIVATIVE_HD inline bool scale_pair(
     double first, double second, double value, double& scaled) noexcept {{
   return cosx_pair_scale_tensor(first, second, value, scaled);
 }}
 
-}}  // namespace vibeqc::dft::generated_cosx_derivative
+}}  // namespace generativeqc::dft::generated_cosx_derivative
 
-#undef VIBEQC_COSX_DERIVATIVE_HD
+#undef GENERATIVEQC_COSX_DERIVATIVE_HD
 """
 
 

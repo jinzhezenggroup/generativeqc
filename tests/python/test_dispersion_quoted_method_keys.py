@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method import _generated_parameters
+from generativeqc_compiler.method import _generated_parameters
 
 from tools.sync_dispersion_parameters import _parse_variant, build_catalog
 

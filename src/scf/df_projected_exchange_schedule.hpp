@@ -3,7 +3,7 @@
 #include "generated_df_exchange_schedule.hpp"
 #include "scf/df_streamed_k_policy.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Bind the existing dense fallback to the compiler's source-work comparison.
  * Capacity counts doubles in EACH of four existing disjoint buffers. This
@@ -27,4 +27,4 @@ inline bool df_shared_projected_exchange_schedule_admitted(
   return schedule.rows && schedule.blocks && (schedule.blocks <= 2 || explicit_multiblock);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

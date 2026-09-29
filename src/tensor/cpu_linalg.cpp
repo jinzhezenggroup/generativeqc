@@ -7,30 +7,30 @@
 #include <numeric>
 #include <stdexcept>
 
-#ifndef VIBEQC_HAS_OPENBLAS
-#define VIBEQC_HAS_OPENBLAS 0
+#ifndef GENERATIVEQC_HAS_OPENBLAS
+#define GENERATIVEQC_HAS_OPENBLAS 0
 #endif
-#ifndef VIBEQC_OPENBLAS_SCIPY_PREFIX
-#define VIBEQC_OPENBLAS_SCIPY_PREFIX 0
+#ifndef GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
+#define GENERATIVEQC_OPENBLAS_SCIPY_PREFIX 0
 #endif
-#ifndef VIBEQC_OPENBLAS_HAS_LAPACKE
-#define VIBEQC_OPENBLAS_HAS_LAPACKE 0
+#ifndef GENERATIVEQC_OPENBLAS_HAS_LAPACKE
+#define GENERATIVEQC_OPENBLAS_HAS_LAPACKE 0
 #endif
-#ifndef VIBEQC_OPENBLAS_HAS_LOCAL_THREADS
-#define VIBEQC_OPENBLAS_HAS_LOCAL_THREADS 0
+#ifndef GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
+#define GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS 0
 #endif
-#ifndef VIBEQC_OPENBLAS_HAS_GLOBAL_THREADS
-#define VIBEQC_OPENBLAS_HAS_GLOBAL_THREADS 0
+#ifndef GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS
+#define GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS 0
 #endif
 
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
 #include <cblas.h>
-#if VIBEQC_OPENBLAS_HAS_LAPACKE
+#if GENERATIVEQC_OPENBLAS_HAS_LAPACKE
 #include <lapacke.h>
 #endif
 #endif
 
-namespace vibeqc::tensor {
+namespace generativeqc::tensor {
 namespace {
 
 bool transpose(char value) {
@@ -432,10 +432,10 @@ CpuSymmetricEigenResult scalar_symmetric_eigen(std::vector<double> matrix, std::
   return result;
 }
 
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
 [[maybe_unused]] void openblas_set_local_threads(int threads) {
-#if VIBEQC_OPENBLAS_HAS_LOCAL_THREADS
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   (void)scipy_openblas_set_num_threads_local(threads);
 #else
   (void)openblas_set_num_threads_local(threads);
@@ -446,8 +446,8 @@ CpuSymmetricEigenResult scalar_symmetric_eigen(std::vector<double> matrix, std::
 }
 
 [[maybe_unused]] int openblas_set_local_threads_return_previous(int threads) {
-#if VIBEQC_OPENBLAS_HAS_LOCAL_THREADS
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   return scipy_openblas_set_num_threads_local(threads);
 #else
   return openblas_set_num_threads_local(threads);
@@ -459,8 +459,8 @@ CpuSymmetricEigenResult scalar_symmetric_eigen(std::vector<double> matrix, std::
 }
 
 [[maybe_unused]] int openblas_get_global_threads() {
-#if VIBEQC_OPENBLAS_HAS_GLOBAL_THREADS
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   return scipy_openblas_get_num_threads();
 #else
   return openblas_get_num_threads();
@@ -471,8 +471,8 @@ CpuSymmetricEigenResult scalar_symmetric_eigen(std::vector<double> matrix, std::
 }
 
 [[maybe_unused]] void openblas_set_global_threads(int threads) {
-#if VIBEQC_OPENBLAS_HAS_GLOBAL_THREADS
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_openblas_set_num_threads(threads);
 #else
   openblas_set_num_threads(threads);
@@ -490,10 +490,10 @@ CpuSymmetricEigenResult scalar_symmetric_eigen(std::vector<double> matrix, std::
 class OpenBlasThreadGuard {
  public:
   explicit OpenBlasThreadGuard(const CpuLinalgPlan& plan) {
-#if VIBEQC_OPENBLAS_HAS_LOCAL_THREADS
+#if GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS
     previous_ = openblas_set_local_threads_return_previous(plan.provider_threads);
     local_ = true;
-#elif VIBEQC_OPENBLAS_HAS_GLOBAL_THREADS
+#elif GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS
     if (plan.thread_ownership != CpuLinalgThreadOwnership::provider_parallel)
       throw std::runtime_error(
           "OpenBLAS build lacks thread-local control; use provider-parallel ownership");
@@ -531,7 +531,7 @@ void openblas_gemm(bool ta, bool tb, std::size_t m, std::size_t n, std::size_t k
   OpenBlasThreadGuard guard(plan);
   const auto trans_a = ta ? CblasTrans : CblasNoTrans;
   const auto trans_b = tb ? CblasTrans : CblasNoTrans;
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dgemm(CblasRowMajor, trans_a, trans_b, static_cast<int>(m), static_cast<int>(n),
                     static_cast<int>(k), alpha, a, static_cast<int>(ta ? m : k), b,
                     static_cast<int>(tb ? k : n), beta, c, static_cast<int>(n));
@@ -548,7 +548,7 @@ void openblas_gemv(bool trans, std::size_t m, std::size_t n, const double* a, co
   if (m > limit || n > limit) throw std::length_error("OpenBLAS GEMV dimensions exceed int range");
   OpenBlasThreadGuard guard(plan);
   const auto transpose_a = trans ? CblasTrans : CblasNoTrans;
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dgemv(CblasRowMajor, transpose_a, static_cast<int>(m), static_cast<int>(n), alpha, a,
                     static_cast<int>(n), x, 1, beta, y, 1);
 #else
@@ -562,7 +562,7 @@ void openblas_ger(std::size_t m, std::size_t n, const double* x, const double* y
   const auto limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
   if (m > limit || n > limit) throw std::length_error("OpenBLAS GER dimensions exceed int range");
   OpenBlasThreadGuard guard(plan);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dger(CblasRowMajor, static_cast<int>(m), static_cast<int>(n), alpha, x, 1, y, 1, a,
                    static_cast<int>(n));
 #else
@@ -580,7 +580,7 @@ void openblas_symm(bool left, bool upper, std::size_t m, std::size_t n, const do
   const auto side = left ? CblasLeft : CblasRight;
   const auto triangle = upper ? CblasUpper : CblasLower;
   const int order = static_cast<int>(left ? m : n);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dsymm(CblasRowMajor, side, triangle, static_cast<int>(m), static_cast<int>(n), alpha,
                     a, order, b, static_cast<int>(n), beta, c, static_cast<int>(n));
 #else
@@ -595,7 +595,7 @@ void openblas_syr(bool upper, std::size_t n, const double* x, double* a, double 
   if (n > limit) throw std::length_error("OpenBLAS SYR dimension exceeds int range");
   OpenBlasThreadGuard guard(plan);
   const auto triangle = upper ? CblasUpper : CblasLower;
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dsyr(CblasRowMajor, triangle, static_cast<int>(n), alpha, x, 1, a,
                    static_cast<int>(n));
 #else
@@ -609,7 +609,7 @@ void openblas_syr2(bool upper, std::size_t n, const double* x, const double* y, 
   if (n > limit) throw std::length_error("OpenBLAS SYR2 dimension exceeds int range");
   OpenBlasThreadGuard guard(plan);
   const auto triangle = upper ? CblasUpper : CblasLower;
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dsyr2(CblasRowMajor, triangle, static_cast<int>(n), alpha, x, 1, y, 1, a,
                     static_cast<int>(n));
 #else
@@ -625,7 +625,7 @@ void openblas_syrk(bool upper, bool trans, std::size_t n, std::size_t k, const d
   OpenBlasThreadGuard guard(plan);
   const auto triangle = upper ? CblasUpper : CblasLower;
   const auto transpose_a = trans ? CblasTrans : CblasNoTrans;
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dsyrk(CblasRowMajor, triangle, transpose_a, static_cast<int>(n), static_cast<int>(k),
                     alpha, a, static_cast<int>(trans ? n : k), beta, c, static_cast<int>(n));
 #else
@@ -643,7 +643,7 @@ void openblas_syr2k(bool upper, bool trans, std::size_t n, std::size_t k, const 
   const auto triangle = upper ? CblasUpper : CblasLower;
   const auto transpose_ab = trans ? CblasTrans : CblasNoTrans;
   const int leading_dimension = static_cast<int>(trans ? n : k);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dsyr2k(CblasRowMajor, triangle, transpose_ab, static_cast<int>(n),
                      static_cast<int>(k), alpha, a, leading_dimension, b, leading_dimension, beta,
                      c, static_cast<int>(n));
@@ -664,7 +664,7 @@ void openblas_trsm(bool left, bool upper, bool trans, bool unit_diagonal, std::s
   const auto transpose_a = trans ? CblasTrans : CblasNoTrans;
   const auto diagonal = unit_diagonal ? CblasUnit : CblasNonUnit;
   const int order = static_cast<int>(left ? m : n);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dtrsm(CblasRowMajor, side, triangle, transpose_a, diagonal, static_cast<int>(m),
                     static_cast<int>(n), alpha, a, order, b, static_cast<int>(n));
 #else
@@ -684,7 +684,7 @@ void openblas_trmm(bool left, bool upper, bool trans, bool unit_diagonal, std::s
   const auto transpose_a = trans ? CblasTrans : CblasNoTrans;
   const auto diagonal = unit_diagonal ? CblasUnit : CblasNonUnit;
   const int order = static_cast<int>(left ? m : n);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   scipy_cblas_dtrmm(CblasRowMajor, side, triangle, transpose_a, diagonal, static_cast<int>(m),
                     static_cast<int>(n), alpha, a, order, b, static_cast<int>(n));
 #else
@@ -694,11 +694,11 @@ void openblas_trmm(bool left, bool upper, bool trans, bool unit_diagonal, std::s
 }
 
 int openblas_cholesky_lower(double* matrix, std::size_t n, const CpuLinalgPlan& plan) {
-#if VIBEQC_OPENBLAS_HAS_LAPACKE
+#if GENERATIVEQC_OPENBLAS_HAS_LAPACKE
   if (n > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     throw std::length_error("OpenBLAS Cholesky dimension exceeds int range");
   OpenBlasThreadGuard guard(plan);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   return static_cast<int>(scipy_LAPACKE_dpotrf(LAPACK_ROW_MAJOR, 'L', static_cast<int>(n), matrix,
                                                static_cast<int>(n)));
 #else
@@ -715,12 +715,12 @@ int openblas_cholesky_lower(double* matrix, std::size_t n, const CpuLinalgPlan& 
 
 CpuSymmetricEigenResult openblas_symmetric_eigen(std::vector<double> matrix, std::size_t n,
                                                  const CpuLinalgPlan& plan) {
-#if VIBEQC_OPENBLAS_HAS_LAPACKE
+#if GENERATIVEQC_OPENBLAS_HAS_LAPACKE
   if (n > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     throw std::length_error("OpenBLAS eigensolver dimension exceeds int range");
   std::vector<double> values(n);
   OpenBlasThreadGuard guard(plan);
-#if VIBEQC_OPENBLAS_SCIPY_PREFIX
+#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX
   const int info =
       static_cast<int>(scipy_LAPACKE_dsyevd(LAPACK_ROW_MAJOR, 'V', 'L', static_cast<int>(n),
                                             matrix.data(), static_cast<int>(n), values.data()));
@@ -748,15 +748,15 @@ bool fits_openblas(std::size_t m, std::size_t n, std::size_t k) noexcept {
 
 }  // namespace
 
-bool cpu_openblas_built() noexcept { return VIBEQC_HAS_OPENBLAS != 0; }
+bool cpu_openblas_built() noexcept { return GENERATIVEQC_HAS_OPENBLAS != 0; }
 bool cpu_openblas_lapack_built() noexcept {
-  return VIBEQC_HAS_OPENBLAS != 0 && VIBEQC_OPENBLAS_HAS_LAPACKE != 0;
+  return GENERATIVEQC_HAS_OPENBLAS != 0 && GENERATIVEQC_OPENBLAS_HAS_LAPACKE != 0;
 }
 bool cpu_openblas_local_thread_control_built() noexcept {
-  return VIBEQC_HAS_OPENBLAS != 0 && VIBEQC_OPENBLAS_HAS_LOCAL_THREADS != 0;
+  return GENERATIVEQC_HAS_OPENBLAS != 0 && GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS != 0;
 }
 bool cpu_openblas_global_thread_control_built() noexcept {
-  return VIBEQC_HAS_OPENBLAS != 0 && VIBEQC_OPENBLAS_HAS_GLOBAL_THREADS != 0;
+  return GENERATIVEQC_HAS_OPENBLAS != 0 && GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS != 0;
 }
 
 CpuLinalgProvider resolve_cpu_linalg_provider(const CpuLinalgPlan& plan, bool require_lapack) {
@@ -848,13 +848,39 @@ void cpu_gemm(char a_trans, char b_trans, std::size_t m, std::size_t n, std::siz
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_gemm(ta, tb, m, n, k, a, b, c, alpha, beta, plan);
     return;
   }
 #endif
   scalar_gemm(ta, tb, m, n, k, a, b, c, alpha, beta);
+}
+
+void cpu_congruence(char coefficient_transpose, std::size_t n, const double* coefficients,
+                    const double* matrix, double* result, double* workspace,
+                    const CpuLinalgPlan& plan) {
+  bool transposed = false;
+  if (coefficient_transpose == 'T' || coefficient_transpose == 't')
+    transposed = true;
+  else if (coefficient_transpose != 'N' && coefficient_transpose != 'n')
+    throw std::invalid_argument("CPU congruence transpose must be N or T");
+  validate_plan(plan);
+  if (!n) return;
+  checked_matrix_elements(n, n);
+  if (!coefficients || !matrix || !result || !workspace)
+    throw std::invalid_argument("CPU congruence received null storage");
+  if (workspace == coefficients || workspace == matrix || workspace == result ||
+      result == coefficients || result == matrix)
+    throw std::invalid_argument("CPU congruence requires non-aliasing input/output/workspace");
+
+  if (transposed) {
+    cpu_gemm('N', 'N', n, n, n, matrix, coefficients, workspace, 1.0, 0.0, plan);
+    cpu_gemm('T', 'N', n, n, n, coefficients, workspace, result, 1.0, 0.0, plan);
+  } else {
+    cpu_gemm('N', 'N', n, n, n, coefficients, matrix, workspace, 1.0, 0.0, plan);
+    cpu_gemm('N', 'T', n, n, n, workspace, coefficients, result, 1.0, 0.0, plan);
+  }
 }
 
 void cpu_gemv(char trans, std::size_t m, std::size_t n, const double* a, const double* x, double* y,
@@ -883,7 +909,7 @@ void cpu_gemv(char trans, std::size_t m, std::size_t n, const double* a, const d
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_gemv(transposed, m, n, a, x, y, alpha, beta, plan);
     return;
@@ -907,7 +933,7 @@ void cpu_ger(std::size_t m, std::size_t n, const double* x, const double* y, dou
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_ger(m, n, x, y, a, alpha, plan);
     return;
@@ -942,7 +968,7 @@ void cpu_symm(char side, char uplo, std::size_t m, std::size_t n, const double* 
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_symm(left, upper, m, n, a, b, c, alpha, beta, plan);
     return;
@@ -967,7 +993,7 @@ void cpu_syr(char uplo, std::size_t n, const double* x, double* a, double alpha,
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_syr(upper, n, x, a, alpha, plan);
     return;
@@ -992,7 +1018,7 @@ void cpu_syr2(char uplo, std::size_t n, const double* x, const double* y, double
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_syr2(upper, n, x, y, a, alpha, plan);
     return;
@@ -1033,7 +1059,7 @@ void cpu_syrk(char uplo, char trans, std::size_t n, std::size_t k, const double*
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_syrk(upper, transposed, n, k, a, c, alpha, beta, plan);
     return;
@@ -1074,7 +1100,7 @@ void cpu_syr2k(char uplo, char trans, std::size_t n, std::size_t k, const double
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_syr2k(upper, transposed, n, k, a, b, c, alpha, beta, plan);
     return;
@@ -1108,7 +1134,7 @@ void cpu_trsm(char side, char uplo, char trans, char diag, std::size_t m, std::s
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_trsm(left, upper, transposed, unit_diagonal, m, n, a, b, alpha, plan);
     return;
@@ -1142,7 +1168,7 @@ void cpu_trmm(char side, char uplo, char trans, char diag, std::size_t m, std::s
   } else {
     provider = resolve_cpu_linalg_provider(plan);
   }
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (provider == CpuLinalgProvider::openblas) {
     openblas_trmm(left, upper, transposed, unit_diagonal, m, n, a, b, alpha, plan);
     return;
@@ -1156,7 +1182,7 @@ int cpu_cholesky_lower(double* matrix, std::size_t n, const CpuLinalgPlan& plan)
   if (!n) return 0;
   checked_matrix_elements(n, n);
   if (!matrix) throw std::invalid_argument("CPU Cholesky received null storage");
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (resolve_cpu_linalg_provider(plan, true) == CpuLinalgProvider::openblas)
     return openblas_cholesky_lower(matrix, n, plan);
 #else
@@ -1172,7 +1198,7 @@ CpuSymmetricEigenResult cpu_symmetric_eigen(std::vector<double> matrix, std::siz
     throw std::invalid_argument("CPU symmetric eigensolver dimensions are inconsistent");
   if (!std::all_of(matrix.begin(), matrix.end(), [](double x) { return std::isfinite(x); }))
     throw std::invalid_argument("CPU symmetric eigensolver requires finite input");
-#if VIBEQC_HAS_OPENBLAS
+#if GENERATIVEQC_HAS_OPENBLAS
   if (resolve_cpu_linalg_provider(plan, true) == CpuLinalgProvider::openblas)
     return openblas_symmetric_eigen(std::move(matrix), n, plan);
 #else
@@ -1181,4 +1207,4 @@ CpuSymmetricEigenResult cpu_symmetric_eigen(std::vector<double> matrix, std::siz
   return scalar_symmetric_eigen(std::move(matrix), n);
 }
 
-}  // namespace vibeqc::tensor
+}  // namespace generativeqc::tensor

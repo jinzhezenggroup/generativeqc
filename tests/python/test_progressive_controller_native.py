@@ -1,9 +1,9 @@
 """Native HF endpoint coverage for the typed #192 deterministic controller."""
 
 import pytest
-from vibeqc import Calculator
-from vibeqc.accuracy import ObservableTarget, TargetAccuracy
-from vibeqc.progressive_controller import (
+from generativeqc import Calculator
+from generativeqc.accuracy import ObservableTarget, TargetAccuracy
+from generativeqc.progressive_controller import (
     ProgressiveBudget,
     TargetProblem,
     make_deterministic_hf_plan,
@@ -155,7 +155,7 @@ def test_projection_memory_budget_rejection_falls_back_to_target() -> None:
 def test_verification_budget_rejects_before_fock_rebuild(
     fitted: bool, provider_limit: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import vibeqc.progressive_controller as controller
+    import generativeqc.progressive_controller as controller
 
     source, target = calculators(fitted=fitted)
     problem = TargetProblem.from_calculator(target, ATOMS)

@@ -64,7 +64,7 @@ def _evidence_levels() -> dict[str, object]:
 
 def _fixture() -> dict[str, object]:
     return {
-        "schema": "vibeqc.electronic-production-paths.v2",
+        "schema": "generativeqc.electronic-production-paths.v2",
         "coverage": "pilot",
         "rows": [
             {

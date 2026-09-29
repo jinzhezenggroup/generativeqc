@@ -26,22 +26,6 @@
       "supports_batch": true
     },
     {
-      "name": "wb97m-v",
-      "symbol": "WB97M_V",
-      "abi_id": 3,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "aliases": [
-        "wb97m-v-rks"
-      ],
-      "compiler_method": "WB97M-V",
-      "spin": "unpolarized"
-    },
-    {
       "name": "rccsd(t)",
       "symbol": "RCCSD_T",
       "abi_id": 4,
@@ -77,9 +61,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "LDA_XC_PW",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "pbe-rks",
@@ -90,9 +72,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "lda-uks",
@@ -103,9 +83,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "LDA_XC_PW",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "pbe-uks",
@@ -116,9 +94,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "r2scan-rks",
@@ -129,9 +105,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "R2SCAN",
-      "spin": "unpolarized"
+      "supports_batch": true
     },
     {
       "name": "r2scan-uks",
@@ -142,9 +116,7 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "R2SCAN",
-      "spin": "polarized"
+      "supports_batch": true
     },
     {
       "name": "rccsd",
@@ -157,32 +129,6 @@
         "forces"
       ],
       "supports_batch": true
-    },
-    {
-      "name": "pbe0-rks",
-      "symbol": "PBE0_RKS",
-      "abi_id": 13,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "PBE0",
-      "spin": "unpolarized"
-    },
-    {
-      "name": "pbe0-uks",
-      "symbol": "PBE0_UKS",
-      "abi_id": 14,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "PBE0",
-      "spin": "polarized"
     },
     {
       "name": "gfn2-xtb",
@@ -200,32 +146,6 @@
       ]
     },
     {
-      "name": "b3lyp-rks",
-      "symbol": "B3LYP_RKS",
-      "abi_id": 16,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "B3LYP",
-      "spin": "unpolarized"
-    },
-    {
-      "name": "b3lyp-uks",
-      "symbol": "B3LYP_UKS",
-      "abi_id": 17,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "B3LYP",
-      "spin": "polarized"
-    },
-    {
       "name": "pbe-d4-rks",
       "symbol": "PBE_D4_RKS",
       "abi_id": 18,
@@ -234,74 +154,33 @@
       "properties": [
         "energy"
       ],
-      "supports_batch": true,
-      "compiler_method": "PBE-D4(BJ-EEQ-ATM)",
-      "spin": "unpolarized"
-    },
+      "supports_batch": true
+    }
+  ],
+  "composite_methods": [
     {
-      "name": "wb97m-v-uks",
-      "symbol": "WB97M_V_UKS",
-      "abi_id": 19,
+      "name": "r2scan-3c",
       "family": "density_functional",
-      "provider": "dft",
+      "identifier": "R2SCAN-3c",
+      "spin": "unpolarized",
       "properties": [
         "energy"
       ],
       "supports_batch": true,
-      "compiler_method": "WB97M-V",
-      "spin": "polarized"
+      "aliases": [
+        "r2scan-3c-rks"
+      ]
     },
     {
-      "name": "m06-2x-rks",
-      "symbol": "M06_2X_RKS",
-      "abi_id": 20,
+      "name": "r2scan-3c-uks",
       "family": "density_functional",
-      "provider": "dft",
+      "identifier": "R2SCAN-3c",
+      "spin": "polarized",
       "properties": [
         "energy"
       ],
       "supports_batch": true,
-      "compiler_method": "M06-2X",
-      "spin": "unpolarized"
-    },
-    {
-      "name": "m06-2x-uks",
-      "symbol": "M06_2X_UKS",
-      "abi_id": 21,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "M06-2X",
-      "spin": "polarized"
-    },
-    {
-      "name": "mn15-rks",
-      "symbol": "MN15_RKS",
-      "abi_id": 22,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "MN15",
-      "spin": "unpolarized"
-    },
-    {
-      "name": "mn15-uks",
-      "symbol": "MN15_UKS",
-      "abi_id": 23,
-      "family": "density_functional",
-      "provider": "dft",
-      "properties": [
-        "energy"
-      ],
-      "supports_batch": true,
-      "compiler_method": "MN15",
-      "spin": "polarized"
+      "aliases": []
     }
   ]
 }

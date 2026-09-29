@@ -28,6 +28,13 @@ COMPONENTS = (
     "final_reduction_assembly",
 )
 
+WORK_STAGES = ("generated", "screened", "compacted", "executed")
+WORK_COUNT_POLICY = (
+    "only counters with an attributable runtime meaning are promoted into "
+    "generated/screened/compacted/executed; logical/capacity bounds remain under "
+    "capacity, and unavailable stages are left empty rather than inferred"
+)
+
 
 def _finite_nonnegative(value: typing.Any, *, field: str) -> float | None:
     if value is None:
@@ -66,6 +73,94 @@ def _int_or_none(value: typing.Any) -> int | None:
     if result < 0:
         raise ValueError("work counter must be nonnegative")
     return result
+
+
+def _empty_work_counts() -> dict[str, dict[str, int]]:
+    return {name: {} for name in (*WORK_STAGES, "capacity", "observed")}
+
+
+def _store_counter(target: dict[str, int], key: str, value: typing.Any) -> None:
+    measured = _int_or_none(value)
+    if measured is not None:
+        target[key] = measured
+
+
+def _stationary_work_counts(
+    work: Mapping[str, typing.Any],
+) -> dict[str, dict[str, int]]:
+    counts = _empty_work_counts()
+    executor = _mapping(work.get("stationary_task_executor"))
+    sources = executor.get("sources")
+    if isinstance(sources, Sequence) and not isinstance(
+        sources, (str, bytes, bytearray)
+    ):
+        for source_record in sources:
+            if not isinstance(source_record, Mapping):
+                continue
+            source = str(source_record.get("source", "unknown"))
+            rank = source_record.get("rank")
+            unit = "pairs" if rank == 2 else "quartets" if rank == 4 else "tuples"
+            _store_counter(
+                counts["generated"],
+                f"{source}_public_ao_{unit}",
+                source_record.get("logical_tasks"),
+            )
+    _store_counter(
+        counts["generated"],
+        "primitive_records",
+        executor.get("logical_primitive_records"),
+    )
+    for key in (
+        "fixed_capacity",
+        "resident_capacity",
+        "page_capacity",
+        "primitive_record_page_budget",
+    ):
+        _store_counter(counts["capacity"], key, executor.get(key))
+    for key in ("ordered_quartets", "exchange_ordered_quartets"):
+        _store_counter(counts["capacity"], key, work.get(key))
+    for output_key, source_key in (
+        ("semilocal_geometry_points", "xc_points"),
+        ("partition_grid_pair_visits", "grid_pair_visits"),
+    ):
+        _store_counter(counts["executed"], output_key, work.get(source_key))
+    for output_key, source_key in (
+        ("native_primitive_records", "primitive_records"),
+        ("native_task_descriptors", "task_descriptors"),
+        ("native_task_batches", "task_batches"),
+        ("native_launches", "launches"),
+        ("primitive_pages", "primitive_pages"),
+        ("bulk_pack_chunks", "bulk_pack_chunks"),
+        ("bulk_packed_descriptors", "bulk_packed_descriptors"),
+        ("scalar_packed_descriptors", "scalar_packed_descriptors"),
+        ("geometry_batches", "geometry_batches"),
+    ):
+        _store_counter(counts["observed"], output_key, work.get(source_key))
+    return counts
+
+
+def _wb97mv_work_counts(
+    work: Mapping[str, typing.Any],
+) -> dict[str, dict[str, int]]:
+    counts = _empty_work_counts()
+    for key in (
+        "symmetry_unique_quartets_per_integral_source",
+        "maximum_center_dual3_evaluations_total",
+        "nonlocal_dense_pair_capacity",
+    ):
+        _store_counter(counts["capacity"], key, work.get(key))
+    for output_key, source_key in (
+        ("two_electron_quartet_traversals", "two_electron_quartet_traversals"),
+        (
+            "range_recurrences_per_participating_center",
+            "range_recurrences_per_participating_center",
+        ),
+        ("partition_pair_visits_scheduled", "partition_pair_visits"),
+        ("ao_collocation_point_visits_scheduled", "ao_collocation_point_visits"),
+        ("nonlocal_geometry_point_visits_scheduled", "geometry_point_visits"),
+    ):
+        _store_counter(counts["observed"], output_key, work.get(source_key))
+    return counts
 
 
 def _first_present(*values: typing.Any) -> typing.Any:
@@ -139,12 +234,24 @@ def _normalize_wb97mv(
         "semilocal_geometry_and_features",
         field="component_seconds.semilocal_geometry_and_features",
     )
-    wall["vv10_rvv10"] = _sum_present(
+    legacy_vv10 = _sum_present(
         (
             component.get("vv10_pairs"),
             component.get("nonlocal_geometry"),
         ),
         field="component_seconds.vv10_rvv10",
+    )
+    wall["vv10_rvv10"] = (
+        legacy_vv10
+        if legacy_vv10 is not None
+        else _sum_present(
+            (
+                component.get("nonlocal_reset"),
+                component.get("vv10_pair_enqueue"),
+                component.get("nonlocal_geometry_and_pair_drain"),
+            ),
+            field="component_seconds.resident_vv10_rvv10",
+        )
     )
     wall["compile_aot_cache_setup"] = _value(
         component, "prepare", field="component_seconds.prepare"
@@ -180,11 +287,26 @@ def _normalize_wb97mv(
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
     return {
-        "schema": "vibeqc.dft-force-components.v1",
+        "schema": "generativeqc.dft-force-components.v1",
         "source_route": "wb97mv-component-seconds",
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": _wb97mv_work_counts(work),
+        "work_count_policy": WORK_COUNT_POLICY,
+        "work_count_notes": {
+            "stationary_integral_derivatives": (
+                "public-AO quartet quantities are capacity bounds; native screening "
+                "happens inside the derivative kernel and no post-screen quartet count "
+                "is currently exposed"
+            ),
+            "vv10_rvv10": (
+                work.get("nonlocal_active_count_scope")
+                or "dense pair capacity is not promoted to executed pair work"
+            ),
+        },
+        "source_component_seconds": dict(component),
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
         "unattributed_wall_seconds": _unattributed(endpoint, attributed),
@@ -215,10 +337,21 @@ def _normalize_stationary(
         "primitive_derivative_reduction_sync",
         field="timeline.primitive_derivative_reduction_sync",
     )
-    wall["semilocal_geometry_response"] = _value(
+    legacy_geometry = _value(
         phases,
         "xc_geometry_and_sync",
         field="timeline.xc_geometry_and_sync",
+    )
+    wall["semilocal_geometry_response"] = (
+        legacy_geometry
+        if legacy_geometry is not None
+        else _sum_present(
+            (
+                phases.get("xc_geometry_enqueue"),
+                phases.get("xc_geometry_drain"),
+            ),
+            field="timeline.xc_geometry_enqueue_drain",
+        )
     )
     wall["host_packing"] = _sum_present(
         tuple(
@@ -293,11 +426,20 @@ def _normalize_stationary(
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
     return {
-        "schema": "vibeqc.dft-force-components.v1",
+        "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": _stationary_work_counts(work),
+        "work_count_policy": WORK_COUNT_POLICY,
+        "work_count_notes": {
+            "stationary_integral_derivatives": (
+                "generated public-AO task domains and native submission counters are "
+                "not post-screen integral execution counts"
+            ),
+        },
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
         "unattributed_wall_seconds": _unattributed(endpoint, attributed),
@@ -310,6 +452,163 @@ def _normalize_stationary(
             "missing": "null means not measured by this telemetry source; never zero-filled",
         },
     }
+
+
+_EXCHANGE_COMPONENT = {
+    "full-range": "scf_full_range_k",
+    "short-range": "scf_short_range_k",
+    "long-range": "scf_long_range_k",
+}
+_SCF_TRACE_COMPONENT = {
+    "ri_j": "scf_fock_j",
+    "ri_k": "scf_full_range_k",
+    "ri_k_occupied": "scf_full_range_k",
+    "ri_k_short_range": "scf_short_range_k",
+    "ri_k_long_range": "scf_long_range_k",
+}
+
+
+def _accumulate_component(
+    target: dict[str, float | None], name: str, value: typing.Any, *, field: str
+) -> None:
+    measured = _finite_nonnegative(value, field=field)
+    if measured is None:
+        return
+    previous = target.get(name)
+    target[name] = measured if previous is None else previous + measured
+
+
+def expected_scf_components(
+    exchange_operators: Sequence[str],
+    *,
+    semilocal: bool = True,
+    nonlocal_correlation: bool = False,
+) -> tuple[str, ...]:
+    """Return method-graph component names without using a named functional."""
+
+    expected = ["scf_fock_j"]
+    if semilocal:
+        expected.append("semilocal_ao_grid_xc")
+    if nonlocal_correlation:
+        expected.append("vv10_rvv10")
+    for operator in exchange_operators:
+        try:
+            component = _EXCHANGE_COMPONENT[operator]
+        except KeyError as error:
+            raise ValueError(f"unsupported exchange operator: {operator}") from error
+        if component not in expected:
+            expected.append(component)
+    return tuple(expected)
+
+
+def normalize_scf_trace(
+    records: Sequence[Mapping[str, typing.Any]],
+    *,
+    exchange_operators: Sequence[str] = (),
+    semilocal: bool = True,
+    nonlocal_correlation: bool = False,
+) -> dict[str, typing.Any]:
+    """Normalize opt-in CUDA SCF traces without splitting fused J/K evidence.
+
+    The native DF trace is intrusive diagnostic evidence. Its CUDA-event times
+    never become clean endpoint wall time. A shared J/K root cannot be assigned
+    to J and K separately, so that duration remains explicitly ambiguous.
+    Direct/RSH providers that do not emit this trace remain missing rather than
+    receiving inferred timings.
+    """
+
+    from benchmarks.df_component_ledger import aggregate
+
+    summary = aggregate(list(records))
+    profiled = _empty_components()
+    ambiguous: dict[str, float] = {}
+    unclassified: dict[str, float] = {}
+    for group in summary["groups"]:
+        if group["execution"] != "stream":
+            continue
+        operation = str(group["operation"])
+        milliseconds = _finite_nonnegative(
+            group.get("gpu_inclusive_ms"),
+            field=f"scf_trace.{operation}.gpu_inclusive_ms",
+        )
+        if milliseconds is None:
+            continue
+        component = _SCF_TRACE_COMPONENT.get(operation)
+        if component is not None:
+            _accumulate_component(
+                profiled,
+                component,
+                milliseconds,
+                field=f"scf_trace.{operation}.gpu_inclusive_ms",
+            )
+        elif operation == "ri_jk_shared":
+            ambiguous["scf_shared_jk"] = (
+                ambiguous.get("scf_shared_jk", 0.0) + milliseconds
+            )
+        else:
+            unclassified[operation] = unclassified.get(operation, 0.0) + milliseconds
+
+    expected = expected_scf_components(
+        exchange_operators,
+        semilocal=semilocal,
+        nonlocal_correlation=nonlocal_correlation,
+    )
+    missing = [name for name in expected if profiled[name] is None]
+    return {
+        "schema": "generativeqc.dft-scf-components.v1",
+        "profiled_ms": profiled,
+        "expected_components": list(expected),
+        "missing_expected_components": missing,
+        "ambiguous_profiled_ms": ambiguous,
+        "unclassified_root_profiled_ms": unclassified,
+        "source_summary": summary,
+        "measurement_policy": (
+            "opt-in CUDA-event diagnostic; do not add to clean endpoint wall time; "
+            "shared J/K roots remain unsplit"
+        ),
+    }
+
+
+def merge_scf_profile(
+    force_components: Mapping[str, typing.Any],
+    scf_profile: Mapping[str, typing.Any],
+) -> dict[str, typing.Any]:
+    """Attach measured SCF component events to one force-component record."""
+
+    if force_components.get("schema") != "generativeqc.dft-force-components.v1":
+        raise ValueError("force component schema mismatch")
+    if scf_profile.get("schema") != "generativeqc.dft-scf-components.v1":
+        raise ValueError("SCF component schema mismatch")
+    result = {
+        **force_components,
+        "wall_seconds": dict(_mapping(force_components.get("wall_seconds"))),
+        "profiled_ms": dict(_mapping(force_components.get("profiled_ms"))),
+        "notes": dict(_mapping(force_components.get("notes"))),
+    }
+    incoming = _mapping(scf_profile.get("profiled_ms"))
+    for name in COMPONENTS:
+        value = incoming.get(name)
+        if value is None:
+            continue
+        measured = _finite_nonnegative(value, field=f"scf_profile.{name}")
+        previous = result["profiled_ms"].get(name)
+        if previous is not None and not math.isclose(
+            float(previous), typing.cast("float", measured), rel_tol=1e-9, abs_tol=1e-9
+        ):
+            raise ValueError(f"duplicate component timing disagrees for {name}")
+        result["profiled_ms"][name] = measured
+    result["coverage"] = _coverage(result["wall_seconds"], result["profiled_ms"])
+    result["scf_profile"] = {
+        key: scf_profile.get(key)
+        for key in (
+            "expected_components",
+            "missing_expected_components",
+            "ambiguous_profiled_ms",
+            "unclassified_root_profiled_ms",
+            "measurement_policy",
+        )
+    }
+    return result
 
 
 def normalize_force_work(

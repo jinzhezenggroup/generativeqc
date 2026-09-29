@@ -1,5 +1,5 @@
-#ifndef VIBEQC_RUNTIME_RESOURCE_USAGE_HPP
-#define VIBEQC_RUNTIME_RESOURCE_USAGE_HPP
+#ifndef GENERATIVEQC_RUNTIME_RESOURCE_USAGE_HPP
+#define GENERATIVEQC_RUNTIME_RESOURCE_USAGE_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -7,7 +7,7 @@
 #include <limits>
 #include <vector>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Opt-in samples of simultaneously owned CPU numeric buffers.
  *
@@ -82,6 +82,6 @@ inline void sample_cuda_arena_capacity(std::size_t bytes) noexcept {
   ++record.cuda_arena_samples;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 
 #endif

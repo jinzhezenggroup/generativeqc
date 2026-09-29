@@ -11,17 +11,17 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.geometry import (
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.geometry import (
     PreparedD3CudaBatch,
     compile_d3_bj_batch,
     execute_d3_bj_batch,
 )
 
-from tools.vibeqc_d3.reference import gfn1_compatibility, make_spec
+from tools.generativeqc_d3.reference import gfn1_compatibility, make_spec
 
 _FIXTURES = json.loads(
     (Path(__file__).parents[1] / "data/d3_bj_reference.json").read_text()
@@ -115,10 +115,10 @@ def test_ragged_d3_batch_rebuild_boundary_is_explicit() -> None:
 
 
 def test_ragged_d3_primal_and_batch_vjp_lower_as_one_cuda_program() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.geometry.d3_cuda import _energy_gradient_program
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.geometry.d3_cuda import _energy_gradient_program
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     cases = _PBE[:2]
     spec = make_spec(**cases[0]["parameters"])
@@ -140,7 +140,7 @@ def test_ragged_d3_primal_and_batch_vjp_lower_as_one_cuda_program() -> None:
 def test_generated_d3_prepared_owner_uses_shared_compiled_execution_contract(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import vibeqc_compiler.geometry.d3_cuda as runtime
+    import generativeqc_compiler.geometry.d3_cuda as runtime
 
     cases = _PBE[:2]
     spec = make_spec(**cases[0]["parameters"])
@@ -189,7 +189,7 @@ def test_generated_d3_prepared_owner_uses_shared_compiled_execution_contract(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_D3_GENERATED_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_D3_GENERATED_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_generated_d3_cuda_ragged_batch_matches_independent_goldens(
@@ -199,10 +199,10 @@ def test_generated_d3_cuda_ragged_batch_matches_independent_goldens(
     spec = make_spec(**cases[0]["parameters"])
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_D3_GENERATED_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_D3_GENERATED_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
         nvcc,
-        cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120")),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120")),
     )
     systems = [
         (case["numbers"], np.asarray(case["positions"], dtype=np.float64))

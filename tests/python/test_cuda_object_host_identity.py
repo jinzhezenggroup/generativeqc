@@ -4,10 +4,10 @@ import shutil
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.native_runtime import _cuda_host_identity
-from vibeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.native_runtime import _cuda_host_identity
+from generativeqc_compiler.common.provenance import file_hash
 
 
 @pytest.mark.parametrize("spelling", ("name", "absolute"))

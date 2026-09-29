@@ -86,7 +86,7 @@
         "permutations": []
       },
       "recurrence": "subset_wick",
-      "schema": "vibeqc.integral_ir",
+      "schema": "generativeqc.integral_ir",
       "schema_version": 1,
       "spec": {
         "center_bindings": [
@@ -212,7 +212,7 @@
         "permutations": []
       },
       "recurrence": "subset_wick",
-      "schema": "vibeqc.integral_ir",
+      "schema": "generativeqc.integral_ir",
       "schema_version": 1,
       "spec": {
         "center_bindings": [
@@ -308,7 +308,7 @@
         "permutations": []
       },
       "recurrence": "subset_wick",
-      "schema": "vibeqc.integral_ir",
+      "schema": "generativeqc.integral_ir",
       "schema_version": 1,
       "spec": {
         "center_bindings": [

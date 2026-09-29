@@ -30,16 +30,16 @@ try:
     from benchmarks._support import environment_metadata, raw_output_path, write_result
 except ModuleNotFoundError:
     from _support import environment_metadata, raw_output_path, write_result
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     canonical_hash,
     file_hash,
     new_evidence,
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -47,10 +47,10 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_tune import tune_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_tune import tune_cuda
 
-SCHEMA = "vibeqc.tensor.cub-qualification.v1"
+SCHEMA = "generativeqc.tensor.cub-qualification.v1"
 ROWS = 65
 INNER = 4097
 ATOL = 1e-11

@@ -8,24 +8,24 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.first_directional import DirectionalMatrixTerm
-from vibeqc_compiler.integral.first_directional_execute import (
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.first_directional import DirectionalMatrixTerm
+from generativeqc_compiler.integral.first_directional_execute import (
     DirectionalFirstAccumulator,
     compile_directional_first,
 )
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
-from vibeqc_compiler.integral.weight_pullback import normalized_radial_primitives
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weight_pullback import normalized_radial_primitives
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="explicit real-GPU qualification",
 )
 
@@ -36,7 +36,8 @@ def compiler() -> typing.Any:
     nvcc = shutil.which("nvcc")
     assert nvcc, "selected CUDA qualification needs nvcc on PATH"
     return CudaCompilerAdapter(
-        Path(nvcc), cuda_target_info(os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120"))
+        Path(nvcc),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120")),
     )
 
 

@@ -8,16 +8,16 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.capture import CaptureContract, _GraphMetrics
-from vibeqc_compiler.common.cuda_runtime import CudaArtifact
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.execution import CompiledExecutionIdentity
-from vibeqc_compiler.common.specialization import (
+from generativeqc_compiler.common.capture import CaptureContract, _GraphMetrics
+from generativeqc_compiler.common.cuda_runtime import CudaArtifact
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.execution import CompiledExecutionIdentity
+from generativeqc_compiler.common.specialization import (
     GuardPredicate,
     SpecializationGuard,
     WorkloadSignature,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -25,9 +25,12 @@ from vibeqc_compiler.tensor import (
     add,
     input_tensor,
 )
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, tensor_capture_contract
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_execute import (
+    PreparedCuda,
+    tensor_capture_contract,
+)
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -240,7 +243,7 @@ inline int cudaGraphLaunch(cudaGraphExec_t,cudaStream_t) { ++launches; return la
     source.write_text(r"""
 #include <cassert>
 #include "src/runtime/cuda_graph_region.cuh"
-using namespace vibeqc::runtime;
+using namespace generativeqc::runtime;
 int main() {
  static_assert(sizeof(GraphMetrics)==88);
  GraphBinding key{"artifact-a",0,reinterpret_cast<void*>(1),reinterpret_cast<void*>(2),reinterpret_cast<void*>(3)};

@@ -9,7 +9,7 @@
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 namespace cuda_df {
 std::uint64_t next_factor_basis_identity() noexcept;
@@ -93,7 +93,7 @@ struct CudaDensityFittingJkPlan {
   const double* response_host_raw{};
   const core::Atom *response_orbital_atoms{}, *response_auxiliary_atoms{};
   const core::Shell *response_orbital_shells{}, *response_auxiliary_shells{};
-  vibeqc_basis_representation response_orbital_representation{},
+  generativeqc_basis_representation response_orbital_representation{},
       response_auxiliary_representation{};
   double* exchange_tile_output{};
   double* exchange_density_column_major{};
@@ -123,4 +123,4 @@ struct CudaDensityFittingJkPlan {
   void* final_validation{};
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

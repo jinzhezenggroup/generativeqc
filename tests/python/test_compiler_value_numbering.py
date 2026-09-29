@@ -1,10 +1,10 @@
 """Effect-aware GVN shared by TensorIR and generated integral algebra."""
 
 import numpy as np
-from vibeqc_compiler.common.liveness import EffectKind
-from vibeqc_compiler.common.value_numbering import ValueNumberTable
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.liveness import EffectKind
+from generativeqc_compiler.common.value_numbering import ValueNumberTable
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.tensor import (
     Program,
     TensorSpec,
     add,
@@ -14,7 +14,7 @@ from vibeqc_compiler.tensor import (
     optimize,
     transpose,
 )
-from vibeqc_compiler.tensor.optimize import _value_number
+from generativeqc_compiler.tensor.optimize import _value_number
 
 
 def _equivalent(left: tuple[str, str], right: tuple[str, str]) -> bool:

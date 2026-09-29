@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from vibeqc_compiler.integral import production, production_profile
+from generativeqc_compiler.integral import production, production_profile
 
 
 def test_production_preserves_profile_compatibility_reexports() -> None:
@@ -56,7 +56,7 @@ def test_production_profile_avoids_emission_orchestration_dependencies() -> None
     assert relative_modules.isdisjoint(
         {"production", "production_cost", "cuda_emitter", "cuda_lowering"}
     )
-    assert absolute_roots.isdisjoint({"benchmarks", "tools", "vibeqc"})
+    assert absolute_roots.isdisjoint({"benchmarks", "tools", "generativeqc"})
 
 
 def test_resolved_profile_is_owned_by_profile_module() -> None:

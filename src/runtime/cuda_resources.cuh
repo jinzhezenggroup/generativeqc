@@ -10,7 +10,7 @@
 #include "bounded_workspace.hpp"
 #include "resource_cuda.cuh"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 inline void cuda_resource_check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
@@ -218,4 +218,4 @@ class OwnedCudaBuffer {
   cudaStream_t lifetime_stream_{};
 };
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

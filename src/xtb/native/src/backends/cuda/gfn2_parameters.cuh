@@ -1,13 +1,13 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_PARAMETERS_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PARAMETERS_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_PARAMETERS_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PARAMETERS_CUH
 
 #include <cstddef>
 
 #include "data/parameters/gfn2.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::size_t kPairOverrideStorage =
     parameters::gfn2::kPairScaleOverrides.size() == 0u
@@ -23,6 +23,6 @@ extern __device__ __constant__
 extern __device__ __constant__
     parameters::gfn2::PairScaleOverride g_gfn2_pair_overrides[kPairOverrideStorage];
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_PARAMETERS_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_PARAMETERS_CUH

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <limits>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Host live-set bound for one source-backed CUDA DF preparation item.
  * The caller selects the actual derivative exporter. Generated one-electron
@@ -281,4 +281,4 @@ inline std::size_t df_force_budget(std::size_t requested) noexcept {
   return resolve_df_budget({1, 1, 1, 1, 0, true}, {}, requested).response_bytes;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

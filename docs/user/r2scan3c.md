@@ -1,6 +1,6 @@
 # r2SCAN-3c capability contract
 
-VibeQC exposes canonical r2SCAN-3c through the Python selectors
+GenerativeQC exposes canonical r2SCAN-3c through the Python selectors
 "r2scan-3c", "r2scan-3c-rks", and "r2scan-3c-uks". These names resolve to the
 same inspectable R2SCAN-3c MethodIR used by the compiler; they do not add a
 second native scientific driver or a separate native method ID.
@@ -28,8 +28,12 @@ correction twice.
 The method remains fail-closed outside H-Ar, for a changed defining basis, or
 when a requested backend/property combination has not been qualified.
 The first CUDA s/p/d stationary-force domain admits at most 32 atoms, 128 AOs,
-16,000,000 ordered primitive records, 1,000,000 grid points and 100,000,000
-grid-pair visits. These are execution bounds, not a claim that every H-Ar
+1,000,000 grid points and 100,000,000 grid-pair visits. Stationary integral work
+is streamed through bounded native pages: each page admits at most 4096 task
+descriptors and, by default, 16,000,000 primitive records. The complete force may
+execute more than 16,000,000 primitive records across multiple admitted pages;
+the cumulative count is retained as coverage evidence rather than used as a
+whole-force allocation gate. These are execution bounds, not a claim that every H-Ar
 system has a qualified total force. A resource or compiler precondition that
 fails produces an explicit item failure rather than an incomplete total.
 

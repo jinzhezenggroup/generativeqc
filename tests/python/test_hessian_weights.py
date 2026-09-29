@@ -13,7 +13,7 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     two_electron_energy,
     two_electron_weight,
     weight_energy,

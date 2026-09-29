@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_ENERGY_FORCE_EXECUTION_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ENERGY_FORCE_EXECUTION_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_ENERGY_FORCE_EXECUTION_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ENERGY_FORCE_EXECUTION_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -20,7 +20,7 @@
 #include "backends/cuda/gfn2_scc_potential.cuh"
 #include "backends/cuda/gfn2_total_energy.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Stable execution-level mapping of failures from the composed device stages. */
 enum class Gfn2EnergyForceExecutionDeviceError : std::uint32_t {
@@ -237,6 +237,6 @@ cudaError_t execute_gfn2_energy_force_cuda(
     const Gfn2EnergyForceExecutionDeviceDiagnostics& diagnostics,
     const Gfn2GeometryEpochConsumerDevice& geometry, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_ENERGY_FORCE_EXECUTION_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ENERGY_FORCE_EXECUTION_CUH

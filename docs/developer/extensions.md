@@ -1,6 +1,6 @@
 # Programmable extension API
 
-`vibeqc.extensions` is the public, versioned construction surface for advanced
+`generativeqc.extensions` is the public, versioned construction surface for advanced
 users who need to describe supported quantum-chemistry computations without
 writing backend-specific CUDA or C++.
 
@@ -9,7 +9,7 @@ scientific specs and canonical IR. Built-ins may be AOT-compiled for release;
 advanced extensions may explicitly opt into JIT, but AOT/JIT must not change the
 method's scientific identity.
 
-VibeQC uses a **single-wheel** model. The compiler may ship with the normal
+GenerativeQC uses a **single-wheel** model. The compiler may ship with the normal
 package so advanced capabilities are available without a second distribution.
 The important boundary is activation: ordinary built-in calculations use
 AOT/native artifacts and must not invoke code emission, compiler subprocesses,
@@ -19,7 +19,7 @@ explicit on-demand capabilities and may require such a toolchain when requested.
 ## XC and method composition
 
 ```python
-from vibeqc.extensions import method, xc
+from generativeqc.extensions import method, xc
 
 my_xc = xc.compose(
     "my-pbe0",
@@ -42,7 +42,7 @@ available.
 
 ## TensorIR
 
-`vibeqc.extensions.tensor` exposes a curated backend-neutral TensorIR subset:
+`generativeqc.extensions.tensor` exposes a curated backend-neutral TensorIR subset:
 typed indices/tensors, immutable programs, serialization, optimization, AD and
 the interpreter. Advanced users may explicitly request the first public native
 compilation slice with `tensor.compile(program, target="cpu", mode="jit")`.

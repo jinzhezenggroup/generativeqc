@@ -8,9 +8,9 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from vibeqc import _cpu_force_resources, _dft_gradient, _stationary_cpu, ecp
-from vibeqc.batch import PreparedBatch
-from vibeqc_compiler import dft
+from generativeqc import _cpu_force_resources, _dft_gradient, _stationary_cpu, ecp
+from generativeqc.batch import PreparedBatch
+from generativeqc_compiler import dft
 
 if TYPE_CHECKING:
     from typing_extensions import Self

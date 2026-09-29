@@ -5,16 +5,16 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     NativeRHFState,
     analytic_hessian,
     cphf_relaxation,
     rhf_hvp,
 )
-from tools.vibeqc_hessian.directional import directional_rhf_response
-from tools.vibeqc_hessian.first_order import generated_rhf_relaxation_contraction
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_hessian.directional import directional_rhf_response
+from tools.generativeqc_hessian.first_order import generated_rhf_relaxation_contraction
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 
 @pytest.fixture(scope="module")
@@ -92,7 +92,7 @@ def test_hvp_bilinear_symmetry_without_posthoc_symmetrization(
 def test_hvp_matches_three_step_reconverged_gradient_difference(
     h2_case: typing.Any,
 ) -> None:
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     state, v, _, _ = h2_case
     expected = rhf_hvp(state, v).value
@@ -138,7 +138,7 @@ def test_relaxation_is_required_for_complete_hvp(h2_case: typing.Any) -> None:
 def test_hvp_path_does_not_materialize_dense_hessian_or_coordinate_sources(
     h2_case: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from tools.vibeqc_hessian import analytic, first_order
+    from tools.generativeqc_hessian import analytic, first_order
 
     state, v, _, _ = h2_case
 

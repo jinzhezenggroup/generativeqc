@@ -6,9 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common import paths as common_paths
-from vibeqc_compiler.common.paths import source_hashes
-from vibeqc_compiler.method import stationary_cuda
+from generativeqc_compiler.common import paths as common_paths
+from generativeqc_compiler.common.paths import source_hashes
+from generativeqc_compiler.method import stationary_cuda
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -20,7 +20,7 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
     if cmake is None:
         pytest.skip("CMake is required for dependency evaluation")
     tree = ast.parse(
-        (ROOT / "python/vibeqc_compiler/method/stationary_cuda.py").read_text()
+        (ROOT / "python/generativeqc_compiler/method/stationary_cuda.py").read_text()
     )
     assets = next(
         ast.literal_eval(node.value)
@@ -32,23 +32,23 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
         )
     )
     expected = source_hashes("common", "integral", "xc", "dft", assets=assets)
-    workflow = (ROOT / "cmake/VibeQCCuda.cmake").read_text()
-    selection = workflow.split("set(_vibeqc_stationary_contract_assets", 1)[1]
+    workflow = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
+    selection = workflow.split("set(_generativeqc_stationary_contract_assets", 1)[1]
     selection = (
-        "set(_vibeqc_stationary_contract_assets"
+        "set(_generativeqc_stationary_contract_assets"
         + selection.split("endforeach()", 1)[0]
         + "endforeach()"
     )
-    unrelated = ("python/vibeqc_compiler/tensor/ir.py", "tools/unrelated.py")
+    unrelated = ("python/generativeqc_compiler/tensor/ir.py", "tools/unrelated.py")
     entries = "\n".join(f'  "{path}"' for path in (*expected, *unrelated))
     output = tmp_path / "dependencies.txt"
     script = tmp_path / "evaluate.cmake"
     script.write_text(
         "cmake_minimum_required(VERSION 3.25)\n"
         f'set(CMAKE_CURRENT_SOURCE_DIR "{ROOT.as_posix()}")\n'
-        f"set(_vibeqc_identity_inputs\n{entries}\n)\n"
+        f"set(_generativeqc_identity_inputs\n{entries}\n)\n"
         + selection
-        + f'\nfile(WRITE "{output.as_posix()}" "${{_vibeqc_stationary_contract_inputs}}")\n'
+        + f'\nfile(WRITE "{output.as_posix()}" "${{_generativeqc_stationary_contract_inputs}}")\n'
     )
     subprocess.run(
         [cmake, "-P", str(script)], check=True, capture_output=True, timeout=20
@@ -57,7 +57,7 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
         Path(p).relative_to(ROOT).as_posix() for p in output.read_text().split(";")
     }
     assert actual == set(expected)
-    assert 'OUTPUTS "${_vibeqc_stationary_manifest}"' in workflow
+    assert 'OUTPUTS "${_generativeqc_stationary_manifest}"' in workflow
     assert (
         'GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/write_stationary_aot_manifest.py"'
         in workflow

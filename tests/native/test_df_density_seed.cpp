@@ -18,8 +18,8 @@ namespace {
 void require(bool value, const char* message) {
   if (!value) throw std::runtime_error(message);
 }
-void check(vibeqc_status status, const std::string& detail) {
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void check(generativeqc_status status, const std::string& detail) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 void cuda_check(cudaError_t status) {
   if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
@@ -28,12 +28,12 @@ void cuda_check(cudaError_t status) {
 
 int main() {
   if (!std::getenv("SLURM_JOB_ID")) return 77;
-  using namespace vibeqc::scf;
-  using namespace vibeqc::scf::cuda_df;
+  using namespace generativeqc::scf;
+  using namespace generativeqc::scf::cuda_df;
   try {
     require(std::getenv("SLURM_JOB_ID"), "density seed test requires Slurm");
-    (void)setenv("VIBEQC_DF_EXCHANGE", "occupied", 1);
-    (void)setenv("VIBEQC_DF_SEED_EXCHANGE", "dense", 1);
+    (void)setenv("GENERATIVEQC_DF_EXCHANGE", "occupied", 1);
+    (void)setenv("GENERATIVEQC_DF_SEED_EXCHANGE", "dense", 1);
     constexpr std::size_t n = 8, a = 5, capacity = 2;
     std::vector<double> metric(a * a), b(n * n * a), h(n * n), x(n * n), d(n * n);
     for (std::size_t q = 0; q < a; ++q) metric[q * a + q] = 1;
@@ -101,7 +101,7 @@ int main() {
       }
       std::vector<double> j, dense;
       check(execute_cuda_density_fitting_rhf_jk(raw, d, j, dense, detail), detail);
-      (void)setenv("VIBEQC_DF_SEED_EXCHANGE", "factor", 1);
+      (void)setenv("GENERATIVEQC_DF_SEED_EXCHANGE", "factor", 1);
       check(reset_scf_factors(*raw, state, detail), detail);
       check(build_scf_occupied_jk(*raw, state, state.d_density, nullptr, false, detail), detail);
       require(state.density_seed_used == expected, "seed fallback did not execute expected branch");
@@ -151,7 +151,7 @@ int main() {
             detail);
       require(records[0].iterations == 1 && !records[0].converged, "seed exceeded iteration limit");
     }
-    (void)setenv("VIBEQC_DF_FINAL_EXCHANGE", "occupied", 1);
+    (void)setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "occupied", 1);
     check(run_cuda_density_fitting_rhf_device_scf(raw, h, x, final, {capacity}, {0}, 100, 1e-12,
                                                   1e-10, d, records, detail),
           detail);
@@ -170,15 +170,15 @@ int main() {
       require(std::abs(actual_k[k] - expected_k[k]) < 1e-12, "final retained K differs from dense");
       require(std::abs(actual_j[k] - expected_j[k]) < 1e-12, "final retained J differs from dense");
     }
-    (void)setenv("VIBEQC_DF_FINAL_EXCHANGE", "auto", 1);
+    (void)setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "auto", 1);
     check(try_cuda_density_fitting_final_rhf_jk(raw, token, d, actual_j, actual_k, used, detail),
           detail);
     require(used, "automatic final K rejected a profitable resident RHF workload");
-    (void)setenv("VIBEQC_DF_FINAL_EXCHANGE", "dense", 1);
+    (void)setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "dense", 1);
     check(try_cuda_density_fitting_final_rhf_jk(raw, token, d, actual_j, actual_k, used, detail),
           detail);
     require(!used, "explicit dense final K reused an occupied factor");
-    (void)setenv("VIBEQC_DF_FINAL_EXCHANGE", "occupied", 1);
+    (void)setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "occupied", 1);
     auto changed = d;
     changed[0] += 1e-14;
     check(try_cuda_density_fitting_final_rhf_jk(raw, token, changed, actual_j, actual_k, used,

@@ -25,16 +25,16 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from vibeqc_compiler.common.provenance import atomic_json, canonical_hash
-from vibeqc_compiler.xc.bulk_runtime import PRODUCTION_DENSITY_CANDIDATE_DOMAIN
-from vibeqc_compiler.xc.libxc_bulk_capabilities import (
+from generativeqc_compiler.common.provenance import atomic_json, canonical_hash
+from generativeqc_compiler.xc.bulk_runtime import PRODUCTION_DENSITY_CANDIDATE_DOMAIN
+from generativeqc_compiler.xc.libxc_bulk_capabilities import (
     BulkFunctionalCapability,
     available_capabilities,
 )
 
 from tools.qualify_libxc_production_domain import qualify_functional
 
-CATALOG_CAMPAIGN_SCHEMA = "vibeqc.libxc-production-domain-catalog-campaign/v1"
+CATALOG_CAMPAIGN_SCHEMA = "generativeqc.libxc-production-domain-catalog-campaign/v1"
 CATALOG_ROW_STATUSES = (
     "pass",
     "fail",

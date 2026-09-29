@@ -10,7 +10,7 @@
 #include "dft/dispersion/d4_reference.hpp"
 
 namespace d4_tests {
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 struct Molecule {
   std::vector<std::int32_t> z;
   std::vector<double> xyz, q;

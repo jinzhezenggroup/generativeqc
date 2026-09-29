@@ -2,7 +2,7 @@
   "baseline_revision": "2414c57dbc7a11c7cd33e3f81fad333be44422e4",
   "generator_abi": 1,
   "manifest_schema": 2,
-  "manifest_sha256": "b1bd53203ab9205b2e99de73037d1ff233e4e30c644e402aa2b3d90d2e29bded",
+  "manifest_sha256": "e9f7e4fb37bfaa1a527b1eef6e3370a7f493ba63d4ce2f51f08526be812359e3",
   "architectures": [
     "sm_120",
     "sm_90"
@@ -507,16 +507,16 @@
     ]
   ],
   "artifacts": {
-    "sm_90/vibeqc_generated_shell_sm90_shard_0.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
-    "sm_90/vibeqc_generated_shell_sm90_shard_1.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
-    "sm_90/vibeqc_generated_shell_sm90_shard_2.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
-    "sm_90/vibeqc_generated_shell_sm90_shard_3.cu": "6317922732a5d7a6c03d19c1482ed05119d2008f87b3ec76573ce92acf2ad809",
-    "sm_120/vibeqc_generated_shell_sm120_shard_0.cu": "886fe97996429c008e5eb1b5132400ac5d0db204f4348b600d8e2ae525eb5323",
-    "sm_120/vibeqc_generated_shell_sm120_shard_1.cu": "dba2910861ae335551dd09592e64385e9cd2c12a7d9a19e768a2890fd5f97dbb",
-    "sm_120/vibeqc_generated_shell_sm120_shard_2.cu": "45a8ad80e8aba9134cb1f102aa34463115384b9ac8f2635838bb3ebfee64acec",
-    "sm_120/vibeqc_generated_shell_sm120_shard_3.cu": "12734e79dab76ef4ba756ced057310a2a2a40bd264cfbceadac050336d8d8ca7",
-    "vibeqc_generated_shell_registry.hpp": "a6aa314c13d80edc4c3d5cc0df7db25236efa9779bdd20b505ee6f5d68f41bcf",
-    "vibeqc_generated_shell_registry.cu": "e4c5bda3269b46d4f0c785c81b3c704fd09875d689ac9d8ee0f450b257ad2c78"
+    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "0246798cc90e49839b56c0b598f24f5c73b9093f8a74cd4e8fafe86b7ae608cf",
+    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "0246798cc90e49839b56c0b598f24f5c73b9093f8a74cd4e8fafe86b7ae608cf",
+    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "0246798cc90e49839b56c0b598f24f5c73b9093f8a74cd4e8fafe86b7ae608cf",
+    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "0246798cc90e49839b56c0b598f24f5c73b9093f8a74cd4e8fafe86b7ae608cf",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "eae2a8344970c28a285161db283e88ba85bdab118a7d6f272315484730ee09a5",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "212b995540e45cc21ffc808bafb5f1559b799673b090772db279da6725225739",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "4086b074435e8947269cbdd9f5a151e47e961ae8206873cbd473d12df70f7d13",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "bb8082a224b165f8281281e69c4e28651a145d32b225f4671eb472078f14d0dc",
+    "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
+    "generativeqc_generated_shell_registry.cu": "bd55fd42760eb1be4e2bbc350f8a5e07351d3c535e829b2e7331c2d887cbc17f"
   },
   "artifact_corrections": [
     {
@@ -524,15 +524,15 @@
       "source_revision": "2cf3dec31100b0cda0b5267dc4364f75ccad9682",
       "reason": "Expose the selected packed Fock queue-claim width as registry metadata so runtime grids count claims rather than individual tasks. Only the registry source fingerprint changes; all eight sm_120/sm_90 CUDA shards, the registry header, manifest and shell catalog remain byte-identical. Both single- and multiple-profile metadata paths and explicit Fock schedule overrides have dedicated tests.",
       "paths": [
-        "vibeqc_generated_shell_registry.cu"
+        "generativeqc_generated_shell_registry.cu"
       ]
     },
     {
       "issue": 136,
       "reason": "Value-only Coulomb tables use their pruned IR stride; common geometry scratch retains the force-order extent. Verified exact PPPS/PSPS native objects against independent RHF/UHF direct/persistent fixtures.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu"
       ]
     },
     {
@@ -540,48 +540,48 @@
       "source_revision": "2193132a8eb6ae1ec9ab2f511cb10db7c490a592",
       "reason": "Profiling-only FP64/FP32 quartet counters extend the generated streaming launch parameters. The four sm_120 shards and launch registry change; the shell catalog, manifest, portable sm_90 shards, and public registry header remain identical.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu",
-        "vibeqc_generated_shell_registry.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
       ]
     },
     {
       "issue": 356,
       "reason": "Compile the sm_120 ssss force consumer as an opt-in endpoint candidate. The manifest, ssss shard, public registry header, and launch registry change intentionally; runtime keeps the tuned native force path as default until #356's complete endpoint gate passes.",
       "paths": [
-        "python/vibeqc_compiler/integral/production_shell_classes.json",
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "vibeqc_generated_shell_registry.hpp",
-        "vibeqc_generated_shell_registry.cu"
+        "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "generativeqc_generated_shell_registry.hpp",
+        "generativeqc_generated_shell_registry.cu"
       ]
     },
     {
       "issue": 673,
       "reason": "Prune proven-dead non-mixed streaming Fock internal arguments while preserving the stable public launch wrapper ABI. The four sm_120 generated shards change intentionally; portable sm_90 shards and registry artifacts remain unchanged.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     },
     {
       "issue": 41,
       "reason": "Compiler-derived scalar Rys2 force and subset/Wick Fock companion schedules replace the redundant per-class manifest payloads. The manifest bytes intentionally change; all ten regenerated sm_120/sm_90 shards and registry artifacts are byte-identical to the existing baseline, and the shell catalog is unchanged. Only the manifest fingerprint is refreshed.",
       "paths": [
-        "python/vibeqc_compiler/integral/production_shell_classes.json"
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
       ]
     },
     {
       "issue": 1077,
       "reason": "Typed HartreeFock/Coulomb task consumer deliberately extends generated scatter and streaming task binding. The four sm_120 shards change; portable sm_90 shards, registry and shell catalog remain unchanged. Independent dense scatter and allocated through-d J / through-f fallback matrix tests pass.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     },
     {
@@ -589,20 +589,20 @@
       "source_revision": "5f9aa5d7944f1af39bc1e8f0e67923d0e9dd3d13",
       "reason": "Binary-search the monotonic Schwarz/density tail once per streaming row instead of linearly probing screened ket blocks. The four tuned sm_120 shards change intentionally; portable sm_90 shards, registry artifacts, manifest and shell catalog remain byte-identical.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     },
     {
       "issue": 1187,
       "reason": "Add a typed full-range Exchange value consumer beside existing HartreeFock/Coulomb generated shell consumers. The four tuned sm_120 shards change intentionally because shared scatter and streaming task emission now carry K-only semantics; portable sm_90 shards, registry artifacts, manifest and shell catalog remain unchanged. Independent dense RHF/UHF HF/J-only/K-only contractions and CUDA AOT compilation are required gates.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     },
     {
@@ -610,10 +610,21 @@
       "source_revision": "9e599a80f4258b425918c303f69c39d663f46814",
       "reason": "Lower the mixed-Fock density-by-integral product to FP32 while retaining FP64 density/Fock storage, global accumulation, scale application, and the ordinary FP64 evaluation order. Rebasing preserves the current HartreeFock/Coulomb/Exchange J-only/K-only scatter semantics. The four tuned sm_120 shards change intentionally; portable sm_90 shards, registry artifacts, manifest and shell catalog remain byte-identical. Dense RHF/UHF HF/J-only/K-only scatter coverage, the finite FP64 overflow regression, production CUDA AOT/runtime checks, and RTX 5090 qualification are retained.",
       "paths": [
-        "sm_120/vibeqc_generated_shell_sm120_shard_0.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_1.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_2.cu",
-        "sm_120/vibeqc_generated_shell_sm120_shard_3.cu"
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 1477,
+      "source_revision": "9101d05bdb0e517764714ff4ef993a4abd782c69",
+      "reason": "Expose method-neutral Coulomb/exchange coefficients in the compiler-owned Direct force contraction while preserving the historical HF wrapper coefficients. The four tuned sm_120 shards change intentionally because they embed the shared force helper; portable sm_90 shards, registry artifacts, manifest and shell catalog remain byte-identical.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     }
   ]

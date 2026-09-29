@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -19,7 +19,7 @@ def test_auto_requires_rank_reference_residency_and_reservation(
     """Query a shape-only plan; no large tensors or SCF solve are necessary."""
     assert os.environ.get("SLURM_JOB_ID")
     root = Path(__file__).resolve().parents[2]
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     source = tmp_path / "selector.cpp"
     source.write_text(
         r"""
@@ -30,7 +30,7 @@ def test_auto_requires_rank_reference_residency_and_reservation(
 #include "scf/df_exchange_policy.hpp"
 #include "scf/density_fitting.hpp"
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   CudaDensityFittingJkPlan p;
   p.device_id=-1; p.nbf=768; p.naux=768; p.batch_size=1;
   p.row_tile=768; p.auxiliary_tile=768; p.occupied_scf_reserved=true;
@@ -45,7 +45,7 @@ int main() {
     std::string detail;
     std::vector<std::int32_t> alpha{rank}, beta=uhf ? alpha : std::vector<std::int32_t>{};
     const auto status=cuda_df::occupied_scf_policy(p, enabled, detail, alpha, beta);
-    if(status!=VIBEQC_STATUS_SUCCESS || enabled!=expected)
+    if(status!=GENERATIVEQC_STATUS_SUCCESS || enabled!=expected)
       throw std::runtime_error("nbf=" + std::to_string(p.nbf) +
           " rank=" + std::to_string(rank) +
           " capacity=" + std::to_string(p.value_storage.rank_capacity) +
@@ -68,7 +68,7 @@ int main() {
     p.value_storage={};
     p.projection_capacity=p.nbf*p.nbf*p.naux;
   };
-  setenv("VIBEQC_DF_EXCHANGE", "auto", 1);
+  setenv("GENERATIVEQC_DF_EXCHANGE", "auto", 1);
   check(true);
   check_packed_capacity(160);
   check(true, 159); check(true, 161); check(false, 160, true);
@@ -113,14 +113,14 @@ int main() {
   p.integral_source=reinterpret_cast<CudaDensityFittingIntegralSource*>(1);
   check(false); p.integral_source=nullptr;
   p.occupied_scf_reserved=false; check(false); p.occupied_scf_reserved=true;
-  setenv("VIBEQC_DF_EXCHANGE", "dense", 1); check(false);
-  setenv("VIBEQC_DF_EXCHANGE", "occupied", 1); check(true, 159, true);
+  setenv("GENERATIVEQC_DF_EXCHANGE", "dense", 1); check(false);
+  setenv("GENERATIVEQC_DF_EXCHANGE", "occupied", 1); check(true, 159, true);
 
   // Real allocation must preserve the method-aware planner's decision. The
   // rank-zero hint denotes UHF/unknown reference, not a rank-zero RHF guess.
   std::vector<double> metric(64, 0), raw(512, 0);
   for (int i=0; i<8; ++i) metric[i*8+i]=1;
-  setenv("VIBEQC_DF_EXCHANGE", "dense", 1);
+  setenv("GENERATIVEQC_DF_EXCHANGE", "dense", 1);
   const auto dense_budget=plan_density_fitting_tiles(1,8,8,2,0).peak_workspace_bytes;
   const auto allocated = [&](std::size_t hint, std::size_t budget, bool expected) {
     const auto tile=plan_density_fitting_tiles(1,8,8,2,budget,0,false,hint);
@@ -132,7 +132,7 @@ int main() {
     const auto status=create_cuda_density_fitting_jk_plan_tiled(
         0,1,8,8,metric,raw,1e-10,tile.auxiliary_tile,tile.ao_pair_tile,
         &actual,diagnostics,detail,tile.automatic_rhf_rank);
-    if (status!=VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    if (status!=GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     const bool reserved=actual->occupied_scf_reserved;
     const auto peak=diagnostics[0].peak_device_bytes;
     destroy_cuda_density_fitting_jk_plan(actual);
@@ -140,7 +140,7 @@ int main() {
     return peak;
   };
   const auto dense_peak=allocated(2,dense_budget,false);
-  setenv("VIBEQC_DF_EXCHANGE", "auto", 1);
+  setenv("GENERATIVEQC_DF_EXCHANGE", "auto", 1);
   for (std::size_t hint : {0U,6U,2U})
     if(allocated(hint,dense_budget,false)!=dense_peak)
       throw std::runtime_error("ineligible or constrained auto changed dense reservation");

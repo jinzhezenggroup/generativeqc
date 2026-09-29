@@ -6,7 +6,7 @@
 #include <limits>
 #include <vector>
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Physical energy terms, never the half-trace of an XC-containing Fock. */
 struct EnergyComponents {
@@ -65,4 +65,4 @@ struct ScfDiagnostic {
   IncrementalXcDiagnostic incremental_xc;
   std::vector<ScfIteration> history;
 };
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

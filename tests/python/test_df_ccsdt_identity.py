@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 from test_df_ccsdt_oracle import _problem
 
-from tools.vibeqc_cc.df_ccsdt_oracle import (
+from tools.generativeqc_cc.df_ccsdt_oracle import (
     DenseDFOracleProvider,
     dense_df_oracle_from_three_index,
     run_dense_df_ccsdt_oracle,

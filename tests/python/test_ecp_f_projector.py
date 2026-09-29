@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, ResourceBudget
+from generativeqc.ecp import ecp_integrals
 from test_ecp import detached_native, detached_reference, fixture, reference
-from vibeqc import Calculator, ResourceBudget
-from vibeqc.ecp import ecp_integrals
 
 
 def require_device(device: typing.Any) -> None:
-    if device == "cuda" and os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1":
         pytest.skip("requires an allocated CUDA device")
 
 

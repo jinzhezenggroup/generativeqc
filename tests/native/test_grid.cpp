@@ -11,13 +11,14 @@
 
 int main() {
   try {
-    vibeqc::core::System system;
+    generativeqc::core::System system;
     system.atoms = {{2, {0, 0, 0}}};
     system.shells = {{0, 0, {{0.7, 1}}}};
     std::string detail;
-    if (vibeqc::molecule::validate_and_normalize(system, detail) != VIBEQC_STATUS_SUCCESS)
+    if (generativeqc::molecule::validate_and_normalize(system, detail) !=
+        GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail);
-    vibeqc::dft::AoBasis basis(system);
+    generativeqc::dft::AoBasis basis(system);
     // Destroy the original topology to test that the evaluator owns its state.
     system.atoms.clear();
     system.shells.clear();
@@ -28,7 +29,7 @@ int main() {
     const double value = std::pow(2 * a / std::numbers::pi, 0.75) * std::exp(-a * 0.14);
     std::size_t index = 0;
     for (unsigned degree = 0; degree <= 3; ++degree) {
-      for (const auto& d : vibeqc::molecule::cartesian_components(degree)) {
+      for (const auto& d : generativeqc::molecule::cartesian_components(degree)) {
         double exact = value;
         for (unsigned k = 0; k < 3; ++k) {
           const double x = point[k];

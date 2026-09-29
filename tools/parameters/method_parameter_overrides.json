@@ -14,7 +14,7 @@
     "pair_cutoff": 60,
     "atm_cutoff": 40,
     "charge_cn_cutoff": 25,
-    "table_sha256": "f0caaa42a0604d2d0c429e34eb84f5078769058ab02cccc55ae492746c6bc34c",
+    "table_sha256": "6e3915221b62f5125c6f9d193689160a8d490be7af262cd4a51e7f1853148ff8",
     "charge_parameter_sha256": "02b8bee49c10b4c31914caf149d9f58164e58d6dc7ae2ab21e9d12f5bc22797a"
   },
   "d4_profile_overrides": {
@@ -65,7 +65,7 @@
         "parameter_sha256": "3edc7b569cff3cf47dffd06395de02b3d45aabb4d4be368debf87fbafd56fa4e",
         "implementation_sha256": "c1d69f640c9a7498618998a97b40a1629554ede31001ceab3060dc2f84c8be1e",
         "vdw_radii_sha256": "3f08b5755bfd643d6dbb56fd544c117145473a4b27138978a25d0475af985575",
-        "data_sha256": "c1cede24b2527a2b688981b651d91da7206d8da1a223c3f217a86800c47eded2",
+        "data_sha256": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65",
         "source": "dftd3/simple-dftd3",
         "source_revision": "41d5a07b98ce15e97bec7a1815869725f6c7b0c2",
         "license": "LGPL-3.0-or-later",

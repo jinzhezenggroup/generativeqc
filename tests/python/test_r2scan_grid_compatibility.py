@@ -1,9 +1,9 @@
 """New LDA/PBE grid defaults must preserve existing r2SCAN admission."""
 
 import pytest
-from vibeqc import KsOptions
-from vibeqc.ks import resolve_ks_options
-from vibeqc_compiler.dft.grid import GridPolicy, GridSpec
+from generativeqc import KsOptions
+from generativeqc.ks import resolve_ks_options
+from generativeqc_compiler.dft.grid import GridPolicy, GridSpec
 
 
 @pytest.mark.parametrize("method", ["r2scan-rks", "r2scan-uks"])

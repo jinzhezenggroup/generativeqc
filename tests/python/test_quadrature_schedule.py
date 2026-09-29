@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 
 def test_codegen_has_no_runtime_or_numpy_dependency(tmp_path: Path) -> None:
@@ -25,7 +25,7 @@ def test_codegen_has_no_runtime_or_numpy_dependency(tmp_path: Path) -> None:
         capture_output=True,
     )
     assert output.read_text() == emit_quadrature_cuda()
-    from vibeqc_compiler.xc import grid_response, grid_response_ir
+    from generativeqc_compiler.xc import grid_response, grid_response_ir
 
     assert grid_response.grid_response_program is grid_response_ir.grid_response_program
     assert (
@@ -189,7 +189,7 @@ def test_emitted_layout_counts_actual_buffer_shapes_without_cuda(
 #include "quadrature.cuh"
 #include <iostream>
 int main() {
-  using namespace vibeqc::generated::quadrature;
+  using namespace generativeqc::generated::quadrature;
   for (size_t atoms : {1, 3, 24, 48, 96})
     for (size_t points : {1, 4095, 4096, 4097, 2654208}) {
       const auto l = layout(atoms, points);

@@ -1,6 +1,6 @@
 # TensorIR: typed equations and a CPU reference interpreter
 
-`python/vibeqc_compiler/tensor/` implements the CG08 foundation in issue #145. It describes
+`python/generativeqc_compiler/tensor/` implements the CG08 foundation in issue #145. It describes
 real tensor equations, validates them before execution, and replays them with
 NumPy on CPU. It includes independent loop references for a matrix product, a
 spin-orbital MP2-like energy fragment, one virtual Fock contribution to a CC-like
@@ -78,7 +78,7 @@ Run this from the repository root:
 
 ```python
 import numpy as np
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -200,7 +200,7 @@ and metric.
 
 ## Derivative programs (#151)
 
-`python/vibeqc_compiler/tensor/autodiff.py` provides a CPU reference for JVP (`jvp`) and
+`python/generativeqc_compiler/tensor/autodiff.py` provides a CPU reference for JVP (`jvp`) and
 matrix-free VJP (`vjp`) with an adjoint dot test (`dot_test`). It covers every
 primitive, preserves exact rational coefficients, accumulates multiple
 consumers, and rejects unsupported or non-differentiable requests. The
@@ -215,7 +215,7 @@ and builds only active operand adjoints, so an unrequested diagonal projection
 cannot consume the generation element budget. Repeated einsum labels that
 survive in the output retain their cotangent axis in the diagonal embedding.
 
-`python/vibeqc_compiler/tensor/ad_program.py` turns the same rules into demand-driven,
+`python/generativeqc_compiler/tensor/ad_program.py` turns the same rules into demand-driven,
 backend-independent TensorIR `Program` DAGs:
 
 - `linearize(program, tangent_inputs, outputs=..., packed=...)` generates
@@ -267,7 +267,7 @@ subgraphs. The replacement must reproduce the original dtype result bit for
 bit; cancellation, overflow, signed-zero changes, or invalid division cannot
 be hidden by rational simplification. Array constant folding is deferred.
 
-The `vibeqc.tensor` schema and primitive definitions are versioned independently.
+The `generativeqc.tensor` schema and primitive definitions are versioned independently.
 Replay validates every node, shape, attribute, dependency, convention, logical
 hash, and stable debug name. It rejects unknown versions/primitives, forward
 references, duplicate JSON keys, and incompatible declarations. Serialization
@@ -325,7 +325,7 @@ python tools/tensor_ad_examples.py --mode compile \
   --output /tmp/tensor-ad-compile
 ```
 
-The runner uses the existing `vibeqc.validation` schema and controlled FP64
+The runner uses the existing `generativeqc.validation` schema and controlled FP64
 `atol=1e-11, rtol=1e-10` gates from #138. It checks original execution, JSON
 replay, each rewrite, and optimized replay against independent loops. Exported
 examples include actual inputs, reference values, the program, packing map,

@@ -33,10 +33,10 @@ import numpy as np
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     GATES,
     block_error,
     canonical_hash,
@@ -44,7 +44,7 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -59,12 +59,12 @@ from vibeqc_compiler.tensor import (
     transpose_program,
     vjp,
 )
-from vibeqc_compiler.tensor.cuda_execute import (
+from generativeqc_compiler.tensor.cuda_execute import (
     PreparedCuda,
     compile_cuda,
     tensor_source_identity,
 )
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -213,7 +213,7 @@ def _recomputation_count(plan: typing.Any) -> typing.Any:
 def run(args: typing.Any) -> typing.Any:
     nvcc = args.nvcc or find_nvcc()
     if nvcc is None:
-        raise ValueError("provide --nvcc or VIBEQC_NVCC")
+        raise ValueError("provide --nvcc or GENERATIVEQC_NVCC")
     compiler = CudaCompilerAdapter(
         nvcc, cuda_target_info(args.architecture), args.compile_timeout
     )

@@ -28,34 +28,34 @@ _PREFIX = r"""
 #include <thread>
 #include <optional>
 #include <stdexcept>
-using vibeqc_xtb_status_t=int;
-constexpr int VIBEQC_XTB_STATUS_SUCCESS=0,VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED=1,
- VIBEQC_XTB_STATUS_SCC_NOT_CONVERGED=2,VIBEQC_XTB_STATUS_NOT_IMPLEMENTED=3;
-constexpr int VIBEQC_XTB_API_VERSION=1,VIBEQC_XTB_MEMORY_HOST=0,
- VIBEQC_XTB_MODEL_GFN2_XTB=2,VIBEQC_XTB_COMPUTE_ENERGY=1,
- VIBEQC_XTB_COMPUTE_FORCES=2,VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES=4,
- VIBEQC_XTB_SCC_START_FRESH=1,VIBEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN=1;
-constexpr double VIBEQC_XTB_DEFAULT_ELECTRONIC_TEMPERATURE=300;
-struct vibeqc_xtb_const_buffer_t {const void* data;std::size_t bytes;int location;unsigned reserved;};
-struct vibeqc_xtb_buffer_t {void* data;std::size_t bytes;int location;unsigned reserved;};
-template<class T> vibeqc_xtb_const_buffer_t input_buffer(std::span<const T> x) {
- return {x.empty()?nullptr:x.data(),x.size_bytes(),VIBEQC_XTB_MEMORY_HOST,0u};
+using generativeqc_xtb_status_t=int;
+constexpr int GENERATIVEQC_XTB_STATUS_SUCCESS=0,GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED=1,
+ GENERATIVEQC_XTB_STATUS_SCC_NOT_CONVERGED=2,GENERATIVEQC_XTB_STATUS_NOT_IMPLEMENTED=3;
+constexpr int GENERATIVEQC_XTB_API_VERSION=1,GENERATIVEQC_XTB_MEMORY_HOST=0,
+ GENERATIVEQC_XTB_MODEL_GFN2_XTB=2,GENERATIVEQC_XTB_COMPUTE_ENERGY=1,
+ GENERATIVEQC_XTB_COMPUTE_FORCES=2,GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES=4,
+ GENERATIVEQC_XTB_SCC_START_FRESH=1,GENERATIVEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN=1;
+constexpr double GENERATIVEQC_XTB_DEFAULT_ELECTRONIC_TEMPERATURE=300;
+struct generativeqc_xtb_const_buffer_t {const void* data;std::size_t bytes;int location;unsigned reserved;};
+struct generativeqc_xtb_buffer_t {void* data;std::size_t bytes;int location;unsigned reserved;};
+template<class T> generativeqc_xtb_const_buffer_t input_buffer(std::span<const T> x) {
+ return {x.empty()?nullptr:x.data(),x.size_bytes(),GENERATIVEQC_XTB_MEMORY_HOST,0u};
 }
-template<class T> vibeqc_xtb_buffer_t output_buffer(std::vector<T>& x) {
- return {x.empty()?nullptr:x.data(),x.size()*sizeof(T),VIBEQC_XTB_MEMORY_HOST,0u};
+template<class T> generativeqc_xtb_buffer_t output_buffer(std::vector<T>& x) {
+ return {x.empty()?nullptr:x.data(),x.size()*sizeof(T),GENERATIVEQC_XTB_MEMORY_HOST,0u};
 }
-struct vibeqc_xtb_batch_t {
+struct generativeqc_xtb_batch_t {
  std::size_t struct_size;unsigned api_version;std::int64_t batch_size,total_atoms;
- vibeqc_xtb_const_buffer_t atom_offsets,atomic_numbers,positions,molecular_charges,unpaired_electrons,spin_channels;
+ generativeqc_xtb_const_buffer_t atom_offsets,atomic_numbers,positions,molecular_charges,unpaired_electrons,spin_channels;
 };
-struct vibeqc_xtb_compute_options_t {
+struct generativeqc_xtb_compute_options_t {
  std::size_t struct_size;unsigned api_version;int model;unsigned flags;
  int max_scc_iterations,scc_start_mode,scc_mixer,scc_mixer_history;
  double charge_tolerance,energy_tolerance,electronic_temperature,scc_mixer_damping;
 };
-struct vibeqc_xtb_batch_result_t {
+struct generativeqc_xtb_batch_result_t {
  std::size_t struct_size;unsigned api_version;
- vibeqc_xtb_buffer_t energies,forces,atomic_charges,scc_iterations,scc_converged,per_system_status;
+ generativeqc_xtb_buffer_t energies,forces,atomic_charges,scc_iterations,scc_converged,per_system_status;
 };
 enum class Gfn2RuntimeBackend : std::uint8_t {kCpu=1,kCuda=2};
 enum class Gfn2RuntimeStatus : std::uint8_t {kSuccess=0,kInvalidArgument,kBackendUnavailable,kNotSupported,kNotImplemented,kAllocationFailed,kNotConverged,kEigensolverFailed,kInternalError};
@@ -74,11 +74,11 @@ struct Gate {
  std::mutex mutex; std::condition_variable condition;
  bool race=false,first=false,second=false,overlap=false;
 } gate;
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 struct Gfn2CpuExecutionCache {std::mutex mutex; int marker=0;};
 struct Gfn2CpuOrbitalSnapshot {int marker=0;};
-int execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,const vibeqc_xtb_batch_t& b,
- const vibeqc_xtb_compute_options_t&,vibeqc_xtb_batch_result_t& out,std::string&) {
+int execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,const generativeqc_xtb_batch_t& b,
+ const generativeqc_xtb_compute_options_t&,generativeqc_xtb_batch_result_t& out,std::string&) {
  const int marker=int(*static_cast<const double*>(b.molecular_charges.data));
  {
   std::lock_guard<std::mutex> lock(cache.mutex);
@@ -97,18 +97,18 @@ int execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,const vibeqc_xtb_ba
    gate.second=true;gate.condition.notify_all();
   }
  }
- return marker==4 ? VIBEQC_XTB_STATUS_NOT_IMPLEMENTED : VIBEQC_XTB_STATUS_SUCCESS;
+ return marker==4 ? GENERATIVEQC_XTB_STATUS_NOT_IMPLEMENTED : GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 int copy_restricted_gfn2_orbital_snapshot_cpu(Gfn2CpuExecutionCache& cache,
  Gfn2CpuOrbitalSnapshot& snapshot,std::string&) {
  std::lock_guard<std::mutex> lock(cache.mutex);
  snapshot.marker=cache.marker;
  if(cache.marker==6)throw std::runtime_error("snapshot allocation injection");
- return cache.marker==3 ? VIBEQC_XTB_STATUS_NOT_IMPLEMENTED : VIBEQC_XTB_STATUS_SUCCESS;
+ return cache.marker==3 ? GENERATIVEQC_XTB_STATUS_NOT_IMPLEMENTED : GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 }
 bool convert_cpu_orbitals(const Gfn2RuntimeRequest&,
- const vibeqc::xtb::detail::Gfn2CpuOrbitalSnapshot& snapshot,Gfn2RuntimeOrbitals& out,std::string&) {
+ const generativeqc::xtb::detail::Gfn2CpuOrbitalSnapshot& snapshot,Gfn2RuntimeOrbitals& out,std::string&) {
  out.marker=snapshot.marker;return snapshot.marker!=5;
 }
 struct Gfn2RuntimeBridge {

@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.xc-integration-reference",
+  "schema": "generativeqc.xc-integration-reference",
   "version": 1,
   "inputs": {
     "name": "h2",
@@ -207,5 +207,5 @@
       "sha256": "f7ddf7ab20a69c6a8eb6d87cdee945f6ef6e3b5d28195acf837cab779c0b3009"
     }
   },
-  "identity": "e4fd02b9d5dcaec5e7409eb487565004df02f6a91a286f2a18a89e474e9c8f58"
+  "identity": "ae4e1e4722d0f233394cb2cdae259f44b5608a3898360e0b5444aa6e4887c785"
 }

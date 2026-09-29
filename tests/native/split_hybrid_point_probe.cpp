@@ -6,34 +6,34 @@
 #include <string>
 #include <vector>
 
-#if VIBEQC_VALIDATE_CUDA
+#if GENERATIVEQC_VALIDATE_CUDA
 #include <cuda_runtime.h>
-#define VIBEQC_PROBE_DEVICE __device__
+#define GENERATIVEQC_PROBE_DEVICE __device__
 #else
 #define __device__
-#define VIBEQC_PROBE_DEVICE
+#define GENERATIVEQC_PROBE_DEVICE
 #endif
 #include "m06_2x_point.cuh"
 #include "mn15_point.cuh"
-#if !VIBEQC_VALIDATE_CUDA
+#if !GENERATIVEQC_VALIDATE_CUDA
 #undef __device__
 #endif
 
-VIBEQC_PROBE_DEVICE void evaluate_point(int code, const double* x, double* y) {
+GENERATIVEQC_PROBE_DEVICE void evaluate_point(int code, const double* x, double* y) {
   if (code == 450) {
     const auto value =
-        vibeqc::dft::generated::m06_2x_device(x[0], x[1], x[2], x[3], x[4], x[5], x[6]);
+        generativeqc::dft::generated::m06_2x_device(x[0], x[1], x[2], x[3], x[4], x[5], x[6]);
     y[0] = value.energy_density;
     for (unsigned i = 0; i < 7; ++i) y[i + 1] = value.feature_derivative[i];
   } else {
     const auto value =
-        vibeqc::dft::generated::mn15_device(x[0], x[1], x[2], x[3], x[4], x[5], x[6]);
+        generativeqc::dft::generated::mn15_device(x[0], x[1], x[2], x[3], x[4], x[5], x[6]);
     y[0] = value.energy_density;
     for (unsigned i = 0; i < 7; ++i) y[i + 1] = value.feature_derivative[i];
   }
 }
 
-#if VIBEQC_VALIDATE_CUDA
+#if GENERATIVEQC_VALIDATE_CUDA
 void check_cuda(cudaError_t status) {
   if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
 }
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     std::ifstream source(argv[3], std::ios::binary);
     if (!source.read(reinterpret_cast<char*>(input.data()), input.size() * sizeof(double)))
       throw std::runtime_error("point input is missing or truncated");
-#if VIBEQC_VALIDATE_CUDA
+#if GENERATIVEQC_VALIDATE_CUDA
     int devices = 0;
     check_cuda(cudaGetDeviceCount(&devices));
     if (devices < 1) throw std::runtime_error("CUDA acceptance requires a real CUDA device");

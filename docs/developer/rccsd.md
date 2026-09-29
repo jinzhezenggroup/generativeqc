@@ -6,7 +6,7 @@ Complete CPU residual/iteration semantics are documented in
 [RCCSD CPU solver](rccsd_bc.md), while the current native/public CUDA execution
 and acceptance boundary is documented in [GPU RCCSD](rccsd_gpu.md).
 
-`tools.vibeqc_cc` provides the internal FP64 CPU scientific facade used for
+`tools.generativeqc_cc` provides the internal FP64 CPU scientific facade used for
 independent equation and solver validation. Public capability is determined by
 the native registry and the generated method table, not by this validation
 facade.
@@ -87,7 +87,7 @@ reference makes F_ov approximately zero without deleting that dependence.
 The inventory expands PySCF 2.14.0 `rccsd.energy`, the T1 part of
 `rccsd.update_amps`, and `rintermediates.cc_Foo/cc_Fvv/cc_Fov`. Source URLs,
 SHA-256 identities, version and Apache-2.0 license are recorded in
-`tools/vibeqc_cc/source_manifest.json`, `NOTICE`, and `LICENSE.pyscf`.
+`tools/generativeqc_cc/source_manifest.json`, `NOTICE`, and `LICENSE.pyscf`.
 The generator verifies installed upstream bytes before producing fixtures.
 This is an audited inventory route, not a pdaggerq generation claim.
 Program logical hashes encode factors, order, symmetry, dimensions and input
@@ -156,7 +156,7 @@ Random cases include unequal occupied/virtual dimensions, nonzero singles,
 pair-symmetric doubles and eightfold symmetric signed ERIs. Fixed PySCF
 references additionally reuse H2, water and LiH from #147 with identical C,
 integrals and Hamiltonian. Native provider tests check those values and run
-fresh VibeQC RHF into the fixed-amplitude facade. The latter is a bridge smoke
+fresh GenerativeQC RHF into the fixed-amplitude facade. The latter is a bridge smoke
 check, not the converged HF→CCSD endpoint required by slice C.
 
 Run from the repository root with `PYTHONPATH=.:python`:
@@ -172,7 +172,7 @@ python -m tools.validate_cc --output /tmp/cc-evidence --references tests/referen
 ```
 
 Generation needs pinned PySCF; ordinary tests consume committed data. Native
-bridge tests require the built CPU library via `VIBEQC_LIBRARY`. Controlled
+bridge tests require the built CPU library via `GENERATIVEQC_LIBRARY`. Controlled
 values are checked per element with `atol=1e-11, rtol=1e-10`, alongside absolute
 energy `<=1e-8` and physical residual `<=1e-9` gates; no older tolerance changes.
 The evidence runner records numerical/representation success only. T2, solver,

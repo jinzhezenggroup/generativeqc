@@ -12,7 +12,7 @@
 #include "scf/reference/mean_field.hpp"
 #include "scf/reference/observation.hpp"
 
-namespace vibeqc::scf::initial_guess {
+namespace generativeqc::scf::initial_guess {
 
 using reference::density_from_orbitals;
 using reference::generalized_eigen;
@@ -172,7 +172,7 @@ Matrix charge_guided_lowdin_density(const core::System& system, const integrals:
       throw std::invalid_argument("charge-guided seed shell references an invalid atom");
     }
     const std::uint64_t angular = shell.angular_momentum;
-    const std::uint64_t count64 = system.basis_representation == VIBEQC_BASIS_SPHERICAL
+    const std::uint64_t count64 = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                                       ? 2u * angular + 1u
                                       : (angular + 1u) * (angular + 2u) / 2u;
     const std::size_t count =
@@ -671,4 +671,4 @@ Matrix prepare_initial_density(const core::System& system, const integrals::Inte
   return density;
 }
 
-}  // namespace vibeqc::scf::initial_guess
+}  // namespace generativeqc::scf::initial_guess

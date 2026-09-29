@@ -55,7 +55,7 @@ def controls(variant: typing.Any, trace: typing.Any = None) -> typing.Any:
     updates.update({name: None for name in TRACE_CONTROLS})
     if trace is not None:
         updates.update(TRACE=str(trace), SHELL_COUNTERS="1")
-    updates = {"VIBEQC_DF_" + name: value for name, value in updates.items()}
+    updates = {"GENERATIVEQC_DF_" + name: value for name, value in updates.items()}
     old = {key: os.environ.get(key) for key in updates}
     try:
         for key, value in updates.items():
@@ -131,12 +131,12 @@ def main() -> None:
     patch = args.source_patch.read_bytes()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     import pyscf
+    from generativeqc import Calculator
     from pyscf import gto, scf
-    from vibeqc import Calculator
 
     case = benchmark_cases()[args.case]
     if args.copies != 1:
-        if not isinstance(case.vibeqc_basis, str) or case.method != "rhf":
+        if not isinstance(case.generativeqc_basis, str) or case.method != "rhf":
             parser.error("replication requires a named-basis closed-shell fixture")
         case = replace(
             case,
@@ -148,7 +148,7 @@ def main() -> None:
             charge=case.charge * args.copies,
             expected_ao_count=None,
         )
-    orbital, cpu_orbital = case.vibeqc_basis, case.pyscf_basis
+    orbital, cpu_orbital = case.generativeqc_basis, case.pyscf_basis
     if args.orbital_basis_file:
         orbital, cpu_orbital = load_comparison_basis(
             args.orbital_basis_file, case, role="orbital", compute_forces=True
@@ -194,7 +194,7 @@ def main() -> None:
         max_iterations=100,
     )
     payload = {
-        "schema": "vibeqc.df_admission_probe.v1",
+        "schema": "generativeqc.df_admission_probe.v1",
         "case": args.case,
         "geometries_bohr": [case.atoms] * args.batch,
         "method": case.method,
@@ -229,7 +229,7 @@ def main() -> None:
         "environment": {
             key: value
             for key, value in os.environ.items()
-            if key.startswith("VIBEQC_")
+            if key.startswith("GENERATIVEQC_")
             or key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
         },
         "variants": {
@@ -307,7 +307,7 @@ def main() -> None:
                 if checkpoint.exists():
                     raise RuntimeError("refusing to overwrite checkpoint")
                 batch.save_checkpoint(checkpoint)
-                from vibeqc.checkpoint import inspect_checkpoint
+                from generativeqc.checkpoint import inspect_checkpoint
 
                 payload["frozen_density_sha256"] = {
                     b["name"]: b["sha256"]

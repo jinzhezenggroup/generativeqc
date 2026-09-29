@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Resolve host spin/precision while retaining compile-time angular dispatch. */
 void dispatch_angular_fock_quartets(
@@ -23,4 +23,4 @@ void dispatch_angular_fock_quartets(
     const double* density, const std::uint8_t* active, double* fock,
     const std::uint64_t* generated_fock_shell_class_mask);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

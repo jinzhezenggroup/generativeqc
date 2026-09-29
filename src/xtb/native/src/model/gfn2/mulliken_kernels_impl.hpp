@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_MULLIKEN_KERNELS_IMPL_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_MULLIKEN_KERNELS_IMPL_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_MULLIKEN_KERNELS_IMPL_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_MULLIKEN_KERNELS_IMPL_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include "generated_gfn2_electronic_native.hpp"
 #include "model/gfn2/mulliken_kernels.hpp"
 
-namespace vibeqc::xtb::detail::gfn2::kernel_implementation {
+namespace generativeqc::xtb::detail::gfn2::kernel_implementation {
 
 static void population_record_failure(MullikenPopulationTask& task,
                                       std::uint64_t candidate) noexcept {
@@ -68,7 +68,7 @@ static void population_chunk(void* opaque, std::size_t chunk) noexcept {
           population_fail(task, 1, element_position);
           return;
         }
-        if (!::vibeqc::xtb::generated::gfn2_population_update_tensor(
+        if (!::generativeqc::xtb::generated::gfn2_population_update_tensor(
                 density_value, overlap_value, shell_charge, shell_charge)) {
           population_fail(task, 4, element_position + 1u);
           return;
@@ -82,7 +82,7 @@ static void population_chunk(void* opaque, std::size_t chunk) noexcept {
             population_fail(task, 2, element_position + 2u + static_cast<std::uint64_t>(component));
             return;
           }
-          if (!::vibeqc::xtb::generated::gfn2_population_update_tensor(
+          if (!::generativeqc::xtb::generated::gfn2_population_update_tensor(
                   density_value, integral, value, value)) {
             population_fail(task, 5, element_position + 2u + static_cast<std::uint64_t>(component));
             return;
@@ -97,7 +97,7 @@ static void population_chunk(void* opaque, std::size_t chunk) noexcept {
             population_fail(task, 3, element_position + 5u + static_cast<std::uint64_t>(component));
             return;
           }
-          if (!::vibeqc::xtb::generated::gfn2_population_update_tensor(
+          if (!::generativeqc::xtb::generated::gfn2_population_update_tensor(
                   density_value, integral, value, value)) {
             population_fail(task, 6, element_position + 5u + static_cast<std::uint64_t>(component));
             return;
@@ -173,7 +173,7 @@ static void hamiltonian_chunk(void* opaque, std::size_t chunk) noexcept {
           hamiltonian_fail(task, 1, element_position);
           return;
         }
-        if (!::vibeqc::xtb::generated::gfn2_scalar_hamiltonian_update_tensor(
+        if (!::generativeqc::xtb::generated::gfn2_scalar_hamiltonian_update_tensor(
                 overlap, row_vat, row_vsh, column_vat, column_vsh, shift, shift)) {
           hamiltonian_fail(task, 4, element_position + 1u);
           return;
@@ -194,7 +194,7 @@ static void hamiltonian_chunk(void* opaque, std::size_t chunk) noexcept {
             return;
           }
           if (!std::isfinite(row_potential) || !std::isfinite(column_potential) ||
-              !::vibeqc::xtb::generated::gfn2_multipole_hamiltonian_update_tensor(
+              !::generativeqc::xtb::generated::gfn2_multipole_hamiltonian_update_tensor(
                   forward_integral, reverse_integral, row_potential, column_potential, shift,
                   shift)) {
             hamiltonian_fail(task, 5,
@@ -218,7 +218,7 @@ static void hamiltonian_chunk(void* opaque, std::size_t chunk) noexcept {
             return;
           }
           if (!std::isfinite(row_potential) || !std::isfinite(column_potential) ||
-              !::vibeqc::xtb::generated::gfn2_multipole_hamiltonian_update_tensor(
+              !::generativeqc::xtb::generated::gfn2_multipole_hamiltonian_update_tensor(
                   forward_integral, reverse_integral, row_potential, column_potential, shift,
                   shift)) {
             hamiltonian_fail(task, 6,
@@ -247,6 +247,6 @@ static void hamiltonian_chunk(void* opaque, std::size_t chunk) noexcept {
   }
 }
 
-}  // namespace vibeqc::xtb::detail::gfn2::kernel_implementation
+}  // namespace generativeqc::xtb::detail::gfn2::kernel_implementation
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_MULLIKEN_KERNELS_IMPL_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_MULLIKEN_KERNELS_IMPL_HPP

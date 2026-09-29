@@ -93,7 +93,7 @@ CUDA_ALLOWED = {
         "scf/cuda_batch.hpp",
         "scf/eigensolver_workspace.hpp",
         "runtime/resource_cuda.cuh",
-        "vibeqc/vibeqc.hpp",
+        "generativeqc/generativeqc.hpp",
     ),
 }
 CUDA_ALLOWED["cuda_df_source"] = (

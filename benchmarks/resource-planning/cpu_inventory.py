@@ -21,8 +21,8 @@ _BENCHMARKS_DIR = next(
 )
 sys.path.insert(0, str(_BENCHMARKS_DIR))
 from _retention import raw_output_path
-from vibeqc import Atom, Calculator, electron_state, estimate_hf_resources
-from vibeqc.profiles import file_hash
+from generativeqc import Atom, Calculator, electron_state, estimate_hf_resources
+from generativeqc.profiles import file_hash
 
 ROOT = Path(__file__).resolve().parents[2]
 H2 = [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]
@@ -73,10 +73,10 @@ def main() -> None:
     args = parser.parse_args()
     build = args.build.resolve()
     cache = (build / "CMakeCache.txt").read_text()
-    if "VIBEQC_ENABLE_CUDA:BOOL=OFF" not in cache:
+    if "GENERATIVEQC_ENABLE_CUDA:BOOL=OFF" not in cache:
         raise ValueError("the CPU heap audit requires a CPU-only library build")
-    library = build / "libvibeqc.so"
-    os.environ["VIBEQC_LIBRARY"] = str(library)
+    library = build / "libgenerativeqc.so"
+    os.environ["GENERATIVEQC_LIBRARY"] = str(library)
     compiler = os.environ.get("CXX", "c++")
     records = []
     cases = [
@@ -107,7 +107,9 @@ def main() -> None:
                 ]
             )
         cases.append(("water-pbe-rks-def2-svp", [WATER], "def2-svp", "pbe-rks", False))
-    with tempfile.TemporaryDirectory(prefix="vibeqc-resource-probe-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="generativeqc-resource-probe-"
+    ) as temporary:
         executable = Path(temporary) / "probe"
         command = [
             compiler,
@@ -119,7 +121,7 @@ def main() -> None:
             str(Path(__file__).with_name("cpu_heap_probe.cpp")),
             f"-L{build}",
             f"-Wl,-rpath,{build}",
-            "-lvibeqc",
+            "-lgenerativeqc",
             "-o",
             str(executable),
         ]

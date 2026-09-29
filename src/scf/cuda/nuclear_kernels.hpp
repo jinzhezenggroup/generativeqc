@@ -7,7 +7,7 @@
 
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve the retained kernel geometry, shared workspace and stream. */
 void launch_build_nuclear_repulsion_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -19,4 +19,4 @@ void launch_nuclear_force_kernel(dim3 grid, dim3 block, std::size_t shared_bytes
                                  cudaStream_t stream, DeviceBatch batch, const std::uint8_t* active,
                                  double* forces);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

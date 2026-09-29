@@ -6,7 +6,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 SYSTEMS = [
     [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))],
@@ -23,7 +23,7 @@ def test_energy_only_batch_preserves_replay_and_force_recovery(
 ) -> None:
     device, provider = route.split("-")
     if device == "cuda":
-        if os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+        if os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1":
             pytest.skip("explicit allocated-GPU opt-in")
         assert os.environ.get("SLURM_JOB_ID")
     options = {
@@ -46,9 +46,9 @@ def test_energy_only_batch_preserves_replay_and_force_recovery(
         for replay in range(3):
             expected = full.execute(strict=True)
             trace = tmp_path / f"energy-{replay}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = batch.execute(properties=("energy",), strict=True)
-            monkeypatch.delenv("VIBEQC_DF_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_TRACE")
             np.testing.assert_allclose(
                 result.energies, expected.energies, atol=1e-10, rtol=0
             )
@@ -96,7 +96,7 @@ def test_invalid_batch_properties_reject_before_execution(
         def forbidden(*args: typing.Any) -> None:
             pytest.fail("invalid output request reached native execution")
 
-        monkeypatch.setattr(batch._library, "vibeqc_batch_execute", forbidden)
+        monkeypatch.setattr(batch._library, "generativeqc_batch_execute", forbidden)
         with pytest.raises(error):
             batch.execute(properties=properties)
 
@@ -113,6 +113,6 @@ def test_energy_only_dft_batch_rejects_forces_before_execution(
         def forbidden(*args: typing.Any) -> None:
             pytest.fail("unsupported force request reached native execution")
 
-        monkeypatch.setattr(batch._library, "vibeqc_batch_execute", forbidden)
+        monkeypatch.setattr(batch._library, "generativeqc_batch_execute", forbidden)
         with pytest.raises(ValueError, match="does not support properties: forces"):
             batch.execute(properties=("energy", "forces"))

@@ -21,7 +21,7 @@ def test_diagnostic_binds_packaged_aot_and_declared_schedule(
         return expected
 
     monkeypatch.setattr(benchmark, "complete_rks_cuda_gradient_diagnostic", execute)
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"fixture")
     prepared = object()
     target = object()
@@ -59,7 +59,7 @@ def test_case_reuses_one_prepared_owner_across_geometry_rebind(
     calls: list[dict[str, object]] = []
     prepared = object()
     target = object()
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"fixture")
 
     def execute(**kwargs: object) -> SimpleNamespace:

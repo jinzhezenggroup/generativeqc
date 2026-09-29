@@ -19,7 +19,9 @@ def test_rks_hvp_export_is_independent_of_import_order(
 ) -> None:
     # Copy only the real export machinery into an isolated package. The stub
     # implementation exercises Python import binding, not Hessian mathematics.
-    source = (ROOT / "tools/vibeqc_hessian/__init__.py").read_text(encoding="utf-8")
+    source = (ROOT / "tools/generativeqc_hessian/__init__.py").read_text(
+        encoding="utf-8"
+    )
     tree = ast.parse(source)
     lazy = next(
         node

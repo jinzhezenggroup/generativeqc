@@ -1,13 +1,13 @@
 # Cross-basis HF initialization
 
-VibeQC can solve a source HF calculation, project its occupied density into a
+GenerativeQC can solve a source HF calculation, project its occupied density into a
 different AO basis, and converge the actual target Hamiltonian. Projection is
 explicit and opt-in. It does not change the target basis, electron count, spin,
 integrals or convergence criteria, and a converged source is never reported as
 a converged target.
 
 ```python
-from vibeqc import Calculator, projected_singlepoint
+from generativeqc import Calculator, projected_singlepoint
 
 atoms = [("H", (0, 0, -0.7)), ("H", (0.1, 0, 0.7))]  # Bohr
 source = Calculator(basis="sto-3g")
@@ -129,7 +129,7 @@ regeneration uses:
 ```bash
 PYTHONPATH=python:. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python tools/generate_projection_references.py
-PYTHONPATH=python:. VIBEQC_LIBRARY=$PWD/build/libvibeqc.so \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so \
   python -m pytest tests/python/test_basis_projection.py \
   tests/python/test_cross_overlap.py tests/python/test_progressive_hf.py -q
 ```
@@ -139,7 +139,7 @@ GPU endpoint tests require an explicit finite Slurm allocation:
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:10:00 bash -lc 'PYTHONPATH=python:. \
-  VIBEQC_LIBRARY=$PWD/build-cuda/libvibeqc.so VIBEQC_PROJECTION_CUDA_TEST=1 \
+  GENERATIVEQC_LIBRARY=$PWD/build-cuda/libgenerativeqc.so GENERATIVEQC_PROJECTION_CUDA_TEST=1 \
   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python -m pytest tests/python/test_basis_projection_cuda.py -q'
 ```
@@ -190,7 +190,7 @@ Reproduce a report by selecting `--device cpu` or running the CUDA command
 inside the same finite Slurm allocation used for the tests:
 
 ```bash
-PYTHONPATH=python:. VIBEQC_LIBRARY=$PWD/build/libvibeqc.so \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so \
   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python benchmarks/basis_projection_gate.py --device cpu \
   --case h2-rhf-small-large --repeats 5 --output projection-cpu.json

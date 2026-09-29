@@ -3,14 +3,14 @@
 import copy
 
 import pytest
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.program_storage import (
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.program_storage import (
     BufferAliasBinding,
     CallDonationBinding,
     CallEffectBinding,
     ProgramStoragePlan,
 )
-from vibeqc_compiler.common.storage import AliasKind, MemoryEffect
+from generativeqc_compiler.common.storage import AliasKind, MemoryEffect
 
 
 def example() -> ProgramIR:

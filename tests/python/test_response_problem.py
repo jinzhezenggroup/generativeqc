@@ -5,8 +5,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_response import (
     DenseAOResponseBackend,
     ResponseCompatibilityError,
     ResponseProblem,

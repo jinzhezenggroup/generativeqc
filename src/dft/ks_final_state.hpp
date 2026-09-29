@@ -12,7 +12,7 @@
 #include "dft/scf_diagnostic.hpp"
 #include "scf/solver/final_state.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Immutable semilocal model and owner identity not represented by the common
  * mean-field determinant identity. The owner and solve epoch prevent a
@@ -95,4 +95,4 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              bool compute_weighted_density, VerifiedKsFinalState& output,
                              std::string& detail);
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

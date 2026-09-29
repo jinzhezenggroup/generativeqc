@@ -4,8 +4,8 @@ import ctypes
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.native_runtime import compile_runtime_bundle
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.native_runtime import compile_runtime_bundle
 
 
 def value(artifact: object, symbol: str = "value") -> int:

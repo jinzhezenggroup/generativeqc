@@ -137,10 +137,10 @@ def build() -> dict[str, dict]:
                 else "GPL-3.0-or-later",
                 "attribution": "GMTKN55/WATER27, Goerigk et al., PCCP 2017, DOI:10.1039/C7CP04913G"
                 if key in {"water_dimer", "water8", "water16", "water32"}
-                else "VibeQC repository",
+                else "GenerativeQC repository",
                 "source_url": "https://github.com/grimme-lab/GMTKN55"
                 if key in {"water_dimer", "water8", "water16", "water32"}
-                else "https://github.com/jinzhezenggroup/vibeqc",
+                else "https://github.com/jinzhezenggroup/generativeqc",
                 "upstream_geometry_revision": "8d485b37"
                 if key in {"water_dimer", "water8", "water16", "water32"}
                 else None,
@@ -157,7 +157,7 @@ def build() -> dict[str, dict]:
             "kind": "constructed",
             "bond_length_angstrom": 1.208,
             "license": "GPL-3.0-or-later",
-            "attribution": "VibeQC DFT-MP-v1 contract",
+            "attribution": "GenerativeQC DFT-MP-v1 contract",
         },
     }
     for key, smiles in {
@@ -176,7 +176,7 @@ def build() -> dict[str, dict]:
                 "seed": SEED,
                 "max_iterations": 1000,
                 "license": "GPL-3.0-or-later",
-                "attribution": "VibeQC DFT-MP-v1 contract; geometry generated with RDKit (BSD-3-Clause)",
+                "attribution": "GenerativeQC DFT-MP-v1 contract; geometry generated with RDKit (BSD-3-Clause)",
             },
         }
     return out

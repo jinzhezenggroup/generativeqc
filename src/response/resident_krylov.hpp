@@ -7,7 +7,7 @@
 
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::response {
+namespace generativeqc::response {
 
 /** Method-neutral resident vector storage/execution contract for GMRES.
  *
@@ -104,4 +104,4 @@ ResidentGmresResult solve_gmres_resident(const GmresPlan& plan, ResidentKrylovBa
                                          std::span<const double> rhs,
                                          std::span<const double> initial_guess = {});
 
-}  // namespace vibeqc::response
+}  // namespace generativeqc::response

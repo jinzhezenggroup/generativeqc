@@ -8,8 +8,9 @@
 #include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "tensor/cpu_linalg.hpp"
 
-namespace vibeqc::mp2::detail {
+namespace generativeqc::mp2::detail {
 namespace {
 bool finite(const std::vector<double>& values) {
   return std::all_of(values.begin(), values.end(),
@@ -22,7 +23,7 @@ std::size_t fourth(std::size_t value) { return square(square(value)); }
 std::vector<std::size_t> shell_offsets(const core::System& system) {
   std::vector<std::size_t> offsets(system.shells.size() + 1, 0);
   for (std::size_t shell = 0; shell < system.shells.size(); ++shell) {
-    const auto count = system.basis_representation == VIBEQC_BASIS_SPHERICAL
+    const auto count = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                            ? 2 * system.shells[shell].angular_momentum + 1
                            : molecule::cartesian_count(system.shells[shell].angular_momentum);
     offsets[shell + 1] = posthf::checked_add(offsets[shell], count);
@@ -32,12 +33,11 @@ std::vector<std::size_t> shell_offsets(const core::System& system) {
 
 std::vector<double> pullback_matrix(std::span<const double> coefficients,
                                     std::span<const double> mo, std::size_t n) {
-  std::vector<double> ao(square(n), 0.0);
-  for (std::size_t u = 0; u < n; ++u)
-    for (std::size_t v = 0; v < n; ++v)
-      for (std::size_t p = 0; p < n; ++p)
-        for (std::size_t q = 0; q < n; ++q)
-          ao[u * n + v] += coefficients[u * n + p] * mo[p * n + q] * coefficients[v * n + q];
+  const auto n2 = square(n);
+  if (coefficients.size() != n2 || mo.size() != n2)
+    throw std::invalid_argument("rank-2 AO pullback shape mismatch");
+  std::vector<double> ao(n2), workspace(n2);
+  tensor::cpu_congruence('N', n, coefficients.data(), mo.data(), ao.data(), workspace.data());
   return ao;
 }
 
@@ -137,4 +137,4 @@ std::vector<double> conventional_derivative(const core::System& system,
   return derivative;
 }
 
-}  // namespace vibeqc::mp2::detail
+}  // namespace generativeqc::mp2::detail

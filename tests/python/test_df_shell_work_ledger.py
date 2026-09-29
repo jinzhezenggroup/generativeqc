@@ -201,7 +201,7 @@ def test_nsight_activity_must_match_class_launch_domain(
             "INSERT INTO StringIds VALUES(1, ?)",
             (
                 (
-                    "void vibeqc::scf::shell_packet<(unsigned int)0, (unsigned int)0, "
+                    "void generativeqc::scf::shell_packet<(unsigned int)0, (unsigned int)0, "
                     "(unsigned int)0, (unsigned int)2>(...)"
                 ),
             ),
@@ -251,7 +251,7 @@ def test_shared_recurrence_work_is_counted_once_per_primitive(
     states: typing.Any,
     valid: typing.Any,
 ) -> None:
-    from vibeqc_compiler.integral.df_rys_shell import shell_rys_work_model
+    from generativeqc_compiler.integral.df_rys_shell import shell_rys_work_model
 
     # A toy lowering moves the six SSS component states into a shared cache;
     # unchanged total work must not be compared with the now-zero component work.

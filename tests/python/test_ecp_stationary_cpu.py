@@ -5,17 +5,17 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
 from test_ecp import fixture
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
 
 GRID = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
 
 
 def test_ecp_cpu_ao_spatial_jets_do_not_promote_ecp_higher_derivatives() -> None:
-    from vibeqc.basis_capabilities import basis_capability
+    from generativeqc.basis_capabilities import basis_capability
 
     atoms, record, mol = fixture(representation="cartesian")
     points = np.array([[0.21, -0.15, 0.8], [0.43, 0.36, 2.1]])
@@ -228,8 +228,8 @@ def test_cpu_ecp_work_rejects_before_compilation_and_recovers(
     execution: typing.Any,
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _stationary_cpu as module
-    from vibeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc import _stationary_cpu as module
+    from generativeqc._ks_snapshot import NativeKsSnapshot
 
     atoms, record, _ = fixture(representation="cartesian")
     calc = Calculator(basis=record, method="pbe-rks", ks_options=KsOptions(grid=GRID))

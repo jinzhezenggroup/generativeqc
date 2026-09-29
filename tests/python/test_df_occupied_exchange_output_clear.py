@@ -5,7 +5,9 @@ SOURCE = (ROOT / "src/scf/cuda/df_occupied_exchange.cpp").read_text(encoding="ut
 
 
 def test_fast_occupied_exchange_paths_skip_full_output_clear() -> None:
-    function = SOURCE.split("vibeqc_status build_occupied_exchange", maxsplit=1)[1]
+    function = SOURCE.split("generativeqc_status build_occupied_exchange", maxsplit=1)[
+        1
+    ]
     before_projected, after_projected = function.split(
         "if (plan.integral_source && plan.streamed", maxsplit=1
     )

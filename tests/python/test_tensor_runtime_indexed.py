@@ -5,8 +5,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -18,8 +18,8 @@ from vibeqc_compiler.tensor import (
     runtime_indexed_select,
     transpose_program,
 )
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
 TARGET = cuda_target_info("sm_120")
 
@@ -161,22 +161,25 @@ def test_runtime_indexed_generated_ad_matches_runtime_maps() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_runtime_indexed_cuda_replays_changed_maps_and_recovers_bounds(
     tmp_path: Path,
 ) -> None:
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_resident import PreparedResident, compile_resident
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_resident import (
+        PreparedResident,
+        compile_resident,
+    )
 
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     program = _program()
     plan = plan_cuda(program, compiler.target)

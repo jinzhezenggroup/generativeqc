@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 /** Scale the retained, sorted positive eigenvectors into column-major L.
  * Rank selection is already validated; occupation is absorbed in sqrt(lambda).
@@ -111,4 +111,4 @@ void launch_update_device_uhf_convergence_kernel(
     std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual = nullptr);
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

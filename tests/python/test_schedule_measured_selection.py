@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.common.gpu_profitability import GpuProfitability
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.schedule import (
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.schedule import (
     ScheduleContract,
     ScheduleResources,
     ScheduleTopology,
     select_measured_schedule_contract,
 )
-from vibeqc_compiler.integral.direct_fock_schedule import (
+from generativeqc_compiler.integral.direct_fock_schedule import (
     DIRECT_FOCK_ROUTE_SCHEMA,
     direct_fock_route_contract,
     select_direct_fock_route,
 )
-from vibeqc_compiler.integral.operator_route_schedule import (
+from generativeqc_compiler.integral.operator_route_schedule import (
     operator_route_contract,
     select_operator_route,
 )

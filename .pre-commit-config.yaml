@@ -27,7 +27,7 @@ repos:
         pass_filenames: false
         always_run: true
       - id: public-method-manifest
-        name: Check generated public method metadata
+        name: Check generated native method metadata
         entry: python3 tools/generate_method_manifest.py --check
         language: system
         pass_filenames: false
@@ -57,16 +57,16 @@ repos:
         pass_filenames: false
         always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.8
+    rev: v0.16.9
     hooks:
       # Generated parameter Python is byte-for-byte qualified against its source.
       - id: ruff
         args: ["--fix"]
         types_or: [python, pyi, jupyter]
-        exclude: ^python/vibeqc_compiler/method/_generated_parameters\.py$
+        exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$
       - id: ruff-format
         types_or: [python, pyi, jupyter]
-        exclude: ^python/vibeqc_compiler/method/_generated_parameters\.py$
+        exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v23.1.1
     hooks:

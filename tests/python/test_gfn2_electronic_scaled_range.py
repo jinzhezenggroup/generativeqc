@@ -35,7 +35,7 @@ def probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <cstdlib>
 int main(int argc, char** argv) {
   if (argc != 2) return 2;
-  using namespace vibeqc::xtb::generated;
+  using namespace generativeqc::xtb::generated;
   Gfn2ElectronicPairIntegrals x{};
   Gfn2ElectronicPairPotentials p{};
   double expected{};

@@ -1,6 +1,6 @@
 # HF snapshots and integral providers (CG10)
 
-The internal `tools.vibeqc_posthf` interface supplies validated reference states,
+The internal `tools.generativeqc_posthf` interface supplies validated reference states,
 explicitly indexed MO integrals, and an MP2 validation bridge. It does not
 register an MP2 or CC method in the public calculator. Source checkouts expose
 this development interface with `PYTHONPATH=.:python`; PySCF is needed only to
@@ -28,7 +28,7 @@ basis, occupation, metric or algorithm changes cannot reuse a provider built
 for another snapshot. Individual failed native HF exports raise before a
 snapshot is returned; independent neighboring source/provider objects survive.
 
-`export_rhf(source)` runs VibeQC's existing native RHF solver, exports its
+`export_rhf(source)` runs GenerativeQC's existing native RHF solver, exports its
 owned density, rebuilds the physical Fock with the specified Hamiltonian, and
 canonicalizes on the CPU. It checks both the original SCF commutator and the
 density/Fock change after canonicalization. This initial convenience exporter
@@ -192,12 +192,12 @@ separately and do not loosen layout or MP2 gates. A second generation checks
 identical array hashes. CI consumes these fixtures without importing PySCF.
 
 ```bash
-PYTHONPATH=.:python VIBEQC_LIBRARY=$PWD/build/cpu/libvibeqc.so \
+PYTHONPATH=.:python GENERATIVEQC_LIBRARY=$PWD/build/cpu/libgenerativeqc.so \
   python -m pytest tests/python/test_posthf_reference.py \
   tests/python/test_posthf_providers.py -q
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env PYTHONPATH=.:python VIBEQC_LIBRARY=$PWD/build/cuda/libvibeqc.so \
-  VIBEQC_POSTHF_CUDA_TEST=1 python -m pytest tests/python/test_posthf_cuda.py -q
+  env PYTHONPATH=.:python GENERATIVEQC_LIBRARY=$PWD/build/cuda/libgenerativeqc.so \
+  GENERATIVEQC_POSTHF_CUDA_TEST=1 python -m pytest tests/python/test_posthf_cuda.py -q
 ```
 
 The CUDA transform runtime is compiled explicitly with `compile_cuda`, using

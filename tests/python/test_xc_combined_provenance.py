@@ -5,7 +5,7 @@ from copy import deepcopy
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.xc import spec as module
+from generativeqc_compiler.xc import spec as module
 
 
 def records() -> tuple[tuple[str, str], ...]:

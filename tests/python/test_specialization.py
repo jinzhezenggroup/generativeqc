@@ -5,9 +5,9 @@ import typing
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
-from vibeqc_compiler.common.backend import TargetInfo
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.specialization import (
+from generativeqc_compiler.common.backend import TargetInfo
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.specialization import (
     CompilationIdentity,
     GuardPredicate,
     ImplementationProfile,
@@ -359,8 +359,8 @@ def test_other_backends_and_unknown_subgroups_need_no_cuda_assumptions(
 def test_existing_compiled_artifact_key_and_loader_remain_the_authority(
     case: typing.Any, tmp_path: typing.Any
 ) -> None:
-    from vibeqc_compiler.integral.artifact_cache import LocalArtifactCache
-    from vibeqc_compiler.integral.runtime_backend import CompiledArtifactIdentity
+    from generativeqc_compiler.integral.artifact_cache import LocalArtifactCache
+    from generativeqc_compiler.integral.runtime_backend import CompiledArtifactIdentity
 
     artifact = CompiledArtifactIdentity(
         "cuda",

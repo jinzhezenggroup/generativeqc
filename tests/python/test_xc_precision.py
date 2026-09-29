@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.xc.precision import (
+from generativeqc_compiler.xc.precision import (
     STRICT_MATH_MODE,
     admit_selective_precision,
 )
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.spec import functional
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.spec import functional
 
 SENSITIVE = {
     "reciprocal",

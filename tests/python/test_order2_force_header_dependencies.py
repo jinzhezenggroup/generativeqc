@@ -6,7 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.weighted_eri_cuda import emit_low_order_weighted_header
+from generativeqc_compiler.integral.weighted_eri_cuda import (
+    emit_low_order_weighted_header,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,7 +19,7 @@ def test_order2_force_names_its_vector_accessor_owner() -> None:
 
 
 def test_order2_force_header_compiles_without_prior_native_math(tmp_path: Path) -> None:
-    compiler = os.environ.get("VIBEQC_NVCC") or shutil.which("nvcc")
+    compiler = os.environ.get("GENERATIVEQC_NVCC") or shutil.which("nvcc")
     if not compiler:
         pytest.skip("NVCC unavailable for the standalone CUDA header gate")
     (tmp_path / "weighted_eri.cuh").write_text(emit_low_order_weighted_header())

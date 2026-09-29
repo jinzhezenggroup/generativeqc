@@ -9,12 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.integral.first_derivative_native import emit_first_derivative_cuda
-from vibeqc_compiler.integral.first_derivative_schedule import (
+from generativeqc_compiler.integral.first_derivative_native import (
+    emit_first_derivative_cuda,
+)
+from generativeqc_compiler.integral.first_derivative_schedule import (
     CUDA_REQUESTS_PER_UNIT,
     derivative_cuda_sources,
 )
-from vibeqc_compiler.method.stationary_cuda import (
+from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_AOT_SHARD_WIDTH,
     QUALIFIED_SPD_AOT_SHARDS,
     QUALIFIED_SPD_COMPONENTS,
@@ -76,7 +78,7 @@ def main() -> None:
         # once, with the existing per-unit and aggregate source budgets intact.
         for shard_index, source in enumerate(_component_aot_sources()):
             write_if_changed(
-                args.output / f"vibeqc_stationary_spd_primitive_{shard_index}.cu",
+                args.output / f"generativeqc_stationary_spd_primitive_{shard_index}.cu",
                 source,
             )
         return

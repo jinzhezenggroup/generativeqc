@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve first-occurrence atom order while collapsing repeated shell centers. */
 __device__ __forceinline__ unsigned direct_force_unique_center_atoms(
@@ -68,4 +68,4 @@ __device__ __forceinline__ void scatter_direct_force_independent_gradient(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
-from vibeqc.overlap import cross_overlap
-from vibeqc.projection import ProjectionRejected, project_occupied
+from generativeqc import Calculator, Primitive, Shell
+from generativeqc.overlap import cross_overlap
+from generativeqc.projection import ProjectionRejected, project_occupied
 
 REFERENCES = json.loads(
     (Path(__file__).parents[1] / "data/basis_projection_reference.json").read_text()

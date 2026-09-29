@@ -51,7 +51,7 @@ The sequence is AO -> D times AO -> density/gradient -> shared point energy
 and Cartesian potential coefficients -> weighted E/V reductions. The AO
 traversal, dense D*AO/density-feature contractions, resident point-domain XC
 coefficient algebra, symmetric-potential assembly and scalar-total reductions
-are emitted by `vibeqc_compiler.dft.ao_cuda`; the resident header owns density
+are emitted by `generativeqc_compiler.dft.ao_cuda`; the resident header owns density
 validation and launch/runtime scheduling only. The emitted point evaluator
 differentiates the same stable energy used by the CPU
 consumer; no separate singular sigma chain rule or CPU XC call is inserted.
@@ -127,7 +127,7 @@ changing any seed. Missing import entries preserve neighbors. Frozen warm
 updates keep the same seed even across successful or changed-geometry solves;
 clearing seeds while frozen prevents later solves from creating replacements.
 
-The additive `vibeqc_batch_get_scf_diagnostic` query returns density-update and
+The additive `generativeqc_batch_get_scf_diagnostic` query returns density-update and
 physical-commutator RMS values without changing the legacy result array stride.
 Unavailable and failed items report absence, including after a rejected replay.
 Python batch calls default to the method's supported observables, so KS defaults
@@ -135,7 +135,7 @@ to energy and rejects forces. HF retains its energy-plus-force default.
 
 ## Validation
 
-`vibeqc_dft_cuda_tests` checks the actual device-buffer pipeline against CPU
+`generativeqc_dft_cuda_tests` checks the actual device-buffer pipeline against CPU
 full-matrix integration, the independent #214 H2 fixture, spin-resolved finite
 differences, empty spin/vacuum tails, partial tiles and Cartesian/spherical f
 shells. It checks a density changed by a device kernel without re-upload,
@@ -146,7 +146,7 @@ All real-GPU invocations use finite Slurm allocations. Fixed-density results,
 point-domain checks, full SCF, replay, changed geometry and batching must remain
 distinct evidence until the corresponding native consumers are verified.
 
-`vibeqc_ks_cuda_tests` independently rebuilds returned SCF densities with the
+`generativeqc_ks_cuda_tests` independently rebuilds returned SCF densities with the
 CPU providers, exercises resident replay and changed-geometry normalization,
 and rejects stale grids and failed warm-state replacement. The registered
 C API tests cover both spins/functionals on the actual CUDA backend and reject

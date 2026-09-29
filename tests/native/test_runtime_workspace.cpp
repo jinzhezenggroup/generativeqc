@@ -8,12 +8,12 @@
 #include "runtime/bounded_workspace.hpp"
 
 int main() {
-  using vibeqc::runtime::AsyncGeneration;
-  using vibeqc::runtime::BorrowedWorkspace;
-  using vibeqc::runtime::checked_add;
-  using vibeqc::runtime::checked_multiply;
-  using vibeqc::runtime::ranges_overlap;
-  using vibeqc::runtime::WorkspaceLayout;
+  using generativeqc::runtime::AsyncGeneration;
+  using generativeqc::runtime::BorrowedWorkspace;
+  using generativeqc::runtime::checked_add;
+  using generativeqc::runtime::checked_multiply;
+  using generativeqc::runtime::ranges_overlap;
+  using generativeqc::runtime::WorkspaceLayout;
 
   std::size_t value = 0;
   assert(checked_add(7, 9, value) && value == 16);
@@ -39,7 +39,7 @@ int main() {
   const auto empty_view = empty.view<std::byte>(0, 0);
   assert(empty_view.data == nullptr && empty_view.elements == 0);
 
-  vibeqc::runtime::ResourcePlan plan{64, 32, 16, alignof(double)};
+  generativeqc::runtime::ResourcePlan plan{64, 32, 16, alignof(double)};
   assert(plan.valid());
   plan.workspace_bytes = 65;
   assert(!plan.valid());

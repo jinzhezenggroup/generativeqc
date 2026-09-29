@@ -5,7 +5,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 
 @pytest.fixture(params=("cpu", "cuda"))
@@ -22,20 +22,20 @@ def device(request: typing.Any) -> typing.Any:
         try:
             _native.check(
                 library,
-                library.vibeqc_context_create(
+                library.generativeqc_context_create(
                     ctypes.byref(descriptor), ctypes.byref(context)
                 ),
             )
         except RuntimeError as error:
             pytest.skip(f"CUDA context unavailable: {error}")
-        library.vibeqc_context_destroy(context)
+        library.generativeqc_context_destroy(context)
     return request.param
 
 
 def warm_snapshot(prepared: typing.Any, index: typing.Any) -> typing.Any:
     """Explicit seed export; normal energy-only execution needs no AO download."""
     state = _native.HfWarmState(ctypes.sizeof(_native.HfWarmState), _native.ABI_VERSION)
-    getter = prepared._library.vibeqc_batch_get_hf_warm_state
+    getter = prepared._library.generativeqc_batch_get_hf_warm_state
     _native.check(
         prepared._library, getter(prepared._batch, index, ctypes.byref(state))
     )
@@ -65,7 +65,7 @@ def restore_snapshots(prepared: typing.Any, snapshots: typing.Any) -> typing.Any
         state.coordinates = coordinates.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         state.coordinate_count = coordinates.size
         state.energy = energy
-    return prepared._library.vibeqc_batch_restore_hf_warm_states(
+    return prepared._library.generativeqc_batch_restore_hf_warm_states(
         prepared._batch, states, len(states)
     )
 
@@ -194,7 +194,7 @@ def test_batch_scf_query_abi_and_stale_record() -> None:
     with calculator.prepare_batch(
         [[("H", (0, 0, 0))], [("Li", (0, 0, 0))]], multiplicities=[2, 2]
     ) as prepared:
-        getter = prepared._library.vibeqc_batch_get_scf_diagnostic
+        getter = prepared._library.generativeqc_batch_get_scf_diagnostic
         record = _native.ScfDiagnostic(
             ctypes.sizeof(_native.ScfDiagnostic), _native.ABI_VERSION, -7, -11
         )
@@ -228,7 +228,9 @@ def test_batch_scf_query_abi_and_stale_record() -> None:
         assert getter(prepared._batch, 1, None) == _native.STATUS_SUCCESS
         outputs = (_native.BatchItemResultDescriptor * 1)()
         assert (
-            prepared._library.vibeqc_batch_execute(prepared._batch, None, 0, outputs, 1)
+            prepared._library.generativeqc_batch_execute(
+                prepared._batch, None, 0, outputs, 1
+            )
             == _native.STATUS_INVALID_ARGUMENT
         )
         assert getter(prepared._batch, 1, None) == _native.STATUS_NOT_IMPLEMENTED
@@ -238,7 +240,7 @@ def test_batch_scf_query_abi_and_stale_record() -> None:
 def test_energy_batch_resolves_only_required_operator_derivatives(
     monkeypatch: typing.Any, method: typing.Any, ao_order: typing.Any
 ) -> None:
-    import vibeqc.calculator as calculator_module
+    import generativeqc.calculator as calculator_module
 
     calls = []
     original = calculator_module.require_basis

@@ -1,5 +1,5 @@
-#ifndef VIBEQC_METHODS_METHOD_HPP
-#define VIBEQC_METHODS_METHOD_HPP
+#ifndef GENERATIVEQC_METHODS_METHOD_HPP
+#define GENERATIVEQC_METHODS_METHOD_HPP
 
 #include <array>
 #include <cstddef>
@@ -11,20 +11,20 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "runtime/execution_context.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/precision_work.hpp"
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::methods {
+namespace generativeqc::methods {
 
 /** Registry metadata used by the public capability query and method factory. */
 struct Capabilities {
-  vibeqc_method method{};
-  vibeqc_method_family family{};
-  vibeqc_property_flags supported_properties{};
+  generativeqc_method method{};
+  generativeqc_method_family family{};
+  generativeqc_property_flags supported_properties{};
   bool available{};
   bool supports_batch{};
 };
@@ -42,7 +42,7 @@ struct Result {
   double energy{};
   std::vector<double> forces;
   Convergence convergence;
-  vibeqc_backend executed_backend{VIBEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   /** Existing CPU physical Fock evaluation counter; zero means unavailable. */
   std::size_t fock_builds{};
   /** How the requested precision policy resolved in the executed backend. */
@@ -59,6 +59,34 @@ struct Result {
 };
 
 /** Method-neutral copy of the cumulative native CUDA KS movement ledger. */
+struct CcPerformanceDiagnostic {
+  double reference_seconds{};
+  double problem_seconds{};
+  double provider_seconds{};
+  double source_seconds{};
+  double solver_seconds{};
+  double iteration_seconds{};
+  double replay_seconds{};
+  double update_seconds{};
+  double diis_seconds{};
+  double triples_seconds{};
+  std::uint64_t source_scans{};
+  std::uint64_t source_reads{};
+  std::uint64_t source_values{};
+  std::uint64_t transform_fmas{};
+  std::uint64_t transform_stages{};
+  std::uint64_t mo_blocks{};
+  std::uint64_t cuda_transform_calls{};
+  std::uint64_t cuda_batch_calls{};
+  std::uint64_t iteration_graph_calls{};
+  std::uint64_t replay_graph_calls{};
+  std::uint64_t update_calls{};
+  std::uint64_t generated_error_checks{};
+  std::uint64_t diis_gram_calls{};
+  std::uint64_t diis_coefficient_calls{};
+  std::uint64_t diis_combine_calls{};
+};
+
 struct KsTransportDiagnostic {
   std::uint64_t setup_h2d_bytes{};
   std::uint64_t density_h2d_bytes{};
@@ -75,7 +103,7 @@ struct KsTransportDiagnostic {
 };
 
 struct BatchItemResult {
-  vibeqc_status status{VIBEQC_STATUS_INTERNAL_ERROR};
+  generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
   Result calculation;
   std::size_t bucket_id{};
   bool warm_start_used{};
@@ -194,8 +222,11 @@ class PreparedCalculation {
   [[nodiscard]] virtual std::optional<KsTransportDiagnostic> ks_transport_diagnostic() const {
     return std::nullopt;
   }
-  [[nodiscard]] virtual std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic()
+  [[nodiscard]] virtual std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic()
       const {
+    return std::nullopt;
+  }
+  [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const {
     return std::nullopt;
   }
 };
@@ -230,7 +261,12 @@ class PreparedBatch {
     (void)index;
     return std::nullopt;
   }
-  [[nodiscard]] virtual std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic(
+  [[nodiscard]] virtual std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
+      std::size_t index) const {
+    (void)index;
+    return std::nullopt;
+  }
+  [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
       std::size_t index) const {
     (void)index;
     return std::nullopt;
@@ -249,26 +285,26 @@ class PreparedBatch {
 /** Exception carrying an exact public status across the C++ method boundary. */
 class MethodError final : public std::runtime_error {
  public:
-  MethodError(vibeqc_status status, const std::string& message)
+  MethodError(generativeqc_status status, const std::string& message)
       : std::runtime_error(message), status_(status) {}
 
-  [[nodiscard]] vibeqc_status status() const noexcept { return status_; }
+  [[nodiscard]] generativeqc_status status() const noexcept { return status_; }
 
  private:
-  vibeqc_status status_;
+  generativeqc_status status_;
 };
 
-[[nodiscard]] const Capabilities* find_capabilities(vibeqc_method method) noexcept;
+[[nodiscard]] const Capabilities* find_capabilities(generativeqc_method method) noexcept;
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const vibeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor);
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
-                                             const vibeqc_method_descriptor& descriptor,
-                                             vibeqc_batch_flags flags);
+                                             const generativeqc_method_descriptor& descriptor,
+                                             generativeqc_batch_flags flags);
 
-}  // namespace vibeqc::methods
+}  // namespace generativeqc::methods
 
 #endif

@@ -5,7 +5,7 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral import first_derivative_schedule as schedule
+from generativeqc_compiler.integral import first_derivative_schedule as schedule
 
 DOMAIN = ("", "x", "xx", "xy", "xz", "y", "yy", "yz", "z", "zz")
 

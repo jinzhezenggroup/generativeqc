@@ -10,7 +10,7 @@ Run the complete-endpoint comparator from a Linux checkout with the CPU native
 library and `.[reference-test]` installed:
 
 ```bash
-export VIBEQC_LIBRARY="$PWD/build/libvibeqc.so"
+export GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 python tools/benchmark_ccsdt_cpu_bundles.py \
   --case nh3 \

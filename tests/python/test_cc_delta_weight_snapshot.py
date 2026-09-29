@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc import triples_lambda_response as response_module
+from tools.generativeqc_cc import triples_lambda_response as response_module
 
 
 @pytest.mark.parametrize("external", [False, True])

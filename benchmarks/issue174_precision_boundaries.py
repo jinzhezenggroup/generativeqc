@@ -38,11 +38,11 @@ if str(_REPOSITORY_ROOT) not in sys.path:
     # Direct ``python benchmarks/...`` execution otherwise exposes only the
     # benchmarks directory, not its namespace-package parent.
     sys.path.insert(0, str(_REPOSITORY_ROOT))
-_MIXED_KEY = "VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD"
+_MIXED_KEY = "GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD"
 _DIAGNOSTIC_ENVIRONMENT = {
-    "VIBEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC": "1",
-    "VIBEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE": "1",
-    "VIBEQC_BOUNDED_DIRECT_STREAMING": "force",
+    "GENERATIVEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC": "1",
+    "GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE": "1",
+    "GENERATIVEQC_BOUNDED_DIRECT_STREAMING": "force",
 }
 _CLASS_HEADER_PATTERN = re.compile(
     r"^bounded-direct-fock-class-profile "
@@ -170,11 +170,11 @@ def _parse_fock_profile(diagnostic: str) -> dict[str, Any]:
 def _calculator(case: Any, arguments: argparse.Namespace) -> Any:
     """Construct one calculator with controls shared by every measurement."""
 
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     return Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=arguments.max_iterations,

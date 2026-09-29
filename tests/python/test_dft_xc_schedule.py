@@ -5,9 +5,14 @@ from __future__ import annotations
 import copy
 
 import pytest
-from vibeqc.autotune import dft_endpoint_gate
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid, molecular_grid_identity
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc.autotune import dft_endpoint_gate
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.dft.grid import (
+    GridSpec,
+    MolecularGrid,
+    molecular_grid_identity,
+)
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
     GridXcCandidateLimits,
@@ -292,6 +297,62 @@ def test_grid_xc_candidate_local_shapes_rank_distinct_point_tiles() -> None:
     )
     assert not rejected_assessment.legal
     assert "device bytes 41943040 exceeds limit 33554432" in rejected_assessment.reasons
+
+
+def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None:
+    shape = GridXcCandidateShape(
+        npoint=4096,
+        tile_points=256,
+        nao=96,
+        max_active_ao=48,
+        spins=2,
+        jet_components=4,
+        device_workspace_bytes=8 << 20,
+        generated_source_bytes=180_000,
+    )
+    limits = GridXcCandidateLimits(
+        device_bytes=32 << 20,
+        live_values=2_000_000,
+        source_bytes=300_000,
+    )
+    compiled = GpuProfitability(
+        compiled_registers_per_thread=72,
+        spill_store_bytes=16,
+        spill_load_bytes=8,
+        local_bytes=32,
+        shared_bytes=2048,
+        compiled_occupancy_upper_bound=0.5,
+        object_bytes=96_000,
+        compile_seconds=1.25,
+    )
+    (assessment,) = rank_grid_xc_candidates(
+        (GridXcScheduleCandidate(DEVICE_FUSED, shape, compiled),),
+        limits,
+        device_xc_available=True,
+        observable="potential",
+        functional="PBE",
+    )
+    profitability = assessment.schedule_contract.profitability
+    assert profitability.compiled_registers_per_thread == 72
+    assert profitability.spill_bytes == 24
+    assert profitability.local_bytes == 32
+    assert profitability.shared_bytes == 2048
+    assert profitability.compiled_occupancy_upper_bound == 0.5
+    assert profitability.object_bytes == 96_000
+    assert profitability.compile_seconds == 1.25
+    assert assessment.schedule_contract.resources.registers_per_thread == 72
+    assert assessment.schedule_contract.resources.shared_bytes == 2048
+    assert (
+        dict(assessment.schedule_contract.provenance)["compiled_resource_evidence"]
+        == "common.gpu_profitability"
+    )
+
+    with pytest.raises(ValueError, match="only compiled GPU profitability facts"):
+        GridXcScheduleCandidate(
+            DEVICE_FUSED,
+            shape,
+            GpuProfitability(semantic_traffic_bytes=1),
+        )
 
 
 def endpoint_sample(

@@ -5,14 +5,14 @@ import os
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.sources import CudaDFSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.sources import CudaDFSource
+from tools.generativeqc_response import (
     CudaDFJKBackend,
     GMRESOptions,
     RHFResponseOperator,
@@ -21,7 +21,7 @@ from tools.vibeqc_response import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated real GPU",
 )
 

@@ -1,8 +1,8 @@
 """Shared compiler scheduling for bounded homogeneous runtime ranges."""
 
 import pytest
-from vibeqc_compiler.common.gpu_profitability import GpuProfitability
-from vibeqc_compiler.common.homogeneous_schedule import (
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.homogeneous_schedule import (
     HomogeneousExecution,
     HomogeneousTaskRange,
     HomogeneousTaskSchedule,
@@ -45,7 +45,7 @@ def test_invalid_packet_capacity_fails_closed(capacity: int) -> None:
 
 
 def test_df_signature_packet_policy_is_compiler_owned() -> None:
-    from vibeqc_compiler.integral.df_shell_derivatives import (
+    from generativeqc_compiler.integral.df_shell_derivatives import (
         DF_SIGNATURE_PACKET_SCHEDULE,
         emit_df_shell_derivatives_cuda,
     )

@@ -6,16 +6,16 @@ import shutil
 from copy import deepcopy
 
 import pytest
-from vibeqc_compiler.common.evidence import canonical_hash
-from vibeqc_compiler.xc.bulk_point_program import (
+from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.xc.bulk_point_program import (
     SemilocalPointBinding,
     bind_runtime_semilocal_point_program,
 )
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
-from vibeqc_compiler.xc.compiled_cpu_evidence import (
+from generativeqc_compiler.xc.compiled_cpu_evidence import (
     QUALIFICATION_SCHEMA,
     RESULT_SCHEMA,
     build_result,

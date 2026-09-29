@@ -5,7 +5,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method.mp2_schedule import native_header, ri_mp2_residency_plan
+from generativeqc_compiler.method.mp2_schedule import (
+    native_header,
+    ri_mp2_residency_plan,
+)
 
 
 @pytest.mark.parametrize("nbf,virtuals,budget", [(3, 1, 48), (4, 2, 128)])
@@ -25,7 +28,7 @@ def test_generated_native_full_residency_reduces_j_scratch(tmp_path: Path) -> No
 int main() {
   for (auto nv : {1u, 2u}) {
     const std::size_t budget = nv == 1 ? 48 : 128;
-    const auto p = vibeqc::mp2::generated::ri_mp2_residency_plan(0,budget,nv+2,2,nv,1);
+    const auto p = generativeqc::mp2::generated::ri_mp2_residency_plan(0,budget,nv+2,2,nv,1);
     if (!p.full_resident || p.j_batch != 1 || p.virtual_block != nv || p.peak_bytes != budget) return 1;
   }
 }

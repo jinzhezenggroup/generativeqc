@@ -29,7 +29,7 @@ def _number(value: typing.Any) -> typing.Any:
 
 def render(data: dict[str, typing.Any], source: dict[str, typing.Any]) -> str:
     """Render gCP data after matching its canonical input to the registry."""
-    if data["schema"] != "vibeqc.gcp-r2scan3c-parameters":
+    if data["schema"] != "generativeqc.gcp-r2scan3c-parameters":
         raise source_registry.SourceRegistryError("unexpected gCP parameter schema")
     upstream = data.get("upstream", {})
     repository = source["repository"].removeprefix("https://github.com/")
@@ -65,7 +65,7 @@ def render(data: dict[str, typing.Any], source: dict[str, typing.Any]) -> str:
         "",
         "#include <array>",
         "",
-        "namespace vibeqc::dft::dispersion::gcp_data {",
+        "namespace generativeqc::dft::dispersion::gcp_data {",
         "struct Element {",
         "  double emiss;",
         "  double slater;",
@@ -88,7 +88,7 @@ def render(data: dict[str, typing.Any], source: dict[str, typing.Any]) -> str:
     lines += [
         "}};",
         f'inline constexpr char kSimpleDftd3Revision[] = "{source["revision"]}";',
-        "}  // namespace vibeqc::dft::dispersion::gcp_data",
+        "}  // namespace generativeqc::dft::dispersion::gcp_data",
         "",
     ]
     return "\n".join(lines)

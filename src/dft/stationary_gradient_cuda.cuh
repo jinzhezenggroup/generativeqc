@@ -10,13 +10,13 @@
 #include "grid_task_view.cuh"
 #include "xc_point.hpp"
 
-namespace vibeqc_stationary_cuda {
-using namespace vibeqc_tensor;
+namespace generativeqc_stationary_cuda {
+using namespace generativeqc_tensor;
 constexpr size_t workers = 32, record_stride = 26, task_stride = 9;
 struct Owner {
   Context context;
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
-      max_primitive_work{}, bytes{};
+      max_page_primitive_work{}, bytes{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
   cudaStream_t geometry_stream{};
@@ -30,17 +30,15 @@ struct Owner {
   uint64_t uploads{}, downloads{}, launches{}, primitive_count{}, point_count{}, pair_visits{},
       task_count{}, task_batches{};
   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
-  uint64_t primitive_epoch_begin{};
-  // Metrics are cumulative; admission applies only to work since the last reset.
-  void reset_primitive_work() noexcept { primitive_epoch_begin = primitive_count; }
-  void check_primitive_work(size_t work) const {
-    const auto used = primitive_count - primitive_epoch_begin;
-    if (used > max_primitive_work || work > max_primitive_work - used ||
-        work > std::numeric_limits<uint64_t>::max() - primitive_count)
-      throw std::invalid_argument("stationary primitive work budget exceeded");
+  // Primitive metrics are cumulative across one reset/force execution. Admission
+  // is page-local so arbitrarily many bounded pages may contribute to one force.
+  void check_page_primitive_work(size_t work) const {
+    if (work > max_page_primitive_work)
+      throw std::invalid_argument("stationary primitive page work budget exceeded");
   }
   void count_primitive_work(size_t work) {
-    check_primitive_work(work);
+    if (work > std::numeric_limits<uint64_t>::max() - primitive_count)
+      throw std::invalid_argument("stationary primitive work counter overflow");
     primitive_count += work;
   }
 };
@@ -127,20 +125,20 @@ __global__ void task_reduce(const double* input, const int64_t* tasks, size_t co
 __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
                                const double* centers, size_t na, double* output, int* error);
 __global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error);
-__global__ void geometry_kernel(vibeqc::dft::GridTaskView view, const double* work,
+__global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external, size_t external_stride,
                                 size_t external_offset, double* partial, double* scratch,
                                 double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
-}  // namespace vibeqc_stationary_cuda
+}  // namespace generativeqc_stationary_cuda
 
 extern "C" {
 int stationary_create(int device, int major, int minor, size_t na, size_t n, size_t nprimitive,
                       size_t np, size_t ntask, size_t ns, size_t max_primitive_work, size_t budget,
                       void** output, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   if (output) *output = nullptr;
   return guarded(nullptr, error, size, [&] {
     if (!output || !max_primitive_work)
@@ -158,7 +156,7 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->points = np;
     p->task_capacity = ntask;
     p->spin_blocks = ns;
-    p->max_primitive_work = max_primitive_work;
+    p->max_page_primitive_work = max_primitive_work;
     p->bytes = bytes;
     p->context.prepare(device, major, minor, bytes, bytes - 256, 0, 0, 0, false);
     auto* next = reinterpret_cast<double*>(p->context.arena);
@@ -188,7 +186,7 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
 }
 int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !primitives || !ao_ranges || !ao_norms || !ao_atoms || p->topology_ready)
@@ -226,7 +224,7 @@ int stationary_topology(void* pointer, const double* primitives, const int64_t* 
   });
 }
 int stationary_profile(void* pointer, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p) throw std::invalid_argument("null stationary owner");
@@ -249,7 +247,7 @@ int stationary_profile(void* pointer, char* error, size_t size) {
 }
 int stationary_reset(void* pointer, const double* centers, const double* density,
                      const double* weighted_density, double tolerance, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !p->topology_ready || !std::isfinite(tolerance) || tolerance < 0)
@@ -257,7 +255,6 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     p->context.check_device();
     drain_geometry(*p);
     p->failed = false;
-    p->reset_primitive_work();
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
@@ -277,7 +274,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
 }
 int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges, size_t count,
                      char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !tasks || !charges || !count || count > p->task_capacity)
@@ -294,11 +291,12 @@ int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges,
       for (size_t center = 0; center < size_t(rank); ++center)
         if (task[4 + center] < 0 || task[4 + center] >= int64_t(p->aos))
           throw std::invalid_argument("invalid stationary AO task index");
-      if (size_t(work) > p->max_primitive_work - primitive_work)
-        throw std::invalid_argument("stationary primitive work budget exceeded");
+      if (size_t(work) > p->max_page_primitive_work ||
+          primitive_work > p->max_page_primitive_work - size_t(work))
+        throw std::invalid_argument("stationary primitive page work budget exceeded");
       primitive_work += size_t(work);
     }
-    p->check_primitive_work(primitive_work);
+    p->check_page_primitive_work(primitive_work);
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     upload(*p, p->tasks, tasks, task_stride * count, stream);
@@ -324,13 +322,13 @@ int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges,
 }
 int stationary_nuclear(void* pointer, unsigned kind, int64_t a, int64_t b, double za, double zb,
                        char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p) throw std::invalid_argument("invalid stationary owner");
     check(*p);
     drain_geometry(*p);
-    p->check_primitive_work(1);
+    p->check_page_primitive_work(1);
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     nuclear_kernel<<<1, 1, 0, stream>>>(kind, a, b, za, zb, p->centers, p->atoms, p->sources,
@@ -342,23 +340,23 @@ int stationary_nuclear(void* pointer, unsigned kind, int64_t a, int64_t b, doubl
     profile_elapsed(*p, p->primitive_kernel_ms, p->stage0, p->stage1);
   });
 }
-int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView* view,
+int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTaskView* view,
                                  const double* work, const int64_t* owners, const double* weights,
                                  const double* raw, const double* external, char* error,
                                  size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points)
+        !view->ao || !view->points)
       throw std::invalid_argument("invalid geometry task lease");
     check(*p);
     drain_geometry(*p);
     auto stream = view->stream;
     // This optional bounded tile is accounted separately by the nonlocal
     // caller (6*npoint FP64 values). It lives through the borrowed stream.
-    vibeqc::runtime::OwnedCudaBuffer<double> seeds;
+    generativeqc::runtime::OwnedCudaBuffer<double> seeds;
     if (external) {
       for (size_t i = 0; i < 6 * view->npoint; ++i)
         if (!std::isfinite(external[i]))
@@ -402,18 +400,18 @@ int stationary_geometry_external(void* pointer, const vibeqc::dft::GridTaskView*
     }
   });
 }
-int stationary_geometry_external_device(void* pointer, const vibeqc::dft::GridTaskView* view,
+int stationary_geometry_external_device(void* pointer, const generativeqc::dft::GridTaskView* view,
                                         const double* work, const int64_t* owners,
                                         const double* weights, const double* raw,
                                         const double* external_device, size_t external_stride,
                                         size_t external_offset, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points || !external_device ||
-        external_stride < external_offset || view->npoint > external_stride - external_offset)
+        !view->ao || !view->points || !external_device || external_stride < external_offset ||
+        view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident nonlocal geometry seed lease");
     check(*p);
     drain_geometry(*p);
@@ -454,16 +452,16 @@ int stationary_geometry_external_device(void* pointer, const vibeqc::dft::GridTa
   });
 }
 int stationary_geometry_external_device_enqueue(
-    void* pointer, const vibeqc::dft::GridTaskView* view, const double* work, const int64_t* owners,
-    const double* weights, const double* raw, const double* external_device, size_t external_stride,
-    size_t external_offset, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+    void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
+    const int64_t* owners, const double* weights, const double* raw, const double* external_device,
+    size_t external_stride, size_t external_offset, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points || !external_device ||
-        external_stride < external_offset || view->npoint > external_stride - external_offset)
+        !view->ao || !view->points || !external_device || external_stride < external_offset ||
+        view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid deferred resident nonlocal geometry seed lease");
     check(*p);
     auto stream = view->stream;
@@ -490,15 +488,15 @@ int stationary_geometry_external_device_enqueue(
   });
 }
 
-int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* view,
+int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTaskView* view,
                                 const double* work, const int64_t* owners, const double* weights,
                                 const double* raw, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao_ids || !view->ao || !view->points)
+        !view->ao || !view->points)
       throw std::invalid_argument("invalid deferred geometry task lease");
     check(*p);
     auto stream = view->stream;
@@ -525,14 +523,14 @@ int stationary_geometry_enqueue(void* pointer, const vibeqc::dft::GridTaskView* 
     ++p->geometry_batches;
   });
 }
-int stationary_geometry(void* pointer, const vibeqc::dft::GridTaskView* view, const double* work,
-                        const int64_t* owners, const double* weights, const double* raw,
-                        char* error, size_t size) {
+int stationary_geometry(void* pointer, const generativeqc::dft::GridTaskView* view,
+                        const double* work, const int64_t* owners, const double* weights,
+                        const double* raw, char* error, size_t size) {
   return stationary_geometry_external(pointer, view, work, owners, weights, raw, nullptr, error,
                                       size);
 }
 int stationary_geometry_drain(void* pointer, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p) throw std::invalid_argument("invalid stationary owner");
@@ -541,7 +539,7 @@ int stationary_geometry_drain(void* pointer, char* error, size_t size) {
   });
 }
 int stationary_finish(void* pointer, double* output, size_t count, char* error, size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !output || count != 3 * stationary_source_count * p->atoms)
@@ -568,7 +566,7 @@ int stationary_finish(void* pointer, double* output, size_t count, char* error, 
 }
 int stationary_finish_reduced(void* pointer, double* output, size_t count, char* error,
                               size_t size) {
-  using namespace vibeqc_stationary_cuda;
+  using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !output || count != 3 * p->atoms)
@@ -599,7 +597,7 @@ int stationary_finish_reduced(void* pointer, double* output, size_t count, char*
   });
 }
 int stationary_profile_metrics(void* pointer, double* output, size_t count) {
-  auto* p = static_cast<vibeqc_stationary_cuda::Owner*>(pointer);
+  auto* p = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
   if (!p || !output || count != 10) return 1;
   const double values[]{p->synchronization_wait_ms, p->setup_transfer_ms,
                         p->setup_validation_ms,     p->primitive_h2d_ms,
@@ -610,7 +608,7 @@ int stationary_profile_metrics(void* pointer, double* output, size_t count) {
   return 0;
 }
 int stationary_metrics(void* pointer, uint64_t* output, size_t count) {
-  auto* p = static_cast<vibeqc_stationary_cuda::Owner*>(pointer);
+  auto* p = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
   if (!p || !output || count != 14) return 1;
   const uint64_t values[]{p->bytes,
                           p->uploads,
@@ -630,7 +628,7 @@ int stationary_metrics(void* pointer, uint64_t* output, size_t count) {
   return 0;
 }
 void stationary_destroy(void* pointer) {
-  auto* p = static_cast<vibeqc_stationary_cuda::Owner*>(pointer);
+  auto* p = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
   if (!p) return;
   int previous = 0;
   const bool have_device = cudaGetDevice(&previous) == cudaSuccess;

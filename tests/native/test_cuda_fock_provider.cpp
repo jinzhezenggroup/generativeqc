@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -18,7 +19,7 @@
 #include "scf/density_fitting.hpp"
 
 namespace {
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -47,6 +48,22 @@ struct DeviceMatrix {
   }
 };
 
+struct DeviceCounter {
+  std::uint64_t* pointer{};
+  DeviceCounter() { check(cudaMalloc(reinterpret_cast<void**>(&pointer), sizeof(*pointer))); }
+  ~DeviceCounter() { cudaFree(pointer); }
+  DeviceCounter(const DeviceCounter&) = delete;
+  DeviceCounter& operator=(const DeviceCounter&) = delete;
+  void set(std::uint64_t value) const {
+    check(cudaMemcpy(pointer, &value, sizeof(value), cudaMemcpyHostToDevice));
+  }
+  std::uint64_t get() const {
+    std::uint64_t value{};
+    check(cudaMemcpy(&value, pointer, sizeof(value), cudaMemcpyDeviceToHost));
+    return value;
+  }
+};
+
 /** Exercise the same resident boundary consumed by native KS: enqueue on the
  * provider stream, then explicitly export only at this reference boundary. */
 void direct_device(CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector<double>& a,
@@ -62,7 +79,7 @@ void direct_device(CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector
           plan, spec, da.pointer, unrestricted ? db.pointer : nullptr, a.size(),
           spec.coulomb.present ? j.pointer : nullptr, spec.exchange.present ? ka.pointer : nullptr,
           spec.exchange.present && unrestricted ? kb.pointer : nullptr,
-          reinterpret_cast<int*>(error.pointer), detail) == VIBEQC_STATUS_SUCCESS,
+          reinterpret_cast<int*>(error.pointer), detail) == GENERATIVEQC_STATUS_SUCCESS,
       detail.c_str());
   const auto stream = cuda_direct_jk_stream(plan);
   int failure = -1;
@@ -85,11 +102,11 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
   auto* failure_pointer = reinterpret_cast<int*>(error.pointer);
   require(enqueue_cuda_direct_jk_device(plan, spec, da.pointer, nullptr, a.size(), da.pointer,
                                         nullptr, nullptr, failure_pointer,
-                                        detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                        detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "resident J/K accepted overlapping input/output");
   require(enqueue_cuda_direct_jk_device(plan, spec, da.pointer, nullptr, a.size() - 1, j.pointer,
                                         nullptr, nullptr, failure_pointer,
-                                        detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                        detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "resident J/K accepted incomplete batch dimensions");
   auto invalid = a;
   invalid[0] = std::numeric_limits<double>::quiet_NaN();
@@ -99,10 +116,10 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
   for (bool recover : {false, true}) {
     if (recover)
       check(cudaMemcpy(da.pointer, a.data(), a.size() * sizeof(double), cudaMemcpyHostToDevice));
-    require(
-        enqueue_cuda_direct_jk_device(plan, spec, da.pointer, nullptr, a.size(), j.pointer, nullptr,
-                                      nullptr, failure_pointer, detail) == VIBEQC_STATUS_SUCCESS,
-        detail.c_str());
+    require(enqueue_cuda_direct_jk_device(plan, spec, da.pointer, nullptr, a.size(), j.pointer,
+                                          nullptr, nullptr, failure_pointer,
+                                          detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
     int failure = -1;
     check(cudaMemcpyAsync(&failure, failure_pointer, sizeof(failure), cudaMemcpyDeviceToHost,
                           stream));
@@ -110,6 +127,95 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
     require(recover ? failure == 0 : failure != 0,
             "resident J/K failure state was lost or not reset");
   }
+}
+
+void mixed_coulomb_work_census() {
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+
+  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
+  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+  const std::vector<double> zero_density(matrix, 0.0), sentinel(matrix, 123.0);
+  require(density.size() == matrix, "mixed-work fixture density shape changed");
+
+  const auto make_plan = [&](double screening) {
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 0, screening, 32U * 1024U * 1024U, &raw,
+                                       diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    return raw;
+  };
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+      make_plan(0.0), &destroy_cuda_direct_jk_plan);
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> screened(
+      make_plan(std::numeric_limits<double>::max()), &destroy_cuda_direct_jk_plan);
+
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  spec.exchange.present = false;
+  DeviceMatrix device_density(density), uninstrumented(sentinel), instrumented(sentinel),
+      error({0.0});
+  DeviceCounter count;
+  auto* failure = reinterpret_cast<int*>(error.pointer);
+  require(enqueue_cuda_direct_jk_device_mixed_j(plan.get(), spec, device_density.pointer, nullptr,
+                                                matrix, uninstrumented.pointer, nullptr, nullptr,
+                                                failure, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() == matrix * matrix,
+          "mixed Coulomb census did not count evaluated AO-ERI recurrences");
+  std::vector<double> first(matrix), second(matrix);
+  check(cudaMemcpy(first.data(), uninstrumented.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  check(cudaMemcpy(second.data(), instrumented.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  require(first == second, "mixed Coulomb instrumentation changed the J result");
+
+  check(cudaMemcpy(device_density.pointer, zero_density.data(), matrix * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() == 0, "mixed Coulomb replay leaked its prior recurrence count");
+
+  check(cudaMemcpy(device_density.pointer, density.data(), matrix * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  count.set(999);
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              screened.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail, count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(screened.get())));
+  require(count.get() == 0, "screened mixed Coulomb recurrences were counted as executed");
+
+  require(
+      enqueue_cuda_direct_jk_device_mixed_j(
+          plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer, nullptr,
+          nullptr, failure, detail, reinterpret_cast<std::uint64_t*>(device_density.pointer)) ==
+          GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+      "mixed Coulomb census accepted a counter aliasing its density");
+  require(enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, device_density.pointer, nullptr, matrix, instrumented.pointer,
+              nullptr, nullptr, failure, detail,
+              reinterpret_cast<std::uint64_t*>(reinterpret_cast<char*>(count.pointer) + 1)) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "mixed Coulomb census accepted a misaligned counter");
 }
 
 void direct_value_dispatch_selection() {
@@ -164,7 +270,7 @@ void device_selection() {
       std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
       require(create_cuda_density_fitting_jk_plan_tiled(0, 1, 2, 2, metric, tensor, 1e-10, tile,
                                                         tile, &raw, diagnostics,
-                                                        detail) == VIBEQC_STATUS_SUCCESS,
+                                                        detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)>
           plan(raw, &destroy_cuda_density_fitting_jk_plan);
@@ -181,7 +287,7 @@ void device_selection() {
           DeviceMatrix dj(sentinel), dka(sentinel), dkb(sentinel);
           require(execute_cuda_density_fitting_rhf_jk_device(
                       plan.get(), da.pointer, j ? dj.pointer : nullptr, k ? dka.pointer : nullptr,
-                      detail, terms, layout) == VIBEQC_STATUS_SUCCESS,
+                      detail, terms, layout) == GENERATIVEQC_STATUS_SUCCESS,
                   detail.c_str());
           check(cudaDeviceSynchronize());  // Test boundary observes the plan's nonblocking stream.
           dj.verify(j ? rhf.coulomb : sentinel);
@@ -190,7 +296,7 @@ void device_selection() {
           // neither write them nor assume non-null means a term was requested.
           require(execute_cuda_density_fitting_uhf_jk_device(
                       plan.get(), da.pointer, db.pointer, dj.pointer, dka.pointer, dkb.pointer,
-                      detail, terms, layout) == VIBEQC_STATUS_SUCCESS,
+                      detail, terms, layout) == GENERATIVEQC_STATUS_SUCCESS,
                   detail.c_str());
           check(cudaDeviceSynchronize());
           dj.verify(j ? uhf.coulomb : sentinel);
@@ -199,24 +305,25 @@ void device_selection() {
         }
       require(execute_cuda_density_fitting_rhf_jk_device(plan.get(), da.pointer, nullptr, nullptr,
                                                          detail, {true, false}) ==
-                  VIBEQC_STATUS_INVALID_ARGUMENT,
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
               "missing selected device J accepted");
       require(execute_cuda_density_fitting_uhf_jk_device(
                   plan.get(), da.pointer, db.pointer, nullptr, nullptr, nullptr, detail,
-                  {false, true}) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                  {false, true}) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
               "missing selected device K accepted");
       da.verify(input_a);
       db.verify(input_b);
     }
 }
 
-std::vector<double> reference_range_exchange(const vibeqc::core::System& system,
+std::vector<double> reference_range_exchange(const generativeqc::core::System& system,
                                              const std::vector<double>& density,
-                                             vibeqc::integrals::CoulombRange range, double omega) {
-  const auto eri = range == vibeqc::integrals::CoulombRange::Full
-                       ? vibeqc::integrals::build_integrals(system, false, true).eri
-                       : vibeqc::integrals::build_range_eri(system, range, omega);
-  const std::size_t n = vibeqc::molecule::ao_count(system);
+                                             generativeqc::integrals::CoulombRange range,
+                                             double omega) {
+  const auto eri = range == generativeqc::integrals::CoulombRange::Full
+                       ? generativeqc::integrals::build_integrals(system, false, true).eri
+                       : generativeqc::integrals::build_range_eri(system, range, omega);
+  const std::size_t n = generativeqc::molecule::ao_count(system);
   std::vector<double> exchange(n * n);
   for (std::size_t i = 0; i < n; ++i)
     for (std::size_t j = 0; j < n; ++j)
@@ -227,15 +334,16 @@ std::vector<double> reference_range_exchange(const vibeqc::core::System& system,
 }
 
 void range_exchange_provider() {
-  vibeqc::core::System system;
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.1, -0.8}}, {1, {0.2, -0.1, 0.7}}};
   system.shells = {{0, 0, {{0.9, 0.7}, {0.25, 0.3}}}, {1, 1, {{0.65, 1.0}}}};
   system.electron_count = 2;
-  system.basis_representation = VIBEQC_BASIS_CARTESIAN;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          detail.c_str());
-  const std::size_t n = vibeqc::molecule::ao_count(system), matrix = n * n;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
   std::vector<double> alpha(matrix), beta(matrix);
   for (std::size_t ij = 0; ij < matrix; ++ij) {
     alpha[ij] = std::sin(0.41 * (ij / n) - 0.27 * (ij % n)) / n;
@@ -245,15 +353,15 @@ void range_exchange_provider() {
   CudaDirectJkPlan* raw{};
   CudaDirectJkDiagnostic diagnostic;
   require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U * 1024U * 1024U, &raw, diagnostic,
-                                     detail) == VIBEQC_STATUS_SUCCESS,
+                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
       raw, &destroy_cuda_direct_jk_plan);
 
   constexpr double omega = 0.37;
   for (const auto [op, radial] :
-       {std::pair{FockOperator::ShortRange, vibeqc::integrals::CoulombRange::Short},
-        std::pair{FockOperator::LongRange, vibeqc::integrals::CoulombRange::Long}}) {
+       {std::pair{FockOperator::ShortRange, generativeqc::integrals::CoulombRange::Short},
+        std::pair{FockOperator::LongRange, generativeqc::integrals::CoulombRange::Long}}) {
     const auto expected_alpha = reference_range_exchange(system, alpha, radial, omega);
     const auto expected_beta = reference_range_exchange(system, beta, radial, omega);
     for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
@@ -265,7 +373,7 @@ void range_exchange_provider() {
       std::vector<double> j, ka, kb;
       require(execute_cuda_direct_jk(plan.get(), spec, alpha,
                                      spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
-                                     j, ka, kb, detail) == VIBEQC_STATUS_SUCCESS,
+                                     j, ka, kb, detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       require(j.empty() && ka.size() == expected_alpha.size() &&
                   kb.size() == (spin == FockSpin::Unrestricted ? expected_beta.size() : 0),
@@ -281,7 +389,7 @@ void range_exchange_provider() {
 
   // Pick a positive threshold between actual full-range Schwarz products so
   // the qualification checks both retained and skipped range quartets.
-  const auto full_eri = vibeqc::integrals::build_integrals(system, false, true).eri;
+  const auto full_eri = generativeqc::integrals::build_integrals(system, false, true).eri;
   std::vector<double> bounds(matrix), products;
   for (std::size_t i = 0; i < n; ++i)
     for (std::size_t k = 0; k < n; ++k)
@@ -298,13 +406,13 @@ void range_exchange_provider() {
   CudaDirectJkPlan* screened_raw{};
   CudaDirectJkDiagnostic screened_diagnostic;
   require(create_cuda_direct_jk_plan(0, {system}, 0, screening, 32U * 1024U * 1024U, &screened_raw,
-                                     screened_diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+                                     screened_diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> screened(
       screened_raw, &destroy_cuda_direct_jk_plan);
   for (const auto [op, radial] :
-       {std::pair{FockOperator::ShortRange, vibeqc::integrals::CoulombRange::Short},
-        std::pair{FockOperator::LongRange, vibeqc::integrals::CoulombRange::Long}}) {
+       {std::pair{FockOperator::ShortRange, generativeqc::integrals::CoulombRange::Short},
+        std::pair{FockOperator::LongRange, generativeqc::integrals::CoulombRange::Long}}) {
     FockBuildSpec range_spec;
     range_spec.spin = FockSpin::Restricted;
     range_spec.derivative_order = 0;
@@ -312,9 +420,9 @@ void range_exchange_provider() {
     range_spec.exchange = {true, -0.31, op, omega, FockApproximation::Exact};
     std::vector<double> j, ka, kb;
     require(execute_cuda_direct_jk(screened.get(), range_spec, alpha, {}, j, ka, kb, detail) ==
-                VIBEQC_STATUS_SUCCESS,
+                GENERATIVEQC_STATUS_SUCCESS,
             detail.c_str());
-    const auto range_eri = vibeqc::integrals::build_range_eri(system, radial, omega);
+    const auto range_eri = generativeqc::integrals::build_range_eri(system, radial, omega);
     std::vector<double> screened_expected(matrix);
     std::size_t skipped = 0, retained = 0;
     for (std::size_t i = 0; i < n; ++i)
@@ -352,18 +460,19 @@ void range_exchange_provider() {
 void range_exchange_derivatives() {
   constexpr double omega = 0.3, coefficient = -0.37, step = 1e-4;
   for (unsigned angular : {0U, 1U, 2U, 3U}) {
-    for (auto representation : {VIBEQC_BASIS_CARTESIAN, VIBEQC_BASIS_SPHERICAL}) {
-      vibeqc::core::System first;
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      generativeqc::core::System first;
       first.atoms = {{1, {0.1, -0.2, -0.8}}, {1, {0.3, 0.1, 0.7}}};
       first.shells = {{0, 0, {{0.8, 1.0}}}, {1, angular, {{0.6, 1.0}}}};
       first.electron_count = 2;
       first.basis_representation = representation;
       std::string detail;
-      require(vibeqc::molecule::validate_and_normalize(first, detail) == VIBEQC_STATUS_SUCCESS,
+      require(generativeqc::molecule::validate_and_normalize(first, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       auto second = first;
       second.atoms[1].position[0] += 0.23;
-      const std::size_t n = vibeqc::molecule::ao_count(first), matrix = n * n;
+      const std::size_t n = generativeqc::molecule::ao_count(first), matrix = n * n;
       std::vector<double> a(matrix), b(matrix), packed_a, packed_b;
       for (std::size_t i = 0; i < n; ++i)
         for (std::size_t j = 0; j < n; ++j) {
@@ -377,27 +486,27 @@ void range_exchange_derivatives() {
       CudaDirectJkPlan* raw{};
       CudaDirectJkDiagnostic diagnostic;
       require(create_cuda_direct_jk_plan(0, {first, second}, 1, 0.0, 32U << 20, &raw, diagnostic,
-                                         detail) == VIBEQC_STATUS_SUCCESS,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
       for (auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
         std::vector<std::vector<double>> gradients;
         for (auto [op, radial] :
-             {std::pair{FockOperator::FullRange, vibeqc::integrals::CoulombRange::Full},
-              std::pair{FockOperator::ShortRange, vibeqc::integrals::CoulombRange::Short},
-              std::pair{FockOperator::LongRange, vibeqc::integrals::CoulombRange::Long}}) {
+             {std::pair{FockOperator::FullRange, generativeqc::integrals::CoulombRange::Full},
+              std::pair{FockOperator::ShortRange, generativeqc::integrals::CoulombRange::Short},
+              std::pair{FockOperator::LongRange, generativeqc::integrals::CoulombRange::Long}}) {
           FockBuildSpec spec;
           spec.spin = spin;
           spec.derivative_order = 1;
           spec.coulomb.present = false;
           spec.exchange = {true, coefficient, op,
-                           radial == vibeqc::integrals::CoulombRange::Full ? 0.0 : omega};
+                           radial == generativeqc::integrals::CoulombRange::Full ? 0.0 : omega};
           std::vector<double> gradient;
           require(execute_cuda_direct_energy_derivative(
                       plan.get(), spec, packed_a,
                       spin == FockSpin::Unrestricted ? packed_b : std::vector<double>{}, gradient,
-                      detail) == VIBEQC_STATUS_SUCCESS,
+                      detail) == GENERATIVEQC_STATUS_SUCCESS,
                   detail.c_str());
           for (std::size_t item = 0; item < 2; ++item) {
             const auto energy = [&](double shift) {
@@ -431,12 +540,12 @@ void range_exchange_derivatives() {
           require(execute_cuda_direct_energy_derivative_item(
                       plan.get(), item, j_spec, a,
                       spin == FockSpin::Unrestricted ? b : std::vector<double>{}, j_gradient,
-                      detail) == VIBEQC_STATUS_SUCCESS,
+                      detail) == GENERATIVEQC_STATUS_SUCCESS,
                   detail.c_str());
           require(execute_cuda_direct_rsh_energy_derivatives_item(
                       plan.get(), item, spin, 1.0, coefficient, coefficient, omega, a,
                       spin == FockSpin::Unrestricted ? b : std::vector<double>{}, fused,
-                      detail) == VIBEQC_STATUS_SUCCESS,
+                      detail) == GENERATIVEQC_STATUS_SUCCESS,
                   detail.c_str());
           require(fused.size() == 18 && j_gradient.size() == 6,
                   "fused CUDA RSH derivative returned the wrong source shape");
@@ -460,12 +569,12 @@ void range_exchange_derivatives() {
 
 void direct_providers(bool through_f_response) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
-    for (auto representation : {VIBEQC_BASIS_CARTESIAN, VIBEQC_BASIS_SPHERICAL}) {
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       // Noncoincident centers and unequal primitive/basis metadata distinguish
       // items with identical dimensions. Through-f values also test public AO
       // expansion ordering. The optional numerical tier adds d/f response
       // without repeating expensive high-angular CPU derivatives for every mask.
-      vibeqc::core::System first;
+      generativeqc::core::System first;
       first.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
       first.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, angular, {{0.6, 1.0}}}};
       // Mixed p/d quartets exercise generated classes that s+d alone cannot
@@ -477,13 +586,15 @@ void direct_providers(bool through_f_response) {
       second.atoms[1].position[2] += 0.13;
       second.shells[1].primitives[0].exponent = 0.9;
       std::string detail;
-      require(vibeqc::molecule::validate_and_normalize(first, detail) == VIBEQC_STATUS_SUCCESS,
+      require(generativeqc::molecule::validate_and_normalize(first, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
-      require(vibeqc::molecule::validate_and_normalize(second, detail) == VIBEQC_STATUS_SUCCESS,
+      require(generativeqc::molecule::validate_and_normalize(second, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       const bool derivatives = angular < 2 || through_f_response;
-      const auto ints = vibeqc::integrals::build_integrals(first, derivatives);
-      const auto other = vibeqc::integrals::build_integrals(second, derivatives);
+      const auto ints = generativeqc::integrals::build_integrals(first, derivatives);
+      const auto other = generativeqc::integrals::build_integrals(second, derivatives);
       const std::size_t n = ints.nbf, matrix = n * n;
       std::vector<double> a(matrix), b(matrix), packed_a, packed_b;
       for (std::size_t ij = 0; ij < matrix; ++ij) {
@@ -498,7 +609,7 @@ void direct_providers(bool through_f_response) {
       CudaDirectJkDiagnostic diagnostic;
       require(create_cuda_direct_jk_plan(0, {first, second}, derivatives ? 1 : 0, 0.0,
                                          64U * 1024U * 1024U, &raw, diagnostic,
-                                         detail) == VIBEQC_STATUS_SUCCESS,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
@@ -514,7 +625,7 @@ void direct_providers(bool through_f_response) {
       CudaDirectJkPlan* pure_j_raw{};
       CudaDirectJkDiagnostic pure_j_diagnostic;
       require(create_cuda_direct_jk_plan(0, {first, second}, 0, 0.0, pure_j_capacity, &pure_j_raw,
-                                         pure_j_diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+                                         pure_j_diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> pure_j_plan(
           pure_j_raw, &destroy_cuda_direct_jk_plan);
@@ -528,7 +639,7 @@ void direct_providers(bool through_f_response) {
       CudaDirectJkDiagnostic generated_value_diagnostic;
       require(create_cuda_direct_jk_plan(0, {first, second}, 0, 0.0, 64U * 1024U * 1024U,
                                          &generated_value_raw, generated_value_diagnostic,
-                                         detail) == VIBEQC_STATUS_SUCCESS,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)>
           generated_value_plan(generated_value_raw, &destroy_cuda_direct_jk_plan);
@@ -542,7 +653,7 @@ void direct_providers(bool through_f_response) {
           cuda_direct_jk_device_bytes(2, n, 4, shell_count, primitive_count, 0);
       require(
           create_cuda_direct_jk_plan(0, {first, second}, 0, 0.0, fallback_capacity, &fallback_raw,
-                                     fallback_diagnostic, detail) == VIBEQC_STATUS_SUCCESS,
+                                     fallback_diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> fallback_plan(
           fallback_raw, &destroy_cuda_direct_jk_plan);
@@ -566,7 +677,7 @@ void direct_providers(bool through_f_response) {
             std::vector<double> dj, dka, dkb;
             require(execute_cuda_direct_jk(plan.get(), spec, packed_a,
                                            uhf ? packed_b : std::vector<double>{}, dj, dka, dkb,
-                                           detail) == VIBEQC_STATUS_SUCCESS,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
                     detail.c_str());
             std::vector<double> ej, eka, ekb, gradient;
             for (const auto* data : {&ints, &other}) {
@@ -612,59 +723,62 @@ void direct_providers(bool through_f_response) {
                   plan.get(), spec, packed_a, uhf ? packed_b : std::vector<double>{},
                   actual_gradient, detail);
               if (response) {
-                require(status == VIBEQC_STATUS_SUCCESS, detail.c_str());
+                require(status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
                 compare(actual_gradient, gradient);
               } else
-                require(status == VIBEQC_STATUS_INVALID_ARGUMENT,
+                require(status == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "unrequested direct derivatives executed");
             }
           }
       auto fitted = make_hf_fock_spec(FockSpin::Restricted, FockApproximation::DensityFitted);
       std::vector<double> j{123.0}, ka, kb;
       require(execute_cuda_direct_jk(plan.get(), fitted, packed_a, {}, j, ka, kb, detail) ==
-                      VIBEQC_STATUS_INVALID_ARGUMENT &&
+                      GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                   j == std::vector<double>{123.0},
               "direct provider accepted fitted semantics or published partial output");
       CudaDirectJkPlan* too_small{};
       require(create_cuda_direct_jk_plan(0, {first}, 0, 0.0, 1, &too_small, diagnostic, detail) ==
-                      VIBEQC_STATUS_OUT_OF_MEMORY &&
+                      GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
                   !too_small,
               "direct source ignored its buffer budget");
       auto invalid = first;
       invalid.atoms[0].position[0] = std::numeric_limits<double>::quiet_NaN();
-      require(create_cuda_direct_jk_plan(0, {invalid}, 0, 0.0, 64U * 1024U * 1024U, &too_small,
-                                         diagnostic, detail) == VIBEQC_STATUS_INVALID_ARGUMENT &&
-                  !too_small,
-              "nonfinite direct source geometry accepted");
-      if (angular == 0 && representation == VIBEQC_BASIS_CARTESIAN) {
+      require(
+          create_cuda_direct_jk_plan(0, {invalid}, 0, 0.0, 64U * 1024U * 1024U, &too_small,
+                                     diagnostic, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              !too_small,
+          "nonfinite direct source geometry accepted");
+      if (angular == 0 && representation == GENERATIVEQC_BASIS_CARTESIAN) {
         direct_device_failures(plan.get(), packed_a);
         // Inputs are finite but deliberately outside the stable numerical
         // range. A failed bound must not silently screen the entire source.
         invalid = first;
         invalid.shells[0].primitives[0].coefficient = 1e200;
         require(create_cuda_direct_jk_plan(0, {invalid}, 0, 0.0, 64U * 1024U * 1024U, &too_small,
-                                           diagnostic, detail) == VIBEQC_STATUS_NUMERICAL_FAILURE &&
+                                           diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
                     !too_small,
                 "nonfinite direct bound published a source");
         auto spec = make_hf_fock_spec(FockSpin::Restricted);
         auto huge = packed_a;
         std::fill(huge.begin(), huge.end(), std::numeric_limits<double>::max());
         require(execute_cuda_direct_jk(plan.get(), spec, huge, {}, j, ka, kb, detail) ==
-                        VIBEQC_STATUS_NUMERICAL_FAILURE &&
+                        GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
                     j == std::vector<double>{123.0},
                 "nonfinite direct matrix published partial output");
         std::fill(huge.begin(), huge.end(), 1e200);
         std::vector<double> gradient{123.0};
-        require(execute_cuda_direct_energy_derivative(plan.get(), spec, huge, {}, gradient,
-                                                      detail) == VIBEQC_STATUS_NUMERICAL_FAILURE &&
-                    gradient == std::vector<double>{123.0},
-                "nonfinite direct derivative published partial output");
+        require(
+            execute_cuda_direct_energy_derivative(plan.get(), spec, huge, {}, gradient, detail) ==
+                    GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+                gradient == std::vector<double>{123.0},
+            "nonfinite direct derivative published partial output");
         auto opposite = huge;
         for (auto& value : opposite) value = -value;
         spec.spin = FockSpin::Unrestricted;
         spec.exchange.present = false;
         require(execute_cuda_direct_energy_derivative(plan.get(), spec, huge, opposite, gradient,
-                                                      detail) == VIBEQC_STATUS_SUCCESS,
+                                                      detail) == GENERATIVEQC_STATUS_SUCCESS,
                 "absent direct exchange contaminated finite total-density response");
         for (double value : gradient) require(value == 0.0, "zero total-density response changed");
       }
@@ -673,15 +787,22 @@ void direct_providers(bool through_f_response) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
+      mixed_coulomb_work_census();
+      std::cout << "CUDA mixed Coulomb work census PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {
       range_exchange_derivatives();
       std::cout << "CUDA s/p/d/f SR/LR derivative gates PASS\n";
       return 0;
     }
     require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--through-f-response"),
-            "expected optional --through-f-response");
+            "expected optional --mixed-census-only, --range-response-only, or "
+            "--through-f-response");
     const bool through_f_response = argc == 2;
     direct_value_dispatch_selection();
+    mixed_coulomb_work_census();
     device_selection();
     range_exchange_provider();
     range_exchange_derivatives();

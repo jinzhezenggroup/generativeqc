@@ -12,16 +12,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     block_error,
     new_evidence,
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.resources import ResourcePlan
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.resources import ResourcePlan
 
-from tools.vibeqc_validation.publication import publish
+from tools.generativeqc_validation.publication import publish
 
 CASES = ("h2", "f_cartesian", "f_spherical", "separated_f")
 FUNCTIONALS = ("LDA_XC_PW", "PBE")
@@ -47,7 +47,11 @@ def validate_run(run: typing.Any) -> typing.Any:
     """Bind complete timing, source, derivative and resource inventories."""
     canonical_hash(run)  # Reject nonfinite values anywhere in retained evidence.
     if (
-        run["schema"] != "vibeqc.xc-contraction-benchmark.v1"
+        run["schema"]
+        not in {
+            "generativeqc.xc-contraction-benchmark.v1",
+            "vibeqc.xc-contraction-benchmark.v1",
+        }
         or run["dirty"] is not False
         or not re.fullmatch(r"[0-9a-f]{40}", run["revision"])
     ):
@@ -217,7 +221,11 @@ def summarize(run: typing.Any) -> typing.Any:
     """Reconstruct medians from retained samples without a speedup decision."""
     validate_run(run)
     return {
-        "schema": "vibeqc.xc-contraction-summary.v1",
+        "schema": (
+            "vibeqc.xc-contraction-summary.v1"
+            if run["schema"] == "vibeqc.xc-contraction-benchmark.v1"
+            else "generativeqc.xc-contraction-summary.v1"
+        ),
         "revision": run["revision"],
         "decision": "numerical acceptance; explicit experimental CPU candidate; no performance promotion",
         "cases": [
@@ -344,7 +352,7 @@ def main() -> None:
                 "--output",
                 ".artifacts/xc-measured.json",
             ],
-            "source_repository": "https://github.com/njzjz-bot/vibeqc",
+            "source_repository": "https://github.com/njzjz-bot/generativeqc",
             "source_ref": "refs/heads/evidence/issue-236-measured",
             "note": "Fetch exact measured revision; fresh cache; OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1; PySCF 2.14.0/Libxc 7.0.0.",
         },

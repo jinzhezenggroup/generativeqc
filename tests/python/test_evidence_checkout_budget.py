@@ -4,12 +4,12 @@ import typing
 
 import pytest
 
-from tools.vibeqc_validation.retention import check
+from tools.generativeqc_validation.retention import check
 
 
 def policy(budget: typing.Any) -> typing.Any:
     return {
-        "schema": "vibeqc.retention-policy.v1",
+        "schema": "generativeqc.retention-policy.v1",
         "exceptions": {},
         "review_size_bytes": 1024,
         "benchmark_results_max_bytes": budget,

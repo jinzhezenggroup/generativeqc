@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SOLVER_DENSE_LINEAR_HPP
-#define VIBEQC_SOLVER_DENSE_LINEAR_HPP
+#ifndef GENERATIVEQC_SOLVER_DENSE_LINEAR_HPP
+#define GENERATIVEQC_SOLVER_DENSE_LINEAR_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace vibeqc::solver {
+namespace generativeqc::solver {
 
 /** Small pivoted dense FP64 solve used by host iterative-solver policies.
  *
@@ -49,6 +49,6 @@ inline bool solve_dense_linear(std::vector<double> matrix, std::vector<double> r
   return true;
 }
 
-}  // namespace vibeqc::solver
+}  // namespace generativeqc::solver
 
 #endif

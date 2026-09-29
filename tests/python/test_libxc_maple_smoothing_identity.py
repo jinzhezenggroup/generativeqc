@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.xc.libxc_maple import MapleImportError, import_maple_source
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.xc.libxc_maple import MapleImportError, import_maple_source
 
 SOURCE = Path(__file__).resolve().parents[2] / "upstream/libxc/7.0.0/attenuation.mpl"
 

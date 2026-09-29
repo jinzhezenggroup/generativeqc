@@ -1,12 +1,12 @@
-#ifndef VIBEQC_SCF_CUDA_ONE_ELECTRON_VALUES_CUH
-#define VIBEQC_SCF_CUDA_ONE_ELECTRON_VALUES_CUH
+#ifndef GENERATIVEQC_SCF_CUDA_ONE_ELECTRON_VALUES_CUH
+#define GENERATIVEQC_SCF_CUDA_ONE_ELECTRON_VALUES_CUH
 
 #include <cuda_runtime.h>
 
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Non-owning device view of existing normalized basis topology and geometry.
  * AO expansion terms retain the basis layer's Cartesian/spherical order.
@@ -46,6 +46,6 @@ cudaError_t launch_generated_one_electron_values(
     const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
     double* hcore, cudaStream_t stream, double* kinetic = nullptr, double* attraction = nullptr);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

@@ -1,7 +1,11 @@
 """Unknown and output-free effects must survive dead-code elimination."""
 
 import pytest
-from vibeqc_compiler.common.liveness import EffectKind, LivenessNode, analyze_liveness
+from generativeqc_compiler.common.liveness import (
+    EffectKind,
+    LivenessNode,
+    analyze_liveness,
+)
 
 
 def test_unspecified_effect_preserves_the_operation_and_its_inputs() -> None:

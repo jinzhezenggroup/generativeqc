@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_df_production.hpp"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_tuning/manifest.py"
+  "owner": "python/generativeqc_compiler/integral/df_tuning/manifest.py"
 }

@@ -16,8 +16,8 @@
 #include "generated_cosx_derivative_contractions.cuh"
 #include "generated_one_electron_derivatives.cuh"
 #include "generated_one_electron_values.cuh"
+#include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
-#include "vibeqc/vibeqc.h"
 
 extern "C" {
 int grid_cuda_create_v2(int device, int major, int minor, const size_t* dimensions,
@@ -27,16 +27,18 @@ void grid_cuda_destroy_v1(void* pointer);
 int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint, int features,
                               const size_t* ao_ids, size_t active, double* feature_output,
                               double* jet_output, char* error, size_t size);
-int grid_cuda_view_v1(void* pointer, vibeqc::dft::GridTaskView* output, char* error, size_t size);
-int grid_cuda_basis_v1(void* pointer, vibeqc::dft::GridBasisView* output, char* error, size_t size);
+int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, char* error,
+                      size_t size);
+int grid_cuda_basis_v1(void* pointer, generativeqc::dft::GridBasisView* output, char* error,
+                       size_t size);
 }
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 // The device layout and upload width must follow the host grid index storage.
 using GridOwner = std::remove_cvref_t<
-    decltype(std::declval<const vibeqc::dft::MolecularGrid&>().owners())>::value_type;
+    decltype(std::declval<const generativeqc::dft::MolecularGrid&>().owners())>::value_type;
 
 void check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
@@ -44,7 +46,7 @@ void check(cudaError_t status) {
 }
 
 void checked_status(int status, const char* detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status != 0) throw std::runtime_error(detail);
 }
 
@@ -129,8 +131,8 @@ __global__ void esp_probe_derivative_kernel(const double* basis, std::size_t nat
                                             std::size_t nprimitive, std::size_t nao,
                                             const double* points, std::size_t npoint, double* esp,
                                             double* esp_derivative, int* error) {
-  namespace one = vibeqc::scf::generated_one_electron;
-  namespace derivative = vibeqc::scf::generated_one_electron_derivatives;
+  namespace one = generativeqc::scf::generated_one_electron;
+  namespace derivative = generativeqc::scf::generated_one_electron_derivatives;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t matrix = nao * nao;
@@ -207,7 +209,7 @@ __global__ void esp_probe_derivative_kernel(const double* basis, std::size_t nat
 __global__ void esp_value_kernel(const double* basis, std::size_t natom, std::size_t nprimitive,
                                  std::size_t nao, const double* points, std::size_t npoint,
                                  double* esp, int* error) {
-  namespace one = vibeqc::scf::generated_one_electron;
+  namespace one = generativeqc::scf::generated_one_electron;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t matrix = nao * nao;
@@ -519,7 +521,7 @@ __global__ void contract_molecular_esp_kernel(const double* basis, std::size_t n
                                               const double* symmetric_projection,
                                               std::size_t npoint, double energy_factor,
                                               double* nuclear_gradient, int* error) {
-  namespace derivative = vibeqc::scf::generated_one_electron_derivatives;
+  namespace derivative = generativeqc::scf::generated_one_electron_derivatives;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t matrix = nao * nao;
@@ -573,14 +575,17 @@ __global__ void contract_molecular_esp_kernel(const double* basis, std::size_t n
                                                 a[2], b[0], b[1], b[2]);
         const double primitive_weight = primitives[2 * ia + 1] * primitives[2 * ib + 1];
         for (unsigned ti = 0; ti < first_terms; ++ti) {
-          const unsigned first_component = vibeqc::scf::generated_one_electron::component_index(
-              static_cast<unsigned>(first[4 + 4 * ti]), static_cast<unsigned>(first[5 + 4 * ti]),
-              static_cast<unsigned>(first[6 + 4 * ti]));
+          const unsigned first_component =
+              generativeqc::scf::generated_one_electron::component_index(
+                  static_cast<unsigned>(first[4 + 4 * ti]),
+                  static_cast<unsigned>(first[5 + 4 * ti]),
+                  static_cast<unsigned>(first[6 + 4 * ti]));
           for (unsigned tj = 0; tj < second_terms; ++tj) {
-            const unsigned second_component = vibeqc::scf::generated_one_electron::component_index(
-                static_cast<unsigned>(second[4 + 4 * tj]),
-                static_cast<unsigned>(second[5 + 4 * tj]),
-                static_cast<unsigned>(second[6 + 4 * tj]));
+            const unsigned second_component =
+                generativeqc::scf::generated_one_electron::component_index(
+                    static_cast<unsigned>(second[4 + 4 * tj]),
+                    static_cast<unsigned>(second[5 + 4 * tj]),
+                    static_cast<unsigned>(second[6 + 4 * tj]));
             double factor = 0.0;
             if (!generated_cosx_derivative::scale_pair(primitive_weight, first[7 + 4 * ti],
                                                        second[7 + 4 * tj], factor)) {
@@ -720,7 +725,7 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(const MolecularGrid& g
   const int create_status = grid_cuda_create_v2(
       device, properties.major, properties.minor, dimensions, basis.packed.data(), tile_points, 1,
       diagnostic.grid_device_bytes, n, &grid_plan, message, sizeof(message));
-  if (create_status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (create_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (create_status != 0 || !grid_plan)
     throw std::runtime_error(message[0] ? message : "CUDA COSX molecular grid preparation failed");
 
@@ -871,7 +876,7 @@ std::vector<double> cuda_cosx_point_derivative_reference(const core::System& sys
   const int create_status = grid_cuda_create_v2(
       device, properties.major, properties.minor, dimensions, basis.packed.data(), tile_points, 1,
       expected_grid_bytes, n, &grid, message, sizeof(message));
-  if (create_status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (create_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (create_status != 0 || !grid)
     throw std::runtime_error(message[0] ? message : "CUDA COSX derivative grid preparation failed");
 
@@ -958,4 +963,4 @@ std::vector<double> cuda_cosx_point_derivative_reference(const core::System& sys
   }
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

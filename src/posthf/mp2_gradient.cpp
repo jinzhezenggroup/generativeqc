@@ -10,7 +10,7 @@
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 namespace {
 constexpr const char* energy_adjoint_hash = "mp2-canonical-energy-adjoint-v1";
 
@@ -528,6 +528,7 @@ GradientResourcePlan conventional_gradient_plan(
       posthf::checked_add(posthf::checked_mul(2, n4), posthf::checked_mul(3, n2));
   relaxed_elements = posthf::checked_add(relaxed_elements, posthf::checked_mul(2, rotations));
   plan.relaxed_weight_bytes = posthf::checked_mul(sizeof(double), relaxed_elements);
+  plan.rank2_transform_workspace_bytes = posthf::checked_mul(sizeof(double), n2);
   plan.shell_cotangent_bytes =
       posthf::checked_mul(sizeof(double), fourth_power(maximum_shell_ao_count));
   const auto shell2 = square(maximum_shell_ao_count);
@@ -545,8 +546,9 @@ GradientResourcePlan conventional_gradient_plan(
   plan.candidate_output_bytes = candidate_output_bytes;
   plan.peak_bytes = provider_bytes;
   for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
-                     plan.shell_cotangent_bytes, plan.derivative_staging_bytes,
-                     plan.derivative_backend_staging_bytes, plan.candidate_output_bytes})
+                     plan.rank2_transform_workspace_bytes, plan.shell_cotangent_bytes,
+                     plan.derivative_staging_bytes, plan.derivative_backend_staging_bytes,
+                     plan.candidate_output_bytes})
     plan.peak_bytes = posthf::checked_add(plan.peak_bytes, bytes);
   if (plan.peak_bytes > budget_bytes)
     throw std::length_error("conventional MP2 gradient exceeds numeric memory budget");
@@ -581,6 +583,7 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
       posthf::checked_add(posthf::checked_mul(2, n4), posthf::checked_mul(3, n2));
   relaxed_elements = posthf::checked_add(relaxed_elements, posthf::checked_mul(2, rotations));
   plan.relaxed_weight_bytes = posthf::checked_mul(sizeof(double), relaxed_elements);
+  plan.rank2_transform_workspace_bytes = posthf::checked_mul(sizeof(double), n2);
 
   auto reverse_result_elements =
       posthf::checked_add(posthf::checked_mul(2, n2), posthf::checked_add(three, a2));
@@ -602,13 +605,14 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
   plan.candidate_output_bytes = candidate_output_bytes;
 
   plan.peak_bytes = provider_bytes;
-  for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
-                     plan.reverse_result_bytes, plan.reverse_workspace_bytes,
-                     plan.derivative_staging_bytes, plan.candidate_output_bytes})
+  for (auto bytes :
+       {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
+        plan.rank2_transform_workspace_bytes, plan.reverse_result_bytes,
+        plan.reverse_workspace_bytes, plan.derivative_staging_bytes, plan.candidate_output_bytes})
     plan.peak_bytes = posthf::checked_add(plan.peak_bytes, bytes);
   if (plan.peak_bytes > budget_bytes)
     throw std::length_error("RI-MP2 gradient exceeds numeric memory budget");
   return plan;
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

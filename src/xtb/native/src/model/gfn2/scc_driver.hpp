@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_SCC_DRIVER_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_SCC_DRIVER_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_SCC_DRIVER_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_SCC_DRIVER_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -21,7 +21,7 @@
 #include "model/gfn2/wavefunction.hpp"
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 inline constexpr std::size_t kSccDriverWorkspaceAlignment = 64u;
 inline constexpr double kDefaultSccEnergyTolerance = 1.0e-8;
@@ -68,7 +68,7 @@ class SccDriverPlan {
   explicit SccDriverPlan(std::shared_ptr<const SccDriverPlanData> data) noexcept;
   std::shared_ptr<const SccDriverPlanData> data_;
 
-  friend vibeqc_xtb_status_t make_scc_driver_plan(
+  friend generativeqc_xtb_status_t make_scc_driver_plan(
       const WavefunctionLayout& wavefunction, const MullikenPlan& mulliken, const ES2Plan& es2,
       const ES3Plan& es3, const AES2Plan& aes2, const EigensolverPlan& eigensolver,
       const SccMixerPlan& mixer, const D4Plan* d4, const PeriodicEmbeddingPlan* periodic_embedding,
@@ -162,7 +162,7 @@ struct SccDriverState {
   double* periodic_embedding_energies = nullptr;
   double* internal_energies = nullptr;
   std::uint64_t* iterations = nullptr;
-  vibeqc_xtb_status_t* system_statuses = nullptr;
+  generativeqc_xtb_status_t* system_statuses = nullptr;
   std::uint8_t* initialized = nullptr;
   std::uint8_t* converged = nullptr;
 
@@ -210,7 +210,7 @@ struct SccDriverWorkspace {
   double* free_energies = nullptr;
   double* periodic_atomic_potentials = nullptr;
   double* periodic_embedding_energies = nullptr;
-  vibeqc_xtb_status_t* periodic_system_statuses = nullptr;
+  generativeqc_xtb_status_t* periodic_system_statuses = nullptr;
   double* d4_atomic_potentials = nullptr;
   double* d4_two_body_energies = nullptr;
   std::uint8_t* active_systems = nullptr;
@@ -231,30 +231,30 @@ struct SccDriverWorkspace {
 /* Seal the component plans and explicit SCC convergence policy. The
  * molecular driver uses both the mixer residual and complete free-energy
  * change, including D4 and finite-temperature entropy, as acceptance gates. */
-vibeqc_xtb_status_t make_scc_driver_plan(
+generativeqc_xtb_status_t make_scc_driver_plan(
     const WavefunctionLayout& wavefunction, const MullikenPlan& mulliken, const ES2Plan& es2,
     const ES3Plan& es3, const AES2Plan& aes2, const EigensolverPlan& eigensolver,
     const SccMixerPlan& mixer, const D4Plan* d4, const PeriodicEmbeddingPlan* periodic_embedding,
     std::uint64_t maximum_iterations, double electronic_temperature, double energy_tolerance,
     SccDriverPlan& plan, std::string& error);
 
-vibeqc_xtb_status_t bind_scc_driver_state(const SccDriverPlan& plan, void* workspace,
+generativeqc_xtb_status_t bind_scc_driver_state(const SccDriverPlan& plan, void* workspace,
                                           std::size_t workspace_size, SccDriverState& state,
                                           std::string& error);
 
-vibeqc_xtb_status_t bind_scc_driver_workspace(const SccDriverPlan& plan, void* workspace,
+generativeqc_xtb_status_t bind_scc_driver_workspace(const SccDriverPlan& plan, void* workspace,
                                               std::size_t workspace_size, SccDriverWorkspace& view,
                                               std::string& error);
 
 /* Initialize both the mixer history and driver trace as one logical action. */
-vibeqc_xtb_status_t initialize_scc_driver_state_cpu(const SccDriverPlan& plan,
+generativeqc_xtb_status_t initialize_scc_driver_state_cpu(const SccDriverPlan& plan,
                                                     const WavefunctionView& wavefunction,
                                                     const SccMixerState& mixer_state,
                                                     const SccDriverState& state,
                                                     std::string& error);
 
 /* Restart one system from its current public multipoles (raw when converged). */
-vibeqc_xtb_status_t restart_scc_driver_system_cpu(const SccDriverPlan& plan, std::int64_t system,
+generativeqc_xtb_status_t restart_scc_driver_system_cpu(const SccDriverPlan& plan, std::int64_t system,
                                                   const WavefunctionView& wavefunction,
                                                   const SccMixerState& mixer_state,
                                                   const SccDriverState& state, std::string& error);
@@ -275,13 +275,13 @@ vibeqc_xtb_status_t restart_scc_driver_system_cpu(const SccDriverPlan& plan, std
  * from that public raw state. Successful steady-state calls perform no dynamic
  * allocation.
  */
-vibeqc_xtb_status_t iterate_scc_driver_batch_cpu(
+generativeqc_xtb_status_t iterate_scc_driver_batch_cpu(
     const SccDriverPlan& plan, const SccDriverGeometryView& geometry,
     const CpuLinearAlgebraBackend& backend, const EigensolverOverlapCache& overlap_cache,
     const WavefunctionView& wavefunction, const SccMixerState& mixer_state,
     const SccDriverState& state, const SccDriverWorkspace& workspace, std::string& error,
     const SccParallelExecutor* parallel = nullptr);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_SCC_DRIVER_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_SCC_DRIVER_HPP

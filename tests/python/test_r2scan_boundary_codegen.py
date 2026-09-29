@@ -43,7 +43,7 @@ def test_generated_r2scan_matches_high_precision_libxc_tail(tmp_path: Path) -> N
     for values, _ in REFERENCE:
         arguments = ", ".join(repr(value) for value in values)
         calls.append(
-            "{ auto v = vibeqc::dft::generated::r2scan_polarized("
+            "{ auto v = generativeqc::dft::generated::r2scan_polarized("
             + arguments
             + '); std::printf("%.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g\\n", '
             + "v.energy_density, v.feature_derivative[0], v.feature_derivative[1], "
@@ -80,7 +80,7 @@ def test_generated_r2scan_matches_high_precision_libxc_tail(tmp_path: Path) -> N
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated CUDA device",
 )
 def test_generated_cuda_r2scan_matches_high_precision_libxc_tail(
@@ -106,7 +106,7 @@ def test_generated_cuda_r2scan_matches_high_precision_libxc_tail(
         '#include <cstdio>\n#include <cuda_runtime.h>\n#include "r2scan.cuh"\n'
         "__global__ void evaluate(const double* inputs, double* outputs) {\n"
         "  const auto i = blockIdx.x; const auto* p = inputs + 7 * i;\n"
-        "  const auto v = vibeqc::dft::generated::r2scan_device(\n"
+        "  const auto v = generativeqc::dft::generated::r2scan_device(\n"
         "      p[0], p[1], p[2], p[3], p[4], p[5], p[6]);\n"
         "  outputs[8 * i] = v.energy_density;\n"
         "  for (unsigned k = 0; k < 7; ++k) outputs[8 * i + k + 1] = v.feature_derivative[k];\n"

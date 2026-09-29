@@ -8,20 +8,20 @@
 #include <intrin.h>
 #endif
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 namespace {
 
-constexpr const char* kCpuIsaEnvironment = "VIBEQC_XTB_CPU_ISA";
+constexpr const char* kCpuIsaEnvironment = "GENERATIVEQC_XTB_CPU_ISA";
 
 #if (defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__))
 #if defined(__has_builtin)
-#define VIBEQC_XTB_HAS_CPU_BUILTINS \
+#define GENERATIVEQC_XTB_HAS_CPU_BUILTINS \
   (__has_builtin(__builtin_cpu_init) && __has_builtin(__builtin_cpu_supports))
 #else
-#define VIBEQC_XTB_HAS_CPU_BUILTINS 1
+#define GENERATIVEQC_XTB_HAS_CPU_BUILTINS 1
 #endif
 #else
-#define VIBEQC_XTB_HAS_CPU_BUILTINS 0
+#define GENERATIVEQC_XTB_HAS_CPU_BUILTINS 0
 #endif
 
 }  // namespace
@@ -31,7 +31,7 @@ const char* cpu_isa_name(CpuIsa isa) noexcept {
 }
 
 bool cpu_avx2_fma_kernels_built() noexcept {
-#if defined(VIBEQC_XTB_HAS_AVX2_FMA_KERNELS)
+#if defined(GENERATIVEQC_XTB_HAS_AVX2_FMA_KERNELS)
   return true;
 #else
   return false;
@@ -63,7 +63,7 @@ CpuFeatureSnapshot detect_cpu_features() noexcept {
     features.avx2 = (static_cast<unsigned int>(registers[1]) & (1u << 5u)) != 0u;
   }
   return features;
-#elif VIBEQC_XTB_HAS_CPU_BUILTINS
+#elif GENERATIVEQC_XTB_HAS_CPU_BUILTINS
   /* GCC and Clang's x86 CPU builtins include the operating-system AVX state
    * gate. A reported AVX capability therefore also proves OSXSAVE plus the
    * required XMM/YMM XCR0 state without executing AVX in this translation unit. */
@@ -80,45 +80,45 @@ CpuFeatureSnapshot detect_cpu_features() noexcept {
 #endif
 }
 
-vibeqc_xtb_status_t resolve_cpu_isa_request(const char* request, bool avx2_kernels_built,
+generativeqc_xtb_status_t resolve_cpu_isa_request(const char* request, bool avx2_kernels_built,
                                          const CpuFeatureSnapshot& features, CpuIsa& selected,
                                          std::string& error) {
   const char* mode = request == nullptr ? "auto" : request;
   if (std::strcmp(mode, "baseline") == 0) {
     selected = CpuIsa::kBaseline;
     error.clear();
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
   if (std::strcmp(mode, "auto") == 0) {
     selected =
         avx2_kernels_built && features.supports_avx2_fma() ? CpuIsa::kAvx2Fma : CpuIsa::kBaseline;
     error.clear();
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
   if (std::strcmp(mode, "avx2") != 0) {
-    error = "VIBEQC_XTB_CPU_ISA must be exactly one of auto, baseline, or avx2 when it is set";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    error = "GENERATIVEQC_XTB_CPU_ISA must be exactly one of auto, baseline, or avx2 when it is set";
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   if (!avx2_kernels_built) {
-    error = "VIBEQC_XTB_CPU_ISA=avx2 was requested, but this xTBloom build has no AVX2/FMA kernels";
-    return VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+    error = "GENERATIVEQC_XTB_CPU_ISA=avx2 was requested, but this xTBloom build has no AVX2/FMA kernels";
+    return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
   }
   if (!features.supports_avx2_fma()) {
     error =
-        "VIBEQC_XTB_CPU_ISA=avx2 was requested, but the CPU or operating system does not support "
+        "GENERATIVEQC_XTB_CPU_ISA=avx2 was requested, but the CPU or operating system does not support "
         "AVX2 with FMA and enabled XMM/YMM state";
-    return VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+    return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
   }
   selected = CpuIsa::kAvx2Fma;
   error.clear();
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t resolve_cpu_isa_from_environment(CpuIsa& selected, std::string& error) {
+generativeqc_xtb_status_t resolve_cpu_isa_from_environment(CpuIsa& selected, std::string& error) {
   return resolve_cpu_isa_request(std::getenv(kCpuIsaEnvironment), cpu_avx2_fma_kernels_built(),
                                  detect_cpu_features(), selected, error);
 }
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail
 
-#undef VIBEQC_XTB_HAS_CPU_BUILTINS
+#undef GENERATIVEQC_XTB_HAS_CPU_BUILTINS

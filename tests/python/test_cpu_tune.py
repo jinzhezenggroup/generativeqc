@@ -6,27 +6,27 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cpu_dispatch import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cpu_dispatch import (
     cpu_target_supported,
     detect_cpu_features,
 )
-from vibeqc_compiler.common.cpu_target import (
+from generativeqc_compiler.common.cpu_target import (
     AVX2_FMA_TARGET,
     GENERIC_CPU_TARGET,
 )
-from vibeqc_compiler.integral.cpu_tune import (
+from generativeqc_compiler.integral.cpu_tune import (
     CpuTuneLimits,
     CpuTuneSchedule,
     cpu_static_cost,
     cpu_tune_candidates,
     tune_cpu_first_derivative_shell,
 )
-from vibeqc_compiler.integral.first_derivatives_execute import (
+from generativeqc_compiler.integral.first_derivatives_execute import (
     FirstDerivativeShellEvaluator,
     compile_first_derivative_shell,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
 
 @pytest.fixture(scope="module")
@@ -153,7 +153,7 @@ def test_cpu_autotune_numerical_gate_timing_and_parallel_evidence(
         targets=tuple(targets),
         limits=limits,
     )
-    assert result["schema"] == "vibeqc.cpu-autotune.v1"
+    assert result["schema"] == "generativeqc.cpu-autotune.v1"
     assert result["selected"]["selection_identity"]
     assert result["selected"]["program_identity"]
     assert result["selected"]["compiler_artifact_keys"]
@@ -169,7 +169,7 @@ def test_cpu_autotune_numerical_gate_timing_and_parallel_evidence(
     for row in ready:
         static = row["static_resources"]
         actual_bytes = row["compiled_resources"]["numeric_storage_bytes"]
-        assert static["schema"] == "vibeqc.cpu.static-cost.v2"
+        assert static["schema"] == "generativeqc.cpu.static-cost.v2"
         assert actual_bytes == static["estimated_numeric_storage_bytes"]
         assert actual_bytes <= static["estimated_runtime_working_set_bytes"]
         assert (
@@ -259,7 +259,7 @@ def test_cpu_static_cost_accounts_for_record_storage() -> None:
 def test_cpu_autotune_rejects_record_budget_before_compilation(
     monkeypatch: typing.Any, tmp_path: typing.Any
 ) -> None:
-    import vibeqc_compiler.integral.cpu_tune as tuning
+    import generativeqc_compiler.integral.cpu_tune as tuning
 
     ir = build_weighted_eri_ir((1, 0, 0, 0))
     primitives, centers = _fixture()

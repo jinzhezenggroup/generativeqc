@@ -3,7 +3,7 @@
 The internal C++ boundaries in `src/scf/fock_build.hpp` and
 `src/scf/fock_provider.hpp` separate a mathematical J/K request from its
 resolved execution strategy and prepared integral sources. CPU and CUDA
-providers can be selected independently. The additive public `vibeqc/fock.h`
+providers can be selected independently. The additive public `generativeqc/fock.h`
 and Python `FockPlan` interfaces expose these choices while the legacy method
 descriptors retain their density-fitting defaults.
 
@@ -21,8 +21,8 @@ is tracked in the [pure-J candidate note](../../.agents/notes/proposed/2026-09-2
 Create a new plan when those inputs or mathematical coefficients change:
 
 ```python
-from vibeqc import FockBuildSpec, FockPlan
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import FockBuildSpec, FockPlan
+from generativeqc_compiler.dft import NativeAO
 
 atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]  # Bohr
 spec = FockBuildSpec.hf(coulomb="density_fitted", exchange="exact")
@@ -73,7 +73,7 @@ device-byte diagnostics cover explicit source buffers and exclude modules,
 driver/library-private storage and recurrence stacks.
 
 The C API offers the same ownership and output rules through
-`vibeqc_fock_plan_create`, `evaluate`, `solve`, `diagnostic`, `last_error` and
+`generativeqc_fock_plan_create`, `evaluate`, `solve`, `diagnostic`, `last_error` and
 `destroy`. Context and system handles may be destroyed after creation.
 Descriptors are versioned and caller-owned output buffers must be disjoint.
 Publication is transactional, including SCF nonconvergence. C callers must
@@ -85,8 +85,8 @@ serialize calls and destruction; Python serializes them with a per-plan lock.
 with the existing `FixedDensityXC` integrator:
 
 ```python
-from vibeqc import FixedDensityMeanField, FockBuildSpec, FockTerm
-from vibeqc_compiler.xc import FixedDensityXC, functional
+from generativeqc import FixedDensityMeanField, FockBuildSpec, FockTerm
+from generativeqc_compiler.xc import FixedDensityXC, functional
 
 spec = FockBuildSpec(
     derivative_order=0, coulomb=FockTerm(), exchange=FockTerm(present=False)
@@ -317,10 +317,10 @@ and [COSX reference contract](../reference/cosx_reference.md).
 
 ## Validation and scope
 
-`vibeqc_fock_build_tests` uses independent pinned two-AO J/K values, distinct
+`generativeqc_fock_build_tests` uses independent pinned two-AO J/K values, distinct
 alpha/beta densities, nonsymmetric densities, and non-unit coefficients. It
 checks absent terms, derivatives, preflight failures, and resolved identities.
-`vibeqc_fock_provider_tests` adds all exact/DF pairings, independently absent
+`generativeqc_fock_provider_tests` adds all exact/DF pairings, independently absent
 terms, a separate dense DF oracle, central differences through a truncated
 metric, molecular SCF/force comparisons, warm replay, changed geometry and
 ragged failure isolation. CUDA DF tests cover independent host and resident
@@ -328,24 +328,24 @@ device outputs against the same-approximation CPU services. The existing
 RHF/UHF, batch, density-fitting, Cartesian, and spherical suites exercise the
 standard method endpoints.
 
-`vibeqc_cuda_fock_provider_tests` covers through-f direct matrices, s/p
+`generativeqc_cuda_fock_provider_tests` covers through-f direct matrices, s/p
 derivatives, public representations, nonfinite source/result failure, and
-independent DF device layouts. `vibeqc_cuda_fock_composition_tests` compares
+independent DF device layouts. `generativeqc_cuda_fock_composition_tests` compares
 all exact/DF/absent pairs, both spins, signed responses and separate batch items
 against CPU integrals. It checks resident and regenerated DF storage with a
 truncated metric, and complete SCF/replay/changed-geometry force endpoints.
-The optional `vibeqc_cuda_fock_provider_tests --through-f-response` numerical
+The optional `generativeqc_cuda_fock_provider_tests --through-f-response` numerical
 tier adds signed d/f UHF responses against the complete CPU derivative tensors
 for both public representations and both independently prepared batch items.
 
-`vibeqc_cosx_fock_provider_tests` qualifies the internal fixed-density
+`generativeqc_cosx_fock_provider_tests` qualifies the internal fixed-density
 RI-J/COSX-K composition for RHF and UHF against independent CPU DF and discrete
 COSX oracles. It also checks that the dedicated grid exactly reproduces the
 resolved COSX identity, total device usage stays within the admitted budget,
 and the legacy exact/DF prepared owner rejects COSX rather than falling through
 to its DF branch.
 
-`vibeqc_cosx_scf_tests` covers cold RHF/UHF convergence, warm replay,
+`generativeqc_cosx_scf_tests` covers cold RHF/UHF convergence, warm replay,
 strict warm determinant validation, nonconverged one-iteration state behavior
 and explicit force rejection. The returned density and energy are re-evaluated
 with independent CPU DF-J and discrete COSX-K oracles, including the final
@@ -353,7 +353,7 @@ physical commutator residual.
 
 `tests/python/test_fock.py` exercises public independent choices, transactional
 failure, identity, source lifetime, SCF/replay/force consistency and semilocal XC
-composition. `vibeqc_fock_api_tests` exercises the public C lifecycle after
+composition. `generativeqc_fock_api_tests` exercises the public C lifecycle after
 context/system destruction and is also run with CUDA under the scheduler.
 The [retained production comparison](../../benchmarks/results/fock-strategies/README.md)
 contains matched, synchronized CPU/CUDA endpoints, raw samples, quantitative
@@ -364,7 +364,7 @@ This is an architecture non-regression study, not a speedup promotion.
 No complete DFT SCF method is advertised.
 
 `tools/benchmark_fock_strategies.py` runs one worker per revision/backend
-against production Release builds with `VIBEQC_CUDA_FAST_COMPILE=OFF`. It
+against production Release builds with `GENERATIVEQC_CUDA_FAST_COMPILE=OFF`. It
 records fixed-density direct CPU and DF CPU/CUDA matrices, complete RHF/UHF
 SCF/forces, warm replay, changed geometry and four-item batch timings, with
 all raw samples and matched-approximation numerical gates. The standalone
@@ -417,9 +417,9 @@ bounded reduction storage, serialized across items and spins and included in
 tile-budget admission. It never borrows graph scratch. CUDA allocation, library
 and execution failures propagate without selecting a CPU fallback.
 
-`VIBEQC_DF_REFERENCE_FINAL_VALIDATION=1` explicitly restores the CPU validation,
+`GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION=1` explicitly restores the CPU validation,
 projection and W path for independent diagnostics and causal timing comparisons.
-`VIBEQC_DF_FORCE_FINAL_REBUILD=1` and `VIBEQC_DF_REFERENCE_FINAL_EIGEN=1` still
+`GENERATIVEQC_DF_FORCE_FINAL_REBUILD=1` and `GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN=1` still
 perform the actual bounded correction/rebuild path. Component traces report
 validation/W GPU intervals, transfers, synchronization and workspace bytes;
 host regions and the progress journal retain physical-Fock/eigen/correction

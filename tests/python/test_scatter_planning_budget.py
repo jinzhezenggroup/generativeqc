@@ -3,8 +3,8 @@
 from unittest.mock import patch
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -14,7 +14,7 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     scatter_add,
 )
-from vibeqc_compiler.tensor.batch_schedule import index_table_values
+from generativeqc_compiler.tensor.batch_schedule import index_table_values
 
 
 def _scatter_program(targets: int) -> Program:

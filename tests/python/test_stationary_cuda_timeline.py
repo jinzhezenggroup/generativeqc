@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc._stationary_cuda import _ExclusiveWallTimeline
+from generativeqc._stationary_cuda import _ExclusiveWallTimeline
 
 
 def test_exclusive_stationary_cuda_timeline_reconciles_without_overlap() -> None:
@@ -13,7 +13,7 @@ def test_exclusive_stationary_cuda_timeline_reconciles_without_overlap() -> None
         pass
     result = timeline.finish()
 
-    assert result["schema"] == "vibeqc.stationary-cuda-exclusive-wall.v1"
+    assert result["schema"] == "generativeqc.stationary-cuda-exclusive-wall.v1"
     assert result["exclusive_wall_seconds"] == {
         "artifact_lookup_compile": 6.0,
         "preparation": 1.0,

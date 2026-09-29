@@ -14,45 +14,45 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Host-owned Cartesian DF tensor export for the explicit raw-integral API. This compatibility
  * output is separate from device-resident source replay. */
 namespace {
 using namespace cuda_execution;
 
-vibeqc_status cuda_status(cudaError_t status) {
-  if (status == cudaSuccess) return VIBEQC_STATUS_SUCCESS;
-  return status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                             : VIBEQC_STATUS_CUDA_ERROR;
+generativeqc_status cuda_status(cudaError_t status) {
+  if (status == cudaSuccess) return GENERATIVEQC_STATUS_SUCCESS;
+  return status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                             : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
 /** Generate Cartesian DF tensors without constructing the full four-center ERI. */
-vibeqc_status build_cuda_density_fitting_integrals_impl(
+generativeqc_status build_cuda_density_fitting_integrals_impl(
     int device_id, const core::System& orbital_system, const core::System& auxiliary_system,
     integrals::DensityFittingIntegralData& output, std::string& detail, bool include_derivatives) {
   unsigned value_math = 0, value_lanes = 1;
   if (!cuda_policy::df_value_raw_lanes_requested(value_lanes)) {
-    detail = "VIBEQC_DF_VALUE_RAW_MAPPING must be auto, scalar, subgroup, warp or candidate";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_VALUE_RAW_MAPPING must be auto, scalar, subgroup, warp or candidate";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (!cuda_policy::df_value_math_requested(value_math)) {
-    detail = "VIBEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (device_id < 0) {
     detail = "CUDA density-fitting integral generation received an invalid device";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (orbital_system.atoms.size() != auxiliary_system.atoms.size()) {
     detail = "orbital and auxiliary systems must share geometry";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (std::size_t atom = 0; atom < orbital_system.atoms.size(); ++atom) {
     if (orbital_system.atoms[atom].atomic_number != auxiliary_system.atoms[atom].atomic_number ||
         orbital_system.atoms[atom].position != auxiliary_system.atoms[atom].position) {
       detail = "orbital and auxiliary systems must share geometry";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
 
@@ -70,31 +70,31 @@ vibeqc_status build_cuda_density_fitting_integrals_impl(
   combined.charge = orbital_system.charge;
   combined.multiplicity = 1;
   combined.electron_count = 2;
-  combined.basis_representation = VIBEQC_BASIS_CARTESIAN;
+  combined.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
 
   HostBatch host;
   std::vector<const std::vector<double>*> no_warm(1, nullptr);
   if (!pack_host_batch({combined}, no_warm, host, false)) {
     detail = "combined Cartesian DF basis cannot be represented by CUDA";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t orbital_count = molecule::cartesian_ao_count(orbital_system);
   const std::size_t auxiliary_count = molecule::cartesian_ao_count(auxiliary_system);
   const std::size_t dummy_index = orbital_count + auxiliary_count;
   if (host.nbf != dummy_index + 1U || orbital_count == 0U || auxiliary_count == 0U) {
     detail = "Cartesian DF basis dimensions are inconsistent";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (auxiliary_count > std::numeric_limits<std::int32_t>::max() ||
       dummy_index > std::numeric_limits<std::int32_t>::max() ||
       host.nbf > std::numeric_limits<std::int32_t>::max()) {
     detail = "Cartesian DF basis exceeds CUDA index limits";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (orbital_count > std::numeric_limits<std::size_t>::max() / orbital_count ||
       orbital_count * orbital_count > std::numeric_limits<std::size_t>::max() / auxiliary_count) {
     detail = "CUDA DF tensor dimensions overflowed";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t metric_elements = auxiliary_count * auxiliary_count;
   const std::size_t three_center_elements = orbital_count * orbital_count * auxiliary_count;
@@ -102,7 +102,7 @@ vibeqc_status build_cuda_density_fitting_integrals_impl(
   if (total_elements < metric_elements ||
       total_elements > std::numeric_limits<unsigned>::max() * static_cast<std::size_t>(128U)) {
     detail = "CUDA DF integral launch dimensions are too large";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   cudaError_t cuda_error = cudaSetDevice(device_id);
@@ -205,7 +205,7 @@ vibeqc_status build_cuda_density_fitting_integrals_impl(
     if (pointer == nullptr) {
       detail = "CUDA allocation failed while staging DF basis metadata";
       release();
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
   }
 
@@ -215,7 +215,7 @@ vibeqc_status build_cuda_density_fitting_integrals_impl(
   if (device_metric == nullptr || device_three_center == nullptr) {
     detail = "CUDA allocation failed for DF integral output";
     release();
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   output = {};
@@ -270,22 +270,20 @@ vibeqc_status build_cuda_density_fitting_integrals_impl(
     return cuda_status(cuda_error);
   }
   release();
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 }  // namespace
 
-vibeqc_status build_cuda_density_fitting_integrals(int device_id,
-                                                   const core::System& orbital_system,
-                                                   const core::System& auxiliary_system,
-                                                   integrals::DensityFittingIntegralData& output,
-                                                   std::string& detail, bool include_derivatives) {
+generativeqc_status build_cuda_density_fitting_integrals(
+    int device_id, const core::System& orbital_system, const core::System& auxiliary_system,
+    integrals::DensityFittingIntegralData& output, std::string& detail, bool include_derivatives) {
   if (!cuda_df_shell_domain(auxiliary_system, "auxiliary", detail) ||
       !cuda_df_shell_domain(orbital_system, "orbital", detail)) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   return build_cuda_density_fitting_integrals_impl(device_id, orbital_system, auxiliary_system,
                                                    output, detail, include_derivatives);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

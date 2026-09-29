@@ -24,11 +24,11 @@ default is `partition=main`, `gres=gpu:1`, one node and one task, with a finite
 per-tool time limit. A concrete GPU model such as `gpu:5090:1` is an explicit
 cluster/reproduction choice, not the implicit meaning of CUDA.
 
-Set `VIBEQC_BENCHMARK_PARTITION`, `VIBEQC_BENCHMARK_GRES`,
-`VIBEQC_BENCHMARK_NODES`, `VIBEQC_BENCHMARK_NTASKS`,
-`VIBEQC_BENCHMARK_TIME` or `VIBEQC_BENCHMARK_SRUN` to select another
+Set `GENERATIVEQC_BENCHMARK_PARTITION`, `GENERATIVEQC_BENCHMARK_GRES`,
+`GENERATIVEQC_BENCHMARK_NODES`, `GENERATIVEQC_BENCHMARK_NTASKS`,
+`GENERATIVEQC_BENCHMARK_TIME` or `GENERATIVEQC_BENCHMARK_SRUN` to select another
 scheduler/resource layout without editing source. Set
-`VIBEQC_BENCHMARK_LOCAL=1` for tools that support local execution. Explicit
+`GENERATIVEQC_BENCHMARK_LOCAL=1` for tools that support local execution. Explicit
 CLI/function arguments take precedence over environment settings, which take
 precedence over the project defaults. Empty environment values for partition,
 GRES or time omit that optional Slurm flag. Current benchmark executables consume
@@ -48,13 +48,13 @@ matrix references, trace variations, spin/weight factors and stale-grid failures
 Its exporter and evidence runner preserve the existing FP64 element gate and
 record all finite-difference steps.
 
-`vibeqc_dft_tests` directly exercises native `GridSpec v1` ordering,
+`generativeqc_dft_tests` directly exercises native `GridSpec v1` ordering,
 fixed-density LDA/PBE variational response, `lda-tail-v1` zero/tiny/invalid
 domains, strict PBE vacuum/interior rejection, and the finite default-grid
 `pbe-tail-v2-lda-fallback` path. Its PBE H2 case also checks energy, electron
 integral and AO potential elements against the hash-checked
 `tests/reference_data/xc_integration/h2.npz` PySCF/Libxc fixture.
-`vibeqc_dft_api_tests` exercises the exported CPU energy-only LDA/PBE RKS and
+`generativeqc_dft_api_tests` exercises the exported CPU energy-only LDA/PBE RKS and
 UKS contracts, closed-shell and integer spin-population validation,
 force/batch/DF/CUDA rejection and nonconvergence diagnostics. UKS regressions
 also cover separate alpha/beta densities, total-density Coulomb construction,
@@ -86,7 +86,7 @@ The new small-fixture tolerances do not supersede stricter existing tests.
 | Existing benchmark/source tests (`test_benchmarks.py`, CUDA DF source and resident benchmark tests) | Pure runner/schema/source assertions; CUDA benchmarks explicitly invoked separately | Runner correctness and emission, not GPU execution |
 | `tests/python/test_validation.py` | New saved PySCF/libcint values and analytic derivatives, compared with the generator host evaluator and native CPU HF | Independent small-fixture numerical acceptance, sign/order/version corruption detection, reproducible protocol behavior |
 
-The host adapter in `tools/vibeqc_validation/integrals.py` is not another oracle:
+The host adapter in `tools/generativeqc_validation/integrals.py` is not another oracle:
 it contracts the existing generator evaluator and compares it with libcint.
 Its primitive normalization is explicit and tested against a different library.
 The spherical f fixture is pinned for downstream consumers; this adapter only
@@ -95,7 +95,7 @@ executes Cartesian tensors. Existing native spherical tests remain in force.
 Generate the capability table using the existing catalog:
 
 ```bash
-python -m tools.vibeqc_validation.capabilities --output /tmp/capabilities.json
+python -m tools.generativeqc_validation.capabilities --output /tmp/capabilities.json
 ```
 
 Each of the 55 canonical shell classes has separate **representation, source,
@@ -110,7 +110,7 @@ second independent matrix that needs manual maintenance.
 
 ## Numerical conventions and fixture layers
 
-`tools/vibeqc_validation/fixtures.py::CONVENTIONS` is the machine-checked
+`tools/generativeqc_validation/fixtures.py::CONVENTIONS` is the machine-checked
 convention record included in every fixture:
 
 - Coordinates are Bohr; energies are Hartree; gradients/forces are Hartree/Bohr.
@@ -194,7 +194,7 @@ Initial gates for new, scale-controlled fixtures are:
 
 The small HF endpoint test uses `1e-10 Eh` and `1e-7 Eh/bohr`; the existing He
 and molecular gates retain their stricter historical tolerances. These are
-requirements, not a statement that VibeQC implements CC or CC gradients.
+requirements, not a statement that GenerativeQC implements CC or CC gradients.
 
 `finite_difference` records at least three positive distinct steps and every
 error; it does not promote the most favorable step. The HF example uses 0.01,
@@ -211,10 +211,10 @@ investigation, not a relaxed acceptance threshold.
 Continue using the standard commands:
 
 ```bash
-cmake -S . -B build -G Ninja -DVIBEQC_ENABLE_CUDA=OFF -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -G Ninja -DGENERATIVEQC_ENABLE_CUDA=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
-VIBEQC_LIBRARY=$PWD/build/libvibeqc.so python -m pytest tests/python -q
+GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so python -m pytest tests/python -q
 ```
 
 DF shell derivatives compile as 64 stable class units under
@@ -228,7 +228,7 @@ optimization even when compile-fast mode is enabled. See the
 for the invariants and cold/incremental validation distinction.
 
 The existing CPU/Python CI jobs discover the new tests automatically. CUDA CI
-continues its separate compilation job. Its `VIBEQC_CUDA_FAST_COMPILE=ON` setting
+continues its separate compilation job. Its `GENERATIVEQC_CUDA_FAST_COMPILE=ON` setting
 is a compilation smoke check only; never use that build for resource/performance
 acceptance. `validation_gate.py run` wraps these existing commands and archives
 their outputs instead of replacing ctest, pytest, autotune, or the f-shell runner:
@@ -240,7 +240,7 @@ python benchmarks/validation_gate.py run --tier cuda-compile --subject release-b
 python benchmarks/validation_gate.py run --tier gpu-numerical --subject f-matrix \
   --unavailable 'GPU job has not been allocated' --output /tmp/gpu-not-run.json
 
-VIBEQC_LIBRARY=$PWD/build/libvibeqc.so python benchmarks/validation_gate.py hf \
+GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so python benchmarks/validation_gate.py hf \
   --case h2 --device cpu --repeats 5 --finite-difference --output /tmp/hf-cpu.json
 ```
 
@@ -248,7 +248,7 @@ For actual GPU work on this machine, preserve Slurm's assigned visibility:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env VIBEQC_LIBRARY=$PWD/build/cuda-release-sm120/libvibeqc.so \
+  env GENERATIVEQC_LIBRARY=$PWD/build/cuda-release-sm120/libgenerativeqc.so \
   python benchmarks/validation_gate.py hf --case h2 --device cuda --repeats 5 \
   --output /tmp/hf-cuda.json
 ```
@@ -265,7 +265,7 @@ it might have skipped tests, so inspect/attach its actual numerical evidence.
 
 ## Shared results and performance protocol
 
-`python/vibeqc_compiler/common/evidence.py` defines the `vibeqc.validation` version-1
+`python/generativeqc_compiler/common/evidence.py` defines the `generativeqc.validation` version-1
 envelope. `new_evidence`, `block_error`, `attach_artifact`, and `write_evidence`
 are the registration API for downstream tasks. Every record includes revision,
 equation/IR/source/schedule identities, device/toolchain, actual selected backend,
@@ -320,7 +320,7 @@ through the generated streaming workers. Run it only in an allocated GPU job:
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:20:00 bash -lc \
-  'VIBEQC_LIBRARY=$PWD/build/libvibeqc.so PYTHONPATH=$PWD/python:$PWD \
+  'GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so PYTHONPATH=$PWD/python:$PWD \
    python benchmarks/issue174_precision_boundaries.py \
      --output .artifacts/benchmarks/issue174-precision-boundaries.json'
 ```

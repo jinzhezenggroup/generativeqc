@@ -7,7 +7,7 @@
 #include <limits>
 #include <vector>
 
-namespace vibeqc_grid_cpu {
+namespace generativeqc_grid_cpu {
 template <class Norm, class Ratio, class Log, class Pair>
 int contract(const double* points, size_t np, const double* centers, size_t na,
              const int64_t* owners, const double* seeds, double* output, size_t output_count,
@@ -35,7 +35,7 @@ int contract(const double* points, size_t np, const double* centers, size_t na,
     // Reject nonsmooth geometry even for an empty point tile or zero seed.
     for (size_t a = 0; a < na; ++a)
       for (size_t b = 0; b < a; ++b)
-        if (vibeqc_grid_adjoint::distance(centers + 3 * a, centers + 3 * b, norm, valid)[0] <=
+        if (generativeqc_grid_adjoint::distance(centers + 3 * a, centers + 3 * b, norm, valid)[0] <=
                 tolerance ||
             !valid)
           return -2;
@@ -44,7 +44,7 @@ int contract(const double* points, size_t np, const double* centers, size_t na,
     std::vector<size_t> zeros(na);
     std::vector<std::array<double, 4>> distances(na);
     for (size_t p = 0; p < np; ++p)
-      if (!vibeqc_grid_adjoint::contract_point(
+      if (!generativeqc_grid_adjoint::contract_point(
               points + 3 * p, centers, na, owners[p], seeds[p], gradient.data(), logs.data(),
               products.data(), bar_product.data(), bar_distance.data(), zeros.data(),
               distances.data(), norm, ratio, logarithm, pair))
@@ -57,4 +57,4 @@ int contract(const double* points, size_t np, const double* centers, size_t na,
     return -3;
   }
 }
-}  // namespace vibeqc_grid_cpu
+}  // namespace generativeqc_grid_cpu

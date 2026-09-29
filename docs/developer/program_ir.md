@@ -1,6 +1,6 @@
 # Serial ProgramIR and fixed-density XC tile lifetimes
 
-`vibeqc_compiler.common.program` describes a **finite, synchronous sequence of
+`generativeqc_compiler.common.program` describes a **finite, synchronous sequence of
 opaque provider calls**. It derives dependency and last-use information without
 replacing IntegralIR, TensorIR, MethodIR, XC mathematics or native runtime owners.
 This is a deliberately narrow compiler prototype, not a whole-program optimizer.
@@ -116,7 +116,7 @@ input shares storage with the DFT-owned feature buffer.
 
 ## Logical SPMD lowering contract
 
-`vibeqc_compiler.common.spmd` adds a backend-neutral lowering plan around the
+`generativeqc_compiler.common.spmd` adds a backend-neutral lowering plan around the
 immutable ProgramIR. The scientific ProgramIR remains schema v2 and does not
 contain physical GPU ordinals, product names, links or topology assumptions.
 A `DeviceMesh` names only logical axes. `BufferPlacement` describes whether a
@@ -156,7 +156,7 @@ Rationale:
 
 ## Structured bounded solver regions
 
-`vibeqc_compiler.common.solver_region.SolverRegion` adds a structured loop
+`generativeqc_compiler.common.solver_region.SolverRegion` adds a structured loop
 contract **above** serial ProgramIR without changing ProgramIR schema v2. The
 body remains ordinary SSA: immutable inputs are declared as invariants and every
 loop-carried value is an explicit `current -> next` pair. `max_steps` is a
@@ -181,7 +181,7 @@ checkpoint payloads remain outside that boundary unless a future consumer expose
 them as named owners.
 
 The first existing endpoint represented by this contract is conventional RCCSD
-in `tools.vibeqc_cc.solver.PreparedCCSD.solver_region`. Its numerical loop is
+in `tools.generativeqc_cc.solver.PreparedCCSD.solver_region`. Its numerical loop is
 unchanged: the region records the existing optimized TensorIR equation identity,
 DIIS/control state as explicit carried dependencies, the exact
 `max_iterations + 1` evaluation bound, the existing energy/residual plus fresh
@@ -273,7 +273,7 @@ checkouts, pointing `PYTHONPATH` at the checkout being tested and running the sa
 benchmark script. Source/library identities and raw timing samples are reported.
 
 ```bash
-export VIBEQC_LIBRARY=/path/to/qualified/cpu/libvibeqc.so
+export GENERATIVEQC_LIBRARY=/path/to/qualified/cpu/libgenerativeqc.so
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. \
   python benchmarks/programir_xc_lifetimes.py --case f_spherical --repeats 11
 ```

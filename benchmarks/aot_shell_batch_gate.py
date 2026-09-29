@@ -1,13 +1,13 @@
 # ruff: noqa: PLC0414
 """Run a fixed-dm0 A/B endpoint benchmark for generated shell classes.
 
-The baseline and candidate are executed in one prepared VibeQC batch.  A
+The baseline and candidate are executed in one prepared GenerativeQC batch.  A
 candidate-union capacity prime happens before the measured cold baseline so a
 larger candidate cannot be penalized (or fail) merely because the immutable
 CUDA task arena was sized from the smaller baseline selection.  The measured
 replays then use one frozen post-cold density and an interleaved ABBA/AB
 sequence.  GPU4PySCF is intentionally not involved: this tool isolates the
-VibeQC shell-class dispatch and its SCF/force path.
+GenerativeQC shell-class dispatch and its SCF/force path.
 
 The module keeps all GPU imports inside :func:`main`; parser, dry-run, and
 pure control-flow tests can therefore run on scheduler login nodes.
@@ -37,13 +37,13 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc_compiler.common.timing import (
+from generativeqc_compiler.common.timing import (
     interleaved_selection_order as interleaved_selection_order,
 )
-from vibeqc_compiler.common.timing import timing_summary as timing_summary
+from generativeqc_compiler.common.timing import timing_summary as timing_summary
 
-_SHELL_ENVIRONMENT = "VIBEQC_AOT_SHELL_CLASSES"
-_FOCK_SHELL_ENVIRONMENT = "VIBEQC_AOT_FOCK_SHELL_CLASSES"
+_SHELL_ENVIRONMENT = "GENERATIVEQC_AOT_SHELL_CLASSES"
+_FOCK_SHELL_ENVIRONMENT = "GENERATIVEQC_AOT_FOCK_SHELL_CLASSES"
 _RESERVED_ENVIRONMENTS = frozenset({_SHELL_ENVIRONMENT, _FOCK_SHELL_ENVIRONMENT})
 BASELINE = "baseline"
 CANDIDATE = "candidate"
@@ -196,7 +196,7 @@ def _aot_selection(
 
 
 def _synchronize(cupy_module: Any) -> None:
-    """Synchronize the stream used by the native VibeQC CUDA plan."""
+    """Synchronize the stream used by the native GenerativeQC CUDA plan."""
 
     cupy_module.cuda.Stream.null.synchronize()
 
@@ -794,7 +794,7 @@ def _parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         description=(
-            "fixed-dm0 interleaved A/B gate for VibeQC generated shell classes"
+            "fixed-dm0 interleaved A/B gate for GenerativeQC generated shell classes"
         )
     )
     parser.add_argument("--case", default="water-tetramer-def2-svp-spherical")
@@ -913,7 +913,7 @@ def main() -> None:
     from _cases import benchmark_cases
     from _support import cuda_accelerator_metadata, environment_metadata
     from compare_gpu4pyscf_batch import scaled_geometries
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     cases = benchmark_cases()
     if arguments.case not in cases:
@@ -968,7 +968,7 @@ def main() -> None:
         systems = scaled_geometries(case.atoms, batch_size)
         calculator = Calculator(
             method=case.method,
-            basis=case.vibeqc_basis,
+            basis=case.generativeqc_basis,
             basis_representation=case.basis_representation,
             device="cuda",
             max_iterations=arguments.max_iterations,

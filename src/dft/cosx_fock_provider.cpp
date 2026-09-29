@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 constexpr std::size_t kDefaultDeviceBudget = 256U * 1024U * 1024U;
@@ -208,4 +208,4 @@ std::vector<double> PreparedCosxFockPlan::energy_derivative(const std::vector<do
   return impl_->energy_derivative(density, beta);
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

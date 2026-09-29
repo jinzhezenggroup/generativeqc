@@ -6,13 +6,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -51,7 +51,7 @@ def test_automatic_cold_and_warm_force_matches_independent_oracle(
         "RESPONSE_STORAGE",
         "FINAL_PROJECTION",
     ):
-        monkeypatch.setenv("VIBEQC_DF_" + control, "auto")
+        monkeypatch.setenv("GENERATIVEQC_DF_" + control, "auto")
     calc = Calculator(
         method="rhf",
         basis="def2-svp",
@@ -66,7 +66,7 @@ def test_automatic_cold_and_warm_force_matches_independent_oracle(
     with calc.prepare_batch([case.atoms]) as batch:
         for phase in ("cold", "warm"):
             trace = tmp_path / f"{phase}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             actual = batch.execute(strict=True).items[0]
             results.append(
                 {

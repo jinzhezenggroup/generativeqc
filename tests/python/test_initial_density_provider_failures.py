@@ -21,7 +21,7 @@ def seed_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "std::pair<Matrix, Matrix> normalized_warm_uhf_density", 1
     )[0]
     preparation = source.split("Matrix prepare_initial_density(", 1)[1].split(
-        "}  // namespace vibeqc::scf::initial_guess", 1
+        "}  // namespace generativeqc::scf::initial_guess", 1
     )[0]
     prefix = r"""
 #include <algorithm>
@@ -33,7 +33,7 @@ def seed_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <stdexcept>
 #include <string>
 #include <vector>
-namespace vibeqc {
+namespace generativeqc {
 namespace core { struct System { int electron_count = 2; }; }
 namespace integrals {
 struct IntegralData {
@@ -75,7 +75,7 @@ enum class InitialOrbitalRequest { ColdDensityOnly, RequireCoreFrame };
 }}
 int main(int argc, char** argv) {
   if (argc != 2) return 100;
-  using namespace vibeqc;
+  using namespace generativeqc;
   using namespace scf::initial_guess;
   const std::string mode = argv[1];
   core::System system;

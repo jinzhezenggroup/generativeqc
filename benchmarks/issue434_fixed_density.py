@@ -122,12 +122,14 @@ def main() -> int:
             raise SystemExit(f"fixture hash mismatch: {name}")
 
     env = {
-        key: value for key, value in os.environ.items() if not key.startswith("VIBEQC_")
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GENERATIVEQC_")
     }
     env.update(
-        VIBEQC_DF_EXCHANGE="occupied",
-        VIBEQC_DF_VALUE_STORAGE="dense",
-        VIBEQC_DF_RESIDENT_EXCHANGE="auto",
+        GENERATIVEQC_DF_EXCHANGE="occupied",
+        GENERATIVEQC_DF_VALUE_STORAGE="dense",
+        GENERATIVEQC_DF_RESIDENT_EXCHANGE="auto",
     )
     result = subprocess.run(
         [
@@ -285,7 +287,7 @@ def main() -> int:
         ),
     }
     report = {
-        "schema": "vibeqc.issue434.fixed-density-diagnosis.v1",
+        "schema": "generativeqc.issue434.fixed-density-diagnosis.v1",
         "scope": "Exact saved-density native/independent operator comparison; no SCF rerun or admission.",
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
         "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],

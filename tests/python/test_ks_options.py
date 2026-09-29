@@ -8,7 +8,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Atom,
     Calculator,
     GridPolicy,
@@ -17,21 +17,21 @@ from vibeqc import (
     ResourceBudget,
     estimate_ks_resources,
 )
-from vibeqc.ks import native_ks_options, resolve_ks_options
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.dft.grid import (
+from generativeqc.ks import native_ks_options, resolve_ks_options
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft.grid import (
     GRID_POLICY_RADII_SOURCE,
     GRID_POLICY_UPSTREAM_REVISION,
     MolecularGrid,
     grid_policy_provenance,
 )
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     MethodSpec,
     SemilocalXCPrimitive,
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.xc.spec import functional
+from generativeqc_compiler.xc.spec import functional
 
 H2 = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
 CUSTOM = GridSpec(
@@ -45,7 +45,10 @@ CUSTOM = GridSpec(
 
 @pytest.fixture(params=("cpu", "cuda"))
 def device(request: typing.Any) -> typing.Any:
-    if request.param == "cuda" and os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+    if (
+        request.param == "cuda"
+        and os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires an explicitly Slurm-allocated GPU")
     return request.param
 
@@ -148,7 +151,7 @@ def test_production_grid_policy_is_resolved_element_aware_and_versioned() -> Non
 def test_production_grid_radii_match_pinned_provenance_and_unknowns_fail_closed() -> (
     None
 ):
-    from vibeqc_compiler.geometry._gfn1_data import GFN1_GEOMETRY_ELEMENT_ROWS
+    from generativeqc_compiler.geometry._gfn1_data import GFN1_GEOMETRY_ELEMENT_ROWS
 
     source = [row[1] for row in GFN1_GEOMETRY_ELEMENT_ROWS]
     policy = GridPolicy()
@@ -200,7 +203,7 @@ def test_named_pbe_selector_cannot_silently_change_to_hybrid(
     replacement: str,
     rejection: str,
 ) -> None:
-    import vibeqc.ks as ks_module
+    import generativeqc.ks as ks_module
 
     hybrid = resolve_method(replacement, spin="unpolarized")
     monkeypatch.setattr(ks_module, "resolve_method", lambda *args, **kwargs: hybrid)
@@ -277,8 +280,8 @@ def test_method_ir_projection_preserves_catalog_identity(
 def test_method_ir_mismatch_fails_before_native_load(
     monkeypatch: typing.Any, graph: typing.Any, consumer: typing.Any
 ) -> None:
-    import vibeqc.ks as ks_module
-    from vibeqc import _native
+    import generativeqc.ks as ks_module
+    from generativeqc import _native
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("inconsistent MethodIR reached native loading")
@@ -299,7 +302,7 @@ def test_method_ir_mismatch_fails_before_native_load(
 def test_method_ir_projection_treats_identifiers_as_descriptive(
     monkeypatch: typing.Any,
 ) -> None:
-    import vibeqc.ks as ks_module
+    import generativeqc.ks as ks_module
 
     graph = replace(resolve_method("PBE"), identifier="descriptive-pbe-alias")
     monkeypatch.setattr(ks_module, "resolve_method", lambda *args, **kwargs: graph)
@@ -311,7 +314,7 @@ def test_method_ir_projection_treats_identifiers_as_descriptive(
 def test_unsupported_compositions_and_policy_fail_before_native_load(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _native
+    from generativeqc import _native
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("unsupported KS model reached native loading")
@@ -343,7 +346,7 @@ def test_unqualified_hybrid_default_grid_fails_closed(method: str) -> None:
 def test_semantic_ks_abi_lowers_pbe0_primitives_directly() -> None:
     import ctypes
 
-    from vibeqc import _native
+    from generativeqc import _native
 
     native = native_ks_options(resolve_ks_options("pbe0-rks", KsOptions(grid=CUSTOM)))
     assert native.struct_size == ctypes.sizeof(_native.KsOptionsDescriptor)
@@ -364,7 +367,7 @@ def test_semantic_ks_abi_lowers_pbe0_primitives_directly() -> None:
 
 
 def test_semantic_ks_abi_carries_schedule_without_suffix_versions() -> None:
-    from vibeqc import _native
+    from generativeqc import _native
 
     fused = resolve_ks_options("pbe-rks")
     unfused = resolve_ks_options("pbe-rks", KsOptions(xc_schedule="host_unfused"))
@@ -510,7 +513,7 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
 
 
 def test_noncurrent_native_ks_schema_is_rejected(monkeypatch: typing.Any) -> None:
-    from vibeqc import _native
+    from generativeqc import _native
 
     library = _native.load_library(device="cpu")
 
@@ -521,7 +524,7 @@ def test_noncurrent_native_ks_schema_is_rejected(monkeypatch: typing.Any) -> Non
         def __call__(self) -> typing.Any:
             return 6
 
-    monkeypatch.setattr(library, "vibeqc_ks_options_version", OldSchema())
+    monkeypatch.setattr(library, "generativeqc_ks_options_version", OldSchema())
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     with pytest.raises(NotImplementedError, match="semantic KS execution-plan ABI"):
         Calculator(method="pbe0-rks", ks_options=KsOptions(grid=CUSTOM))
@@ -623,7 +626,7 @@ def test_semantic_abi_serializes_nonlocal_primitive_without_named_method_branch(
 
 
 def test_semantic_abi_serializes_range_exchange_without_named_method_branch() -> None:
-    from vibeqc import _native
+    from generativeqc import _native
 
     graph = resolve_method(
         MethodSpec(

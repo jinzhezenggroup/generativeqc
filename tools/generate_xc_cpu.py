@@ -6,15 +6,15 @@ from pathlib import Path as _CompilerPath
 from typing import Any
 
 _compiler_root = (
-    _CompilerPath(__file__).resolve().parents[1] / "python" / "vibeqc_compiler"
+    _CompilerPath(__file__).resolve().parents[1] / "python" / "generativeqc_compiler"
 )
 for _name, _path in (
-    ("vibeqc_compiler", _compiler_root),
-    ("vibeqc_compiler.common", _compiler_root / "common"),
-    ("vibeqc_compiler.integral", _compiler_root / "integral"),
-    ("vibeqc_compiler.xc", _compiler_root / "xc"),
-    ("vibeqc_compiler.dft", _compiler_root / "dft"),
-    ("vibeqc_compiler.method", _compiler_root / "method"),
+    ("generativeqc_compiler", _compiler_root),
+    ("generativeqc_compiler.common", _compiler_root / "common"),
+    ("generativeqc_compiler.integral", _compiler_root / "integral"),
+    ("generativeqc_compiler.xc", _compiler_root / "xc"),
+    ("generativeqc_compiler.dft", _compiler_root / "dft"),
+    ("generativeqc_compiler.method", _compiler_root / "method"),
 ):
     _module = _compiler_types.ModuleType(_name)
     _module.__path__ = [str(_path)]
@@ -23,46 +23,46 @@ for _name, _path in (
 import argparse
 from pathlib import Path
 
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.dft.feature_policy import emit_feature_policy
-from vibeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
-from vibeqc_compiler.integral.expr import AlgebraForm
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.method.spec import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft.feature_policy import emit_feature_policy
+from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
+from generativeqc_compiler.integral.expr import AlgebraForm
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.method.spec import (
     ExactExchangePrimitive,
     NonlocalCorrelationPrimitive,
     RangeSeparatedExchangePrimitive,
     SemilocalXCPrimitive,
     resolve_method,
 )
-from vibeqc_compiler.xc.production_policy import (
+from generativeqc_compiler.xc.production_policy import (
     lda_xc_pw_polarized_tail_expression,
     lda_xc_pw_unpolarized_tail_expression,
     pbe_correlation_scaled_expression,
     pbe_exchange_direct_expression,
     pbe_exchange_reciprocal_expression,
 )
-from vibeqc_compiler.xc.semilocal_codegen import (
+from generativeqc_compiler.xc.semilocal_codegen import (
     build_roots,
     emit_r2scan_program,
 )
-from vibeqc_compiler.xc.semilocal_codegen import (
+from generativeqc_compiler.xc.semilocal_codegen import (
     emit_polarized_semilocal as _emit_polarized_semilocal,
 )
-from vibeqc_compiler.xc.spec import functional
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.xc.spec import functional
+from generativeqc_compiler.xc.wb97mv_maple import (
     DENSITY_THRESHOLD as WB97MV_DENSITY_THRESHOLD,
 )
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.xc.wb97mv_maple import (
     SIGMA_THRESHOLD as WB97MV_SIGMA_THRESHOLD,
 )
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.xc.wb97mv_maple import (
     SMOOTH_LR_CUTOFF as WB97MV_SMOOTH_LR_CUTOFF,
 )
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.xc.wb97mv_maple import (
     SMOOTH_LR_ORDER as WB97MV_SMOOTH_LR_ORDER,
 )
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.xc.wb97mv_maple import (
     TAU_THRESHOLD as WB97MV_TAU_THRESHOLD,
 )
 
@@ -107,7 +107,7 @@ def emit_lda_xc_pw() -> str:
         "#pragma once",
         "#include <cmath>",
         "#include <cfloat>",
-        "namespace vibeqc::dft::generated {",
+        "namespace generativeqc::dft::generated {",
         "struct LdaXcPwValue { double energy_density; double density_derivative; };",
         f'inline constexpr const char* kLdaXcPwExpressionIdentity = "{expression_hash}";',
         'inline constexpr const char* kLdaXcPwTailAlgebra = "sixth-root-v1";',
@@ -692,7 +692,7 @@ def main() -> None:
         + emit_scan_polarized()
         + emit_r2scan_polarized()
         + emit_feature_policy()
-        + "}  // namespace vibeqc::dft::generated\n",
+        + "}  // namespace generativeqc::dft::generated\n",
     )
 
 

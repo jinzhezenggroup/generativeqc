@@ -4,7 +4,7 @@
 
 #include <cstddef>
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 /** Unit-weight lower-pair density: diagonal once, off-diagonal D_mn+D_nm.
  * The sum is invariant to row/column-major interpretation even for nonsymmetric D.
@@ -33,4 +33,4 @@ void launch_project_packed_df(cudaStream_t stream, std::size_t n, std::size_t a,
                               bool column_major, const double* packed, const double* coefficients,
                               double* projection);
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

@@ -10,7 +10,7 @@
 
 // Borrowed atomic coordinates and Gaussian product geometry; derivative
 // seeds retain the packed batch coordinate convention.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar>
 __device__ inline Vec3<Scalar> atom_position(const DeviceBatch& batch, std::int64_t atom,
@@ -54,4 +54,4 @@ __device__ inline Vec3<Scalar> product_center(double alpha, const Vec3<Scalar>& 
           (alpha_value * first.z + beta_value * second.z) / exponent};
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

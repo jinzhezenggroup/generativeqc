@@ -338,7 +338,7 @@ def render_element_header(
 
 #include "dft/dispersion/d4_types.hpp"
 
-namespace vibeqc::dft::dispersion::data {{
+namespace generativeqc::dft::dispersion::data {{
 
 inline constexpr char kElementSourceRevision[] = "{revision}";
 inline constexpr char kElementSourceDigest[] = "{digest}";
@@ -348,7 +348,7 @@ inline constexpr std::array<D4ElementData, kElementCount> kElements{{{{
 {chr(10).join(element_rows)}
 }}}};
 
-}}  // namespace vibeqc::dft::dispersion::data
+}}  // namespace generativeqc::dft::dispersion::data
 // clang-format on
 """
 
@@ -393,7 +393,7 @@ def render_header(
 
 #include "dft/dispersion/d4_element_data.hpp"
 
-namespace vibeqc::dft::dispersion::data {{
+namespace generativeqc::dft::dispersion::data {{
 
 inline constexpr char kSourceRevision[] = "{revision}";
 inline constexpr char kSourceDigest[] = "{digest}";
@@ -408,7 +408,7 @@ inline constexpr std::array<double, kReferenceCount * (kReferenceCount + 1) / 2>
 {format_array([c6[i * len(references) + j] for i in range(len(references)) for j in range(i + 1)])}
 }}}};
 
-}}  // namespace vibeqc::dft::dispersion::data
+}}  // namespace generativeqc::dft::dispersion::data
 // clang-format on
 """
 

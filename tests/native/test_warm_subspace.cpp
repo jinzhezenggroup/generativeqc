@@ -15,7 +15,7 @@ void require(bool value, const char* detail) {
 }
 
 void invariant_subspace_survives_occupied_rotation() {
-  using namespace vibeqc::scf::solver;
+  using namespace generativeqc::scf::solver;
   const double a = std::sqrt(0.5);
   // The first two columns are an arbitrary rotation inside the occupied
   // subspace. They are not eigenvectors of the 1/2 block, but their projector
@@ -32,7 +32,7 @@ void invariant_subspace_survives_occupied_rotation() {
 }
 
 void occupied_virtual_coupling_triggers_fallback() {
-  using namespace vibeqc::scf::solver;
+  using namespace generativeqc::scf::solver;
   const Matrix fock{1.0, 0.0, 0.125, 0.0, 2.0, 0.0, 0.125, 0.0, 5.0};
   const Matrix identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
   const auto diagnostic = inspect_warm_occupied_subspace(fock, identity, 3, 2);
@@ -49,7 +49,7 @@ void occupied_virtual_coupling_triggers_fallback() {
 }
 
 void invalid_evidence_is_fail_closed() {
-  using namespace vibeqc::scf::solver;
+  using namespace generativeqc::scf::solver;
   Matrix fock{1.0, 0.0, 0.0, 2.0};
   Matrix orbitals{1.0, 0.0, 0.0, 1.0};
   orbitals[0] = std::numeric_limits<double>::quiet_NaN();
@@ -69,7 +69,7 @@ void invalid_evidence_is_fail_closed() {
 }
 
 void finite_input_scale_overflow_requests_fallback() {
-  using namespace vibeqc::scf::solver;
+  using namespace generativeqc::scf::solver;
   // Every entry and the coupling residual is finite, but ||F||*||C||+||FC||
   // overflows binary64. Dividing by infinity must not manufacture a zero gate.
   const Matrix fock{8.0e307, 0.0, 0.125, 0.0, 8.0e307, 0.0, 0.125, 0.0, 8.0e307};
@@ -82,7 +82,7 @@ void finite_input_scale_overflow_requests_fallback() {
 }
 
 void full_space_is_trivially_invariant() {
-  using namespace vibeqc::scf::solver;
+  using namespace generativeqc::scf::solver;
   const Matrix fock{2.0, 0.25, 0.25, 3.0};
   const Matrix identity{1.0, 0.0, 0.0, 1.0};
   const auto diagnostic = inspect_warm_occupied_subspace(fock, identity, 2, 2);

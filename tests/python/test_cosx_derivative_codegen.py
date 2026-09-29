@@ -8,7 +8,7 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.method.cosx_derivative_runtime import (
+from generativeqc_compiler.method.cosx_derivative_runtime import (
     build_cosx_bidirectional_update_program,
     build_cosx_esp_derivative_update_program,
     build_cosx_molecular_ao_update_program,
@@ -19,10 +19,10 @@ from vibeqc_compiler.method.cosx_derivative_runtime import (
     build_cosx_scale_program,
     build_cosx_symmetric_projection_update_program,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.tensor.program import Program
+    from generativeqc_compiler.tensor.program import Program
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -158,7 +158,7 @@ def test_generated_header_retires_native_cosx_contraction_formulas(
         timeout=60,
     )
     generated = output.read_text()
-    assert "#define VIBEQC_COSX_DERIVATIVE_HD __host__ __device__" in generated
+    assert "#define GENERATIVEQC_COSX_DERIVATIVE_HD __host__ __device__" in generated
     for helper in (
         "accumulate_projection",
         "accumulate_esp_derivative",
@@ -193,6 +193,6 @@ def test_generated_header_retires_native_cosx_contraction_formulas(
     ):
         assert retired not in consumer
 
-    cmake = (ROOT / "cmake/VibeQCGeneratedSources.cmake").read_text()
-    assert "vibeqc_cosx_derivative_contraction_codegen" in cmake
+    cmake = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
+    assert "generativeqc_cosx_derivative_contraction_codegen" in cmake
     assert "generate_cosx_derivative_native.py" in cmake

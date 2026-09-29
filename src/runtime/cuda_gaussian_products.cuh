@@ -1,12 +1,12 @@
-#ifndef VIBEQC_RUNTIME_CUDA_GAUSSIAN_PRODUCTS_CUH
-#define VIBEQC_RUNTIME_CUDA_GAUSSIAN_PRODUCTS_CUH
+#ifndef GENERATIVEQC_RUNTIME_CUDA_GAUSSIAN_PRODUCTS_CUH
+#define GENERATIVEQC_RUNTIME_CUDA_GAUSSIAN_PRODUCTS_CUH
 
 #include <cuda_runtime.h>
 
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::runtime::cuda_gaussian_products {
+namespace generativeqc::runtime::cuda_gaussian_products {
 
 /** Borrowed normalized AO expansions. All views use the same atom index space.
  * Radial coefficients and sparse Cartesian coefficients already include their
@@ -141,5 +141,5 @@ __device__ void scatter(const Factor (&factors)[Rank], const Response& response,
   }
 }
 
-}  // namespace vibeqc::runtime::cuda_gaussian_products
+}  // namespace generativeqc::runtime::cuda_gaussian_products
 #endif

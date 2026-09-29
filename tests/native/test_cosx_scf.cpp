@@ -16,14 +16,14 @@
 
 namespace {
 
-using vibeqc::scf::reference::Matrix;
+using generativeqc::scf::reference::Matrix;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
-vibeqc::core::System hydrogen_dimer(int charge, int multiplicity) {
-  vibeqc::core::System system;
+generativeqc::core::System hydrogen_dimer(int charge, int multiplicity) {
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {
       {0,
@@ -36,14 +36,15 @@ vibeqc::core::System hydrogen_dimer(int charge, int multiplicity) {
   system.charge = charge;
   system.multiplicity = multiplicity;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "COSX SCF hydrogen fixture normalization failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "COSX SCF hydrogen fixture normalization failed");
   return system;
 }
 
-vibeqc::scf::ResolvedFockBuild mixed_strategy(vibeqc::scf::FockSpin spin,
-                                              unsigned derivative_order = 0) {
-  using namespace vibeqc::scf;
+generativeqc::scf::ResolvedFockBuild mixed_strategy(generativeqc::scf::FockSpin spin,
+                                                    unsigned derivative_order = 0) {
+  using namespace generativeqc::scf;
   auto spec = make_hf_fock_spec(spin);
   spec.derivative_order = derivative_order;
   spec.coulomb.approximation = FockApproximation::DensityFitted;
@@ -52,12 +53,13 @@ vibeqc::scf::ResolvedFockBuild mixed_strategy(vibeqc::scf::FockSpin spin,
   return resolve_fock_build(spec, FockBackend::Cuda, 1.0e-12, 1.0e-10);
 }
 
-vibeqc::scf::ResolvedFockBuild cpu_j_strategy(const vibeqc::scf::ResolvedFockBuild& mixed) {
+generativeqc::scf::ResolvedFockBuild cpu_j_strategy(
+    const generativeqc::scf::ResolvedFockBuild& mixed) {
   auto spec = mixed.spec;
   spec.exchange.present = false;
-  return vibeqc::scf::resolve_fock_build(spec, vibeqc::scf::FockBackend::Cpu,
-                                         mixed.screening_tolerance,
-                                         mixed.metric_relative_threshold);
+  return generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu,
+                                               mixed.screening_tolerance,
+                                               mixed.metric_relative_threshold);
 }
 
 struct PhysicalCheck {
@@ -65,10 +67,10 @@ struct PhysicalCheck {
   double residual{};
 };
 
-PhysicalCheck independent_rhf(const vibeqc::core::System& system,
-                              const vibeqc::dft::PreparedCosxFockPlan& gpu,
+PhysicalCheck independent_rhf(const generativeqc::core::System& system,
+                              const generativeqc::dft::PreparedCosxFockPlan& gpu,
                               const std::vector<double>& density) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   scf::PreparedFockPlan cpu_j(system, &system, cpu_j_strategy(gpu.strategy()));
   auto jk = cpu_j.build(density);
   jk.exchange_alpha =
@@ -83,10 +85,10 @@ PhysicalCheck independent_rhf(const vibeqc::core::System& system,
           scf::reference::residual_rms(residual)};
 }
 
-PhysicalCheck independent_uhf(const vibeqc::core::System& system,
-                              const vibeqc::dft::PreparedCosxFockPlan& gpu,
+PhysicalCheck independent_uhf(const generativeqc::core::System& system,
+                              const generativeqc::dft::PreparedCosxFockPlan& gpu,
                               const std::vector<double>& joined) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   const auto n = gpu.one_electron().nbf;
   auto [alpha, beta] = scf::reference::split_spin_matrices(joined, n * n);
   scf::PreparedFockPlan cpu_j(system, &system, cpu_j_strategy(gpu.strategy()));
@@ -110,8 +112,8 @@ PhysicalCheck independent_uhf(const vibeqc::core::System& system,
           std::hypot(residual_a, residual_b) / std::sqrt(2.0)};
 }
 
-vibeqc::scf::ScfOptions options() {
-  vibeqc::scf::ScfOptions out;
+generativeqc::scf::ScfOptions options() {
+  generativeqc::scf::ScfOptions out;
   out.compute_forces = false;
   out.max_iterations = 100;
   out.diis_history = 8;
@@ -121,7 +123,7 @@ vibeqc::scf::ScfOptions options() {
 }
 
 void verify_rhf(int device) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   const auto system = hydrogen_dimer(0, 1);
   const auto strategy = mixed_strategy(scf::FockSpin::Restricted);
   dft::PreparedCosxFockPlan plan(system, &system, strategy, 16, device);
@@ -191,7 +193,7 @@ void verify_rhf(int device) {
 }
 
 void verify_uhf(int device) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   const auto system = hydrogen_dimer(1, 2);
   const auto strategy = mixed_strategy(scf::FockSpin::Unrestricted);
   dft::PreparedCosxFockPlan plan(system, &system, strategy, 16, device);

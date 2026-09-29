@@ -6,7 +6,7 @@
 #include "tensor/cpu_linalg.hpp"
 
 int main(int argc, char** argv) {
-  using namespace vibeqc::tensor;
+  using namespace generativeqc::tensor;
   if (argc != 2) return 2;
   const std::string mode(argv[1]);
   const CpuLinalgPlan plan{CpuLinalgProvider::scalar};

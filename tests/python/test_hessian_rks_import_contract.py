@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-HESSIAN = ROOT / "tools/vibeqc_hessian"
+HESSIAN = ROOT / "tools/generativeqc_hessian"
 
 
 def _tree(module: str) -> ast.Module:

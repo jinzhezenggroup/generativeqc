@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <limits>
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 
 // Lane-parallel execution only. Program owns the generated scientific DAG.
 // Active AoS records are packed into an internal SoA tile; inactive tail lanes
@@ -62,4 +62,4 @@ int contract_first_components_cpu_lanes(const double* records, std::size_t count
   return 0;
 }
 
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

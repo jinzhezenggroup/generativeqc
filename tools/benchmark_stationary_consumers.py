@@ -15,10 +15,10 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
 
 SYSTEMS = {
     "h2": [("H", (0.1, 0.2, -0.6)), ("H", (0.2, -0.1, 0.8))],
@@ -170,7 +170,7 @@ def main() -> None:
         )
     except (subprocess.SubprocessError, OSError):
         head, dirty = None, None
-    library = Path(os.environ.get("VIBEQC_LIBRARY", ""))
+    library = Path(os.environ.get("GENERATIVEQC_LIBRARY", ""))
     result["provenance"] = {
         "head": head,
         "dirty": dirty,

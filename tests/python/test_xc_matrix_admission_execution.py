@@ -8,7 +8,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
+from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
 
 if TYPE_CHECKING:
     from pathlib import Path

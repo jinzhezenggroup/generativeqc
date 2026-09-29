@@ -3,17 +3,17 @@
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from vibeqc_compiler.common.compiler_work import (
+from generativeqc_compiler.common.compiler_work import (
     CompilerWorkLimit,
     compiler_work_budget,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.capabilities import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.capabilities import (
     _check_recurrence,
     build_capability_report,
 )
-from vibeqc_compiler.integral.expr import Graph, Node
-from vibeqc_compiler.integral.shell_spec import PSSS_SPEC
+from generativeqc_compiler.integral.expr import Graph, Node
+from generativeqc_compiler.integral.shell_spec import PSSS_SPEC
 
 
 def test_budget_stops_before_graph_mutation_and_restores_context() -> None:

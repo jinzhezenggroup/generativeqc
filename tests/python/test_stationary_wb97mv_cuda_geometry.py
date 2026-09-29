@@ -1,7 +1,7 @@
 """Opt-in real CUDA semilocal geometry gate against independent Libxc energies.
 
-Run with VIBEQC_TEST_RANGE_CUDA=1 inside Slurm, with nvcc on PATH and a native
-VibeQC library available for basis preparation. This qualifies the semilocal
+Run with GENERATIVEQC_TEST_RANGE_CUDA=1 inside Slurm, with nvcc on PATH and a native
+GenerativeQC library available for basis preparation. This qualifies the semilocal
 slice only; SR/LR exchange and VV10 are intentionally absent from this energy.
 """
 
@@ -23,8 +23,8 @@ def test_cuda_b97m_geometry_matches_independent_energy_differences(
     fixed. Separate center and point differences catch cancellation between the
     two sources, as well as spin and kinetic-density factors of two.
     """
-    if os.environ.get("VIBEQC_TEST_RANGE_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
+    if os.environ.get("GENERATIVEQC_TEST_RANGE_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
     if not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("native CUDA validation requires a Slurm allocation")
     nvcc = shutil.which("nvcc")
@@ -33,20 +33,20 @@ def test_cuda_b97m_geometry_matches_independent_energy_differences(
     libxc = pytest.importorskip("pyscf.dft.libxc")
     if libxc.__version__ != "7.0.0":
         pytest.skip("independent oracle is pinned to Libxc 7.0.0")
-    from pyscf import gto
-    from pyscf.dft import numint
-    from vibeqc._stationary_cuda import _CudaSources
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.dft import NativeAO
-    from vibeqc_compiler.dft.cuda import CudaGrid
-    from vibeqc_compiler.dft.cuda import compile_cuda as compile_grid
-    from vibeqc_compiler.method import resolve_method
-    from vibeqc_compiler.method.stationary_cuda import compile_stationary_cuda
-    from vibeqc_compiler.method.stationary_gradient import (
+    from generativeqc._stationary_cuda import _CudaSources
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft.cuda import CudaGrid
+    from generativeqc_compiler.dft.cuda import compile_cuda as compile_grid
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import compile_stationary_cuda
+    from generativeqc_compiler.method.stationary_gradient import (
         StationaryGradientPlan,
         StationaryMeanField,
     )
+    from pyscf import gto
+    from pyscf.dft import numint
 
     coordinates = np.array(((0.13, -0.17, -0.71), (-0.09, 0.11, 0.79)))
     # LiH supplies both s and p AOs in the admitted public basis domain.

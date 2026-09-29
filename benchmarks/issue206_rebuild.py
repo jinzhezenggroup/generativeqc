@@ -193,7 +193,7 @@ def _paired_errors(left: dict[str, Any], right: dict[str, Any]) -> dict[str, flo
 def _case_inputs(args: Any, case: Any) -> tuple[Any, Any, Any, Any, dict[str, Any]]:
     """Resolve shared native/PySCF basis inputs before GPU package setup."""
 
-    native_orbital, reference_orbital = case.vibeqc_basis, case.pyscf_basis
+    native_orbital, reference_orbital = case.generativeqc_basis, case.pyscf_basis
     overrides: dict[str, Any] = {}
     if args.orbital_basis_file:
         native_orbital, reference_orbital = load_comparison_basis(
@@ -286,14 +286,14 @@ def main() -> None:
     if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
         parser.error("run inside a finite Slurm GPU allocation")
     library = args.library.resolve(strict=True)
-    os.environ["VIBEQC_LIBRARY"] = str(library)
+    os.environ["GENERATIVEQC_LIBRARY"] = str(library)
 
     # Import GPU packages only after protocol validation, as in the matched
     # runner; this makes --help and basis preflight safe on login nodes.
     import cupy as cp
+    from generativeqc import Calculator
     from gpu4pyscf.scf import uhf as gpu_uhf
     from pyscf import df, gto, scf
-    from vibeqc import Calculator
 
     case = cases[args.case]
     (
@@ -417,7 +417,7 @@ def main() -> None:
         except importlib.metadata.PackageNotFoundError:
             package_versions[package] = None
     payload = {
-        "schema": "vibeqc.issue206.rebuild",
+        "schema": "generativeqc.issue206.rebuild",
         "version": 3,
         "status": "pass"
         if all(
@@ -460,7 +460,7 @@ def main() -> None:
             "changed_policy": "restore original geometry and prime outside each changed timer; time geometry reset, SCF and complete forces",
             "endpoint_boundary": "synchronized host energies and complete host forces",
         },
-        "vibeqc": {
+        "generativeqc": {
             "cold": native_cold,
             "warm": native_warm,
             "warm_summary": _summary(native_warm),

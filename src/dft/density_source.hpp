@@ -4,7 +4,7 @@
 
 #include "scf/density_factor.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Explicit algorithm candidates; no automatic performance policy is implied. */
 enum class XcDensityRoute { DensityMatrix, OccupiedOrbitals };
@@ -51,4 +51,4 @@ struct RksDensityDiagnostic {
   double physical_residual{};
 };
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

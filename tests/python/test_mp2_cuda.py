@@ -6,20 +6,20 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_mp2 import PreparedMP2Energy
-from tools.vibeqc_posthf.cuda import compile_cuda
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_mp2 import PreparedMP2Energy
+from tools.generativeqc_posthf.cuda import compile_cuda
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="DEVICE_VALIDATION_PENDING: requires explicitly allocated real CUDA GPU",
 )
 
@@ -29,11 +29,11 @@ def cuda_setup(tmp_path_factory: typing.Any) -> typing.Any:
     # Explicit allocation identity for Slurm or an authorized platform Notebook.
     # This test neither acquires resources nor manufactures a Slurm job identity.
     assert os.environ.get("SLURM_JOB_ID") or os.environ.get(
-        "VIBEQC_MP2_GPU_ALLOCATION"
+        "GENERATIVEQC_MP2_GPU_ALLOCATION"
     ), "run inside an explicitly allocated GPU job or Notebook"
     compiler = CudaCompilerAdapter(
-        Path(os.environ["VIBEQC_NVCC"]),
-        cuda_target_info(os.environ.get("VIBEQC_MP2_ARCH", "sm_120")),
+        Path(os.environ["GENERATIVEQC_NVCC"]),
+        cuda_target_info(os.environ.get("GENERATIVEQC_MP2_ARCH", "sm_120")),
     )
     cache = tmp_path_factory.mktemp("mp2-cuda-cache")
     return compiler, cache, compile_cuda(compiler, cache / "transform")

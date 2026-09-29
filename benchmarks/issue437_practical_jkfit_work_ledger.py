@@ -33,7 +33,7 @@ except ModuleNotFoundError:
 from benchmarks.df_component_ledger import read_trace
 from benchmarks.df_shell_work_ledger import DISTANCE_EDGES_BOHR, EXPONENT_EDGES
 
-SCHEMA = "vibeqc.issue437_practical_jkfit_work"
+SCHEMA = "generativeqc.issue437_practical_jkfit_work"
 VERSION = 1
 _MISSING_PHASE_A_FIELDS = (
     "response_weight_magnitude_distribution",

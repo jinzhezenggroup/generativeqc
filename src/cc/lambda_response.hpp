@@ -9,7 +9,7 @@
 #include "cc/solver.hpp"
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 
 struct LambdaOptions {
   double cc_tolerance{1e-9};
@@ -66,7 +66,7 @@ LambdaResult solve_lambda_cpu_with_energy_source(const Problem& problem,
                                                  std::span<const double> t2_source,
                                                  const LambdaOptions& options = {});
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 /** Solve RCCSD Lambda with generated RHS/J^T actions executed on CUDA.
  *
  * GMRES control and packed symmetry projection remain host-owned in this first
@@ -144,4 +144,4 @@ class CudaHamiltonianResponseOwner {
 };
 #endif
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

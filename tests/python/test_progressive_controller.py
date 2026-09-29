@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc.accuracy import (
+from generativeqc.accuracy import (
     AccuracyAssessment,
     ErrorEvidence,
     EvidenceKind,
@@ -13,7 +13,7 @@ from vibeqc.accuracy import (
     ResolvedModel,
     TargetAccuracy,
 )
-from vibeqc.progressive_controller import (
+from generativeqc.progressive_controller import (
     ArithmeticPolicy,
     DeterministicHFPlan,
     FinalVerification,
@@ -440,8 +440,8 @@ def test_unverifiable_fock_budget_fails_closed() -> None:
 def test_physical_audit_rejects_workspace_before_native_owners(
     monkeypatch: pytest.MonkeyPatch, maximum_bytes: int
 ) -> None:
-    import vibeqc.progressive_controller as controller
-    from vibeqc_compiler import dft
+    import generativeqc.progressive_controller as controller
+    from generativeqc_compiler import dft
 
     def forbidden(*args: object, **kwargs: object) -> None:
         pytest.fail("native Fock/basis work started before verification admission")
@@ -467,14 +467,14 @@ def test_physical_audit_rejects_workspace_before_native_owners(
 def test_physical_audit_admits_provider_and_workspace_before_native_owners(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import vibeqc.progressive_controller as controller
-    from vibeqc_compiler import dft
+    import generativeqc.progressive_controller as controller
+    from generativeqc_compiler import dft
 
     def forbidden(*args: object, **kwargs: object) -> None:
         pytest.fail("native Fock/basis work started before provider admission")
 
     def estimate(systems: object, **kwargs: object) -> SimpleNamespace:
-        from vibeqc_compiler.common.resources import ResourceBudget
+        from generativeqc_compiler.common.resources import ResourceBudget
 
         budget = kwargs["budget"]
         assert isinstance(budget, ResourceBudget)

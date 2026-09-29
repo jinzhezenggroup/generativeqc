@@ -88,7 +88,7 @@
 #include "solver/iteration_control.hpp"
 #include "tensor/metrics.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 namespace {
 
@@ -99,11 +99,11 @@ using namespace cuda_execution;
 // The legacy spellings below remain documented here for source-level tooling;
 // their actual ``std::getenv`` calls and thresholds are implemented by
 // ``scf/cuda/rhf_policy.cpp`` so editing policy does not rebuild this TU:
-//   std::getenv("VIBEQC_FINAL_FOCK_REBUILD")
-//   std::getenv("VIBEQC_PPPS_SIGNATURE_BUCKETING")
-//   std::getenv("VIBEQC_PPPS_BLOCK_THREADS")
-//   std::getenv("VIBEQC_FORCE_DENSITY_PRODUCT_SCREENING")
-//   std::getenv("VIBEQC_PSSS_RESIDENT_BRA")
+//   std::getenv("GENERATIVEQC_FINAL_FOCK_REBUILD")
+//   std::getenv("GENERATIVEQC_PPPS_SIGNATURE_BUCKETING")
+//   std::getenv("GENERATIVEQC_PPPS_BLOCK_THREADS")
+//   std::getenv("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING")
+//   std::getenv("GENERATIVEQC_PSSS_RESIDENT_BRA")
 //   kTightConvergedFockReuseDensityRms = 1.0e-12
 //   kExpandedConvergedFockReuseDensityTolerance = 1.0e-9
 //   kExpandedConvergedFockReuseDensityRms = 2.0e-9
@@ -432,7 +432,7 @@ cudaError_t launch_generated_shell_class_mixed_focks(
   return cudaSuccess;
 }
 
-void fill_global_failure(std::vector<RhfBucketItem>& outputs, vibeqc_status status) {
+void fill_global_failure(std::vector<RhfBucketItem>& outputs, generativeqc_status status) {
   for (RhfBucketItem& output : outputs) output.status = status;
 }
 
@@ -448,7 +448,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   std::vector<RhfBucketItem> outputs(batch_size);
   if (options.export_physical_reference &&
       (unrestricted || options.screening_tolerance != 0 || batch_size != 1)) {
-    fill_global_failure(outputs, VIBEQC_STATUS_NOT_IMPLEMENTED);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
     return outputs;
   }
   plan.last_shell_class_profile.reset();
@@ -486,35 +486,38 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   std::size_t public_ao_elements = 0;
   std::size_t rectangular_matrix_elements = 0;
   std::size_t spin_rectangular_matrix_elements = 0;
-  if (!vibeqc::runtime::checked_multiply(nbf, nbf, matrix_size) ||
-      !vibeqc::runtime::checked_multiply(matrix_size, matrix_size, eri_size) ||
-      !vibeqc::runtime::checked_multiply(batch_size, matrix_size, matrix_elements) ||
-      !vibeqc::runtime::checked_multiply(batch_size, spin_count, spin_batch_size) ||
-      !vibeqc::runtime::checked_multiply(matrix_elements, spin_count, spin_matrix_elements) ||
-      !vibeqc::runtime::checked_multiply(batch_size, eri_size, eri_elements) ||
-      !vibeqc::runtime::checked_add(nbf, 1, nbf_plus_one) ||
-      !vibeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product) ||
-      !vibeqc::runtime::checked_multiply(direct_nbf, direct_nbf, direct_matrix_size) ||
-      !vibeqc::runtime::checked_multiply(batch_size, direct_matrix_size, direct_matrix_elements) ||
-      !vibeqc::runtime::checked_multiply(direct_matrix_elements, spin_count,
-                                         direct_spin_matrix_elements) ||
-      !vibeqc::runtime::checked_add(direct_nbf, 1, direct_nbf_plus_one) ||
-      !vibeqc::runtime::checked_multiply(direct_nbf, direct_nbf_plus_one, direct_pair_product) ||
-      !vibeqc::runtime::checked_multiply(batch_size, nbf, public_ao_elements) ||
-      !vibeqc::runtime::checked_multiply(public_ao_elements, direct_nbf,
-                                         rectangular_matrix_elements) ||
-      !vibeqc::runtime::checked_multiply(rectangular_matrix_elements, spin_count,
-                                         spin_rectangular_matrix_elements)) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+  if (!generativeqc::runtime::checked_multiply(nbf, nbf, matrix_size) ||
+      !generativeqc::runtime::checked_multiply(matrix_size, matrix_size, eri_size) ||
+      !generativeqc::runtime::checked_multiply(batch_size, matrix_size, matrix_elements) ||
+      !generativeqc::runtime::checked_multiply(batch_size, spin_count, spin_batch_size) ||
+      !generativeqc::runtime::checked_multiply(matrix_elements, spin_count, spin_matrix_elements) ||
+      !generativeqc::runtime::checked_multiply(batch_size, eri_size, eri_elements) ||
+      !generativeqc::runtime::checked_add(nbf, 1, nbf_plus_one) ||
+      !generativeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product) ||
+      !generativeqc::runtime::checked_multiply(direct_nbf, direct_nbf, direct_matrix_size) ||
+      !generativeqc::runtime::checked_multiply(batch_size, direct_matrix_size,
+                                               direct_matrix_elements) ||
+      !generativeqc::runtime::checked_multiply(direct_matrix_elements, spin_count,
+                                               direct_spin_matrix_elements) ||
+      !generativeqc::runtime::checked_add(direct_nbf, 1, direct_nbf_plus_one) ||
+      !generativeqc::runtime::checked_multiply(direct_nbf, direct_nbf_plus_one,
+                                               direct_pair_product) ||
+      !generativeqc::runtime::checked_multiply(batch_size, nbf, public_ao_elements) ||
+      !generativeqc::runtime::checked_multiply(public_ao_elements, direct_nbf,
+                                               rectangular_matrix_elements) ||
+      !generativeqc::runtime::checked_multiply(rectangular_matrix_elements, spin_count,
+                                               spin_rectangular_matrix_elements)) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const std::size_t pair_count = pair_product / 2;
   const std::size_t direct_pair_count = direct_pair_product / 2;
   std::size_t pair_elements = 0;
   std::size_t direct_pair_elements = 0;
-  if (!vibeqc::runtime::checked_multiply(batch_size, pair_count, pair_elements) ||
-      !vibeqc::runtime::checked_multiply(batch_size, direct_pair_count, direct_pair_elements)) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+  if (!generativeqc::runtime::checked_multiply(batch_size, pair_count, pair_elements) ||
+      !generativeqc::runtime::checked_multiply(batch_size, direct_pair_count,
+                                               direct_pair_elements)) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   if (matrix_elements > std::numeric_limits<unsigned>::max() ||
@@ -525,7 +528,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       spin_rectangular_matrix_elements > std::numeric_limits<unsigned>::max() ||
       direct_pair_elements > std::numeric_limits<unsigned>::max() ||
       spin_batch_size > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const std::size_t total_atoms = host.atomic_numbers.size();
@@ -533,14 +536,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const std::size_t total_shell_pairs = host.shell_pair_first.size();
   if (host.shell_pair_primitive_offsets.size() != total_shell_pairs + 1 ||
       host.shell_pair_primitive_offsets.back() < 0) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const std::size_t total_shell_pair_primitives =
       static_cast<std::size_t>(host.shell_pair_primitive_offsets.back());
   if (host.system_shell_quartet_offsets.size() != batch_size + 1 ||
       host.system_shell_quartet_offsets.back() < 0) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const std::size_t total_shell_quartets =
@@ -549,7 +552,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       host.system_shell_pair_block_quartet_offsets.size() != batch_size + 1 ||
       host.system_shell_pair_block_offsets.back() < 0 ||
       host.system_shell_pair_block_quartet_offsets.back() < 0) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const std::size_t total_shell_pair_blocks =
@@ -608,7 +611,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             host.shell_pair_first, host.shell_pair_second, kMixedFockMinimumAngularOrder,
             direct_task_layout) ||
         direct_task_layout.shell_quartet_count != total_shell_quartets) {
-      fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
       return outputs;
     }
     total_shell_quartet_tiles = direct_task_layout.exact_tile_count;
@@ -644,7 +647,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     if (first_setup) {
       mixed_precision_system_census = direct_task_layout.system_mixed_capable_tile_counts;
       if (mixed_precision_system_census.size() != batch_size) {
-        fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
         return outputs;
       }
     } else if (plan.mixed_precision_system_census.size() == batch_size) {
@@ -680,23 +683,23 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       host.psss_resident_tasks.size() > std::numeric_limits<unsigned>::max() ||
       (!requested_bounded_direct_streaming &&
        total_shell_quartet_tiles > detail::kDirectFixedTopologyTileLimit)) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   std::size_t force_coordinate_count = 0;
   std::size_t force_matrix_elements = 0;
   std::size_t direct_force_elements = 0;
-  if (!vibeqc::runtime::checked_multiply(total_atoms, 3, force_coordinate_count) ||
-      !vibeqc::runtime::checked_multiply(force_coordinate_count, matrix_size,
-                                         force_matrix_elements) ||
-      !vibeqc::runtime::checked_multiply(force_matrix_elements, pair_count,
-                                         direct_force_elements)) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+  if (!generativeqc::runtime::checked_multiply(total_atoms, 3, force_coordinate_count) ||
+      !generativeqc::runtime::checked_multiply(force_coordinate_count, matrix_size,
+                                               force_matrix_elements) ||
+      !generativeqc::runtime::checked_multiply(force_matrix_elements, pair_count,
+                                               direct_force_elements)) {
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);
   if (diis_history > 64) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   if (!first_setup &&
@@ -715,7 +718,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
        plan.mixed_precision_fock != requested_mixed_precision_fock ||
        plan.mixed_precision_fock_threshold !=
            requested_mixed_precision_fock_threshold.value_or(0.0))) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   std::size_t generated_shell_task_capacity = first_setup ? 0 : plan.generated_shell_task_capacity;
@@ -726,16 +729,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   if (first_setup && requested_mixed_precision_fock) {
     for (std::size_t order = kMixedFockMinimumAngularOrder;
          order < detail::kDirectQuartetAngularOrderCount; ++order) {
-      if (!vibeqc::runtime::checked_add(fp32_shell_quartet_tile_capacity,
-                                        direct_task_layout.angular_order_tile_counts[order],
-                                        fp32_shell_quartet_tile_capacity)) {
-        fill_global_failure(outputs, VIBEQC_STATUS_OUT_OF_MEMORY);
+      if (!generativeqc::runtime::checked_add(fp32_shell_quartet_tile_capacity,
+                                              direct_task_layout.angular_order_tile_counts[order],
+                                              fp32_shell_quartet_tile_capacity)) {
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
         return outputs;
       }
     }
     if (fp32_shell_quartet_tile_capacity >
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
-      fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
       return outputs;
     }
   }
@@ -748,9 +751,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   std::size_t bounded_generated_task_capacity =
       first_setup ? 0 : plan.bounded_generated_task_capacity;
   if (first_setup && requested_bounded_direct_streaming) {
-    if (!vibeqc::runtime::checked_multiply(total_shell_pairs, kBoundedGeneratedTasksPerShellPair,
-                                           bounded_generated_task_capacity)) {
-      fill_global_failure(outputs, VIBEQC_STATUS_OUT_OF_MEMORY);
+    if (!generativeqc::runtime::checked_multiply(total_shell_pairs,
+                                                 kBoundedGeneratedTasksPerShellPair,
+                                                 bounded_generated_task_capacity)) {
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
     bounded_generated_task_capacity =
@@ -785,10 +789,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     include_generated_task_classes(fock_kernels, fock_kernel_count);
     for (std::size_t shell_class = 0; shell_class < generated_task_classes.size(); ++shell_class) {
       if (!generated_task_classes[shell_class]) continue;
-      if (!vibeqc::runtime::checked_add(generated_shell_task_capacity,
-                                        direct_task_layout.shell_class_tile_counts[shell_class],
-                                        generated_shell_task_capacity)) {
-        fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+      if (!generativeqc::runtime::checked_add(
+              generated_shell_task_capacity,
+              direct_task_layout.shell_class_tile_counts[shell_class],
+              generated_shell_task_capacity)) {
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
         return outputs;
       }
     }
@@ -810,7 +815,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   if (resident_ppps_ket_task_capacity > generated_shell_task_capacity ||
       resident_ppps_ket_task_capacity >
           static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   if (first_setup) {
@@ -826,7 +831,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             requested_transformed_direct, shell_class_profiling, inactive_eigensolver_profiling,
             bounded_fock_class_timing, requested_bounded_direct_streaming,
             requested_mixed_precision_fock, plan.layout)) {
-      fill_global_failure(outputs, VIBEQC_STATUS_OUT_OF_MEMORY);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
     plan.batch_size = batch_size;
@@ -854,7 +859,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                 plan.bounded_direct_shell_pair_order.end(), 0U);
       if (!make_bounded_stream_shell_pair_order(host, plan.bounded_stream_shell_pair_order,
                                                 plan.bounded_stream_pair_class_offsets)) {
-        fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
         return outputs;
       }
     }
@@ -919,7 +924,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     for (std::size_t system = 0; system < mixed_precision_system_census.size(); ++system) {
       if (mixed_precision_system_census[system] >
           static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
-        fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
         return outputs;
       }
       plan.mixed_precision_system_census[system] =
@@ -940,7 +945,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool quartet_direct = plan.quartet_direct;
   const bool transformed_direct = plan.transformed_direct;
   if (transformed_direct != !host.ao_to_direct_transform.empty()) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const bool bounded_direct_streaming = plan.bounded_direct_streaming;
@@ -1100,7 +1105,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     if (direct_target.multiprocessor_count == 0U ||
         direct_target.multiprocessor_count > std::numeric_limits<unsigned>::max() /
                                                  direct_schedule.persistent_quartet_warps_per_sm) {
-      fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
       return outputs;
     }
     plan.persistent_quartet_warps_per_multiprocessor =
@@ -1626,27 +1631,27 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   };
   if (first_setup) {
     for (const auto& upload : static_uploads) {
-      const vibeqc_status status = copy_to_device(upload.second.first, upload.first,
-                                                  upload.second.second, resources.stream_);
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      const generativeqc_status status = copy_to_device(upload.second.first, upload.first,
+                                                        upload.second.second, resources.stream_);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
     }
   }
   if (geometry_changed) {
-    const vibeqc_status position_status =
+    const generativeqc_status position_status =
         copy_to_device(positions, host.positions.data(), host.positions.size() * sizeof(double),
                        resources.stream_);
-    if (position_status != VIBEQC_STATUS_SUCCESS) {
+    if (position_status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, position_status);
       return outputs;
     }
   }
   for (const auto& upload : dynamic_uploads) {
-    const vibeqc_status status =
+    const generativeqc_status status =
         copy_to_device(upload.second.first, upload.first, upload.second.second, resources.stream_);
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -1655,10 +1660,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // The SCF graph initializes previous_energy from this device buffer. A
     // frozen replay therefore restores its original seed explicitly instead
     // of relying on whatever energy the most recent resident density left.
-    const vibeqc_status status =
+    const generativeqc_status status =
         copy_to_device(energy, host_previous_energy_seed.data(),
                        host_previous_energy_seed.size() * sizeof(double), resources.stream_);
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -1761,7 +1766,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       return outputs;
     }
     if (plan.lwork < 0 || resources.solver_workspace_bytes_ == 0) {
-      fill_global_failure(outputs, VIBEQC_STATUS_CUDA_ERROR);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_CUDA_ERROR);
       return outputs;
     }
     if (options.export_physical_reference) {
@@ -1780,7 +1785,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     if (resources.solver_host_workspace_bytes_ != 0) {
       resources.solver_host_workspace_ = std::malloc(resources.solver_host_workspace_bytes_);
       if (resources.solver_host_workspace_ == nullptr) {
-        fill_global_failure(outputs, VIBEQC_STATUS_OUT_OF_MEMORY);
+        fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
         return outputs;
       }
     }
@@ -1828,10 +1833,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   const auto multiply_matrices = [&](const double* left, bool transpose_left, const double* right,
                                      double* output, double scale = 1.0) {
-    const vibeqc_status product_status = launch_matrix_product(
+    const generativeqc_status product_status = launch_matrix_product(
         resources.matrix_view(), static_cast<int>(batch_size), static_cast<int>(nbf), left,
         transpose_left, right, active, output, use_cublas, scale);
-    if (use_cublas && product_status != VIBEQC_STATUS_SUCCESS) {
+    if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
     return product_status;
@@ -1839,46 +1844,46 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const auto multiply_spin_matrices = [&](const double* left, bool left_is_spin,
                                           bool transpose_left, const double* right,
                                           bool right_is_spin, double* output) {
-    const vibeqc_status product_status = launch_spin_matrix_product(
+    const generativeqc_status product_status = launch_spin_matrix_product(
         resources.matrix_view(), static_cast<int>(batch_size), 2, static_cast<int>(nbf), left,
         left_is_spin, transpose_left, right, right_is_spin, active, output, use_cublas);
-    if (use_cublas && product_status != VIBEQC_STATUS_SUCCESS) {
+    if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
     return product_status;
   };
-  const auto build_commutator_residual = [&]() -> vibeqc_status {
+  const auto build_commutator_residual = [&]() -> generativeqc_status {
     // [F, P]S is evaluated as four O(N^3) products.  `temporary` and
     // `eigensystem` are iteration scratch at this point: the former holds the
     // first product until it is folded into `residual`, while the latter is
     // overwritten before DIIS uses it as its effective-Fock output.  Keeping
     // the products in separate launches also lets the existing cuBLAS
     // strided-batched wrapper handle RHF and interleaved UHF layouts alike.
-    vibeqc_status product_status = VIBEQC_STATUS_SUCCESS;
+    generativeqc_status product_status = GENERATIVEQC_STATUS_SUCCESS;
     if (unrestricted) {
       product_status = multiply_spin_matrices(fock, true, false, density, true, temporary);
-      if (product_status == VIBEQC_STATUS_SUCCESS) {
+      if (product_status == GENERATIVEQC_STATUS_SUCCESS) {
         product_status = multiply_spin_matrices(temporary, true, false, overlap, false, residual);
       }
-      if (product_status == VIBEQC_STATUS_SUCCESS) {
+      if (product_status == GENERATIVEQC_STATUS_SUCCESS) {
         product_status = multiply_spin_matrices(overlap, false, false, density, true, eigensystem);
       }
-      if (product_status == VIBEQC_STATUS_SUCCESS) {
+      if (product_status == GENERATIVEQC_STATUS_SUCCESS) {
         product_status = multiply_spin_matrices(eigensystem, true, false, fock, true, temporary);
       }
     } else {
       product_status = multiply_matrices(fock, false, density, temporary);
-      if (product_status == VIBEQC_STATUS_SUCCESS) {
+      if (product_status == GENERATIVEQC_STATUS_SUCCESS) {
         product_status = multiply_matrices(temporary, false, overlap, residual);
       }
-      if (product_status == VIBEQC_STATUS_SUCCESS) {
+      if (product_status == GENERATIVEQC_STATUS_SUCCESS) {
         product_status = multiply_matrices(overlap, false, density, eigensystem);
       }
-      if (product_status == VIBEQC_STATUS_SUCCESS) {
+      if (product_status == GENERATIVEQC_STATUS_SUCCESS) {
         product_status = multiply_matrices(eigensystem, false, fock, temporary);
       }
     }
-    if (product_status != VIBEQC_STATUS_SUCCESS) return product_status;
+    if (product_status != GENERATIVEQC_STATUS_SUCCESS) return product_status;
     launch_subtract_matrix_batches_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
@@ -2143,7 +2148,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         }
         if (error != cudaSuccess) return error;
 
-#define VIBEQC_COMPACT_BOUNDED_FOCK_PAGE(unrestricted_value)                                      \
+#define GENERATIVEQC_COMPACT_BOUNDED_FOCK_PAGE(unrestricted_value)                                \
   launch_compact_bounded_exact_class_force_wave_kernel(                                           \
       unrestricted_value, DirectScreeningPurpose::Fock, plan.persistent_quartet_worker_blocks,    \
       kBoundedDirectThreads, 0, resources.stream_, device_batch, bounded_stream_topology,         \
@@ -2152,11 +2157,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       bounded_direct_generated_tasks, bounded_direct_generated_task_counts + shell_class,         \
       bounded_direct_generated_task_heads + shell_class, nullptr, true, nullptr, nullptr)
         if (is_unrestricted) {
-          VIBEQC_COMPACT_BOUNDED_FOCK_PAGE(true);
+          GENERATIVEQC_COMPACT_BOUNDED_FOCK_PAGE(true);
         } else {
-          VIBEQC_COMPACT_BOUNDED_FOCK_PAGE(false);
+          GENERATIVEQC_COMPACT_BOUNDED_FOCK_PAGE(false);
         }
-#undef VIBEQC_COMPACT_BOUNDED_FOCK_PAGE
+#undef GENERATIVEQC_COMPACT_BOUNDED_FOCK_PAGE
         error = cudaPeekAtLastError();
         if (error != cudaSuccess) return error;
         if (bounded_fock_class_timing) {
@@ -2274,22 +2279,22 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     error =
         cudaMemsetAsync(bounded_direct_cursor, 0, sizeof(unsigned long long), resources.stream_);
     if (error != cudaSuccess) return error;
-#define VIBEQC_LAUNCH_BOUNDED_GENERATED_FOCK(unrestricted_value, task_offsets, selected_classes, \
-                                             selected_any)                                       \
-  launch_compact_bounded_generated_tasks_kernel(                                                 \
-      unrestricted_value, DirectScreeningPurpose::Fock, plan.persistent_quartet_worker_blocks,   \
-      kBoundedDirectThreads, 0, resources.stream_, device_batch, options.screening_tolerance,    \
-      shell_pair_bounds, shell_pair_density_bounds, bounded_direct_shell_pair_order,             \
-      bounded_direct_shell_pair_block_bounds, bounded_direct_system_density_bounds, active,      \
-      generated_fock_shell_class_mask, 0U, host_native_streaming_fock_shell_class_mask,          \
-      selected_classes, selected_any, bounded_direct_cursor, bounded_direct_generated_tasks,     \
+#define GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FOCK(unrestricted_value, task_offsets,           \
+                                                   selected_classes, selected_any)             \
+  launch_compact_bounded_generated_tasks_kernel(                                               \
+      unrestricted_value, DirectScreeningPurpose::Fock, plan.persistent_quartet_worker_blocks, \
+      kBoundedDirectThreads, 0, resources.stream_, device_batch, options.screening_tolerance,  \
+      shell_pair_bounds, shell_pair_density_bounds, bounded_direct_shell_pair_order,           \
+      bounded_direct_shell_pair_block_bounds, bounded_direct_system_density_bounds, active,    \
+      generated_fock_shell_class_mask, 0U, host_native_streaming_fock_shell_class_mask,        \
+      selected_classes, selected_any, bounded_direct_cursor, bounded_direct_generated_tasks,   \
       bounded_direct_generated_task_counts, task_offsets, bounded_direct_generated_overflow)
     if (is_unrestricted) {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FOCK(true, bounded_direct_generated_task_offsets, nullptr,
-                                           nullptr);
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FOCK(true, bounded_direct_generated_task_offsets,
+                                                 nullptr, nullptr);
     } else {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FOCK(false, bounded_direct_generated_task_offsets, nullptr,
-                                           nullptr);
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FOCK(false, bounded_direct_generated_task_offsets,
+                                                 nullptr, nullptr);
     }
     error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
@@ -2337,15 +2342,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
     if (error != cudaSuccess) return error;
     if (is_unrestricted) {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FOCK(true, bounded_direct_generated_retry_task_offsets,
-                                           bounded_direct_generated_retry_mask,
-                                           bounded_direct_generated_retry_any);
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FOCK(true, bounded_direct_generated_retry_task_offsets,
+                                                 bounded_direct_generated_retry_mask,
+                                                 bounded_direct_generated_retry_any);
     } else {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FOCK(false, bounded_direct_generated_retry_task_offsets,
-                                           bounded_direct_generated_retry_mask,
-                                           bounded_direct_generated_retry_any);
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FOCK(false, bounded_direct_generated_retry_task_offsets,
+                                                 bounded_direct_generated_retry_mask,
+                                                 bounded_direct_generated_retry_any);
     }
-#undef VIBEQC_LAUNCH_BOUNDED_GENERATED_FOCK
+#undef GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FOCK
     error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
     launch_normalize_bounded_generated_task_counts_kernel(
@@ -2542,7 +2547,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                  static_cast<std::int32_t>(batch_size), cached_energy_baseline_hit,
                                  energy, active, converged, failed, iterations, previous_energy,
                                  energy_change, density_rms, diis_count, diis_head);
-  vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   if (geometry_changed) {
     cuda_error = launch_generated_one_electron_values(
         one_electron_view(device_batch), ao_pair_first, ao_pair_second, pair_count,
@@ -2556,7 +2561,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       const auto ecp_status =
           integrals::add_ecp_cuda(device_id, host.ecp_systems[e], resources.stream_,
                                   hcore + e * matrix_size, nullptr, nullptr, ecp_detail);
-      if (ecp_status != VIBEQC_STATUS_SUCCESS) {
+      if (ecp_status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, ecp_status);
         return outputs;
       }
@@ -2625,17 +2630,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                });
             }
           }
-          const vibeqc_status order_upload_status = copy_to_device(
+          const generativeqc_status order_upload_status = copy_to_device(
               bounded_direct_shell_pair_order, plan.bounded_direct_shell_pair_order.data(),
               total_shell_pairs * sizeof(std::uint32_t), resources.stream_);
-          if (order_upload_status != VIBEQC_STATUS_SUCCESS) {
+          if (order_upload_status != GENERATIVEQC_STATUS_SUCCESS) {
             fill_global_failure(outputs, order_upload_status);
             return outputs;
           }
-          const vibeqc_status stream_order_upload_status = copy_to_device(
+          const generativeqc_status stream_order_upload_status = copy_to_device(
               bounded_stream_shell_pair_order, plan.bounded_stream_shell_pair_order.data(),
               total_shell_pairs * sizeof(std::uint32_t), resources.stream_);
-          if (stream_order_upload_status != VIBEQC_STATUS_SUCCESS) {
+          if (stream_order_upload_status != GENERATIVEQC_STATUS_SUCCESS) {
             fill_global_failure(outputs, stream_order_upload_status);
             return outputs;
           }
@@ -2669,7 +2674,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     status = launch_solver(resources.eigensolver_view(), ordinary_eigensolver_family,
                            static_cast<int>(nbf), static_cast<int>(batch_size), eigensystem,
                            temporary, eigenvalues, lwork, solver_info, active);
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -2687,17 +2692,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // construction without changing mixed warm/cold bucket semantics.
   if (!all_systems_warm) {
     status = multiply_matrices(hcore, false, orthogonalizer, temporary);
-    if (status == VIBEQC_STATUS_SUCCESS) {
+    if (status == GENERATIVEQC_STATUS_SUCCESS) {
       status = multiply_matrices(orthogonalizer, true, temporary, eigensystem);
     }
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
     status = launch_solver(resources.eigensolver_view(), ordinary_eigensolver_family,
                            static_cast<int>(nbf), static_cast<int>(batch_size), eigensystem,
                            temporary, eigenvalues, lwork, solver_info, active);
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -2706,7 +2711,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                  converged);
     if (unrestricted) {
       status = multiply_matrices(orthogonalizer, false, eigensystem, temporary);
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
@@ -2724,7 +2729,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                        active, density);
     } else {
       status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
@@ -2773,7 +2778,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       // resident density buffer. Residency was invalidated before execution,
       // and a rejected trace must not publish a replacement cache entry. A
       // separately frozen valid dm0/energy pair remains safe to replay.
-      fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
       return outputs;
     }
   }
@@ -2814,12 +2819,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
        ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd) &&
       graph_eigensolver_family != ordinary_eigensolver_family;
 
-  const auto launch_iteration_pre_eigensolver = [&](bool allow_mixed_precision) -> vibeqc_status {
+  const auto launch_iteration_pre_eigensolver =
+      [&](bool allow_mixed_precision) -> generativeqc_status {
     const cudaError_t fock_error = launch_fock_builder(density, allow_mixed_precision);
     if (fock_error != cudaSuccess) return cuda_status(fock_error);
-    if (fock_only_iteration) return VIBEQC_STATUS_SUCCESS;
+    if (fock_only_iteration) return GENERATIVEQC_STATUS_SUCCESS;
 
-    vibeqc_status iteration_status = VIBEQC_STATUS_SUCCESS;
+    generativeqc_status iteration_status = GENERATIVEQC_STATUS_SUCCESS;
     if (unrestricted) {
       launch_compute_uhf_energy_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads,
                                        0, resources.stream_, static_cast<std::int32_t>(batch_size),
@@ -2833,7 +2839,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                    nuclear_repulsion, active, energy);
       iteration_status = build_commutator_residual();
     }
-    if (iteration_status != VIBEQC_STATUS_SUCCESS) return iteration_status;
+    if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
 
     launch_update_diis_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
                               resources.stream_, static_cast<std::int32_t>(batch_size),
@@ -2844,26 +2850,27 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     if (unrestricted) {
       iteration_status =
           multiply_spin_matrices(eigensystem, true, false, orthogonalizer, false, temporary);
-      if (iteration_status == VIBEQC_STATUS_SUCCESS) {
+      if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
         iteration_status =
             multiply_spin_matrices(orthogonalizer, false, true, temporary, true, eigensystem);
       }
-      if (iteration_status == VIBEQC_STATUS_SUCCESS) {
+      if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
         launch_expand_spin_active_kernel(blocks_for(spin_batch_size), threads, 0, resources.stream_,
                                          static_cast<std::int32_t>(batch_size), 2, active,
                                          spin_active);
       }
     } else {
       iteration_status = multiply_matrices(eigensystem, false, orthogonalizer, temporary);
-      if (iteration_status == VIBEQC_STATUS_SUCCESS) {
+      if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
         iteration_status = multiply_matrices(orthogonalizer, true, temporary, eigensystem);
       }
     }
-    if (iteration_status != VIBEQC_STATUS_SUCCESS) return iteration_status;
+    if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     return cuda_status(cudaPeekAtLastError());
   };
 
-  const auto launch_iteration_eigensolver = [&](CudaEigensolverFamily family) -> vibeqc_status {
+  const auto launch_iteration_eigensolver =
+      [&](CudaEigensolverFamily family) -> generativeqc_status {
     return launch_solver(resources.eigensolver_view(), family, static_cast<int>(nbf),
                          static_cast<int>(unrestricted ? spin_batch_size : batch_size), eigensystem,
                          temporary, eigenvalues, lwork, solver_info,
@@ -2901,19 +2908,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // FP64 direct and DF share the physical pre-DIIS residual gate for both
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
-  const auto launch_iteration_post_eigensolver = [&](bool append_device_tail,
-                                                     bool allow_mixed_precision) -> vibeqc_status {
+  const auto launch_iteration_post_eigensolver =
+      [&](bool append_device_tail, bool allow_mixed_precision) -> generativeqc_status {
     // Only the item's coarse mixed stage may defer stationarity. Exact peers
     // and every FP64 refinement step must satisfy the physical force criterion.
     const auto* approximate_census = allow_mixed_precision ? mixed_precision_item_census : nullptr;
-    vibeqc_status iteration_status = VIBEQC_STATUS_SUCCESS;
+    generativeqc_status iteration_status = GENERATIVEQC_STATUS_SUCCESS;
     if (unrestricted) {
       launch_inspect_spin_solver_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
                                         static_cast<std::int32_t>(batch_size), 2, solver_info,
                                         active, failed, converged);
       iteration_status =
           multiply_spin_matrices(orthogonalizer, false, false, eigensystem, true, coefficients);
-      if (iteration_status == VIBEQC_STATUS_SUCCESS) {
+      if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
         launch_build_spin_density_kernel(blocks_for(spin_matrix_elements), threads, 0,
                                          resources.stream_, static_cast<std::int32_t>(batch_size),
                                          2, static_cast<std::int32_t>(nbf), occupied, coefficients,
@@ -2939,7 +2946,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                    static_cast<std::int32_t>(batch_size), solver_info, active,
                                    failed, converged);
       iteration_status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
-      if (iteration_status == VIBEQC_STATUS_SUCCESS) {
+      if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
         launch_build_density_kernel(blocks_for(matrix_elements), threads, 0, resources.stream_,
                                     static_cast<std::int32_t>(batch_size),
                                     static_cast<std::int32_t>(nbf), occupied, coefficients, active,
@@ -2961,7 +2968,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         }
       }
     }
-    if (iteration_status != VIBEQC_STATUS_SUCCESS) return iteration_status;
+    if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     if (track_force_final_orbitals) {
       // After the convergence kernel, active selects only items that accepted
       // P_{n+1} and will continue. Advance their determinant orbital frame with
@@ -2982,13 +2989,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // The graph owner handles capture/instantiate/upload mechanics; this driver
     // supplies only the exact numerical launch order for each captured stage.
     const auto iteration_capture = plan.graphs.capture_iteration(
-        resources.device_id_, resources.stream_, !split_provider_iteration, [&]() -> vibeqc_status {
+        resources.device_id_, resources.stream_, !split_provider_iteration,
+        [&]() -> generativeqc_status {
           status = launch_iteration_pre_eigensolver(true);
-          if (status == VIBEQC_STATUS_SUCCESS && !fock_only_iteration &&
+          if (status == GENERATIVEQC_STATUS_SUCCESS && !fock_only_iteration &&
               !split_provider_iteration) {
             status = launch_iteration_eigensolver(graph_eigensolver_family);
           }
-          if (status == VIBEQC_STATUS_SUCCESS && !fock_only_iteration &&
+          if (status == GENERATIVEQC_STATUS_SUCCESS && !fock_only_iteration &&
               !split_provider_iteration) {
             status = launch_iteration_post_eigensolver(true, true);
           }
@@ -2997,21 +3005,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     cuda_error = iteration_capture.cuda_error;
     if (!iteration_capture.ok()) {
       if (use_cublas) plan.retry_without_cublas = true;
-      fill_global_failure(outputs, iteration_capture.body_status != VIBEQC_STATUS_SUCCESS
+      fill_global_failure(outputs, iteration_capture.body_status != GENERATIVEQC_STATUS_SUCCESS
                                        ? iteration_capture.body_status
                                        : cuda_status(iteration_capture.cuda_error));
       return outputs;
     }
     if (split_provider_iteration) {
       const auto post_capture = plan.graphs.capture_post_eigensolver(
-          resources.device_id_, resources.stream_, [&]() -> vibeqc_status {
+          resources.device_id_, resources.stream_, [&]() -> generativeqc_status {
             status = launch_iteration_post_eigensolver(false, true);
             return status;
           });
       cuda_error = post_capture.cuda_error;
       if (!post_capture.ok()) {
         if (use_cublas) plan.retry_without_cublas = true;
-        fill_global_failure(outputs, post_capture.body_status != VIBEQC_STATUS_SUCCESS
+        fill_global_failure(outputs, post_capture.body_status != GENERATIVEQC_STATUS_SUCCESS
                                          ? post_capture.body_status
                                          : cuda_status(post_capture.cuda_error));
         return outputs;
@@ -3045,11 +3053,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   if (cuda_error == cudaSuccess && split_provider_iteration) {
     std::vector<std::uint8_t> host_active(batch_size, 1U);
-    ::vibeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned) {
+    ::generativeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned) {
       cuda_error = plan.graphs.launch_iteration(resources.stream_);
       if (cuda_error != cudaSuccess) return false;
       status = launch_iteration_eigensolver(ordinary_eigensolver_family);
-      if (status != VIBEQC_STATUS_SUCCESS) return false;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return false;
       cuda_error = plan.graphs.launch_post_eigensolver(resources.stream_);
       if (cuda_error == cudaSuccess) {
         cuda_error = cudaMemcpyAsync(host_active.data(), active, batch_size * sizeof(std::uint8_t),
@@ -3062,7 +3070,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
              std::any_of(host_active.begin(), host_active.end(),
                          [](std::uint8_t value) { return value != 0; });
     });
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -3246,7 +3254,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // The isolated profile intentionally captures one Fock construction and
     // omits the eigensolve/convergence tail. Return after device timings are
     // copied so no final-Fock rebuild or analytic-force work contaminates it.
-    fill_global_failure(outputs, VIBEQC_STATUS_NOT_CONVERGED);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_CONVERGED);
     for (auto& output : outputs) output.fock_only_diagnostic = true;
     return outputs;
   }
@@ -3294,19 +3302,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // reports an honest non-convergence instead of a clamped success. Each item
     // leaves the loop on its own convergence, so a stagnating item is promoted
     // without holding back or dictating the precision of its neighbors.
-    ::vibeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned) {
+    ::generativeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned) {
       if (std::none_of(host_refinement_active.begin(), host_refinement_active.end(),
                        [](std::uint8_t value) { return value != 0; })) {
         return false;
       }
       status = launch_iteration_pre_eigensolver(false);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = launch_iteration_eigensolver(ordinary_eigensolver_family);
       }
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = launch_iteration_post_eigensolver(false, false);
       }
-      if (status != VIBEQC_STATUS_SUCCESS) return false;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return false;
       cuda_error =
           cudaMemcpyAsync(host_refinement_active.data(), active, batch_size * sizeof(std::uint8_t),
                           cudaMemcpyDeviceToHost, resources.stream_);
@@ -3317,9 +3325,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
              std::any_of(host_refinement_active.begin(), host_refinement_active.end(),
                          [](std::uint8_t value) { return value != 0; });
     });
-    if (status != VIBEQC_STATUS_SUCCESS || cuda_error != cudaSuccess) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS || cuda_error != cudaSuccess) {
       fill_global_failure(outputs,
-                          status != VIBEQC_STATUS_SUCCESS ? status : cuda_status(cuda_error));
+                          status != GENERATIVEQC_STATUS_SUCCESS ? status : cuda_status(cuda_error));
       return outputs;
     }
   }
@@ -3439,10 +3447,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // active mask now contains every converged system for common finalization.
     if (unrestricted) {
       status = multiply_spin_matrices(fock, true, false, orthogonalizer, false, temporary);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = multiply_spin_matrices(orthogonalizer, false, true, temporary, true, eigensystem);
       }
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         launch_expand_spin_active_kernel(blocks_for(spin_batch_size), threads, 0, resources.stream_,
                                          static_cast<std::int32_t>(batch_size), 2, active,
                                          spin_active);
@@ -3453,16 +3461,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       }
     } else {
       status = multiply_matrices(fock, false, orthogonalizer, temporary);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = multiply_matrices(orthogonalizer, true, temporary, eigensystem);
       }
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = launch_solver(resources.eigensolver_view(), ordinary_eigensolver_family,
                                static_cast<int>(nbf), static_cast<int>(batch_size), eigensystem,
                                temporary, eigenvalues, lwork, solver_info, active);
       }
     }
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -3473,7 +3481,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                         active, failed, converged);
       status =
           multiply_spin_matrices(orthogonalizer, false, false, eigensystem, true, coefficients);
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
@@ -3482,7 +3490,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                    static_cast<std::int32_t>(batch_size), solver_info, active,
                                    failed, converged);
       status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
@@ -3518,7 +3526,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       return outputs;
     }
     status = build_commutator_residual();
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       trace.finish("residual_failed");
       fill_global_failure(outputs, status);
       return outputs;
@@ -3562,16 +3570,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     // therefore supplies physical orbital energies while preserving P exactly.
     if (unrestricted) {
       status = multiply_spin_matrices(fock, true, false, coefficients, true, temporary);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = multiply_spin_matrices(coefficients, true, true, temporary, true, eigensystem);
       }
     } else {
       status = multiply_matrices(fock, false, coefficients, temporary);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = multiply_matrices(coefficients, true, temporary, eigensystem);
       }
     }
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, status);
       return outputs;
     }
@@ -3606,7 +3614,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         1,
         1,
         options.screening_tolerance,
-        static_cast<int>(options.precision_mode.value_or(VIBEQC_PRECISION_FP64)),
+        static_cast<int>(options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64)),
         unrestricted,
         density,
         fock,
@@ -3621,7 +3629,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     });
   }
   if (force_final_state.has_value() && !force_final_state->force_consumable()) {
-    fill_global_failure(outputs, VIBEQC_STATUS_INTERNAL_ERROR);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INTERNAL_ERROR);
     return outputs;
   }
   const double* final_density =
@@ -3663,11 +3671,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       // With unit spin occupations, W_sigma = P_sigma F_sigma P_sigma.
       // Iteration scratch is free here; keep the selected final P/F untouched.
       status = multiply_spin_matrices(final_density, true, false, final_fock, true, temporary);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status =
             multiply_spin_matrices(temporary, true, false, final_density, true, weighted_density);
       }
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
@@ -3690,10 +3698,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       // W = P F(P) P / 2. At stationarity this equals the canonical expression;
       // at finite residual it preserves the same P as the other force terms.
       status = multiply_matrices(final_density, false, final_fock, temporary);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         status = multiply_matrices(temporary, false, final_density, weighted_density, 0.5);
       }
-      if (status != VIBEQC_STATUS_SUCCESS) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
@@ -3729,7 +3737,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           integrals::add_ecp_cuda(device_id, host.ecp_systems[e], resources.stream_, nullptr,
                                   (unrestricted ? total_density : final_density) + e * matrix_size,
                                   forces + 3 * host.atom_offsets[e], ecp_detail);
-      if (ecp_status != VIBEQC_STATUS_SUCCESS) {
+      if (ecp_status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, ecp_status);
         return outputs;
       }
@@ -3841,8 +3849,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     error =
         cudaMemsetAsync(bounded_direct_cursor, 0, sizeof(unsigned long long), resources.stream_);
     if (error != cudaSuccess) return error;
-#define VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(unrestricted_value, purpose_value, task_offsets,     \
-                                              selected_classes, selected_any)                      \
+#define GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(unrestricted_value, purpose_value,             \
+                                                    task_offsets, selected_classes, selected_any)  \
   launch_compact_bounded_generated_tasks_kernel(                                                   \
       unrestricted_value, purpose_value, plan.persistent_quartet_worker_blocks,                    \
       kBoundedDirectThreads, 0, resources.stream_, device_batch, options.screening_tolerance,      \
@@ -3853,22 +3861,22 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       task_offsets, bounded_direct_generated_overflow)
     if (is_unrestricted) {
       if (purpose == DirectScreeningPurpose::Force) {
-        VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(true, DirectScreeningPurpose::Force,
-                                              bounded_direct_generated_task_offsets, nullptr,
-                                              nullptr);
+        GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(true, DirectScreeningPurpose::Force,
+                                                    bounded_direct_generated_task_offsets, nullptr,
+                                                    nullptr);
       } else {
-        VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(true, DirectScreeningPurpose::Fock,
-                                              bounded_direct_generated_task_offsets, nullptr,
-                                              nullptr);
+        GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(true, DirectScreeningPurpose::Fock,
+                                                    bounded_direct_generated_task_offsets, nullptr,
+                                                    nullptr);
       }
     } else if (purpose == DirectScreeningPurpose::Force) {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(false, DirectScreeningPurpose::Force,
-                                            bounded_direct_generated_task_offsets, nullptr,
-                                            nullptr);
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(false, DirectScreeningPurpose::Force,
+                                                  bounded_direct_generated_task_offsets, nullptr,
+                                                  nullptr);
     } else {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(false, DirectScreeningPurpose::Fock,
-                                            bounded_direct_generated_task_offsets, nullptr,
-                                            nullptr);
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(false, DirectScreeningPurpose::Fock,
+                                                  bounded_direct_generated_task_offsets, nullptr,
+                                                  nullptr);
     }
     error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
@@ -3961,24 +3969,24 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     if (error != cudaSuccess) return error;
     if (is_unrestricted) {
       if (purpose == DirectScreeningPurpose::Force) {
-        VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
+        GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
             true, DirectScreeningPurpose::Force, bounded_direct_generated_retry_task_offsets,
             bounded_direct_generated_retry_mask, bounded_direct_generated_retry_any);
       } else {
-        VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
+        GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
             true, DirectScreeningPurpose::Fock, bounded_direct_generated_retry_task_offsets,
             bounded_direct_generated_retry_mask, bounded_direct_generated_retry_any);
       }
     } else if (purpose == DirectScreeningPurpose::Force) {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
           false, DirectScreeningPurpose::Force, bounded_direct_generated_retry_task_offsets,
           bounded_direct_generated_retry_mask, bounded_direct_generated_retry_any);
     } else {
-      VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
+      GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE(
           false, DirectScreeningPurpose::Fock, bounded_direct_generated_retry_task_offsets,
           bounded_direct_generated_retry_mask, bounded_direct_generated_retry_any);
     }
-#undef VIBEQC_LAUNCH_BOUNDED_GENERATED_FORCE
+#undef GENERATIVEQC_LAUNCH_BOUNDED_GENERATED_FORCE
     error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
     launch_normalize_bounded_generated_task_counts_kernel(
@@ -4045,7 +4053,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         const auto compact_page = [&](std::uint32_t* signature_counts,
                                       const std::uint32_t* signature_offsets,
                                       bool force_execution) -> cudaError_t {
-#define VIBEQC_COMPACT_EXACT_OVERFLOW_FORCE(unrestricted_value, purpose_value)                    \
+#define GENERATIVEQC_COMPACT_EXACT_OVERFLOW_FORCE(unrestricted_value, purpose_value)              \
   launch_compact_bounded_exact_class_force_wave_kernel(                                           \
       unrestricted_value, purpose_value, plan.persistent_quartet_worker_blocks,                   \
       kBoundedDirectThreads, 0, resources.stream_, device_batch, bounded_stream_topology,         \
@@ -4056,16 +4064,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       force_execution, signature_counts, signature_offsets)
           if (is_unrestricted) {
             if (purpose == DirectScreeningPurpose::Force) {
-              VIBEQC_COMPACT_EXACT_OVERFLOW_FORCE(true, DirectScreeningPurpose::Force);
+              GENERATIVEQC_COMPACT_EXACT_OVERFLOW_FORCE(true, DirectScreeningPurpose::Force);
             } else {
-              VIBEQC_COMPACT_EXACT_OVERFLOW_FORCE(true, DirectScreeningPurpose::Fock);
+              GENERATIVEQC_COMPACT_EXACT_OVERFLOW_FORCE(true, DirectScreeningPurpose::Fock);
             }
           } else if (purpose == DirectScreeningPurpose::Force) {
-            VIBEQC_COMPACT_EXACT_OVERFLOW_FORCE(false, DirectScreeningPurpose::Force);
+            GENERATIVEQC_COMPACT_EXACT_OVERFLOW_FORCE(false, DirectScreeningPurpose::Force);
           } else {
-            VIBEQC_COMPACT_EXACT_OVERFLOW_FORCE(false, DirectScreeningPurpose::Fock);
+            GENERATIVEQC_COMPACT_EXACT_OVERFLOW_FORCE(false, DirectScreeningPurpose::Fock);
           }
-#undef VIBEQC_COMPACT_EXACT_OVERFLOW_FORCE
+#undef GENERATIVEQC_COMPACT_EXACT_OVERFLOW_FORCE
           return cudaPeekAtLastError();
         };
         if (signature_paged) {
@@ -4134,7 +4142,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     cudaError_t error = cudaMemsetAsync(bounded_direct_generated_task_heads + kDdddShellClass, 0,
                                         sizeof(std::uint32_t), resources.stream_);
     if (error != cudaSuccess) return error;
-#define VIBEQC_LAUNCH_NATIVE_DDDD_FORCE(unrestricted_value, purpose_value)                        \
+#define GENERATIVEQC_LAUNCH_NATIVE_DDDD_FORCE(unrestricted_value, purpose_value)                  \
   launch_bounded_direct_dddd_streaming_kernel(                                                    \
       unrestricted_value, purpose_value, true, plan.persistent_quartet_worker_blocks,             \
       detail::kDirectQuartetThreads, 0, resources.stream_, device_batch, bounded_stream_topology, \
@@ -4143,16 +4151,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       shell_class_profiling ? shell_class_profile : nullptr, nullptr)
     if (is_unrestricted) {
       if (purpose == DirectScreeningPurpose::Force) {
-        VIBEQC_LAUNCH_NATIVE_DDDD_FORCE(true, DirectScreeningPurpose::Force);
+        GENERATIVEQC_LAUNCH_NATIVE_DDDD_FORCE(true, DirectScreeningPurpose::Force);
       } else {
-        VIBEQC_LAUNCH_NATIVE_DDDD_FORCE(true, DirectScreeningPurpose::Fock);
+        GENERATIVEQC_LAUNCH_NATIVE_DDDD_FORCE(true, DirectScreeningPurpose::Fock);
       }
     } else if (purpose == DirectScreeningPurpose::Force) {
-      VIBEQC_LAUNCH_NATIVE_DDDD_FORCE(false, DirectScreeningPurpose::Force);
+      GENERATIVEQC_LAUNCH_NATIVE_DDDD_FORCE(false, DirectScreeningPurpose::Force);
     } else {
-      VIBEQC_LAUNCH_NATIVE_DDDD_FORCE(false, DirectScreeningPurpose::Fock);
+      GENERATIVEQC_LAUNCH_NATIVE_DDDD_FORCE(false, DirectScreeningPurpose::Fock);
     }
-#undef VIBEQC_LAUNCH_NATIVE_DDDD_FORCE
+#undef GENERATIVEQC_LAUNCH_NATIVE_DDDD_FORCE
     return cudaPeekAtLastError();
   };
   const auto launch_bounded_generic_force = [&](bool is_unrestricted,
@@ -4237,7 +4245,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         cudaError_t error = cudaMemsetAsync(bounded_direct_generated_task_heads + shell_class, 0,
                                             sizeof(std::uint32_t), resources.stream_);
         if (error != cudaSuccess) return error;
-#define VIBEQC_LAUNCH_BOUNDED_NATIVE_PAGE(unrestricted_value, purpose_value)                      \
+#define GENERATIVEQC_LAUNCH_BOUNDED_NATIVE_PAGE(unrestricted_value, purpose_value)                \
   launch_contract_bounded_exact_low_order_force_page_kernel(                                      \
       unrestricted_value, purpose_value, plan.persistent_quartet_worker_blocks,                   \
       kBoundedDirectThreads, 0, resources.stream_, device_batch, bounded_stream_topology,         \
@@ -4247,18 +4255,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       shell_class_profiling ? shell_class_profile : nullptr)
         if (purpose == DirectScreeningPurpose::Force) {
           if (is_unrestricted) {
-            VIBEQC_LAUNCH_BOUNDED_NATIVE_PAGE(true, DirectScreeningPurpose::Force);
+            GENERATIVEQC_LAUNCH_BOUNDED_NATIVE_PAGE(true, DirectScreeningPurpose::Force);
           } else {
-            VIBEQC_LAUNCH_BOUNDED_NATIVE_PAGE(false, DirectScreeningPurpose::Force);
+            GENERATIVEQC_LAUNCH_BOUNDED_NATIVE_PAGE(false, DirectScreeningPurpose::Force);
           }
         } else {
           if (is_unrestricted) {
-            VIBEQC_LAUNCH_BOUNDED_NATIVE_PAGE(true, DirectScreeningPurpose::Fock);
+            GENERATIVEQC_LAUNCH_BOUNDED_NATIVE_PAGE(true, DirectScreeningPurpose::Fock);
           } else {
-            VIBEQC_LAUNCH_BOUNDED_NATIVE_PAGE(false, DirectScreeningPurpose::Fock);
+            GENERATIVEQC_LAUNCH_BOUNDED_NATIVE_PAGE(false, DirectScreeningPurpose::Fock);
           }
         }
-#undef VIBEQC_LAUNCH_BOUNDED_NATIVE_PAGE
+#undef GENERATIVEQC_LAUNCH_BOUNDED_NATIVE_PAGE
         error = cudaPeekAtLastError();
         if (error != cudaSuccess) return error;
       }
@@ -4580,7 +4588,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   if (inactive_eigensolver_profiling) {
     if (host_inactive_eigensolver_profile_count > host_inactive_eigensolver_profile.size()) {
-      fill_global_failure(outputs, VIBEQC_STATUS_INTERNAL_ERROR);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INTERNAL_ERROR);
       return outputs;
     }
     CudaInactiveEigensolverProfile profile;
@@ -4680,7 +4688,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
 
   // The mixed-precision Fock decision (already gated on quartet-direct) and its
   // forced final FP64 rebuild are fixed for the plan; report what actually ran.
-  const int32_t requested_precision_mode = options.precision_mode.value_or(VIBEQC_PRECISION_FP64);
+  const int32_t requested_precision_mode =
+      options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
   const bool precision_route_enabled = plan.mixed_precision_fock;
   for (std::size_t system = 0; system < batch_size; ++system) {
     RhfBucketItem& output = outputs[system];
@@ -4739,9 +4748,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       result.forces.assign(host_forces.begin() + atom_begin * 3,
                            host_forces.begin() + atom_end * 3);
     }
-    output.status = host_failed[system] != 0 ? VIBEQC_STATUS_NUMERICAL_FAILURE
-                                             : (result.converged ? VIBEQC_STATUS_SUCCESS
-                                                                 : VIBEQC_STATUS_SCF_NOT_CONVERGED);
+    output.status = host_failed[system] != 0
+                        ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
+                        : (result.converged ? GENERATIVEQC_STATUS_SUCCESS
+                                            : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED);
   }
   return outputs;
 }
@@ -4758,7 +4768,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan
                                 inactive_eigensolver_profiling);
 }
 
-vibeqc_status contract_cuda_weighted_eri_primitives(
+generativeqc_status contract_cuda_weighted_eri_primitives(
     int device_id, const CudaWeightedEriPrimitive* records, std::size_t record_count,
     std::size_t tile_count, std::size_t memory_budget_bytes, bool generated,
     std::vector<CudaWeightedEriResult>& output, CudaWeightedEriDiagnostic& diagnostic,
@@ -4771,24 +4781,25 @@ vibeqc_status contract_cuda_weighted_eri_primitives(
   std::size_t output_bytes = 0, result_peak = 0, input_bytes = 0;
   if ((record_count != 0U && records == nullptr) ||
       tile_count > std::numeric_limits<std::uint32_t>::max() ||
-      !vibeqc::runtime::checked_multiply(record_count, sizeof(CudaWeightedEriPrimitive),
-                                         input_bytes) ||
-      !vibeqc::runtime::checked_multiply(tile_count, sizeof(CudaWeightedEriResult), output_bytes) ||
-      !vibeqc::runtime::checked_multiply(output_bytes, 2U, result_peak) ||
+      !generativeqc::runtime::checked_multiply(record_count, sizeof(CudaWeightedEriPrimitive),
+                                               input_bytes) ||
+      !generativeqc::runtime::checked_multiply(tile_count, sizeof(CudaWeightedEriResult),
+                                               output_bytes) ||
+      !generativeqc::runtime::checked_multiply(output_bytes, 2U, result_peak) ||
       result_peak > memory_budget_bytes) {
     detail = "weighted ERI dimensions or numeric memory budget are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (std::size_t index = 0; index < record_count; ++index) {
     const auto& record = records[index];
     if (record.kind > 1U || record.output_tile >= tile_count) {
       detail = "weighted ERI record kind or output tile is invalid";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (unsigned slot = 0; slot < 4; ++slot) {
       if (!(record.exponents[slot] > 0.0) || !std::isfinite(record.exponents[slot])) {
         detail = "weighted ERI primitive exponents must be finite and positive";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
       unsigned total = 0;
       for (unsigned axis = 0; axis < 3; ++axis) {
@@ -4796,19 +4807,19 @@ vibeqc_status contract_cuda_weighted_eri_primitives(
         if (angular > 3U || !std::isfinite(record.centers[slot][axis]) ||
             (record.kind == 1U && angular != static_cast<unsigned>(slot == 0U && axis == 0U))) {
           detail = "weighted ERI angular components or positions are invalid";
-          return VIBEQC_STATUS_INVALID_ARGUMENT;
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
         total += angular;
       }
       if (total > 3U) {
         detail = "weighted ERI primitive shells beyond f are unsupported";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
     }
     for (double weight : record.weights) {
       if (!std::isfinite(weight)) {
         detail = "external ERI weights must be finite";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
     }
     if (generated && record.kind == 1U)
@@ -4820,14 +4831,14 @@ vibeqc_status contract_cuda_weighted_eri_primitives(
     if (record_count == 0U) {
       output.resize(tile_count);
       diagnostic.host_peak_bytes = output_bytes;
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     const std::size_t capacity =
         std::min({record_count, std::size_t{65536},
                   (memory_budget_bytes - result_peak) / sizeof(CudaWeightedEriPrimitive)});
     if (capacity == 0U) {
       detail = "weighted ERI budget cannot hold one primitive and its outputs";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     diagnostic.primitive_capacity = capacity;
     diagnostic.host_peak_bytes = output_bytes;
@@ -4921,19 +4932,19 @@ vibeqc_status contract_cuda_weighted_eri_primitives(
       if (!finite) {
         output.clear();
         detail = "weighted ERI contraction overflowed or produced nonfinite values";
-        return VIBEQC_STATUS_NUMERICAL_FAILURE;
+        return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
       }
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     output.clear();
     detail = "weighted ERI host allocation failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::exception& error) {
     output.clear();
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

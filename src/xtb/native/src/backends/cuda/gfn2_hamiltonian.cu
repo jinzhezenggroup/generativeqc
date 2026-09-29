@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_hamiltonian.cuh"
 #include "generated_gfn2_electronic_native.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -323,8 +323,8 @@ __global__ void assemble_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch,
       continue;
     }
 
-    vibeqc::xtb::generated::Gfn2ElectronicPairIntegrals pair_integrals{};
-    vibeqc::xtb::generated::Gfn2ElectronicPairPotentials pair_potentials{};
+    generativeqc::xtb::generated::Gfn2ElectronicPairIntegrals pair_integrals{};
+    generativeqc::xtb::generated::Gfn2ElectronicPairPotentials pair_potentials{};
     pair_integrals.overlap = overlap;
     pair_potentials.row_scalar = row_scalar;
     pair_potentials.column_scalar = column_scalar;
@@ -375,7 +375,7 @@ __global__ void assemble_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch,
       }
     }
     double shift = 0.0;
-    if (finite && !vibeqc::xtb::generated::evaluate_gfn2_electronic_pair(pair_integrals,
+    if (finite && !generativeqc::xtb::generated::evaluate_gfn2_electronic_pair(pair_integrals,
                                                                          pair_potentials, shift)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2HamiltonianDeviceError::kNonfiniteAssemblyArithmetic);
@@ -494,8 +494,8 @@ __global__ void assemble_spin_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batc
         }
       }
 
-      vibeqc::xtb::generated::Gfn2ElectronicPairIntegrals pair_integrals{};
-      vibeqc::xtb::generated::Gfn2ElectronicPairPotentials pair_potentials{};
+      generativeqc::xtb::generated::Gfn2ElectronicPairIntegrals pair_integrals{};
+      generativeqc::xtb::generated::Gfn2ElectronicPairPotentials pair_potentials{};
       pair_integrals.overlap = overlap;
       pair_potentials.row_scalar = row_scalar;
       pair_potentials.column_scalar = column_scalar;
@@ -597,7 +597,7 @@ __global__ void assemble_spin_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batc
         }
       }
       double shift = 0.0;
-      if (finite && !vibeqc::xtb::generated::evaluate_gfn2_electronic_pair(
+      if (finite && !generativeqc::xtb::generated::evaluate_gfn2_electronic_pair(
                         pair_integrals, pair_potentials, shift)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2HamiltonianDeviceError::kNonfiniteAssemblyArithmetic);
@@ -1049,4 +1049,4 @@ cudaError_t assemble_gfn2_spin_hamiltonian_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

@@ -1,4 +1,4 @@
-"""Generate public method ABI/runtime metadata from one audited manifest."""
+"""Generate stable native C/C++ ABI/provider metadata from one audited manifest."""
 
 from __future__ import annotations
 
@@ -8,17 +8,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/public_methods.json"
-C_IDS = ROOT / "include/vibeqc/generated_method_ids.h"
-PYTHON = ROOT / "python/vibeqc/_generated_methods.py"
+C_IDS = ROOT / "include/generativeqc/generated_method_ids.h"
 CPP = ROOT / "src/methods/generated_method_manifest.hpp"
-DOC = ROOT / "docs/public_methods.md"
 
 FAMILIES = {
-    "hartree_fock": "VIBEQC_METHOD_FAMILY_HARTREE_FOCK",
-    "density_functional": "VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL",
-    "coupled_cluster": "VIBEQC_METHOD_FAMILY_COUPLED_CLUSTER",
-    "perturbation": "VIBEQC_METHOD_FAMILY_PERTURBATION",
-    "semiempirical": "VIBEQC_METHOD_FAMILY_SEMIEMPIRICAL",
+    "hartree_fock": "GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK",
+    "density_functional": "GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL",
+    "coupled_cluster": "GENERATIVEQC_METHOD_FAMILY_COUPLED_CLUSTER",
+    "perturbation": "GENERATIVEQC_METHOD_FAMILY_PERTURBATION",
+    "semiempirical": "GENERATIVEQC_METHOD_FAMILY_SEMIEMPIRICAL",
 }
 PROVIDERS = {
     "reserved": ("Reserved", False, False),
@@ -30,8 +28,8 @@ PROVIDERS = {
     "xtb": ("Xtb", True, False),
 }
 PROPERTIES = {
-    "energy": "VIBEQC_PROPERTY_ENERGY",
-    "forces": "VIBEQC_PROPERTY_FORCES",
+    "energy": "GENERATIVEQC_PROPERTY_ENERGY",
+    "forces": "GENERATIVEQC_PROPERTY_FORCES",
 }
 
 
@@ -57,7 +55,7 @@ def load_manifest() -> list[dict]:
             "properties",
             "supports_batch",
         }
-        optional = {"aliases", "unavailable_reason", "compiler_method", "spin"}
+        optional = {"aliases", "unavailable_reason"}
         if set(method) - (required | optional):
             raise ValueError(
                 f"unknown method manifest fields for {method.get('name')!r}"
@@ -133,18 +131,6 @@ def load_manifest() -> list[dict]:
         if method["provider"] == "xtb" and method["family"] != "semiempirical":
             raise ValueError(f"{name}: xTB provider requires semiempirical family")
 
-        compiler_method = method.get("compiler_method")
-        spin = method.get("spin")
-        if method["provider"] == "dft":
-            if not isinstance(compiler_method, str) or not compiler_method:
-                raise ValueError(f"{name}: executable DFT requires compiler_method")
-            if spin not in {"unpolarized", "polarized"}:
-                raise ValueError(f"{name}: executable DFT requires a supported spin")
-        elif compiler_method is not None or spin is not None:
-            raise ValueError(
-                f"{name}: compiler_method/spin are reserved for executable DFT providers"
-            )
-
         method_aliases = method.get("aliases", [])
         if not isinstance(method_aliases, list) or any(
             not isinstance(alias, str) or not alias or alias != alias.lower()
@@ -161,107 +147,85 @@ def load_manifest() -> list[dict]:
     return sorted(methods, key=lambda method: method["abi_id"])
 
 
+def load_composite_methods() -> list[dict]:
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    composites = payload.get("composite_methods", [])
+    if not isinstance(composites, list):
+        raise TypeError("public composite methods must be a list")
+
+    native = load_manifest()
+    occupied = {method["name"] for method in native}
+    occupied.update(alias for method in native for alias in method.get("aliases", []))
+    names: set[str] = set()
+    aliases: set[str] = set()
+    required = {
+        "name",
+        "family",
+        "identifier",
+        "spin",
+        "properties",
+        "supports_batch",
+        "aliases",
+    }
+    for method in composites:
+        if not isinstance(method, dict) or set(method) != required:
+            raise ValueError(f"invalid public composite method entry {method!r}")
+        name = method["name"]
+        if not isinstance(name, str) or not name or name != name.lower():
+            raise ValueError(
+                "public composite names must be non-empty lowercase strings"
+            )
+        if name in occupied or name in names or name in aliases:
+            raise ValueError(f"duplicate public method selector {name!r}")
+        if method["family"] not in FAMILIES:
+            raise ValueError(f"unknown composite method family {method['family']!r}")
+        if not isinstance(method["identifier"], str) or not method["identifier"]:
+            raise ValueError(f"{name}: composite identifier must be a non-empty string")
+        if method["spin"] not in {"unpolarized", "polarized"}:
+            raise ValueError(f"{name}: composite spin must be polarized or unpolarized")
+        properties = method["properties"]
+        if (
+            not isinstance(properties, list)
+            or not properties
+            or any(prop not in PROPERTIES for prop in properties)
+            or len(set(properties)) != len(properties)
+        ):
+            raise ValueError(f"{name}: invalid composite properties")
+        if type(method["supports_batch"]) is not bool:
+            raise ValueError(f"{name}: supports_batch must be a boolean")
+        method_aliases = method["aliases"]
+        if not isinstance(method_aliases, list) or any(
+            not isinstance(alias, str) or not alias or alias != alias.lower()
+            for alias in method_aliases
+        ):
+            raise ValueError(f"{name}: aliases must be non-empty lowercase strings")
+        names.add(name)
+        for alias in method_aliases:
+            if alias in occupied or alias in names or alias in aliases:
+                raise ValueError(f"duplicate public method selector {alias!r}")
+            aliases.add(alias)
+    return composites
+
+
 def emit_c_ids(methods: list[dict]) -> str:
     lines = [
         "// Generated by tools/generate_method_manifest.py from manifests/public_methods.json.",
         "// Do not edit by hand; ABI ids are explicit manifest data and must never be renumbered implicitly.",
-        "#ifndef VIBEQC_GENERATED_METHOD_IDS_H",
-        "#define VIBEQC_GENERATED_METHOD_IDS_H",
+        "#ifndef GENERATIVEQC_GENERATED_METHOD_IDS_H",
+        "#define GENERATIVEQC_GENERATED_METHOD_IDS_H",
         "",
         "#include <stdint.h>",
         "",
         "// clang-format off",
-        "typedef int32_t vibeqc_method;",
+        "typedef int32_t generativeqc_method;",
         "enum {",
     ]
     for index, method in enumerate(methods):
         comma = "," if index + 1 < len(methods) else ""
-        lines.append(f"  VIBEQC_METHOD_{method['symbol']} = {method['abi_id']}{comma}")
+        lines.append(
+            f"  GENERATIVEQC_METHOD_{method['symbol']} = {method['abi_id']}{comma}"
+        )
     lines.extend(["};", "// clang-format on", "", "#endif", ""])
-    return "\n".join(lines)
-
-
-def emit_python(methods: list[dict]) -> str:
-    lines = [
-        '"""Generated public method identity metadata; do not edit by hand."""',
-        "",
-        "# fmt: off",
-        "from types import MappingProxyType",
-        "",
-    ]
-    for method in methods:
-        lines.append(f"METHOD_{method['symbol']} = {method['abi_id']}")
-
-    lines.extend(["", "METHOD_CONSTANTS = MappingProxyType({"])
-    for method in methods:
-        lines.append(f'    "METHOD_{method["symbol"]}": METHOD_{method["symbol"]},')
-    lines.extend(["})", "", "METHOD_METADATA = MappingProxyType({"])
-    for method in methods:
-        method_aliases = tuple(method.get("aliases", []))
-        compiler_binding = ""
-        if method["provider"] == "dft":
-            compiler_binding = (
-                f', "compiler_method": {method["compiler_method"]!r}, '
-                f'"spin": {method["spin"]!r}'
-            )
-        lines.append(
-            f'    {method["name"]!r}: MappingProxyType({{"abi_id": '
-            f'{method["abi_id"]}, "family": {method["family"]!r}, '
-            f'"provider": {method["provider"]!r}, '
-            f'"properties": {tuple(method["properties"])!r}, '
-            f'"supports_batch": {bool(method["supports_batch"])!r}, '
-            f'"aliases": {method_aliases!r}{compiler_binding}}}),'
-        )
-    lines.extend(["})", "", "METHOD_NAME_TO_ID = MappingProxyType({"])
-    for method in methods:
-        lines.append(f"    {method['name']!r}: METHOD_{method['symbol']},")
-        for alias in method.get("aliases", []):
-            lines.append(f"    {alias!r}: METHOD_{method['symbol']},")
-    lines.extend(["})", "METHOD_ID_TO_NAME = MappingProxyType({"])
-    for method in methods:
-        lines.append(f"    METHOD_{method['symbol']}: {method['name']!r},")
-    lines.extend(["})", ""])
-
-    hf = [f"METHOD_{m['symbol']}" for m in methods if m["provider"] == "hf"]
-    dft = [f"METHOD_{m['symbol']}" for m in methods if m["provider"] == "dft"]
-    lines.append(f"HF_METHOD_IDS = frozenset(({', '.join(hf)}{',' if hf else ''}))")
-    lines.append(
-        f"NATIVE_DFT_METHOD_IDS = frozenset(({', '.join(dft)}{',' if dft else ''}))"
-    )
-    lines.extend(["# fmt: on", ""])
-    return "\n".join(lines)
-
-
-def emit_markdown(methods: list[dict]) -> str:
-    lines = [
-        "<!-- Generated by tools/generate_method_manifest.py from manifests/public_methods.json. -->",
-        "<!-- Do not edit by hand. -->",
-        "",
-        "# Public native methods",
-        "",
-        "This table is generated from `manifests/public_methods.json`. It is the",
-        "canonical user-facing list of native method names and declared properties.",
-        "Backend-, basis-, grid-, and model-specific qualification may impose",
-        "additional fail-closed constraints at execution time.",
-        "",
-        "| Method | Family | Properties | Batch | Aliases | Status |",
-        "| --- | --- | --- | --- | --- | --- |",
-    ]
-    for method in methods:
-        properties = ", ".join(f"`{value}`" for value in method["properties"]) or "—"
-        aliases = ", ".join(f"`{value}`" for value in method.get("aliases", [])) or "—"
-        family = method["family"].replace("_", " ")
-        batch = "yes" if method["supports_batch"] else "no"
-        status = (
-            "available"
-            if method["properties"]
-            else "unavailable — "
-            + method.get("unavailable_reason", "no executable provider")
-        )
-        lines.append(
-            f"|`{method['name']}` | {family} | {properties} | {batch} | {aliases} | {status} |"
-        )
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -273,26 +237,27 @@ def cpp_properties(method: dict) -> str:
 def emit_cpp(methods: list[dict]) -> str:
     lines = [
         "// Generated by tools/generate_method_manifest.py from manifests/public_methods.json.",
-        "// Native function pointers remain registry-owned; this file owns public identity/capability facts.",
-        "#ifndef VIBEQC_METHODS_GENERATED_METHOD_MANIFEST_HPP",
-        "#define VIBEQC_METHODS_GENERATED_METHOD_MANIFEST_HPP",
+        "// Native function pointers remain registry-owned; this file owns ABI/provider identity and",
+        "// capability facts.",
+        "#ifndef GENERATIVEQC_METHODS_GENERATED_METHOD_MANIFEST_HPP",
+        "#define GENERATIVEQC_METHODS_GENERATED_METHOD_MANIFEST_HPP",
         "",
         "#include <array>",
         "#include <cstdint>",
         "#include <string_view>",
         "",
-        '#include "vibeqc/vibeqc.h"',
+        '#include "generativeqc/generativeqc.h"',
         "",
         "// clang-format off",
-        "namespace vibeqc::methods::generated {",
+        "namespace generativeqc::methods::generated {",
         "",
         "enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Rccsd, Rccsdt, Dft, Xtb };",
         "",
         "struct MethodManifestEntry {",
         "  std::string_view name;",
-        "  vibeqc_method method;",
-        "  vibeqc_method_family family;",
-        "  vibeqc_property_flags properties;",
+        "  generativeqc_method method;",
+        "  generativeqc_method_family family;",
+        "  generativeqc_property_flags properties;",
         "  bool supports_batch;",
         "  PublicProvider provider;",
         "  std::string_view unavailable_reason;",
@@ -303,7 +268,7 @@ def emit_cpp(methods: list[dict]) -> str:
     for method in methods:
         reason = method.get("unavailable_reason", "")
         lines.append(
-            f'    {{"{method["name"]}", VIBEQC_METHOD_{method["symbol"]}, '
+            f'    {{"{method["name"]}", GENERATIVEQC_METHOD_{method["symbol"]}, '
             f"{FAMILIES[method['family']]}, {cpp_properties(method)}, "
             f"{'true' if method['supports_batch'] else 'false'}, "
             f'PublicProvider::{PROVIDERS[method["provider"]][0]}, "{reason}"}},'
@@ -320,13 +285,13 @@ def emit_cpp(methods: list[dict]) -> str:
             "}",
             "",
             "inline constexpr const MethodManifestEntry* find_method(",
-            "    vibeqc_method value) noexcept {",
+            "    generativeqc_method value) noexcept {",
             "  for (const auto& method : kMethodManifest)",
             "    if (method.method == value) return &method;",
             "  return nullptr;",
             "}",
             "",
-            "}  // namespace vibeqc::methods::generated",
+            "}  // namespace generativeqc::methods::generated",
             "// clang-format on",
             "",
             "#endif",
@@ -353,10 +318,9 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     methods = load_manifest()
+    load_composite_methods()
     write_or_check(C_IDS, emit_c_ids(methods), check=args.check)
-    write_or_check(PYTHON, emit_python(methods), check=args.check)
     write_or_check(CPP, emit_cpp(methods), check=args.check)
-    write_or_check(DOC, emit_markdown(methods), check=args.check)
 
 
 if __name__ == "__main__":

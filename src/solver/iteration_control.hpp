@@ -1,7 +1,7 @@
-#ifndef VIBEQC_SOLVER_ITERATION_CONTROL_HPP
-#define VIBEQC_SOLVER_ITERATION_CONTROL_HPP
+#ifndef GENERATIVEQC_SOLVER_ITERATION_CONTROL_HPP
+#define GENERATIVEQC_SOLVER_ITERATION_CONTROL_HPP
 
-namespace vibeqc::solver {
+namespace generativeqc::solver {
 
 /** Result of a bounded host-controlled iterative loop. */
 struct BoundedIterationResult {
@@ -34,6 +34,6 @@ BoundedIterationResult run_bounded_iterations(unsigned max_iterations, Step&& st
   return result;
 }
 
-}  // namespace vibeqc::solver
+}  // namespace generativeqc::solver
 
 #endif

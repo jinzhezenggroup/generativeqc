@@ -5,15 +5,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.tensor import PackedLayout, execute
-from vibeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.tensor import PackedLayout, execute
+from generativeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
 
-from tools.vibeqc_cc.gradient_equations import build_hamiltonian_programs
-from tools.vibeqc_cc.lambda_equations import build_lambda_programs
-from tools.vibeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
-from tools.vibeqc_cc.oracle import dense_feeds, random_case
-from tools.vibeqc_cc.triples_response import build_tile_triples_vjp
+from tools.generativeqc_cc.gradient_equations import build_hamiltonian_programs
+from tools.generativeqc_cc.lambda_equations import build_lambda_programs
+from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
+from tools.generativeqc_cc.oracle import dense_feeds, random_case
+from tools.generativeqc_cc.triples_response import build_tile_triples_vjp
 
 
 def _native(program: typing.Any, tmp_path: Path) -> NativeTensorProgram:

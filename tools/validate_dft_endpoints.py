@@ -23,8 +23,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc import Calculator
-from vibeqc.autotune import source_identity
+from generativeqc import Calculator
+from generativeqc.autotune import source_identity
 
 METHODS = ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks")
 UKS_METHODS = frozenset(("lda-uks", "pbe-uks"))
@@ -253,14 +253,14 @@ def main() -> None:
         parser.error("batch sizes must be positive")
     if capture(["git", "-C", str(ROOT), "status", "--porcelain"]):
         parser.error("DFT endpoint evidence requires a clean source checkout")
-    library_path = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library_path = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     library = ctypes.CDLL(str(library_path))
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    native_identity = library.vibeqc_get_source_identity().decode()
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    native_identity = library.generativeqc_get_source_identity().decode()
     if native_identity != source_identity(ROOT):
         parser.error("selected native library does not match this source checkout")
     report = {
-        "schema": "vibeqc.dft-endpoints.v1",
+        "schema": "generativeqc.dft-endpoints.v1",
         "revision": capture(["git", "-C", str(ROOT), "rev-parse", "HEAD"]),
         "native_source_identity": native_identity,
         "library": str(library_path),

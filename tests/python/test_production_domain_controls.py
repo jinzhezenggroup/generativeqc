@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.xc.production_domain_controls import (
+from generativeqc_compiler.xc.production_domain_controls import (
     CONTROL_SEMANTICS,
     run_control_case,
 )

@@ -8,7 +8,7 @@
 #include "core/types.hpp"
 #include "dft/grid.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Density convention for the exchange-only COSX reference energy. */
 enum class CosxDensityConvention : std::uint8_t {
@@ -86,4 +86,4 @@ CosxMolecularDerivativeResult build_cosx_molecular_derivative_reference(
     const MolecularGrid& grid, std::span<const double> density, CosxDensityConvention convention,
     CosxReferenceSpec spec = {});
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

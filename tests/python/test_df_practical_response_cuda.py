@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import (
@@ -16,7 +16,7 @@ from benchmarks.compare_gpu4pyscf_batch import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -113,15 +113,15 @@ def test_practical_full_force_cold_warm_and_changed_geometry(
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require finite Slurm"
     case, orbital, auxiliary, moved, references = practical_reference
     for name, value in {
-        "VIBEQC_DF_VALUE_STORAGE": values,
-        "VIBEQC_DF_RESPONSE_STORAGE": storage,
-        "VIBEQC_DF_RESPONSE_SPACE": space,
-        "VIBEQC_DF_RESPONSE_ALGEBRA": algebra,
-        "VIBEQC_DF_EXCHANGE": "auto" if space == "auto" else "occupied",
-        "VIBEQC_DF_FORCE_SCREEN_ABS": "off",
-        "VIBEQC_DF_REFERENCE_FINAL_VALIDATION": "0",
-        "VIBEQC_DF_WEIGHTED_EXECUTION": "shell",
-        "VIBEQC_DF_DERIVATIVE_PAIRS": "packed" if values == "packed" else "full",
+        "GENERATIVEQC_DF_VALUE_STORAGE": values,
+        "GENERATIVEQC_DF_RESPONSE_STORAGE": storage,
+        "GENERATIVEQC_DF_RESPONSE_SPACE": space,
+        "GENERATIVEQC_DF_RESPONSE_ALGEBRA": algebra,
+        "GENERATIVEQC_DF_EXCHANGE": "auto" if space == "auto" else "occupied",
+        "GENERATIVEQC_DF_FORCE_SCREEN_ABS": "off",
+        "GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION": "0",
+        "GENERATIVEQC_DF_WEIGHTED_EXECUTION": "shell",
+        "GENERATIVEQC_DF_DERIVATIVE_PAIRS": "packed" if values == "packed" else "full",
     }.items():
         monkeypatch.setenv(name, value)
     calculator = Calculator(
@@ -155,7 +155,7 @@ def test_practical_full_force_cold_warm_and_changed_geometry(
         )
         + "\n"
     )
-    monkeypatch.setenv("VIBEQC_DF_TRACE", str(tmp_path / "prepare.jsonl"))
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(tmp_path / "prepare.jsonl"))
     rows = []
     with calculator.prepare_batch(
         [case.atoms], charges=[case.charge], multiplicities=[case.multiplicity]
@@ -166,7 +166,9 @@ def test_practical_full_force_cold_warm_and_changed_geometry(
             ("changed", True),
             ("changed_warm", True),
         ):
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(tmp_path / f"{phase}.jsonl"))
+            monkeypatch.setenv(
+                "GENERATIVEQC_DF_TRACE", str(tmp_path / f"{phase}.jsonl")
+            )
             item = batch.execute(
                 [np.array([r for _, r in moved])] if changed else None, strict=False
             ).items[0]
@@ -277,13 +279,13 @@ def test_practical_water_insufficient_budget(
         "water-tetramer-def2-svp-spherical"
     )
     for name, value in {
-        "VIBEQC_DF_VALUE_STORAGE": values,
-        "VIBEQC_DF_RESPONSE_STORAGE": "panel",
-        "VIBEQC_DF_RESPONSE_SPACE": "dense",
-        "VIBEQC_DF_RESPONSE_ALGEBRA": "blas",
-        "VIBEQC_DF_EXCHANGE": "occupied",
-        "VIBEQC_DF_REFERENCE_FINAL_VALIDATION": "0",
-        "VIBEQC_DF_TRACE": str(tmp_path / "rejection.jsonl"),
+        "GENERATIVEQC_DF_VALUE_STORAGE": values,
+        "GENERATIVEQC_DF_RESPONSE_STORAGE": "panel",
+        "GENERATIVEQC_DF_RESPONSE_SPACE": "dense",
+        "GENERATIVEQC_DF_RESPONSE_ALGEBRA": "blas",
+        "GENERATIVEQC_DF_EXCHANGE": "occupied",
+        "GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION": "0",
+        "GENERATIVEQC_DF_TRACE": str(tmp_path / "rejection.jsonl"),
     }.items():
         monkeypatch.setenv(name, value)
     calculator = Calculator(
@@ -322,7 +324,7 @@ def test_practical_water_insufficient_budget(
         assert item.status == _native.STATUS_OUT_OF_MEMORY, item.status_message
         # The diagnostic API reports unavailable capability when no value
         # plan was admitted, rather than returning an empty diagnostic tuple.
-        with pytest.raises(NotImplementedError, match="VIBEQC error 3"):
+        with pytest.raises(NotImplementedError, match="GENERATIVEQC error 3"):
             batch.last_density_fitting_metric_diagnostics()
 
 
@@ -346,7 +348,7 @@ def test_practical_auxiliary_f_rys_is_executed(
         "PRIMITIVE_BUCKETS": buckets,
         "FORCE_SCREEN_ABS": "off",
     }.items():
-        monkeypatch.setenv("VIBEQC_DF_" + key, value)
+        monkeypatch.setenv("GENERATIVEQC_DF_" + key, value)
     calculator = Calculator(
         method=case.method,
         basis=orbital,
@@ -364,7 +366,7 @@ def test_practical_auxiliary_f_rys_is_executed(
         [case.atoms], charges=[case.charge], multiplicities=[case.multiplicity]
     ) as batch:
         batch.execute(strict=True)
-        monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+        monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
         result = batch.execute(strict=True).items[0]
     energy, force = references[0]
     assert abs(result.energy - energy) <= 3e-11

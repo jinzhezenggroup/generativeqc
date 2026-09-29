@@ -5,7 +5,7 @@
 #include "runtime/cuda_ao_pairs.cuh"
 #include "scf/cuda/one_electron_values.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 
 using Policy = generated_one_electron::ValuePolicy;
@@ -38,4 +38,4 @@ cudaError_t launch_generated_one_electron_values(
   return cudaPeekAtLastError();
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

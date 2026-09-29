@@ -1,7 +1,7 @@
 """Real-device TensorIR checks; opt in only inside an allocated CUDA job.
 
 Example: srun -p main --gres=gpu:5090:1 --time=00:10:00 env
-VIBEQC_TENSOR_CUDA_TEST=1 VIBEQC_NVCC=/path/to/nvcc python -m pytest ...
+GENERATIVEQC_TENSOR_CUDA_TEST=1 GENERATIVEQC_NVCC=/path/to/nvcc python -m pytest ...
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -36,13 +36,17 @@ from vibeqc_compiler.tensor import (
     transpose,
     transpose_program,
 )
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from vibeqc_compiler.tensor.cuda_plan import Reservations, TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.examples import example_cases
-from vibeqc_compiler.tensor.interpreter import execute
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+from generativeqc_compiler.tensor.cuda_plan import (
+    Reservations,
+    TensorSchedule,
+    plan_cuda,
+)
+from generativeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.tensor.interpreter import execute
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 
@@ -51,17 +55,17 @@ pytestmark = pytest.mark.skipif(
 def compiler() -> typing.Any:
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
     return CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
 
 
 @pytest.fixture(scope="module")
 def cache(tmp_path_factory: typing.Any) -> typing.Any:
     return (
-        Path(os.environ["VIBEQC_TENSOR_CACHE"])
-        if "VIBEQC_TENSOR_CACHE" in os.environ
+        Path(os.environ["GENERATIVEQC_TENSOR_CACHE"])
+        if "GENERATIVEQC_TENSOR_CACHE" in os.environ
         else tmp_path_factory.mktemp("tensor-cuda")
     )
 
@@ -70,12 +74,12 @@ def test_two_tensor_providers_share_one_global_budget(
     compiler: typing.Any, cache: typing.Any
 ) -> None:
     """A retained neighbor forces an executable recomputation alternative."""
-    from vibeqc_compiler.common.resources import (
+    from generativeqc_compiler.common.resources import (
         ResourceBudget,
         ResourceSession,
         plan_resources,
     )
-    from vibeqc_compiler.tensor.resources import tensor_resource_choices
+    from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
     index = Index("i", IndexSpace("axis", "batch", 8192))
     x = input_tensor("x", TensorSpec((index,), role="input"))
@@ -130,13 +134,13 @@ def test_actual_cuda_allocation_failure_is_typed_and_exhausted_plan_is_recorded(
     compiler: typing.Any, cache: typing.Any
 ) -> None:
     """An impossible native allocation tests rollback without filling GPU RAM."""
-    from vibeqc import (
+    from generativeqc import (
         ResourceAllocationError,
         ResourceBudget,
         ResourceSession,
         plan_resources,
     )
-    from vibeqc_compiler.tensor.resources import tensor_resource_choices
+    from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
     program = Program({"scalar": constant(3)})
     choices = tensor_resource_choices(
@@ -162,14 +166,14 @@ def test_actual_cuda_allocation_failure_is_typed_and_exhausted_plan_is_recorded(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="also requires a CUDA-linked HF library",
 )
 def test_direct_hf_and_tensor_share_one_executable_resource_plan(
     compiler: typing.Any, cache: typing.Any
 ) -> None:
-    from vibeqc import Calculator, ResourceBudget, ResourceSession, plan_resources
-    from vibeqc_compiler.tensor.resources import tensor_resource_choices
+    from generativeqc import Calculator, ResourceBudget, ResourceSession, plan_resources
+    from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
     atoms = [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]
     calculator = Calculator(device="cuda")
@@ -550,7 +554,7 @@ def test_nonfinite_intermediate_and_minimum_budget(
 def test_shape_buckets_budget_and_concurrent_system_independence(
     compiler: typing.Any, cache: typing.Any
 ) -> None:
-    from vibeqc_compiler.tensor.cuda_batch import PreparedTensorBatch
+    from generativeqc_compiler.tensor.cuda_batch import PreparedTensorBatch
 
     plans, feeds = [], []
     for size in (3, 5, 3):
@@ -716,8 +720,8 @@ def test_graph_arithmetic_failure_is_preserved_and_next_replay_recovers(
 def test_graph_global_budget_falls_back_without_untracked_graph_storage(
     compiler: typing.Any, cache: typing.Any
 ) -> None:
-    from vibeqc_compiler.common.resources import ResourceBudget, plan_resources
-    from vibeqc_compiler.tensor.resources import tensor_resource_choices
+    from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+    from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
     program = Program({"scalar": constant(3)})
     choices = tensor_resource_choices(program, compiler.target)
@@ -762,8 +766,8 @@ def test_staged_tuning_qualifies_fresh_complete_cuda_endpoints(
     compiler: typing.Any, cache: typing.Any, family: typing.Any
 ) -> None:
     """Real CUDA screens may rank, but only fresh all-input gates may promote."""
-    from vibeqc_compiler.tensor.cuda_search import TensorScreeningPolicy
-    from vibeqc_compiler.tensor.cuda_tune import tune_cuda
+    from generativeqc_compiler.tensor.cuda_search import TensorScreeningPolicy
+    from generativeqc_compiler.tensor.cuda_tune import tune_cuda
 
     i = Index("i", IndexSpace("rows", "batch", 65))
     j = Index("j", IndexSpace("columns", "batch", 47))

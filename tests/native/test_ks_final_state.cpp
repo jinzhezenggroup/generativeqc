@@ -8,9 +8,9 @@
 #include "dft/semilocal_family.hpp"
 
 namespace {
-using namespace vibeqc;
-using namespace vibeqc::dft;
-using namespace vibeqc::scf;
+using namespace generativeqc;
+using namespace generativeqc::dft;
+using namespace generativeqc::scf;
 using reference::Matrix;
 
 void require(bool value, const char* detail) {

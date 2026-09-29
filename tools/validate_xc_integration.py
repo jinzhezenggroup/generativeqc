@@ -22,17 +22,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 import numpy as np
-from vibeqc.profiles import atomic_json, canonical_hash, file_hash
-from vibeqc_compiler.common.evidence import (
+from generativeqc.profiles import atomic_json, canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import (
     block_error,
     new_evidence,
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import FixedDensityXC, functional
-from vibeqc_compiler.xc.integration_fixtures import CASES, load_integration_fixture
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import FixedDensityXC, functional
+from generativeqc_compiler.xc.integration_fixtures import (
+    CASES,
+    load_integration_fixture,
+)
 
 
 def run(output: typing.Any) -> None:
@@ -135,10 +138,10 @@ def run(output: typing.Any) -> None:
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
     paths = [
-        "python/vibeqc_compiler/xc/integration.py",
-        "python/vibeqc_compiler/xc/potential.py",
+        "python/generativeqc_compiler/xc/integration.py",
+        "python/generativeqc_compiler/xc/potential.py",
         "tools/validate_xc_integration.py",
-        "python/vibeqc_compiler/xc/integration_fixtures.py",
+        "python/generativeqc_compiler/xc/integration_fixtures.py",
         "tests/python/test_xc_integration.py",
     ]
     report["source_files"] = {path: file_hash(ROOT / path) for path in paths}
@@ -151,7 +154,7 @@ def run(output: typing.Any) -> None:
     report["toolchain"] = {
         "python": sys.version,
         "numpy": np.__version__,
-        "library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
     }
     report["settings"] = {
         "scope": "fixed explicit grids; interior-v1; no clipping, SCF, forces or GPU",

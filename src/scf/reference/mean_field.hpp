@@ -1,11 +1,11 @@
-#ifndef VIBEQC_SCF_REFERENCE_MEAN_FIELD_HPP
-#define VIBEQC_SCF_REFERENCE_MEAN_FIELD_HPP
+#ifndef GENERATIVEQC_SCF_REFERENCE_MEAN_FIELD_HPP
+#define GENERATIVEQC_SCF_REFERENCE_MEAN_FIELD_HPP
 
 #include <utility>
 
 #include "scf/reference/linalg.hpp"
 
-namespace vibeqc::scf::reference {
+namespace generativeqc::scf::reference {
 
 /** Form a density from the first occupied columns of S-orthonormal orbitals.
  * occupation_weight is two for a restricted closed shell and one per UHF spin.
@@ -34,5 +34,5 @@ double density_rms(const Matrix& a, const Matrix& b);
 /** RMS physical residual, distinct from an update or DIIS extrapolation error. */
 double residual_rms(const Matrix& residual);
 
-}  // namespace vibeqc::scf::reference
+}  // namespace generativeqc::scf::reference
 #endif

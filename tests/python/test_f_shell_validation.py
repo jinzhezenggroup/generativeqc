@@ -9,11 +9,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompileResult
+from generativeqc_compiler.common.cuda_adapter import CudaCompileResult
 
-from tools.vibeqc_validation import f_shell
-from tools.vibeqc_validation.f_shell_cuda import emit_numerical_driver
-from tools.vibeqc_validation.f_shell_numerics import contract_reference, eri_orbit
+from tools.generativeqc_validation import f_shell
+from tools.generativeqc_validation.f_shell_cuda import emit_numerical_driver
+from tools.generativeqc_validation.f_shell_numerics import contract_reference, eri_orbit
 
 EXPECTED_CLASSES = {
     "fsss",

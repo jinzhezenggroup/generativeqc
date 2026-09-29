@@ -1,6 +1,6 @@
 # Audited semilocal XC expressions (DFT02)
 
-`vibeqc_compiler.xc` represents LDA exchange, PW92 correlation (ordinary and modified
+`generativeqc_compiler.xc` represents LDA exchange, PW92 correlation (ordinary and modified
 parameters), PBE exchange/correlation, and tau-dependent SCAN and r²SCAN
 exchange/correlation. `LDA_XC_PW`, `PBE`, `SCAN`, and `R2SCAN` are exact component
 sums. This is an explicit scientific tooling API, not a public molecular KS
@@ -228,7 +228,7 @@ PYTHONPATH=python:. python -m pytest tests/python/test_xc_expressions.py -q
 python tools/validate_xc.py --tier cpu --variants baseline --output build/xc-cpu
 python tools/validate_xc.py --tier cuda-compile --output build/xc-compile
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=00:10:00 env PYTHONPATH=python:. VIBEQC_XC_CUDA_TEST=1 \
+  --time=00:10:00 env PYTHONPATH=python:. GENERATIVEQC_XC_CUDA_TEST=1 \
   python -m pytest tests/python/test_xc_cuda.py -q
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:10:00 python tools/validate_xc.py --tier endpoint \

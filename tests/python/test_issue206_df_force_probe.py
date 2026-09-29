@@ -16,11 +16,11 @@ from benchmarks import issue206_df_force_probe as probe
 @pytest.fixture
 def protocol(tmp_path: typing.Any, monkeypatch: typing.Any) -> typing.Any:
     """Use an identifiable fake binary; sample calls never touch CUDA."""
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"protocol-only native library")
     # main() selects this binary through the process environment. Register it
     # with monkeypatch so later native tests recover their original library.
-    monkeypatch.setenv("VIBEQC_LIBRARY", str(library))
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(library))
     output = tmp_path / "ledger.json"
     monkeypatch.setenv("SLURM_JOB_ID", "protocol-test")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
@@ -73,7 +73,7 @@ def test_probe_writes_validated_force_increment_and_binary_identity(
     probe.main()
     payload = json.loads(output.read_text())
     record = payload["records"][0]
-    assert payload["schema"] == "vibeqc.issue206.df_force_ledger"
+    assert payload["schema"] == "generativeqc.issue206.df_force_ledger"
     assert payload["version"] == 2
     assert record["force_increment_seconds"] == 3.5
     assert record["validation"]["valid"] is True
@@ -134,7 +134,9 @@ def test_changed_binary_never_publishes_a_ledger(
     assert not output.exists()
 
 
-@pytest.mark.parametrize("variable", ("VIBEQC_DF_TRACE", "VIBEQC_DF_HOST_TRACE"))
+@pytest.mark.parametrize(
+    "variable", ("GENERATIVEQC_DF_TRACE", "GENERATIVEQC_DF_HOST_TRACE")
+)
 def test_unrequested_trace_cannot_contaminate_unprofiled_evidence(
     protocol: typing.Any, monkeypatch: typing.Any, variable: typing.Any
 ) -> None:
@@ -191,7 +193,7 @@ def test_trace_protocol_preserves_raw_evidence_and_requires_force_components(
         for index, operation in enumerate(operations):
             rows.append(
                 {
-                    "schema": "vibeqc.df_trace",
+                    "schema": "generativeqc.df_trace",
                     "version": 1,
                     "id": index,
                     "operation": operation,
@@ -217,11 +219,11 @@ def test_trace_protocol_preserves_raw_evidence_and_requires_force_components(
                     "tiles": [],
                 }
             )
-        Path(os.environ["VIBEQC_DF_TRACE"]).write_text(
+        Path(os.environ["GENERATIVEQC_DF_TRACE"]).write_text(
             "".join(json.dumps(row) + "\n" for row in rows)
         )
         host = {
-            "schema": "vibeqc.df_host_trace",
+            "schema": "generativeqc.df_host_trace",
             "version": 1,
             "id": 0,
             "valid": True,
@@ -239,7 +241,9 @@ def test_trace_protocol_preserves_raw_evidence_and_requires_force_components(
                 }
             ],
         }
-        Path(os.environ["VIBEQC_DF_HOST_TRACE"]).write_text(json.dumps(host) + "\n")
+        Path(os.environ["GENERATIVEQC_DF_HOST_TRACE"]).write_text(
+            json.dumps(host) + "\n"
+        )
         return dict(force if "forces" in properties else energy)
 
     monkeypatch.setattr(probe, "_sample", sample)
@@ -258,8 +262,8 @@ def test_trace_protocol_preserves_raw_evidence_and_requires_force_components(
         assert "force_attribution" in payload["records"][0]
         with pytest.raises(FileExistsError):
             probe.main()
-    assert "VIBEQC_DF_TRACE" not in os.environ
-    assert "VIBEQC_DF_HOST_TRACE" not in os.environ
+    assert "GENERATIVEQC_DF_TRACE" not in os.environ
+    assert "GENERATIVEQC_DF_HOST_TRACE" not in os.environ
 
 
 def test_traced_force_records_publish_selected_response_policy(
@@ -290,7 +294,7 @@ def test_traced_force_records_publish_selected_response_policy(
         for index, operation in enumerate(operations):
             rows.append(
                 {
-                    "schema": "vibeqc.df_trace",
+                    "schema": "generativeqc.df_trace",
                     "version": 1,
                     "id": index,
                     "operation": operation,
@@ -316,13 +320,13 @@ def test_traced_force_records_publish_selected_response_policy(
                     "tiles": [],
                 }
             )
-        Path(os.environ["VIBEQC_DF_TRACE"]).write_text(
+        Path(os.environ["GENERATIVEQC_DF_TRACE"]).write_text(
             "".join(json.dumps(row) + "\n" for row in rows)
         )
-        Path(os.environ["VIBEQC_DF_HOST_TRACE"]).write_text(
+        Path(os.environ["GENERATIVEQC_DF_HOST_TRACE"]).write_text(
             json.dumps(
                 {
-                    "schema": "vibeqc.df_host_trace",
+                    "schema": "generativeqc.df_host_trace",
                     "version": 1,
                     "id": 0,
                     "valid": True,

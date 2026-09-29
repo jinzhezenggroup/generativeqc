@@ -50,7 +50,7 @@ def test_stationary_timeline_normalizes_without_zero_filling_missing_components(
 
     record = normalize_force_work(work, state_export_seconds=0.1)
 
-    assert record["schema"] == "vibeqc.dft-force-components.v1"
+    assert record["schema"] == "generativeqc.dft-force-components.v1"
     assert record["source_route"] == "stationary-exclusive-wall"
     assert record["endpoint_seconds"] == pytest.approx(2.1)
     assert record["wall_seconds"]["host_packing"] == pytest.approx(0.5)
@@ -141,3 +141,114 @@ def test_missing_profiled_values_are_null_not_nan_or_zero() -> None:
     assert record["profiled_ms"]["h2d_d2h"] is None
     assert record["wall_seconds"]["scf_full_range_k"] is None
     assert math.isfinite(record["unattributed_wall_seconds"])
+
+
+def test_wb97mv_resident_nonlocal_timers_map_to_vv10_component() -> None:
+    work = {
+        "execution": "cuda-complete-wb97mv",
+        "endpoint_seconds": 2.0,
+        "component_seconds": {
+            "integral_derivatives": 0.4,
+            "density_and_nuclear_setup": 0.07,
+            "semilocal_geometry_and_features": 0.5,
+            "nonlocal_reset": 0.01,
+            "vv10_pair_enqueue": 0.09,
+            "nonlocal_geometry_and_pair_drain": 0.6,
+            "reduction_and_validation": 0.2,
+            "prepare": 0.2,
+        },
+    }
+    record = normalize_force_work(work)
+    assert record["wall_seconds"]["vv10_rvv10"] == pytest.approx(0.70)
+    assert "vv10_rvv10" in record["coverage"]["wall_seconds"]
+    assert record["source_component_seconds"]["nonlocal_reset"] == pytest.approx(0.01)
+    assert record["source_component_seconds"][
+        "density_and_nuclear_setup"
+    ] == pytest.approx(0.07)
+
+
+def test_stationary_split_geometry_phases_preserve_component_attribution() -> None:
+    work = {
+        "endpoint_seconds": 1.0,
+        "timeline": {
+            "endpoint_seconds": 1.0,
+            "exclusive_wall_seconds": {
+                "xc_geometry_enqueue": 0.12,
+                "xc_geometry_drain": 0.08,
+            },
+        },
+    }
+    record = normalize_force_work(work)
+    assert record["wall_seconds"]["semilocal_geometry_response"] == pytest.approx(0.20)
+    assert "semilocal_geometry_response" in record["coverage"]["wall_seconds"]
+
+
+def test_stationary_work_counts_keep_capacity_separate_from_execution() -> None:
+    work = {
+        "endpoint_seconds": 1.0,
+        "timeline": {"endpoint_seconds": 1.0, "exclusive_wall_seconds": {}},
+        "stationary_task_executor": {
+            "fixed_capacity": 8,
+            "resident_capacity": 32,
+            "page_capacity": 16,
+            "primitive_record_page_budget": 256,
+            "logical_primitive_records": 123,
+            "sources": (
+                {"source": "one_electron", "rank": 2, "logical_tasks": 4},
+                {"source": "coulomb", "rank": 4, "logical_tasks": 16},
+                {"source": "exact_exchange", "rank": 4, "logical_tasks": 16},
+            ),
+        },
+        "ordered_quartets": 32,
+        "exchange_ordered_quartets": 16,
+        "primitive_records": 123,
+        "task_descriptors": 36,
+        "task_batches": 3,
+        "primitive_pages": 5,
+        "xc_points": 40,
+        "grid_pair_visits": 80,
+    }
+
+    record = normalize_force_work(work)
+    counts = record["work_counts"]
+
+    assert counts["generated"]["coulomb_public_ao_quartets"] == 16
+    assert counts["generated"]["exact_exchange_public_ao_quartets"] == 16
+    assert counts["generated"]["primitive_records"] == 123
+    assert counts["capacity"]["ordered_quartets"] == 32
+    assert counts["capacity"]["primitive_record_page_budget"] == 256
+    assert counts["executed"]["semilocal_geometry_points"] == 40
+    assert counts["executed"]["partition_grid_pair_visits"] == 80
+    assert counts["screened"] == {}
+    assert counts["compacted"] == {}
+    assert counts["observed"]["native_primitive_records"] == 123
+    assert "ordered_quartets" not in counts["executed"]
+
+
+def test_wb97mv_capacity_is_not_promoted_to_executed_pair_or_quartet_work() -> None:
+    work = {
+        "execution": "cuda-complete-wb97mv",
+        "endpoint_seconds": 1.0,
+        "component_seconds": {"reduction_and_validation": 0.1},
+        "symmetry_unique_quartets_per_integral_source": 45150,
+        "maximum_center_dual3_evaluations_total": 270900,
+        "two_electron_quartet_traversals": 1,
+        "range_recurrences_per_participating_center": 2,
+        "nonlocal_dense_pair_capacity": 10000,
+        "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
+        "geometry_point_visits": 200,
+    }
+
+    record = normalize_force_work(work)
+    counts = record["work_counts"]
+
+    assert counts["capacity"]["symmetry_unique_quartets_per_integral_source"] == 45150
+    assert counts["capacity"]["nonlocal_dense_pair_capacity"] == 10000
+    assert counts["executed"] == {}
+    assert counts["screened"] == {}
+    assert counts["compacted"] == {}
+    assert counts["observed"]["nonlocal_geometry_point_visits_scheduled"] == 200
+    note = record["work_count_notes"]["stationary_integral_derivatives"]
+    assert "capacity bounds" in note
+    assert "inside the derivative kernel" in note
+    assert "no post-screen quartet count" in note

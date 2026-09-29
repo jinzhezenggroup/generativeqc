@@ -3,7 +3,7 @@
 #include "generated_df_derivatives_cpu.hpp"
 #include "generated_df_values_cpu.hpp"
 
-namespace vibeqc::integrals::generated_df_cpu {
+namespace generativeqc::integrals::generated_df_cpu {
 namespace {
 scf::generated_df::Vec3 value_vec(Vec3 v) { return {v.x, v.y, v.z}; }
 scf::generated_df::Angular value_angular(Angular a) { return {a.x, a.y, a.z}; }
@@ -43,4 +43,4 @@ Response three_center_derivative(double alpha, Vec3 a_center, Angular a, double 
       derivative_angular(b), gamma, derivative_vec(c_center), derivative_angular(c)));
 }
 
-}  // namespace vibeqc::integrals::generated_df_cpu
+}  // namespace generativeqc::integrals::generated_df_cpu

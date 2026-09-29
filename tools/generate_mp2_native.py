@@ -9,12 +9,16 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from vibeqc_compiler.common.source_reuse import native_header as source_reuse_header
-from vibeqc_compiler.method.mp2_schedule import native_header as mp2_schedule_header
-from vibeqc_compiler.tensor.cpu_emit import emit_cpu
+from generativeqc_compiler.common.source_reuse import (
+    native_header as source_reuse_header,
+)
+from generativeqc_compiler.method.mp2_schedule import (
+    native_header as mp2_schedule_header,
+)
+from generativeqc_compiler.tensor.cpu_emit import emit_cpu
 
-from tools.vibeqc_mp2.equations import cpu_capacity, energy_program
-from tools.vibeqc_posthf.plan_spec import native_header as block_capacity_header
+from tools.generativeqc_mp2.equations import cpu_capacity, energy_program
+from tools.generativeqc_posthf.plan_spec import native_header as block_capacity_header
 
 
 def cpu_header() -> typing.Any:
@@ -26,7 +30,7 @@ def cpu_header() -> typing.Any:
         "#include <cstddef>",
         "#include <stdexcept>",
         "#include <vector>",
-        "namespace vibeqc::mp2::generated {",
+        "namespace generativeqc::mp2::generated {",
         "using CpuRun = void(*)(const double*,const double*,double,double,const double*,const double*,double*);",
         "struct CpuPlan { CpuRun run; std::size_t numeric_bytes; const char* equation_hash; };",
     ]
@@ -102,9 +106,9 @@ def _numeric_architectures(value: typing.Any) -> typing.Any:
 
 
 def cuda_sources(directory: typing.Any, architectures: typing.Any) -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     archs = _numeric_architectures(architectures)
     directory.mkdir(parents=True, exist_ok=True)
@@ -112,7 +116,7 @@ def cuda_sources(directory: typing.Any, architectures: typing.Any) -> None:
         '#include "posthf/mp2_cuda_plan.hpp"',
         "#include <cuda_runtime.h>",
         "#include <stdexcept>",
-        "namespace vibeqc::mp2::generated {",
+        "namespace generativeqc::mp2::generated {",
     ]
     choices = []
     for arch in archs:
@@ -132,7 +136,7 @@ def cuda_sources(directory: typing.Any, architectures: typing.Any) -> None:
             inputs = ",".join(
                 feeds[plan.steps[k].node.attrs["name"]] for k in plan.inputs
             )
-            source += f"""\nextern "C" int {prefix}run(void* p,const double* g,const double* x,double ei,double ej,const double* ea,const double* eb,double* out,vibeqc_tensor::Metrics* metrics,char* error,size_t size) {{
+            source += f"""\nextern "C" int {prefix}run(void* p,const double* g,const double* x,double ei,double ej,const double* ea,const double* eb,double* out,generativeqc_tensor::Metrics* metrics,char* error,size_t size) {{
 const void* inputs[]={{{inputs}}}; void* outputs[]={{out,out+1}};
 return {prefix}generated::{prefix}tensor_run(p,inputs,outputs,1,metrics,error,size);
 }}\n"""
@@ -140,7 +144,7 @@ return {prefix}generated::{prefix}tensor_run(p,inputs,outputs,1,metrics,error,si
             table += [
                 f'extern "C" int {prefix}tensor_create(int,void**,char*,std::size_t);',
                 f'extern "C" void {prefix}tensor_destroy(void*);',
-                f'extern "C" int {prefix}run(void*,const double*,const double*,double,double,const double*,const double*,double*,vibeqc_tensor::Metrics*,char*,std::size_t);',
+                f'extern "C" int {prefix}run(void*,const double*,const double*,double,double,const double*,const double*,double*,generativeqc_tensor::Metrics*,char*,std::size_t);',
             ]
             choices.append(
                 f'''if (arch=={arch} && tile=={tile}) return {{{prefix}tensor_create,{prefix}tensor_destroy,{prefix}run,{plan.peak_bytes}ULL,{plan.allocation_bytes}ULL,"{program.logical_hash}"}};'''

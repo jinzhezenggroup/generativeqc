@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_CLASSICAL_ENERGY_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_CLASSICAL_ENERGY_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_CLASSICAL_ENERGY_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_CLASSICAL_ENERGY_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/cuda/gfn2_electric_field.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::int64_t kGfn2SccClassicalInputComponents = 6;
 inline constexpr std::int64_t kGfn2SccClassicalDiagnosticComponents = 7;
@@ -177,6 +177,6 @@ cudaError_t evaluate_gfn2_scc_classical_energy_cuda(
     const Gfn2SccClassicalEnergyDeviceWorkspace& workspace, std::uint32_t* system_errors,
     std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_CLASSICAL_ENERGY_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_CLASSICAL_ENERGY_CUH

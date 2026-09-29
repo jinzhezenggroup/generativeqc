@@ -10,13 +10,15 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
     build_one_electron_derivative_kernel,
     evaluate_one_electron_derivative_primitive,
 )
-from vibeqc_compiler.integral.one_electron_values import evaluate_one_electron_primitive
-from vibeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.one_electron_values import (
+    evaluate_one_electron_primitive,
+)
+from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 
 @cache
@@ -152,8 +154,8 @@ def test_selected_g_cartesian_derivatives_match_independent_libcint(
 
 
 def test_g_derivative_codegen_is_explicit_and_production_stays_fail_closed() -> None:
-    from vibeqc_compiler.integral.capabilities import query_integral_capability
-    from vibeqc_compiler.integral.one_electron_derivatives_cuda import (
+    from generativeqc_compiler.integral.capabilities import query_integral_capability
+    from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
         _emit_axis_permutations,
         one_electron_derivative_inventory,
     )
@@ -229,14 +231,14 @@ def test_emitted_derivatives_normalized_raw_and_spherical_blocks(
 ) -> None:
     """Exercise emitted CSE/geometry/Boys boundaries against independent blocks."""
     pytest.importorskip("pyscf")
-    from vibeqc_compiler.integral.one_electron_derivatives_cuda import (
+    from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
         emit_one_electron_derivatives_cuda,
     )
 
-    from tools.vibeqc_validation.one_electron_derivatives import (
+    from tools.generativeqc_validation.one_electron_derivatives import (
         one_electron_derivative_matrix,
     )
-    from tools.vibeqc_validation.one_electron_derivatives_cuda import (
+    from tools.generativeqc_validation.one_electron_derivatives_cuda import (
         derivative_evaluation_body,
     )
 
@@ -257,7 +259,7 @@ def test_emitted_derivatives_normalized_raw_and_spherical_blocks(
         "#define __device__\n#define __forceinline__ inline\n#define __noinline__\n"
         + header
     )
-    source += '\nnamespace one = vibeqc::scf::generated_one_electron_derivatives;\nextern "C" void evaluate(const double* inputs, double* outputs, unsigned count) {\nfor (unsigned i=0;i<count;++i) { const double* p=inputs+14*i; double* out=outputs+27*i;\n'
+    source += '\nnamespace one = generativeqc::scf::generated_one_electron_derivatives;\nextern "C" void evaluate(const double* inputs, double* outputs, unsigned count) {\nfor (unsigned i=0;i<count;++i) { const double* p=inputs+14*i; double* out=outputs+27*i;\n'
     source += derivative_evaluation_body() + "\n}}\n"
     path = tmp_path / "fixture.cpp"
     path.write_text(source)

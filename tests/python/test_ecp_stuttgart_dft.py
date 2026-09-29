@@ -17,7 +17,7 @@ DEVICES = [
     pytest.param(
         "cuda",
         marks=pytest.mark.skipif(
-            os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1",
+            os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1",
             reason="explicit real-device ECP gate",
         ),
     ),

@@ -16,7 +16,7 @@ def test_source_response_derivative_policy_matrix(tmp_path: Path) -> None:
     source.write_text(r"""
 #include "scf/df_derivative_policy.hpp"
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   for (unsigned bits = 0; bits != 32; ++bits) {
     const bool source = bits & 1, raw = bits & 2, fitted = bits & 4;
     const bool validated = bits & 8, qualify = bits & 16;

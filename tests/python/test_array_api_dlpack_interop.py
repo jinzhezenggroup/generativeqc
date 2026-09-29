@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc_compiler.array_api import (
+from generativeqc_compiler.array_api import (
     DLPACK_INTEROP_VERSION,
     DLPackDevice,
     DLPackInteropError,

@@ -1,6 +1,6 @@
 # Complete small-system RCCSD gradients
 
-`tools.vibeqc_cc.complete_gradient_validation` connects native RHF, converged
+`tools.generativeqc_cc.complete_gradient_validation` connects native RHF, converged
 RCCSD, generated Lambda, raw-Hamiltonian and orbital response, and native
 analytic integral derivatives. It returns a **complete conventional CCSD energy
 gradient for the supported small-system validation scope**, not just fixed-
@@ -35,9 +35,9 @@ From a checkout with a matching CPU native library:
 
 ```bash
 cmake -S . -B build-cpu -G Ninja \
-  -DVIBEQC_ENABLE_CUDA=OFF -DVIBEQC_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+  -DGENERATIVEQC_ENABLE_CUDA=OFF -DGENERATIVEQC_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cpu -j2
-PYTHONPATH=python:. VIBEQC_LIBRARY=$PWD/build-cpu/libvibeqc.so \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY=$PWD/build-cpu/libgenerativeqc.so \
   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
   python tools/run_ccsd_gradient.py --case h2o --output water-gradient.json
 ```
@@ -46,7 +46,7 @@ The driver writes a new JSON file and refuses to overwrite an existing one.
 Omit `--output` to print JSON. Select the bounded CUDA derivative consumer with
 
 ```bash
-PYTHONPATH=python:. VIBEQC_LIBRARY=$PWD/build-cuda/libvibeqc.so \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY=$PWD/build-cuda/libgenerativeqc.so \
   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
   python tools/run_ccsd_gradient.py --case h2o \
     --derivative-backend cuda --device-id 0 \
@@ -72,8 +72,8 @@ are rejected instead of silently ignored. Numerical solving uses the strict
 endpoint options, not tolerance suggestions stored with reference metadata.
 
 ```python
-from tools.vibeqc_cc import CCSDGradientOptions, complete_gradient_validation
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_cc import CCSDGradientOptions, complete_gradient_validation
+from tools.generativeqc_posthf.sources import NativeSource
 
 with NativeSource(
     atoms=[("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4))],
@@ -208,7 +208,7 @@ shell work; this does not convert the dense gradient chain into a tiled one.
 ## Reproduce scientific validation
 
 ```bash
-PYTHONPATH=python:. VIBEQC_LIBRARY=$PWD/build-cpu/libvibeqc.so \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY=$PWD/build-cpu/libgenerativeqc.so \
   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
   python -m pytest -q tests/python/test_cc_complete_gradient.py
 ```
@@ -238,7 +238,7 @@ remove overlap or orbital response and require a visible error. `gradient_capabi
 continues to describe this internal validation endpoint, while `public_calculator=True`
 records that the same qualified conventional <=12-AO RCCSD force capability is now
 published through the native Calculator owner. The older
-`tools.vibeqc_cc.api.method_capabilities("rccsd")` energy helper remains a narrow
+`tools.generativeqc_cc.api.method_capabilities("rccsd")` energy helper remains a narrow
 internal energy facade rather than the public capability registry. A fully resident
 GPU response chain, scalable tiled MO/AO weights, DF/frozen-core/open-shell/ECP
 extensions and perturbative-(T) behavior remain separate capabilities.

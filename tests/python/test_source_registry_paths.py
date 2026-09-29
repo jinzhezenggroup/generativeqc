@@ -40,7 +40,7 @@ def test_sync_and_update_reject_destination_escape(
     manifest.write_text(
         json.dumps(
             {
-                "schema": "vibeqc.scientific-source-registry",
+                "schema": "generativeqc.scientific-source-registry",
                 "schema_version": 1,
                 "sources": {source_id: source},
                 "products": {},

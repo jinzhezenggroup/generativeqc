@@ -4,7 +4,7 @@
 
 #include "generated_scf_array_native.hpp"
 
-namespace vibeqc::scf::gradient {
+namespace generativeqc::scf::gradient {
 std::vector<double> analytic_forces(const integrals::IntegralData& ints, const Matrix& density,
                                     const Matrix& weighted_density,
                                     std::span<const double> two_electron) {
@@ -32,4 +32,4 @@ std::vector<double> analytic_uhf_forces(const integrals::IntegralData& ints,
   return forces;
 }
 
-}  // namespace vibeqc::scf::gradient
+}  // namespace generativeqc::scf::gradient

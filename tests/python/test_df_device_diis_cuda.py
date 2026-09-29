@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace
 from benchmarks.df_progress_ledger import read_progress, summarize_progress
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -58,9 +58,9 @@ def test_compact_diis_independent_forces_and_warm_reset(
         gradient = mf.nuc_grad_method()
         gradient.auxbasis_response = True
         references.append((mf.e_tot, -gradient.kernel()))
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", exchange)
-    monkeypatch.setenv("VIBEQC_DF_DIIS_DOTS", dots)
-    monkeypatch.delenv("VIBEQC_DF_DISABLE_DEVICE_DIIS", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", exchange)
+    monkeypatch.setenv("GENERATIVEQC_DF_DIIS_DOTS", dots)
+    monkeypatch.delenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS", raising=False)
     calc = Calculator(
         method=method,
         basis="def2-svp",
@@ -89,11 +89,11 @@ def test_compact_diis_independent_forces_and_warm_reset(
         ):
             progress_path = tmp_path / f"progress-{step}.jsonl"
             host_path = tmp_path / f"host-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(progress_path))
-            monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(host_path))
+            monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(progress_path))
+            monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(host_path))
             output = owner.execute(positions, properties=properties, strict=True)
-            monkeypatch.delenv("VIBEQC_DF_PROGRESS_TRACE")
-            monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_PROGRESS_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
             for slot, item in enumerate(output.items):
                 expected = references[int(step == 4 and slot == size - 1)]
                 assert item.converged and 1 <= item.iterations <= 100
@@ -130,7 +130,7 @@ def test_diis_workspace_shortfall_fails_without_numerical_retry(
     """A force half-budget cannot borrow response capacity for solver owners."""
     assert os.environ.get("SLURM_JOB_ID")
     path = tmp_path / "shortfall.jsonl"
-    monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(path))
+    monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(path))
     calc = Calculator(
         basis="def2-svp",
         device="cuda",

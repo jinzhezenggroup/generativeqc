@@ -2,27 +2,27 @@
 
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda/eigensolver_kernels.hpp"
 #include "scf/cuda/launch_geometry.hpp"
 #include "scf/eigensolver_workspace.hpp"
-#include "vibeqc/vibeqc.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Host-only provider dispatch and profiling order. Graph eligibility is resolved at setup before
  * this execution boundary. */
 namespace {
-vibeqc_status cuda_status(cudaError_t status) {
-  if (status == cudaSuccess) return VIBEQC_STATUS_SUCCESS;
-  return status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                             : VIBEQC_STATUS_CUDA_ERROR;
+generativeqc_status cuda_status(cudaError_t status) {
+  if (status == cudaSuccess) return GENERATIVEQC_STATUS_SUCCESS;
+  return status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                             : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
-vibeqc_status solver_status(cusolverStatus_t status) {
-  if (status == CUSOLVER_STATUS_SUCCESS) return VIBEQC_STATUS_SUCCESS;
-  return status == CUSOLVER_STATUS_ALLOC_FAILED ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                : VIBEQC_STATUS_CUDA_ERROR;
+generativeqc_status solver_status(cusolverStatus_t status) {
+  if (status == CUSOLVER_STATUS_SUCCESS) return GENERATIVEQC_STATUS_SUCCESS;
+  return status == CUSOLVER_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
 }  // namespace
@@ -38,10 +38,10 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
     : n_(n) {
   if (n <= 0 || !stream || !matrix || !eigenvalues)
     throw std::invalid_argument("invalid ordinary eigensolver owner");
-  const auto checked = [](vibeqc_status status) {
-    if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-    if (status != VIBEQC_STATUS_SUCCESS)
-      throw vibeqc::Error(status, "ordinary CUDA eigensolver preparation failed");
+  const auto checked = [](generativeqc_status status) {
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw generativeqc::Error(status, "ordinary CUDA eigensolver preparation failed");
   };
   checked(cuda_status(cudaGetDevice(&device_)));
   resources_.stream_ = stream;
@@ -87,31 +87,32 @@ void OrdinaryStreamEigensolver::cleanup() noexcept {
 
 OrdinaryStreamEigensolver::~OrdinaryStreamEigensolver() { cleanup(); }
 
-vibeqc_status OrdinaryStreamEigensolver::launch(int batch, double* matrices,
-                                                double* native_workspace, double* eigenvalues,
-                                                int* info, const std::uint8_t* active) const {
+generativeqc_status OrdinaryStreamEigensolver::launch(int batch, double* matrices,
+                                                      double* native_workspace, double* eigenvalues,
+                                                      int* info, const std::uint8_t* active) const {
   if (batch <= 0 || !matrices || !native_workspace || !eigenvalues || !info || !active)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   int device = -1;
   auto error = cudaGetDevice(&device);
   if (error != cudaSuccess) return cuda_status(error);
-  if (device != device_) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (device != device_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   const auto family = n_ <= kSmallEigensolverLimit ? CudaEigensolverFamily::small_native
                                                    : CudaEigensolverFamily::xsyevd;
   cudaStreamCaptureStatus capture{};
   error = cudaStreamIsCapturing(resources_.stream_, &capture);
   if (error != cudaSuccess) return cuda_status(error);
   if (capture != cudaStreamCaptureStatusNone && family != CudaEigensolverFamily::small_native)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   return launch_solver(resources_, family, n_, batch, matrices, native_workspace, eigenvalues, 0,
                        info, active);
 }
 
-vibeqc_status launch_solver(const EigensolverResources& resources, CudaEigensolverFamily family,
-                            int nbf, int batch_size, double* matrices,
-                            double* eigenvector_workspace, double* eigenvalues, int lwork,
-                            int* info, const std::uint8_t* active,
-                            const EigensolverProfileLaunch* profile) {
+generativeqc_status launch_solver(const EigensolverResources& resources,
+                                  CudaEigensolverFamily family, int nbf, int batch_size,
+                                  double* matrices, double* eigenvector_workspace,
+                                  double* eigenvalues, int lwork, int* info,
+                                  const std::uint8_t* active,
+                                  const EigensolverProfileLaunch* profile) {
   const bool provider_invoked = provider_eigensolver(family);
   if (profile != nullptr) {
     launch_begin_inactive_eigensolver_profile_kernel(
@@ -139,7 +140,7 @@ vibeqc_status launch_solver(const EigensolverResources& resources, CudaEigensolv
     const cudaError_t profile_error = cudaPeekAtLastError();
     if (profile_error != cudaSuccess) return cuda_status(profile_error);
   }
-  vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   if (family == CudaEigensolverFamily::small_native) {
     launch_symmetric_eigen_small_kernel(static_cast<unsigned>(batch_size), 1, 0, resources.stream_,
                                         batch_size, nbf, matrices, eigenvalues, info, active);
@@ -193,7 +194,7 @@ vibeqc_status launch_solver(const EigensolverResources& resources, CudaEigensolv
         batch_size, nbf, matrices, eigenvector_workspace, eigenvalues, info, active);
     status = cuda_status(cudaPeekAtLastError());
   }
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (profile != nullptr) {
     launch_finish_inactive_eigensolver_profile_kernel(1, 1, 0, resources.stream_, batch_size,
                                                       active, info, profile->capacity,
@@ -203,4 +204,4 @@ vibeqc_status launch_solver(const EigensolverResources& resources, CudaEigensolv
   return status;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

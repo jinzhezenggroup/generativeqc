@@ -7,14 +7,14 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.structure import audit_structure
+from generativeqc_compiler.common.structure import audit_structure
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
     """Native and JIT builds must compile exactly one scientific grid policy."""
-    from vibeqc_compiler.dft.ao_cuda import (
+    from generativeqc_compiler.dft.ao_cuda import (
         emit_grid_source,
         emit_native_xc_contraction_kernels,
     )
@@ -51,7 +51,7 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
         "__global__ void ao_kernel",
         "__global__ void ao_kernel_fp32",
         "__global__ void feature_kernel",
-        "__device__ vibeqc::dft::point::Value evaluate_xc_point",
+        "__device__ generativeqc::dft::point::Value evaluate_xc_point",
         "__global__ void xc_local_potential_kernel",
     ):
         assert scientific in source
@@ -71,7 +71,8 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
     native_template = (ROOT / "src/dft/cuda_grid.cu").read_text()
     assert "__global__ void ao_kernel" not in native_template
     assert (
-        "__device__ vibeqc::dft::point::Value evaluate_xc_point" not in native_template
+        "__device__ generativeqc::dft::point::Value evaluate_xc_point"
+        not in native_template
     )
     resident_template = (ROOT / "src/dft/cuda_xc_kernels.cuh").read_text()
     for retired in (
@@ -85,7 +86,7 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
         "__global__ void accumulate_totals",
     ):
         assert retired not in resident_template
-    assert headers[-1] == ROOT / "include/vibeqc/vibeqc.h"
+    assert headers[-1] == ROOT / "include/generativeqc/generativeqc.h"
 
 
 def test_dependency_directions() -> None:
@@ -96,16 +97,16 @@ def test_method_composition_is_above_xc_and_dft(tmp_path: typing.Any) -> None:
     method = tmp_path / "method"
     method.mkdir()
     (method / "ok.py").write_text(
-        "from vibeqc_compiler.xc.spec import FunctionalSpec\n"
+        "from generativeqc_compiler.xc.spec import FunctionalSpec\n"
     )
     (method / "geometry_ok.py").write_text(
-        "from vibeqc_compiler.geometry.ir import GeometryIR\n"
+        "from generativeqc_compiler.geometry.ir import GeometryIR\n"
     )
     assert audit_structure(tmp_path)["errors"] == []
 
     dft = tmp_path / "dft"
     dft.mkdir()
-    (dft / "bad.py").write_text("import vibeqc_compiler.method\n")
+    (dft / "bad.py").write_text("import generativeqc_compiler.method\n")
     errors = audit_structure(tmp_path)["errors"]
     assert any("forbidden dft -> method import" in error for error in errors)
 
@@ -128,7 +129,9 @@ def test_ao_lowering_scalar_dependency_is_narrow(
 ) -> None:
     dft = tmp_path / "dft"
     dft.mkdir()
-    (dft / (module + ".py")).write_text(f"import vibeqc_compiler.integral.{target}\n")
+    (dft / (module + ".py")).write_text(
+        f"import generativeqc_compiler.integral.{target}\n"
+    )
     assert (not audit_structure(tmp_path)["errors"]) == allowed
 
 
@@ -136,13 +139,13 @@ def test_installed_package_does_not_consume_neighbor_checkout(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
     """A wheel placed under another checkout must use its own bundled inputs."""
-    from vibeqc_compiler.common import paths
+    from generativeqc_compiler.common import paths
 
     (tmp_path / "CMakeLists.txt").touch()
     foreign = tmp_path / "src/tensor/cuda_runtime.cuh"
     foreign.parent.mkdir(parents=True)
     foreign.write_text("different checkout")
-    package = tmp_path / "site/vibeqc_compiler"
+    package = tmp_path / "site/generativeqc_compiler"
     bundled = package / "assets/src/tensor/cuda_runtime.cuh"
     bundled.parent.mkdir(parents=True)
     bundled.write_text("installed template")
@@ -157,7 +160,7 @@ def test_installed_package_does_not_consume_neighbor_checkout(
     [
         "from ..tensor import Program",
         "import benchmarks.aot_shell_batch_gate",
-        "from vibeqc import Calculator",
+        "from generativeqc import Calculator",
         "def run():\n    import tools.generate_shell_kernels",
     ],
 )
@@ -176,11 +179,11 @@ import importlib, importlib.abc, pkgutil, sys
 sys.path.insert(0, {str(ROOT / "python")!r})
 class RejectRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {{'vibeqc', 'tools', 'benchmarks', 'pyscf', 'torch', 'cupy'}}:
+        if fullname.split('.')[0] in {{'generativeqc', 'tools', 'benchmarks', 'pyscf', 'torch', 'cupy'}}:
             raise AssertionError('compiler imported ' + fullname)
 sys.meta_path.insert(0, RejectRuntime())
-import vibeqc_compiler
-for item in pkgutil.walk_packages(vibeqc_compiler.__path__, vibeqc_compiler.__name__ + '.'):
+import generativeqc_compiler
+for item in pkgutil.walk_packages(generativeqc_compiler.__path__, generativeqc_compiler.__name__ + '.'):
     importlib.import_module(item.name)
 """
     subprocess.run(
@@ -221,11 +224,13 @@ def test_method_custom_derivatives_may_emit_tensor_graphs_but_not_the_reverse(
 ) -> None:
     method = tmp_path / "method"
     method.mkdir()
-    (method / "rule.py").write_text("from vibeqc_compiler.tensor import Program\n")
+    (method / "rule.py").write_text(
+        "from generativeqc_compiler.tensor import Program\n"
+    )
     assert audit_structure(tmp_path)["errors"] == []
     tensor = tmp_path / "tensor"
     tensor.mkdir()
-    (tensor / "bad.py").write_text("import vibeqc_compiler.method\n")
+    (tensor / "bad.py").write_text("import generativeqc_compiler.method\n")
     assert any(
         "forbidden tensor -> method import" in e
         for e in audit_structure(tmp_path)["errors"]

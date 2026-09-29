@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_initialize_state_kernel(
@@ -33,4 +33,4 @@ void launch_inspect_spin_solver_kernel(dim3 grid, dim3 block, std::size_t shared
                                        std::uint8_t* active, std::uint8_t* failed,
                                        std::uint8_t* converged);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

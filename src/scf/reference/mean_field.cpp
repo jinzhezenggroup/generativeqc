@@ -5,7 +5,7 @@
 
 #include "generated_scf_array_native.hpp"
 
-namespace vibeqc::scf::reference {
+namespace generativeqc::scf::reference {
 
 Matrix density_from_orbitals(const Matrix& coefficients, std::size_t n, std::size_t occupied,
                              double occupation_weight) {
@@ -82,4 +82,4 @@ double residual_rms(const Matrix& residual) {
   return std::sqrt(dot(residual, residual) / static_cast<double>(residual.size()));
 }
 
-}  // namespace vibeqc::scf::reference
+}  // namespace generativeqc::scf::reference

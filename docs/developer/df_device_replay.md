@@ -96,7 +96,7 @@ complete HF capture containing five warm replays of three systems.
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:15:00 env CUDA_ROOT=/path/to/cuda \
-  VIBEQC_LIBRARY="$PWD/build/cuda/libvibeqc.so" PYTHON=/path/to/python \
+  GENERATIVEQC_LIBRARY="$PWD/build/cuda/libgenerativeqc.so" PYTHON=/path/to/python \
   bash benchmarks/df_device_replay.sh
 ```
 

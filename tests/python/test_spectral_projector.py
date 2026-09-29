@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.matrix_function import (
+from generativeqc_compiler.method.matrix_function import (
     MatrixFunctionEvaluation,
     SymmetricMatrixFunctionSpec,
 )
-from vibeqc_compiler.method.spectral_projector import (
+from generativeqc_compiler.method.spectral_projector import (
     prepare_fixed_rank_projector,
     projector_logical_workspace_bytes,
 )

@@ -5,7 +5,7 @@
     "frozen": 0,
     "max_cycle": 150
   },
-  "content_hash": "7cd6d2e38a116b3c95d291355d5c423401dead408e24326104da7adb413c936b",
+  "content_hash": "5e198faf7fda567ecff0f34e6610514d28ab556db59e17a0777a2040252a2c0a",
   "correlation_energy": -0.048672101864669776,
   "cphf": {
     "max_cycle": 100,
@@ -202,7 +202,7 @@
     "direct_scf_tol": 1e-14,
     "max_cycle": 150
   },
-  "schema": "vibeqc.ccsd.gradient_reference",
+  "schema": "generativeqc.ccsd.gradient_reference",
   "schema_version": 1,
   "total_energy": -75.01047526325561,
   "units": {

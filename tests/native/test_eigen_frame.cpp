@@ -12,7 +12,7 @@ void require(bool value, const char* detail) {
   if (!value) throw std::runtime_error(detail);
 }
 void checked_frames() {
-  using namespace vibeqc::scf::solver;
+  using namespace generativeqc::scf::solver;
   // An analytic generalized frame with nonidentity metric. The ordinary
   // validator never needs a production or reference eigensolver to test it.
   const Matrix f{2, 0, 0, 12}, s{2, 0, 0, 4}, values{1, 3};

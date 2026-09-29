@@ -15,14 +15,14 @@ def upload_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/api/c_api_fock.cpp").read_text()
     create = source.split(
-        'extern "C" vibeqc_status vibeqc_uhf_response_resident_create(', 1
+        'extern "C" generativeqc_status generativeqc_uhf_response_resident_create(', 1
     )[1]
     body = create.split("    owner->allocation_bytes = bytes;\n", 1)[1]
     body = body.split("    *output = owner.release();", 1)[0]
     # Only deallocation is instrumented: retain every native upload, catch and
     # stream-drain statement, plus the actual vector allocation/filling order.
     body = body.replace("std::vector<double>", "TrackedVector")
-    owner = source.split("struct vibeqc_uhf_response_resident {", 1)[1].split(
+    owner = source.split("struct generativeqc_uhf_response_resident {", 1)[1].split(
         "\n};", 1
     )[0]
     harness = r"""
@@ -34,12 +34,12 @@ def upload_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <string>
 #include <vector>
 #include <cstdint>
-#define VIBEQC_HAS_CUDA 1
+#define GENERATIVEQC_HAS_CUDA 1
 using cudaStream_t = int;
 using cublasHandle_t = void*;
-struct vibeqc_fock_plan;
-namespace vibeqc::scf { struct CudaDirectJkPlan; }
-struct vibeqc_uhf_response_resident { OWNER_BODY
+struct generativeqc_fock_plan;
+namespace generativeqc::scf { struct CudaDirectJkPlan; }
+struct generativeqc_uhf_response_resident { OWNER_BODY
 };
 struct Pending { void* dst; const void* src; std::size_t bytes; };
 Pending pending[6]{};
@@ -75,7 +75,7 @@ int cudaStreamSynchronize(int) {
   pending_count=0;
   return 0;
 }
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 int resource_cuda_malloc(void** p,std::size_t n) {
   *p=std::malloc(n); if(!*p) return 4; ++allocations; return 0;
 }
@@ -83,7 +83,7 @@ int resource_cuda_free(void* p) { std::free(p); --allocations; return 0; }
 }
 void resident_cuda(int code) { if(code) throw std::runtime_error("injected CUDA failure"); }
 void resident_blas(int code) { if(code) throw std::runtime_error("injected BLAS failure"); }
-void uhf_resident_sync(vibeqc_uhf_response_resident* o) {
+void uhf_resident_sync(generativeqc_uhf_response_resident* o) {
   resident_cuda(cudaStreamSynchronize(o->stream)); ++o->synchronizations;
 }
 void create() {
@@ -93,14 +93,14 @@ void create() {
   const double coefficients_beta[9]={9,8,7,6,5,4,3,2,1};
   const double orbital_energies_alpha[3]={-1,0,1};
   const double orbital_energies_beta[3]={-2,0,2};
-  auto owner=std::make_unique<vibeqc_uhf_response_resident>();
+  auto owner=std::make_unique<generativeqc_uhf_response_resident>();
   owner->stream=17;
   NATIVE_BODY
   if(copy_calls!=6 || pending_count || owner->h2d_bytes!=224)
     throw std::runtime_error("successful upload accounting changed");
   if(owner->coefficients_alpha[1]!=4 || owner->coefficients_beta[1]!=6)
     throw std::runtime_error("uploaded coefficient transpose changed");
-  vibeqc::runtime::resource_cuda_free(owner->allocation);
+  generativeqc::runtime::resource_cuda_free(owner->allocation);
   cublasDestroy(owner->blas);
 }
 int main(int argc,char** argv) {

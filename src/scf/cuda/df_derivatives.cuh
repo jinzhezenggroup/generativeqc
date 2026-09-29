@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_DF_DERIVATIVES_CUH
-#define VIBEQC_SCF_CUDA_DF_DERIVATIVES_CUH
+#ifndef GENERATIVEQC_SCF_CUDA_DF_DERIVATIVES_CUH
+#define GENERATIVEQC_SCF_CUDA_DF_DERIVATIVES_CUH
 #include <cuda_runtime.h>
 
 #include <cstddef>
@@ -8,7 +8,7 @@
 #include "runtime/cuda_gaussian_products.cuh"
 #include "runtime/strided_range.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 /** Non-owning normalized public-AO expansions; atom indices share one geometry. */
 using DfDerivativeBasisView = runtime::cuda_gaussian_products::BasisView;
 
@@ -35,5 +35,5 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView orbital,
                                       cudaStream_t stream, std::size_t begin = 0,
                                       std::size_t gradient_stride = 0, unsigned gradient_copies = 1,
                                       bool skip_sp_shells = false);
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

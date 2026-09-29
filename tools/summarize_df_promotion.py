@@ -23,9 +23,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.common.evidence import file_hash
+from generativeqc_compiler.common.evidence import file_hash
 
-from tools.vibeqc_validation.f_shell_numerics import numerical_error
+from tools.generativeqc_validation.f_shell_numerics import numerical_error
 
 
 def summarize(directory: Path) -> dict:
@@ -39,7 +39,7 @@ def summarize(directory: Path) -> dict:
     endpoints = reports["endpoints"]["runs"]
     selected = [row for row in endpoints if row["route"] == "primitive"]
     result = {
-        "schema": "vibeqc.df_value_promotion",
+        "schema": "generativeqc.df_value_promotion",
         "version": 1,
         "selected_mapping": "primitive",
         "input_hashes": {

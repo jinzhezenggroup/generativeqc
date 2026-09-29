@@ -5,14 +5,14 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions, _native
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._ks_snapshot import _scf_xc_points
-from vibeqc.ks import native_ks_options, resolve_ks_options
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.method import MethodSpec, resolve_method
+from generativeqc import Calculator, GridSpec, KsOptions, _native
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._ks_snapshot import _scf_xc_points
+from generativeqc.ks import native_ks_options, resolve_ks_options
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import MethodSpec, resolve_method
 
-from tools.vibeqc_response import (
+from tools.generativeqc_response import (
     NativeRKSResponse,
     NativeUKSResponse,
     ResponseUnsupported,
@@ -98,7 +98,7 @@ def test_v1_and_v2_point_layouts_remain_compatible(functional: int) -> None:
     rho = np.array([[0.8, 0.4], [0.3, 0.2]])
     gradient = np.arange(12, dtype=np.float64).reshape(2, 2, 3) * 0.002
     pointer = ct.POINTER(ct.c_double)
-    old = library.vibeqc_xc_point_batch_v1
+    old = library.generativeqc_xc_point_batch_v1
     old.argtypes = [ct.c_uint32, pointer, pointer, ct.c_size_t, pointer, ct.c_size_t]
     old.restype = ct.c_int
     output = np.empty((2, 9))

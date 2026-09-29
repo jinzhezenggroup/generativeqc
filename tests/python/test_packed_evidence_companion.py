@@ -33,7 +33,7 @@ def evidence(tmp_path: typing.Any) -> typing.Any:
         "frozen_density_sha256": {"density_0": "density"},
         "coordinates_bohr": [[0, 0, 0]],
         "changed_coordinates_bohr": [[0.001, 0, 0]],
-        "controls": {"VIBEQC_DF_FINAL_PROJECTION": "auto"},
+        "controls": {"GENERATIVEQC_DF_FINAL_PROJECTION": "auto"},
         "slurm_job_id": "original-job",
         "runner_sha256": "original-runner",
         "samples": [

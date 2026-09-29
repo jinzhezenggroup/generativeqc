@@ -2,10 +2,10 @@ import os
 import typing
 
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="opt-in native CUDA DFT gate",
 )
 

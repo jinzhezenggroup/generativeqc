@@ -56,7 +56,7 @@
   "numpy": "2.2.6",
   "pyscf": "2.14.0",
   "python": "3.11.14",
-  "schema": "vibeqc.rccsd-t.reference",
+  "schema": "generativeqc.rccsd-t.reference",
   "upstream": {
     "files": [
       {

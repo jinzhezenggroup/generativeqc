@@ -4,16 +4,22 @@ import typing
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
-from vibeqc_compiler.method.stationary import (
+from generativeqc_compiler.method.stationary import (
     ParameterSource,
     StationaryProblem,
     StationaryState,
 )
-from vibeqc_compiler.method.stationary_pullback import (
+from generativeqc_compiler.method.stationary_pullback import (
     ProviderPullbackRule,
     compile_provider_pullback_plan,
 )
-from vibeqc_compiler.tensor import Program, TensorSpec, add, input_tensor, multiply
+from generativeqc_compiler.tensor import (
+    Program,
+    TensorSpec,
+    add,
+    input_tensor,
+    multiply,
+)
 
 
 def _input(name: str, *, diff: bool = True) -> typing.Any:

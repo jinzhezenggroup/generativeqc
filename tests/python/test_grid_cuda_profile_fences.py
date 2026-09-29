@@ -53,8 +53,8 @@ def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
 
 
 def test_stationary_consumer_explicitly_owns_deferred_error_gate() -> None:
-    grid = (ROOT / "python/vibeqc_compiler/dft/cuda.py").read_text()
-    stationary = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text()
+    grid = (ROOT / "python/generativeqc_compiler/dft/cuda.py").read_text()
+    stationary = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
     assert "grid_cuda_run_selected_deferred_v1" in grid
     assert "_defer_error_to_consumer=defer_error_to_consumer" in grid
     task = grid.split("    def task(", 1)[1].split("    def xc_task(", 1)[0]
@@ -64,3 +64,40 @@ def test_stationary_consumer_explicitly_owns_deferred_error_gate() -> None:
     assert "defer_error_to_consumer=defer_error_to_consumer" not in task
     assert "defer_error_to_consumer=defer_error_to_consumer" in feature
     assert "defer_error_to_consumer=True" in stationary
+
+
+def test_full_local_identity_map_skips_map_upload_and_density_gather() -> None:
+    source = (ROOT / "src/dft/cuda_grid.cu").read_text()
+    block = _selected_execution()
+    assert "identity_map = !ao_ids && active == p.nao;" in block
+    assert "p.local && active && !identity_map" in block
+    assert "p.local && !identity_map ? p.local_density : p.density" in block
+    assert "p.local && !identity_map ? p.ao_ids : nullptr" in block
+    view = source.split("int grid_cuda_view_v1", 1)[1].split(
+        "int grid_cuda_basis_v1", 1
+    )[0]
+    assert "p.last_identity_map ? nullptr : p.ao_ids" in view
+    scatter = source.split("int grid_cuda_scatter_v1", 1)[1].split(
+        "int grid_cuda_metrics_v1", 1
+    )[0]
+    assert "p.last_identity_map ? nullptr : p.ao_ids" in scatter
+
+
+def test_stationary_geometry_consumes_null_map_as_identity() -> None:
+    generated = (
+        ROOT / "python/generativeqc_compiler/method/stationary_cuda.py"
+    ).read_text()
+    driver = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    native = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    assert "view.ao_ids ? view.ao_ids[mu] : mu" in generated
+    assert "ao.feature_task(" in driver
+    task = driver.split("with ao.feature_task(", 1)[1].split(") as task:", 1)[0]
+    assert "None," in task
+    for entry in (
+        "stationary_geometry_external",
+        "stationary_geometry_external_device",
+        "stationary_geometry_external_device_enqueue",
+        "stationary_geometry_enqueue",
+    ):
+        assert f"int {entry}" in native
+    assert "!view->ao_ids" not in native

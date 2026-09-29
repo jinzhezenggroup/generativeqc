@@ -4,12 +4,17 @@ from functools import lru_cache
 
 import numpy as np
 import pytest
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc import UnsupportedXC, functional
-from vibeqc_compiler.xc.contractions import ContractionProgram, ExternalPointContraction
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture as fixture
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc import UnsupportedXC, functional
+from generativeqc_compiler.xc.contractions import (
+    ContractionProgram,
+    ExternalPointContraction,
+)
+from generativeqc_compiler.xc.integration_fixtures import (
+    load_integration_fixture as fixture,
+)
 
 
 @lru_cache(maxsize=16)
@@ -228,7 +233,7 @@ def test_spin_resolved_response_finite_differences_transpose_and_exchange(
     )
     # Check the actual shared svec coordinates, including sqrt(2) on the
     # off-diagonal entries, rather than a second unweighted triangular dot.
-    from tools.vibeqc_posthf.pair_space import PairSpace
+    from tools.generativeqc_posthf.pair_space import PairSpace
 
     pairs = PairSpace(density.shape[-1])
     packed_directions = [np.concatenate([pairs.pack(s) for s in d]) for d in directions]
@@ -635,8 +640,8 @@ def test_external_rks_mixed_cartesian_coefficients_match_generated_graph(
 
 
 def test_contraction_requests_reject_unsupported_axes_domains_and_directions() -> None:
-    from vibeqc_compiler.xc.contracts import DerivativeRequest, IngredientContract
-    from vibeqc_compiler.xc.spec import UnsupportedXC
+    from generativeqc_compiler.xc.contracts import DerivativeRequest, IngredientContract
+    from generativeqc_compiler.xc.spec import UnsupportedXC
 
     with pytest.raises(UnsupportedXC):
         DerivativeRequest("hessian")

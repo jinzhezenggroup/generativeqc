@@ -176,7 +176,7 @@ def _cmake_cache(build_directory: Path) -> dict[str, str]:
         match = re.match(r"([^:=]+)(?::[^=]+)?=(.*)$", line)
         if match and (
             "CUDA" in match.group(1)
-            or match.group(1).startswith("VIBEQC_")
+            or match.group(1).startswith("GENERATIVEQC_")
             or match.group(1) == "CMAKE_GENERATOR"
         ):
             values[match.group(1)] = match.group(2)
@@ -260,7 +260,7 @@ def _ninja_summary(
         row
         for row in rows
         if row.output.endswith((".so", ".a", ".dll", ".dylib"))
-        or row.output.rsplit("/", 1)[-1] in ("vibeqc", "libvibeqc")
+        or row.output.rsplit("/", 1)[-1] in ("generativeqc", "libgenerativeqc")
     )
     device_link_rows = tuple(
         row
@@ -333,7 +333,7 @@ def build_ledger(
     cuda_architectures = {
         key: value
         for key, value in cmake_values.items()
-        if "ARCHITECTURE" in key or "VIBEQC_CUDA" in key
+        if "ARCHITECTURE" in key or "GENERATIVEQC_CUDA" in key
     }
     cuda_compiler = cmake_values.get("CMAKE_CUDA_COMPILER", "nvcc")
     host_compiler = cmake_values.get("CMAKE_CXX_COMPILER", os.environ.get("CXX", "c++"))

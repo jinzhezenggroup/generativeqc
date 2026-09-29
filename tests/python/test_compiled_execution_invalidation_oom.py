@@ -33,7 +33,7 @@ void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 int main(int argc, char** argv) {
   if (argc != 3) return 1;
   std::set_terminate([] { std::_Exit(91); });
-  using namespace vibeqc::runtime;
+  using namespace generativeqc::runtime;
   const int stage = std::atoi(argv[1]);
   CompiledExecutionRegion region;
   CompiledExecutionBinding binding{"valid", 0, nullptr, nullptr, nullptr};

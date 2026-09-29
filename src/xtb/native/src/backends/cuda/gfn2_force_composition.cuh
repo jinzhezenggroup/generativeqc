@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_FORCE_COMPOSITION_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_FORCE_COMPOSITION_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_FORCE_COMPOSITION_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_FORCE_COMPOSITION_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/cuda/gfn2_force_common.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Stationary gradient/force fields accepted by the final force composer. */
 enum class Gfn2ForceCompositionComponent : std::uint32_t {
@@ -128,6 +128,6 @@ cudaError_t compose_gfn2_forces_cuda(const Gfn2ForceCompositionDeviceBatch& batc
                                      std::uint32_t* system_errors, std::uint32_t* plan_error,
                                      cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_FORCE_COMPOSITION_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_FORCE_COMPOSITION_CUH

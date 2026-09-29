@@ -214,7 +214,7 @@ def main() -> None:
     if args.output is not None and args.output.resolve() == args.journal.resolve():
         parser.error("output must not replace the input progress journal")
     report = {
-        "schema": "vibeqc.scf-diagnostic-evidence.v1",
+        "schema": "generativeqc.scf-diagnostic-evidence.v1",
         "source": str(args.journal),
         "invocations": analyze_progress_events(read_progress_journal(args.journal)),
     }

@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.direct-hf-retirement.v1",
+  "schema": "generativeqc.direct-hf-retirement.v1",
   "issue": 356,
   "scope": "Current handwritten scientific CUDA under src/scf/cuda/direct_*; this overlay does not replace or reclassify the semantic CUDA ownership ledger.",
   "families": [
@@ -14,7 +14,7 @@
       "evidence": [
         "docs/developer/shell_codegen.md",
         "docs/developer/weighted_eri.md",
-        "python/vibeqc_compiler/integral/production_shell_classes.json"
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
       ],
       "required_compiler_capabilities": [
         "#832 profitability/resource planning",
@@ -37,7 +37,7 @@
       "evidence": [
         "docs/developer/shell_codegen.md",
         "docs/developer/weighted_eri.md",
-        "python/vibeqc_compiler/integral/production_shell_classes.json"
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
       ],
       "required_compiler_capabilities": [
         "#832 profitability/resource planning",
@@ -60,7 +60,7 @@
       "evidence": [
         "docs/developer/shell_codegen.md",
         "docs/maintainer/cuda_ownership.md",
-        "python/vibeqc_compiler/integral/production_shell_classes.json"
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
       ],
       "required_compiler_capabilities": [
         "#830 GVN/redundancy cleanup",

@@ -1,4 +1,4 @@
-"""Convert a local BSE complete JSON file to VibeQC's checked basis schema."""
+"""Convert a local BSE complete JSON file to GenerativeQC's checked basis schema."""
 
 import argparse
 import sys
@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from vibeqc.basis_import import import_bse
+from generativeqc.basis_import import import_bse
 
 
 def main() -> None:

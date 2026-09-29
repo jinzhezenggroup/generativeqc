@@ -73,7 +73,7 @@ int cudaStreamSynchronize(cudaStream_t s) {
   queued.clear(); return 0;
 }
 void cuda_check(int error) { if(error)throw std::runtime_error("injected CUDA failure"); }
-namespace vibeqc_tensor { struct DeviceAllocationError : std::bad_alloc {}; }
+namespace generativeqc_tensor { struct DeviceAllocationError : std::bad_alloc {}; }
 struct TrackingVector : std::vector<double> {
   using std::vector<double>::vector;
   TrackingVector()=default;

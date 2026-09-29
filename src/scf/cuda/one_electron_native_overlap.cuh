@@ -10,7 +10,7 @@
 
 // Retained overlap/kinetic primitives used by independent derivative
 // and force paths; generated value evaluation has a separate owner.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar>
 __device__ inline Scalar primitive_overlap(double alpha, const Vec3<Scalar>& first, double beta,
@@ -195,4 +195,4 @@ __device__ inline void primitive_kinetic_second_center_gradient(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

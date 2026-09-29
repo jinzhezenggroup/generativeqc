@@ -20,8 +20,8 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
-vibeqc::core::System h2() {
-  vibeqc::core::System system;
+generativeqc::core::System h2() {
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, 0.0}}, {1, {0.1, 0.2, 1.4}}};
   system.shells = {
       {0,
@@ -32,8 +32,9 @@ vibeqc::core::System h2() {
        {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}},
   };
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "COSX provider H2 normalization failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "COSX provider H2 normalization failed");
   return system;
 }
 
@@ -45,9 +46,9 @@ double max_error(const std::vector<double>& first, const std::vector<double>& se
   return error;
 }
 
-vibeqc::scf::ResolvedFockBuild mixed_strategy(vibeqc::scf::FockSpin spin,
-                                              unsigned derivative_order = 0) {
-  using namespace vibeqc::scf;
+generativeqc::scf::ResolvedFockBuild mixed_strategy(generativeqc::scf::FockSpin spin,
+                                                    unsigned derivative_order = 0) {
+  using namespace generativeqc::scf;
   auto spec = make_hf_fock_spec(spin);
   spec.derivative_order = derivative_order;
   spec.coulomb.approximation = FockApproximation::DensityFitted;
@@ -56,16 +57,17 @@ vibeqc::scf::ResolvedFockBuild mixed_strategy(vibeqc::scf::FockSpin spin,
   return resolve_fock_build(spec, FockBackend::Cuda, 1.0e-12, 1.0e-10);
 }
 
-vibeqc::scf::ResolvedFockBuild cpu_j_strategy(const vibeqc::scf::ResolvedFockBuild& mixed) {
+generativeqc::scf::ResolvedFockBuild cpu_j_strategy(
+    const generativeqc::scf::ResolvedFockBuild& mixed) {
   auto spec = mixed.spec;
   spec.exchange.present = false;
-  return vibeqc::scf::resolve_fock_build(spec, vibeqc::scf::FockBackend::Cpu,
-                                         mixed.screening_tolerance,
-                                         mixed.metric_relative_threshold);
+  return generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu,
+                                               mixed.screening_tolerance,
+                                               mixed.metric_relative_threshold);
 }
 
-void verify_restricted(const vibeqc::core::System& system, int device) {
-  using namespace vibeqc;
+void verify_restricted(const generativeqc::core::System& system, int device) {
+  using namespace generativeqc;
   const auto strategy = mixed_strategy(scf::FockSpin::Restricted);
   bool legacy_rejected = false;
   try {
@@ -162,8 +164,8 @@ void verify_restricted(const vibeqc::core::System& system, int device) {
           "prepared COSX derivative ignored the resolved arbitrary exchange coefficient");
 }
 
-void verify_unrestricted(const vibeqc::core::System& system, int device) {
-  using namespace vibeqc;
+void verify_unrestricted(const generativeqc::core::System& system, int device) {
+  using namespace generativeqc;
   const auto strategy = mixed_strategy(scf::FockSpin::Unrestricted);
   dft::PreparedCosxFockPlan gpu(system, &system, strategy, 5, device);
 

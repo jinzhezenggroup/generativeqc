@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     PackedLayout,

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.integral.direct_pair_gradient_cuda import (
+from generativeqc_compiler.integral.direct_pair_gradient_cuda import (
     emit_direct_high_order_pair_gradient_header,
 )
 
@@ -46,11 +46,13 @@ def test_order456_consumer_is_fully_compiler_owned() -> None:
     assert '#include "generated_direct_high_order_pair_gradient.cuh"' in force
     assert "direct_native_order456_gradient.cuh" not in force
 
-    generated = (REPOSITORY_ROOT / "cmake/VibeQCGeneratedSources.cmake").read_text(
+    generated = (
+        REPOSITORY_ROOT / "cmake/GenerativeQCGeneratedSources.cmake"
+    ).read_text(encoding="utf-8")
+    cuda = (REPOSITORY_ROOT / "cmake/GenerativeQCCuda.cmake").read_text(
         encoding="utf-8"
     )
-    cuda = (REPOSITORY_ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
-    assert "VIBEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER" in generated
+    assert "GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER" in generated
     assert "generate_direct_pair_gradient.py" in generated
     assert "coulomb_recurrence_cuda.py" in generated
-    assert cuda.count("VIBEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER") == 2
+    assert cuda.count("GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER") == 2

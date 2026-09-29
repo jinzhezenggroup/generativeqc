@@ -7,9 +7,9 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from vibeqc import Atom, GridPolicy
-from vibeqc.calculator import _named_basis_shells
-from vibeqc_compiler.dft.grid import molecular_grid_identity
+from generativeqc import Atom, GridPolicy
+from generativeqc.calculator import _named_basis_shells
+from generativeqc_compiler.dft.grid import molecular_grid_identity
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
@@ -37,7 +37,7 @@ def canonical(value: dict) -> bytes:
 
 def build() -> dict:
     grid = GridPolicy("tight").resolve("pbe", derivative_order=1)
-    basis_bytes = (REPO / "python/vibeqc/data/basis_pack.json").read_bytes()
+    basis_bytes = (REPO / "python/generativeqc/data/basis_pack.json").read_bytes()
     cases = {}
     for path in sorted((ROOT / "inputs").glob("*.json")):
         if path.stem.endswith("-changed"):

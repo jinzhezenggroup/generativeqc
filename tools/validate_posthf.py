@@ -29,10 +29,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 import numpy as np
-from vibeqc.profiles import probe_device
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc.profiles import probe_device
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -41,24 +41,24 @@ from vibeqc_compiler.common.evidence import (
     validate_evidence,
 )
 
-from tools.vibeqc_posthf.conventions import MOBlock
-from tools.vibeqc_posthf.cuda import compile_cuda
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.conventions import MOBlock
+from tools.generativeqc_posthf.cuda import compile_cuda
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.mp2 import restricted_mp2
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import CudaDFSource, NativeSource
+from tools.generativeqc_posthf.mp2 import restricted_mp2
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import CudaDFSource, NativeSource
 
 
 def source_hash() -> typing.Any:
     files = [
         *ROOT.glob("src/posthf/*"),
-        *ROOT.glob("tools/vibeqc_posthf/*.py"),
+        *ROOT.glob("tools/generativeqc_posthf/*.py"),
         ROOT / "src/integrals/s_integrals.cpp",
         ROOT / "src/tensor/cuda_runtime.cuh",
         ROOT / "src/tensor/metrics.hpp",
@@ -363,7 +363,7 @@ def main() -> typing.Any:
                 finally:
                     if generated:
                         df_source.close()
-            # Complete VibeQC HF -> owned snapshot -> provider -> MP2.
+            # Complete GenerativeQC HF -> owned snapshot -> provider -> MP2.
             for backend in backends:
                 own, export = export_rhf(
                     source, backend=backend, generation_id=f"{name}-{backend}-native"

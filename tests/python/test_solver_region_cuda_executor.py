@@ -51,7 +51,7 @@ inline int cudaGraphLaunch(cudaGraphExec_t,cudaStream_t) { ++launches; return 0;
 #include <cassert>
 #include <stdexcept>
 #include "src/runtime/solver_region_cuda.cuh"
-using namespace vibeqc::runtime;
+using namespace generativeqc::runtime;
 int main() {
  GraphBinding key{"region-a",0,reinterpret_cast<void*>(1),
                   reinterpret_cast<void*>(2),reinterpret_cast<void*>(3)};

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import _stationary_cpu_components as components
-from vibeqc_compiler.integral import first_derivative_schedule as schedule
+from generativeqc import _stationary_cpu_components as components
+from generativeqc_compiler.integral import first_derivative_schedule as schedule
 
 
 def test_cpu_aot_inventory_is_complete_and_link_safe(
@@ -71,8 +71,8 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
 ) -> None:
     from types import SimpleNamespace
 
-    from vibeqc import _stationary_cpu_components as component_module
-    from vibeqc import _stationary_cpu_streaming as streaming_module
+    from generativeqc import _stationary_cpu_components as component_module
+    from generativeqc import _stationary_cpu_streaming as streaming_module
 
     dispatch_signature = ct.CFUNCTYPE(
         ct.c_int,
@@ -96,7 +96,7 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
         return 0
 
     library = type("Library", (), {})()
-    library.vibeqc_component_contract_cpu = contract
+    library.generativeqc_component_contract_cpu = contract
     for shard in range(schedule.CPU_AOT_SHARDS):
         setattr(library, schedule.cpu_aot_symbol(shard), dispatch)
 
@@ -189,11 +189,11 @@ def test_component_executor_uses_packaged_aot_without_runtime_compilation(
 
 
 def test_native_library_exports_stationary_cpu_aot() -> None:
-    path = os.environ.get("VIBEQC_LIBRARY")
+    path = os.environ.get("GENERATIVEQC_LIBRARY")
     if not path:
-        pytest.skip("native VibeQC library not supplied")
+        pytest.skip("native GenerativeQC library not supplied")
     library = ct.CDLL(str(Path(path)))
-    assert library.vibeqc_component_contract_cpu
+    assert library.generativeqc_component_contract_cpu
     for shard in range(schedule.CPU_AOT_SHARDS):
         assert getattr(library, schedule.cpu_aot_symbol(shard))
 
@@ -201,13 +201,15 @@ def test_native_library_exports_stationary_cpu_aot() -> None:
 def test_cmake_registers_the_fixed_cpu_aot_inventory() -> None:
     root = Path(__file__).resolve().parents[2]
     top = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    generated = (root / "cmake/VibeQCGeneratedSources.cmake").read_text(
+    generated = (root / "cmake/GenerativeQCGeneratedSources.cmake").read_text(
         encoding="utf-8"
     )
-    assert "VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT" in top
-    assert "foreach(_vibeqc_stationary_cpu_shard RANGE 0 45)" in generated
+    assert "GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT" in top
+    assert "foreach(_generativeqc_stationary_cpu_shard RANGE 0 45)" in generated
     assert "generate_stationary_cpu_derivative_aot.py" in generated
     assert "ADD_TO_TARGET" in generated
     assert "-ffp-contract=off" in generated
-    identity = (root / "cmake/VibeQCSourceIdentity.json").read_text(encoding="utf-8")
+    identity = (root / "cmake/GenerativeQCSourceIdentity.json").read_text(
+        encoding="utf-8"
+    )
     assert "tools/generate_stationary_cpu_derivative_aot.py" in identity

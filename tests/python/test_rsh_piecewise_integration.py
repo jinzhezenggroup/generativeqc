@@ -6,9 +6,9 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.method import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.method import (
     METHOD_CATALOG,
     VV10,
     original_nonlocal_correlation,
@@ -39,7 +39,7 @@ def test_rsh_unary_works_inside_lazy_piecewise_and_iterative_graph(
 def test_range_exchange_and_nonlocal_correlation_are_canonically_composable(
     with_dispersion: typing.Any,
 ) -> None:
-    from vibeqc_compiler.method import r2scan3c_d4_eeq
+    from generativeqc_compiler.method import r2scan3c_d4_eeq
 
     spec = replace(
         METHOD_CATALOG["CAM-B3LYP"],

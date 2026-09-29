@@ -24,22 +24,26 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
-from vibeqc import (
+from generativeqc import (
     Calculator,
     ObservableTarget,
     TargetAccuracy,
     _native,
     compare_observables,
 )
-from vibeqc.profiles import canonical_hash, file_hash
+from generativeqc.profiles import canonical_hash, file_hash
 
-from tools.vibeqc_numerics.audit import ProbeControls, StrictHFAudit, probe_hf
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_scf import solve
-from tools.vibeqc_scf.baselines import transported_density
-from tools.vibeqc_scf.proposals import diagonal_preconditioner, diis_density, mixing
-from tools.vibeqc_scf.replay import TargetOperator, counterfactual, export_trace
-from tools.vibeqc_validation.fixtures import calculator_inputs
+from tools.generativeqc_numerics.audit import ProbeControls, StrictHFAudit, probe_hf
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_scf import solve
+from tools.generativeqc_scf.baselines import transported_density
+from tools.generativeqc_scf.proposals import (
+    diagonal_preconditioner,
+    diis_density,
+    mixing,
+)
+from tools.generativeqc_scf.replay import TargetOperator, counterfactual, export_trace
+from tools.generativeqc_validation.fixtures import calculator_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCES = ROOT / "tests/reference_data/scf-proposals/references.json"
@@ -56,7 +60,7 @@ def load_references(path: typing.Any = REFERENCES) -> typing.Any:
     record = json.loads(path.read_text())
     digest = record.pop("record_hash")
     if (
-        record["schema"] != "vibeqc.scf_reference_families"
+        record["schema"] != "generativeqc.scf_reference_families"
         or record["schema_version"] != 1
         or canonical_hash(record) != digest
         or record["provenance"]["pyscf"] != "2.14.0"
@@ -376,14 +380,14 @@ def run(
         ROOT / "src/scf/proposals.hpp",
         ROOT / "src/scf/proposal_bridge.hpp",
         ROOT / "src/posthf/bridge.cpp",
-        ROOT / "tools/vibeqc_numerics/audit.py",
-        ROOT / "tools/vibeqc_posthf/sources.py",
-        ROOT / "python/vibeqc/accuracy.py",
-        ROOT / "python/vibeqc/profiles.py",
-        *sorted((ROOT / "tools/vibeqc_scf").glob("*.py")),
+        ROOT / "tools/generativeqc_numerics/audit.py",
+        ROOT / "tools/generativeqc_posthf/sources.py",
+        ROOT / "python/generativeqc/accuracy.py",
+        ROOT / "python/generativeqc/profiles.py",
+        *sorted((ROOT / "tools/generativeqc_scf").glob("*.py")),
     ]
     report = {
-        "schema": "vibeqc.scf_complete_solve_benchmark",
+        "schema": "generativeqc.scf_complete_solve_benchmark",
         "schema_version": 1,
         "rows": rows,
         "target": TARGET.to_dict(),

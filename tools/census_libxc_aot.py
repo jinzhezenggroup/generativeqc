@@ -18,9 +18,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.common.compiler_work import compiler_work_budget
-from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.xc import bulk_aot, libxc_bulk
+from generativeqc_compiler.common.compiler_work import compiler_work_budget
+from generativeqc_compiler.common.provenance import atomic_json
+from generativeqc_compiler.xc import bulk_aot, libxc_bulk
 
 
 def main(argv: list[str] | None = None) -> int:

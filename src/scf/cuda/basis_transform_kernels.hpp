@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_initialize_direct_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -42,4 +42,4 @@ void launch_transform_direct_fock_right_kernel(dim3 grid, dim3 block, std::size_
                                                const double* temporary, const double* hcore,
                                                const std::uint8_t* active, double* fock);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

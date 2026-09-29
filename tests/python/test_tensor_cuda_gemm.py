@@ -6,8 +6,14 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import Index, IndexSpace, TensorSpec, einsum, input_tensor
-from vibeqc_compiler.tensor.cuda_gemm import fp64_coefficient, gemm_contract
+from generativeqc_compiler.tensor import (
+    Index,
+    IndexSpace,
+    TensorSpec,
+    einsum,
+    input_tensor,
+)
+from generativeqc_compiler.tensor.cuda_gemm import fp64_coefficient, gemm_contract
 
 
 def node_for(expression: typing.Any, dimensions: typing.Any) -> typing.Any:

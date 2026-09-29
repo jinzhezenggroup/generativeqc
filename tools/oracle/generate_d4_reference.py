@@ -120,7 +120,7 @@ def main() -> None:
         )
     adapter = ROOT / "tools/oracle/d4_fixed_charge.f90"
     records = []
-    with tempfile.TemporaryDirectory(prefix="vibeqc-d4-oracle-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="generativeqc-d4-oracle-") as tmp:
         exe = Path(tmp) / "oracle"
         subprocess.run(
             [
@@ -169,7 +169,7 @@ namespace d4_tests {
 struct OracleFixture {
   const char* name;
   int n;
-  vibeqc::dft::dispersion::D4Parameters parameters;
+  generativeqc::dft::dispersion::D4Parameters parameters;
   std::array<std::int32_t, 8> z;
   std::array<double, 24> xyz;
   std::array<double, 8> q;
@@ -181,7 +181,7 @@ inline const OracleFixture kOracleFixtures[] = {
 """
     for name, n, numbers, xyz, charges, params, values in records:
         par = (
-            "{vibeqc::dft::dispersion::D4ReferenceModel::gfn2, "
+            "{generativeqc::dft::dispersion::D4ReferenceModel::gfn2, "
             + ", ".join(map(repr, params))
             + ", 30.0, 50.0, 25.0}"
         )

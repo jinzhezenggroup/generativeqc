@@ -7,17 +7,17 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_mp2 import PreparedMP2Energy
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_mp2 import PreparedMP2Energy
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_NATIVE_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_NATIVE_TEST") != "1",
     reason="requires explicit native CPU library selection; fixture tests are separate",
 )
 
@@ -70,7 +70,7 @@ def bounded_reference(
     source: typing.Any, *, budget: typing.Any = 256 << 20, iterations: typing.Any = 100
 ) -> typing.Any:
     lib = source._library
-    fn = lib.vibeqc_posthf_reference_v1
+    fn = lib.generativeqc_posthf_reference_v1
     ptr = ct.POINTER(ct.c_double)
     fn.argtypes = [
         ct.c_void_p,

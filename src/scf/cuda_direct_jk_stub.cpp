@@ -3,9 +3,9 @@
 #include "runtime/provider_registry.hpp"
 #include "scf/cuda_direct_jk.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
-vibeqc_status unavailable(std::string& detail) {
+generativeqc_status unavailable(std::string& detail) {
   return runtime::provider_not_implemented(
       fock_provider_registration(FockApproximation::Exact, FockBackend::Cuda), detail,
       "CUDA direct J/K");
@@ -18,43 +18,55 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t, std::size_t, std::size_t, s
       "CUDA direct J/K allocation inventory"));
 }
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
-                                             std::size_t shells, std::size_t primitives) {
-  return cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, 0);
+                                             std::size_t shells, std::size_t primitives,
+                                             unsigned derivative_order) {
+  return cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, derivative_order);
 }
-vibeqc_status create_cuda_direct_jk_plan(int, const std::vector<core::System>&, unsigned, double,
-                                         std::size_t, CudaDirectJkPlan** output,
-                                         CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+generativeqc_status create_cuda_direct_jk_plan(int, const std::vector<core::System>&, unsigned,
+                                               double, std::size_t, CudaDirectJkPlan** output,
+                                               CudaDirectJkDiagnostic& diagnostic,
+                                               std::string& detail) {
   if (output) *output = nullptr;
   diagnostic = {};
   return unavailable(detail);
 }
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan*) noexcept {}
-vibeqc_status execute_cuda_direct_jk(CudaDirectJkPlan*, FockBuildSpec, const std::vector<double>&,
-                                     const std::vector<double>&, std::vector<double>&,
-                                     std::vector<double>&, std::vector<double>&,
-                                     std::string& detail) {
+generativeqc_status execute_cuda_direct_jk(CudaDirectJkPlan*, FockBuildSpec,
+                                           const std::vector<double>&, const std::vector<double>&,
+                                           std::vector<double>&, std::vector<double>&,
+                                           std::vector<double>&, std::string& detail) {
   return unavailable(detail);
 }
-vibeqc_status execute_cuda_direct_energy_derivative(CudaDirectJkPlan*, FockBuildSpec,
-                                                    const std::vector<double>&,
-                                                    const std::vector<double>&,
-                                                    std::vector<double>&, std::string& detail) {
+generativeqc_status execute_cuda_direct_energy_derivative(CudaDirectJkPlan*, FockBuildSpec,
+                                                          const std::vector<double>&,
+                                                          const std::vector<double>&,
+                                                          std::vector<double>&,
+                                                          std::string& detail) {
   return unavailable(detail);
 }
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan*) noexcept {
   return {};
 }
-vibeqc_status execute_cuda_direct_jk_item(CudaDirectJkPlan*, std::size_t, FockBuildSpec,
-                                          const std::vector<double>&, const std::vector<double>&,
-                                          std::vector<double>&, std::vector<double>&,
-                                          std::vector<double>&, std::string& detail) {
+generativeqc_status execute_cuda_direct_jk_item(CudaDirectJkPlan*, std::size_t, FockBuildSpec,
+                                                const std::vector<double>&,
+                                                const std::vector<double>&, std::vector<double>&,
+                                                std::vector<double>&, std::vector<double>&,
+                                                std::string& detail) {
   return unavailable(detail);
 }
-vibeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan*, std::size_t,
-                                                         FockBuildSpec, const std::vector<double>&,
-                                                         const std::vector<double>&,
-                                                         std::vector<double>&,
-                                                         std::string& detail) {
+generativeqc_status execute_cuda_direct_energy_derivative_item(
+    CudaDirectJkPlan*, std::size_t, FockBuildSpec, const std::vector<double>&,
+    const std::vector<double>&, std::vector<double>&, std::string& detail) {
   return unavailable(detail);
 }
-}  // namespace vibeqc::scf
+generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan*, FockSpin, double, double, const double*, const double*, std::size_t,
+    std::vector<double>&, std::string& detail) {
+  return unavailable(detail);
+}
+generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(
+    CudaDirectJkPlan*, FockSpin, double, double, double, double, const double*, const double*,
+    std::size_t, std::vector<double>&, std::string& detail) {
+  return unavailable(detail);
+}
+}  // namespace generativeqc::scf

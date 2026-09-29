@@ -7,7 +7,7 @@
 
 #include "scf/cuda/scf_constants.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Common FP64 HF energy comparison budget. Both quartet scatter and fitted
  * contractions/reductions lose a few representable values at stationarity.
@@ -49,4 +49,4 @@ __device__ inline double maximum_physical_residual(const double* values, std::si
   return __shfl_sync(0xffffffffU, maximum, 0);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

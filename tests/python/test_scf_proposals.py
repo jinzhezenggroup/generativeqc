@@ -6,25 +6,25 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
-from tools.vibeqc_numerics.audit import ProbeControls, StrictHFAudit, probe_hf
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_scf import DensityProposal, ScfItem, solve
-from tools.vibeqc_scf.proposals import (
+from tools.generativeqc_numerics.audit import ProbeControls, StrictHFAudit, probe_hf
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_scf import DensityProposal, ScfItem, solve
+from tools.generativeqc_scf.proposals import (
     OccupiedProposal,
     RotationProposal,
     diis_density,
     mixing,
 )
-from tools.vibeqc_scf.replay import (
+from tools.generativeqc_scf.replay import (
     TargetOperator,
     counterfactual,
     export_trace,
     load_trace,
     restore_source,
 )
-from tools.vibeqc_scf.state import metric_root
+from tools.generativeqc_scf.state import metric_root
 
 ATOMS = [(2, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
 
@@ -393,7 +393,7 @@ def test_repeated_bad_model_is_disabled_so_traditional_diis_can_recover() -> Non
 
 
 def test_transport_and_extrapolation_are_explicit_new_validated_states() -> None:
-    from tools.vibeqc_scf.baselines import transported_density
+    from tools.generativeqc_scf.baselines import transported_density
 
     source, model = setup()
     with source:
@@ -422,7 +422,7 @@ def test_dataset_split_rejects_adjacent_geometry_leakage(
 ) -> None:
     import json
 
-    from vibeqc.profiles import canonical_hash
+    from generativeqc.profiles import canonical_hash
 
     from tools.validate_scf_proposals import REFERENCES, load_references
 

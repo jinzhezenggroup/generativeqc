@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions, ResourceBudget, _native
+from generativeqc import Calculator, GridSpec, KsOptions, ResourceBudget, _native
 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
@@ -25,7 +25,7 @@ def test_named_hybrid_still_requires_explicit_grid(method: str) -> None:
 def test_noncurrent_schema_rejects_explicit_hybrid_without_resolving_default(
     method: str, version: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    library = SimpleNamespace(vibeqc_ks_options_version=lambda: version)
+    library = SimpleNamespace(generativeqc_ks_options_version=lambda: version)
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     with pytest.raises(NotImplementedError, match="semantic KS execution-plan ABI"):
         Calculator(method=method, ks_options=KsOptions(grid=GridSpec()))

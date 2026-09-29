@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.periodic import PeriodicCell, PeriodicSystem
+from generativeqc_compiler.periodic import PeriodicCell, PeriodicSystem
 
 
 @pytest.mark.parametrize("boolean", [True, np.bool_(True)])

@@ -7,7 +7,7 @@
 
 #include "response/resident_krylov.hpp"
 
-namespace vibeqc::response {
+namespace generativeqc::response {
 namespace {
 using WorkspaceVector = runtime::TrackedVector<double>;
 
@@ -301,4 +301,4 @@ ResidentGmresResult solve_gmres_resident(const GmresPlan& plan, ResidentKrylovBa
   return finish(slots.best_x, GmresStatus::max_iterations, beta);
 }
 
-}  // namespace vibeqc::response
+}  // namespace generativeqc::response

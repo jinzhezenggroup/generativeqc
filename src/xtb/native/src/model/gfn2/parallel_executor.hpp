@@ -1,11 +1,11 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_PARALLEL_EXECUTOR_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_PARALLEL_EXECUTOR_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_PARALLEL_EXECUTOR_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_PARALLEL_EXECUTOR_HPP
 
 #include <cstddef>
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 /*
  * Optional chunked executor used to parallelize intra-system phases when the
@@ -37,6 +37,6 @@ inline bool scc_parallel_enabled(const SccParallelExecutor& executor) noexcept {
   return executor.dispatch_chunks != nullptr;
 }
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_PARALLEL_EXECUTOR_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_PARALLEL_EXECUTOR_HPP

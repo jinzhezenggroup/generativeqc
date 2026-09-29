@@ -6,7 +6,7 @@
 
 #include "dft/density_source.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 class AoBasis;
 class MolecularGrid;
 namespace nlc {
@@ -45,4 +45,4 @@ SpinVv10Integral integrate_vv10_uks(const AoBasis& basis, const MolecularGrid& g
                                     Vv10DensityDomain domain = Vv10DensityDomain::StrictPositive);
 
 }  // namespace nlc
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

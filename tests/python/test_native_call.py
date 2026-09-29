@@ -1,7 +1,7 @@
 import typing
 
 import pytest
-from vibeqc_compiler.common.native_call import checked_native_call
+from generativeqc_compiler.common.native_call import checked_native_call
 
 
 def test_checked_native_call_success() -> None:

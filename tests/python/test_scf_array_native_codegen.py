@@ -7,9 +7,12 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from vibeqc_compiler.array_api import VibeArray
-from vibeqc_compiler.array_api.scf import density_program, weighted_density_program
-from vibeqc_compiler.tensor.scf import (
+    from generativeqc_compiler.array_api import VibeArray
+from generativeqc_compiler.array_api.scf import (
+    density_program,
+    weighted_density_program,
+)
+from generativeqc_compiler.tensor.scf import (
     diis_extrapolation_program,
     diis_gram_program,
     hf_force_program,
@@ -70,7 +73,7 @@ def test_native_generator_participates_in_source_identity(
 ) -> None:
     from pathlib import Path
 
-    from vibeqc import autotune
+    from generativeqc import autotune
 
     root = Path(__file__).resolve().parents[2]
     before = autotune.source_identity(root)
@@ -90,9 +93,9 @@ def test_fixed_native_specialization_rejects_changed_coefficient_layout(
 ) -> None:
     from dataclasses import replace
 
-    from vibeqc_compiler.array_api import namespace as xp
-    from vibeqc_compiler.array_api import trace
-    from vibeqc_compiler.tensor.scf import (
+    from generativeqc_compiler.array_api import namespace as xp
+    from generativeqc_compiler.array_api import trace
+    from generativeqc_compiler.tensor.scf import (
         density_input_specs,
         weighted_density_input_specs,
     )

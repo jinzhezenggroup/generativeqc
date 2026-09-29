@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     AccuracyAssessment,
     AdaptiveNumericsPolicy,
     ContributionLedger,
@@ -18,7 +18,7 @@ from vibeqc import (
     TargetAccuracy,
     TargetErrorBudget,
 )
-from vibeqc.accuracy import ObservableTarget
+from generativeqc.accuracy import ObservableTarget
 
 
 def delta(energy: float, force: float, *, natom: int = 2) -> ObservableDelta:

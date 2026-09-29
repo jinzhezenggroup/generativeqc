@@ -22,10 +22,10 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import atomic_json
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     PrecisionDirective,
@@ -35,9 +35,9 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     lower_precision,
 )
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
-from vibeqc_compiler.tensor.cuda_search import estimate_schedule
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
 
 def fixture(size: int, seed: int) -> tuple[Program, dict[str, np.ndarray]]:
@@ -157,7 +157,7 @@ def run(args: argparse.Namespace) -> dict:
             "plan_identity": plan.identity,
         }
     return {
-        "schema": "vibeqc.tensor.precision-qualification.v1",
+        "schema": "generativeqc.tensor.precision-qualification.v1",
         "architecture": args.architecture,
         "size": args.size,
         "seed": args.seed,

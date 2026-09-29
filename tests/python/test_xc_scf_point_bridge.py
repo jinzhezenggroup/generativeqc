@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import _native
-from vibeqc._ks_snapshot import _scf_xc_points
+from generativeqc import _native
+from generativeqc._ks_snapshot import _scf_xc_points
 
 
 def test_scf_point_bridge_matches_independent_domain_fixture() -> None:

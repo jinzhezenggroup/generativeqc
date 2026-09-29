@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 
-from tools.vibeqc_validation.xc_retirement import (
+from tools.generativeqc_validation.xc_retirement import (
     LEGACY_MODULE_FILES,
     errors,
     inventory,
@@ -14,7 +14,7 @@ from tools.vibeqc_validation.xc_retirement import (
 
 ROOT = Path(__file__).resolve().parents[2]
 
-SEMILOCAL_LEGACY = ROOT / "python/vibeqc_compiler/xc/expressions.py"
+SEMILOCAL_LEGACY = ROOT / "python/generativeqc_compiler/xc/expressions.py"
 
 
 def test_semilocal_legacy_module_is_physically_retired() -> None:
@@ -29,7 +29,7 @@ def test_xc_retirement_gate_rejects_no_new_legacy_edges() -> None:
 
 def test_xc_retirement_inventory_is_explicit_and_monotone() -> None:
     report = inventory(ROOT)
-    assert report["schema"] == "vibeqc.xc-retirement-inventory.v1"
+    assert report["schema"] == "generativeqc.xc-retirement-inventory.v1"
     consumers = scan_legacy_consumers(ROOT)
     assert len(report["consumers"]) == len(consumers)
     assert {row["module"] for row in report["legacy_sources"]} <= set(
@@ -39,8 +39,8 @@ def test_xc_retirement_inventory_is_explicit_and_monotone() -> None:
 
 def test_retired_xc_handwritten_builders_stay_deleted() -> None:
     sources = (
-        ROOT / "python/vibeqc_compiler/xc/semilocal_family.py",
-        ROOT / "python/vibeqc_compiler/xc/rsh_expressions.py",
+        ROOT / "python/generativeqc_compiler/xc/semilocal_family.py",
+        ROOT / "python/generativeqc_compiler/xc/expression_dispatch.py",
     )
     function_names = set()
     for source in sources:
@@ -72,10 +72,10 @@ def test_retired_xc_handwritten_builders_stay_deleted() -> None:
 
 
 def test_xc_retirement_gate_detects_new_consumer(tmp_path: Path) -> None:
-    source = tmp_path / "python/vibeqc_compiler/xc/new_backend.py"
+    source = tmp_path / "python/generativeqc_compiler/xc/new_backend.py"
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from vibeqc_compiler.xc.wb97mv_expressions import energy_expression\n"
+        "from generativeqc_compiler.xc.wb97mv_expressions import energy_expression\n"
     )
     failures = errors(tmp_path)
     assert len(failures) == 1
@@ -83,42 +83,45 @@ def test_xc_retirement_gate_detects_new_consumer(tmp_path: Path) -> None:
 
 
 def test_xc_retirement_gate_detects_new_expression_module(tmp_path: Path) -> None:
-    source = tmp_path / "python/vibeqc_compiler/xc/new_expressions.py"
+    source = tmp_path / "python/generativeqc_compiler/xc/new_expressions.py"
     source.parent.mkdir(parents=True)
     source.write_text("def energy_expression():\n    return None\n")
     failures = errors(tmp_path)
     expected = (
-        "python/vibeqc_compiler/xc/new_expressions.py: "
+        "python/generativeqc_compiler/xc/new_expressions.py: "
         "untracked handwritten-looking XC expression module"
     )
     assert failures == [expected]
 
 
 def test_xc_retirement_final_gate_detects_remaining_consumer(tmp_path: Path) -> None:
-    source = tmp_path / "python/vibeqc_compiler/xc/expression_dispatch.py"
+    source = tmp_path / "python/generativeqc_compiler/xc/expression_dispatch.py"
     source.parent.mkdir(parents=True)
     source.write_text("from .rsh_expressions import energy_expression\n")
     failures = errors(tmp_path, require_no_consumers=True)
-    assert failures == [
-        (
-            "python/vibeqc_compiler/xc/expression_dispatch.py:1: legacy XC consumer remains "
-            "vibeqc_compiler.xc.rsh_expressions"
-        )
-    ]
+    newly_forbidden = (
+        "python/generativeqc_compiler/xc/expression_dispatch.py:1: new legacy XC consumer "
+        "generativeqc_compiler.xc.rsh_expressions (import-from)"
+    )
+    remaining = (
+        "python/generativeqc_compiler/xc/expression_dispatch.py:1: legacy XC consumer remains "
+        "generativeqc_compiler.xc.rsh_expressions"
+    )
+    assert failures == [newly_forbidden, remaining]
 
 
 def test_retired_direct_program_import_is_not_reauthorized(tmp_path: Path) -> None:
     """Moving the retained bridge must not allow the former consumer back in."""
-    source = tmp_path / "python/vibeqc_compiler/xc/program.py"
+    source = tmp_path / "python/generativeqc_compiler/xc/program.py"
     source.parent.mkdir(parents=True)
     source.write_text("from .expressions import energy_expression\n")
     newly_forbidden = (
-        "python/vibeqc_compiler/xc/program.py:1: new legacy XC consumer "
-        "vibeqc_compiler.xc.expressions (import-from)"
+        "python/generativeqc_compiler/xc/program.py:1: new legacy XC consumer "
+        "generativeqc_compiler.xc.expressions (import-from)"
     )
     remaining = (
-        "python/vibeqc_compiler/xc/program.py:1: legacy XC consumer remains "
-        "vibeqc_compiler.xc.expressions"
+        "python/generativeqc_compiler/xc/program.py:1: legacy XC consumer remains "
+        "generativeqc_compiler.xc.expressions"
     )
     assert errors(tmp_path) == [newly_forbidden]
     assert errors(tmp_path, require_no_consumers=True) == [newly_forbidden, remaining]

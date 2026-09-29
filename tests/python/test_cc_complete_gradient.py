@@ -10,35 +10,35 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import Index, IndexSpace, Program, TensorSpec, execute
+from generativeqc_compiler.tensor import Index, IndexSpace, Program, TensorSpec, execute
 
 from tools.cc_gradient_fixtures import CASES, inputs, load, source_arguments
-from tools.vibeqc_cc import BoundCCSDLambda, BoundCCSDResponse, solve
-from tools.vibeqc_cc import complete_gradient as module
-from tools.vibeqc_cc import lambda_solver as lambda_solver_module
-from tools.vibeqc_cc.complete_gradient import (
+from tools.generativeqc_cc import BoundCCSDLambda, BoundCCSDResponse, solve
+from tools.generativeqc_cc import complete_gradient as module
+from tools.generativeqc_cc import lambda_solver as lambda_solver_module
+from tools.generativeqc_cc.complete_gradient import (
     BoundCCSDGradient,
     CCSDGradientOptions,
     complete_gradient_validation,
     gradient_capabilities,
 )
-from tools.vibeqc_cc.gradient_equations import (
+from tools.generativeqc_cc.gradient_equations import (
     build_ao_eri_weight_block_program,
     build_ao_weight_program,
     build_hamiltonian_programs,
 )
-from tools.vibeqc_cc.lambda_equations import PARAMETERS
-from tools.vibeqc_cc.oracle import dense_feeds, random_case
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import (
+from tools.generativeqc_cc.lambda_equations import PARAMETERS
+from tools.generativeqc_cc.oracle import dense_feeds, random_case
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import (
     NativeSource,
     _valid_cuda_device,
     _valid_size_t_budget,
 )
-from tools.vibeqc_response.implicit import ImplicitSolveError
-from tools.vibeqc_response.oracle import _expm_small, explicit_rhf_response_matrix
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_response.implicit import ImplicitSolveError
+from tools.generativeqc_response.oracle import _expm_small, explicit_rhf_response_matrix
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 def _source(value: typing.Any) -> typing.Any:

@@ -5,14 +5,14 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc import _native
-from vibeqc.nonlocal_runtime import NonlocalFixedGridPlan
-from vibeqc_compiler.dft import (
+from generativeqc import _native
+from generativeqc.nonlocal_runtime import NonlocalFixedGridPlan
+from generativeqc_compiler.dft import (
     nonlocal_energy_reference,
     nonlocal_explicit_geometry_derivatives_reference,
     nonlocal_feature_derivatives_reference,
 )
-from vibeqc_compiler.method import original_nonlocal_correlation
+from generativeqc_compiler.method import original_nonlocal_correlation
 
 
 @pytest.fixture
@@ -183,7 +183,11 @@ def test_native_cuda_matches_cpu_on_real_device_when_available(
         cuda.weight_derivative, cpu.weight_derivative, rtol=5e-13, atol=5e-15
     )
     assert diagnostic.host_workspace_bytes == 7 * len(density) * 8
-    assert diagnostic.device_workspace_bytes == (21 * len(density) + 1) * 8
+    partner_blocks = (len(density) + 127) // 128
+    assert (
+        diagnostic.device_workspace_bytes
+        == (22 * len(density) + partner_blocks + 2) * 8
+    )
     assert diagnostic.workspace_bytes == (
         diagnostic.host_workspace_bytes + diagnostic.device_workspace_bytes
     )
@@ -235,7 +239,7 @@ def test_native_failure_does_not_partially_publish_caller_buffers(
             weight.size,
             -17,
         )
-        status = library.vibeqc_nonlocal_plan_execute(
+        status = library.generativeqc_nonlocal_plan_execute(
             plan._plan, ctypes.byref(inputs), ctypes.byref(output)
         )
 

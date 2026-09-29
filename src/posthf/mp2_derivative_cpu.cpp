@@ -6,7 +6,7 @@
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_derivative_common.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 
 std::vector<double> conventional_derivative_cpu(const core::System& system,
                                                 const hf::PhysicalReference& reference,
@@ -40,4 +40,4 @@ std::vector<double> density_fitted_derivative_cpu(const core::System& orbital,
   return gradient;
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

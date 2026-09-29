@@ -111,7 +111,7 @@ Redistributed or derived material:
   `fa8a4416e8fe093d0075bc10ac875494c2a449a9`. Exact source paths and hashes
   are recorded in `data/parameters/manifest.json`.
 - GFN1 parameter source bytes are remote-only source-registry inputs from the
-  pinned xTBloom/tblite export. Generated VibeQC products keep their audited
+  pinned xTBloom/tblite export. Generated GenerativeQC products keep their audited
   identities without vendoring that source tree.
   `data/parameters/gfn1.hpp` is deterministically regenerated from that JSON
   by `tools/parameters/generate_gfn1.py` and must reproduce the audited
@@ -122,7 +122,7 @@ Redistributed or derived material:
   source and legal paths, hashes, exporter identity, and a diagnostic dxtb
   semantic cross-check are recorded in
   the pinned source metadata; `upstream/manifest.json` records the
-  VibeQC source/product identity. The mixed-source generated header carries
+  GenerativeQC source/product identity. The mixed-source generated header carries
   `LGPL-3.0-or-later AND Apache-2.0`.
 - The Stewart STO-nG tables in `data/parameters/tblite_sto.hpp` come from
   `src/tblite/basis/slater.f90` at that revision.
@@ -265,7 +265,7 @@ mctc-lib repository: <https://github.com/grimme-lab/mctc-lib>
 mctc-lib license: `Apache-2.0` (`LICENSES/Apache-2.0.txt`).
 
 The GFN2-D4 reference data consumed by this scoped runtime is shared from
-VibeQC's canonical `src/dft/dispersion/d4_data.hpp` table rather than copied
+GenerativeQC's canonical `src/dft/dispersion/d4_data.hpp` table rather than copied
 into this runtime. It is derived from dftd4 revision
 `6e1f59c3f39d919a2dbef0601d2576727c8b30e8`.
 The GFN1 atomic input and exponential coordination data, and the D4
@@ -277,7 +277,7 @@ double-exponential convention, while the H0 implementation retains its
 Mantina atomic-radii table. GFN1 also retains the same atomic radii for H0 and
 halogen correction, Pauling electronegativities for H0, and the 4/3-scaled
 covalent radii and exponential CN convention. Exact dftd4 source blobs are
-recorded in VibeQC's canonical `src/dft/dispersion/d4_manifest.json`; exact mctc-lib source paths,
+recorded in GenerativeQC's canonical `src/dft/dispersion/d4_manifest.json`; exact mctc-lib source paths,
 blobs, and hashes are recorded in `data/parameters/mctc_manifest.json`. The
 original focused notice and upstream license copies remain in
 `data/parameters/d4.NOTICE` and `data/parameters/licenses/`.
@@ -462,7 +462,7 @@ Repository: <https://github.com/pytorch/pytorch>
 License: `BSD-3-Clause` (retained by the separately installed distribution).
 
 The required Python and wheel CI jobs install PyTorch 2.13.0 from PyPI solely
-to execute the public `vibeqc_xtb_torch` CPU/autograd tests on Linux, macOS arm64,
+to execute the public `generativeqc_xtb_torch` CPU/autograd tests on Linux, macOS arm64,
 and Windows AMD64. The canonical resolution and artifact hashes, including
 PyTorch's separately installed transitive dependencies, are recorded in
 `uv.lock`. PyTorch 2.13 publishes no canonical-PyPI runtime wheel for macOS
@@ -481,7 +481,7 @@ Repository: <https://github.com/pytorch/pytorch>
 License: `BSD-3-Clause` (`LICENSES/BSD-3-Clause.txt`; Copyright (c) 2016,
 Facebook, Inc.)
 
-The optional compiled torch integration `libvibeqc_xtb_torch_ext` is written
+The optional compiled torch integration `libgenerativeqc_xtb_torch_ext` is written
 against the LibTorch Stable ABI. The exact transitive `#include` closure of
 its stable-ABI headers is vendored in `cmake/3rdparty/torch-stable/` from the
 PyPI `torch 2.12.1` wheel so the extension compiles without downloading torch.
@@ -586,7 +586,7 @@ Repository: <https://github.com/pyodide/pyodide>
 
 The CPython 3.14 Pyodide wheel redistributes the official Pyodide 314.0.4
 `libopenblas` 0.3.28 WebAssembly side module under the content-qualified name
-`libvibeqc_xtb_openblas-6a78812c.so`. It is a wheel build input, not a Python
+`libgenerativeqc_xtb_openblas-6a78812c.so`. It is a wheel build input, not a Python
 runtime dependency: xTBloom does not declare SciPy, Pyodide `libopenblas`, or a
 separate OpenBLAS package in `Requires-Dist`. A narrow xTBloom adapter provides
 only the column-major LP64 LAPACKE work routines needed by GFN2 inference.
@@ -628,7 +628,7 @@ and remain under their vendor licenses. xTBloom artifacts must not bundle their
 shared or static library files. CUDA providers may be installed separately
 through the `cuda12` Python extra or supplied by the system. MKL is not a
 Python dependency; native users may explicitly select a compatible
-`libmkl_rt` through `VIBEQC_XTB_CPU_LINALG_LIBRARY`. That selection is used only to
+`libmkl_rt` through `GENERATIVEQC_XTB_CPU_LINALG_LIBRARY`. That selection is used only to
 validate one coherent adjacent `libmkl_intel_lp64`, `libmkl_sequential`, and
 `libmkl_core` cohort. xTBloom's private shim loads those unbundled components in
 a separate link-map namespace and does not load the selected `libmkl_rt`.
@@ -660,7 +660,7 @@ Willow Garage/OSRF, and Intel grants reached by the compiled include graph.
 Eigen is a WebAssembly build input, not a vendored repository dependency.
 `web/CMakeLists.txt` obtains the official release archive only when the Web demo
 is enabled, verifies the fixed SHA-256 before extraction, and may instead use
-the same local archive supplied through `VIBEQC_XTB_WEB_EIGEN_ARCHIVE` for an
+the same local archive supplied through `GENERATIVEQC_XTB_WEB_EIGEN_ARCHIVE` for an
 offline build. Native builds do not fetch Eigen. The wrapper uses Eigen's
 `SelfAdjointEigenSolver`, `LLT`, matrix multiplication, and triangular solves
 behind the LP64 LAPACKE/CBLAS symbols required by xTBloom's unchanged runtime
@@ -677,7 +677,7 @@ acquisition policy, and every retained legal file's exact size and digest. The
 repository and source distribution retain that compact provenance/legal
 payload but not the archive or header tree. Native CMake installs and Python
 wheels exclude all Eigen material. The Pages artifact carries the compiled
-side module as `vibeqc_xtb_web.side.wasm`, the five exact upstream license records,
+side module as `generativeqc_xtb_web.side.wasm`, the five exact upstream license records,
 the four notice-bearing headers above, and the provenance manifest so browser
 recipients can identify and obtain the corresponding source.
 
@@ -824,7 +824,7 @@ the distribution boundary are recorded in `web/openchemlib_manifest.json`.
 
 The OpenChemLib module and resource bytes are supplied by the selected CDN
 directly to the user's browser; they are not vendored into the repository,
-linked into `vibeqc_xtb_web.wasm`, copied into the Pages artifact, installed with
+linked into `generativeqc_xtb_web.wasm`, copied into the Pages artifact, installed with
 the native library, or bundled in Python wheels. The deployed site does retain
 the license text and provenance manifest next to its other legal material.
 

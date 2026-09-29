@@ -20,16 +20,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from vibeqc import _native
-from vibeqc.profiles import probe_device
+from generativeqc import _native
+from generativeqc.profiles import probe_device
 
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     CudaDirectJKBackend,
     GMRESOptions,
     RHFResponseOperator,
@@ -62,7 +62,7 @@ def _oracle(reference: object, arrays: dict) -> np.ndarray:
     c = reference.coefficients
     mo = np.einsum("up,vq,wr,xs,uvwx->pqrs", c, c, c, c, arrays["ao"], optimize=True)
     # The oracle helper only needs the reference/layout and a MO-block reader.
-    from tools.vibeqc_response import DenseAOResponseBackend
+    from tools.generativeqc_response import DenseAOResponseBackend
 
     backend = DenseAOResponseBackend(arrays["ao"])
     problem = RHFResponseOperator.build_problem(reference, backend)
@@ -220,8 +220,12 @@ def _consumer() -> list[dict]:
     """Gate complete HVPs with PySCF; retain native assembly parity separately."""
     import pyscf
 
-    from tools.vibeqc_hessian import NativeRHFState, analytic_hessian, rhf_hvp_many
-    from tools.vibeqc_validation.hessian_fixtures import (
+    from tools.generativeqc_hessian import (
+        NativeRHFState,
+        analytic_hessian,
+        rhf_hvp_many,
+    )
+    from tools.generativeqc_validation.hessian_fixtures import (
         fixture_inputs,
         oracle_analytic_hessian,
     )
@@ -309,7 +313,7 @@ def main() -> None:
     if patch:
         args.output.with_suffix(".patch").write_bytes(patch)
     result = {
-        "schema": "vibeqc.response-resident-evidence/v2",
+        "schema": "generativeqc.response-resident-evidence/v2",
         "source": {
             "revision": revision,
             "dirty": bool(patch),

@@ -1,7 +1,7 @@
 """Native CUDA CPKS with the same independent endpoint gates as CPU KS.
 
 The shared oracle assertions use libcint/Libxc and independently reconverged
-perturbations. They do not substitute a CPU VibeQC response as the reference.
+perturbations. They do not substitute a CPU GenerativeQC response as the reference.
 """
 
 import os
@@ -10,6 +10,10 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, KsOptions
+from generativeqc._ks_snapshot import NativeKsSnapshot
+from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+from generativeqc_compiler.xc import functional
 from test_ecp import fixture as _ecp_fixture
 from test_response_native_rks import (
     ATOMS,
@@ -31,13 +35,9 @@ from test_response_native_uks import (
 from test_response_native_uks import (
     test_spin_action_finite_rotations_and_transpose as _check_uks_action,
 )
-from vibeqc import Calculator, KsOptions
-from vibeqc._ks_snapshot import NativeKsSnapshot
-from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-from vibeqc_compiler.xc import functional
 
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     NativeJKBackend,
     NativeRKSResponse,
     NativeUKSResponse,
@@ -45,10 +45,10 @@ from tools.vibeqc_response import (
     solve,
     solve_many,
 )
-from tools.vibeqc_response.native_ks import _NativeKSXCKernel
+from tools.generativeqc_response.native_ks import _NativeKSXCKernel
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated real GPU",
 )
 
@@ -169,7 +169,9 @@ def test_cuda_resource_lifetime_and_identity_failures(
         # A legacy library's CUDA wire layout alone does not prove that no
         # ECP/core-adjusted Hamiltonian was used. Require the live native proof.
         with monkeypatch.context() as legacy:
-            legacy.setattr(batch._library, "vibeqc_ks_snapshot_hamiltonian_v1", None)
+            legacy.setattr(
+                batch._library, "generativeqc_ks_snapshot_hamiltonian_v1", None
+            )
             with pytest.raises(ResponseUnsupported, match="all-electron"):
                 cls.from_native(batch, basis)
         with pytest.raises(MemoryError):

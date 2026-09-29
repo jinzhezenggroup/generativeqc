@@ -6,20 +6,20 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.common.provenance import file_hash
-from vibeqc_compiler.method import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.method import (
     MethodSpec,
     NonlocalCorrelationPrimitive,
     RangeSeparatedExchangePrimitive,
     SemilocalXCPrimitive,
     resolve_method,
 )
-from vibeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.semilocal_codegen import build_roots
-from vibeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.semilocal_codegen import build_roots
+from generativeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC
+from generativeqc_compiler.xc.wb97mv_maple import (
     energy_expression as production_energy_expression,
 )
 

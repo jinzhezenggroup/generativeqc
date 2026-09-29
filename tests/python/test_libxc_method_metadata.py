@@ -6,8 +6,8 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method import METHOD_CATALOG
-from vibeqc_compiler.method._generated_libxc_methods import (
+from generativeqc_compiler.method import METHOD_CATALOG
+from generativeqc_compiler.method._generated_libxc_methods import (
     BLOCKED_LIBXC_METHODS,
     LIBXC_METHODS,
 )

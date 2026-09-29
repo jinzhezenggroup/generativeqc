@@ -5,10 +5,13 @@ from __future__ import annotations
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.method.spec import SemilocalXCPrimitive, resolve_method
-from vibeqc_compiler.xc.semilocal_codegen import build_roots, emit_polarized_semilocal
-from vibeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC, functional
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.method.spec import SemilocalXCPrimitive, resolve_method
+from generativeqc_compiler.xc.semilocal_codegen import (
+    build_roots,
+    emit_polarized_semilocal,
+)
+from generativeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC, functional
 
 
 @pytest.mark.parametrize("name", ("LDA_XC_PW", "PBE", "B3LYP", "R2SCAN"))
@@ -72,19 +75,25 @@ def test_bulk_opt_in_stays_distinct_and_cannot_claim_production(name: str) -> No
     )
     with pytest.raises(ValueError, match="cannot claim production"):
         emit_polarized_semilocal(spec, production=True, **options)
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        build_roots(spec, ((),))
+    _, default_roots, default_identity = build_roots(spec, ((),))
+    _, pointwise_roots, pointwise_identity = build_roots(
+        spec, ((),), pointwise_bulk=True
+    )
+    assert len(default_roots) == len(pointwise_roots) == 1
+    assert default_identity != pointwise_identity
 
 
-def test_bulk_bridge_rejects_nonunit_weight_and_tau_projection() -> None:
+def test_bulk_bridge_rejects_nonunit_weight_and_projects_tau_mgga() -> None:
     weighted = FunctionalSpec(
         "weighted-bulk", (("GGA_X_PBE_SOL", Fraction(2)),), spin="polarized"
     )
     with pytest.raises(UnsupportedXC, match="unit-weight"):
         build_roots(weighted, ((),), pointwise_bulk=True)
-    with pytest.raises(UnsupportedXC, match="tau/laplacian projection"):
-        build_roots(
-            functional("MGGA_X_R2SCAN01", spin="polarized"),
-            ((),),
-            pointwise_bulk=True,
-        )
+
+    _, roots, identity = build_roots(
+        functional("MGGA_X_R2SCAN01", spin="polarized"),
+        ((), (5,), (6,)),
+        pointwise_bulk=True,
+    )
+    assert len(roots) == 3
+    assert len(identity) == 64

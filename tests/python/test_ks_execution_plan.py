@@ -3,8 +3,15 @@
 from fractions import Fraction
 
 import pytest
-from vibeqc.ks import ks_coefficients, ks_range_exchange_parameters
-from vibeqc_compiler.method import (
+from generativeqc import _generated_methods
+from generativeqc.ks import (
+    ks_coefficients,
+    ks_range_exchange_parameters,
+    native_dft_carrier,
+    public_dft_selectors,
+    resolve_ks_method,
+)
+from generativeqc_compiler.method import (
     ExactExchangePrimitive,
     MethodIR,
     RangeSeparatedExchangePrimitive,
@@ -84,6 +91,46 @@ def test_execution_identity_uses_semantics_not_method_name(
     )
 
 
+@pytest.mark.parametrize(
+    "selector,identifier,spin,carrier",
+    (
+        ("pbe50-rks", "PBE50", "unpolarized", "pbe-rks"),
+        ("pbe50-uks", "PBE50", "polarized", "pbe-uks"),
+    ),
+)
+def test_public_dft_discovery_does_not_require_an_abi_manifest_row(
+    selector: str, identifier: str, spin: str, carrier: str
+) -> None:
+    assert selector not in _generated_methods.METHOD_NAME_TO_ID
+    method_ir, functional = resolve_ks_method(selector)
+    assert method_ir.identity == resolve_method(identifier, spin=spin).identity
+    assert functional.spin == spin
+    assert native_dft_carrier(selector) == carrier
+    assert selector in public_dft_selectors()
+
+
+def test_public_dft_aliases_resolve_without_becoming_duplicate_catalog_rows() -> None:
+    selector = "pbe1pbe-rks"
+    assert selector not in _generated_methods.METHOD_NAME_TO_ID
+    method_ir, functional = resolve_ks_method(selector)
+    assert method_ir.identity == resolve_method("PBE0", spin="unpolarized").identity
+    assert method_ir.identifier == "PBE1PBE"
+    assert functional.spin == "unpolarized"
+    assert native_dft_carrier(selector) == "pbe-rks"
+    assert selector not in public_dft_selectors()
+
+
+def test_public_dft_discovery_tracks_current_native_lowerers() -> None:
+    assert "scan-rks" in public_dft_selectors()
+    scan, functional = resolve_ks_method("scan-rks")
+    assert scan.identifier == "SCAN"
+    assert functional.spin == "unpolarized"
+
+    assert "cam-b3lyp-rks" not in public_dft_selectors()
+    with pytest.raises(NotImplementedError, match="qualified lowerer"):
+        resolve_ks_method("cam-b3lyp-rks")
+
+
 def test_execution_plan_rejects_cross_primitive_omega_drift() -> None:
     wb97mv = resolve_method("WB97M-V")
     semilocal = wb97mv.primitives[0]
@@ -136,19 +183,19 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
 ) -> None:
     from dataclasses import replace
 
-    from vibeqc.ks import (
+    from generativeqc.ks import (
         WB97MV_SCF_DOMAIN,
         KsOptions,
-        _native_semilocal_family,
+        _native_semilocal_code,
         native_ks_options,
         resolve_ks_method,
         resolve_ks_options,
     )
-    from vibeqc_compiler.dft.grid import GridSpec
+    from generativeqc_compiler.dft.grid import GridSpec
 
     graph = resolve_method("WB97M-V", spin=spin)
     renamed = replace(graph, identifier="not-a-method-dispatch-key")
-    assert _native_semilocal_family(renamed) == 4
+    assert _native_semilocal_code(renamed) == 4
     options = resolve_ks_options(
         selector, KsOptions(composition=renamed, grid=GridSpec())
     )
@@ -158,7 +205,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
         "threshold": "1/100000000",
         "active_comparison": ">=",
     }
-    from vibeqc import _native
+    from generativeqc import _native
 
     native = native_ks_options(options)
     assert native.scf_domain.decode() == WB97MV_SCF_DOMAIN
@@ -189,8 +236,8 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
 def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -> None:
     from dataclasses import replace
 
-    from vibeqc.ks import _native_semilocal_family
-    from vibeqc_compiler.method import (
+    from generativeqc.ks import _native_semilocal_code
+    from generativeqc_compiler.method import (
         NonlocalCorrelationPrimitive,
         RangeSeparatedExchangePrimitive,
         SemilocalXCPrimitive,
@@ -202,7 +249,7 @@ def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -
             graph, primitives=graph.primitives[:drop] + graph.primitives[drop + 1 :]
         )
         with pytest.raises(NotImplementedError):
-            _native_semilocal_family(missing)
+            _native_semilocal_code(missing)
     changed = []
     for primitive in graph.primitives:
         if isinstance(primitive, SemilocalXCPrimitive):
@@ -219,11 +266,11 @@ def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -
         else:
             changed.append(primitive)
     with pytest.raises(NotImplementedError, match="canonical"):
-        _native_semilocal_family(replace(graph, primitives=tuple(changed)))
+        _native_semilocal_code(replace(graph, primitives=tuple(changed)))
     nonlocal_term = graph.primitives[-1]
     assert isinstance(nonlocal_term, NonlocalCorrelationPrimitive)
     wrong = replace(nonlocal_term, spec=replace(nonlocal_term.spec, b=Fraction(59, 10)))
     with pytest.raises(NotImplementedError, match="canonical"):
-        _native_semilocal_family(
+        _native_semilocal_code(
             replace(graph, primitives=(*graph.primitives[:-1], wrong))
         )

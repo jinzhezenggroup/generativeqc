@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc import ks
-from vibeqc._stationary_cuda import _CudaSources
-from vibeqc_compiler.dft.grid import GridSpec
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc.geometry_cuda import _functional_code
+from generativeqc import ks
+from generativeqc._stationary_cuda import _CudaSources
+from generativeqc_compiler.dft.grid import GridSpec
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc.geometry_cuda import _functional_code
 
 
 class _View(ct.Structure):
@@ -33,7 +33,7 @@ class _View(ct.Structure):
 def test_curated_selector_reaches_both_geometry_consumers(
     method: str, spin: str, expected: int
 ) -> None:
-    code = ks._native_semilocal_family(resolve_method(method, spin=spin))
+    code = ks._native_semilocal_code(resolve_method(method, spin=spin))
     assert type(code) is int
     assert code == expected
     assert _functional_code(code, None) == expected
@@ -146,11 +146,8 @@ def test_resident_nonlocal_seed_handoff_uses_device_pointer_and_stride() -> None
         )
 
 
-def test_pbe_d4_selector_also_returns_builtin_integer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(ks, "_is_pbe_d4_composition", lambda _: True)
-    code = ks._native_semilocal_family(object())
+def test_pbe_d4_selector_also_returns_builtin_integer() -> None:
+    code = ks._native_semilocal_code(resolve_method("PBE-D4(BJ-EEQ-ATM)"))
     assert type(code) is int and code == 1
     assert _functional_code(code, None) == 1
 

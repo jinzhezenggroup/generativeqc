@@ -47,7 +47,7 @@ void check_history(unsigned spins, unsigned old_count, unsigned head) {
   Device<std::uint8_t> d_active(std::vector<std::uint8_t>{1, 0});
   Device<std::uint32_t> d_count(std::vector<std::uint32_t>{old_count, old_count});
   Device<std::uint32_t> d_head(std::vector<std::uint32_t>{head, head});
-  vibeqc::scf::cuda_execution::launch_diis_dot_partials(
+  generativeqc::scf::cuda_execution::launch_diis_dot_partials(
       nullptr, batch, n, spins, history, d_current.data, d_stored.data, d_active.data, d_count.data,
       d_head.data, parts, d_result.data);
   check(cudaGetLastError());

@@ -6,9 +6,13 @@ import typing
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
-from vibeqc_compiler.common.layout import DenseLayout
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.resources import MAX_BYTES, ResourceBudget, plan_resources
+from generativeqc_compiler.common.layout import DenseLayout
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.resources import (
+    MAX_BYTES,
+    ResourceBudget,
+    plan_resources,
+)
 
 
 def example() -> typing.Any:

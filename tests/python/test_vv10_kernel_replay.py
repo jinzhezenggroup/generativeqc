@@ -5,19 +5,19 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc._dft_gradient import resolve_nonlocal_nuclear_sources
-from vibeqc_compiler.dft import (
+from generativeqc._dft_gradient import resolve_nonlocal_nuclear_sources
+from generativeqc_compiler.dft import (
     FixedDensityNonlocalCorrelation,
     GridSpec,
     MolecularGrid,
     NativeAO,
 )
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.method import (
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.method import (
     NonlocalCorrelationPrimitive,
     original_nonlocal_correlation,
 )
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
 
 
 @pytest.mark.parametrize("variant", ("vv10", "rvv10"))

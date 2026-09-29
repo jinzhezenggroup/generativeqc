@@ -8,9 +8,9 @@ from decimal import Decimal, localcontext
 
 import numpy as np
 import pytest
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid, partition_weights
-from vibeqc_compiler.xc.contractions import GeometryPartials
-from vibeqc_compiler.xc.grid_response import (
+from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid, partition_weights
+from generativeqc_compiler.xc.contractions import GeometryPartials
+from generativeqc_compiler.xc.grid_response import (
     grid_mixed_response_program,
     grid_mixed_response_tiles,
     grid_response_program,
@@ -445,10 +445,10 @@ def test_branch_program_identity_and_no_runtime_import_during_generation() -> No
 import importlib.abc, sys
 class BlockRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, *args):
-        if fullname.split('.')[0] in {'vibeqc', 'pyscf', 'torch', 'cupy'}:
+        if fullname.split('.')[0] in {'generativeqc', 'pyscf', 'torch', 'cupy'}:
             raise RuntimeError('generation imported ' + fullname)
 sys.meta_path.insert(0, BlockRuntime())
-from vibeqc_compiler.xc.grid_response import grid_response_program
+from generativeqc_compiler.xc.grid_response import grid_response_program
 for kind in ('norm', 'ratio', 'log', 'becke'):
     assert grid_response_program(kind).identity
 """,

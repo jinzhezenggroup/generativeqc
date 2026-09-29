@@ -9,7 +9,7 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda_direct_jk.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Select resident value sources without changing the requested mathematics.
  * Generated J/K are exact FP64 full-range consumers on the same provider stream.
@@ -57,4 +57,4 @@ struct CudaDirectJkPlan {
   ~CudaDirectJkPlan();
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

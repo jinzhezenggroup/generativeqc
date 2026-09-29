@@ -5,10 +5,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.xc import libxc_maple
-from vibeqc_compiler.xc.libxc_maple import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.xc import libxc_maple
+from generativeqc_compiler.xc.libxc_maple import (
     IMPORTER_SEMANTICS,
     MapleImportError,
     import_maple_source,

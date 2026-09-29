@@ -1,7 +1,7 @@
 """Validate native CPU UKS against independent matched-grid PySCF/Libxc SCF.
 
 PySCF owns its AO integrals, Coulomb build, XC integration, SCF iteration and
-final residual evaluation. VibeQC and PySCF receive the same atoms, basis,
+final residual evaluation. GenerativeQC and PySCF receive the same atoms, basis,
 charge, spin, GridSpec-v1 points and quadrature weights. This is a small
 endpoint gate, not a quadrature-convergence, gradient, batch or CUDA claim.
 """
@@ -22,9 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 import numpy as np
-from vibeqc import Atom
-from vibeqc.calculator import Calculator, _named_basis_shells
-from vibeqc_compiler.dft import GridSpec, MolecularGrid
+from generativeqc import Atom
+from generativeqc.calculator import Calculator, _named_basis_shells
+from generativeqc_compiler.dft import GridSpec, MolecularGrid
 
 from tools.generate_validation_references import pyscf_molecule
 
@@ -250,7 +250,7 @@ def validate() -> dict:
             )
 
     return {
-        "schema": "vibeqc.uks-endpoint-validation",
+        "schema": "generativeqc.uks-endpoint-validation",
         "version": 1,
         "source": {
             "commit": git_output("rev-parse", "HEAD"),
@@ -261,7 +261,7 @@ def validate() -> dict:
             "python": platform.python_version(),
             "platform": platform.platform(),
             "numpy": np.__version__,
-            "vibeqc_library": os.environ.get("VIBEQC_LIBRARY"),
+            "generativeqc_library": os.environ.get("GENERATIVEQC_LIBRARY"),
             "threads": {
                 name: os.environ.get(name)
                 for name in (

@@ -8,18 +8,18 @@ from pathlib import Path
 
 import pytest
 
-from tools.restore_retained_evidence import _records
-from tools.vibeqc_validation.retention import (
+from tools.generativeqc_validation.retention import (
     POLICY_PATH,
     check,
     classify,
     digest,
     tracked_blobs,
 )
-from tools.vibeqc_validation.retention_review import (
+from tools.generativeqc_validation.retention_review import (
     campaign_inventory,
     large_legacy_review_errors,
 )
+from tools.restore_retained_evidence import _records
 
 RESULT_ROOT = "benchmarks/results/"
 REVIEW_PATH = "benchmarks/legacy-evidence-review.json"
@@ -28,7 +28,7 @@ DOCUMENT = "docs/legacy-review.md"
 
 def policy(threshold: typing.Any = 16) -> typing.Any:
     return {
-        "schema": "vibeqc.retention-policy.v1",
+        "schema": "generativeqc.retention-policy.v1",
         "review_size_bytes": 1 << 20,
         "exceptions": {},
         "legacy_large_review_path": REVIEW_PATH,
@@ -41,7 +41,7 @@ def review_for(
 ) -> typing.Any:
     path = RESULT_ROOT + "legacy/result.json"
     review = {
-        "schema": "vibeqc.legacy-large-evidence-review.v1",
+        "schema": "generativeqc.legacy-large-evidence-review.v1",
         "threshold_bytes": threshold,
         "scope": "storage review only",
         "families": {
@@ -190,7 +190,7 @@ def test_retention_488_snapshot_binds_removed_checkout_bytes() -> None:
 def test_execution_flow_streams_are_transient(path: typing.Any) -> None:
     assert classify(path) == "transient"
     rules = {
-        "schema": "vibeqc.retention-policy.v1",
+        "schema": "generativeqc.retention-policy.v1",
         "review_size_bytes": 1 << 20,
         "exceptions": {},
     }

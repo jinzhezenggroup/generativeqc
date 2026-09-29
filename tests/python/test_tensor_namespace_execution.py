@@ -6,9 +6,9 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.array_api import namespace as frontend_xp
-from vibeqc_compiler.array_api import trace
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.array_api import namespace as frontend_xp
+from generativeqc_compiler.array_api import trace
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,

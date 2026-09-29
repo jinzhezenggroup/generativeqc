@@ -22,7 +22,7 @@ def _inventory(source_root: Path, manifest_path: Path) -> list[Path]:
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     if data.get("schema_version") != 1:
         raise ValueError(
-            f"unsupported VibeQC source identity manifest schema: "
+            f"unsupported GenerativeQC source identity manifest schema: "
             f"{data.get('schema_version')}"
         )
 
@@ -86,14 +86,14 @@ def main() -> None:
         _inventory(args.source_root.resolve(), args.manifest.resolve()),
     )
     rendered = args.template.read_text(encoding="utf-8")
-    rendered = rendered.replace("@VIBEQC_SOURCE_IDENTITY@", identity)
+    rendered = rendered.replace("@GENERATIVEQC_SOURCE_IDENTITY@", identity)
     rendered = rendered.replace(
-        "#cmakedefine01 VIBEQC_CUDA_FAST_COMPILE",
-        f"#define VIBEQC_CUDA_FAST_COMPILE {_bool_int(args.cuda_fast_compile)}",
+        "#cmakedefine01 GENERATIVEQC_CUDA_FAST_COMPILE",
+        f"#define GENERATIVEQC_CUDA_FAST_COMPILE {_bool_int(args.cuda_fast_compile)}",
     )
     rendered = rendered.replace(
-        "#cmakedefine01 VIBEQC_TUNING_RELEASE_BUILD",
-        f"#define VIBEQC_TUNING_RELEASE_BUILD {_bool_int(args.release_build)}",
+        "#cmakedefine01 GENERATIVEQC_TUNING_RELEASE_BUILD",
+        f"#define GENERATIVEQC_TUNING_RELEASE_BUILD {_bool_int(args.release_build)}",
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

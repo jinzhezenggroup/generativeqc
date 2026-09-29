@@ -5,7 +5,7 @@
 #include "generated_mean_field_setup.cuh"
 #include "scf/cuda/mean_field_setup.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 namespace {
 unsigned blocks(std::size_t elements) {
   return static_cast<unsigned>(std::min(std::size_t{65535}, 1 + (elements - 1) / 128));
@@ -28,4 +28,4 @@ void form_occupation_weights(cudaStream_t stream, std::size_t n, unsigned spins,
 void check_overlap_metric(cudaStream_t stream, std::size_t n, const double* metric, int* invalid) {
   generated::check_overlap_identity<<<blocks(n * n), 128, 0, stream>>>(n, metric, invalid);
 }
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

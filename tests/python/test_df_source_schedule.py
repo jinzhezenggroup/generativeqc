@@ -7,7 +7,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.integral.df_policy import emit_df_value_source_schedule_cuda
+from generativeqc_compiler.integral.df_policy import emit_df_value_source_schedule_cuda
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, method_capabilities
+from generativeqc import Calculator, method_capabilities
 
 H2 = [
     [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))],
@@ -84,7 +84,7 @@ def test_mp2_batch_failure_is_item_local_and_later_replay_is_clean() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="requires explicitly allocated CUDA device and native library",
 )
 def test_mp2_cuda_batch_matches_cpu_and_isolates_failed_items() -> None:

@@ -5,12 +5,12 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -72,11 +72,11 @@ def test_shell_execution_and_return_to_generic(
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
     )
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "generic")
-    monkeypatch.setenv("VIBEQC_DF_SHELL_SCHEDULE", schedule)
-    monkeypatch.setenv("VIBEQC_DF_PRIMITIVE_BUCKETS", buckets)
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_ALGEBRA", algebra)
-    monkeypatch.setenv("VIBEQC_DF_RAW_STAGING", staging)
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "generic")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", schedule)
+    monkeypatch.setenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", buckets)
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", algebra)
+    monkeypatch.setenv("GENERATIVEQC_DF_RAW_STAGING", staging)
     with calc.prepare_batch([atoms], multiplicities=[spin + 1]) as owner:
         owner.execute(properties=("energy", "forces"), strict=True)
         routes = [
@@ -88,11 +88,11 @@ def test_shell_execution_and_return_to_generic(
             ("generic", "full"),
         ]
         for index, (route, pairs) in enumerate(routes):
-            monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", route)
-            monkeypatch.setenv("VIBEQC_DF_DERIVATIVE_PAIRS", pairs)
-            monkeypatch.setenv("VIBEQC_DF_SHELL_COUNTERS", "1")
+            monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", route)
+            monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", pairs)
+            monkeypatch.setenv("GENERATIVEQC_DF_SHELL_COUNTERS", "1")
             trace = tmp_path / f"response-{index}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = owner.execute(properties=("energy", "forces"), strict=True).items[
                 0
             ]
@@ -163,5 +163,5 @@ def test_shell_execution_and_return_to_generic(
             else:
                 assert "shell_triples_visited" not in counters
             policy = owner._warm_metadata[0]["controls"]["runtime_policy"]
-            assert policy["VIBEQC_DF_WEIGHTED_EXECUTION"] == route
-            assert policy["VIBEQC_DF_PRIMITIVE_BUCKETS"] == buckets
+            assert policy["GENERATIVEQC_DF_WEIGHTED_EXECUTION"] == route
+            assert policy["GENERATIVEQC_DF_PRIMITIVE_BUCKETS"] == buckets

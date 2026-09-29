@@ -14,8 +14,8 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
-vibeqc::core::System molecule(bool uhf) {
-  vibeqc::core::System s;
+generativeqc::core::System molecule(bool uhf) {
+  generativeqc::core::System s;
   s.atoms = {{2, {0, 0, -0.7}}, {1, {0, 0, 0.7}}};
   s.shells = {
       {0, 0, {{6.36242139, 0.15432897}, {1.15892300, 0.53532814}, {0.31364979, 0.44463454}}},
@@ -23,14 +23,14 @@ vibeqc::core::System molecule(bool uhf) {
   s.charge = uhf ? 0 : 1;
   s.multiplicity = uhf ? 2 : 1;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(s, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(s, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "system normalization failed");
   return s;
 }
 }  // namespace
 
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   try {
     {
       // Qualified symmetric seeds use the supplied operation for S and each
@@ -135,7 +135,7 @@ int main() {
         require(run(options, &baseline.density).converged, "valid warm density was rejected");
       }
     }
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     // Capability rejection occurs before touching the CUDA runtime. Host
     // callbacks must not disappear silently in either native GPU HF path.
     ScfHooks hooks;

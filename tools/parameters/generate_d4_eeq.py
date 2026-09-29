@@ -77,7 +77,7 @@ def render(
 
 #include "dft/dispersion/d4_element_data.hpp"
 
-namespace vibeqc::dft::dispersion::eeq_data {{
+namespace generativeqc::dft::dispersion::eeq_data {{
 
 using data::D4ReferenceData;
 using data::kElementCount;
@@ -108,7 +108,7 @@ inline constexpr std::array<double, kReferenceCount * (kReferenceCount + 1) / 2>
 {base.format_array(packed_standard)}
 }}}};
 
-}}  // namespace vibeqc::dft::dispersion::eeq_data
+}}  // namespace generativeqc::dft::dispersion::eeq_data
 // clang-format on
 """
 
@@ -128,14 +128,14 @@ def render_r2scan_c6(
 
 #include "dft/dispersion/d4_eeq_data.hpp"
 
-namespace vibeqc::dft::dispersion::eeq_data {{
+namespace generativeqc::dft::dispersion::eeq_data {{
 
 inline constexpr std::array<double, kReferenceCount * (kReferenceCount + 1) / 2>
     kReferenceC6R2SCAN3C{{{{
 {base.format_array(packed)}
 }}}};
 
-}}  // namespace vibeqc::dft::dispersion::eeq_data
+}}  // namespace generativeqc::dft::dispersion::eeq_data
 // clang-format on
 """
 

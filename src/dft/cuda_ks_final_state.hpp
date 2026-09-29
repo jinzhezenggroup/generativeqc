@@ -4,7 +4,7 @@
 
 #include "dft/ks_final_state.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Detached authorization for exactly one successful solve on one immutable
  * native KS owner. A later begin invalidates it before scientific work.
@@ -16,4 +16,4 @@ struct CudaKsFinalStateToken {
   bool operator==(const CudaKsFinalStateToken&) const = default;
 };
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

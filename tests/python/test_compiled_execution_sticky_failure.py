@@ -19,7 +19,7 @@ def test_success_cannot_clear_sticky_failure(tmp_path: Path, warmed: bool) -> No
         '#include "runtime/compiled_execution_region.hpp"\n'
         "#include <cassert>\n"
         "int main() {\n"
-        "  using namespace vibeqc::runtime;\n"
+        "  using namespace generativeqc::runtime;\n"
         "  CompiledExecutionRegion region;\n"
         '  CompiledExecutionBinding binding{"qualified"};\n'
         "  region.bind(binding);\n"

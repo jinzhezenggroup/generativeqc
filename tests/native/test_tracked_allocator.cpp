@@ -11,9 +11,9 @@
 #include "runtime/tracked_allocator.hpp"
 
 namespace {
-using vibeqc::runtime::AllocationCounter;
-using vibeqc::runtime::TrackedAllocator;
-using vibeqc::runtime::TrackedVector;
+using generativeqc::runtime::AllocationCounter;
+using generativeqc::runtime::TrackedAllocator;
+using generativeqc::runtime::TrackedVector;
 
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
@@ -93,8 +93,8 @@ void exceptions_and_refusals() {
   try {
     auto allocator = TrackedAllocator<double>(counter);
     const auto size = std::numeric_limits<std::size_t>::max() / sizeof(double) + 1;
-    auto* pointer = allocator.allocate(size);
-    allocator.deallocate(pointer, size);
+    (void)allocator.allocate(size);
+    throw std::runtime_error("overflow allocation unexpectedly succeeded");
   } catch (const std::bad_array_new_length&) {
     failed = true;
   }

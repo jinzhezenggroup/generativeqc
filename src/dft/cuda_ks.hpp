@@ -12,11 +12,11 @@
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/fock_prepared.hpp"
 #include "scf/types.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Explicit component ownership for composition into #203. Provider/context
  * overhead and host quadrature preparation remain distinct from the native
@@ -60,6 +60,62 @@ struct CudaKsTransfers {
  * shape query performs no CUDA call and allocates no numeric buffers. */
 std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
                                 bool exact_exchange = false, bool range_correction = false);
+
+/** Borrowed device density for a successful immutable final-state token.
+ * The allocation remains owned by CudaKsPlan and is valid only while that
+ * exact token remains current. No transfer or synchronization is performed. */
+struct CudaKsResidentDensityBinding {
+  int device_id{-1};
+  const double* alpha{};
+  const double* beta{};
+  std::size_t matrix_elements{};
+  unsigned spins{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && alpha != nullptr && matrix_elements != 0 &&
+           (spins == 1 || (spins == 2 && beta != nullptr)) && owner != 0 && solve_epoch != 0 &&
+           generation != 0;
+  }
+};
+
+/** Borrowed total stationary D/W for one-electron force consumers.
+ * W is formed from the exact accepted final C/epsilon/occupation frame on the
+ * KS stream and published only after the final-state validation drain. For UKS,
+ * density is the alpha+beta total. The storage is phase-local scratch owned by
+ * CudaKsPlan and is valid only while the exact token remains current. */
+struct CudaKsResidentStationaryWeightsBinding {
+  int device_id{-1};
+  const double* density{};
+  const double* weighted_density{};
+  std::size_t matrix_elements{};
+  unsigned spins{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && density != nullptr && weighted_density != nullptr &&
+           matrix_elements != 0 && (spins == 1 || spins == 2) && owner != 0 && solve_epoch != 0 &&
+           generation != 0;
+  }
+};
+
+/** Borrowed full-grid total rho/grad-rho retained by the device-fused
+ * nonlocal KS owner for its successful final generation. These arrays are
+ * read-only inputs for downstream resident nonlocal force composition; the
+ * owner keeps allocation/lifetime responsibility and invalidates the lease
+ * with the same exact final-state token as resident D. */
+struct CudaKsResidentNonlocalFeaturesBinding {
+  int device_id{-1};
+  const double* density{};
+  const double* gradient{};
+  std::size_t point_count{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && density != nullptr && gradient != nullptr && point_count != 0 &&
+           owner != 0 && solve_epoch != 0 && generation != 0;
+  }
+};
 
 /** Native ordinary-stream LDA/PBE RKS/UKS trajectory. The borrowed common
  * Fock plan must outlive it. Model/grid/functional identity is immutable;
@@ -114,15 +170,32 @@ class CudaKsPlan {
   /** Revoke final-state eligibility without changing warm-start ownership. */
   void invalidate_final_state() noexcept;
   /** Read-only host eligibility query. It performs no CUDA call or transfer. */
-  vibeqc_status final_state_token(CudaKsFinalStateToken& token, std::string& detail) const;
+  generativeqc_status final_state_token(CudaKsFinalStateToken& token, std::string& detail) const;
+  /** Borrow the current converged density in device memory under the same
+   * exact-token contract. This is a zero-transfer execution lease for native
+   * downstream consumers; callers must not retain pointers across invalidation. */
+  generativeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
+                                             CudaKsResidentDensityBinding& binding,
+                                             std::string& detail) const;
+  /** Borrow total stationary D/W already staged by a successful weighted
+   * final-state read. This performs no CUDA launch, transfer, or synchronization. */
+  generativeqc_status resident_final_stationary_weights(
+      const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+      std::string& detail) const;
+  /** Borrow final total rho/grad-rho already produced by device-fused
+   * nonlocal XC. The binding is available only for the exact current token
+   * and performs no transfer, synchronization or numerical launch. */
+  generativeqc_status resident_final_nonlocal_features(
+      const CudaKsFinalStateToken& expected, CudaKsResidentNonlocalFeaturesBinding& binding,
+      std::string& detail) const;
   /** Export a detached, strictly validated current physical state. Exact-token
    * comparison
    * precedes transfer; eligibility is rechecked before publication.
    * W is built only when
    * explicitly requested. */
-  vibeqc_status read_final_state(const CudaKsFinalStateToken& expected,
-                                 bool compute_weighted_density, VerifiedKsFinalState& state,
-                                 std::string& detail);
+  generativeqc_status read_final_state(const CudaKsFinalStateToken& expected,
+                                       bool compute_weighted_density, VerifiedKsFinalState& state,
+                                       std::string& detail);
   const CudaKsResources& resources() const noexcept;
   CudaKsTransfers transfers() const noexcept;
 
@@ -130,4 +203,4 @@ class CudaKsPlan {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

@@ -9,8 +9,8 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import ImplicitSolveSpec
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.method import ImplicitSolveSpec
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -23,31 +23,31 @@ from vibeqc_compiler.tensor import (
     transpose,
 )
 
-from tools.vibeqc_mp2.gradient import (
+from tools.generativeqc_mp2.gradient import (
     canonical_energy_adjoint,
     canonical_orbital_rhs,
     solve_canonical_orbital_response,
 )
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     DenseAOResponseBackend,
     GMRESOptions,
     NativeJKBackend,
     ResponseCompatibilityError,
     RHFResponseOperator,
 )
-from tools.vibeqc_response.implicit import (
+from tools.generativeqc_response.implicit import (
     BoundImplicitState,
     ImplicitSolveError,
     ResponseGMRES,
     checked_transpose_solve,
 )
-from tools.vibeqc_response.krylov import _HostKrylovEngine
+from tools.generativeqc_response.krylov import _HostKrylovEngine
 
 
 def _rhf_equation(
@@ -410,8 +410,8 @@ def test_response_binding_rejects_cpks_even_with_declared_resources() -> None:
     from dataclasses import replace
     from types import SimpleNamespace
 
-    from tools.vibeqc_response.implicit import ResponseTransposeBinding
-    from tools.vibeqc_response.problem import ResponseProblem
+    from tools.generativeqc_response.implicit import ResponseTransposeBinding
+    from tools.generativeqc_response.problem import ResponseProblem
 
     metadata, arrays = load_fixture("h2")
     reference = replace(

@@ -5,13 +5,13 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-from vibeqc_compiler.dft.ao import jet_indices
-from vibeqc_compiler.dft.features import density_features
-from vibeqc_compiler.dft.spatial import SpatialPolicy, build_spatial_tasks
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+from generativeqc_compiler.dft.ao import jet_indices
+from generativeqc_compiler.dft.features import density_features
+from generativeqc_compiler.dft.spatial import SpatialPolicy, build_spatial_tasks
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 
 
 @pytest.fixture(params=["cartesian", "spherical"])
@@ -42,7 +42,7 @@ def local_case(request: typing.Any) -> typing.Any:
 def test_empty_fixed_mask_has_zero_xc_without_evaluating_vacuum_derivatives(
     local_case: typing.Any,
 ) -> None:
-    from vibeqc_compiler.xc import FixedDensityXC, UnsupportedXC, functional
+    from generativeqc_compiler.xc import FixedDensityXC, UnsupportedXC, functional
 
     basis, grid, density = local_case
     far = replace(grid, points=grid.points + 100)
@@ -175,7 +175,7 @@ def test_prepared_rejects_domain_and_forged_map(local_case: typing.Any) -> None:
 def test_fixed_density_xc_scatter_and_trace_variation(
     local_case: typing.Any, screening: typing.Any
 ) -> None:
-    from vibeqc_compiler.xc import FixedDensityXC, functional
+    from generativeqc_compiler.xc import FixedDensityXC, functional
 
     basis, grid, density = local_case
     policy = SpatialPolicy(
@@ -213,9 +213,12 @@ def test_fixed_density_xc_scatter_and_trace_variation(
 
 
 def test_spatial_xc_preserves_independent_fixtures() -> None:
-    from vibeqc_compiler.dft.fixtures import basis_arguments
-    from vibeqc_compiler.xc import FixedDensityXC, functional
-    from vibeqc_compiler.xc.integration_fixtures import CASES, load_integration_fixture
+    from generativeqc_compiler.dft.fixtures import basis_arguments
+    from generativeqc_compiler.xc import FixedDensityXC, functional
+    from generativeqc_compiler.xc.integration_fixtures import (
+        CASES,
+        load_integration_fixture,
+    )
 
     consumer = FixedDensityXC(functional("PBE", spin="polarized"))
     for case in CASES:
@@ -238,7 +241,7 @@ def test_spatial_xc_preserves_independent_fixtures() -> None:
 
 
 def test_molecular_grid_materialization_and_stale_geometry() -> None:
-    from vibeqc_compiler.dft import GridSpec, MolecularGrid
+    from generativeqc_compiler.dft import GridSpec, MolecularGrid
 
     with NativeAO([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]) as basis:
         grid = MolecularGrid(

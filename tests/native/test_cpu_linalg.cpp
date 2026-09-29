@@ -9,9 +9,9 @@
 #include "tensor/cpu_linalg.hpp"
 
 namespace {
-using vibeqc::tensor::CpuLinalgPlan;
-using vibeqc::tensor::CpuLinalgProvider;
-using vibeqc::tensor::CpuLinalgThreadOwnership;
+using generativeqc::tensor::CpuLinalgPlan;
+using generativeqc::tensor::CpuLinalgProvider;
+using generativeqc::tensor::CpuLinalgThreadOwnership;
 
 bool close(double a, double b, double tolerance = 1.0e-12) {
   return std::abs(a - b) <= tolerance * std::max({1.0, std::abs(a), std::abs(b)});
@@ -25,7 +25,7 @@ bool check_zero_scaling(CpuLinalgProvider provider, CpuLinalgThreadOwnership own
   for (char ta : {'N', 'T'})
     for (char tb : {'N', 'T'}) {
       std::array<double, 4> c{poison, poison, poison, poison};
-      vibeqc::tensor::cpu_gemm(ta, tb, 2, 2, 2, a.data(), b.data(), c.data(), 1, 0, plan);
+      generativeqc::tensor::cpu_gemm(ta, tb, 2, 2, 2, a.data(), b.data(), c.data(), 1, 0, plan);
       for (std::size_t i = 0; i < 2; ++i)
         for (std::size_t j = 0; j < 2; ++j) {
           double expected = 0;
@@ -35,13 +35,13 @@ bool check_zero_scaling(CpuLinalgProvider provider, CpuLinalgThreadOwnership own
         }
     }
   std::array<double, 4> c{poison, poison, poison, poison}, nan{poison, poison, poison, poison};
-  vibeqc::tensor::cpu_gemm('N', 'N', 2, 2, 0, nullptr, nullptr, c.data(), 1, 0, plan);
+  generativeqc::tensor::cpu_gemm('N', 'N', 2, 2, 0, nullptr, nullptr, c.data(), 1, 0, plan);
   if (!std::all_of(c.begin(), c.end(), [](double x) { return x == 0; })) return false;
   c.fill(2);
-  vibeqc::tensor::cpu_gemm('N', 'N', 2, 2, 2, nan.data(), nan.data(), c.data(), 0, 3, plan);
+  generativeqc::tensor::cpu_gemm('N', 'N', 2, 2, 2, nan.data(), nan.data(), c.data(), 0, 3, plan);
   if (!std::all_of(c.begin(), c.end(), [](double x) { return x == 6; })) return false;
   c.fill(poison);
-  vibeqc::tensor::cpu_gemm('N', 'N', 2, 2, 2, nan.data(), nan.data(), c.data(), 0, 0, plan);
+  generativeqc::tensor::cpu_gemm('N', 'N', 2, 2, 2, nan.data(), nan.data(), c.data(), 0, 0, plan);
   return std::all_of(c.begin(), c.end(), [](double x) { return x == 0; });
 }
 
@@ -52,20 +52,58 @@ bool check_gemm(CpuLinalgProvider provider,
   const std::array<double, 6> b{7, 8, 9, 10, 11, 12};
   std::array<double, 4> c{1, 1, 1, 1};
   CpuLinalgPlan plan{provider, ownership, threads};
-  vibeqc::tensor::cpu_gemm('N', 'N', 2, 2, 3, a.data(), b.data(), c.data(), 1.0, 2.0, plan);
+  generativeqc::tensor::cpu_gemm('N', 'N', 2, 2, 3, a.data(), b.data(), c.data(), 1.0, 2.0, plan);
   const std::array<double, 4> expected{60, 66, 141, 156};
   for (std::size_t i = 0; i < c.size(); ++i)
     if (!close(c[i], expected[i])) return false;
 
   std::array<double, 9> gram{};
-  vibeqc::tensor::cpu_gemm('T', 'N', 3, 3, 2, a.data(), a.data(), gram.data(), 1.0, 0.0, plan);
+  generativeqc::tensor::cpu_gemm('T', 'N', 3, 3, 2, a.data(), a.data(), gram.data(), 1.0, 0.0,
+                                 plan);
   const std::array<double, 9> gram_expected{17, 22, 27, 22, 29, 36, 27, 36, 45};
   for (std::size_t i = 0; i < gram.size(); ++i)
     if (!close(gram[i], gram_expected[i])) return false;
 
   std::array<double, 1> zero_inner{2.0};
-  vibeqc::tensor::cpu_gemm('N', 'N', 1, 1, 0, nullptr, nullptr, zero_inner.data(), 1.0, 3.0, plan);
+  generativeqc::tensor::cpu_gemm('N', 'N', 1, 1, 0, nullptr, nullptr, zero_inner.data(), 1.0, 3.0,
+                                 plan);
   return close(zero_inner[0], 6.0) && check_zero_scaling(provider, ownership, threads);
+}
+
+bool check_congruence(CpuLinalgProvider provider,
+                      CpuLinalgThreadOwnership ownership = CpuLinalgThreadOwnership::task_parallel,
+                      int threads = 1) {
+  constexpr std::size_t n = 3;
+  const CpuLinalgPlan plan{provider, ownership, threads};
+  const std::array<double, n * n> coefficients{1.0, 0.2, -0.1, 0.3, 0.9, 0.4, -0.2, 0.5, 1.1};
+  const std::array<double, n * n> matrix{2.0, -1.0, 0.5, 0.7, 3.0, -0.4, -0.2, 0.8, 1.5};
+  for (char trans : {'N', 'T'}) {
+    std::array<double, n * n> expected{}, result{}, workspace{};
+    for (std::size_t i = 0; i < n; ++i)
+      for (std::size_t j = 0; j < n; ++j)
+        for (std::size_t p = 0; p < n; ++p)
+          for (std::size_t q = 0; q < n; ++q) {
+            const double left = trans == 'T' ? coefficients[p * n + i] : coefficients[i * n + p];
+            const double right = trans == 'T' ? coefficients[q * n + j] : coefficients[j * n + q];
+            expected[i * n + j] += left * matrix[p * n + q] * right;
+          }
+    generativeqc::tensor::cpu_congruence(trans, n, coefficients.data(), matrix.data(),
+                                         result.data(), workspace.data(), plan);
+    for (std::size_t i = 0; i < result.size(); ++i)
+      if (!std::isfinite(result[i]) || !close(result[i], expected[i], 3.0e-12)) return false;
+  }
+
+  bool rejected = false;
+  std::array<double, 1> one{1.0}, workspace{0.0};
+  try {
+    generativeqc::tensor::cpu_congruence('X', 1, one.data(), one.data(), one.data(),
+                                         workspace.data(), plan);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  if (!rejected) return false;
+  generativeqc::tensor::cpu_congruence('N', 0, nullptr, nullptr, nullptr, nullptr, plan);
+  return true;
 }
 
 bool check_gemv(CpuLinalgProvider provider,
@@ -75,24 +113,24 @@ bool check_gemv(CpuLinalgProvider provider,
   const std::array<double, 6> a{1, 2, 3, 4, 5, 6};
   const std::array<double, 3> x{2, -1, 0.5};
   std::array<double, 2> y{3, -2};
-  vibeqc::tensor::cpu_gemv('N', 2, 3, a.data(), x.data(), y.data(), 2.0, -1.0, plan);
+  generativeqc::tensor::cpu_gemv('N', 2, 3, a.data(), x.data(), y.data(), 2.0, -1.0, plan);
   const std::array<double, 2> expected{0.0, 14.0};
   for (std::size_t i = 0; i < y.size(); ++i)
     if (!close(y[i], expected[i])) return false;
 
   const std::array<double, 2> tx{2, -1};
   std::array<double, 3> ty{1, 2, 3};
-  vibeqc::tensor::cpu_gemv('T', 2, 3, a.data(), tx.data(), ty.data(), 0.5, 2.0, plan);
+  generativeqc::tensor::cpu_gemv('T', 2, 3, a.data(), tx.data(), ty.data(), 0.5, 2.0, plan);
   const std::array<double, 3> transposed_expected{1.0, 3.5, 6.0};
   for (std::size_t i = 0; i < ty.size(); ++i)
     if (!close(ty[i], transposed_expected[i])) return false;
 
   const double poison = std::numeric_limits<double>::quiet_NaN();
   std::array<double, 2> scaled{2.0, -3.0};
-  vibeqc::tensor::cpu_gemv('N', 2, 3, &poison, &poison, scaled.data(), 0.0, 4.0, plan);
+  generativeqc::tensor::cpu_gemv('N', 2, 3, &poison, &poison, scaled.data(), 0.0, 4.0, plan);
   if (scaled[0] != 8.0 || scaled[1] != -12.0) return false;
   std::array<double, 3> empty{poison, poison, poison};
-  vibeqc::tensor::cpu_gemv('T', 0, 3, nullptr, nullptr, empty.data(), 1.0, 0.0, plan);
+  generativeqc::tensor::cpu_gemv('T', 0, 3, nullptr, nullptr, empty.data(), 1.0, 0.0, plan);
   return std::all_of(empty.begin(), empty.end(), [](double value) { return value == 0.0; });
 }
 
@@ -103,14 +141,14 @@ bool check_ger(CpuLinalgProvider provider,
   const std::array<double, 2> x{2.0, -1.0};
   const std::array<double, 3> y{3.0, 4.0, -2.0};
   std::array<double, 6> a{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
-  vibeqc::tensor::cpu_ger(2, 3, x.data(), y.data(), a.data(), 0.5, plan);
+  generativeqc::tensor::cpu_ger(2, 3, x.data(), y.data(), a.data(), 0.5, plan);
   const std::array<double, 6> expected{4.0, 6.0, 1.0, 2.5, 3.0, 7.0};
   for (std::size_t i = 0; i < a.size(); ++i)
     if (!close(a[i], expected[i])) return false;
 
   const double poison = std::numeric_limits<double>::quiet_NaN();
-  vibeqc::tensor::cpu_ger(2, 3, &poison, &poison, nullptr, 0.0, plan);
-  vibeqc::tensor::cpu_ger(0, 3, nullptr, nullptr, nullptr, 1.0, plan);
+  generativeqc::tensor::cpu_ger(2, 3, &poison, &poison, nullptr, 0.0, plan);
+  generativeqc::tensor::cpu_ger(0, 3, nullptr, nullptr, nullptr, 1.0, plan);
   return true;
 }
 
@@ -142,13 +180,14 @@ bool check_symm(CpuLinalgProvider provider,
             for (std::size_t k = 0; k < n; ++k) sum += b[i * n + k] * full[k * 3 + j];
           expected[i * n + j] = 2.0 * sum - expected[i * n + j];
         }
-      vibeqc::tensor::cpu_symm(side, uplo, m, n, a.data(), b.data(), c.data(), 2.0, -1.0, plan);
+      generativeqc::tensor::cpu_symm(side, uplo, m, n, a.data(), b.data(), c.data(), 2.0, -1.0,
+                                     plan);
       for (std::size_t i = 0; i < c.size(); ++i)
         if (!std::isfinite(c[i]) || !close(c[i], expected[i])) return false;
     }
   }
   std::array<double, 2> scaled{2.0, -3.0};
-  vibeqc::tensor::cpu_symm('L', 'U', 1, 2, &poison, &poison, scaled.data(), 0.0, 4.0, plan);
+  generativeqc::tensor::cpu_symm('L', 'U', 1, 2, &poison, &poison, scaled.data(), 0.0, 4.0, plan);
   return scaled[0] == 8.0 && scaled[1] == -12.0;
 }
 
@@ -175,7 +214,7 @@ bool check_syr(CpuLinalgProvider provider,
         expected[i * 3 + j] = initial + alpha * x[i] * x[j];
       }
     }
-    vibeqc::tensor::cpu_syr(uplo, 3, x.data(), a.data(), alpha, plan);
+    generativeqc::tensor::cpu_syr(uplo, 3, x.data(), a.data(), alpha, plan);
     for (std::size_t i = 0; i < a.size(); ++i) {
       const std::size_t row = i / 3, column = i % 3;
       const bool selected = uplo == 'U' ? column >= row : column <= row;
@@ -183,8 +222,8 @@ bool check_syr(CpuLinalgProvider provider,
       if (!selected && !std::isnan(a[i])) return false;
     }
   }
-  vibeqc::tensor::cpu_syr('L', 2, &poison, nullptr, 0.0, plan);
-  vibeqc::tensor::cpu_syr('U', 0, nullptr, nullptr, 1.0, plan);
+  generativeqc::tensor::cpu_syr('L', 2, &poison, nullptr, 0.0, plan);
+  generativeqc::tensor::cpu_syr('U', 0, nullptr, nullptr, 1.0, plan);
   return true;
 }
 
@@ -212,7 +251,7 @@ bool check_syr2(CpuLinalgProvider provider,
         expected[i * 3 + j] = initial + alpha * (x[i] * y[j] + y[i] * x[j]);
       }
     }
-    vibeqc::tensor::cpu_syr2(uplo, 3, x.data(), y.data(), a.data(), alpha, plan);
+    generativeqc::tensor::cpu_syr2(uplo, 3, x.data(), y.data(), a.data(), alpha, plan);
     for (std::size_t i = 0; i < a.size(); ++i) {
       const std::size_t row = i / 3, column = i % 3;
       const bool selected = uplo == 'U' ? column >= row : column <= row;
@@ -228,8 +267,8 @@ bool check_syr2(CpuLinalgProvider provider,
     for (char uplo : {'L', 'U'}) {
       std::array<double, 4> a{};
       a[uplo == 'U' ? 2 : 1] = poison;
-      vibeqc::tensor::cpu_syr2(uplo, 2, xx.data(), yy.data(), a.data(), std::ldexp(1.0, -exponent),
-                               plan);
+      generativeqc::tensor::cpu_syr2(uplo, 2, xx.data(), yy.data(), a.data(),
+                                     std::ldexp(1.0, -exponent), plan);
       for (std::size_t i = 0; i < a.size(); ++i) {
         const bool selected = uplo == 'U' ? i / 2 <= i % 2 : i / 2 >= i % 2;
         if (selected && (!std::isfinite(a[i]) || a[i] != expected[i])) return false;
@@ -237,8 +276,8 @@ bool check_syr2(CpuLinalgProvider provider,
       }
     }
   }
-  vibeqc::tensor::cpu_syr2('L', 2, &poison, &poison, nullptr, 0.0, plan);
-  vibeqc::tensor::cpu_syr2('U', 0, nullptr, nullptr, nullptr, 1.0, plan);
+  generativeqc::tensor::cpu_syr2('L', 2, &poison, &poison, nullptr, 0.0, plan);
+  generativeqc::tensor::cpu_syr2('U', 0, nullptr, nullptr, nullptr, 1.0, plan);
   return true;
 }
 
@@ -248,21 +287,21 @@ bool check_syrk(CpuLinalgProvider provider,
   const CpuLinalgPlan plan{provider, ownership, threads};
   const std::array<double, 6> a{1, 2, 3, 4, 5, 6};
   std::array<double, 4> lower{1, 2, 3, 4};
-  vibeqc::tensor::cpu_syrk('L', 'N', 2, 3, a.data(), lower.data(), 2.0, 3.0, plan);
+  generativeqc::tensor::cpu_syrk('L', 'N', 2, 3, a.data(), lower.data(), 2.0, 3.0, plan);
   const std::array<double, 4> lower_expected{31, 2, 73, 166};
   for (std::size_t i = 0; i < lower.size(); ++i)
     if (!close(lower[i], lower_expected[i])) return false;
 
   const std::array<double, 6> transposed_a{1, 4, 2, 5, 3, 6};
   std::array<double, 4> upper{1, 2, 3, 4};
-  vibeqc::tensor::cpu_syrk('U', 'T', 2, 3, transposed_a.data(), upper.data(), 2.0, 3.0, plan);
+  generativeqc::tensor::cpu_syrk('U', 'T', 2, 3, transposed_a.data(), upper.data(), 2.0, 3.0, plan);
   const std::array<double, 4> upper_expected{31, 70, 3, 166};
   for (std::size_t i = 0; i < upper.size(); ++i)
     if (!close(upper[i], upper_expected[i])) return false;
 
   const double poison = std::numeric_limits<double>::quiet_NaN();
   std::array<double, 4> zero_inner{poison, 9.0, poison, poison};
-  vibeqc::tensor::cpu_syrk('L', 'N', 2, 0, nullptr, zero_inner.data(), 1.0, 0.0, plan);
+  generativeqc::tensor::cpu_syrk('L', 'N', 2, 0, nullptr, zero_inner.data(), 1.0, 0.0, plan);
   return zero_inner[0] == 0.0 && zero_inner[1] == 9.0 && zero_inner[2] == 0.0 &&
          zero_inner[3] == 0.0;
 }
@@ -293,7 +332,8 @@ bool check_syr2k(CpuLinalgProvider provider,
           }
           expected[i * 2 + j] = 1.5 * sum - 2.0 * expected[i * 2 + j];
         }
-      vibeqc::tensor::cpu_syr2k(uplo, trans, 2, 3, aa.data(), bb.data(), c.data(), 1.5, -2.0, plan);
+      generativeqc::tensor::cpu_syr2k(uplo, trans, 2, 3, aa.data(), bb.data(), c.data(), 1.5, -2.0,
+                                      plan);
       for (std::size_t i = 0; i < c.size(); ++i) {
         const std::size_t row = i / 2, column = i % 2;
         const bool selected = uplo == 'U' ? column >= row : column <= row;
@@ -303,7 +343,7 @@ bool check_syr2k(CpuLinalgProvider provider,
     }
   }
   std::array<double, 4> scaled{2.0, 9.0, -3.0, 4.0};
-  vibeqc::tensor::cpu_syr2k('L', 'N', 2, 1, &poison, &poison, scaled.data(), 0.0, 4.0, plan);
+  generativeqc::tensor::cpu_syr2k('L', 'N', 2, 1, &poison, &poison, scaled.data(), 0.0, 4.0, plan);
   return scaled[0] == 8.0 && scaled[1] == 9.0 && scaled[2] == -12.0 && scaled[3] == 16.0;
 }
 
@@ -354,8 +394,8 @@ bool check_trsm(CpuLinalgProvider provider,
                   rhs[i * n + j] += expected[i * n + k] * op_a(k, j) / alpha;
           }
 
-          vibeqc::tensor::cpu_trsm(side, uplo, trans, diag, m, n, a.data(), rhs.data(), alpha,
-                                   plan);
+          generativeqc::tensor::cpu_trsm(side, uplo, trans, diag, m, n, a.data(), rhs.data(), alpha,
+                                         plan);
           for (std::size_t i = 0; i < rhs.size(); ++i)
             if (!std::isfinite(rhs[i]) || !close(rhs[i], expected[i], 2.0e-12)) return false;
         }
@@ -410,8 +450,8 @@ bool check_trmm(CpuLinalgProvider provider,
                   expected[i * n + j] += alpha * input[i * n + k] * op_a(k, j);
           }
 
-          vibeqc::tensor::cpu_trmm(side, uplo, trans, diag, m, n, a.data(), result.data(), alpha,
-                                   plan);
+          generativeqc::tensor::cpu_trmm(side, uplo, trans, diag, m, n, a.data(), result.data(),
+                                         alpha, plan);
           for (std::size_t i = 0; i < result.size(); ++i)
             if (!std::isfinite(result[i]) || !close(result[i], expected[i], 2.0e-12)) return false;
         }
@@ -424,20 +464,20 @@ bool check_cholesky(CpuLinalgProvider provider,
                     int threads = 1) {
   std::array<double, 9> a{4, 12, -16, 12, 37, -43, -16, -43, 98};
   const CpuLinalgPlan plan{provider, ownership, threads};
-  if (vibeqc::tensor::cpu_cholesky_lower(a.data(), 3, plan) != 0) return false;
+  if (generativeqc::tensor::cpu_cholesky_lower(a.data(), 3, plan) != 0) return false;
   const std::array<double, 6> expected{2, 6, 1, -8, 5, 3};
   const std::array<std::size_t, 6> where{0, 3, 4, 6, 7, 8};
   for (std::size_t i = 0; i < where.size(); ++i)
     if (!close(a[where[i]], expected[i])) return false;
 
   std::array<double, 4> bad{1, 2, 2, 1};
-  return vibeqc::tensor::cpu_cholesky_lower(bad.data(), 2, plan) == 2;
+  return generativeqc::tensor::cpu_cholesky_lower(bad.data(), 2, plan) == 2;
 }
 bool check_eigen(CpuLinalgProvider provider,
                  CpuLinalgThreadOwnership ownership = CpuLinalgThreadOwnership::task_parallel,
                  int threads = 1) {
   const CpuLinalgPlan plan{provider, ownership, threads};
-  auto result = vibeqc::tensor::cpu_symmetric_eigen({2.0, 1.0, 1.0, 2.0}, 2, plan);
+  auto result = generativeqc::tensor::cpu_symmetric_eigen({2.0, 1.0, 1.0, 2.0}, 2, plan);
   if (result.values.size() != 2 || result.vectors.size() != 4 || !close(result.values[0], 1.0) ||
       !close(result.values[1], 3.0))
     return false;
@@ -455,31 +495,32 @@ bool check_eigen(CpuLinalgProvider provider,
 }  // namespace
 
 int main() {
-  if (!check_gemm(CpuLinalgProvider::scalar) || !check_gemv(CpuLinalgProvider::scalar) ||
-      !check_ger(CpuLinalgProvider::scalar) || !check_symm(CpuLinalgProvider::scalar) ||
-      !check_syr(CpuLinalgProvider::scalar) || !check_syr2(CpuLinalgProvider::scalar) ||
-      !check_syrk(CpuLinalgProvider::scalar) || !check_syr2k(CpuLinalgProvider::scalar) ||
-      !check_trsm(CpuLinalgProvider::scalar) || !check_trmm(CpuLinalgProvider::scalar) ||
-      !check_cholesky(CpuLinalgProvider::scalar) || !check_eigen(CpuLinalgProvider::scalar)) {
+  if (!check_gemm(CpuLinalgProvider::scalar) || !check_congruence(CpuLinalgProvider::scalar) ||
+      !check_gemv(CpuLinalgProvider::scalar) || !check_ger(CpuLinalgProvider::scalar) ||
+      !check_symm(CpuLinalgProvider::scalar) || !check_syr(CpuLinalgProvider::scalar) ||
+      !check_syr2(CpuLinalgProvider::scalar) || !check_syrk(CpuLinalgProvider::scalar) ||
+      !check_syr2k(CpuLinalgProvider::scalar) || !check_trsm(CpuLinalgProvider::scalar) ||
+      !check_trmm(CpuLinalgProvider::scalar) || !check_cholesky(CpuLinalgProvider::scalar) ||
+      !check_eigen(CpuLinalgProvider::scalar)) {
     std::cerr << "scalar CPU linear algebra failed\n";
     return 1;
   }
 
-  const auto automatic = vibeqc::tensor::cpu_linalg_diagnostic();
+  const auto automatic = generativeqc::tensor::cpu_linalg_diagnostic();
   if (automatic.thread_ownership != CpuLinalgThreadOwnership::task_parallel ||
       automatic.provider_threads != 1) {
     std::cerr << "default thread ownership is not task-parallel/single-thread\n";
     return 2;
   }
   if (automatic.cpu_target.empty() ||
-      automatic.cpu_target != vibeqc::tensor::cpu_linalg_target_name()) {
+      automatic.cpu_target != generativeqc::tensor::cpu_linalg_target_name()) {
     std::cerr << "CPU target identity is missing or inconsistent\n";
     return 7;
   }
 
-  if (vibeqc::tensor::cpu_openblas_built()) {
-    const bool local = vibeqc::tensor::cpu_openblas_local_thread_control_built();
-    const bool global = vibeqc::tensor::cpu_openblas_global_thread_control_built();
+  if (generativeqc::tensor::cpu_openblas_built()) {
+    const bool local = generativeqc::tensor::cpu_openblas_local_thread_control_built();
+    const bool global = generativeqc::tensor::cpu_openblas_global_thread_control_built();
     if (!local && automatic.provider != CpuLinalgProvider::scalar) {
       std::cerr << "OpenBLAS without local thread control must not auto-promote\n";
       return 3;
@@ -488,6 +529,7 @@ int main() {
     const auto ownership = local ? CpuLinalgThreadOwnership::task_parallel
                                  : CpuLinalgThreadOwnership::provider_parallel;
     if ((local || global) && (!check_gemm(CpuLinalgProvider::openblas, ownership) ||
+                              !check_congruence(CpuLinalgProvider::openblas, ownership) ||
                               !check_gemv(CpuLinalgProvider::openblas, ownership) ||
                               !check_ger(CpuLinalgProvider::openblas, ownership) ||
                               !check_symm(CpuLinalgProvider::openblas, ownership) ||
@@ -500,7 +542,7 @@ int main() {
       std::cerr << "OpenBLAS BLAS provider failed\n";
       return 4;
     }
-    if ((local || global) && vibeqc::tensor::cpu_openblas_lapack_built() &&
+    if ((local || global) && generativeqc::tensor::cpu_openblas_lapack_built() &&
         (!check_cholesky(CpuLinalgProvider::openblas, ownership) ||
          !check_eigen(CpuLinalgProvider::openblas, ownership))) {
       std::cerr << "OpenBLAS LAPACK provider failed\n";
@@ -512,12 +554,13 @@ int main() {
     const CpuLinalgPlan invalid{CpuLinalgProvider::automatic,
                                 CpuLinalgThreadOwnership::task_parallel, 2};
     std::array<double, 1> one{1.0};
-    vibeqc::tensor::cpu_gemm('N', 'N', 1, 1, 1, one.data(), one.data(), one.data(), 1, 0, invalid);
+    generativeqc::tensor::cpu_gemm('N', 'N', 1, 1, 1, one.data(), one.data(), one.data(), 1, 0,
+                                   invalid);
     std::cerr << "nested-provider thread contract was accepted\n";
     return 6;
   } catch (const std::invalid_argument&) {
   }
 
   std::cout << "CPU linear algebra provider tests passed ("
-            << vibeqc::tensor::cpu_linalg_provider_name(automatic.provider) << ")\n";
+            << generativeqc::tensor::cpu_linalg_provider_name(automatic.provider) << ")\n";
 }

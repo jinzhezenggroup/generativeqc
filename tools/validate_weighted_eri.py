@@ -30,28 +30,34 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
-from vibeqc_compiler.integral.blocks import (
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.integral.blocks import (
     BlockRequest,
     ShellTile,
     TensorLayout,
     WeightTile,
 )
-from vibeqc_compiler.integral.eri_weights import (
+from generativeqc_compiler.integral.eri_weights import (
     fold_dense_eri_weight,
     fold_normalized_pair_weight,
 )
-from vibeqc_compiler.integral.ir import four_center_eri_operator
-from vibeqc_compiler.integral.range_separation import CoulombKernel, CoulombKernelFamily
-from vibeqc_compiler.integral.shell_signature import BasisConvention, CenterBinding
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
-from vibeqc_compiler.integral.weighted_eri_inputs import (
+from generativeqc_compiler.integral.ir import four_center_eri_operator
+from generativeqc_compiler.integral.range_separation import (
+    CoulombKernel,
+    CoulombKernelFamily,
+)
+from generativeqc_compiler.integral.shell_signature import (
+    BasisConvention,
+    CenterBinding,
+)
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri_inputs import (
     prepare_weighted_eri_stream,
     weighted_eri_response,
 )
 
 from tools.generate_validation_references import pyscf_molecule, quartet_data
-from tools.vibeqc_validation.f_shell_numerics import (
+from tools.generativeqc_validation.f_shell_numerics import (
     _normalized_primitives,
     numerical_error,
 )
@@ -323,7 +329,7 @@ def main() -> None:
         "tiles": len(fixtures),
         "probe_sha256": file_hash(args.probe),
         "records_sha256": file_hash(records),
-        "library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "fixtures": [
             {
                 "name": f["request"].request_id,

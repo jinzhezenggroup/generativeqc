@@ -7,8 +7,10 @@ import subprocess
 
 import numpy as np
 import pytest
+from generativeqc_compiler.integral.weighted_eri_cuda import (
+    emit_low_order_weighted_header,
+)
 from scipy.special import hyp1f1
-from vibeqc_compiler.integral.weighted_eri_cuda import emit_low_order_weighted_header
 
 
 class Geometry(ct.Structure):
@@ -36,9 +38,9 @@ def generated(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     source = source.replace("#include <cuda_runtime.h>", "")
     source = source.replace("__device__ __forceinline__", "inline")
     source += r"""
-extern "C" void force_only(int p, const vibeqc::scf::generated_weighted_eri::Geometry* g,
+extern "C" void force_only(int p, const generativeqc::scf::generated_weighted_eri::Geometry* g,
                           const double* weights, double* out) {
-  using namespace vibeqc::scf::generated_weighted_eri;
+  using namespace generativeqc::scf::generated_weighted_eri;
   const auto result = p ? psss_force(*g, weights) : ssss_force(*g, weights);
   for (int c=0; c<3; ++c) for (int k=0; k<3; ++k) out[3*c+k]=result.center[c][k];
 }

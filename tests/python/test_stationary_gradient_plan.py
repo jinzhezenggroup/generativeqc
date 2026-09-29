@@ -10,21 +10,21 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.method import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.method import (
     MethodSpec,
     UnsupportedMethod,
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.tensor import Program, execute
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
 
 def plan(spin: typing.Any = "unpolarized", method: typing.Any = "PBE") -> typing.Any:
@@ -327,7 +327,7 @@ def test_rsh_gradient_inventory_and_identity_bind_operator_and_omega() -> None:
         for primitive in p.range_exchange_primitives
     )
 
-    from vibeqc_compiler.method.spec import METHOD_CATALOG
+    from generativeqc_compiler.method.spec import METHOD_CATALOG
 
     changed_spec = replace(
         METHOD_CATALOG["CAM-B3LYP"],
@@ -613,7 +613,7 @@ def test_same_tensor_graph_has_deterministic_cuda_source_and_separate_schedule_i
 
 
 def test_missing_xc_derivative_rule_rejects_plan(monkeypatch: typing.Any) -> None:
-    from vibeqc_compiler.method import SemilocalXCPrimitive
+    from generativeqc_compiler.method import SemilocalXCPrimitive
 
     monkeypatch.setattr(
         SemilocalXCPrimitive,
@@ -627,7 +627,7 @@ def test_missing_xc_derivative_rule_rejects_plan(monkeypatch: typing.Any) -> Non
 def test_missing_exact_exchange_derivative_rule_rejects_hybrid_plan(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc_compiler.method import ExactExchangePrimitive
+    from generativeqc_compiler.method import ExactExchangePrimitive
 
     monkeypatch.setattr(
         ExactExchangePrimitive,
@@ -646,13 +646,13 @@ import importlib.abc
 import sys
 class BlockRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'vibeqc', 'pyscf', 'cupy', 'torch'}:
+        if fullname.split('.')[0] in {'generativeqc', 'pyscf', 'cupy', 'torch'}:
             raise AssertionError('compiler imported ' + fullname)
 sys.meta_path.insert(0, BlockRuntime())
-from vibeqc_compiler.method import StationaryGradientPlan, StationaryMeanField, resolve_method
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.method import StationaryGradientPlan, StationaryMeanField, resolve_method
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 p = StationaryGradientPlan(resolve_method('PBE'), StationaryMeanField('interior-v1'))
 for source in ('one_electron', 'coulomb', 'overlap_pulay'):
     block = p.integral_block(source, terms=2)

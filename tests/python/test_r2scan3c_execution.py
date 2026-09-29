@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Calculator,
     GridSpec,
     KsOptions,
@@ -16,7 +16,7 @@ from vibeqc import (
     evaluate_r2scan3c_gcp,
     load_r2scan3c_basis,
 )
-from vibeqc_compiler.method import UnsupportedMethod, resolve_method
+from generativeqc_compiler.method import UnsupportedMethod, resolve_method
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 WATER = [
@@ -37,7 +37,7 @@ GRID = GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
 
 
 def _numbers_and_coordinates(atoms: typing.Any) -> tuple[list[int], np.ndarray]:
-    from vibeqc.calculator import Atom
+    from generativeqc.calculator import Atom
 
     normalized = tuple(Atom.from_value(atom) for atom in atoms)
     return (
@@ -47,7 +47,7 @@ def _numbers_and_coordinates(atoms: typing.Any) -> tuple[list[int], np.ndarray]:
 
 
 def _cuda_evidence(name: str, payload: typing.Any) -> None:
-    directory = os.environ.get("VIBEQC_R2SCAN3C_CUDA_EVIDENCE")
+    directory = os.environ.get("GENERATIVEQC_R2SCAN3C_CUDA_EVIDENCE")
     if directory:
         path = Path(directory)
         path.mkdir(parents=True, exist_ok=True)
@@ -57,13 +57,15 @@ def _cuda_evidence(name: str, payload: typing.Any) -> None:
 
 
 def _real_cuda_allocation() -> str:
-    allocation = os.environ.get("SLURM_JOB_ID") or os.environ.get("VIBEQC_QZ_WORKLOAD")
+    allocation = os.environ.get("SLURM_JOB_ID") or os.environ.get(
+        "GENERATIVEQC_QZ_WORKLOAD"
+    )
     assert allocation, "real GPU tests require a Slurm allocation or qz workload name"
     return allocation
 
 
 def test_native_gcp_public_wrapper_matches_independent_reference() -> None:
-    from tools.vibeqc_gcp.reference import evaluate_r2scan3c_gcp as reference
+    from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp as reference
 
     graph = resolve_method("R2SCAN-3c")
     numbers, xyz = _numbers_and_coordinates(H2)
@@ -152,7 +154,7 @@ def test_r2scan3c_rejects_wrong_basis_and_out_of_domain_element() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
 @pytest.mark.parametrize("atoms", (H2, WATER), ids=("h2-sp", "water-spd"))
@@ -207,7 +209,7 @@ def test_cuda_r2scan3c_public_force_is_electronic_plus_d4_plus_gcp(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
 def test_cuda_r2scan3c_water_total_force_matches_reconverged_directional_fd() -> None:
@@ -257,14 +259,14 @@ def test_cuda_r2scan3c_water_total_force_matches_reconverged_directional_fd() ->
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
 def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
     allocation = _real_cuda_allocation()
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
+    from generativeqc_compiler.dft import NativeAO
 
     calculator = Calculator(
         method="r2scan-3c-rks",
@@ -281,7 +283,7 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
         ) as basis:
             state = StationaryKsState.from_native(batch, basis)
             try:
-                with pytest.raises(ValueError, match="primitive work budget"):
+                with pytest.raises(ValueError, match="primitive page work budget"):
                     complete_rks_cuda_gradient_diagnostic(
                         state,
                         basis,
@@ -289,12 +291,13 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
                         target=batch._stationary_cuda_target(),
                         cache=Path(
                             os.environ.get(
-                                "VIBEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
+                                "GENERATIVEQC_STATIONARY_CACHE",
+                                ".cache/stationary-cuda",
                             )
                         ),
                         aot_directory=None,
                         native_grid_library=Path(str(batch._library._name)).resolve(),
-                        max_primitive_records=12_134_768,
+                        max_primitive_records=1,
                     )
             finally:
                 state._source.close()
@@ -302,18 +305,22 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
 
     assert force.shape == (3, 3)
     assert work["primitive_records"] == 12_134_769
-    assert work["primitive_records"] <= 16_000_000
+    assert work["primitive_record_page_budget"] == 16_000_000
+    assert (
+        0 < work["primitive_page_peak_records"] <= work["primitive_record_page_budget"]
+    )
+    assert work["primitive_pages"] > 0
     assert work["task_descriptors"] > 0
     assert work["task_batches"] > 0
     assert work["additional_device_peak_bound"] <= work["additional_device_budget"]
     _cuda_evidence(
         "water-spd-resource-work",
-        {**work, "allocation": allocation, "rejected_work_budget": 12_134_768},
+        {**work, "allocation": allocation, "rejected_page_budget": 1},
     )
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
 def test_cuda_r2scan3c_ragged_force_replay_matches_fresh_changed_geometry() -> None:
@@ -373,7 +380,7 @@ def test_cuda_r2scan3c_ragged_force_replay_matches_fresh_changed_geometry() -> N
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
 def test_cuda_r2scan3c_charged_ragged_failure_isolation() -> None:
@@ -426,7 +433,7 @@ def test_cuda_r2scan3c_charged_ragged_failure_isolation() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
 @pytest.mark.parametrize(
@@ -457,11 +464,11 @@ def test_cuda_r2scan3c_spd_total_matches_independent_analytic_oracle(
     dftd4 = pytest.importorskip("dftd4")
     pyscf = pytest.importorskip("pyscf")
     from dftd4.interface import DampingParam, DispersionModel
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import independent_semilocal_total_gradient
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
-    from tools.vibeqc_gcp.reference import evaluate_r2scan3c_gcp as reference_gcp
+    from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp as reference_gcp
 
     basis_spec = load_r2scan3c_basis()
     calculator = Calculator(
@@ -522,7 +529,7 @@ def test_cuda_r2scan3c_spd_total_matches_independent_analytic_oracle(
         f"{spin}-{len(atoms)}-charge-{charge}-production-grid-independent-oracle",
         {
             "allocation": allocation,
-            "source_tree": os.environ.get("VIBEQC_SOURCE_TREE"),
+            "source_tree": os.environ.get("GENERATIVEQC_SOURCE_TREE"),
             "basis_identity": basis_spec.identity,
             "atomic_numbers": numbers,
             "charge": charge,

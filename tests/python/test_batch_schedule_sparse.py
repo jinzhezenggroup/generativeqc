@@ -14,9 +14,9 @@ def test_huge_empty_domains_have_bounded_diagnostics(operation: str) -> None:
         pytest.skip("address-space-bounded regression requires Linux procfs")
     program = r"""
 import os, resource, sys
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import Index, IndexSpace, Program, TensorSpec, input_tensor, indexed_gather, scatter_add
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import Index, IndexSpace, Program, TensorSpec, input_tensor, indexed_gather, scatter_add
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 huge = 2**40
 zero = Index("empty", IndexSpace("empty", "component", 0))
 source_size, target_size = (0, huge) if sys.argv[1] == "scatter" else (huge, 0)
@@ -55,8 +55,8 @@ def test_sparse_histograms_match_dense_small_domains(operation: str) -> None:
     from collections import Counter
     from itertools import product
 
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor import (
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor import (
         Index,
         IndexSpace,
         Program,
@@ -65,7 +65,7 @@ def test_sparse_histograms_match_dense_small_domains(operation: str) -> None:
         input_tensor,
         scatter_add,
     )
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     outer = Index("outer", IndexSpace("components", "component", 2))
     target = cuda_target_info("sm_80")

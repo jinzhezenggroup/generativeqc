@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.r2scan-tail-reference/v1",
+  "schema": "generativeqc.r2scan-tail-reference/v1",
   "boundary_semantics": "semilocal-boundary-v1",
   "functional": "R2SCAN",
   "spin": "polarized",

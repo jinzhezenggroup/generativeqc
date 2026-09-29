@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 XYZ = np.array([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]])
 SYSTEM = [("H", position) for position in XYZ]
@@ -30,7 +30,9 @@ def test_invalid_coordinate_structure_never_executes_native(
             pytest.fail("malformed coordinates reached native execution")
 
         with monkeypatch.context() as guard:
-            guard.setattr(prepared._library, "vibeqc_batch_execute", unexpected_execute)
+            guard.setattr(
+                prepared._library, "generativeqc_batch_execute", unexpected_execute
+            )
             with pytest.raises(ValueError, match="coordinates.*(shape|real)"):
                 prepared.execute([coordinates], strict=True)
         # Admission failures must neither overwrite geometry nor prime warm state.

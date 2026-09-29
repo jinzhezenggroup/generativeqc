@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -19,15 +19,15 @@ pytestmark = pytest.mark.skipif(
 def select_response(monkeypatch: typing.Any, storage: typing.Any) -> None:
     """Explicit selectors keep this experiment independent of size promotion."""
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_STORAGE", storage)
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", storage)
     # This test measures dense response storage/transfer counts. Automatic
     # occupied response has its own independent numerical and route checks.
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", "dense")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_ALGEBRA", "blas")
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "shell")
-    monkeypatch.setenv("VIBEQC_DF_SHELL_SCHEDULE", "compact")
-    monkeypatch.setenv("VIBEQC_DF_RAW_STAGING", "pinned-panels")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", str(4 << 20))
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas")
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", "compact")
+    monkeypatch.setenv("GENERATIVEQC_DF_RAW_STAGING", "pinned-panels")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(4 << 20))
 
 
 @pytest.mark.parametrize("batch_size", [1, 4])
@@ -45,7 +45,7 @@ def test_jk_scratch_survives_response_property_and_geometry_replays(
     """Both spins, batch items and the next SCF reuse the same scratch owners."""
     from pyscf import gto, scf
 
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", exchange)
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", exchange)
     case = benchmark_cases()[case_name]
     moved = [(z, np.array(r, dtype=float)) for z, r in case.atoms]
     moved[1][1][0] += 0.001
@@ -69,11 +69,11 @@ def test_jk_scratch_survives_response_property_and_geometry_replays(
         references.append((oracle.e_tot, -oracle.nuc_grad_method().kernel()))
     calc = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
-        auxiliary_basis=case.vibeqc_basis,
+        auxiliary_basis=case.generativeqc_basis,
         max_iterations=100,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
@@ -99,9 +99,9 @@ def test_jk_scratch_survives_response_property_and_geometry_replays(
             select_response(monkeypatch, storage)
             if not force:
                 # Response-only overrides are invalid for an energy request.
-                monkeypatch.delenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES")
+                monkeypatch.delenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES")
             trace = tmp_path / f"stage-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = batch.execute(
                 [coordinates] * batch_size if changed else None,
                 strict=True,
@@ -157,9 +157,9 @@ def test_jk_scratch_retains_discarded_metric_response(
     monkeypatch: typing.Any, tmp_path: typing.Any, space: typing.Any, pairs: typing.Any
 ) -> None:
     """An unequal near-duplicate auxiliary pair has a finite discarded mode."""
-    monkeypatch.setenv("VIBEQC_DF_FINAL_PROJECTION", "reuse")
-    monkeypatch.setenv("VIBEQC_DF_FINAL_EXCHANGE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESIDENT_EXCHANGE", "full")
+    monkeypatch.setenv("GENERATIVEQC_DF_FINAL_PROJECTION", "reuse")
+    monkeypatch.setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESIDENT_EXCHANGE", "full")
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.1, 0.0, 0.7))]
     basis = [Shell(i, 0, (Primitive(1.0, 1.0),)) for i in range(2)]
     auxiliary = [
@@ -179,11 +179,11 @@ def test_jk_scratch_retains_discarded_metric_response(
         atoms
     )
     select_response(monkeypatch, "jk-scratch")
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", space)
-    monkeypatch.setenv("VIBEQC_DF_DERIVATIVE_PAIRS", pairs)
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", space)
+    monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", pairs)
     trace = tmp_path / "metric-response.jsonl"
-    monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     calc = Calculator(device="cuda", density_fitting="cuda", **common)
     with calc.prepare_batch([atoms]) as batch:
         actual = batch.execute(strict=True).items[0]
@@ -214,10 +214,10 @@ def test_jk_scratch_retains_discarded_metric_response(
 def test_jk_scratch_rejects_partial_source_plan(monkeypatch: typing.Any) -> None:
     """Retained B alone never authorizes borrowing full-size K buffers."""
     select_response(monkeypatch, "jk-scratch")
-    monkeypatch.delenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES")
+    monkeypatch.delenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES")
     case = benchmark_cases()["water-tetramer-def2-svp-spherical"]
     calc = Calculator(
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
@@ -228,7 +228,7 @@ def test_jk_scratch_rejects_partial_source_plan(monkeypatch: typing.Any) -> None
     )
     with calc.prepare_batch([case.atoms]) as batch:
         with monkeypatch.context() as bounded:
-            bounded.setenv("VIBEQC_DF_RESPONSE_STORAGE", "auto")
+            bounded.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto")
             expected = batch.execute(strict=True).items[0]
         # generated_df_hf_gradient converts the adapter's INVALID_ARGUMENT to
         # runtime_error; RHF finalization maps that to NUMERICAL_FAILURE, which
@@ -236,7 +236,7 @@ def test_jk_scratch_rejects_partial_source_plan(monkeypatch: typing.Any) -> None
         # this assertion cannot pass from a preparation failure.
         with pytest.raises(RuntimeError, match="numerical failure"):
             batch.execute(strict=True)
-        monkeypatch.setenv("VIBEQC_DF_RESPONSE_STORAGE", "auto")
+        monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto")
         actual = batch.execute(strict=True).items[0]
         assert actual.energy == pytest.approx(expected.energy, abs=1e-9, rel=0)
         np.testing.assert_allclose(actual.forces, expected.forces, atol=1e-8, rtol=0)
@@ -245,16 +245,16 @@ def test_jk_scratch_rejects_partial_source_plan(monkeypatch: typing.Any) -> None
 @pytest.mark.parametrize(
     ("control", "value"),
     [
-        ("VIBEQC_DF_RESPONSE_STORAGE", "invalid"),
-        ("VIBEQC_DF_RAW_REUSE", "invalid"),
-        ("VIBEQC_DF_RESPONSE_BATCHING", "invalid"),
-        ("VIBEQC_DF_DERIVATIVE_PAIRS", "invalid"),
-        ("VIBEQC_DF_PACKED_AO_BLOCK_ROWS", "0"),
-        ("VIBEQC_DF_PRIMITIVE_BUCKETS", "invalid"),
-        ("VIBEQC_DF_RESPONSE_ALGEBRA", "scalar"),
-        ("VIBEQC_DF_SERIAL_RESPONSE_DOT", "1"),
-        ("VIBEQC_DF_RESPONSE_UPLOAD_PROBE", "packed"),
-        ("VIBEQC_DF_RESPONSE_SCATTER_PROBE", "sharded"),
+        ("GENERATIVEQC_DF_RESPONSE_STORAGE", "invalid"),
+        ("GENERATIVEQC_DF_RAW_REUSE", "invalid"),
+        ("GENERATIVEQC_DF_RESPONSE_BATCHING", "invalid"),
+        ("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "invalid"),
+        ("GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS", "0"),
+        ("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", "invalid"),
+        ("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "scalar"),
+        ("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT", "1"),
+        ("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE", "packed"),
+        ("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE", "sharded"),
     ],
 )
 def test_jk_scratch_rejects_incompatible_controls_and_recovers(
@@ -275,7 +275,7 @@ def test_jk_scratch_rejects_incompatible_controls_and_recovers(
                 batch.execute(strict=True)
         # The storage selector supplies BLAS by default, without requiring an
         # additional environment variable even outside the promoted shape.
-        monkeypatch.delenv("VIBEQC_DF_RESPONSE_ALGEBRA")
+        monkeypatch.delenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA")
         actual = batch.execute(strict=True).items[0]
         assert actual.energy == pytest.approx(expected.energy, abs=1e-9, rel=0)
         np.testing.assert_allclose(actual.forces, expected.forces, atol=1e-8, rtol=0)
@@ -337,9 +337,9 @@ def test_raw_view_binds_model_and_survives_upload_ablation(
         current_owners = []
         with calc.prepare_batch([atoms]) as batch:
             for replay, policy in enumerate(("auto", "off", "auto")):
-                monkeypatch.setenv("VIBEQC_DF_RAW_REUSE", policy)
+                monkeypatch.setenv("GENERATIVEQC_DF_RAW_REUSE", policy)
                 trace = tmp_path / f"model-{changed}-{replay}.jsonl"
-                monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+                monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
                 actual = batch.execute(strict=True).items[0]
                 assert actual.energy == pytest.approx(expected.energy, abs=1e-9, rel=0)
                 np.testing.assert_allclose(

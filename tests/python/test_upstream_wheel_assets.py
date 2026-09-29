@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_installed_compiler_contains_required_source_and_production_assets(
     tmp_path: Path,
 ) -> None:
-    package = tmp_path / "vibeqc_compiler"
+    package = tmp_path / "generativeqc_compiler"
     shutil.copytree(
-        ROOT / "python/vibeqc_compiler",
+        ROOT / "python/generativeqc_compiler",
         package,
         ignore=shutil.ignore_patterns("__pycache__"),
     )
@@ -48,10 +48,10 @@ def test_installed_compiler_contains_required_source_and_production_assets(
         assert "local_root" not in source
 
     script = """
-from vibeqc_compiler.common.d3_data import load_d3_production_data
-from vibeqc_compiler.common.paths import asset_path, source_root
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.xc.libxc_maple import import_maple_file
+from generativeqc_compiler.common.d3_data import load_d3_production_data
+from generativeqc_compiler.common.paths import asset_path, source_root
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.xc.libxc_maple import import_maple_file
 try:
     source_root()
 except ValueError:
@@ -81,7 +81,7 @@ assert d3.table_sha256 == '9ff932ea598f690c1fb599a67762060ba1907102d5ec132164f2a
     # Hybrid force wrappers must be generatable from the installed compiler,
     # without repository tools or runtime/reference imports. Their scientific
     # bytes must agree with checkout code generation.
-    from vibeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device
+    from generativeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device
 
     expected = {
         name: hashlib.sha256(emit_split_hybrid_device(name).encode()).hexdigest()
@@ -91,12 +91,12 @@ assert d3.table_sha256 == '9ff932ea598f690c1fb599a67762060ba1907102d5ec132164f2a
 import builtins, hashlib, json
 original_import = builtins.__import__
 def guarded_import(name, *args, **kwargs):
-    if name.split('.')[0] in ('tools', 'vibeqc', 'pyscf', 'cupy', 'torch'):
+    if name.split('.')[0] in ('tools', 'generativeqc', 'pyscf', 'cupy', 'torch'):
         raise AssertionError('installed compiler imported ' + name)
     return original_import(name, *args, **kwargs)
 builtins.__import__ = guarded_import
-from vibeqc_compiler.common.paths import source_root
-from vibeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device
+from generativeqc_compiler.common.paths import source_root
+from generativeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device
 try:
     source_root()
 except ValueError:

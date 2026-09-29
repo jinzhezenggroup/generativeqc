@@ -10,10 +10,10 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_kernels.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 bool enabled() {
-  const auto* control = std::getenv("VIBEQC_DF_WARM_REUSE");
+  const auto* control = std::getenv("GENERATIVEQC_DF_WARM_REUSE");
   return !control || std::strcmp(control, "0") != 0;
 }
 }  // namespace
@@ -38,9 +38,9 @@ std::shared_ptr<const RhfWarmState> find_rhf_warm_state(const CudaDensityFitting
   }
   return {};
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 using namespace cuda_df;
 
 bool cuda_density_fitting_rhf_warm_matches(const CudaDensityFittingJkPlan* plan,
@@ -81,8 +81,10 @@ void prepare_cuda_density_fitting_rhf_warm_state(CudaDensityFittingJkPlan* plan,
     CudaDfFinalStateSnapshot snapshot;
     std::string detail;
     auto status = read_cuda_density_fitting_final_state(plan, token, snapshot, detail);
-    if (status == VIBEQC_STATUS_INVALID_ARGUMENT || status == VIBEQC_STATUS_OUT_OF_MEMORY) return;
-    if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
+        status == GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+      return;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     if (snapshot.density.size() != 1 || snapshot.density[0] != density) return;
     auto candidate = std::make_shared<RhfWarmState>();
     candidate->token = token;
@@ -152,4 +154,4 @@ void commit_cuda_density_fitting_rhf_warm_state(CudaDensityFittingJkPlan* plan,
   state->warm_frozen = std::move(state->warm_replay_seed);
   state->warm_pending_epoch = 0;
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

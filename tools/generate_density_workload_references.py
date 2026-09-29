@@ -20,10 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 import numpy as np
-from vibeqc import Atom, Primitive, Shell
-from vibeqc.calculator import _named_basis_shells
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
+from generativeqc import Atom, Primitive, Shell
+from generativeqc.calculator import _named_basis_shells
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 
 from tools.generate_validation_references import pyscf_molecule
 from tools.generate_xc_integration_references import FUNCTIONALS
@@ -172,7 +172,7 @@ def generate(directory: Path) -> None:
             arrays[label + "_potential"] = potential * scale[:, None] * scale[None, :]
         arrays = {key: np.ascontiguousarray(value) for key, value in arrays.items()}
         metadata = {
-            "schema": "vibeqc.density-workload-reference.v1",
+            "schema": "generativeqc.density-workload-reference.v1",
             "inputs": inputs,
             "inputs_hash": canonical_hash(inputs),
             "grid_identity": grid.identity,

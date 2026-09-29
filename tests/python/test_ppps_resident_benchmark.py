@@ -8,14 +8,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.benchmark import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.benchmark import (
     emit_ppps_resident_bra_benchmark_cuda,
     emit_shell_class_benchmark_cuda,
 )
-from vibeqc_compiler.integral.fused_schedule import build_fused_shell_plan
-from vibeqc_compiler.integral.production import load_production_kernel_selections
-from vibeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
+from generativeqc_compiler.integral.production import load_production_kernel_selections
+from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
@@ -31,8 +31,8 @@ def test_ppps_resident_benchmark_groups_contiguous_ket_tasks() -> None:
     assert "generated_ppps_resident_bra_force_rhf_kernel<<<" in source
     assert "generated_ppps_component_recompute_rhf_kernel<<<" in source
     assert "resident_bra_1110" in source
-    assert "VIBEQC_TASK_COUNT" not in source
-    assert "VIBEQC_FUSED_LAUNCH" not in source
+    assert "GENERATIVEQC_TASK_COUNT" not in source
+    assert "GENERATIVEQC_FUSED_LAUNCH" not in source
 
 
 def test_ppps_resident_benchmark_runs_when_nvcc_is_configured(
@@ -40,10 +40,10 @@ def test_ppps_resident_benchmark_runs_when_nvcc_is_configured(
 ) -> None:
     """Compile locally and schedule every real-GPU check through Slurm."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the resident GPU benchmark")
-    architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_120")
+        pytest.skip("set GENERATIVEQC_NVCC to run the resident GPU benchmark")
+    architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_120")
     source_path = tmp_path / "generated_ppps_resident_benchmark.cu"
     executable = tmp_path / "generated_ppps_resident_benchmark"
     # Two 256-task chunks leave almost the entire RTX 5090 idle.  Use enough
@@ -110,7 +110,7 @@ def test_ppps_resident_benchmark_runs_when_nvcc_is_configured(
         for item in load_production_kernel_selections(
             repository_root
             / "python"
-            / "vibeqc_compiler"
+            / "generativeqc_compiler"
             / "integral"
             / "production_shell_classes.json",
             "sm_120",

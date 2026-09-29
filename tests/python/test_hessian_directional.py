@@ -6,17 +6,17 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     NativeRHFState,
     directional,
     directional_rhf_response,
     first_order,
     perturbation,
 )
-from tools.vibeqc_posthf.export import conventional_fock
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import GMRESOptions, ResponseSolveError
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_posthf.export import conventional_fock
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import GMRESOptions, ResponseSolveError
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 
 @pytest.fixture(scope="module", params=("h2", "water"))
@@ -377,7 +377,7 @@ def test_nonconverged_response_fails_without_partial_publication(
 def test_one_perturbation_rejects_bad_matrices_before_jk(
     case: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from tools.vibeqc_response import NativeJKBackend, RHFResponseOperator
+    from tools.generativeqc_response import NativeJKBackend, RHFResponseOperator
 
     _, state, _, result = case
     backend = NativeJKBackend(state.source)

@@ -12,7 +12,7 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 
 /** Project raw source slices before whitening when all auxiliary directions of
@@ -21,11 +21,10 @@ namespace {
  * This changes source work from auxiliary-output-panel regeneration to AO-row
  * regeneration; it allocates nothing and remains safe inside SCF capture.
  */
-vibeqc_status build_streamed_projected_exchange(CudaDensityFittingJkPlan& plan, std::size_t system,
-                                                const double* coefficients, std::size_t rank,
-                                                bool column_major, double weight, std::size_t rows,
-                                                double* exchange, std::string& detail,
-                                                const double* charge_density = nullptr) {
+generativeqc_status build_streamed_projected_exchange(
+    CudaDensityFittingJkPlan& plan, std::size_t system, const double* coefficients,
+    std::size_t rank, bool column_major, double weight, std::size_t rows, double* exchange,
+    std::string& detail, const double* charge_density = nullptr) {
   using namespace runtime::cuda_trace;
   const auto n = plan.nbf, a = plan.naux, capacity = plan.panel_capacity;
   const auto ar = a * rank;
@@ -35,7 +34,7 @@ vibeqc_status build_streamed_projected_exchange(CudaDensityFittingJkPlan& plan, 
   auto* transformed = plan.exchange_tile_output;
   auto* output = exchange + system * plan.matrix_elements;
   const auto project = [&](std::size_t begin, std::size_t count, double* target,
-                           bool charge) -> vibeqc_status {
+                           bool charge) -> generativeqc_status {
     const auto raw_tile = std::min(a, capacity / (count * n));
     trace_counter("raw_panel_source_auxiliary_evaluations", count * n * a);
     trace_counter("streamed_occupied_raw_generation_rows", count);
@@ -44,7 +43,7 @@ vibeqc_status build_streamed_projected_exchange(CudaDensityFittingJkPlan& plan, 
       const auto status = generate_cuda_density_fitting_raw_tile(
           plan.integral_source, system, begin * n, count * n, p, q, -1,
           reinterpret_cast<void*>(plan.stream), raw, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       if (charge) {
         launch_accumulate_streamed_auxiliary_density_kernel(
             blocks_for(q), kThreads, 0, plan.stream, count * n, q, raw, charge_density + begin * n,
@@ -91,16 +90,16 @@ vibeqc_status build_streamed_projected_exchange(CudaDensityFittingJkPlan& plan, 
     trace_counter("streamed_whitening_factor_gemms", 1);
     trace_counter("streamed_whitening_factor_flops", 2 * a * a * count * rank);
     trace_counter("streamed_occupied_projection_copy_bytes_avoided", count * ar * sizeof(double));
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   };
-  vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   // The compiler owns visit order and the two-slot lifetime. Raw input and
   // metric scratch remain disjoint from both retained projections; native
   // callbacks bind the existing buffers and enqueue all work on plan.stream.
   const auto project_visit = [&](std::size_t begin, std::size_t count, std::size_t slot,
                                  bool charge) {
     status = project(begin, count, projections[slot], charge);
-    return status == VIBEQC_STATUS_SUCCESS;
+    return status == GENERATIVEQC_STATUS_SUCCESS;
   };
   const auto contract_visit = [&](std::size_t r, std::size_t nr, std::size_t c, std::size_t nc,
                                   std::size_t left, std::size_t right, bool retained) {
@@ -131,9 +130,9 @@ vibeqc_status build_streamed_projected_exchange(CudaDensityFittingJkPlan& plan, 
                                    },
                                    contract_visit);
   if (!completed) {
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     detail = "invalid compiler projected exchange traversal";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (plan.triangular_exchange) {
     launch_mirror_exchange_triangle(blocks_for(plan.matrix_elements), kThreads, plan.stream, n,
@@ -148,15 +147,13 @@ vibeqc_status build_streamed_projected_exchange(CudaDensityFittingJkPlan& plan, 
   trace_counter("streamed_occupied_metric_projection_capacity_bytes", rows * ar * sizeof(double));
   trace_counter("streamed_occupied_scratch_capacity_bytes", 4 * capacity * sizeof(double));
   trace_counter("occupied_exchange_triangular", plan.triangular_exchange);
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 }  // namespace
 
-vibeqc_status build_shared_coulomb_occupied_exchange(CudaDensityFittingJkPlan& plan,
-                                                     const double* density,
-                                                     const double* coefficients, std::size_t rank,
-                                                     double weight, bool allow_multiblock,
-                                                     std::string& detail) {
+generativeqc_status build_shared_coulomb_occupied_exchange(
+    CudaDensityFittingJkPlan& plan, const double* density, const double* coefficients,
+    std::size_t rank, double weight, bool allow_multiblock, std::string& detail) {
   plan.final_projection_token.reset();
   if (plan.batch_size != 1 || !plan.streamed || !plan.integral_source ||
       !plan.triangular_exchange || plan.metric_full_rank.size() != 1 || !plan.metric_full_rank[0] ||
@@ -164,13 +161,13 @@ vibeqc_status build_shared_coulomb_occupied_exchange(CudaDensityFittingJkPlan& p
       rank > static_cast<std::size_t>(std::numeric_limits<int>::max()) / plan.naux ||
       plan.row_tile * plan.nbf * plan.auxiliary_tile < plan.naux) {
     detail = "shared DF J/K source requires admitted streamed RHF factor-first traversal";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto schedule =
       df_projected_exchange_schedule(plan.nbf, plan.naux, rank, plan.panel_capacity, true);
   if (!df_shared_projected_exchange_schedule_admitted(schedule, allow_multiblock)) {
     detail = "shared DF J/K source lacks an admitted projected schedule";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   auto error = cudaMemsetAsync(plan.auxiliary_density, 0, plan.naux * sizeof(double), plan.stream);
   if (error == cudaSuccess)
@@ -182,7 +179,7 @@ vibeqc_status build_shared_coulomb_occupied_exchange(CudaDensityFittingJkPlan& p
   const auto status =
       build_streamed_projected_exchange(plan, 0, coefficients, rank, true, weight, schedule.rows,
                                         plan.alpha_exchange, detail, density);
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   runtime::cuda_trace::trace_counter("shared_projected_row_blocks", schedule.blocks);
   runtime::cuda_trace::trace_counter("shared_projected_regenerated_rows",
                                      schedule.generated_rows - plan.nbf);
@@ -191,10 +188,10 @@ vibeqc_status build_shared_coulomb_occupied_exchange(CudaDensityFittingJkPlan& p
   return build_coulomb(plan, density, detail, true);
 }
 
-vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_t system,
-                                      const double* coefficients, std::size_t rank,
-                                      bool column_major, double weight, double* exchange,
-                                      std::string& detail) {
+generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_t system,
+                                            const double* coefficients, std::size_t rank,
+                                            bool column_major, double weight, double* exchange,
+                                            std::string& detail) {
   plan.final_projection_token.reset();
   using namespace runtime::cuda_trace;
   TraceOperation trace(
@@ -202,14 +199,14 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
       {1, plan.nbf, plan.naux, plan.integral_source != nullptr, plan.streamed, system});
   if (system >= plan.batch_size || rank > plan.nbf || (rank && !coefficients)) {
     detail = "invalid occupied DF exchange dimensions";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   trace_counter("occupied_rank", rank);
   trace_counter("occupied_factor_bytes", plan.nbf * rank * sizeof(double));
   if (!rank) {
     const auto error = cudaMemsetAsync(exchange + system * plan.matrix_elements, 0,
                                        plan.matrix_elements * sizeof(double), plan.stream);
-    return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+    return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                                 : cuda_failure(error, "zero occupied DF exchange", detail);
   }
   cudaError_t error = cudaSuccess;
@@ -306,7 +303,7 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
     trace_counter("occupied_exchange_k", plan.naux * rank);
     trace_counter("occupied_intermediate_bytes", plan.nbf * plan.naux * rank * sizeof(double));
     return status == CUBLAS_STATUS_SUCCESS
-               ? VIBEQC_STATUS_SUCCESS
+               ? GENERATIVEQC_STATUS_SUCCESS
                : blas_failure(status, "resident occupied DF K product", detail);
   }
 
@@ -344,13 +341,13 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
       host_tile.resize(rows * plan.nbf * auxiliary_tile);
     } catch (const std::bad_alloc&) {
       detail = "host allocation for occupied DF streamed panel failed";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
   }
   // Produce [auxiliary][row][AO] into exchange_intermediate. As a cuBLAS
   // column-major matrix each slice is L_row^T (nbf x row_count).
   const auto panel = [&](std::size_t begin, std::size_t count, std::size_t qbegin,
-                         std::size_t qcount) -> vibeqc_status {
+                         std::size_t qcount) -> generativeqc_status {
     const auto pairs = count * plan.nbf;
     if (packed) {
       runtime::cuda_trace::TraceRegion unpack("ri_k_packed_unpack", plan.stream);
@@ -366,7 +363,7 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
       auto status =
           generate_metric_panel(plan, system, begin * plan.nbf, pairs, qbegin, qcount,
                                 plan.auxiliary_tile_values, plan.exchange_tile_output, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       launch_transpose_streamed_df_tile_kernel(blocks_for(pairs * qcount), kThreads, 0, plan.stream,
                                                pairs, qcount, plan.auxiliary_tile_values,
                                                plan.exchange_intermediate);
@@ -393,12 +390,12 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
       trace_counter("host_to_device_bytes", pairs * qcount * sizeof(double));
     }
     error = cudaPeekAtLastError();
-    return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+    return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                                 : cuda_failure(error, "prepare occupied DF panel", detail);
   };
   const double one = 1, zero = 0;
   const auto transform = [&](std::size_t count, std::size_t qcount,
-                             double* output) -> vibeqc_status {
+                             double* output) -> generativeqc_status {
     // U = C^T L_row^T has [rank,row_count] column-major layout. Host B is
     // already C^T in that convention and includes sqrt(occupation).
     auto status = trace_call("ri_k_occupied_gemm", plan.stream, [&] {
@@ -410,7 +407,7 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
           rank * count, static_cast<int>(qcount));
     });
     trace_counter("occupied_projection_products", qcount);
-    return status == CUBLAS_STATUS_SUCCESS ? VIBEQC_STATUS_SUCCESS
+    return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
                                            : blas_failure(status, "occupied DF projection", detail);
   };
   for (std::size_t qbegin = 0; qbegin < plan.naux; qbegin += auxiliary_tile) {
@@ -418,18 +415,18 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
     for (std::size_t rbegin = 0; rbegin < plan.nbf; rbegin += rows) {
       const auto rcount = std::min(rows, plan.nbf - rbegin);
       auto status = panel(rbegin, rcount, qbegin, qcount);
-      if (status == VIBEQC_STATUS_SUCCESS)
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
         status = transform(rcount, qcount, plan.exchange_contributions);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       for (std::size_t tile = 0; tile < row_tiles; ++tile) {
         const auto cbegin = ((rbegin / rows + tile) % row_tiles) * rows;
         const auto ccount = std::min(rows, plan.nbf - cbegin);
         const double* column = plan.exchange_contributions;
         if (tile) {
           status = panel(cbegin, ccount, qbegin, qcount);
-          if (status == VIBEQC_STATUS_SUCCESS)
+          if (status == GENERATIVEQC_STATUS_SUCCESS)
             status = transform(ccount, qcount, plan.auxiliary_tile_values);
-          if (status != VIBEQC_STATUS_SUCCESS) return status;
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
           column = plan.auxiliary_tile_values;
         } else {
           trace_counter("occupied_panel_cache_hits", 1);
@@ -457,7 +454,7 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
       }
     }
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

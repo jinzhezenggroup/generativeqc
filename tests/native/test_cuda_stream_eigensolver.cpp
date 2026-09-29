@@ -61,15 +61,16 @@ void verify(int n) {
   auto* active = owner.allocate<std::uint8_t>(2);
   const std::uint8_t masks[2]{1, 1};
   check(cudaMemcpyAsync(active, masks, sizeof(masks), cudaMemcpyHostToDevice, owner.stream));
-  vibeqc::scf::cuda_execution::OrdinaryStreamEigensolver solver(owner.stream, n, input, values);
-  const auto bound = vibeqc::scf::ordinary_eigensolver_workspace_allowance(n);
+  generativeqc::scf::cuda_execution::OrdinaryStreamEigensolver solver(owner.stream, n, input,
+                                                                      values);
+  const auto bound = generativeqc::scf::ordinary_eigensolver_workspace_allowance(n);
   require(solver.device_bytes() <= bound && solver.host_bytes() <= bound,
           "solver query exceeded the shape bound");
   for (int repeat = 0; repeat < 2; ++repeat) {
     for (int spin = 0; spin < 2; ++spin)
       check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
                             cudaMemcpyHostToDevice, owner.stream));
-    require(solver.launch(2, input, scratch, values, info, active) == VIBEQC_STATUS_SUCCESS,
+    require(solver.launch(2, input, scratch, values, info, active) == GENERATIVEQC_STATUS_SUCCESS,
             "ordinary stream eigensolver failed");
     std::vector<double> v(matrix * 2), w(n * 2);
     int status[2]{-1, -1};
@@ -105,7 +106,7 @@ void verify(int n) {
       }
     }
   }
-  if (n > vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+  if (n > generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     // Library providers still receive the full batch. The common dispatcher
     // must sanitize an inactive nonfinite matrix before calling cuSOLVER.
     const std::uint8_t selected[2]{1, 0};
@@ -116,7 +117,7 @@ void verify(int n) {
                           owner.stream));
     check(cudaMemcpyAsync(input + matrix, invalid.data(), matrix * sizeof(double),
                           cudaMemcpyHostToDevice, owner.stream));
-    require(solver.launch(2, input, scratch, values, info, active) == VIBEQC_STATUS_SUCCESS,
+    require(solver.launch(2, input, scratch, values, info, active) == GENERATIVEQC_STATUS_SUCCESS,
             "inactive provider state failed");
     std::vector<double> inactive(n);
     int status = -1;
@@ -127,7 +128,7 @@ void verify(int n) {
     require(status == 0, "inactive sanitized provider reported failure");
     for (double value : inactive) require(value == 1.0, "inactive matrix was not sanitized");
   }
-  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+  if (n <= generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     for (int spin = 0; spin < 2; ++spin)
       check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
                             cudaMemcpyHostToDevice, owner.stream));
@@ -135,16 +136,16 @@ void verify(int n) {
   }
   check(cudaStreamBeginCapture(owner.stream, cudaStreamCaptureModeThreadLocal));
   const auto capture_status = solver.launch(2, input, scratch, values, info, active);
-  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
-    require(capture_status == VIBEQC_STATUS_SUCCESS,
+  if (n <= generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+    require(capture_status == GENERATIVEQC_STATUS_SUCCESS,
             "small-native eigensolver rejected graph capture");
   } else {
-    require(capture_status == VIBEQC_STATUS_INVALID_ARGUMENT,
+    require(capture_status == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
             "provider-backed ordinary solver silently accepted graph capture");
   }
   cudaGraph_t graph{};
   check(cudaStreamEndCapture(owner.stream, &graph));
-  if (n <= vibeqc::scf::cuda_execution::kSmallEigensolverLimit) {
+  if (n <= generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     cudaGraphExec_t executable{};
     check(cudaGraphInstantiate(&executable, graph, 0));
     for (int replay = 0; replay < 2; ++replay) {

@@ -6,15 +6,14 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc import _generated_methods, _native
-from vibeqc.ks import resolve_ks_method
-from vibeqc_compiler.method import compile_ks_execution_plan, resolve_method
+from generativeqc import _generated_methods, _native
+from generativeqc.ks import resolve_ks_method
+from generativeqc_compiler.method import compile_ks_execution_plan
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_ABI_IDS = {
     "rhf": 1,
     "uhf": 2,
-    "wb97m-v": 3,
     "rccsd(t)": 4,
     "mp2": 5,
     "lda-rks": 6,
@@ -24,17 +23,8 @@ EXPECTED_ABI_IDS = {
     "r2scan-rks": 10,
     "r2scan-uks": 11,
     "rccsd": 12,
-    "pbe0-rks": 13,
-    "pbe0-uks": 14,
     "gfn2-xtb": 15,
-    "b3lyp-rks": 16,
-    "b3lyp-uks": 17,
     "pbe-d4-rks": 18,
-    "wb97m-v-uks": 19,
-    "m06-2x-rks": 20,
-    "m06-2x-uks": 21,
-    "mn15-rks": 22,
-    "mn15-uks": 23,
 }
 
 
@@ -50,7 +40,7 @@ def test_public_method_generated_metadata_is_fresh() -> None:
     )
 
 
-def test_public_method_abi_ids_are_explicit_and_stable() -> None:
+def test_native_provider_ids_are_explicit() -> None:
     payload = json.loads(
         (ROOT / "manifests/public_methods.json").read_text(encoding="utf-8")
     )
@@ -60,54 +50,71 @@ def test_public_method_abi_ids_are_explicit_and_stable() -> None:
         **EXPECTED_ABI_IDS,
         "ccsd(t)": 4,
         "gfn2": 15,
-        "wb97m-v-rks": 3,
+    }
+
+
+def test_public_composite_selectors_are_generated_from_manifest() -> None:
+    assert dict(_generated_methods.COMPOSITE_METHOD_ALIASES) == {
+        "r2scan-3c": ("R2SCAN-3c", "unpolarized"),
+        "r2scan-3c-rks": ("R2SCAN-3c", "unpolarized"),
+        "r2scan-3c-uks": ("R2SCAN-3c", "polarized"),
     }
 
 
 def test_public_method_provider_sets_are_generated() -> None:
     assert _generated_methods.HF_METHOD_IDS == frozenset({1, 2})
     assert _generated_methods.NATIVE_DFT_METHOD_IDS == frozenset(
-        {3, 6, 7, 8, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23}
+        {6, 7, 8, 9, 10, 11, 18}
     )
 
 
-def test_public_dft_bindings_resolve_through_current_method_ir() -> None:
+def test_public_dft_abi_rows_do_not_own_scientific_composition() -> None:
     payload = json.loads(
         (ROOT / "manifests/public_methods.json").read_text(encoding="utf-8")
     )
-    manifest_bindings = {
-        entry["name"]: (entry["compiler_method"], entry["spin"])
-        for entry in payload["methods"]
-        if entry["provider"] == "dft"
-    }
-    generated_bindings = {
-        name: (metadata["compiler_method"], metadata["spin"])
-        for name, metadata in _generated_methods.METHOD_METADATA.items()
+    dft_rows = [entry for entry in payload["methods"] if entry["provider"] == "dft"]
+    assert dft_rows
+    assert all(
+        "compiler_method" not in entry and "spin" not in entry for entry in dft_rows
+    )
+
+    for entry in dft_rows:
+        runtime_method, runtime_functional = resolve_ks_method(entry["name"])
+        plan = compile_ks_execution_plan(runtime_method)
+        assert plan.method.identity == runtime_method.identity
+        assert runtime_functional.spin == runtime_method.spin
+
+    generated_dft = [
+        metadata
+        for metadata in _generated_methods.METHOD_METADATA.values()
         if metadata["provider"] == "dft"
-    }
-    assert generated_bindings == manifest_bindings
-
-    for name, (identifier, spin) in manifest_bindings.items():
-        compiler_method = resolve_method(identifier, spin=spin)
-        plan = compile_ks_execution_plan(compiler_method)
-        runtime_method, runtime_functional = resolve_ks_method(name)
-        assert plan.method.identity == compiler_method.identity
-        assert runtime_method.identity == compiler_method.identity
-        assert runtime_functional.spin == spin
+    ]
+    assert generated_dft
+    assert all(
+        "compiler_method" not in metadata and "spin" not in metadata
+        for metadata in generated_dft
+    )
 
 
-def test_manifest_requires_explicit_compiler_binding_for_dft(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "field,value",
+    (("compiler_method", "PBE"), ("spin", "unpolarized")),
+)
+def test_manifest_rejects_reintroduced_dft_scientific_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
 ) -> None:
     from tools import generate_method_manifest as generator
 
     payload = json.loads(generator.MANIFEST.read_text())
     entry = next(method for method in payload["methods"] if method["provider"] == "dft")
-    entry.pop("compiler_method")
+    entry[field] = value
     path = tmp_path / "invalid.json"
     path.write_text(json.dumps(payload))
     monkeypatch.setattr(generator, "MANIFEST", path)
-    with pytest.raises(ValueError, match="compiler_method"):
+    with pytest.raises(ValueError, match="unknown method manifest fields"):
         generator.load_manifest()
 
 
@@ -141,13 +148,3 @@ def test_manifest_rejects_lossy_abi_and_capability_values(
     monkeypatch.setattr(generator, "MANIFEST", path)
     with pytest.raises(ValueError):
         generator.load_manifest()
-
-
-def test_generated_python_supports_an_empty_provider_group() -> None:
-    from tools import generate_method_manifest as generator
-
-    methods = [m for m in generator.load_manifest() if m["provider"] == "reserved"]
-    generated = generator.emit_python(methods)
-    compile(generated, "generated-methods", "exec")
-    assert "HF_METHOD_IDS = frozenset(())" in generated
-    assert "NATIVE_DFT_METHOD_IDS = frozenset(())" in generated

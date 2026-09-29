@@ -38,7 +38,7 @@ def test_all_shards_preserve_sources_and_unchanged_output_times(
     generator.main()
     lower.assert_called_once_with(generator.QUALIFIED_SPD_COMPONENTS)
     expected = {
-        f"vibeqc_stationary_spd_primitive_{index}.cu": source
+        f"generativeqc_stationary_spd_primitive_{index}.cu": source
         for index, (_, source) in enumerate(sources)
     }
     assert {path.name: path.read_text() for path in output.iterdir()} == expected
@@ -89,7 +89,7 @@ def test_cmake_build_lowers_each_primitive_request_once(
         "from pathlib import Path\n"
         f"sys.path[:0] = [{str(ROOT)!r}, {str(ROOT / 'python')!r}]\n"
         "from tools import generate_stationary_force_aot as generator\n"
-        "from vibeqc_compiler.integral import first_derivative_schedule as schedule\n"
+        "from generativeqc_compiler.integral import first_derivative_schedule as schedule\n"
         "def emit(requests, *, symbol):\n"
         f"    with Path({str(calls)!r}).open('a') as log:\n"
         "        log.write(f'{symbol} {len(requests)}\\n')\n"
@@ -97,9 +97,11 @@ def test_cmake_build_lowers_each_primitive_request_once(
         "schedule.emit_first_derivative_cuda = emit\n"
         "generator.main()\n"
     )
-    workflow = (ROOT / "cmake/VibeQCCuda.cmake").read_text()
-    start = workflow.index("    set(_vibeqc_stationary_spd_primitive_sources)")
-    stop = workflow.index("    add_library(vibeqc_stationary_spd_primitives", start)
+    workflow = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
+    start = workflow.index("    set(_generativeqc_stationary_spd_primitive_sources)")
+    stop = workflow.index(
+        "    add_library(generativeqc_stationary_spd_primitives", start
+    )
     registration = workflow[start:stop].replace(
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_force_aot.py",
         stub.as_posix(),
@@ -111,11 +113,11 @@ def test_cmake_build_lowers_each_primitive_request_once(
         f'set(Python3_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
         f'set(CMAKE_CURRENT_SOURCE_DIR "{ROOT.as_posix()}")\n'
         f'set(PROJECT_SOURCE_DIR "{ROOT.as_posix()}")\n'
-        f'set(VIBEQC_STATIONARY_AOT_DIRECTORY "{output.as_posix()}")\n'
-        f'include("{ROOT.as_posix()}/cmake/VibeQCGenerated.cmake")\n'
+        f'set(GENERATIVEQC_STATIONARY_AOT_DIRECTORY "{output.as_posix()}")\n'
+        f'include("{ROOT.as_posix()}/cmake/GenerativeQCGenerated.cmake")\n'
         + registration
         + "add_custom_target(all_primitives ALL "
-        "DEPENDS ${_vibeqc_stationary_spd_primitive_sources})\n"
+        "DEPENDS ${_generativeqc_stationary_spd_primitive_sources})\n"
     )
     build = tmp_path / "build"
     subprocess.run(
@@ -142,7 +144,7 @@ def test_cmake_build_lowers_each_primitive_request_once(
     assert calls.read_text().splitlines() == expected
 
     # A missing secondary output must retrigger the one shared generation rule.
-    missing = output / "vibeqc_stationary_spd_primitive_11.cu"
+    missing = output / "generativeqc_stationary_spd_primitive_11.cu"
     missing.unlink()
     build_sources()
     assert missing.exists()

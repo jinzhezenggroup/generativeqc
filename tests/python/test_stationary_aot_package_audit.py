@@ -26,7 +26,7 @@ def _fake_loader(
     assert len(matches) == 1
     base = audit._profile_stem(matches[0])
     name = base if component_domain is None else f"{base}_spd"
-    library = directory / f"libvibeqc_stationary_{name}.so"
+    library = directory / f"libgenerativeqc_stationary_{name}.so"
     metadata = {
         "binary_sha256": f"binary-{name}",
         "source_identity": f"source-{name}",
@@ -43,8 +43,8 @@ def _fake_loader(
 def _layout(root: Path, *, binary_size: int = 10) -> None:
     root.mkdir()
     for _, _, name, _ in audit.QUALIFIED_STATIONARY_PACKAGE:
-        (root / f"libvibeqc_stationary_{name}.so").write_bytes(b"x" * binary_size)
-        (root / f"vibeqc_stationary_{name}.json").write_bytes(b"{}\n")
+        (root / f"libgenerativeqc_stationary_{name}.so").write_bytes(b"x" * binary_size)
+        (root / f"generativeqc_stationary_{name}.json").write_bytes(b"{}\n")
 
 
 def test_package_audit_reports_complete_legacy_and_component_footprint(
@@ -52,7 +52,7 @@ def test_package_audit_reports_complete_legacy_and_component_footprint(
 ) -> None:
     root = tmp_path / "build"
     _layout(root, binary_size=10)
-    native = root / "libvibeqc.so"
+    native = root / "libgenerativeqc.so"
     native.write_bytes(b"n" * 120)
     monkeypatch.setattr(audit, "load_stationary_aot_artifact", _fake_loader)
 
@@ -139,8 +139,8 @@ def test_package_audit_cli_runs_from_uninstalled_checkout(tmp_path: Path) -> Non
 def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) -> None:
     import json
 
-    from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.method.stationary_cuda import (
         stationary_aot_profile_contract_identity,
     )
 
@@ -150,14 +150,14 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
         profile_name = name.removesuffix("_spd")
         profile = audit._qualified_aot_profile(profile_name)
         plan = profile.plan
-        library = root / f"libvibeqc_stationary_{name}.so"
+        library = root / f"libgenerativeqc_stationary_{name}.so"
         # These bytes are hashed only, never loaded or executed as native code.
         library.write_bytes(f"opaque audit fixture {name}".encode())
         metadata = {
             "schema": (
-                "vibeqc.stationary-cuda-aot.v2"
+                "generativeqc.stationary-cuda-aot.v2"
                 if component_domain is None
-                else "vibeqc.stationary-cuda-aot.v3"
+                else "generativeqc.stationary-cuda-aot.v3"
             ),
             "functional": functional,
             "spin": spin,
@@ -181,17 +181,17 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
                     "primitive_shards": 23,
                 }
             )
-        (root / f"vibeqc_stationary_{name}.json").write_text(json.dumps(metadata))
+        (root / f"generativeqc_stationary_{name}.json").write_text(json.dumps(metadata))
     result = audit.audit_stationary_aot_directory(root, architecture="sm_120")
     assert len(result.artifacts) == 20
     audit.assert_native_cubin_path(result)
-    library = root / "libvibeqc_stationary_pbe_uks.so"
+    library = root / "libgenerativeqc_stationary_pbe_uks.so"
     original = library.read_bytes()
     library.write_bytes(original + b"tampered")
     with pytest.raises(ValueError, match="binary integrity"):
         audit.audit_stationary_aot_directory(root, architecture="sm_120")
     library.write_bytes(original)
-    manifest = root / "vibeqc_stationary_pbe_uks.json"
+    manifest = root / "generativeqc_stationary_pbe_uks.json"
     metadata = json.loads(manifest.read_text())
     metadata["contract_identity"] = "foreign-contract"
     manifest.write_text(json.dumps(metadata))

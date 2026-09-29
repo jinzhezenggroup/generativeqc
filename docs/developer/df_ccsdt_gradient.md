@@ -35,7 +35,7 @@ separate from the correlation-DF branch and must later be composed before a
 public force is published.
 ## Slice A1 boundary
 
-`tools.vibeqc_cc.pullback_df_three_index` accepts one or more cotangents for
+`tools.generativeqc_cc.pullback_df_three_index` accepts one or more cotangents for
 specific B blocks and returns physical raw three-center and metric weights.
 
 The implementation deliberately reuses

@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc.semilocal_codegen import (
+from generativeqc_compiler.xc.semilocal_codegen import (
     emit_polarized_semilocal,
     polarized_feature_count,
 )
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, UnsupportedXC, functional
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -147,28 +147,29 @@ def test_bulk_imports_reach_shared_native_pointwise_lowerer_without_admission(
     assert "inline BulkValue bulk_point(" in cpu
     assert "__device__ inline BulkValue bulk_point(" in cuda
 
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        emit_polarized_semilocal(
-            spec,
-            value_type="BulkValue",
-            function_name="bulk_point",
-            identity_constant="kBulkIdentity",
-        )
+    default_cpu = emit_polarized_semilocal(
+        spec,
+        value_type="BulkValue",
+        function_name="bulk_point",
+        identity_constant="kBulkIdentity",
+    )
+    assert f"double feature_derivative[{features}];" in default_cpu
+    assert _identity(default_cpu, "kBulkIdentity") != _identity(cpu, "kBulkIdentity")
 
 
-def test_bulk_tau_mgga_stays_explicitly_blocked_until_feature_projection_lands() -> (
-    None
-):
+def test_bulk_tau_mgga_reuses_runtime_feature_projection() -> None:
     spec = functional("MGGA_X_R2SCAN01", spin="polarized")
     assert "MGGA_X_R2SCAN01" in AUTO_BULK_COMPONENTS
-    with pytest.raises(UnsupportedXC, match="tau/laplacian projection"):
-        emit_polarized_semilocal(
-            spec,
-            value_type="BulkMggaValue",
-            function_name="bulk_mgga_point",
-            identity_constant="kBulkMggaIdentity",
-            pointwise_bulk=True,
-        )
+    source = emit_polarized_semilocal(
+        spec,
+        value_type="BulkMggaValue",
+        function_name="bulk_mgga_point",
+        identity_constant="kBulkMggaIdentity",
+        pointwise_bulk=True,
+    )
+    assert "double feature_derivative[7];" in source
+    assert "lapl_a" not in source
+    assert "lapl_b" not in source
 
 
 def test_generator_tools_do_not_reown_semilocal_differentiation() -> None:
@@ -177,7 +178,7 @@ def test_generator_tools_do_not_reown_semilocal_differentiation() -> None:
     wb97mv_cuda = (ROOT / "tools/generate_xc_wb97mv_cuda.py").read_text()
 
     assert "def build_roots(" not in cpu
-    assert "from vibeqc_compiler.xc.semilocal_codegen import" in cpu
+    assert "from generativeqc_compiler.xc.semilocal_codegen import" in cpu
     assert "ScalarCEmitter" not in cuda
     assert "build_roots" not in cuda
     assert "tools.generate_xc_cpu" not in cuda

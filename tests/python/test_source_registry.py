@@ -78,7 +78,7 @@ def test_libxc_importer_semantics_are_pinned_separately() -> None:
     registry = json.loads(source_registry.REGISTRY.read_text())
     admission = registry["sources"]["libxc-7.0.0"]["admission"]
     importer = source_registry.ROOT / admission["importer"]
-    from vibeqc_compiler.xc.libxc_maple import IMPORTER_SEMANTICS
+    from generativeqc_compiler.xc.libxc_maple import IMPORTER_SEMANTICS
 
     assert admission["semantics"] == IMPORTER_SEMANTICS
     assert admission["importer_sha256"] == source_registry._repository_text_sha256(
@@ -164,7 +164,7 @@ def test_sync_is_pinned_and_normalizes_before_writing(
     upstream = b"alpha  \n beta\t\n"
     normalized = b"alpha\n beta\n"
     registry = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {
             "sample": {
@@ -206,7 +206,7 @@ def test_sync_refuses_unexpected_upstream_bytes(
 ) -> None:
     expected = b"expected\n"
     registry = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {
             "sample": {
@@ -236,14 +236,14 @@ def test_sync_refuses_unexpected_upstream_bytes(
     )
     with pytest.raises(source_registry.SourceRegistryError, match="upstream digest"):
         source_registry.sync_source(
-            "sample", registry_path, cache_root=tmp_path / ".cache/vibeqc-sources"
+            "sample", registry_path, cache_root=tmp_path / ".cache/generativeqc-sources"
         )
-    assert not (tmp_path / ".cache/vibeqc-sources/sample/data.txt").exists()
+    assert not (tmp_path / ".cache/generativeqc-sources/sample/data.txt").exists()
 
 
 def test_registry_rejects_floating_or_unsafe_source_paths(tmp_path: Path) -> None:
     payload = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {
             "sample": {
@@ -285,7 +285,7 @@ def test_registry_rejects_invalid_optional_file_metadata(
         field: value,
     }
     payload = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {
             "sample": {
@@ -330,7 +330,7 @@ def test_update_requires_explicit_revision_and_invalidates_products(
     }
     generator_bytes = b"generator\n"
     registry = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {"sample": source},
         "products": {
@@ -436,7 +436,7 @@ def test_product_source_binding_fails_closed_on_registry_drift(
         "outputs": {},
     }
     registry = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {"sample": source},
         "products": {"derived": product},
@@ -492,7 +492,7 @@ def test_product_source_reader_requires_registered_cached_bytes(
         },
     }
     registry = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {"sample": source},
         "products": {
@@ -580,7 +580,7 @@ def test_verify_rejects_stale_generator_and_product_bytes(
         },
     }
     registry = {
-        "schema": "vibeqc.scientific-source-registry",
+        "schema": "generativeqc.scientific-source-registry",
         "schema_version": 1,
         "sources": {"sample": source},
         "products": {

@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.posthf_reference",
+  "schema": "generativeqc.posthf_reference",
   "version": 1,
   "inputs": {
     "name": "h2",

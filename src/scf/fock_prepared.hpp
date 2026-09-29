@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_FOCK_PREPARED_HPP
-#define VIBEQC_SCF_FOCK_PREPARED_HPP
+#ifndef GENERATIVEQC_SCF_FOCK_PREPARED_HPP
+#define GENERATIVEQC_SCF_FOCK_PREPARED_HPP
 
 #include <memory>
 
@@ -7,7 +7,7 @@
 #include "scf/cuda_fock_provider.hpp"
 #include "scf/initial_guess/eigen_operation.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace initial_guess {
 class OverlapOrthogonalizer;
 }
@@ -52,7 +52,8 @@ class PreparedFockPlan {
  public:
   PreparedFockPlan(const core::System& orbital, const core::System* auxiliary,
                    ResolvedFockBuild strategy, int device_id = -1,
-                   std::size_t device_budget_bytes = 0);
+                   std::size_t device_budget_bytes = 0,
+                   unsigned retained_direct_derivative_order = 0);
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
@@ -99,13 +100,13 @@ class PreparedFockPlan {
    * Convergence thresholds, DIIS history and warm density are deliberately
    * excluded: they do not alter the prepared mathematical operator. */
   bool matches(const core::System& orbital, const core::System* auxiliary,
-               const ResolvedFockBuild& strategy, int device_id,
-               std::size_t device_budget_bytes) const noexcept;
+               const ResolvedFockBuild& strategy, int device_id, std::size_t device_budget_bytes,
+               unsigned minimum_direct_derivative_order = 0) const noexcept;
 
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

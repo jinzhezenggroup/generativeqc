@@ -7,12 +7,26 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc._stationary_rsh_cpu import RangeExchangeExecutor
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
+from generativeqc._stationary_rsh_cpu import RangeExchangeExecutor
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
+
+
+def test_native_cuda_rsh_integral_bridge_is_method_neutral() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
+    ).read_text(encoding="utf-8")
+    begin = source.index("generativeqc_status cuda_integral_gradient(")
+    end = source.index("Result execute(bool compute_forces)", begin)
+    bridge = source[begin:end]
+    assert "execution_plan_.range_exchange" in bridge
+    assert "range_strategy_" in bridge
+    assert "SemilocalFamily::Wb97mv" not in bridge
+    assert "execute_prepared_cuda_direct_rsh_energy_derivatives_device(" in bridge
+    assert "!system_.ecp_terms.empty()" in bridge
 
 
 def _fake_s_basis() -> SimpleNamespace:
@@ -60,8 +74,8 @@ def test_range_exchange_executor_rejects_implicit_backend_and_cpu_device(
 def test_cuda_range_exchange_derivative_matches_cpu(
     tmp_path: Path, operator: str
 ) -> None:
-    if os.environ.get("VIBEQC_TEST_RANGE_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
+    if os.environ.get("GENERATIVEQC_TEST_RANGE_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
     if not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("native CUDA validation requires a Slurm allocation")
     nvcc = shutil.which("nvcc")

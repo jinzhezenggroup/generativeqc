@@ -1,7 +1,7 @@
-"""Same-process VIBEQC/GPU4PySCF HF energy+gradient microbenchmarks.
+"""Same-process GENERATIVEQC/GPU4PySCF HF energy+gradient microbenchmarks.
 
 The ``sp8`` case measures tiny-system native-call and warm-plan overhead.  The
-``sdf18-direct`` case crosses VIBEQC's current persistent-ERI threshold and thus
+``sdf18-direct`` case crosses GENERATIVEQC's current persistent-ERI threshold and thus
 also exercises screened direct J/K.  ``he3-sd21-direct`` adds a somewhat larger
 direct workload.  The water/def2-SVP cases cover Cartesian and standard real
 spherical named-basis semantics.  The first three use artificial Cartesian
@@ -15,7 +15,7 @@ Run GPU work through the site scheduler, for example::
       env CUDA_PATH=/group/software/cuda-12.9.1 \
       PATH=/group/software/cuda-12.9.1/bin:/usr/bin:/bin \
       LD_LIBRARY_PATH=/group/software/cuda-12.9.1/lib64 \
-      VIBEQC_LIBRARY=$PWD/build/libvibeqc.so.0.1.0 PYTHONPATH=python \
+      GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so.0.1.0 PYTHONPATH=python \
       build/gpu4pyscf-venv/bin/python benchmarks/compare_gpu4pyscf.py
 """
 
@@ -32,7 +32,7 @@ from _support import (
     raw_output_path,
     write_result,
 )
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 
 def main() -> None:
@@ -57,7 +57,7 @@ def main() -> None:
 
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         energy_tolerance=1.0e-12,
@@ -70,13 +70,13 @@ def main() -> None:
         warm_start=True,
     ) as batch:
         start = time.perf_counter()
-        vibeqc_result = batch.execute(strict=True)
-        vibeqc_cold = time.perf_counter() - start
-        vibeqc_warm: list[float] = []
+        generativeqc_result = batch.execute(strict=True)
+        generativeqc_cold = time.perf_counter() - start
+        generativeqc_warm: list[float] = []
         for _ in range(args.repeats):
             start = time.perf_counter()
-            vibeqc_result = batch.execute(strict=True)
-            vibeqc_warm.append(time.perf_counter() - start)
+            generativeqc_result = batch.execute(strict=True)
+            generativeqc_warm.append(time.perf_counter() - start)
 
     molecule = gto.M(
         atom=case.atoms,
@@ -111,19 +111,21 @@ def main() -> None:
         cp.cuda.Stream.null.synchronize()
         gpu4pyscf_warm.append(time.perf_counter() - start)
 
-    vibeqc_item = vibeqc_result.items[0]
+    generativeqc_item = generativeqc_result.items[0]
     print(
         f"scope: {case.description}, {case.method.upper()} energy + analytic gradient"
     )
-    print(f"VIBEQC energy: {vibeqc_item.energy:.15f} Eh")
+    print(f"GENERATIVEQC energy: {generativeqc_item.energy:.15f} Eh")
     print(f"GPU4PySCF energy: {float(gpu4pyscf_energy):.15f} Eh")
-    print(f"VIBEQC force z(atom 0): {vibeqc_item.forces[0, 2]:.15f} Eh/bohr")
-    print(f"GPU4PySCF force z(atom 0): {-float(gpu4pyscf_gradient[0, 2]):.15f} Eh/bohr")
-    print(f"VIBEQC cold plan execution: {vibeqc_cold * 1.0e3:.3f} ms")
     print(
-        "VIBEQC warm median/min: "
-        f"{statistics.median(vibeqc_warm) * 1.0e3:.3f}/"
-        f"{min(vibeqc_warm) * 1.0e3:.3f} ms"
+        f"GENERATIVEQC force z(atom 0): {generativeqc_item.forces[0, 2]:.15f} Eh/bohr"
+    )
+    print(f"GPU4PySCF force z(atom 0): {-float(gpu4pyscf_gradient[0, 2]):.15f} Eh/bohr")
+    print(f"GENERATIVEQC cold plan execution: {generativeqc_cold * 1.0e3:.3f} ms")
+    print(
+        "GENERATIVEQC warm median/min: "
+        f"{statistics.median(generativeqc_warm) * 1.0e3:.3f}/"
+        f"{min(generativeqc_warm) * 1.0e3:.3f} ms"
     )
     print(f"GPU4PySCF cold execution: {gpu4pyscf_cold * 1.0e3:.3f} ms")
     print(
@@ -161,13 +163,13 @@ def main() -> None:
                 "direct_scf_tolerance": 1.0e-14,
             },
             "settings": {"repeats": args.repeats},
-            "vibeqc": {
-                "energy_hartree": vibeqc_item.energy,
-                "forces_hartree_per_bohr": vibeqc_item.forces.tolist(),
-                "cold_seconds": vibeqc_cold,
-                "warm_seconds": vibeqc_warm,
-                "warm_median_seconds": statistics.median(vibeqc_warm),
-                "warm_minimum_seconds": min(vibeqc_warm),
+            "generativeqc": {
+                "energy_hartree": generativeqc_item.energy,
+                "forces_hartree_per_bohr": generativeqc_item.forces.tolist(),
+                "cold_seconds": generativeqc_cold,
+                "warm_seconds": generativeqc_warm,
+                "warm_median_seconds": statistics.median(generativeqc_warm),
+                "warm_minimum_seconds": min(generativeqc_warm),
             },
             "gpu4pyscf": {
                 "energy_hartree": float(gpu4pyscf_energy),

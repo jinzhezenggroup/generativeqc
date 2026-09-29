@@ -198,7 +198,7 @@
   "multiplicity": 1,
   "schema_version": 1,
   "source": {
-    "attribution": "VibeQC DFT-MP-v1 contract; geometry generated with RDKit (BSD-3-Clause)",
+    "attribution": "GenerativeQC DFT-MP-v1 contract; geometry generated with RDKit (BSD-3-Clause)",
     "kind": "rdkit_etkdg3_mmff94s",
     "license": "GPL-3.0-or-later",
     "max_iterations": 1000,

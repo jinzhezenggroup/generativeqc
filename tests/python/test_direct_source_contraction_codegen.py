@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.integral.direct_source_contraction_cuda import (
+from generativeqc_compiler.integral.direct_source_contraction_cuda import (
     emit_direct_source_contraction_header,
 )
 
@@ -22,6 +22,15 @@ def test_direct_source_contraction_is_compiler_owned() -> None:
     assert "direct_native_source_contraction.cuh" not in source
 
 
+def test_cartesian_source_contraction_accepts_runtime_radial_identity() -> None:
+    source = emit_direct_source_contraction_header()
+    assert "generativeqc::integrals::CoulombRange range" in source
+    assert "double omega = 0.0" in source
+    assert "primitive_eri_cartesian<MaximumAngular>" in source
+    assert "angular_fourth, range, omega" in source
+    assert "range == generativeqc::integrals::CoulombRange::Full" in source
+
+
 def test_native_source_contraction_owner_is_retired() -> None:
     native = ROOT / "src/scf/cuda/direct_native_source_contraction.cuh"
     assert not native.exists()
@@ -36,10 +45,10 @@ def test_native_source_contraction_owner_is_retired() -> None:
 
 
 def test_source_contraction_generation_is_registered() -> None:
-    generated = (ROOT / "cmake/VibeQCGeneratedSources.cmake").read_text(
+    generated = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text(
         encoding="utf-8"
     )
-    cuda = (ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
-    assert "VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER" in generated
+    cuda = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
+    assert "GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER" in generated
     assert "generate_direct_source_contraction.py" in generated
-    assert cuda.count("VIBEQC_DIRECT_SOURCE_CONTRACTION_HEADER") == 2
+    assert cuda.count("GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER") == 2

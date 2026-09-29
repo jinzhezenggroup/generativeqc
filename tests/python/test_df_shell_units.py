@@ -8,17 +8,17 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral import df_rys_shell
-from vibeqc_compiler.integral.df_rys_shell import (
+from generativeqc_compiler.integral import df_rys_shell
+from generativeqc_compiler.integral.df_rys_shell import (
     RYS_SHELL_CLASSES,
     emit_df_rys_shell_cuda,
 )
-from vibeqc_compiler.integral.df_shell_derivatives import (
+from generativeqc_compiler.integral.df_shell_derivatives import (
     SHELL_CLASSES,
     emit_df_shell_derivatives_cuda,
     select_shell_classes,
 )
-from vibeqc_compiler.integral.df_shell_units import emit_df_shell_units
+from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,7 +52,7 @@ def test_units_cover_all_classes_once_and_are_deterministic(
     for angular in SHELL_CLASSES:
         name = "".join(map(str, angular))
         source = units[f"df_shell_{name}.cu"]
-        assert f'VIBEQC_DF_SHELL_MATH_HEADER "df_shell_math_{name}.cuh"' in source
+        assert f'GENERATIVEQC_DF_SHELL_MATH_HEADER "df_shell_math_{name}.cuh"' in source
         for kind in ("panel", "group", "packets"):
             assert f"launch_{kind}_class<{','.join(map(str, angular))}>" in source
         assert "production" not in source
@@ -128,7 +128,8 @@ def test_policy_edit_preserves_numerical_source_bytes_and_mtimes(
 ) -> None:
     manifest = json.loads(
         (
-            ROOT / "python/vibeqc_compiler/integral/production_df_derivatives.json"
+            ROOT
+            / "python/generativeqc_compiler/integral/production_df_derivatives.json"
         ).read_text()
     )
     policy = tmp_path / "policy.json"
@@ -170,4 +171,4 @@ def test_ci_cache_snapshots_version_compiler_and_build_inputs() -> None:
         assert keys
         for key in keys:
             assert "'cmake/**'" in key
-            assert "'python/vibeqc_compiler/**'" in key
+            assert "'python/generativeqc_compiler/**'" in key

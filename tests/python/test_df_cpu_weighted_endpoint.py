@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
-from vibeqc.basis import BasisSet
+from generativeqc import Calculator
+from generativeqc.basis import BasisSet
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from vibeqc.calculator import Result
+    from generativeqc.calculator import Result
 
 _WATER = (
     ("O", (0.0, 0.0, 0.0)),
@@ -54,7 +54,7 @@ def test_weighted_df_public_forces_match_materialized_and_independent_oracle(
 
     results: list[Result] = []
     for flag in ("0", "1"):
-        monkeypatch.setenv("VIBEQC_CPU_DF_MATERIALIZED_DERIVATIVES", flag)
+        monkeypatch.setenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", flag)
         result = calculator().singlepoint(atoms, multiplicity=multiplicity)
         assert result.converged
         assert result.executed_backend == "cpu_reference"
@@ -106,7 +106,7 @@ def test_weighted_df_public_forces_match_materialized_and_independent_oracle(
     np.testing.assert_allclose(fused.forces, expected_force, atol=3e-7, rtol=0)
     np.testing.assert_allclose(np.sum(fused.forces, axis=0), 0, atol=3e-9, rtol=0)
 
-    monkeypatch.setenv("VIBEQC_CPU_DF_MATERIALIZED_DERIVATIVES", "0")
+    monkeypatch.setenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", "0")
     for step in (2e-4, 5e-5):
         energies = []
         for sign in (1, -1):

@@ -49,18 +49,18 @@ void operator delete(void* pointer, std::size_t) noexcept { ::operator delete(po
 #undef cudaStreamSynchronize
 
 int main() {
-  using vibeqc::scf::reference_detail::download;
+  using generativeqc::scf::reference_detail::download;
   const std::array<const double*, 5> matrices{};
   const std::array<const double*, 3> scalars{};
   std::uint8_t converged = 0, failed = 0;
   std::uint32_t iterations = 1;
-  vibeqc::scf::ScfResult result;
+  generativeqc::scf::ScfResult result;
   try {
     // An unconverged solve must return its status before dimension checking or
     // any dense allocation, even when a reference could never fit in memory.
     auto status = download(nullptr, std::numeric_limits<std::size_t>::max(), 1, 0, matrices,
                            nullptr, scalars, &converged, &failed, &iterations, result);
-    if (status != VIBEQC_STATUS_NOT_CONVERGED || result.reference)
+    if (status != GENERATIVEQC_STATUS_NOT_CONVERGED || result.reference)
       throw std::runtime_error("unconverged reference was allocated/published");
     copies = 0;
     converged = 1;

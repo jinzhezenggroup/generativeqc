@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_AES2_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_AES2_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_AES2_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_AES2_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/cuda/gfn2_scc_iteration_control.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::int64_t kGfn2AES2PairDataElements = 5;
 inline constexpr std::int64_t kGfn2AES2PotentialElementsPerAtom = 10;
@@ -180,6 +180,6 @@ cudaError_t evaluate_gfn2_aes2_scc_energy_cuda(
  * cudaPointerGetAttributes. Writable ranges must be mutually disjoint.
  */
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_AES2_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_AES2_CUH

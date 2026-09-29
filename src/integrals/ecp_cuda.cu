@@ -9,7 +9,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/resource_cuda.cuh"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 namespace {
 static_assert(sizeof(EcpSpherePoint::harmonics) / sizeof(double) == generated::ecp_projector_count);
 constexpr int projector_count = generated::ecp_projector_count;
@@ -99,13 +99,13 @@ struct DeviceGuard {
   DeviceGuard() { check(cudaGetDevice(&previous)); }
   ~DeviceGuard() { (void)cudaSetDevice(previous); }
 };
-vibeqc_status map_ecp_exception(std::string& detail) {
+generativeqc_status map_ecp_exception(std::string& detail) {
   try {
     throw;
   } catch (const CudaFailure& error) {
     detail = cudaGetErrorString(error.status);
-    return error.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                     : VIBEQC_STATUS_CUDA_ERROR;
+    return error.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                     : GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (...) {
     return api::map_exception(&detail);
   }
@@ -272,22 +272,23 @@ void run(const core::System& system, unsigned radial, unsigned polar, bool deriv
   check(cudaStreamSynchronize(stream));
 }
 }  // namespace
-vibeqc_status ecp_integrals_cuda(int device, const core::System& system, unsigned radial,
-                                 unsigned polar, bool derivatives, EcpData& output,
-                                 std::string& detail, bool convergence) {
+generativeqc_status ecp_integrals_cuda(int device, const core::System& system, unsigned radial,
+                                       unsigned polar, bool derivatives, EcpData& output,
+                                       std::string& detail, bool convergence) {
   try {
     DeviceGuard device_guard;
     check(cudaSetDevice(device));
     run(system, radial, polar, derivatives, nullptr, &output, nullptr, nullptr, nullptr,
         convergence);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return map_ecp_exception(detail);
   }
 }
-vibeqc_status add_ecp_cuda(int device, const core::System& system, void* stream, double* hcore,
-                           const double* density, double* forces, std::string& detail) {
-  if (system.ecp_terms.empty()) return VIBEQC_STATUS_SUCCESS;
+generativeqc_status add_ecp_cuda(int device, const core::System& system, void* stream,
+                                 double* hcore, const double* density, double* forces,
+                                 std::string& detail) {
+  if (system.ecp_terms.empty()) return GENERATIVEQC_STATUS_SUCCESS;
   try {
     if (forces && !density) throw std::invalid_argument("ECP force requires density weights");
     DeviceGuard device_guard;
@@ -295,9 +296,9 @@ vibeqc_status add_ecp_cuda(int device, const core::System& system, void* stream,
     run(system, generated::ecp_coarse_radial_points, generated::ecp_coarse_polar_points,
         forces != nullptr, static_cast<cudaStream_t>(stream), nullptr, hcore, density, forces,
         true);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return map_ecp_exception(detail);
   }
 }
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

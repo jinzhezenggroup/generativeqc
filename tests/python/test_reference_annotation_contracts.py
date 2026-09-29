@@ -4,7 +4,7 @@ import ast
 import json
 from pathlib import Path
 
-from vibeqc_compiler.common.reference_sources import reference_source_matches
+from generativeqc_compiler.common.reference_sources import reference_source_matches
 
 ROOT = Path(__file__).resolve().parents[2]
 AUDIT = ROOT / "tests/reference_data/reference_source_annotation_audit.json"

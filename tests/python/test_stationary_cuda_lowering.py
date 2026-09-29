@@ -13,13 +13,13 @@ def test_cuda_source_generation_is_device_and_runtime_independent() -> None:
 import sys
 class Block:
     def find_spec(self, name, *args):
-        if name.split('.')[0] in {'vibeqc','pyscf','cupy','torch'}:
+        if name.split('.')[0] in {'generativeqc','pyscf','cupy','torch'}:
             raise AssertionError('source generation imported runtime/oracle: '+name)
 sys.meta_path.insert(0,Block())
-from vibeqc_compiler.integral.first_derivative_native import emit_first_derivative_cuda, emit_first_derivative_cpu
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_cuda import emit_stationary_cuda, emit_stationary_wrapper_cuda
-from vibeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL, StationaryGradientPlan, StationaryMeanField
+from generativeqc_compiler.integral.first_derivative_native import emit_first_derivative_cuda, emit_first_derivative_cpu
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import emit_stationary_cuda, emit_stationary_wrapper_cuda
+from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL, StationaryGradientPlan, StationaryMeanField
 requests=(('overlap',('','')),('kinetic',('','')),('nuclear_attraction',('','')),
           ('four_center_eri',('','','','')),('nuclear',()))
 import ctypes, subprocess
@@ -32,7 +32,7 @@ primitive=emit_first_derivative_cuda(requests)
 assert primitive == emit_first_derivative_cuda(requests)
 cpu=emit_first_derivative_cpu(requests)
 assert '__device__' not in cpu
-assert 'vibeqc_first_derivative_cpu' in cpu
+assert 'generativeqc_first_derivative_cpu' in cpu
 for functional in (0,1,2):
     method=resolve_method(('LDA_XC_PW','PBE','R2SCAN')[functional],spin='unpolarized')
     plan=StationaryGradientPlan(method,StationaryMeanField(SCF_POINT_MODEL))
@@ -42,12 +42,12 @@ for functional in (0,1,2):
     s=emit_stationary_cuda(primitive,functional=functional,plan=plan)
     assert s.startswith(primitive)
     assert 'extern __device__ bool first_derivative' not in s[len(primitive):]
-    assert 'vibeqc_first_derivative_cpu' not in s
+    assert 'generativeqc_first_derivative_cpu' not in s
     assert '__device__ bool first_derivative' in s
     assert 'stationary_gradient_cuda.cuh' in s
     assert 'ao_pullback' in s
     assert 'local_becke' in s
-    assert 'namespace vibeqc_grid_adjoint {' in s
+    assert 'namespace generativeqc_grid_adjoint {' in s
     assert 'grid_response_adjoint.hpp' not in s
     assert f'stationary-plan: {plan.identity}' in s
     assert 'stationary-weight-program-one_electron:' in s
@@ -56,6 +56,7 @@ for functional in (0,1,2):
     assert '__device__ inline bool stationary_source_weight' in s
     assert '__global__ void source_reduce' in s
     assert 'if (view.error && *view.error)' in s
+    assert 'view.ao_ids ? view.ao_ids[mu] : mu' in s
     assert 'atomicExch(error, 1)' in s
     include = s.index('#include "dft/stationary_gradient_cuda.cuh"')
     for scientific in ('__global__ void task_kernel', '__global__ void geometry_kernel'):
@@ -102,7 +103,7 @@ assert 'tau[0]' in r2scan and 'kinetic[0]' in r2scan
 for functional in (0,1):
     plan=StationaryGradientPlan(resolve_method(('LDA_XC_PW','PBE')[functional],spin='unpolarized'),StationaryMeanField(SCF_POINT_MODEL))
     assert emit_stationary_cuda(primitive,pbe=bool(functional),plan=plan) == emit_stationary_cuda(primitive,functional=functional,plan=plan)
-driver=open('python/vibeqc/_stationary_cuda.py').read()
+driver=open('python/generativeqc/_stationary_cuda.py').read()
 assert 'stationary_records' not in driver
 assert 'for ids in product(*ranges)' not in driver
 assert '"stationary_tasks"' in driver
@@ -128,9 +129,9 @@ assert 'np.lexsort' in driver
 def test_generated_stationary_weight_lowering_tracks_plan(
     method_name: str, spin: str, spin_blocks: int
 ) -> None:
-    from vibeqc_compiler.method import resolve_method
-    from vibeqc_compiler.method.stationary_cuda import emit_stationary_weight_cuda
-    from vibeqc_compiler.method.stationary_gradient import (
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import emit_stationary_weight_cuda
+    from generativeqc_compiler.method.stationary_gradient import (
         SCF_POINT_MODEL,
         StationaryGradientPlan,
         StationaryMeanField,
@@ -158,10 +159,10 @@ def test_strict_stationary_cuda_rejects_environment_overrides(
 ) -> None:
     from pathlib import Path
 
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.method import resolve_method, stationary_cuda
-    from vibeqc_compiler.method.stationary_gradient import (
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.method import resolve_method, stationary_cuda
+    from generativeqc_compiler.method.stationary_gradient import (
         SCF_POINT_MODEL,
         StationaryGradientPlan,
         StationaryMeanField,
@@ -200,27 +201,27 @@ def test_strict_stationary_cuda_rejects_environment_overrides(
 def test_native_gradient_grid_helpers_do_not_duplicate_the_ao_translation_unit() -> (
     None
 ):
-    from vibeqc_compiler.dft.ao_cuda import emit_grid_policy
-    from vibeqc_compiler.xc.geometry_cuda import emit_native_geometry_cuda
+    from generativeqc_compiler.dft.ao_cuda import emit_grid_policy
+    from generativeqc_compiler.xc.geometry_cuda import emit_native_geometry_cuda
 
     ao = emit_grid_policy()
     gradient = emit_native_geometry_cuda()
-    assert "namespace vibeqc_grid_policy {" in ao
-    assert "namespace vibeqc_grid_policy {" not in gradient
-    assert "vibeqc_grid_policy::" not in gradient
-    assert "namespace vibeqc_xc_gradient_grid_policy {" in gradient
-    assert "vibeqc_xc_gradient_grid_policy::axis_jet" in gradient
-    assert "namespace vibeqc_grid_adjoint {" in gradient
+    assert "namespace generativeqc_grid_policy {" in ao
+    assert "namespace generativeqc_grid_policy {" not in gradient
+    assert "generativeqc_grid_policy::" not in gradient
+    assert "namespace generativeqc_xc_gradient_grid_policy {" in gradient
+    assert "generativeqc_xc_gradient_grid_policy::axis_jet" in gradient
+    assert "namespace generativeqc_grid_adjoint {" in gradient
     assert "grid_response_adjoint.hpp" not in gradient
 
 
 def test_stationary_aot_inventory_is_fixed_full_sp_domain() -> None:
     from itertools import product
 
-    from vibeqc_compiler.integral.first_derivative_native import (
+    from generativeqc_compiler.integral.first_derivative_native import (
         emit_first_derivative_cuda,
     )
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.method.stationary_cuda import (
         QUALIFIED_SP_COMPONENTS,
         emit_stationary_aot_cuda,
         qualified_sp_requests,
@@ -266,14 +267,14 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
 ) -> None:
     import json
 
-    from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.method import resolve_method
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import (
         load_stationary_aot_artifact,
         stationary_aot_contract_identity,
         stationary_aot_plan_identity,
     )
-    from vibeqc_compiler.method.stationary_gradient import (
+    from generativeqc_compiler.method.stationary_gradient import (
         SCF_POINT_MODEL,
         StationaryGradientPlan,
         StationaryMeanField,
@@ -283,11 +284,11 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
     plan = StationaryGradientPlan(
         resolve_method("PBE", spin=spin), StationaryMeanField(SCF_POINT_MODEL)
     )
-    library = tmp_path / "libvibeqc_stationary_pbe_rks.so"
+    library = tmp_path / "libgenerativeqc_stationary_pbe_rks.so"
     library.write_bytes(b"aot-binary")
-    manifest = tmp_path / "vibeqc_stationary_pbe_rks.json"
+    manifest = tmp_path / "generativeqc_stationary_pbe_rks.json"
     payload = {
-        "schema": "vibeqc.stationary-cuda-aot.v2",
+        "schema": "generativeqc.stationary-cuda-aot.v2",
         "functional": 1,
         "spin": spin,
         "plan_identity": stationary_aot_plan_identity(1, spin=spin),
@@ -369,9 +370,9 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
     ("environment", "expected"),
     [
         ({}, ()),
-        ({"VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": "1"}, ()),
+        ({"GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": "1"}, ()),
         (
-            {"VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": "8"},
+            {"GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": "8"},
             ("--split-compile=8",),
         ),
     ],
@@ -379,19 +380,21 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
 def test_stationary_split_compile_options_are_explicit(
     environment: dict[str, str], expected: tuple[str, ...]
 ) -> None:
-    from vibeqc_compiler.method.stationary_cuda import _split_compile_options
+    from generativeqc_compiler.method.stationary_cuda import _split_compile_options
 
     assert _split_compile_options(environment) == expected
 
 
 @pytest.mark.parametrize("value", ["0", "33", "many"])
 def test_stationary_split_compile_options_fail_closed(value: str) -> None:
-    from vibeqc_compiler.method.stationary_cuda import _split_compile_options
+    from generativeqc_compiler.method.stationary_cuda import _split_compile_options
 
     with pytest.raises(
-        ValueError, match="VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS"
+        ValueError, match="GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS"
     ):
-        _split_compile_options({"VIBEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": value})
+        _split_compile_options(
+            {"GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": value}
+        )
 
 
 @pytest.mark.parametrize(
@@ -406,7 +409,7 @@ def test_stationary_split_compile_options_fail_closed(value: str) -> None:
 def test_global_hybrid_stationary_aot_profiles_bind_exact_plan(
     profile_name: str, functional: int
 ) -> None:
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.method.stationary_cuda import (
         _profile_stem,
         _qualified_aot_profile,
         _qualified_aot_profile_for_plan,
@@ -432,7 +435,7 @@ def test_global_hybrid_stationary_aot_profiles_bind_exact_plan(
 
 
 def test_pbe_and_pbe0_share_point_code_but_never_package_identity() -> None:
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.method.stationary_cuda import (
         _profile_stem,
         _qualified_aot_profile,
         _qualified_aot_profile_for_plan,
@@ -462,8 +465,8 @@ def test_global_hybrid_stationary_aot_loader_uses_profile_plan_identity(
 ) -> None:
     import json
 
-    from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.method.stationary_cuda import (
         _qualified_aot_profile,
         load_stationary_aot_artifact,
         stationary_aot_profile_contract_identity,
@@ -471,13 +474,13 @@ def test_global_hybrid_stationary_aot_loader_uses_profile_plan_identity(
 
     profile = _qualified_aot_profile(profile_name)
     plan = profile.plan
-    library = tmp_path / f"libvibeqc_stationary_{profile_name}.so"
+    library = tmp_path / f"libgenerativeqc_stationary_{profile_name}.so"
     library.write_bytes(b"hybrid-aot-binary")
-    manifest = tmp_path / f"vibeqc_stationary_{profile_name}.json"
+    manifest = tmp_path / f"generativeqc_stationary_{profile_name}.json"
     manifest.write_text(
         json.dumps(
             {
-                "schema": "vibeqc.stationary-cuda-aot.v2",
+                "schema": "generativeqc.stationary-cuda-aot.v2",
                 "functional": profile.functional,
                 "spin": profile.spin,
                 "profile": profile_name,

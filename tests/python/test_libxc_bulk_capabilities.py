@@ -7,15 +7,15 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc import (
+from generativeqc_compiler.xc import (
     UnsupportedXC,
     build_program,
     functional,
     libxc_bulk,
     libxc_bulk_capabilities,
 )
-from vibeqc_compiler.xc.libxc_maple import MapleImportError
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, COMPONENTS
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, COMPONENTS
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_ROOT = ROOT / "tests/data/xc/libxc-bulk"
@@ -62,7 +62,7 @@ def test_bulk_capability_inventory_is_exact_imported_inventory() -> None:
 
     for capability in capabilities:
         payload = capability.to_payload()
-        assert payload["schema"] == "vibeqc.libxc-bulk-capability.v2"
+        assert payload["schema"] == "generativeqc.libxc-bulk-capability.v2"
         assert capability.domain == libxc_bulk.BULK_SEMANTICS
         assert capability.spin_layouts == ("polarized", "unpolarized")
         assert capability.validated_outputs == ("energy", "vxc", "fxc")
@@ -277,7 +277,7 @@ def test_stage_evidence_rejects_changed_compiler_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Implementation drift invalidates proof without importing native runtime."""
-    from vibeqc_compiler.common import paths
+    from generativeqc_compiler.common import paths
 
     base = libxc_bulk_capabilities.functional_capability("GGA_X_PBE_SOL")
     evidence = {"compiled-cpu": _stage_evidence(base, "compiled-cpu")}
@@ -285,7 +285,7 @@ def test_stage_evidence_rejects_changed_compiler_source(
 
     def changed(*families: str, assets: tuple[str, ...] = ()) -> dict[str, str]:
         result = original(*families, assets=assets)
-        result["python/vibeqc_compiler/integral/scalar_c.py"] = "0" * 64
+        result["python/generativeqc_compiler/integral/scalar_c.py"] = "0" * 64
         return result
 
     monkeypatch.setattr(paths, "source_hashes", changed)
@@ -307,11 +307,11 @@ def test_pointwise_lda_gga_components_are_automatically_representable() -> None:
     assert payload["production_admitted"] is False
     assert payload["expression_provenance"]["kind"] == "libxc-bulk-pointwise"
 
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        build_program(spec)
+    program = build_program(spec, order=1)
+    assert len(program.outputs) == 1 + len(spec.features)
 
 
-def test_tau_only_mgga_is_automatically_representable_but_not_production() -> None:
+def test_tau_only_mgga_is_automatically_representable_and_default_lowerable() -> None:
     representable = libxc_bulk_capabilities.claimable_components(
         families=("mgga",),
         supported_ingredients=("rho", "sigma", "tau"),
@@ -322,8 +322,8 @@ def test_tau_only_mgga_is_automatically_representable_but_not_production() -> No
     spec = functional("MGGA_X_R2SCAN01", spin="unpolarized")
     assert spec.ingredients == ("rho", "sigma", "tau")
     assert spec.to_payload()["production_admitted"] is False
-    with pytest.raises(UnsupportedXC, match="not production-domain admitted"):
-        build_program(spec)
+    program = build_program(spec, order=1)
+    assert len(program.outputs) == 1 + len(spec.features)
 
 
 def test_laplacian_mgga_remains_fail_closed_until_feature_ir_exists() -> None:
@@ -369,7 +369,7 @@ def test_production_domain_profiles_are_ingredient_driven_and_versioned() -> Non
     for capability in (lda, gga, mgga):
         profile = capability.production_domain_profile
         payload = profile.to_payload()
-        assert payload["schema"] == "vibeqc.libxc-production-domain-profile.v3"
+        assert payload["schema"] == "generativeqc.libxc-production-domain-profile.v3"
         assert payload["profile"] == "semilocal-boundary-matrix/v3"
         assert payload["identity"] == profile.identity
         assert payload["spin_layouts"] == ["polarized", "unpolarized"]

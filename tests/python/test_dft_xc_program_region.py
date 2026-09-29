@@ -6,13 +6,14 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.dft.xc_program import (
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.dft.xc_program import (
     NativeKsXcSource,
     bind_native_ks_xc_region_candidates,
     native_ks_xc_region,
     select_native_ks_xc_region_program,
 )
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
     GridXcCandidateLimits,
@@ -22,8 +23,8 @@ from vibeqc_compiler.dft.xc_schedule import (
 )
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.common.program import ProgramIR
-    from vibeqc_compiler.dft.xc_schedule import (
+    from generativeqc_compiler.common.program import ProgramIR
+    from generativeqc_compiler.dft.xc_schedule import (
         GridXcCandidateAssessment,
         GridXcExecutionSchedule,
     )
@@ -73,6 +74,7 @@ def _assessment(
     *,
     device_xc_available: bool = True,
     spins: int = 2,
+    compiled_evidence: GpuProfitability | None = None,
 ) -> GridXcCandidateAssessment:
     return assess_grid_xc_schedule(
         schedule,
@@ -82,6 +84,7 @@ def _assessment(
         observable="potential",
         functional="PBE",
         scientific=_scientific(spins=spins),
+        compiled_evidence=compiled_evidence,
     )
 
 
@@ -209,6 +212,42 @@ def test_measured_device_fused_route_replaces_complete_host_region() -> None:
     provenance = dict(selected.candidate.schedule.provenance)
     assert provenance["region_source_consumer"] == "dft.grid_xc"
     assert provenance["domain_schedule"] == "device_fused"
+
+
+def test_region_selection_rejects_gpu_pressure_regression_inside_timing_noise() -> None:
+    host_evidence = GpuProfitability(
+        compiled_registers_per_thread=48,
+        spill_store_bytes=0,
+        spill_load_bytes=0,
+        compiled_occupancy_upper_bound=0.75,
+    )
+    device_evidence = GpuProfitability(
+        compiled_registers_per_thread=80,
+        spill_store_bytes=16,
+        spill_load_bytes=0,
+        compiled_occupancy_upper_bound=0.5,
+    )
+    kwargs = {
+        "program": _program(),
+        "host_unfused": _assessment(HOST_UNFUSED, compiled_evidence=host_evidence),
+        "device_fused": _assessment(DEVICE_FUSED, compiled_evidence=device_evidence),
+        "source": _source(),
+        "device_xc_identity": "cuda-xc-plan-pbe-v1",
+        "minimum_speedup": 1.0,
+    }
+
+    tied = select_native_ks_xc_region_program(
+        endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.995},
+        **kwargs,
+    )
+    assert tied.candidate.name == "host_unfused"
+    assert tied.program is kwargs["program"]
+
+    faster = select_native_ks_xc_region_program(
+        endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.97},
+        **kwargs,
+    )
+    assert faster.candidate.name == "device_fused"
 
 
 def test_missing_endpoint_evidence_keeps_exact_host_fallback() -> None:

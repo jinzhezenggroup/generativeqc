@@ -1,6 +1,6 @@
 # Canonical RHF-MP2 energy and analytic forces
 
-VibeQC exposes real FP64, closed-shell, all-electron conventional canonical RHF-MP2
+GenerativeQC exposes real FP64, closed-shell, all-electron conventional canonical RHF-MP2
 on CPU and CUDA, plus RI-MP2 on CPU. Conventional four-centre execution provides
 total energies and analytic nuclear forces on both backends. CPU RI-MP2 analytic
 forces use the same fitted RHF/correlation Hamiltonian, fixed-rank metric branch,
@@ -12,7 +12,7 @@ correlation, Hessians, or mixed precision. No performance replacement is implied
 by the numerical qualification.
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 calc = Calculator(
     method="mp2",
@@ -177,7 +177,7 @@ source rows and reports that work amplification through the CUDA component
 trace.
 
 The performance schedule for these paths is compiler-owned.
-`vibeqc_compiler.method.mp2_schedule` maps the conventional provider request
+`generativeqc_compiler.method.mp2_schedule` maps the conventional provider request
 capacity to paired direct/exchange jobs that share one AO source traversal and
 selects full-resident versus bounded-B CUDA RI-MP2 execution from dimensions and
 the declared numeric budget. `tools/generate_mp2_native.py` emits those choices
@@ -259,7 +259,7 @@ the supported struct prefix selected by `struct_size`.
 
 Separate tests cover fixed identical-C/ERI OS and SS, explicit spin sums,
 permutations and rectangular tiles; native eight-loop AO→MO and independent RI
-factor checks; VibeQC HF→public conventional/RI MP2 for H2/H2O/LiH/f-shell
+factor checks; GenerativeQC HF→public conventional/RI MP2 for H2/H2O/LiH/f-shell
 fixtures; a 14-AO independent PySCF 2.14.0 conventional system exercising an
 eight-plus-four virtual tail; bad states, nonconvergence, nonfinite arithmetic,
 metric rank, mixed backend, denominator and budget boundaries; C/Python force

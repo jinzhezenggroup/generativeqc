@@ -8,7 +8,7 @@ import subprocess
 import typing
 
 import pytest
-from vibeqc_compiler.integral import emit_ppps_resident_bra_rys3_cuda
+from generativeqc_compiler.integral import emit_ppps_resident_bra_rys3_cuda
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -75,10 +75,10 @@ def test_ppps_resident_bra_sm120_resource_probe_when_nvcc_is_configured(
 ) -> None:
     """Compile both RHF/UHF entries and record the accepted sm_120 footprint."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     source_path = tmp_path / "generated_ppps_resident_rys3.cu"
     cubin_path = tmp_path / "generated_ppps_resident_rys3.cubin"
     source_path.write_text(_cuda_source(), encoding="utf-8")
@@ -100,7 +100,7 @@ def test_ppps_resident_bra_sm120_resource_probe_when_nvcc_is_configured(
     )
     output = result.stdout + result.stderr
     assert result.returncode == 0, output
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(output)
     if architecture != "sm_120":
         return

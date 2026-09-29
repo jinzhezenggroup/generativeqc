@@ -1,6 +1,6 @@
 # COSX discrete CPU reference (issue #246 slice A)
 
-This document fixes the mathematics of the first VibeQC COSX reference before
+This document fixes the mathematics of the first GenerativeQC COSX reference before
 GPU screening, fitting, mixed precision, SCF integration, or provider selection
 is allowed to change execution.
 

@@ -5,30 +5,30 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc._dft_gradient import resolve_nonlocal_nuclear_sources
-from vibeqc.fock import FockPlan
-from vibeqc.mean_field import FixedDensityMeanField, compile_fixed_density_method
-from vibeqc_compiler.dft import (
+from generativeqc._dft_gradient import resolve_nonlocal_nuclear_sources
+from generativeqc.fock import FockPlan
+from generativeqc.mean_field import FixedDensityMeanField, compile_fixed_density_method
+from generativeqc_compiler.dft import (
     ExplicitGrid,
     FixedDensityNonlocalCorrelation,
     GridSpec,
     MolecularGrid,
     NativeAO,
 )
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.method import (
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.method import (
     MethodSpec,
     NonlocalCorrelationPrimitive,
     UnsupportedMethod,
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
 
 
 def _pbe_nonlocal_spec(variant: typing.Any) -> typing.Any:

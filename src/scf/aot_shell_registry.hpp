@@ -1,12 +1,12 @@
-#ifndef VIBEQC_SCF_AOT_SHELL_REGISTRY_HPP
-#define VIBEQC_SCF_AOT_SHELL_REGISTRY_HPP
+#ifndef GENERATIVEQC_SCF_AOT_SHELL_REGISTRY_HPP
+#define GENERATIVEQC_SCF_AOT_SHELL_REGISTRY_HPP
 
 #include <cuda_runtime_api.h>
 
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::generated {
+namespace generativeqc::scf::generated {
 
 /** Runtime identity of the AOT bundle selected for one CUDA device. */
 struct ProfileInfo {
@@ -55,7 +55,7 @@ std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept;
 
 /**
  * Return generated mixed-Fock classes selected by
- * VIBEQC_AOT_MIXED_FOCK_SHELL_CLASSES (default: all compiled classes).
+ * GENERATIVEQC_AOT_MIXED_FOCK_SHELL_CLASSES (default: all compiled classes).
  */
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept;
 
@@ -117,6 +117,6 @@ cudaError_t launch_ppps_resident(cudaStream_t stream, bool unrestricted, const v
                                  double* forces, unsigned block_threads,
                                  std::size_t task_count) noexcept;
 
-}  // namespace vibeqc::scf::generated
+}  // namespace generativeqc::scf::generated
 
 #endif

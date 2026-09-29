@@ -6,7 +6,7 @@
 
 #include "cc/solver.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 
 struct TriplesResponseOptions {
   double denominator_threshold{1e-10};
@@ -36,4 +36,4 @@ TriplesResponseResult triples_response_cpu(const Problem& problem, const SolverR
                                            const std::vector<double>& eps_v,
                                            const TriplesResponseOptions& options = {});
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

@@ -3,5 +3,5 @@
   "outputs": [
     "generated/weighted_eri.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+  "owner": "python/generativeqc_compiler/integral/weighted_eri_cuda.py"
 }

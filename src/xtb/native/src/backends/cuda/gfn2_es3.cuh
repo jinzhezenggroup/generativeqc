@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_ES3_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ES3_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_ES3_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ES3_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/cuda/gfn2_scc_iteration_control.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Semantic input and arithmetic errors detected asynchronously by ES3 kernels. */
 enum class Gfn2ES3DeviceError : std::uint32_t {
@@ -104,6 +104,6 @@ cudaError_t evaluate_gfn2_es3_scc_energy_cuda(
  * completed before another system recorded the error.
  */
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_ES3_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_ES3_CUH

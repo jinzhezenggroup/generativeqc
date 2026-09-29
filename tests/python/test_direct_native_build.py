@@ -26,9 +26,9 @@ def test_direct_device_link_preserves_architecture_request(
     global_link: typing.Any,
 ) -> None:
     """Keep architecture intent and the angular-force compilation boundary."""
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to inspect native CUDA build graphs")
+        pytest.skip("set GENERATIVEQC_NVCC to inspect native CUDA build graphs")
     root = Path(__file__).resolve().parents[2]
     subprocess.run(
         [
@@ -39,13 +39,13 @@ def test_direct_device_link_preserves_architecture_request(
             str(tmp_path),
             "-G",
             "Ninja",
-            "-DVIBEQC_ENABLE_CUDA=ON",
-            "-DVIBEQC_ENABLE_AOT_SHELLS=OFF",
-            "-DVIBEQC_COMPILER_CACHE=off",
-            f"-DVIBEQC_CUDA_SEPARABLE_COMPILATION={global_link}",
+            "-DGENERATIVEQC_ENABLE_CUDA=ON",
+            "-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF",
+            "-DGENERATIVEQC_COMPILER_CACHE=off",
+            f"-DGENERATIVEQC_CUDA_SEPARABLE_COMPILATION={global_link}",
             f"-DCMAKE_CUDA_COMPILER={nvcc}",
             f"-DCMAKE_CUDA_ARCHITECTURES={architectures}",
-            f"-DVIBEQC_CUDA_DIRECT_DEVICE_LINK={enabled}",
+            f"-DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK={enabled}",
         ],
         check=True,
         capture_output=True,
@@ -57,7 +57,7 @@ def test_direct_device_link_preserves_architecture_request(
             ["ninja", "-C", str(tmp_path), "-t", "commands", target], text=True
         ).splitlines()[-1]
 
-    owner = "vibeqc_direct_native" if linked else "vibeqc"
+    owner = "generativeqc_direct_native" if linked else "generativeqc"
     direct = command(f"CMakeFiles/{owner}.dir/src/scf/cuda/direct_reference_force.cu.o")
     assert ("-rdc=true" in direct) == linked
     if architectures.endswith("-real"):
@@ -69,16 +69,16 @@ def test_direct_device_link_preserves_architecture_request(
     # A direct archive must not drag an unrelated SCF kernel into device linking.
     assert (
         "-rdc=true"
-        in command("CMakeFiles/vibeqc.dir/src/scf/cuda/scf_state_kernels.cu.o")
+        in command("CMakeFiles/generativeqc.dir/src/scf/cuda/scf_state_kernels.cu.o")
     ) == (global_link == "ON")
     assert "-rdc=true" not in command(
-        "CMakeFiles/vibeqc_direct_angular_force.dir/"
+        "CMakeFiles/generativeqc_direct_angular_force.dir/"
         "src/scf/cuda/direct_angular_force.cu.o"
     )
-    host = command("CMakeFiles/vibeqc.dir/src/scf/cuda_rhf.cpp.o")
+    host = command("CMakeFiles/generativeqc.dir/src/scf/cuda_rhf.cpp.o")
     assert nvcc not in host
     assert "-rdc=true" not in host
     if architectures.endswith("-virtual"):
-        assert "VIBEQC_CUDA_PROFILE_ARCHITECTURE" not in host
+        assert "GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE" not in host
     else:
-        assert "VIBEQC_CUDA_PROFILE_ARCHITECTURE=120" in host
+        assert "GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE=120" in host

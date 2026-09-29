@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc_compiler.common.cuda_adapter import (
     CudaBenchmarkExecutor,
     CudaExecutionProfile,
     resolve_cuda_execution_profile,
@@ -36,7 +36,7 @@ def test_cpu_allocation_keeps_legacy_positional_time() -> None:
 
 def test_cpu_allocation_single_task_launch_and_serial_default() -> None:
     profile = resolve_cuda_execution_profile(
-        environment={"VIBEQC_BENCHMARK_CPUS_PER_TASK": "8"}
+        environment={"GENERATIVEQC_BENCHMARK_CPUS_PER_TASK": "8"}
     )
     assert profile.wrap(["worker"]).count("--cpus-per-task=8") == 1
     assert profile.to_dict()["cpus_per_task"] == 8

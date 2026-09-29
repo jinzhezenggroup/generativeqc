@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc import functional, libxc_maple, pbe_maple
+from generativeqc_compiler.xc import functional, libxc_maple, pbe_maple
 
 
 @pytest.mark.parametrize("component", ("GGA_X_PBE", "GGA_C_PBE", "PBE"))

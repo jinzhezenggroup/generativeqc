@@ -1,39 +1,39 @@
-#ifndef VIBEQC_INTEGRALS_RANGE_MOMENTS_HPP
-#define VIBEQC_INTEGRALS_RANGE_MOMENTS_HPP
+#ifndef GENERATIVEQC_INTEGRALS_RANGE_MOMENTS_HPP
+#define GENERATIVEQC_INTEGRALS_RANGE_MOMENTS_HPP
 
 #include <cmath>
 #include <cstdint>
 
 #ifdef __CUDACC__
-#define VIBEQC_RANGE_HD __host__ __device__
+#define GENERATIVEQC_RANGE_HD __host__ __device__
 #else
-#define VIBEQC_RANGE_HD
+#define GENERATIVEQC_RANGE_HD
 #endif
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 
-VIBEQC_RANGE_HD inline bool range_isfinite(double value) {
+GENERATIVEQC_RANGE_HD inline bool range_isfinite(double value) {
 #if defined(__CUDA_ARCH__)
   return ::isfinite(value);
 #else
   return std::isfinite(value);
 #endif
 }
-VIBEQC_RANGE_HD inline double range_sqrt(double value) {
+GENERATIVEQC_RANGE_HD inline double range_sqrt(double value) {
 #if defined(__CUDA_ARCH__)
   return ::sqrt(value);
 #else
   return std::sqrt(value);
 #endif
 }
-VIBEQC_RANGE_HD inline double range_hypot(double a, double b) {
+GENERATIVEQC_RANGE_HD inline double range_hypot(double a, double b) {
 #if defined(__CUDA_ARCH__)
   return ::hypot(a, b);
 #else
   return std::hypot(a, b);
 #endif
 }
-VIBEQC_RANGE_HD inline double range_exp(double value) {
+GENERATIVEQC_RANGE_HD inline double range_exp(double value) {
 #if defined(__CUDA_ARCH__)
   return ::exp(value);
 #else
@@ -66,9 +66,9 @@ enum class CoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
  * dF_n/dT = -F_(n+1), rather than differentiating quadrature or clipping branches.
  */
 template <unsigned MaximumOrder>
-VIBEQC_RANGE_HD inline bool bounded_range_moments(unsigned maximum_order, double argument,
-                                                  double rho, CoulombRange range, double omega,
-                                                  double* output) {
+GENERATIVEQC_RANGE_HD inline bool bounded_range_moments(unsigned maximum_order, double argument,
+                                                        double rho, CoulombRange range,
+                                                        double omega, double* output) {
   static_assert(MaximumOrder <= 14, "the validated quadrature domain ends at order 14");
   if (!output || maximum_order > MaximumOrder || !range_isfinite(argument) || argument < 0 ||
       !range_isfinite(rho) || rho <= 0 || !range_isfinite(omega) || omega < 0 ||
@@ -140,10 +140,10 @@ VIBEQC_RANGE_HD inline bool bounded_range_moments(unsigned maximum_order, double
  * owned doubles. Calling the established API with order fourteen still fails
  * before touching its output, protecting existing fourteen-element buffers.
  */
-VIBEQC_RANGE_HD inline bool range_moments(unsigned maximum_order, double argument, double rho,
-                                          CoulombRange range, double omega, double* output) {
+GENERATIVEQC_RANGE_HD inline bool range_moments(unsigned maximum_order, double argument, double rho,
+                                                CoulombRange range, double omega, double* output) {
   return bounded_range_moments<13>(maximum_order, argument, rho, range, omega, output);
 }
-}  // namespace vibeqc::integrals
-#undef VIBEQC_RANGE_HD
+}  // namespace generativeqc::integrals
+#undef GENERATIVEQC_RANGE_HD
 #endif

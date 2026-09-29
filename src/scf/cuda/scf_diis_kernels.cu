@@ -5,7 +5,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_diis_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 namespace {
 __device__ void decode_symmetric_pair(std::uint32_t pair, std::uint32_t width, std::uint32_t& row,
@@ -321,4 +321,4 @@ void launch_update_diis_kernel(
     launch.template operator()<false>();
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

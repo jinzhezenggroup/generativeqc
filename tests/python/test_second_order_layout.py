@@ -5,8 +5,11 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.ir import FOUR_CENTER_ERI_OPERATOR, NuclearCoordinates
-from vibeqc_compiler.integral.second_order_layout import (
+from generativeqc_compiler.integral.ir import (
+    FOUR_CENTER_ERI_OPERATOR,
+    NuclearCoordinates,
+)
+from generativeqc_compiler.integral.second_order_layout import (
     CenterRecovery,
     HessianLayout,
     second_center_recovery,

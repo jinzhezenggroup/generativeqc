@@ -2,7 +2,7 @@
 """Regenerate the independent r2SCAN tail fixture from pinned Libxc Maple C.
 
 Requires GCC/libquadmath and the exact Libxc 7.0.0 source archive. This is an
-offline qualification tool; it imports no VibeQC algebra, AD, or runtime. The
+offline qualification tool; it imports no GenerativeQC algebra, AD, or runtime. The
 original upstream E/vxc formulas (including their cancelling spin coordinates)
 are evaluated in 113-bit arithmetic, then rounded once to binary64. The narrow
 driver preserves Libxc work_mgga thresholds and raw-work derivative semantics.

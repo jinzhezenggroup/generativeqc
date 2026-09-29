@@ -4,7 +4,7 @@
 
 #include "scf/cuda/topology.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Host-only queue diagnostics. Simulated CTA assignment describes descriptor tails, not measured
  * occupancy or execution time. */
@@ -124,4 +124,4 @@ CudaPppsQueueProfile build_ppps_queue_profile(const HostBatch& host,
   return profile;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

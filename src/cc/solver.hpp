@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 
 struct SolverOptions {
   unsigned max_iterations{100};
@@ -45,7 +45,18 @@ struct SolverDiagnostic {
   std::size_t scalar_d2h_bytes{};
   std::size_t amplitude_d2h_bytes{};
   std::size_t synchronizations{};
+  std::size_t iteration_graph_calls{};
+  std::size_t replay_graph_calls{};
+  std::size_t update_calls{};
+  std::size_t generated_error_checks{};
+  std::size_t diis_gram_calls{};
+  std::size_t diis_coefficient_calls{};
+  std::size_t diis_combine_calls{};
   double tensor_seconds{};
+  double iteration_seconds{};
+  double replay_seconds{};
+  double update_seconds{};
+  double diis_seconds{};
 };
 
 struct SolverResult {
@@ -65,4 +76,4 @@ std::size_t problem_host_bytes(const Problem& problem);
 SolverResult solve_cpu(const Problem& problem, const SolverOptions& options);
 SolverResult solve_cuda(const Problem& problem, const SolverOptions& options, int device);
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

@@ -28,13 +28,13 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-from vibeqc import Primitive, Shell
+from generativeqc import Primitive, Shell
 
 if typing.TYPE_CHECKING:
     from collections.abc import Sequence
 
-RUN_SCHEMA = "vibeqc.mp2-public-force-validation.v1"
-CASE_SCHEMA = "vibeqc.mp2-public-force-case.v1"
+RUN_SCHEMA = "generativeqc.mp2-public-force-validation.v1"
+CASE_SCHEMA = "generativeqc.mp2-public-force-case.v1"
 
 PYSCF_FORCE_ATOL = 2.0e-6
 FD_FINE_ATOL = 5.0e-6
@@ -51,7 +51,7 @@ class PublicForceCase:
     """One closed-shell all-electron conventional MP2 qualification case."""
 
     atoms: tuple[tuple[str, tuple[float, float, float]], ...]
-    vibeqc_basis: str | tuple[Shell, ...]
+    generativeqc_basis: str | tuple[Shell, ...]
     pyscf_basis: str | dict[str, list]
     basis_representation: str = "cartesian"
     charge: int = 0
@@ -64,12 +64,12 @@ def validation_cases() -> dict[str, PublicForceCase]:
     return {
         "h2": PublicForceCase(
             atoms=(("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))),
-            vibeqc_basis="sto-3g",
+            generativeqc_basis="sto-3g",
             pyscf_basis="sto-3g",
         ),
         "lih": PublicForceCase(
             atoms=(("Li", (0.0, 0.0, 0.0)), ("H", (0.2, -0.1, 3.0))),
-            vibeqc_basis="sto-3g",
+            generativeqc_basis="sto-3g",
             pyscf_basis="sto-3g",
             basis_representation="spherical",
         ),
@@ -79,12 +79,12 @@ def validation_cases() -> dict[str, PublicForceCase]:
                 ("H", (1.4, 0.1, 1.1)),
                 ("H", (-1.2, 0.2, 1.3)),
             ),
-            vibeqc_basis="sto-3g",
+            generativeqc_basis="sto-3g",
             pyscf_basis="sto-3g",
         ),
         "f-shell": PublicForceCase(
             atoms=(("He", (0.0, 0.0, 0.0)), ("H", (0.3, -0.2, 1.7))),
-            vibeqc_basis=(
+            generativeqc_basis=(
                 Shell(0, 0, (Primitive(1.3, 1.0),)),
                 Shell(0, 3, (Primitive(0.7, 1.0),)),
                 Shell(1, 0, (Primitive(0.6, 1.0),)),
@@ -102,7 +102,7 @@ def validation_cases() -> dict[str, PublicForceCase]:
                 ("H", (0.0, -1.43233673, 1.10715266)),
                 ("H", (0.0, 1.43233673, 1.10715266)),
             ),
-            vibeqc_basis="def2-svp",
+            generativeqc_basis="def2-svp",
             pyscf_basis="def2-svp",
             minimum_ao_count=13,
         ),
@@ -486,11 +486,11 @@ def _pyscf_reference(case: PublicForceCase) -> dict:
 
 
 def _calculator(case: PublicForceCase, backend: str, budget: int) -> typing.Any:
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     return Calculator(
         method="mp2",
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device=backend,
         correlation_memory_budget_bytes=budget,
@@ -535,7 +535,7 @@ def _run_failure_matrix(case: PublicForceCase, backend: str) -> dict:
         else:
             checks[name] = {"status": "fail", "detail": "request unexpectedly passed"}
 
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     force_request = {"charge": case.charge, "properties": ("energy", "forces")}
     expect(
@@ -543,7 +543,7 @@ def _run_failure_matrix(case: PublicForceCase, backend: str) -> dict:
         RuntimeError,
         lambda: Calculator(
             method="mp2",
-            basis=case.vibeqc_basis,
+            basis=case.generativeqc_basis,
             basis_representation=case.basis_representation,
             device=backend,
             mp2_denominator_threshold=100.0,
@@ -554,7 +554,7 @@ def _run_failure_matrix(case: PublicForceCase, backend: str) -> dict:
         (RuntimeError, MemoryError),
         lambda: Calculator(
             method="mp2",
-            basis=case.vibeqc_basis,
+            basis=case.generativeqc_basis,
             basis_representation=case.basis_representation,
             device=backend,
             correlation_memory_budget_bytes=1024,
@@ -567,7 +567,7 @@ def _run_failure_matrix(case: PublicForceCase, backend: str) -> dict:
         (ValueError, RuntimeError),
         lambda: Calculator(
             method="mp2",
-            basis=case.vibeqc_basis,
+            basis=case.generativeqc_basis,
             basis_representation=case.basis_representation,
             device=backend,
         ).singlepoint(invalid_atoms, **force_request),
@@ -577,7 +577,7 @@ def _run_failure_matrix(case: PublicForceCase, backend: str) -> dict:
         NotImplementedError,
         lambda: Calculator(
             method="mp2",
-            basis=case.vibeqc_basis,
+            basis=case.generativeqc_basis,
             basis_representation=case.basis_representation,
             device=backend,
             density_fitting="cuda" if backend == "cuda" else "cpu",
@@ -585,7 +585,7 @@ def _run_failure_matrix(case: PublicForceCase, backend: str) -> dict:
     )
     checks["response_iteration_exhaustion"] = {
         "status": "covered-by-native-test",
-        "evidence": "vibeqc_mp2_gradient_tests bounded GMRES maximum-iteration status",
+        "evidence": "generativeqc_mp2_gradient_tests bounded GMRES maximum-iteration status",
         "reason": "the public method intentionally has no response-iteration fault-injection control",
     }
     return checks
@@ -756,8 +756,8 @@ def _environment_record(calculator: typing.Any = None) -> dict:
         "toolchain": {"python": sys.version, "numpy": np.__version__},
         "library": None,
         "environment": {
-            "VIBEQC_LIBRARY": os.environ.get("VIBEQC_LIBRARY"),
-            "VIBEQC_PROFILE": os.environ.get("VIBEQC_PROFILE"),
+            "GENERATIVEQC_LIBRARY": os.environ.get("GENERATIVEQC_LIBRARY"),
+            "GENERATIVEQC_PROFILE": os.environ.get("GENERATIVEQC_PROFILE"),
         },
     }
     if library and library.exists():
@@ -766,7 +766,7 @@ def _environment_record(calculator: typing.Any = None) -> dict:
             "bytes": library.stat().st_size,
             "sha256": _file_sha256(library),
         }
-        getter = getattr(calculator._library, "vibeqc_get_source_identity", None)
+        getter = getattr(calculator._library, "generativeqc_get_source_identity", None)
         if getter is not None:
             getter.restype = ctypes.c_char_p
             value = getter()

@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.xc-integration-reference",
+  "schema": "generativeqc.xc-integration-reference",
   "version": 1,
   "inputs": {
     "name": "f_cartesian",
@@ -221,5 +221,5 @@
       "sha256": "18b38b3c1dc066ec7a3678e29b66e6647087ede451fdd1f1366280fd22f6d2aa"
     }
   },
-  "identity": "4bf0c47260c0a163224343a188d59ced2b15152abb8da4b973934ce0c068d66f"
+  "identity": "028e7b182b097eb60fbe4ddcc878a54a7fa09c07d5a9c303d640299588e26c32"
 }

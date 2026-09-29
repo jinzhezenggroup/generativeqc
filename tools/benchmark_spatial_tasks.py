@@ -46,29 +46,29 @@ def main() -> None:
     if args.backend == "cuda" and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("real GPU execution requires finite Slurm allocation")
     sys.path[:0] = [str(root / "python"), str(root)]
-    os.environ["VIBEQC_LIBRARY"] = str(args.library.resolve())
+    os.environ["GENERATIVEQC_LIBRARY"] = str(args.library.resolve())
     import numpy as np
-    from vibeqc import Primitive, Shell
-    from vibeqc.autotune import source_identity
-    from vibeqc_compiler.common.evidence import block_error, canonical_hash
-    from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-    from vibeqc_compiler.dft.features import density_features
-    from vibeqc_compiler.dft.plan import plan_tiles
-    from vibeqc_compiler.xc import FixedDensityXC, functional
-    from vibeqc_compiler.xc.potential import assemble_potential
-    from vibeqc_compiler.xc.program import build_program, pack_grid_features
+    from generativeqc import Primitive, Shell
+    from generativeqc.autotune import source_identity
+    from generativeqc_compiler.common.evidence import block_error, canonical_hash
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+    from generativeqc_compiler.dft.features import density_features
+    from generativeqc_compiler.dft.plan import plan_tiles
+    from generativeqc_compiler.xc import FixedDensityXC, functional
+    from generativeqc_compiler.xc.potential import assemble_potential
+    from generativeqc_compiler.xc.program import build_program, pack_grid_features
 
     native = ctypes.CDLL(str(args.library.resolve()))
-    native.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    native.generativeqc_get_source_identity.restype = ctypes.c_char_p
     identity = source_identity(root)
-    if native.vibeqc_get_source_identity().decode() != identity:
+    if native.generativeqc_get_source_identity().decode() != identity:
         raise ValueError("CPU library and source checkout identity differ")
     artifact = None
     if args.backend == "cuda":
-        from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-        from vibeqc_compiler.common.cuda_target import cuda_target_info
-        from vibeqc_compiler.dft.cuda import CudaGrid, compile_cuda
+        from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+        from generativeqc_compiler.common.cuda_target import cuda_target_info
+        from generativeqc_compiler.dft.cuda import CudaGrid, compile_cuda
 
         artifact = compile_cuda(
             CudaCompilerAdapter(
@@ -77,12 +77,12 @@ def main() -> None:
             args.cache,
         )
     if not args.dense_only:
-        from vibeqc_compiler.common.resources import ResourceBudget
-        from vibeqc_compiler.dft.spatial import SpatialPolicy
-        from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+        from generativeqc_compiler.common.resources import ResourceBudget
+        from generativeqc_compiler.dft.spatial import SpatialPolicy
+        from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 
     report = {
-        "schema": "vibeqc.spatial-task-benchmark.v1",
+        "schema": "generativeqc.spatial-task-benchmark.v1",
         "revision": capture(["git", "-C", str(root), "rev-parse", "HEAD"]),
         "dirty": False,
         "source_identity": identity,

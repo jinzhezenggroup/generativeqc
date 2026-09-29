@@ -2,7 +2,7 @@
 
 This is an evidence assembly tool, not a scientific executor. It consumes the
 three already-qualified CPU stages and emits the exact public-method receipt
-owned by `vibeqc_compiler.xc.public_method_evidence`.
+owned by `generativeqc_compiler.xc.public_method_evidence`.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.xc.public_method_evidence import build_result, stage_evidence
+from generativeqc_compiler.common.provenance import atomic_json
+from generativeqc_compiler.xc.public_method_evidence import build_result, stage_evidence
 
 
 def _stage_payload(value: Mapping[str, Any], expected: str) -> dict[str, Any]:
@@ -60,7 +60,7 @@ def qualify_public_method(
         prerequisite_evidence=prerequisites,
     )
     return {
-        "schema": "vibeqc.libxc-public-method-campaign/v1",
+        "schema": "generativeqc.libxc-public-method-campaign/v1",
         "functional": name,
         "prerequisites": prerequisites,
         "result": result,

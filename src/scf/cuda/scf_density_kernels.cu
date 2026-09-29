@@ -7,7 +7,7 @@
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void mix_open_shell_guess_kernel(std::int32_t batch_size, std::int32_t nbf,
                                             const std::int32_t* occupied,
@@ -240,4 +240,4 @@ void launch_sum_uhf_spin_matrices_kernel(dim3 grid, dim3 block, std::size_t shar
       batch_size, nbf, spin_matrices, active, total_matrices);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

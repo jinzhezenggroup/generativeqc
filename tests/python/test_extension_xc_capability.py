@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc.extensions import xc
-from vibeqc_compiler.xc import libxc_bulk_capabilities
+from generativeqc.extensions import xc
+from generativeqc_compiler.xc import libxc_bulk_capabilities
 
 
 def _stage_evidence(

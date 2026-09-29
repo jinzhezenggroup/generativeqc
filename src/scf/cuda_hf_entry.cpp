@@ -2,11 +2,11 @@
 #include <utility>
 #include <vector>
 
+#include "generativeqc/generativeqc.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/mean_field.hpp"
-#include "vibeqc/vibeqc.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 // Host-only single-system adapters share the bucket execution and error
 // contract. Keep them outside the kernel translation unit so host changes
@@ -21,17 +21,17 @@ ScfResult run_rhf_cuda(const core::System& system, const ScfOptions& options, in
   std::vector<RhfBucketItem> result =
       run_rhf_cuda_bucket(systems, options, initial_densities, device_id);
   if (result.empty()) throw std::runtime_error("CUDA RHF returned no result");
-  const vibeqc_status status = result.front().status;
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) {
+  const generativeqc_status status = result.front().status;
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
     throw std::invalid_argument("CUDA RHF received invalid arguments");
   }
   // Preserve the structural-only diagnostic status through the single-system
   // adapter; translating it to runtime_error would turn it into INTERNAL_ERROR.
-  if (status == VIBEQC_STATUS_NOT_IMPLEMENTED) {
+  if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
     throw Error(status, "CUDA RHF numerical endpoint is unavailable in this mode");
   }
-  if (status != VIBEQC_STATUS_SUCCESS && status != VIBEQC_STATUS_SCF_NOT_CONVERGED) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED) {
     throw std::runtime_error("CUDA RHF execution failed");
   }
   return std::move(result.front().scf);
@@ -47,17 +47,17 @@ ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, in
   std::vector<RhfBucketItem> result =
       run_uhf_cuda_bucket(systems, options, initial_densities, device_id);
   if (result.empty()) throw std::runtime_error("CUDA UHF returned no result");
-  const vibeqc_status status = result.front().status;
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) {
+  const generativeqc_status status = result.front().status;
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
     throw std::invalid_argument("CUDA UHF received invalid arguments");
   }
-  if (status == VIBEQC_STATUS_NOT_IMPLEMENTED) {
+  if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
     throw Error(status, "CUDA UHF numerical endpoint is unavailable in this mode");
   }
-  if (status != VIBEQC_STATUS_SUCCESS && status != VIBEQC_STATUS_SCF_NOT_CONVERGED) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED) {
     throw std::runtime_error("CUDA UHF execution failed");
   }
   return std::move(result.front().scf);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

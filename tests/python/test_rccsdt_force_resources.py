@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc import _native
+from generativeqc import _native
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -129,7 +129,7 @@ int main(int argc,char** argv) {
     if(argc!=2) return 1;
     std::ifstream input(argv[1]); std::size_t atoms=0,shells=0;
     input >> atoms >> shells;
-    vibeqc::core::System system; system.atoms.resize(atoms);system.shells.resize(shells);
+    generativeqc::core::System system; system.atoms.resize(atoms);system.shells.resize(shells);
     for(auto& atom:system.atoms)
       input >> atom.atomic_number >> atom.position[0] >> atom.position[1] >> atom.position[2];
     for(auto& shell:system.shells) {
@@ -139,36 +139,36 @@ int main(int argc,char** argv) {
     }
     if(!input) return 2;
     std::string detail;
-    if(vibeqc::molecule::validate_and_normalize(system,detail)!=VIBEQC_STATUS_SUCCESS)
+    if(generativeqc::molecule::validate_and_normalize(system,detail)!=GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail);
-    vibeqc::core::ContextState context;
-    vibeqc::runtime::ExecutionContext execution(context);
-    vibeqc_method_descriptor method{sizeof(vibeqc_method_descriptor),VIBEQC_ABI_VERSION,
-                                    VIBEQC_METHOD_RCCSD_T,200,8,1e-13,1e-11,0.0};
+    generativeqc::core::ContextState context;
+    generativeqc::runtime::ExecutionContext execution(context);
+    generativeqc_method_descriptor method{sizeof(generativeqc_method_descriptor),GENERATIVEQC_ABI_VERSION,
+                                    GENERATIVEQC_METHOD_RCCSD_T,200,8,1e-13,1e-11,0.0};
     method.ccsd_max_iterations=150;method.ccsd_diis_history=6;
     method.ccsd_energy_tolerance=1e-13;method.ccsd_residual_tolerance=1e-11;
     method.correlation_memory_budget_bytes=256ULL<<20;
-    auto state=vibeqc::methods::detail::run_rccsd_native_state(execution,system,method);
+    auto state=generativeqc::methods::detail::run_rccsd_native_state(execution,system,method);
     if(!state.solved.converged() || !state.reference) return 3;
-    const auto plan=vibeqc::cc::plan_rccsdt_force_cpu(system,*state.reference,state.problem,
+    const auto plan=generativeqc::cc::plan_rccsdt_force_cpu(system,*state.reference,state.problem,
                                                     state.solved,256ULL<<20);
     // Refuse before even the first triples-response output is materialized.
     trace::start(); bool refused=false;
     try {
-      (void)vibeqc::cc::rccsdt_force_cpu(system,*state.reference,state.problem,state.solved,
+      (void)generativeqc::cc::rccsdt_force_cpu(system,*state.reference,state.problem,state.solved,
                                        state.eps_o,state.eps_v,plan.peak_bytes-1);
     } catch(const std::length_error&) { refused=true; }
     trace::active=false;
     if(!refused || trace::largest>=4096) return 4;
     trace::start();
-    const auto force=vibeqc::cc::rccsdt_force_cpu(system,*state.reference,state.problem,state.solved,
+    const auto force=generativeqc::cc::rccsdt_force_cpu(system,*state.reference,state.problem,state.solved,
                                                 state.eps_o,state.eps_v,plan.peak_bytes);
     trace::active=false;
     if(force.numeric_capacity_bytes!=plan.peak_bytes ||
        trace::peak+plan.retained_input_bytes>plan.peak_bytes) return 5;
     const auto old_capacity=state.problem.foo.capacity();
     state.problem.foo.reserve(old_capacity+32);
-    const auto enlarged=vibeqc::cc::plan_rccsdt_force_cpu(system,*state.reference,state.problem,
+    const auto enlarged=generativeqc::cc::plan_rccsdt_force_cpu(system,*state.reference,state.problem,
                                                         state.solved,256ULL<<20);
     if(enlarged.peak_bytes-plan.peak_bytes !=
        (state.problem.foo.capacity()-old_capacity)*sizeof(double)) return 6;

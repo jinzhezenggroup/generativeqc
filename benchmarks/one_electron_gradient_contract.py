@@ -22,12 +22,12 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator, Primitive, Shell
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc import Calculator, Primitive, Shell
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
 
 from benchmarks._cases import benchmark_cases
-from tools.vibeqc_validation.one_electron_gradient import (
+from tools.generativeqc_validation.one_electron_gradient import (
     execute_gradient,
     reference_matrices,
 )
@@ -62,7 +62,7 @@ def main() -> None:
                 for k in range(args.contraction_length)
             ),
         )
-        for s in case.vibeqc_basis
+        for s in case.generativeqc_basis
     )
     inputs = {
         "atomic_numbers": [{"H": 1, "He": 2}[a] for a, _ in case.atoms],
@@ -113,7 +113,7 @@ def main() -> None:
             }
         )
     report = {
-        "schema": "vibeqc.one_electron_gradient_contract",
+        "schema": "generativeqc.one_electron_gradient_contract",
         "version": 1,
         "inputs": inputs,
         "input_hash": canonical_hash(inputs),

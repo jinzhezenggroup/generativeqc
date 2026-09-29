@@ -51,17 +51,17 @@ def collect(directory: Path) -> list[dict[str, Any]]:
 
 def timing(row: dict[str, Any], engine: str) -> dict[str, float] | None:
     """Require three finished repeats and the native independent accuracy gate."""
-    groups = ("wb97mv",) if engine == "vibeqc" else ("wb97mv", "wb97mv-reference")
+    groups = ("wb97mv",) if engine == "generativeqc" else ("wb97mv", "wb97mv-reference")
     for group in groups:
         source = row[group]
         record = source.get("record", {})
         samples = record.get(
-            "native_samples" if engine == "vibeqc" else "reference_samples", []
+            "native_samples" if engine == "generativeqc" else "reference_samples", []
         )
         if (
             source["status"] == "measured"
             and len(samples) == 3
-            and (engine != "vibeqc" or record.get("accepted") is True)
+            and (engine != "generativeqc" or record.get("accepted") is True)
         ):
             return record["timing"].get(engine)
     return None
@@ -76,18 +76,18 @@ def main() -> None:
     args.destination.mkdir(parents=True, exist_ok=True)
     (args.destination / "endpoints.json").write_text(
         json.dumps(
-            {"schema": "vibeqc.readme-wb97mv.evidence.v1", "rows": rows},
+            {"schema": "generativeqc.readme-wb97mv.evidence.v1", "rows": rows},
             indent=2,
             allow_nan=False,
         )
         + "\n"
     )
     lines = [
-        "| Atoms / AOs | VibeQC (s) | GPU4PySCF (s) | Paired status | Reference status |",
+        "| Atoms / AOs | GenerativeQC (s) | GPU4PySCF (s) | Paired status | Reference status |",
         "| --- | ---: | ---: | --- | --- |",
     ]
     for row in rows:
-        native, reference = timing(row, "vibeqc"), timing(row, "gpu4pyscf")
+        native, reference = timing(row, "generativeqc"), timing(row, "gpu4pyscf")
         values = [
             f"{sample['median_seconds']:.3f}" if sample else "—"
             for sample in (native, reference)
@@ -105,7 +105,7 @@ def main() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
     for engine, label, color in (
-        ("vibeqc", "VibeQC (accuracy accepted)", "#1967a3"),
+        ("generativeqc", "GenerativeQC (accuracy accepted)", "#1967a3"),
         ("gpu4pyscf", "GPU4PySCF", "#d46b18"),
     ):
         measured = [(r["aos"], timing(r, engine)) for r in rows if timing(r, engine)]

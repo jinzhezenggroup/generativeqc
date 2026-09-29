@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_WEIGHTED_ERI_RUNTIME_HPP
-#define VIBEQC_SCF_WEIGHTED_ERI_RUNTIME_HPP
+#ifndef GENERATIVEQC_SCF_WEIGHTED_ERI_RUNTIME_HPP
+#define GENERATIVEQC_SCF_WEIGHTED_ERI_RUNTIME_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -17,21 +17,21 @@
 #include "tensor/cuda_runtime.cuh"
 #endif
 
-namespace vibeqc::scf::weighted_runtime {
+namespace generativeqc::scf::weighted_runtime {
 
 using Result = CudaWeightedEriResult;
 
 #ifdef __CUDACC__
-#define VIBEQC_RESULT_HD __host__ __device__
+#define GENERATIVEQC_RESULT_HD __host__ __device__
 #else
-#define VIBEQC_RESULT_HD
+#define GENERATIVEQC_RESULT_HD
 #endif
 
 /** Legacy value/gradient ABI, retained as the default result policy. */
 struct GradientOutput {
   using Result = CudaWeightedEriResult;
   static constexpr unsigned count = 13;
-  VIBEQC_RESULT_HD static double& element(Result& result, unsigned i) {
+  GENERATIVEQC_RESULT_HD static double& element(Result& result, unsigned i) {
     return i == 0 ? result.value : result.center[(i - 1) / 3][(i - 1) % 3];
   }
 };
@@ -47,11 +47,14 @@ struct CoordinateOutput {
     double values[Count];
   };
   static constexpr unsigned count = Count;
-  VIBEQC_RESULT_HD static double& element(Result& result, unsigned i) { return result.values[i]; }
+  GENERATIVEQC_RESULT_HD static double& element(Result& result, unsigned i) {
+    return result.values[i];
+  }
 };
 
 template <class Output>
-VIBEQC_RESULT_HD void accumulate(typename Output::Result& target, typename Output::Result& value) {
+GENERATIVEQC_RESULT_HD void accumulate(typename Output::Result& target,
+                                       typename Output::Result& value) {
   for (unsigned i = 0; i < Output::count; ++i) {
 #ifdef __CUDA_ARCH__
     atomicAdd(&Output::element(target, i), Output::element(value, i));
@@ -60,7 +63,7 @@ VIBEQC_RESULT_HD void accumulate(typename Output::Result& target, typename Outpu
 #endif
   }
 }
-#undef VIBEQC_RESULT_HD
+#undef GENERATIVEQC_RESULT_HD
 
 struct NumericalFailure : std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -190,7 +193,7 @@ class Plan {
         throw std::invalid_argument("weighted ERI ABI, operator, omega or component mismatch");
     }
 #ifdef __CUDACC__
-    using vibeqc_tensor::cuda_check;
+    using generativeqc_tensor::cuda_check;
     context_.check_device();
     auto* device_records = reinterpret_cast<Record*>(context_.arena);
     auto* device_results = reinterpret_cast<Result*>(context_.arena + input_bytes_);
@@ -262,17 +265,17 @@ class Plan {
   std::size_t host_bytes() const { return host_bytes_; }
   std::size_t device_bytes() const { return device_bytes_; }
 #ifdef __CUDACC__
-  const vibeqc_tensor::Metrics& metrics() const { return context_.metrics; }
+  const generativeqc_tensor::Metrics& metrics() const { return context_.metrics; }
 #endif
 
  private:
   std::size_t capacity_, tiles_, input_bytes_{}, output_bytes_{}, host_bytes_{}, device_bytes_{};
   std::vector<Result> candidate_;
 #ifdef __CUDACC__
-  vibeqc_tensor::Context context_;
+  generativeqc_tensor::Context context_;
 #else
   std::mutex mutex_;
 #endif
 };
-}  // namespace vibeqc::scf::weighted_runtime
+}  // namespace generativeqc::scf::weighted_runtime
 #endif

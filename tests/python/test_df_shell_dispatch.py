@@ -13,10 +13,10 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.df_shell_derivatives import SHELL_CLASSES
-from vibeqc_compiler.integral.df_shell_units import emit_df_shell_units
-from vibeqc_compiler.integral.df_tuning.manifest import emit_policy
-from vibeqc_compiler.integral.df_tuning.policy import SCHEDULES
+from generativeqc_compiler.integral.df_shell_derivatives import SHELL_CLASSES
+from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
+from generativeqc_compiler.integral.df_tuning.manifest import emit_policy
+from generativeqc_compiler.integral.df_tuning.policy import SCHEDULES
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,10 +42,10 @@ int cudaDeviceGetAttribute(int*,cudaDeviceAttr,int);
 """)
     (stub / "df_derivatives.cuh").write_text("""#pragma once
 #include "cuda_runtime.h"
-namespace vibeqc::scf {struct DfDerivativeBasisView {};}
+namespace generativeqc::scf {struct DfDerivativeBasisView {};}
 """)
     (stub / "df_shell_diagnostics.cuh").write_text("""#pragma once
-namespace vibeqc::scf {struct DfShellDiagnostics {};}
+namespace generativeqc::scf {struct DfShellDiagnostics {};}
 """)
     registry = next(emit_df_shell_units())
     (directory / registry[0]).write_text(registry[1])
@@ -68,7 +68,7 @@ int cudaDeviceGetAttribute(int* value,cudaDeviceAttr kind,int) {
   *value=kind==cudaDevAttrComputeCapabilityMajor?architecture/10:architecture%10;
   return device_error;
 }
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 template<unsigned A,unsigned B,unsigned C>
 int record(const DfShellLaunch& context) {
   constexpr int code=16*A+4*B+C;
@@ -85,7 +85,7 @@ __DECLARATIONS__
 }
 int main(int argc,char** argv) {
   if(argc!=8) return 2;
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   int kind=std::atoi(argv[1]),full=std::atoi(argv[2]),variant=std::atoi(argv[3]);
   architecture=std::atoi(argv[4]);device_error=std::atoi(argv[5]);fail_class=std::atoi(argv[6]);
   bool empty=std::atoi(argv[7]);
@@ -132,10 +132,10 @@ int main(int argc,char** argv) {
         policy: typing.Any = "auto",
         schedule: typing.Any = None,
     ) -> typing.Any:
-        env = dict(os.environ, VIBEQC_DF_SHELL_POLICY=policy)
-        env.pop("VIBEQC_DF_SHELL_SCHEDULE", None)
+        env = dict(os.environ, GENERATIVEQC_DF_SHELL_POLICY=policy)
+        env.pop("GENERATIVEQC_DF_SHELL_SCHEDULE", None)
         if schedule is not None:
-            env["VIBEQC_DF_SHELL_SCHEDULE"] = schedule
+            env["GENERATIVEQC_DF_SHELL_SCHEDULE"] = schedule
         result = subprocess.run(
             [
                 str(executable),
@@ -176,7 +176,8 @@ def test_qualified_policy_and_unknown_target_fallback(
 ) -> None:
     manifest = json.loads(
         (
-            ROOT / "python/vibeqc_compiler/integral/production_df_derivatives.json"
+            ROOT
+            / "python/generativeqc_compiler/integral/production_df_derivatives.json"
         ).read_text()
     )
     choices = {

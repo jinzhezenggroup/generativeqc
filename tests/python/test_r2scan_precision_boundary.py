@@ -1,7 +1,7 @@
 """r2SCAN integration must not implicitly inherit LDA/PBE mixed-J promotion."""
 
 import pytest
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 
 @pytest.mark.parametrize("method", ["r2scan-rks", "r2scan-uks"])

@@ -7,23 +7,25 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.first_derivatives_execute import FirstDerivativeEvaluator
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.first_derivatives_execute import (
+    FirstDerivativeEvaluator,
+)
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     NativeRHFState,
     directional,
     directional_rhf_response,
     first_order,
 )
-from tools.vibeqc_posthf.export import conventional_fock
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import NativeJKBackend
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_posthf.export import conventional_fock
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import NativeJKBackend
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="explicit real-GPU qualification",
 )
 
@@ -34,7 +36,8 @@ def case(request: typing.Any) -> typing.Any:
     nvcc = shutil.which("nvcc")
     assert nvcc
     compiler = CudaCompilerAdapter(
-        Path(nvcc), cuda_target_info(os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120"))
+        Path(nvcc),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120")),
     )
     with NativeSource(**fixture_inputs(request.param)) as source:
         state = NativeRHFState.from_source(source)

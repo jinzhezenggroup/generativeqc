@@ -10,9 +10,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import PackedLayout, Program, execute
+from generativeqc_compiler.tensor import PackedLayout, Program, execute
 
-from tools.vibeqc_cc.gradient_equations import (
+from tools.generativeqc_cc.gradient_equations import (
     build_fock_weight_program,
     build_hamiltonian_programs,
 )
@@ -102,7 +102,7 @@ def _case_cpp(o: int, v: int) -> str:
         for name, value in expected.items():
             declarations.append(_array(f"g{group}_expected_{name}", value))
         section = [
-            f"vibeqc::cc::generated::{struct} in{group}{{}};",
+            f"generativeqc::cc::generated::{struct} in{group}{{}};",
             *[f"in{group}.{name}=g{group}_{name};" for name in input_names],
             f"std::vector<double> arena{group}({arena}(o,v));",
             f"auto out{group}={runner}(o,v,in{group},arena{group}.data(),arena{group}.size());",
@@ -118,7 +118,7 @@ def _case_cpp(o: int, v: int) -> str:
         [
             f"static int case_{o}_{v}(){{",
             *declarations,
-            "using namespace vibeqc::cc::generated;",
+            "using namespace generativeqc::cc::generated;",
             f"constexpr std::size_t o={o},v={v};",
             *sections,
             "return 0;",

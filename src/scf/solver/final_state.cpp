@@ -9,7 +9,7 @@
 #include "runtime/host_component_trace.hpp"
 #include "scf/reference/mean_field.hpp"
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 namespace {
 using reference::Matrix;
 bool finite(const Matrix& values) {
@@ -364,4 +364,4 @@ FinalStateSelection select_final_state(
   }
   return result;
 }
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver

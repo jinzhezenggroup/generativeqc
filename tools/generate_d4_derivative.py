@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.method.d4_derivative import PRODUCTION_D4_EEQ_DERIVATIVE
+from generativeqc_compiler.method.d4_derivative import PRODUCTION_D4_EEQ_DERIVATIVE
 
 
 def main() -> None:

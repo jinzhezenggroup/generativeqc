@@ -10,8 +10,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.blocks import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.blocks import (
     BlockRequest,
     BlockStatus,
     RawBlock,
@@ -24,10 +24,13 @@ from vibeqc_compiler.integral.blocks import (
     contract_weighted_derivative,
     unsupported_block_response,
 )
-from vibeqc_compiler.integral.cache import integral_cache_key
-from vibeqc_compiler.integral.capabilities import query_integral_capability
-from vibeqc_compiler.integral.cuda_schedule import CudaKernelIR, schedule_candidates
-from vibeqc_compiler.integral.ir import (
+from generativeqc_compiler.integral.cache import integral_cache_key
+from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.cuda_schedule import (
+    CudaKernelIR,
+    schedule_candidates,
+)
+from generativeqc_compiler.integral.ir import (
     ContractionOutput,
     IntegralIR,
     NuclearCenter,
@@ -37,16 +40,16 @@ from vibeqc_compiler.integral.ir import (
     TranslationInvariant,
     build_integral_ir,
 )
-from vibeqc_compiler.integral.ir_serialization import (
+from generativeqc_compiler.integral.ir_serialization import (
     integral_from_payload,
     integral_to_payload,
 )
-from vibeqc_compiler.integral.shell_signature import (
+from generativeqc_compiler.integral.shell_signature import (
     BasisShell,
     CenterBinding,
     ShellSignature,
 )
-from vibeqc_compiler.integral.shell_spec import FUSED_SHELL_SPECS, PSPS_SPEC
+from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPECS, PSPS_SPEC
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
@@ -61,8 +64,8 @@ def request_ir(
     """Use separate shell positions even when every slot belongs to one atom."""
     family = OperatorFamily(family)
     if family == OperatorFamily.SCALAR_ECP:
-        from vibeqc_compiler.integral.ecp import build_ecp_ir
-        from vibeqc_compiler.integral.ir import EcpRadialTerm
+        from generativeqc_compiler.integral.ecp import build_ecp_ir
+        from generativeqc_compiler.integral.ir import EcpRadialTerm
 
         return build_ecp_ir(
             (1, 0) if angular is None else angular,
@@ -528,12 +531,14 @@ def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
     tmp_path: typing.Any,
 ) -> None:
     """Pin the legacy registry/shard contract across this semantic refactor."""
-    from vibeqc_compiler.integral.production import write_production_bundles
+    from generativeqc_compiler.integral.production import write_production_bundles
 
     baseline = json.loads(
         Path("tests/reference_data/integral_ir_legacy_artifacts.json").read_text()
     )
-    manifest = Path("python/vibeqc_compiler/integral/production_shell_classes.json")
+    manifest = Path(
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
     assert (
         hashlib.sha256(manifest.read_bytes()).hexdigest() == baseline["manifest_sha256"]
     )
@@ -558,11 +563,11 @@ def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
 def test_incompatible_production_profiles_are_rejected(
     tmp_path: typing.Any,
 ) -> None:
-    from vibeqc_compiler.integral.production import resolve_production_profile
+    from generativeqc_compiler.integral.production import resolve_production_profile
 
     manifest = json.loads(
         Path(
-            "python/vibeqc_compiler/integral/production_shell_classes.json"
+            "python/generativeqc_compiler/integral/production_shell_classes.json"
         ).read_text()
     )
     manifest["architectures"]["sm_120"]["generator_abi"] = 0

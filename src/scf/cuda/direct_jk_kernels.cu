@@ -2,27 +2,29 @@
 #include <cmath>
 
 #include "generated_direct_contraction.cuh"
+#include "scf/cuda/direct_bounded_fallback.hpp"
+#include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 using namespace cuda_execution;
 }
 
 namespace {
 
-vibeqc::integrals::CoulombRange integral_range(DirectCoulombRange range) {
+generativeqc::integrals::CoulombRange integral_range(DirectCoulombRange range) {
   switch (range) {
     case DirectCoulombRange::Full:
-      return vibeqc::integrals::CoulombRange::Full;
+      return generativeqc::integrals::CoulombRange::Full;
     case DirectCoulombRange::Long:
-      return vibeqc::integrals::CoulombRange::Long;
+      return generativeqc::integrals::CoulombRange::Long;
     case DirectCoulombRange::Short:
-      return vibeqc::integrals::CoulombRange::Short;
+      return generativeqc::integrals::CoulombRange::Short;
   }
-  return vibeqc::integrals::CoulombRange::Full;
+  return generativeqc::integrals::CoulombRange::Full;
 }
 
 __global__ void independent_jk_finite_kernel(const double* values, std::size_t count,
@@ -53,10 +55,11 @@ __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, 
 template <bool MixedJ>
 __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begin, bool want_j,
                                       bool want_k, bool unrestricted,
-                                      vibeqc::integrals::CoulombRange exchange_range,
+                                      generativeqc::integrals::CoulombRange exchange_range,
                                       double exchange_omega, double screening, const double* bounds,
                                       const double* density, const double* beta, double* j_out,
-                                      double* ka_out, double* kb_out) {
+                                      double* ka_out, double* kb_out,
+                                      std::uint64_t* mixed_coulomb_work_count) {
   __shared__ double sums[3][kIndependentJkThreads];
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t item = system_begin * matrix + blockIdx.x;
@@ -65,6 +68,7 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
   const auto i = static_cast<std::int32_t>((item % matrix) / n);
   const auto j = static_cast<std::int32_t>(item % n);
   double coulomb = 0.0, alpha_exchange = 0.0, beta_exchange = 0.0;
+  unsigned long long mixed_coulomb_work = 0;
   for (std::size_t kl = threadIdx.x; kl < matrix; kl += blockDim.x) {
     const auto k = static_cast<std::int32_t>(kl / n), l = static_cast<std::int32_t>(kl % n);
     const double a = density[offset + kl], b = unrestricted ? beta[offset + kl] : 0.0;
@@ -73,6 +77,7 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
           MixedJ ? scalar_value(contracted_eri<MixedPrecisionFloat>(batch, system, i, j, k, l, -1))
                  : contracted_eri<double>(batch, system, i, j, k, l, -1);
       coulomb += (a + b) * value;
+      if constexpr (MixedJ) ++mixed_coulomb_work;
     }
     if (want_k && bounds[offset + i * n + k] * bounds[offset + j * n + l] >= screening &&
         (a != 0.0 || b != 0.0)) {
@@ -80,6 +85,15 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
           contracted_eri<double>(batch, system, i, k, j, l, -1, exchange_range, exchange_omega);
       alpha_exchange += a * value;
       beta_exchange += b * value;
+    }
+  }
+  if constexpr (MixedJ) {
+    if (mixed_coulomb_work_count) {
+      for (unsigned offset = warpSize / 2; offset; offset /= 2)
+        mixed_coulomb_work += __shfl_down_sync(0xffffffffU, mixed_coulomb_work, offset);
+      if (threadIdx.x == 0)
+        atomicAdd(reinterpret_cast<unsigned long long*>(mixed_coulomb_work_count),
+                  mixed_coulomb_work);
     }
   }
   sums[0][threadIdx.x] = coulomb;
@@ -107,13 +121,11 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
  * removes the previous coordinate-by-AO^4 scan without changing screening,
  * public-AO spherical expansion, coefficients, or radial operators.
  */
-__global__ void independent_jk_derivative_kernel(DeviceBatch batch, std::size_t system_begin,
-                                                 std::size_t system_count, double cj, double ck,
-                                                 bool unrestricted,
-                                                 vibeqc::integrals::CoulombRange exchange_range,
-                                                 double exchange_omega, double screening,
-                                                 const double* bounds, const double* density,
-                                                 const double* beta, double* out) {
+__global__ void independent_jk_derivative_kernel(
+    DeviceBatch batch, std::size_t system_begin, std::size_t system_count, double cj, double ck,
+    bool unrestricted, generativeqc::integrals::CoulombRange exchange_range, double exchange_omega,
+    double screening, const double* bounds, const double* density, const double* beta,
+    double* out) {
   const std::size_t n = batch.nbf, matrix = n * n, quartets = matrix * matrix;
   const std::size_t work_count = system_count * quartets;
   const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
@@ -141,7 +153,7 @@ __global__ void independent_jk_derivative_kernel(DeviceBatch batch, std::size_t 
       const std::size_t jl = static_cast<std::size_t>(j) * n + l;
       const double exchange = density[offset + ik] * density[offset + jl] +
                               (unrestricted ? beta[offset + ik] * beta[offset + jl] : 0.0);
-      if (exchange_range == vibeqc::integrals::CoulombRange::Full)
+      if (exchange_range == generativeqc::integrals::CoulombRange::Full)
         full_weight += 0.5 * ck * exchange;
       else
         range_weight = 0.5 * ck * exchange;
@@ -286,7 +298,7 @@ __global__ void independent_rsh_derivative_kernel(DeviceBatch batch, std::size_t
         const Dual3 value = contracted_eri<Dual3>(
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate,
-            vibeqc::integrals::CoulombRange::Long, omega);
+            generativeqc::integrals::CoulombRange::Long, omega);
         long_range[0] = value.derivative_x;
         long_range[1] = value.derivative_y;
         long_range[2] = value.derivative_z;
@@ -336,16 +348,17 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   bool want_j, bool want_k, bool unrestricted, bool mixed_j,
                                   DirectCoulombRange exchange_range, double exchange_omega,
                                   double screening, const double* bounds, const double* density,
-                                  const double* beta, double* j_out, double* ka_out,
-                                  double* kb_out) {
+                                  const double* beta, double* j_out, double* ka_out, double* kb_out,
+                                  std::uint64_t* mixed_coulomb_work_count) {
   if (mixed_j)
     independent_jk_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch, system_begin, want_j, want_k, unrestricted, integral_range(exchange_range),
-        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out);
+        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out,
+        mixed_coulomb_work_count);
   else
     independent_jk_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch, system_begin, want_j, want_k, unrestricted, integral_range(exchange_range),
-        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out);
+        exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out, nullptr);
 }
 
 void launch_independent_jk_derivative_kernel(
@@ -384,6 +397,57 @@ void launch_independent_rsh_derivative_kernel(
       screening, bounds, density, beta, out);
 }
 
+void launch_bounded_shell_energy_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    double coulomb_coefficient, double exchange_coefficient) {
+  launch_bounded_direct_shell_quartet_kernel_scaled(
+      unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
+      batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
+      shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
+      density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient);
+}
+
+void launch_bounded_shell_range_exchange_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DirectCoulombRange range, double omega, double exchange_coefficient) {
+  const DirectRangeOperator radial_operator =
+      range == DirectCoulombRange::Long
+          ? DirectRangeOperator::Long
+          : (range == DirectCoulombRange::Short ? DirectRangeOperator::Short
+                                                : DirectRangeOperator::Full);
+  launch_bounded_direct_range_exchange_force_kernel(
+      unrestricted, worker_blocks, kBoundedDirectThreads, 0, stream, batch, screening,
+      shell_pair_bounds, shell_pair_density_bounds, pair_order, shell_pair_block_bounds,
+      system_density_bounds, class_state, schwarz_bounds, density, active, output, cursor,
+      radial_operator, omega, exchange_coefficient);
+}
+
+void launch_bounded_shell_rsh_derivatives(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* source_forces, unsigned long long* cursor, double omega,
+    double coulomb_coefficient, double short_exchange_coefficient,
+    double long_exchange_coefficient) {
+  launch_bounded_direct_rsh_force_kernel(
+      unrestricted, worker_blocks, kBoundedDirectThreads, 0, stream, batch, screening,
+      shell_pair_bounds, shell_pair_density_bounds, pair_order, shell_pair_block_bounds,
+      system_density_bounds, class_state, schwarz_bounds, density, active, source_forces, cursor,
+      omega, coulomb_coefficient, short_exchange_coefficient, long_exchange_coefficient);
+}
+
 }  // namespace cuda_execution
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

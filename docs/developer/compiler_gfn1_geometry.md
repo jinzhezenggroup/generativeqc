@@ -5,7 +5,7 @@ are pure functions of immutable parameters and geometry.
 
 ## Delivered pairwise slice
 
-`python/vibeqc_compiler/geometry/gfn1.py` lowers two GFN1 geometry terms
+`python/generativeqc_compiler/geometry/gfn1.py` lowers two GFN1 geometry terms
 through the existing GeometryIR / PairIR / TensorIR stack:
 
 - exponential covalent coordination numbers (`k = 16`, inclusive 25-bohr

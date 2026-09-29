@@ -1,12 +1,12 @@
 # Deterministic progressive HF
 
-VibeQC exposes a bounded two-stage Hartree-Fock controller for using a cheaper
+GenerativeQC exposes a bounded two-stage Hartree-Fock controller for using a cheaper
 HF calculation only as an initial-state proposal for an explicitly requested
 target. The controller never treats the source energy, residual, basis or
 provider as the target result.
 
 ```python
-from vibeqc import (
+from generativeqc import (
     Calculator,
     ObservableTarget,
     ProgressiveBudget,

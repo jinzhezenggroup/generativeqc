@@ -8,7 +8,7 @@
 
 #include "backends/cuda/gfn2_density.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -1257,4 +1257,4 @@ cudaError_t evaluate_gfn2_spin_density_cuda(
   return cudaGetLastError();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

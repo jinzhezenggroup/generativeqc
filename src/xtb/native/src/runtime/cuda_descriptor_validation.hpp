@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_RUNTIME_CUDA_DESCRIPTOR_VALIDATION_HPP
+#ifndef GENERATIVEQC_XTB_RUNTIME_CUDA_DESCRIPTOR_VALIDATION_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_RUNTIME_CUDA_DESCRIPTOR_VALIDATION_HPP
+#define GENERATIVEQC_XTB_RUNTIME_CUDA_DESCRIPTOR_VALIDATION_HPP
 
 #include <cuda_runtime_api.h>
 
@@ -11,7 +11,7 @@
 
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 
 /*
  * Managed storage is rejected by default at the public CUDA boundary.  An
@@ -33,7 +33,7 @@ enum class CudaManagedMemoryPolicy : std::uint8_t {
 struct CudaValidatedConstBuffer {
   const void* data = nullptr;
   std::size_t logical_bytes = 0u;
-  vibeqc_xtb_memory_space_t memory_space = VIBEQC_XTB_MEMORY_HOST;
+  generativeqc_xtb_memory_space_t memory_space = GENERATIVEQC_XTB_MEMORY_HOST;
   cudaMemoryType pointer_type = cudaMemoryTypeUnregistered;
   std::int32_t allocation_device = -1;
 };
@@ -42,7 +42,7 @@ struct CudaValidatedConstBuffer {
 struct CudaValidatedBuffer {
   void* data = nullptr;
   std::size_t logical_bytes = 0u;
-  vibeqc_xtb_memory_space_t memory_space = VIBEQC_XTB_MEMORY_HOST;
+  generativeqc_xtb_memory_space_t memory_space = GENERATIVEQC_XTB_MEMORY_HOST;
   cudaMemoryType pointer_type = cudaMemoryTypeUnregistered;
   std::int32_t allocation_device = -1;
 };
@@ -64,17 +64,17 @@ class ScopedCudaDevice {
   ScopedCudaDevice(const ScopedCudaDevice&) = delete;
   ScopedCudaDevice& operator=(const ScopedCudaDevice&) = delete;
 
-  [[nodiscard]] bool ok() const noexcept { return status_ == VIBEQC_XTB_STATUS_SUCCESS; }
-  [[nodiscard]] vibeqc_xtb_status_t status() const noexcept { return status_; }
+  [[nodiscard]] bool ok() const noexcept { return status_ == GENERATIVEQC_XTB_STATUS_SUCCESS; }
+  [[nodiscard]] generativeqc_xtb_status_t status() const noexcept { return status_; }
   [[nodiscard]] std::int32_t previous_device() const noexcept { return previous_device_; }
   [[nodiscard]] std::int32_t selected_device() const noexcept { return selected_device_; }
 
-  [[nodiscard]] vibeqc_xtb_status_t restore(std::string& error);
+  [[nodiscard]] generativeqc_xtb_status_t restore(std::string& error);
 
  private:
   std::int32_t previous_device_ = -1;
   std::int32_t selected_device_ = -1;
-  vibeqc_xtb_status_t status_ = VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+  generativeqc_xtb_status_t status_ = GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
   bool restore_pending_ = false;
 };
 
@@ -86,7 +86,7 @@ class ScopedCudaDevice {
  *
  * The calling thread's current device is preserved on every reported path.
  */
-[[nodiscard]] vibeqc_xtb_status_t validate_cuda_stream_owner(std::int32_t device_id,
+[[nodiscard]] generativeqc_xtb_status_t validate_cuda_stream_owner(std::int32_t device_id,
                                                           cudaStream_t stream, bool reject_capture,
                                                           std::string& error);
 
@@ -108,16 +108,16 @@ class ScopedCudaDevice {
  * On failure validated is reset, CUDA runtime validation errors are consumed
  * from the per-thread last-error slot, and no caller bytes are read or written.
  */
-[[nodiscard]] vibeqc_xtb_status_t validate_cuda_const_buffer(
-    std::int32_t device_id, const char* name, const vibeqc_xtb_const_buffer_t& buffer,
+[[nodiscard]] generativeqc_xtb_status_t validate_cuda_const_buffer(
+    std::int32_t device_id, const char* name, const generativeqc_xtb_const_buffer_t& buffer,
     std::size_t logical_bytes, std::size_t alignment, CudaManagedMemoryPolicy managed_policy,
     CudaValidatedConstBuffer& validated, std::string& error);
 
-[[nodiscard]] vibeqc_xtb_status_t validate_cuda_buffer(
-    std::int32_t device_id, const char* name, const vibeqc_xtb_buffer_t& buffer,
+[[nodiscard]] generativeqc_xtb_status_t validate_cuda_buffer(
+    std::int32_t device_id, const char* name, const generativeqc_xtb_buffer_t& buffer,
     std::size_t logical_bytes, std::size_t alignment, CudaManagedMemoryPolicy managed_policy,
     CudaValidatedBuffer& validated, std::string& error);
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail
 
-#endif  // VIBEQC_XTB_RUNTIME_CUDA_DESCRIPTOR_VALIDATION_HPP
+#endif  // GENERATIVEQC_XTB_RUNTIME_CUDA_DESCRIPTOR_VALIDATION_HPP

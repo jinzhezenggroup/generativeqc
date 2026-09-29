@@ -13,7 +13,7 @@
 #include "dft/dispersion/d4_eeq.hpp"
 
 using namespace d4_tests;
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 
 namespace {
 

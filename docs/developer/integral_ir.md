@@ -55,7 +55,7 @@ Coordinates are in Bohr and operators use atomic units. Overlap is
 dimensionless, kinetic is `-1/2 nabla^2`, attraction is `-Z/|r-R_C|`, and all
 Coulomb operators use `1/r12`. AO coefficients/exponents and normalization are
 supplied by the caller's existing basis context; this compile-time signature
-does not serialize a molecule. Normalized Cartesian components use VibeQC's
+does not serialize a molecule. Normalized Cartesian components use GenerativeQC's
 CCA order (descending x, then y exponents), and real spherical components use
 the existing PySCF/libcint convention. Mixed conventions in one signature are
 rejected. Declaring a uniform spherical signature does not enable CUDA
@@ -126,7 +126,7 @@ and angular orders without renumbering the 55 canonical classes. Legacy atom
 bindings remain unresolved until populated from `task.atom[center]`; a quartet
 slot must never be guessed to be its physical atom index.
 
-The new serialization schema is `vibeqc.integral_ir`, version 1. Decoding rejects
+The new serialization schema is `generativeqc.integral_ir`, version 1. Decoding rejects
 unknown versions, fields, and scalar layouts. `integral_cache_key()` uses the
 existing SHA-256 content-addressing approach over the versioned payload,
 including external charges, bindings, layouts, weight descriptors, and signs.

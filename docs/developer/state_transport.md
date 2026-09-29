@@ -1,6 +1,6 @@
 # RCCSD state transport
 
-`tools.vibeqc_cc.state_transport` is the CPU/reference compatibility layer for
+`tools.generativeqc_cc.state_transport` is the CPU/reference compatibility layer for
 moving restricted CC amplitudes between orbital frames. It does not decide when
 to run a source or target calculation and it does not make a transported state a
 target result. Target orchestration, projected amplitudes, residual refinement,

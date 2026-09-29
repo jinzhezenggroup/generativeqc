@@ -12,7 +12,7 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 struct CudaRhfBucketPlan {
   cuda_execution::CudaResources resources;
@@ -193,4 +193,4 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan
                                                          bool shell_class_profiling,
                                                          bool inactive_eigensolver_profiling);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

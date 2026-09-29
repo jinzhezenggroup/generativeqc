@@ -13,7 +13,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void build_schwarz_bounds_packed_kernel(DeviceBatch batch, std::size_t pair_count,
                                                    double* schwarz_bounds) {
@@ -125,4 +125,4 @@ void launch_build_schwarz_and_shell_pair_bounds_packed_kernel(
       batch, pair_count, schwarz_bounds, shell_pair_bounds);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

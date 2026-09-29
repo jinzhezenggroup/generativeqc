@@ -5,14 +5,14 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Atom, Calculator, _native, method_capabilities
-from vibeqc_compiler.dft.grid import MolecularGrid
+from generativeqc import Atom, Calculator, _native, method_capabilities
+from generativeqc_compiler.dft.grid import MolecularGrid
 
 
 @pytest.fixture(params=("cpu", "cuda"))
 def device(request: typing.Any, monkeypatch: typing.Any) -> typing.Any:
     """Only an unavailable CUDA context can skip; numerical failures must fail."""
-    monkeypatch.setenv("VIBEQC_PROFILE", "off")
+    monkeypatch.setenv("GENERATIVEQC_PROFILE", "off")
     if request.param == "cuda":
         library = _native.load_library()
         descriptor = _native.ContextDescriptor(
@@ -25,13 +25,13 @@ def device(request: typing.Any, monkeypatch: typing.Any) -> typing.Any:
         try:
             _native.check(
                 library,
-                library.vibeqc_context_create(
+                library.generativeqc_context_create(
                     ctypes.byref(descriptor), ctypes.byref(context)
                 ),
             )
         except RuntimeError as error:
             pytest.skip(f"CUDA context unavailable: {error}")
-        library.vibeqc_context_destroy(context)
+        library.generativeqc_context_destroy(context)
     return request.param
 
 

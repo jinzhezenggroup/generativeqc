@@ -29,6 +29,7 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
     unit.write_text(
         r"""
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -48,8 +49,10 @@ struct Diagnostic {
   char ccsd_t_equation_hash[65]{}, response_operator_hash[65]{};
 };
 struct Result { double energy{}; std::vector<double> forces; };
+struct Performance { double triples_seconds{}; };
 struct State {
   Diagnostic diagnostic;
+  Performance performance;
   Result result;
   struct { double total_energy{10}; } solved;
   std::optional<int> reference{1};
@@ -108,6 +111,7 @@ std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
 struct Owner {
   Execution execution_;
   std::optional<Diagnostic> last_;
+  std::optional<Performance> last_performance_;
   int system_{};
   struct { double ccsd_denominator_threshold{1e-10}; } descriptor_;
   Result run(bool compute_forces) {
@@ -115,7 +119,7 @@ struct Owner {
     if (failure_mode==2) state.reference.reset();
     last_=state.diagnostic; // Retain the existing CC convergence diagnostic.
     const std::size_t retained=16, triples_virtual_count=7, triples_workspace_bytes=32;
-    const double triples_energy=0.25, triples_minimum_denominator=2;
+    const double triples_energy=0.25, triples_minimum_denominator=2, triples_seconds=0.0;
 """
         + body
         + r"""
@@ -163,16 +167,16 @@ int main(int argc,char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("cuda", (False, True))
-@pytest.mark.parametrize("mode", range(6))
 def test_post_triples_diagnostic_is_published_only_after_success(
-    publication: Path, mode: int, cuda: bool
+    publication: Path,
 ) -> None:
-    result = subprocess.run(
-        [str(publication), str(mode), str(int(cuda))],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
+    for mode in range(6):
+        for cuda in (False, True):
+            result = subprocess.run(
+                [str(publication), str(mode), str(int(cuda))],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert result.returncode == 0, (mode, cuda, result.stderr)

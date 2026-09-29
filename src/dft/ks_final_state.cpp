@@ -5,14 +5,15 @@
 #include <stdexcept>
 
 #include "dft/semilocal_family.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include "generated_split_hybrid_registry.cuh"
 #endif
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 bool finite(const auto& values) {
@@ -23,14 +24,18 @@ bool finite(const auto& values) {
 bool valid_model(const KsFinalStateIdentity& identity) {
   const auto& model = identity.model;
   const auto& fock = identity.determinant.model;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   const bool split_hybrid = generated::split_hybrid_registered(model.functional);
 #else
   const bool split_hybrid = false;
 #endif
+  const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
+  const bool automatic_libxc = static_cast<bool>(automatic_entry);
   SemilocalFamily family;
   try {
-    family = split_hybrid ? SemilocalFamily::R2scan : semilocal_family_from_code(model.functional);
+    family = split_hybrid ? SemilocalFamily::R2scan
+                          : (automatic_libxc ? SemilocalFamily::Lda
+                                             : semilocal_family_from_code(model.functional));
   } catch (const std::invalid_argument&) {
     return false;
   }
@@ -70,7 +75,7 @@ bool valid_model(const KsFinalStateIdentity& identity) {
            correction.spec.exchange.omega > 0.0 &&
            correction.screening_tolerance == fock.screening_tolerance;
   }();
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   const auto split_composition = generated::split_hybrid_composition(model.functional);
   const bool valid_split_exchange =
       !split_hybrid ||
@@ -86,8 +91,10 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #else
   const bool valid_split_exchange = true;
 #endif
-  if (model.version != 1 ||
-      model.scf_domain_version != (split_hybrid ? 4U : semilocal_family_domain_version(family)) ||
+  const std::uint32_t expected_domain_version =
+      automatic_libxc ? automatic_entry.program->domain_version
+                      : (split_hybrid ? 4U : semilocal_family_domain_version(family));
+  if (model.version != 1 || model.scf_domain_version != expected_domain_version ||
       !valid_split_exchange || !model.tile_points || !model.owner ||
       (model.spins != 1 && model.spins != 2) ||
       !((fock.backend == scf::FockBackend::Cpu && model.device == -1) ||
@@ -101,6 +108,10 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       fock.spec.coulomb.op != scf::FockOperator::FullRange ||
       !std::isfinite(model.semilocal_exchange_scale) || model.semilocal_exchange_scale < 0 ||
       !std::isfinite(model.semilocal_correlation_scale) || model.semilocal_correlation_scale < 0 ||
+      (automatic_libxc &&
+       (fock.backend != scf::FockBackend::Cpu || fock.spec.exchange.present ||
+        model.range_correction || model.nonlocal_correlation ||
+        model.semilocal_exchange_scale != 1.0 || model.semilocal_correlation_scale != 1.0)) ||
       (fock.spec.exchange.present &&
        (fock.spec.exchange.op != scf::FockOperator::FullRange ||
         (fock.spec.exchange.approximation != scf::FockApproximation::Exact &&
@@ -240,4 +251,4 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
   return true;
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

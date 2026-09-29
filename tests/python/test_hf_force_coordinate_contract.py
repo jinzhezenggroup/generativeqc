@@ -2,8 +2,8 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import execute
-from vibeqc_compiler.tensor.scf import hf_force_program
+from generativeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor.scf import hf_force_program
 
 
 @pytest.mark.parametrize("spins", (1, 2))

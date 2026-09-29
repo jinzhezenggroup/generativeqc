@@ -6,9 +6,9 @@ from itertools import combinations
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.dft import DensitySource, density_features, orbital_features
-from vibeqc_compiler.dft.fixtures import NAMES, load_fixture
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft import DensitySource, density_features, orbital_features
+from generativeqc_compiler.dft.fixtures import NAMES, load_fixture
 
 BASIS = canonical_hash({"basis": "synthetic", "geometry": [0, 0, 0]})
 KEYS = ("rho", "gradient", "sigma", "tau")

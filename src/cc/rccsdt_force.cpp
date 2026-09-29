@@ -20,8 +20,9 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "scf/types.hpp"
+#include "tensor/cpu_linalg.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 namespace {
 constexpr double kStationarityTolerance = 1e-8;
 constexpr double kOrbitalResidualTolerance = 1e-10;
@@ -175,18 +176,19 @@ RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalRef
                                std::size_t max_bytes) {
   const auto n = ref.nbf;
   const auto n2 = square(n), n4 = fourth(n);
-  const auto required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto retained_required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto transform_required = bytes(checked_mul(2, n2));
+  const auto required = std::max(retained_required, transform_required);
   if (required > max_bytes) throw std::length_error("RCCSD(T) raw Hamiltonian exceeds host budget");
   if (ref.coefficients.size() != n2 || ref.hcore.size() != n2)
     throw std::invalid_argument("RCCSD(T) reference one-electron shape mismatch");
   RawHamiltonian out;
   out.h.assign(n2, 0.0);
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q)
-      for (std::size_t mu = 0; mu < n; ++mu)
-        for (std::size_t nu = 0; nu < n; ++nu)
-          out.h[p * n + q] +=
-              ref.coefficients[mu * n + p] * ref.hcore[mu * n + nu] * ref.coefficients[nu * n + q];
+  {
+    std::vector<double> workspace(n2);
+    tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
+                           workspace.data());
+  }
   posthf::RawSource source(system);
   posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
   const auto all = range(n);
@@ -205,7 +207,7 @@ struct ResponseWeights {
   std::vector<double> hcore, eri, overlap, rotation_gradient, stationarity, orbital_rhs;
 };
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 CudaParameterResponseView cuda_parameter_view(const ParameterWeights& bar) {
   return {std::span<const double>{bar.foo},  std::span<const double>{bar.fov},
           std::span<const double>{bar.fvv},  std::span<const double>{bar.ovov},
@@ -423,7 +425,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   std::size_t shell = 0;
   for (const auto& basis_shell : system.shells) {
     const auto l = static_cast<std::size_t>(basis_shell.angular_momentum);
-    shell = std::max(shell, system.basis_representation == VIBEQC_BASIS_SPHERICAL
+    shell = std::max(shell, system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                                 ? 2 * l + 1
                                 : (l + 1) * (l + 2) / 2);
   }
@@ -433,8 +435,10 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // in retained_input_bytes, so request only its additional buffers here.
   const auto provider = posthf::numeric_block_plan(n, 0, posthf::source_capacity(system),
                                                    {n, n, n, n}, {tile, tile, tile, tile}, false);
-  plan.raw_phase_bytes = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
-                              checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
+  const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
+                                   checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  plan.raw_phase_bytes = std::max(rank2_transform_phase, provider_phase);
   const auto raw_retained = bytes(sum({n4, checked_mul(3, n2)}));
   const auto response_retained = bytes(sum({n4, checked_mul(4, n2), ov}));
   const auto hamiltonian_arena = bytes(generated::hamiltonian_weights_arena_elements(o, v));
@@ -462,7 +466,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                     checked_mul(2, response_retained)});
   const auto coordinates = checked_mul(3, system.atoms.size());
   const auto derivative_staging =
-      bytes(sum({checked_mul(2, n2), checked_mul(shell, checked_mul(n, n2)),
+      bytes(sum({checked_mul(3, n2), checked_mul(shell, checked_mul(n, n2)),
                  checked_mul(square(shell), n2), checked_mul(checked_mul(shell, square(shell)), n),
                  fourth(shell), checked_mul(2, coordinates)}));
   plan.derivative_phase_bytes =
@@ -495,7 +499,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     std::size_t max_bytes, bool include_triples, bool cuda_derivative, int device_id,
     std::size_t derivative_stage_budget, double denominator_threshold) {
   validate_problem(problem);
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
   if (cuda_derivative) throw std::runtime_error("RCCSD(T) CUDA force is unavailable in this build");
 #endif
   if (!cc_result.converged())
@@ -532,7 +536,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   lambda_options.gmres.max_workspace_bytes = max_bytes;
   LambdaResult corrected;
   ParameterWeights parameters;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (cuda_derivative) {
     auto fixed_orbital =
         include_triples
@@ -558,7 +562,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 
   if (triples) add_projected_triples(parameters, *triples, o, v);
   const auto raw = raw_hamiltonian(system, reference, max_bytes);
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)
     cuda_response = std::make_unique<CudaHamiltonianResponseOwner>(
@@ -567,7 +571,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 #endif
   auto hamiltonian_dispatch = [&](const ParameterWeights& bar,
                                   double reference_seed) -> ResponseWeights {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_response)
       return detach_cuda_response(
           cuda_response->hamiltonian(cuda_parameter_view(bar), reference_seed));
@@ -575,7 +579,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     return hamiltonian_pullback(bar, reference_seed, raw, o, v, max_bytes);
   };
   auto fock_dispatch = [&](std::span<const double> bar_fock) -> ResponseWeights {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_response) return detach_cuda_response(cuda_response->fock(bar_fock));
 #endif
     return fock_pullback(bar_fock, raw, o, v, max_bytes);
@@ -639,7 +643,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
         d_rotation[i * n + o + a] = value;
         d_rotation[(o + a) * n + i] = -value;
       }
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_response) {
       const auto jvp = cuda_response->orbital_jvp(d_rotation);
       for (std::size_t index = 0; index < output.size(); ++index) output[index] = -jvp[index];
@@ -727,7 +731,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   result.minimum_same_space_gap = minimum_same_space_gap;
   result.triples_response_pages = triples ? triples->pages : 0;
   result.numeric_capacity_bytes = resources.peak_bytes;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (cuda_response) {
     result.response_owned_device_bytes = cuda_response->owned_device_bytes();
     result.response_h2d_bytes = cuda_response->h2d_bytes();
@@ -777,4 +781,4 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                   denominator_threshold);
 }
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

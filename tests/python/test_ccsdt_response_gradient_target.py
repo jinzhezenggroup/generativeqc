@@ -74,10 +74,10 @@ def test_target_is_required_before_compiler_lookup(
 ) -> None:
     setup, calls = compiler_setup
     if architecture is None:
-        monkeypatch.delenv("VIBEQC_TENSOR_ARCH", raising=False)
+        monkeypatch.delenv("GENERATIVEQC_TENSOR_ARCH", raising=False)
     else:
-        monkeypatch.setenv("VIBEQC_TENSOR_ARCH", architecture)
-    with pytest.raises(pytest.fail.Exception, match="VIBEQC_TENSOR_ARCH"):
+        monkeypatch.setenv("GENERATIVEQC_TENSOR_ARCH", architecture)
+    with pytest.raises(pytest.fail.Exception, match="GENERATIVEQC_TENSOR_ARCH"):
         setup(tmp_path)
     assert calls == []
 
@@ -92,7 +92,7 @@ def test_explicit_target_is_preserved(
     architecture: str,
 ) -> None:
     setup, calls = compiler_setup
-    monkeypatch.setenv("VIBEQC_TENSOR_ARCH", architecture)
+    monkeypatch.setenv("GENERATIVEQC_TENSOR_ARCH", architecture)
     assert setup(tmp_path) == ("allocated-nvcc", architecture.strip())
     assert calls[-1] == ("compiler", "allocated-nvcc", architecture.strip())
 
@@ -103,7 +103,7 @@ def test_invalid_target_has_no_default_fallback(
     tmp_path: Path,
 ) -> None:
     setup, calls = compiler_setup
-    monkeypatch.setenv("VIBEQC_TENSOR_ARCH", "not-a-target")
+    monkeypatch.setenv("GENERATIVEQC_TENSOR_ARCH", "not-a-target")
     with pytest.raises(ValueError, match="unsupported target"):
         setup(tmp_path)
     assert not any(call[0] == "compiler" for call in calls)
@@ -116,7 +116,7 @@ def test_slurm_requirement_is_preserved(
 ) -> None:
     setup, calls = compiler_setup
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    monkeypatch.setenv("VIBEQC_TENSOR_ARCH", "sm_90")
+    monkeypatch.setenv("GENERATIVEQC_TENSOR_ARCH", "sm_90")
     with pytest.raises(AssertionError, match="requires Slurm"):
         setup(tmp_path)
     assert calls == []

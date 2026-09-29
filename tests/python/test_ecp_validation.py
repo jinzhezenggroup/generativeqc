@@ -5,9 +5,9 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc import Atom, BasisProvenance, BasisSet, BasisShell, ElementBasis
-from vibeqc.basis_capabilities import basis_capability
-from vibeqc.ecp import resolve_ecp
+from generativeqc import Atom, BasisProvenance, BasisSet, BasisShell, ElementBasis
+from generativeqc.basis_capabilities import basis_capability
+from generativeqc.ecp import resolve_ecp
 
 
 def potential(**changes: typing.Any) -> typing.Any:

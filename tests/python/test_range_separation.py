@@ -11,23 +11,26 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.integral.capabilities import query_integral_capability
-from vibeqc_compiler.integral.ir import four_center_eri_operator
-from vibeqc_compiler.integral.ir_serialization import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.ir import four_center_eri_operator
+from generativeqc_compiler.integral.ir_serialization import (
     integral_from_payload,
     integral_to_payload,
 )
-from vibeqc_compiler.integral.range_separation import CoulombKernel, reference_moments
-from vibeqc_compiler.integral.weighted_eri import (
+from generativeqc_compiler.integral.range_separation import (
+    CoulombKernel,
+    reference_moments,
+)
+from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
-from vibeqc_compiler.integral.weighted_eri_native import (
+from generativeqc_compiler.integral.weighted_eri_native import (
     emit_weighted_eri_primitive_header,
 )
 
-from tools.vibeqc_validation.weighted_eri import primitive_variables
+from tools.generativeqc_validation.weighted_eri import primitive_variables
 
 # Reference engines are optional for ordinary package/test installations; CI
 # explicitly installs the pinned reference-test extra to exercise these gates.
@@ -40,8 +43,8 @@ def native_weighted_evaluator(
 ) -> typing.Any:
     """Compile the real emitted callable; independent references stay in Python."""
     cuda = backend == "cuda"
-    if cuda and os.environ.get("VIBEQC_TEST_RANGE_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
+    if cuda and os.environ.get("GENERATIVEQC_TEST_RANGE_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
     if cuda and not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("native CUDA validation requires a Slurm allocation")
     compiler = shutil.which("nvcc" if cuda else "c++")
@@ -54,7 +57,7 @@ def native_weighted_evaluator(
     if cuda:
         source += r"""
 __global__ void probe(const double* inputs, double* output) {
-  namespace eri = vibeqc::scf::generated_weighted_eri;
+  namespace eri = generativeqc::scf::generated_weighted_eri;
   eri::Gradient result{};
   output[13] = eri::weighted_primitive(inputs, inputs + 4, inputs + 16, result);
   output[0] = result.value;
@@ -76,7 +79,7 @@ extern "C" int evaluate(const double* inputs, double* output) {
     else:
         source += r"""
 extern "C" int evaluate(const double* inputs, double* output) {
-  namespace eri = vibeqc::scf::generated_weighted_eri;
+  namespace eri = generativeqc::scf::generated_weighted_eri;
   eri::Gradient result{};
   if (!eri::weighted_primitive(inputs, inputs + 4, inputs + 16, result)) return 0;
   output[0] = result.value;
@@ -359,7 +362,7 @@ def test_generated_range_values_and_all_center_derivatives_against_libcint(
         verbose=0,
     )
     normalization = []
-    from vibeqc_compiler.integral.shell_spec import cartesian_components
+    from generativeqc_compiler.integral.shell_spec import cartesian_components
 
     for slot, (l, exponent) in enumerate(zip(angular, exponents)):
         norm = []
@@ -429,8 +432,8 @@ def test_contracted_range_stream_and_public_basis_against_libcint(
 ) -> None:
     """Use the established primitive normalization and public cotangent pullback."""
     pytest.importorskip("pyscf")
-    from vibeqc_compiler.integral.blocks import WeightTile
-    from vibeqc_compiler.integral.weighted_eri_inputs import (
+    from generativeqc_compiler.integral.blocks import WeightTile
+    from generativeqc_compiler.integral.weighted_eri_inputs import (
         PRIMITIVE_RANGE_RECORD,
         prepare_weighted_eri_stream,
     )

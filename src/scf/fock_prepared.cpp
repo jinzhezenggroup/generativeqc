@@ -1,5 +1,6 @@
 #include "scf/fock_prepared.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
@@ -11,13 +12,13 @@
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 constexpr std::size_t kDefaultDeviceBudget = 256U * 1024U * 1024U;
-void checked(vibeqc_status status, const std::string& detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void checked(generativeqc_status status, const std::string& detail) {
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 bool needs(const FockBuildSpec& spec, FockApproximation approximation) {
   return (spec.coulomb.present && spec.coulomb.approximation == approximation) ||
@@ -49,7 +50,7 @@ std::size_t df_source_bytes(const core::System& orbital, const core::System& aux
                multiply_size(auxiliary_cartesian, molecule::ao_count(auxiliary))));
 }
 FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (strategy.backend == FockBackend::Cpu) return {};
   FockExecutionVariant result;
   const auto& cuda_provider = runtime::active_cuda_provider();
@@ -122,7 +123,7 @@ struct PreparedFockPlan::Impl {
   }
 
   Impl(const core::System& system, const core::System* aux, ResolvedFockBuild strategy, int device,
-       std::size_t budget)
+       std::size_t budget, unsigned retained_direct_derivative_order)
       : orbital(system),
         device_id(strategy.backend == FockBackend::Cuda ? device : -1),
         requested_budget(strategy.backend == FockBackend::Cuda ? budget : 0) {
@@ -137,6 +138,13 @@ struct PreparedFockPlan::Impl {
     diagnostic.variant = execution_variant(strategy);
     const bool has_df = needs(strategy.spec, FockApproximation::DensityFitted);
     const bool has_exact = needs(strategy.spec, FockApproximation::Exact);
+    if (retained_direct_derivative_order > 1)
+      throw std::invalid_argument("prepared Direct Fock derivative capability exceeds first order");
+    if (retained_direct_derivative_order && (strategy.backend != FockBackend::Cuda || !has_exact))
+      throw std::invalid_argument(
+          "retained Direct derivative capability requires an exact CUDA provider");
+    const auto direct_derivative_order =
+        std::max<unsigned>(strategy.spec.derivative_order, retained_direct_derivative_order);
     const bool range_exact = strategy.spec.exchange.present &&
                              strategy.spec.exchange.approximation == FockApproximation::Exact &&
                              strategy.spec.exchange.op != FockOperator::FullRange;
@@ -212,7 +220,7 @@ struct PreparedFockPlan::Impl {
     DfResourceEnvelope df_resource{};
     DfBudgetWorkload df_workload{};
     if (has_df) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
       const auto memory = cuda_density_fitting_memory_info(device);
       df_resource = {memory.free_bytes, memory.total_bytes, memory.available};
 #endif
@@ -229,7 +237,7 @@ struct PreparedFockPlan::Impl {
       const auto direct_budget = has_df ? available / 2 : available;
       if (!direct_budget) throw std::bad_alloc();
       CudaDirectJkPlan* raw{};
-      checked(create_cuda_direct_jk_plan(device, {system}, strategy.spec.derivative_order,
+      checked(create_cuda_direct_jk_plan(device, {system}, direct_derivative_order,
                                          strategy.screening_tolerance, direct_budget, &raw,
                                          diagnostic.direct, detail),
               detail);
@@ -309,8 +317,10 @@ struct PreparedFockPlan::Impl {
 };
 
 PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::System* auxiliary,
-                                   ResolvedFockBuild strategy, int device, std::size_t budget)
-    : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget)) {}
+                                   ResolvedFockBuild strategy, int device, std::size_t budget,
+                                   unsigned retained_direct_derivative_order)
+    : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget,
+                                   retained_direct_derivative_order)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
@@ -322,8 +332,8 @@ const integrals::IntegralData& PreparedFockPlan::one_electron() const noexcept {
 initial_guess::EigenOperation PreparedFockPlan::eigen_operation(EigenUse use) const {
   auto* plan = impl_->cuda_df.get();
   if (!plan) return {};
-  const char* control = use == EigenUse::Setup          ? "VIBEQC_DF_REFERENCE_SETUP_EIGEN"
-                        : use == EigenUse::Finalization ? "VIBEQC_DF_REFERENCE_FINAL_EIGEN"
+  const char* control = use == EigenUse::Setup          ? "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN"
+                        : use == EigenUse::Finalization ? "GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN"
                                                         : nullptr;
   const char* value = control ? std::getenv(control) : nullptr;
   if (value && value[0] == '1' && value[1] == '\0') return {};
@@ -392,8 +402,13 @@ std::vector<double> PreparedFockPlan::energy_derivative(const std::vector<double
                          : impl_->cuda_view->energy_derivative(density, beta);
 }
 bool PreparedFockPlan::matches(const core::System& orbital, const core::System* auxiliary,
-                               const ResolvedFockBuild& strategy, int device,
-                               std::size_t budget) const noexcept {
+                               const ResolvedFockBuild& strategy, int device, std::size_t budget,
+                               unsigned minimum_direct_derivative_order) const noexcept {
+  if (minimum_direct_derivative_order > 1 ||
+      (minimum_direct_derivative_order &&
+       (!impl_->cuda_exact ||
+        impl_->diagnostic.direct.derivative_order < minimum_direct_derivative_order)))
+    return false;
   if (impl_->diagnostic.strategy != strategy || !same_system(impl_->orbital, orbital)) return false;
   try {
     if (strategy.backend == FockBackend::Cuda &&
@@ -407,4 +422,4 @@ bool PreparedFockPlan::matches(const core::System& orbital, const core::System* 
   }
   return !impl_->auxiliary || same_system(*impl_->auxiliary, auxiliary ? *auxiliary : orbital);
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

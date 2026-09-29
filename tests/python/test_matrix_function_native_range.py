@@ -23,7 +23,7 @@ def test_native_matrix_function_range_uses_no_overflowing_products(
 #include <array>
 #include <cmath>
 #include <iostream>
-using namespace vibeqc::tensor;
+using namespace generativeqc::tensor;
 int main() {
   const std::array<double, 1> q{1.0};
   const std::array<std::uint8_t, 1> keep{1};
@@ -89,10 +89,10 @@ int main() {
       if (cudaMemcpy(p, host, sizeof(host), cudaMemcpyHostToDevice) != cudaSuccess)
         return 2;
       if (function == 0)
-        vibeqc::tensor::launch_symmetric_inverse_sqrt_vjp(
+        generativeqc::tensor::launch_symmetric_inverse_sqrt_vjp(
             1, p, p + 1, 1e-12, p + 2, p + 3, p + 4, p + 5, nullptr);
       else
-        vibeqc::tensor::launch_symmetric_pseudoinverse_vjp(
+        generativeqc::tensor::launch_symmetric_pseudoinverse_vjp(
             1, p, p + 1, 1e-12, p + 2, p + 3, p + 4, p + 5, nullptr);
       if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess)
         return 3;
@@ -119,7 +119,7 @@ int main() {
   if (cudaMemcpy(p, cross_fixture, sizeof(cross_fixture), cudaMemcpyHostToDevice) !=
       cudaSuccess)
     return 6;
-  vibeqc::tensor::launch_symmetric_inverse_sqrt_vjp(
+  generativeqc::tensor::launch_symmetric_inverse_sqrt_vjp(
       2, p, p + 4, 0.3, p + 6, p + 10, p + 14, p + 18, nullptr);
   if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess)
     return 7;
@@ -131,7 +131,7 @@ int main() {
       std::abs(cross_result[2] - 1.0 / 6.0) > 1e-15)
     return 9;
 
-  vibeqc::tensor::launch_symmetric_pseudoinverse_vjp(
+  generativeqc::tensor::launch_symmetric_pseudoinverse_vjp(
       2, p, p + 4, 0.3, p + 6, p + 10, p + 14, p + 18, nullptr);
   if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess)
     return 10;
@@ -150,7 +150,7 @@ int main() {
       const int derivative = inverse ? 2 * exponent : 3 * exponent / 2 + 1;
       double host[6] = {1, std::ldexp(1., exponent), std::ldexp(1., seed_exponent), 0, 0, 0};
       if (cudaMemcpy(p, host, sizeof(host), cudaMemcpyHostToDevice) != cudaSuccess) return 13;
-      vibeqc::tensor::launch_symmetric_matrix_function_vjp(
+      generativeqc::tensor::launch_symmetric_matrix_function_vjp(
           1, function, p, p + 1, 0, p + 2, p + 3, p + 4, p + 5, nullptr);
       if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess) return 14;
       double result;
@@ -159,7 +159,7 @@ int main() {
       double cross[22] = {1, 0, 0, 1, 0, std::ldexp(1., exponent),
                          0, std::ldexp(1., seed_exponent), std::ldexp(1., seed_exponent), 0};
       if (cudaMemcpy(p, cross, sizeof(cross), cudaMemcpyHostToDevice) != cudaSuccess) return 17;
-      vibeqc::tensor::launch_symmetric_matrix_function_vjp(
+      generativeqc::tensor::launch_symmetric_matrix_function_vjp(
           2, function, p, p + 4, 0.3, p + 6, p + 10, p + 14, p + 18, nullptr);
       if (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess) return 18;
       double out[4];
@@ -176,18 +176,18 @@ int main() {
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_MATRIX_FUNCTION_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MATRIX_FUNCTION_CUDA_TEST") != "1",
     reason="explicit allocated CUDA tier",
 )
 def test_generated_cuda_matrix_function_range(tmp_path: typing.Any) -> None:
-    from vibeqc_compiler.method.matrix_function_cuda import (
+    from generativeqc_compiler.method.matrix_function_cuda import (
         emit_symmetric_matrix_function_vjp_cuda,
     )
 
     assert os.environ.get("SLURM_JOB_ID"), (
         "run CUDA qualification in a Slurm allocation"
     )
-    nvcc = os.environ.get("VIBEQC_NVCC") or shutil.which("nvcc")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC") or shutil.which("nvcc")
     assert nvcc is not None, "explicit CUDA tier requires NVCC"
     header = tmp_path / "generated_symmetric_matrix_function.cuh"
     header.write_text(emit_symmetric_matrix_function_vjp_cuda())
@@ -200,7 +200,7 @@ def test_generated_cuda_matrix_function_range(tmp_path: typing.Any) -> None:
             "-std=c++20",
             "-O3",
             "--fmad=false",
-            "-arch=" + os.environ.get("VIBEQC_MATRIX_FUNCTION_ARCH", "sm_120"),
+            "-arch=" + os.environ.get("GENERATIVEQC_MATRIX_FUNCTION_ARCH", "sm_120"),
             "-I" + str(tmp_path),
             str(source),
             "-o",

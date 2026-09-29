@@ -51,7 +51,7 @@ def test_gfn1_products_retain_the_independent_upstream_audit() -> None:
     # The native adaptation changes only the namespace, not parameter bytes.
     header = (ROOT / "src/xtb/native/data/parameters/gfn1.hpp").read_bytes()
     upstream_header = header.replace(
-        b"namespace vibeqc::xtb::parameters::gfn1",
+        b"namespace generativeqc::xtb::parameters::gfn1",
         b"namespace xtbloom::parameters::gfn1",
     )
     assert (

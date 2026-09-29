@@ -1,4 +1,4 @@
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-#define VIBEQC_COMPONENT_RUNTIME_API VIBEQC_API
+#define GENERATIVEQC_COMPONENT_RUNTIME_API GENERATIVEQC_API
 #include "integrals/first_derivative_component_runtime.hpp"

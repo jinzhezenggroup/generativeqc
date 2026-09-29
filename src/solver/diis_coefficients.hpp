@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SOLVER_DIIS_COEFFICIENTS_HPP
-#define VIBEQC_SOLVER_DIIS_COEFFICIENTS_HPP
+#ifndef GENERATIVEQC_SOLVER_DIIS_COEFFICIENTS_HPP
+#define GENERATIVEQC_SOLVER_DIIS_COEFFICIENTS_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 
 #include "solver/dense_linear.hpp"
 
-namespace vibeqc::solver::detail {
+namespace generativeqc::solver::detail {
 
 enum class DiisMetricScaling { None, MaximumAbsoluteEntry, MaximumDiagonal };
 
@@ -81,6 +81,6 @@ inline DiisCoefficientAction solve_diis_coefficients(const std::vector<double>& 
                                                         : DiisCoefficientAction::RetainCurrent;
 }
 
-}  // namespace vibeqc::solver::detail
+}  // namespace generativeqc::solver::detail
 
 #endif

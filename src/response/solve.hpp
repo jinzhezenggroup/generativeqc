@@ -9,7 +9,7 @@
 #include "response/linear_problem.hpp"
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::response {
+namespace generativeqc::response {
 
 struct ResponseSolveRequest {
   std::span<const double> rhs;
@@ -125,4 +125,4 @@ inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
   return result;
 }
 
-}  // namespace vibeqc::response
+}  // namespace generativeqc::response

@@ -9,7 +9,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Host/device domains for method-neutral execution resource observations. */
 enum class ExecutionMemorySpace : std::uint8_t { Host = 0, Device = 1 };
@@ -141,9 +141,11 @@ class ExecutionContext {
   explicit ExecutionContext(const core::ContextState& state) noexcept
       : backend_(state.requested_backend), device_id_(state.device_id) {}
 
-  [[nodiscard]] vibeqc_backend backend() const noexcept { return backend_; }
+  [[nodiscard]] generativeqc_backend backend() const noexcept { return backend_; }
   [[nodiscard]] int device_id() const noexcept { return device_id_; }
-  [[nodiscard]] bool cuda_requested() const noexcept { return backend_ == VIBEQC_BACKEND_CUDA; }
+  [[nodiscard]] bool cuda_requested() const noexcept {
+    return backend_ == GENERATIVEQC_BACKEND_CUDA;
+  }
 
   void observe_resource_peak(ExecutionResourceKind kind, ExecutionMemorySpace space,
                              std::size_t bytes) noexcept {
@@ -165,9 +167,9 @@ class ExecutionContext {
   void reset_resources() noexcept { resources_.reset(); }
 
  private:
-  vibeqc_backend backend_{VIBEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend backend_{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   int device_id_{};
   ExecutionResourceTracker resources_{};
 };
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

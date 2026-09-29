@@ -21,7 +21,7 @@ export LD_LIBRARY_PATH="$provider_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 # CUDA user-space providers remain separately distributed NVIDIA packages.
 # OpenBLAS is intentionally not excluded: auditwheel follows the GFN2 shim and
-# vendors/collision-renames the reviewed provider cohort into the VibeQC wheel.
+# vendors/collision-renames the reviewed provider cohort into the GenerativeQC wheel.
 auditwheel repair -w "$destination" "$wheel" \
   --exclude libcublas.so.12 \
   --exclude libcublasLt.so.12 \

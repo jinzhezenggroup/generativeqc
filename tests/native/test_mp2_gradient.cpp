@@ -140,7 +140,7 @@ void energy_adjoint_matches_independent_finite_difference() {
   const std::vector<double> eps{-0.8, 0.2, 0.55};
   const std::vector<double> dg{0.3, -0.2, 0.5, 0.1};
   const std::vector<double> de{-0.4, 0.2, 0.6};
-  const auto adjoint = vibeqc::mp2::canonical_energy_adjoint(g, eps, no, 1e-10);
+  const auto adjoint = generativeqc::mp2::canonical_energy_adjoint(g, eps, no, 1e-10);
   double reverse = 0.0;
   for (std::size_t i = 0; i < g.size(); ++i) reverse += adjoint.integrals_iajb[i] * dg[i];
   for (std::size_t i = 0; i < eps.size(); ++i) reverse += adjoint.orbital_energies[i] * de[i];
@@ -188,31 +188,32 @@ struct Fixture {
   }
 };
 
-vibeqc::core::System h2() {
-  vibeqc::core::System system;
+generativeqc::core::System h2() {
+  generativeqc::core::System system;
   system.atoms = {{1, {0, 0, -0.7}}, {1, {0, 0, 0.7}}};
-  const std::vector<vibeqc::core::Primitive> primitives{
+  const std::vector<generativeqc::core::Primitive> primitives{
       {3.42525091, 0.1543289673}, {0.62391373, 0.5353281423}, {0.1688554, 0.4446345422}};
   system.shells = {{0, 0, primitives}, {1, 0, primitives}};
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "H2 setup failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "H2 setup failed");
   return system;
 }
 
 void streamed_provider_matches_dense_oracle() {
   const auto system = h2();
-  vibeqc::scf::ScfOptions options;
+  generativeqc::scf::ScfOptions options;
   options.export_physical_reference = true;
   options.compute_forces = false;
   options.screening_tolerance = 0.0;
   options.energy_tolerance = options.density_tolerance = 1e-11;
   options.reference_memory_budget_bytes = 256ULL << 20;
-  const auto hf = vibeqc::scf::run_rhf(system, options);
+  const auto hf = generativeqc::scf::run_rhf(system, options);
   require(hf.converged && hf.reference, "H2 reference did not converge");
   const auto& reference = *hf.reference;
-  vibeqc::posthf::RawSource source(system);
-  vibeqc::posthf::NativeBlockProvider provider(source, reference, 256ULL << 20, 1);
+  generativeqc::posthf::RawSource source(system);
+  generativeqc::posthf::NativeBlockProvider provider(source, reference, 256ULL << 20, 1);
   std::vector<std::size_t> orbitals(reference.nbf);
   for (std::size_t p = 0; p < reference.nbf; ++p) orbitals[p] = p;
   const auto eri = provider.get({orbitals, orbitals, orbitals, orbitals});
@@ -232,11 +233,11 @@ void streamed_provider_matches_dense_oracle() {
         for (std::size_t b = 0; b < virtuals; ++b)
           g[g_index(reference.nocc, virtuals, i, j, a, b)] =
               eri[eri_index(reference.nbf, i, reference.nocc + a, j, reference.nocc + b)];
-  const auto adjoint =
-      vibeqc::mp2::canonical_energy_adjoint(g, reference.orbital_energies, reference.nocc, 1e-10);
-  const auto dense = vibeqc::mp2::canonical_orbital_rhs(hcore_mo, eri, adjoint, 1e-10);
-  const auto streamed =
-      vibeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo, provider, adjoint, 1e-10);
+  const auto adjoint = generativeqc::mp2::canonical_energy_adjoint(g, reference.orbital_energies,
+                                                                   reference.nocc, 1e-10);
+  const auto dense = generativeqc::mp2::canonical_orbital_rhs(hcore_mo, eri, adjoint, 1e-10);
+  const auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo,
+                                                                          provider, adjoint, 1e-10);
   auto close = [](std::span<const double> first, std::span<const double> second) {
     if (first.size() != second.size()) return false;
     for (std::size_t i = 0; i < first.size(); ++i)
@@ -255,8 +256,8 @@ void streamed_provider_matches_dense_oracle() {
       eri[eri_index(reference.nbf, reference.nocc, 0, 0, reference.nocc)];
   const std::array<double, 1> response{streamed.response_rhs[0] / response_denominator};
   const auto dense_weights =
-      vibeqc::mp2::canonical_lagrangian_weights(hcore_mo, eri, adjoint, response, 1e-10);
-  const auto streamed_weights = vibeqc::mp2::canonical_lagrangian_weights_streamed(
+      generativeqc::mp2::canonical_lagrangian_weights(hcore_mo, eri, adjoint, response, 1e-10);
+  const auto streamed_weights = generativeqc::mp2::canonical_lagrangian_weights_streamed(
       reference, hcore_mo, provider, adjoint, response, 1e-10);
   require(close(streamed_weights.one_electron, dense_weights.one_electron) &&
               close(streamed_weights.two_electron, dense_weights.two_electron) &&
@@ -267,16 +268,17 @@ void streamed_provider_matches_dense_oracle() {
   auto stale = reference;
   bool rejected = false;
   try {
-    (void)vibeqc::mp2::canonical_orbital_rhs_streamed(stale, hcore_mo, provider, adjoint, 1e-10);
+    (void)generativeqc::mp2::canonical_orbital_rhs_streamed(stale, hcore_mo, provider, adjoint,
+                                                            1e-10);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
   require(rejected, "streamed provider accepted a copied/stale reference owner");
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
   rejected = false;
   try {
-    (void)vibeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo, provider, adjoint, 1e-10,
-                                                      true, 7);
+    (void)generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo, provider, adjoint,
+                                                            1e-10, true, 7);
   } catch (const std::runtime_error&) {
     rejected = true;
   }
@@ -288,27 +290,29 @@ void density_fitted_provider_matches_dense_ri_oracle() {
   const auto system = h2();
   const auto auxiliary = system;
   constexpr double metric_threshold = 1.0e-10;
-  vibeqc::scf::ScfOptions options;
+  generativeqc::scf::ScfOptions options;
   options.export_physical_reference = true;
   options.compute_forces = false;
   options.screening_tolerance = 0.0;
   options.energy_tolerance = options.density_tolerance = 1e-11;
   options.density_fitting_relative_threshold = metric_threshold;
   options.reference_memory_budget_bytes = 256ULL << 20;
-  const auto hf = vibeqc::scf::run_rhf_density_fitting(system, auxiliary, options);
+  const auto hf = generativeqc::scf::run_rhf_density_fitting(system, auxiliary, options);
   require(hf.converged && hf.reference, "H2 RI reference did not converge");
   const auto& reference = *hf.reference;
-  vibeqc::posthf::RawSource source(system, &auxiliary);
-  vibeqc::posthf::DensityFittedBlockProvider provider(source, reference, 256ULL << 20,
-                                                      metric_threshold);
+  generativeqc::posthf::RawSource source(system, &auxiliary);
+  generativeqc::posthf::DensityFittedBlockProvider provider(source, reference, 256ULL << 20,
+                                                            metric_threshold);
   const auto n = reference.nbf, na = provider.auxiliary_count();
   std::vector<std::size_t> orbitals(n);
   for (std::size_t p = 0; p < n; ++p) orbitals[p] = p;
   const auto actual_eri = provider.get({orbitals, orbitals, orbitals, orbitals});
 
   // Independent value-side RI reconstruction from public AO A/M tensors.
-  const auto raw = vibeqc::integrals::build_density_fitting_integrals(system, auxiliary, false);
-  const auto factor = vibeqc::scf::factor_density_fitting_metric(raw.metric, na, metric_threshold);
+  const auto raw =
+      generativeqc::integrals::build_density_fitting_integrals(system, auxiliary, false);
+  const auto factor =
+      generativeqc::scf::factor_density_fitting_metric(raw.metric, na, metric_threshold);
   std::vector<double> transformed(n * n * na), whitened(n * n * na), expected_eri(n * n * n * n);
   auto three = [n, na](std::size_t p, std::size_t q, std::size_t P) {
     return (p * n + q) * na + P;
@@ -361,11 +365,12 @@ void density_fitted_provider_matches_dense_ri_oracle() {
         for (std::size_t b = 0; b < nv; ++b)
           g[g_index(reference.nocc, nv, i, j, a, b)] =
               expected_eri[eri_index(n, i, reference.nocc + a, j, reference.nocc + b)];
-  const auto adjoint =
-      vibeqc::mp2::canonical_energy_adjoint(g, reference.orbital_energies, reference.nocc, 1e-10);
-  const auto dense = vibeqc::mp2::canonical_orbital_rhs(hcore_mo, expected_eri, adjoint, 1e-10);
-  const auto streamed =
-      vibeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo, provider, adjoint, 1e-10);
+  const auto adjoint = generativeqc::mp2::canonical_energy_adjoint(g, reference.orbital_energies,
+                                                                   reference.nocc, 1e-10);
+  const auto dense =
+      generativeqc::mp2::canonical_orbital_rhs(hcore_mo, expected_eri, adjoint, 1e-10);
+  const auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo,
+                                                                          provider, adjoint, 1e-10);
   require(close(streamed.energy_gradient, dense.energy_gradient, 2e-10) &&
               close(streamed.response_rhs, dense.response_rhs, 2e-10) &&
               close(streamed.one_electron, dense.one_electron, 2e-10) &&
@@ -380,9 +385,9 @@ void density_fitted_provider_matches_dense_ri_oracle() {
       expected_eri[eri_index(n, reference.nocc, reference.nocc, 0, 0)] -
       expected_eri[eri_index(n, reference.nocc, 0, 0, reference.nocc)];
   const std::array<double, 1> response{streamed.response_rhs[0] / denominator};
-  const auto dense_weights =
-      vibeqc::mp2::canonical_lagrangian_weights(hcore_mo, expected_eri, adjoint, response, 1e-10);
-  const auto streamed_weights = vibeqc::mp2::canonical_lagrangian_weights_streamed(
+  const auto dense_weights = generativeqc::mp2::canonical_lagrangian_weights(
+      hcore_mo, expected_eri, adjoint, response, 1e-10);
+  const auto streamed_weights = generativeqc::mp2::canonical_lagrangian_weights_streamed(
       reference, hcore_mo, provider, adjoint, response, 1e-10);
   require(close(streamed_weights.one_electron, dense_weights.one_electron, 2e-10) &&
               close(streamed_weights.two_electron, dense_weights.two_electron, 2e-10) &&
@@ -391,7 +396,7 @@ void density_fitted_provider_matches_dense_ri_oracle() {
                        dense_weights.stationarity_residual) < 2e-10,
           "RI provider cannot drive the shared relaxed MP2 Lagrangian");
 
-  const auto raw_weights = vibeqc::mp2::density_fitted_lagrangian_weights(
+  const auto raw_weights = generativeqc::mp2::density_fitted_lagrangian_weights(
       reference, provider, streamed_weights, 256ULL << 20);
   require(raw_weights.orbitals == n && raw_weights.auxiliary == na &&
               raw_weights.three_center.size() == n * n * na && raw_weights.metric.size() == na * na,
@@ -401,7 +406,7 @@ void density_fitted_provider_matches_dense_ri_oracle() {
   // with respect to raw A and M. This simultaneously exercises A->B reverse
   // composition and the shared #466 M^(-1/2) pullback.
   auto ri_two_functional = [&](std::span<const double> raw_a, std::span<const double> metric) {
-    const auto local_factor = vibeqc::scf::factor_density_fitting_metric(
+    const auto local_factor = generativeqc::scf::factor_density_fitting_metric(
         std::vector<double>(metric.begin(), metric.end()), na, metric_threshold);
     std::vector<double> local_transformed(n * n * na), local_whitened(n * n * na);
     for (std::size_t p = 0; p < n; ++p)
@@ -467,9 +472,10 @@ void density_fitted_provider_matches_dense_ri_oracle() {
   require(previous_error < 2e-8,
           "RI raw A/M weights do not match the independent finite-difference functional");
 
-  const auto direct_df = vibeqc::integrals::contract_weighted_density_fitting_derivative(
+  const auto direct_df = generativeqc::integrals::contract_weighted_density_fitting_derivative(
       system, auxiliary, raw_weights.three_center, raw_weights.metric, 256ULL << 20);
-  const auto dense_df = vibeqc::integrals::build_density_fitting_integrals(system, auxiliary, true);
+  const auto dense_df =
+      generativeqc::integrals::build_density_fitting_integrals(system, auxiliary, true);
   std::vector<double> dense_df_contraction(dense_df.ncoord, 0.0);
   for (std::size_t coordinate = 0; coordinate < dense_df.ncoord; ++coordinate) {
     for (std::size_t i = 0; i < raw_weights.three_center.size(); ++i)
@@ -485,7 +491,7 @@ void density_fitted_provider_matches_dense_ri_oracle() {
           "direct weighted DF derivative contraction differs from the dense derivative oracle");
   bool derivative_budget_rejected = false;
   try {
-    (void)vibeqc::integrals::contract_weighted_density_fitting_derivative(
+    (void)generativeqc::integrals::contract_weighted_density_fitting_derivative(
         system, auxiliary, raw_weights.three_center, raw_weights.metric, 1);
   } catch (const std::length_error&) {
     derivative_budget_rejected = true;
@@ -494,7 +500,8 @@ void density_fitted_provider_matches_dense_ri_oracle() {
 
   bool budget_rejected = false;
   try {
-    (void)vibeqc::mp2::density_fitted_lagrangian_weights(reference, provider, streamed_weights, 1);
+    (void)generativeqc::mp2::density_fitted_lagrangian_weights(reference, provider,
+                                                               streamed_weights, 1);
   } catch (const std::length_error&) {
     budget_rejected = true;
   }
@@ -536,8 +543,9 @@ double rotated_mp2_energy(const Fixture& fixture, std::span<const double> direct
 void orbital_rhs_and_relaxed_weights_match_independent_oracles() {
   const Fixture fixture;
   const auto adjoint =
-      vibeqc::mp2::canonical_energy_adjoint(fixture.g, fixture.eps, fixture.no, 1e-10);
-  const auto orbital = vibeqc::mp2::canonical_orbital_rhs(fixture.h, fixture.eri, adjoint, 1e-10);
+      generativeqc::mp2::canonical_energy_adjoint(fixture.g, fixture.eps, fixture.no, 1e-10);
+  const auto orbital =
+      generativeqc::mp2::canonical_orbital_rhs(fixture.h, fixture.eri, adjoint, 1e-10);
   const std::array<double, 2> direction{0.31, -0.27};
   double reverse = 0.0;
   for (std::size_t i = 0; i < direction.size(); ++i)
@@ -569,7 +577,7 @@ void orbital_rhs_and_relaxed_weights_match_independent_oracles() {
     for (std::size_t b = 0; b < nv; ++b)
       z[a] += response_inverse[a * nv + b] * orbital.response_rhs[b];
   const auto weights =
-      vibeqc::mp2::canonical_lagrangian_weights(fixture.h, fixture.eri, adjoint, z, 1e-10);
+      generativeqc::mp2::canonical_lagrangian_weights(fixture.h, fixture.eri, adjoint, z, 1e-10);
   require(weights.stationarity_residual < 1e-10,
           "relaxed weights are not stationary with the independent Z-vector");
   for (std::size_t p = 0; p < fixture.n; ++p)
@@ -584,7 +592,7 @@ void invalid_inputs_and_resource_boundaries() {
   const std::array<double, 1> unit_integral{1.0};
   const std::array<double, 2> zero_gap{0.0, 0.0};
   try {
-    (void)vibeqc::mp2::canonical_energy_adjoint(unit_integral, zero_gap, 1, 1e-10);
+    (void)generativeqc::mp2::canonical_energy_adjoint(unit_integral, zero_gap, 1, 1e-10);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
@@ -593,48 +601,51 @@ void invalid_inputs_and_resource_boundaries() {
   const std::array<double, 1> nonfinite_integral{std::numeric_limits<double>::quiet_NaN()};
   const std::array<double, 2> separated_energies{-1.0, 1.0};
   try {
-    (void)vibeqc::mp2::canonical_energy_adjoint(nonfinite_integral, separated_energies, 1, 1e-10);
+    (void)generativeqc::mp2::canonical_energy_adjoint(nonfinite_integral, separated_energies, 1,
+                                                      1e-10);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
   require(rejected, "nonfinite MP2 integral was accepted");
 
-  auto options = vibeqc::response::GmresOptions{};
+  auto options = generativeqc::response::GmresOptions{};
   options.restart = 3;
   options.max_iterations = 10;
-  const auto response = vibeqc::response::prepare_gmres(4, options);
-  const auto probe = vibeqc::mp2::conventional_gradient_plan(
+  const auto response = generativeqc::response::prepare_gmres(4, options);
+  const auto probe = generativeqc::mp2::conventional_gradient_plan(
       4, 2, 4096, response, 3, 9, 9 * sizeof(double),
       static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
   require(probe.peak_bytes > probe.response_bytes && probe.shell_cotangent_bytes > 0,
           "gradient resource plan omitted a simultaneous owner");
+  require(probe.rank2_transform_workspace_bytes == 16 * sizeof(double),
+          "rank-2 congruence workspace is not budgeted");
   require(probe.shell_cotangent_bytes == 81 * sizeof(double),
           "shell-quartet cotangent ownership is not isolated");
   require(probe.derivative_staging_bytes == 485 * sizeof(double),
           "derivative staging double-counts the shell-quartet cotangent");
-  const auto cuda_probe = vibeqc::mp2::conventional_gradient_plan(
+  const auto cuda_probe = generativeqc::mp2::conventional_gradient_plan(
       4, 2, 4096, response, 3, 9, 9 * sizeof(double),
       static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()), 12345);
   require(cuda_probe.derivative_backend_staging_bytes == 12345,
           "gradient resource plan omitted CUDA consumer staging");
   require(cuda_probe.peak_bytes == probe.peak_bytes + 12345,
           "CUDA consumer staging was not charged exactly once");
-  const auto exact = vibeqc::mp2::conventional_gradient_plan(4, 2, 4096, response, 3, 9,
-                                                             9 * sizeof(double), probe.peak_bytes);
+  const auto exact = generativeqc::mp2::conventional_gradient_plan(
+      4, 2, 4096, response, 3, 9, 9 * sizeof(double), probe.peak_bytes);
   require(exact.peak_bytes == probe.peak_bytes, "exact resource budget changed the plan");
   rejected = false;
   try {
-    (void)vibeqc::mp2::conventional_gradient_plan(4, 2, 4096, response, 3, 9, 9 * sizeof(double),
-                                                  probe.peak_bytes - 1);
+    (void)generativeqc::mp2::conventional_gradient_plan(4, 2, 4096, response, 3, 9,
+                                                        9 * sizeof(double), probe.peak_bytes - 1);
   } catch (const std::length_error&) {
     rejected = true;
   }
   require(rejected, "one-byte-short gradient budget was accepted");
   rejected = false;
   try {
-    (void)vibeqc::mp2::conventional_gradient_plan(4, 2, 1, response,
-                                                  std::numeric_limits<std::size_t>::max(), 3, 24,
-                                                  std::numeric_limits<std::size_t>::max());
+    (void)generativeqc::mp2::conventional_gradient_plan(
+        4, 2, 1, response, std::numeric_limits<std::size_t>::max(), 3, 24,
+        std::numeric_limits<std::size_t>::max());
   } catch (const std::overflow_error&) {
     rejected = true;
   }

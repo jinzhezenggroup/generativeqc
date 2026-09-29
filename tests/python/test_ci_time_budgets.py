@@ -36,7 +36,10 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
-    assert "shard: [core, runtime-heavy, posthf, compiler-heavy, ecp-forces]" in section
+    assert (
+        "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
+        in section
+    )
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
     assert "name: python (${{ matrix.shard }})" in section
@@ -46,7 +49,7 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         line for line in section.splitlines() if "key: ccache-python-" in line
     )
     assert "'tests/**'" not in cache_line
-    assert "-DVIBEQC_BUILD_TESTS=OFF" in section
+    assert "-DGENERATIVEQC_BUILD_TESTS=OFF" in section
     for path_name in (
         "test_cc_complete_gradient.py",
         "test_ecp_heavy.py",
@@ -89,15 +92,15 @@ def test_f_shell_release_cache_tracks_only_its_generator_dependencies() -> None:
     )
     assert "f-shell-cuda-v2-12.9-sm120-" in key_line
     for dependency in (
-        "'python/vibeqc_compiler/common/**'",
-        "'python/vibeqc_compiler/integral/**'",
+        "'python/generativeqc_compiler/common/**'",
+        "'python/generativeqc_compiler/integral/**'",
         "'tools/validate_f_shells.py'",
-        "'tools/vibeqc_validation/f_shell.py'",
+        "'tools/generativeqc_validation/f_shell.py'",
     ):
         assert dependency in key_line
     for unrelated_scope in (
         "'include/**'",
-        "'python/vibeqc_compiler/**'",
+        "'python/generativeqc_compiler/**'",
         "'tools/**'",
     ):
         assert unrelated_scope not in key_line

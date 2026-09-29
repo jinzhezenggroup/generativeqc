@@ -1,6 +1,7 @@
 #include "methods/rccsdt_method.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -20,7 +21,7 @@
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
 
-namespace vibeqc::methods::detail {
+namespace generativeqc::methods::detail {
 namespace {
 
 std::vector<double> positions(const core::System& system) {
@@ -54,28 +55,28 @@ std::size_t checked_mul(std::size_t a, std::size_t b) {
   return a * b;
 }
 
-vibeqc_status item_exception_status() {
+generativeqc_status item_exception_status() {
   try {
     throw;
   } catch (const MethodError& error) {
     return error.status();
   } catch (const std::bad_alloc&) {
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::length_error&) {
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument&) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception&) {
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (...) {
-    return VIBEQC_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
 }
 
 class RccsdtPrepared final : public PreparedCalculation {
  public:
   RccsdtPrepared(Capabilities capabilities, runtime::ExecutionContext execution,
-                 core::System system, const vibeqc_method_descriptor& descriptor)
+                 core::System system, const generativeqc_method_descriptor& descriptor)
       : capabilities_(capabilities), execution_(std::move(execution)), system_(std::move(system)) {
     descriptor_ = descriptor;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
@@ -90,27 +91,34 @@ class RccsdtPrepared final : public PreparedCalculation {
     return execution_.resources();
   }
 
-  std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic() const override {
+  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic() const override {
     std::lock_guard<std::mutex> lock(mutex_);
     return last_;
+  }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_performance_;
   }
 
   void invalidate_result() override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
   }
 
   Result execute(bool compute_forces) override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    last_performance_.reset();
     if (compute_forces && molecule::ao_count(system_) > 12)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
     auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_);
     last_ = state.diagnostic;
+    last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
-      throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
+      throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
     if (!state.solved.converged()) return state.result;
 
     try {
@@ -132,8 +140,9 @@ class RccsdtPrepared final : public PreparedCalculation {
       std::size_t triples_virtual_count = 0;
       std::size_t triples_workspace_bytes = 0;
 
+      const auto triples_started = std::chrono::steady_clock::now();
       if (execution_.cuda_requested()) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
         const auto triples = cc::triples::evaluate_cuda(
             state.problem.nocc, state.problem.nvir, state.problem.ovvv.data(),
             state.problem.ovoo.data(), state.problem.ovov.data(), state.problem.fov.data(),
@@ -144,7 +153,7 @@ class RccsdtPrepared final : public PreparedCalculation {
         triples_virtual_count = triples.virtual_triples;
         triples_workspace_bytes = triples.workspace_bytes;
 #else
-        throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                           "native RCCSD(T) CUDA owner is not compiled in this library");
 #endif
       } else {
@@ -159,7 +168,11 @@ class RccsdtPrepared final : public PreparedCalculation {
         triples_workspace_bytes = triples.workspace_bytes;
       }
 
+      const double triples_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - triples_started).count();
       auto diagnostic = state.diagnostic;
+      auto performance = state.performance;
+      performance.triples_seconds = triples_seconds;
       diagnostic.minimum_absolute_denominator =
           std::min(diagnostic.minimum_absolute_denominator, triples_minimum_denominator);
       diagnostic.numeric_capacity_bytes = std::max<std::uint64_t>(
@@ -238,11 +251,12 @@ class RccsdtPrepared final : public PreparedCalculation {
                     diagnostic.response_operator_hash);
       }
       last_ = diagnostic;
+      last_performance_ = performance;
       return state.result;
     } catch (const std::length_error& error) {
-      throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY, error.what());
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY, error.what());
     } catch (const std::bad_alloc&) {
-      throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                         "RCCSD(T) triples workspace allocation failed");
     }
   }
@@ -251,16 +265,18 @@ class RccsdtPrepared final : public PreparedCalculation {
   Capabilities capabilities_;
   runtime::ExecutionContext execution_;
   core::System system_;
-  vibeqc_method_descriptor descriptor_{};
+  generativeqc_method_descriptor descriptor_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
-  std::optional<vibeqc_correlation_diagnostic> last_;
+  std::optional<generativeqc_correlation_diagnostic> last_;
+  std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;
 };
 
 class RccsdtPreparedBatch final : public PreparedBatch {
  public:
   RccsdtPreparedBatch(Capabilities capabilities, core::ContextState& context,
-                      std::vector<core::System> systems, const vibeqc_method_descriptor& descriptor)
+                      std::vector<core::System> systems,
+                      const generativeqc_method_descriptor& descriptor)
       : capabilities_(capabilities),
         execution_(context),
         context_(&context),
@@ -309,8 +325,9 @@ class RccsdtPreparedBatch final : public PreparedBatch {
           owner_coordinates_[index] = std::move(target_coordinates);
         }
         result.calculation = owners_[index]->execute(compute_forces);
-        result.status = result.calculation.convergence.converged ? VIBEQC_STATUS_SUCCESS
-                                                                 : VIBEQC_STATUS_NOT_CONVERGED;
+        result.status = result.calculation.convergence.converged
+                            ? GENERATIVEQC_STATUS_SUCCESS
+                            : GENERATIVEQC_STATUS_NOT_CONVERGED;
       } catch (...) {
         result.status = item_exception_status();
       }
@@ -318,11 +335,17 @@ class RccsdtPreparedBatch final : public PreparedBatch {
     return results;
   }
 
-  std::optional<vibeqc_correlation_diagnostic> correlation_diagnostic(
+  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
       std::size_t index) const override {
     if (index >= owners_.size())
       throw std::invalid_argument("correlation diagnostic batch index is out of range");
     return owners_[index]->correlation_diagnostic();
+  }
+  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
+      std::size_t index) const override {
+    if (index >= owners_.size())
+      throw std::invalid_argument("CC performance diagnostic batch index is out of range");
+    return owners_[index]->cc_performance_diagnostic();
   }
 
   void clear_warm_starts() override {}
@@ -359,51 +382,52 @@ class RccsdtPreparedBatch final : public PreparedBatch {
   runtime::ExecutionContext execution_;
   core::ContextState* context_{};
   std::vector<core::System> systems_;
-  vibeqc_method_descriptor descriptor_{};
+  generativeqc_method_descriptor descriptor_{};
   std::vector<std::unique_ptr<PreparedCalculation>> owners_;
   std::vector<std::vector<double>> owner_coordinates_;
 };
 
 }  // namespace
 
-vibeqc_status validate_rccsdt_system(vibeqc_method method, const core::System& system,
-                                     std::string& detail) {
+generativeqc_status validate_rccsdt_system(generativeqc_method method, const core::System& system,
+                                           std::string& detail) {
   return validate_rccsd_system(method, system, detail);
 }
 
 std::unique_ptr<PreparedCalculation> prepare_rccsdt_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const vibeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor) {
   runtime::ExecutionContext execution(context);
-  if (execution.backend() != VIBEQC_BACKEND_CPU_REFERENCE &&
-      execution.backend() != VIBEQC_BACKEND_CUDA)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  if (execution.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+      execution.backend() != GENERATIVEQC_BACKEND_CUDA)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "RCCSD(T) requires an explicit CPU or CUDA backend");
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
   if (execution.cuda_requested())
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native RCCSD(T) CUDA owner is not compiled in this library");
 #endif
   return std::make_unique<RccsdtPrepared>(capabilities, std::move(execution), system, descriptor);
 }
 
-std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(const Capabilities& capabilities,
-                                                    core::ContextState& context,
-                                                    std::vector<core::System> systems,
-                                                    const vibeqc_method_descriptor& descriptor,
-                                                    vibeqc_batch_flags flags) {
-  constexpr auto supported_flags = static_cast<vibeqc_batch_flags>(VIBEQC_BATCH_ENABLE_WARM_STARTS);
+std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(
+    const Capabilities& capabilities, core::ContextState& context,
+    std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
+    generativeqc_batch_flags flags) {
+  constexpr auto supported_flags =
+      static_cast<generativeqc_batch_flags>(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
   if ((flags & ~supported_flags) != 0)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "RCCSD(T) prepared batches support only the warm-start compatibility flag");
-  if (systems.empty()) throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "RCCSD(T) batch is empty");
+  if (systems.empty())
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "RCCSD(T) batch is empty");
 
   const auto nbf = molecule::ao_count(systems.front());
   const auto nocc = static_cast<std::size_t>(systems.front().electron_count / 2);
   for (const auto& system : systems) {
     if (molecule::ao_count(system) != nbf ||
         static_cast<std::size_t>(system.electron_count / 2) != nocc)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "RCCSD(T) prepared batch requires one homogeneous (nocc,nvir) shape; split "
                         "ragged groups");
   }
@@ -411,4 +435,4 @@ std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(const Capabilities& capabili
                                                descriptor);
 }
 
-}  // namespace vibeqc::methods::detail
+}  // namespace generativeqc::methods::detail

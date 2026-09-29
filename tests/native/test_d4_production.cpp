@@ -8,20 +8,20 @@
 #include "d4_eeq_oracle_fixtures.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include <cuda_runtime.h>
 extern "C" void d4_cuda_fail_after_coordinate_upload_for_test_v1();
 #endif
 
 using namespace d4_eeq_tests;
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 
 namespace {
 
 bool near(double a, double b, double tolerance) { return std::fabs(a - b) <= tolerance; }
 
 bool cuda_available() {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   int devices = 0;
   return cudaGetDeviceCount(&devices) == cudaSuccess && devices > 0;
 #else
@@ -29,16 +29,16 @@ bool cuda_available() {
 #endif
 }
 
-std::unique_ptr<D4Plan> plan_for(const EEQOracleFixture& f, vibeqc_backend backend) {
+std::unique_ptr<D4Plan> plan_for(const EEQOracleFixture& f, generativeqc_backend backend) {
   std::vector<std::uint32_t> offsets{0, static_cast<std::uint32_t>(f.atoms)};
   std::vector<std::int32_t> z(f.z.begin(), f.z.begin() + f.atoms);
   std::vector<double> xyz(f.xyz.begin(), f.xyz.begin() + 3 * f.atoms);
   std::string detail;
-  vibeqc_status status{};
+  generativeqc_status status{};
   auto plan = D4Plan::prepare(backend, 0, std::move(offsets), std::move(z),
                               std::vector<double>{f.total_charge}, std::move(xyz), f.parameters,
                               f.profile, 64u << 20, detail, status);
-  if (!plan || status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (!plan || status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
   return plan;
 }
 
@@ -50,10 +50,10 @@ void execute_one(D4Plan& plan, const std::vector<double>& xyz, bool gradient,
   std::string detail;
   const auto status = plan.execute(xyz, std::span(&active, 1), std::span(&requested, 1), statuses,
                                    components, gradients, charges, detail);
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 
-void independent_oracles(vibeqc_backend backend) {
+void independent_oracles(generativeqc_backend backend) {
   for (const auto& f : kEEQOracleFixtures) {
     auto plan = plan_for(f, backend);
     std::vector<double> xyz(f.xyz.begin(), f.xyz.begin() + 3 * f.atoms);
@@ -73,7 +73,7 @@ void independent_oracles(vibeqc_backend backend) {
   }
 }
 
-void finite_difference(vibeqc_backend backend) {
+void finite_difference(generativeqc_backend backend) {
   const auto& f = kEEQOracleFixtures[1];
   auto plan = plan_for(f, backend);
   std::vector<double> xyz(f.xyz.begin(), f.xyz.begin() + 3 * f.atoms);
@@ -97,10 +97,10 @@ void finite_difference(vibeqc_backend backend) {
   }
 }
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 void changed_geometry_failure_recovery() {
   const auto& f = kEEQOracleFixtures[0];
-  auto plan = plan_for(f, VIBEQC_BACKEND_CUDA);
+  auto plan = plan_for(f, GENERATIVEQC_BACKEND_CUDA);
   std::vector<double> original(f.xyz.begin(), f.xyz.begin() + 3 * f.atoms);
   std::vector<D4Status> statuses;
   std::vector<double> baseline, gradients, charges;
@@ -116,7 +116,7 @@ void changed_geometry_failure_recovery() {
   const auto failed =
       plan->execute(changed, std::span(&active, 1), std::span(&requested, 1), statuses,
                     failed_components, failed_gradient, failed_charges, detail);
-  if (failed != VIBEQC_STATUS_CUDA_ERROR ||
+  if (failed != GENERATIVEQC_STATUS_CUDA_ERROR ||
       detail.find("after coordinate upload") == std::string::npos)
     throw std::runtime_error("D4 post-upload CUDA failure injection did not trigger");
 
@@ -143,10 +143,10 @@ int main(int argc, char** argv) {
   try {
     const bool device = argc > 1 && std::string(argv[1]) == "cuda";
     if (device && !cuda_available()) return 77;
-    const auto backend = device ? VIBEQC_BACKEND_CUDA : VIBEQC_BACKEND_CPU_REFERENCE;
+    const auto backend = device ? GENERATIVEQC_BACKEND_CUDA : GENERATIVEQC_BACKEND_CPU_REFERENCE;
     independent_oracles(backend);
     finite_difference(backend);
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (device) changed_geometry_failure_recovery();
 #endif
     std::puts(device ? "production D4 CUDA oracle/FD gates passed"

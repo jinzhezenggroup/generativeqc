@@ -11,7 +11,7 @@
 #include "dft/grid.hpp"
 #include "runtime/bounded_workspace.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Exact explicit storage request for ordinary-stream semilocal XC. The
  * method's ResourcePlan supplies one arena of device_bytes; this component
@@ -161,7 +161,7 @@ class CudaXcPlan {
   int device_{};
   void* arena_{};
   cudaStream_t stream_{};
-  vibeqc::runtime::AsyncGeneration generations_;
+  generativeqc::runtime::AsyncGeneration generations_;
   double *basis_{}, *points_{}, *weights_{}, *ao_{}, *work_{}, *features_{}, *coefficients_{},
       *point_totals_{}, *potential_{}, *totals_{}, *delta_features_{};
   int* error_{};
@@ -186,4 +186,4 @@ void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* nonlocal_energy, double* ao, double* coefficients,
                                 double* potential, double* totals, int* error);
 }  // namespace cuda_xc_detail
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

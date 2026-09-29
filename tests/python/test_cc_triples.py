@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import Program, dot_test, execute, jvp
+from generativeqc_compiler.tensor import Program, dot_test, execute, jvp
 
 INPUT_NAMES = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
 
@@ -45,7 +45,7 @@ def test_numerator_inventory_matches_pinned_source_and_execution(
     terms prevent cancellation from hiding an incorrect coefficient. The
     inventory operands refer to the transposed views used by the slow source.
     """
-    from tools.vibeqc_cc.triples import V_TERMS, W_TERMS, _v, _views, _w
+    from tools.generativeqc_cc.triples import V_TERMS, W_TERMS, _v, _views, _w
 
     o, v = 2, 3
     ovvv, ovoo, ovov, fov, t1, t2, _, _ = _random_case(o, v, 17)
@@ -114,7 +114,11 @@ def test_numerator_inventory_matches_pinned_source_and_execution(
 def test_reference_fullsum_tensorir_agree(
     o: typing.Any, v: typing.Any, seed: typing.Any
 ) -> None:
-    from tools.vibeqc_cc import triples_energy, triples_energy_tensorir, triples_fullsum
+    from tools.generativeqc_cc import (
+        triples_energy,
+        triples_energy_tensorir,
+        triples_fullsum,
+    )
 
     arrays = _random_case(o, v, seed)
     reference = triples_energy(o, v, *arrays)
@@ -129,7 +133,7 @@ def test_reference_matches_verbatim_slow_kernel_shapes() -> None:
     table, so it must be symmetric under simultaneous (a,b,c) permutation.
     An independent re-implementation here rebuilds the table from the source
     einsum strings and compares it against the module's SLOW_TABLE."""
-    from tools.vibeqc_cc.triples import _LABELS, OP, SLOW_TABLE, VP
+    from tools.generativeqc_cc.triples import _LABELS, OP, SLOW_TABLE, VP
 
     def inv(p: typing.Any) -> typing.Any:
         out = [0, 0, 0]
@@ -168,7 +172,7 @@ def _explicit_r3(w: typing.Any) -> typing.Any:
 
 
 def test_r3_coefficients_one_term_at_a_time() -> None:
-    from tools.vibeqc_cc.triples import R3, r3
+    from tools.generativeqc_cc.triples import R3, r3
 
     rng = np.random.default_rng(3)
     w = rng.normal(size=(3, 3, 3))
@@ -190,7 +194,7 @@ def test_triangular_virtual_multiplicity_against_fullsum() -> None:
     permutation, so the ordered full sum equals 6 times the triangular sum
     after each triangle is re-weighted by 6/2/1.  Fullsum already checks this
     globally; here we assert the degeneracy function in isolation."""
-    from tools.vibeqc_cc.triples import _degeneracy
+    from tools.generativeqc_cc.triples import _degeneracy
 
     # a == b == c -> 6
     assert _degeneracy(0, 0, 0) == 6
@@ -210,7 +214,7 @@ def test_explicit_degenerate_and_double_indices_numerically() -> None:
     test additionally nails the specific index patterns the issue calls for
     (a==b, a==c, b==c, a==b==c) by checking the degeneracy table directly.
     """
-    from tools.vibeqc_cc.triples import VP, _degeneracy, _permuted
+    from tools.generativeqc_cc.triples import VP, _degeneracy, _permuted
 
     # All six virtual permutations of (a, b, c) must be reachable through VP
     # and each maps to a distinct triple index ordering.
@@ -230,7 +234,7 @@ def test_explicit_degenerate_and_double_indices_numerically() -> None:
 def test_t1_zero_removes_v_and_t2_zero_keeps_w_only(
     o: typing.Any, v: typing.Any
 ) -> None:
-    from tools.vibeqc_cc import triples_energy, triples_fullsum
+    from tools.generativeqc_cc import triples_energy, triples_fullsum
 
     ovvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v = _random_case(o, v, 11)
     zero1 = np.zeros_like(t1)
@@ -259,7 +263,7 @@ def test_two_electron_triples_are_zero() -> None:
     CCSD already equals FCI for two electrons in any basis, so the (T)
     correction must be numerically zero to machine rounding.
     """
-    from tools.vibeqc_cc import triples_energy, triples_fullsum
+    from tools.generativeqc_cc import triples_energy, triples_fullsum
 
     ovvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v = _random_case(1, 1, 12)
     reference = triples_energy(1, 1, ovvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v)
@@ -272,7 +276,7 @@ def test_two_electron_triples_are_zero() -> None:
 
 
 def test_tensorir_program_roundtrip_and_replay() -> None:
-    from tools.vibeqc_cc import build_triples_program, triples_energy_tensorir
+    from tools.generativeqc_cc import build_triples_program, triples_energy_tensorir
 
     o, v = 2, 2
     arrays = _random_case(o, v, 21)
@@ -297,7 +301,7 @@ def test_tensorir_program_roundtrip_and_replay() -> None:
 
 
 def test_tensorir_program_is_differentiable() -> None:
-    from tools.vibeqc_cc import build_triples_program, triples_energy
+    from tools.generativeqc_cc import build_triples_program, triples_energy
 
     o, v = 2, 2
     arrays = _random_case(o, v, 22)
@@ -357,12 +361,12 @@ def test_nonfinite_inputs_fail_closed(
     engine: typing.Any, name: typing.Any, value: typing.Any
 ) -> None:
     """Invalid amplitudes, integrals or energies must not yield a (T) result."""
-    from tools import vibeqc_cc
+    from tools import generativeqc_cc
 
     arrays = _random_case(2, 3, 32)
     arrays[INPUT_NAMES.index(name)].flat[0] = value
     with pytest.raises(ValueError, match=f"{name}.*finite"):
-        getattr(vibeqc_cc, engine)(2, 3, *arrays)
+        getattr(generativeqc_cc, engine)(2, 3, *arrays)
 
 
 @pytest.mark.parametrize(
@@ -375,10 +379,10 @@ def test_numpy_scalar_denominator_thresholds(
     engine: typing.Any, threshold: typing.Any
 ) -> None:
     """NumPy-derived tolerances obey the same gate as Python scalar values."""
-    from tools import vibeqc_cc
+    from tools import generativeqc_cc
 
     arrays = _random_case(2, 2, 33)
-    energy = getattr(vibeqc_cc, engine)
+    energy = getattr(generativeqc_cc, engine)
     expected = energy(2, 2, *arrays, denominator_threshold=float(threshold))
     assert energy(2, 2, *arrays, denominator_threshold=threshold) == expected
     # The actual magnitude still controls rejection, regardless of scalar type.
@@ -391,14 +395,14 @@ def test_numpy_scalar_denominator_thresholds(
     [True, np.bool_(True), np.float64(np.nan), np.float32(np.inf), np.int64(0), -1.0],
 )
 def test_invalid_denominator_thresholds(threshold: typing.Any) -> None:
-    from tools.vibeqc_cc import triples_energy
+    from tools.generativeqc_cc import triples_energy
 
     with pytest.raises(ValueError, match="threshold must be a positive finite number"):
         triples_energy(2, 2, *_random_case(2, 2, 34), denominator_threshold=threshold)
 
 
 def test_invalid_inputs_rejected() -> None:
-    from tools.vibeqc_cc import build_triples_program, triples_energy
+    from tools.generativeqc_cc import build_triples_program, triples_energy
 
     arrays = _random_case(2, 2, 31)
     ovvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v = arrays
@@ -419,7 +423,7 @@ def test_invalid_inputs_rejected() -> None:
 def test_degenerate_denominators_fail_closed() -> None:
     """Noncanonical (crossing) or near-degenerate (T) denominators are rejected
     explicitly rather than silently dividing into NaN (issue #150 step 7)."""
-    from tools.vibeqc_cc import triples_energy, triples_fullsum
+    from tools.generativeqc_cc import triples_energy, triples_fullsum
 
     ovvv, ovoo, ovov, fov, t1, t2, _, _ = _random_case(2, 2, 41)
     # occupied energies not strictly below virtual -> nonnegative denominator
@@ -512,7 +516,11 @@ def _endpoint_feeds(name: typing.Any) -> typing.Any:
 
 @pytest.mark.parametrize("name", ["h2", "he", "h2o", "nh3", "ch4"])
 def test_pinned_ground_truth_regression(name: typing.Any) -> None:
-    from tools.vibeqc_cc import triples_energy, triples_energy_tensorir, triples_fullsum
+    from tools.generativeqc_cc import (
+        triples_energy,
+        triples_energy_tensorir,
+        triples_fullsum,
+    )
 
     expected_nocc, expected_nvir, expected = GROUND_TRUTH[name]
     feeds = _endpoint_feeds(name)
@@ -532,17 +540,17 @@ def test_pinned_ground_truth_regression(name: typing.Any) -> None:
 
 def test_committed_production_reference_provenance() -> None:
     """Keep the independent reference tied to its source and endpoint arrays."""
-    from vibeqc_compiler.common.evidence import canonical_hash
+    from generativeqc_compiler.common.evidence import canonical_hash
 
     from tools.cc_endpoint_fixtures import array_hash
 
     root = Path(__file__).resolve().parents[2]
     data = json.loads((ENDPOINTS.parent / "rccsd-t.json").read_text())
-    assert data["schema"] == "vibeqc.rccsd-t.reference"
+    assert data["schema"] == "generativeqc.rccsd-t.reference"
     assert data["version"] == 1
     assert data["pyscf"] == "2.14.0"
     assert data["upstream"] == json.loads(
-        (root / "tools/vibeqc_cc/source_manifest.json").read_text()
+        (root / "tools/generativeqc_cc/source_manifest.json").read_text()
     )
     assert data["molecules_hash"] == canonical_hash(data["molecules"])
     assert [row["name"] for row in data["molecules"]] == list(GROUND_TRUTH)

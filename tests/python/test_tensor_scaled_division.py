@@ -5,7 +5,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     AD_RULE_VERSION,
     GENERATION_VERSION,
     Index,
@@ -307,18 +307,18 @@ def test_scaled_division_on_allocated_cuda(
     import os
     from pathlib import Path
 
-    if os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1":
         pytest.skip("requires explicit allocated-GPU opt-in")
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
     nvcc = find_nvcc()
     assert nvcc is not None
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     rows, expected = [], []
     candidates = _cases(dtype)
@@ -352,7 +352,7 @@ def test_scaled_division_on_allocated_cuda(
         program = transpose_program(primal, ["out"], inputs=selected).program
         names = [f"bar_{name}" for name in selected]
     plan = plan_cuda(program, compiler.target, schedule=TensorSchedule(fuse=fuse))
-    cache = Path(os.environ.get("VIBEQC_TENSOR_CACHE", str(tmp_path)))
+    cache = Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", str(tmp_path)))
     with PreparedCuda(plan, compile_cuda(plan, compiler, cache)) as prepared:
         feed_names = {
             step.node.attrs["name"] for step in plan.steps if step.node.op == "input"
@@ -378,9 +378,9 @@ def test_scaled_division_on_allocated_cuda(
 
 
 def test_scaled_cuda_source_contract_without_runtime_or_device() -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
     program = linearize(_program(np.float64), ["x", "y"]).program
     for fuse in (False, True):

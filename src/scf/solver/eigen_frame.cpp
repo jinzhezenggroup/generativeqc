@@ -6,7 +6,7 @@
 
 #include "scf/reference/linalg.hpp"
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<double>* overlap,
                           const std::vector<double>& values,
                           const std::vector<double>& coefficients, std::size_t n,
@@ -72,4 +72,4 @@ bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& det
   }
   return true;
 }
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver

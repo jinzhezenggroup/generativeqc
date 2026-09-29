@@ -1,6 +1,6 @@
 # Generated f-shell validation
 
-Issue [#135](https://github.com/jinzhezenggroup/vibeqc/issues/135) separates
+Issue [#135](https://github.com/jinzhezenggroup/generativeqc/issues/135) separates
 representation, release compilation, numerical validity, endpoint acceptance,
 and production selection for all 34 canonical f-containing classes.
 `tools/validate_f_shells.py` catalogs the common recurrence/schedule capabilities,
@@ -110,14 +110,14 @@ outside the timing region, at 1e-9 hartree and 1e-7 hartree/bohr. The explicit
 endpoint non-regression budget is 2%; a slower candidate is a rejected
 promotion, not a numerical failure.
 
-Use a release class-mode library configured with `VIBEQC_AOT_UNIT_MODE=class`,
-`VIBEQC_CUDA_FAST_COMPILE=OFF`, and the actual `120-real` target. Record its
+Use a release class-mode library configured with `GENERATIVEQC_AOT_UNIT_MODE=class`,
+`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`, and the actual `120-real` target. Record its
 CMake settings, library/source hashes, and build duration with the evidence.
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:30:00 env OMP_NUM_THREADS=1 PYTHONPATH=python \
-  VIBEQC_LIBRARY="$PWD/build/f-shell-endpoint/libvibeqc.so" \
+  GENERATIVEQC_LIBRARY="$PWD/build/f-shell-endpoint/libgenerativeqc.so" \
   python benchmarks/f_shell_endpoints.py --case water-def2-tzvp \
   --batch 1 --repeats 6 --output build/f-water-b1.json
 ```

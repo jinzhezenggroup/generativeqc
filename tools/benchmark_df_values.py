@@ -26,31 +26,34 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 import numpy as np
-from vibeqc import Atom
-from vibeqc.calculator import _named_basis_shells
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc import Atom
+from generativeqc.calculator import _named_basis_shells
+from generativeqc_compiler.common.cuda_adapter import (
     CudaBenchmarkExecutor,
     CudaCompilerAdapter,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.df_tuning.batch import compile_batch
-from vibeqc_compiler.integral.df_tuning.values import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.df_tuning.batch import compile_batch
+from generativeqc_compiler.integral.df_tuning.values import (
     VALUE_API,
     emit_value_candidate,
     emit_value_driver,
     enumerate_value_trials,
 )
-from vibeqc_compiler.integral.df_value_candidates import VALUE_CLASSES
-from vibeqc_compiler.integral.ir import KernelConsumer
-from vibeqc_compiler.integral.shell_spec import cartesian_components
-from vibeqc_compiler.integral.tuning.process import _runtime_environment, _tool_version
+from generativeqc_compiler.integral.df_value_candidates import VALUE_CLASSES
+from generativeqc_compiler.integral.ir import KernelConsumer
+from generativeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.tuning.process import (
+    _runtime_environment,
+    _tool_version,
+)
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_policy_endpoint import CASES
 from tools.benchmark_df_derivatives import source_identity
 from tools.generate_validation_references import pyscf_molecule
-from tools.vibeqc_validation.df_values import PRIMITIVE_DTYPE
-from tools.vibeqc_validation.f_shell_numerics import _normalized_primitives
+from tools.generativeqc_validation.df_values import PRIMITIVE_DTYPE
+from tools.generativeqc_validation.f_shell_numerics import _normalized_primitives
 
 
 def write_workloads(
@@ -74,7 +77,7 @@ def write_workloads(
                     "angular_momentum": s.angular_momentum,
                     "primitives": [[p.exponent, p.coefficient] for p in s.primitives],
                 }
-                for s in _named_basis_shells(case.vibeqc_basis, atoms)
+                for s in _named_basis_shells(case.generativeqc_basis, atoms)
             ]
             coordinates = np.array([a.position for a in atoms])
             inputs = {
@@ -327,7 +330,7 @@ def main() -> None:
     compiler = CudaCompilerAdapter(
         args.nvcc.resolve(), cuda_target_info(args.architecture), 600
     )
-    includes = (directory, generated, ROOT / "tools/vibeqc_validation")
+    includes = (directory, generated, ROOT / "tools/generativeqc_validation")
     compiled = compile_batch(
         trials,
         emit_value_candidate,
@@ -342,7 +345,7 @@ def main() -> None:
         maximum_stack_bytes=4096,
     )
     report = {
-        "schema": "vibeqc.df_value_tuning",
+        "schema": "generativeqc.df_value_tuning",
         "version": 1,
         "architecture": args.architecture,
         "generator_sha256": identity,

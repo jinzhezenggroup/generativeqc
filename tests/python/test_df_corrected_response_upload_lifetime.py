@@ -29,9 +29,9 @@ _SHIM = r"""
 #include <string>
 #include <vector>
 using cudaStream_t = int;
-using vibeqc_status = int;
+using generativeqc_status = int;
 constexpr int cudaSuccess=0, cudaMemcpyHostToDevice=1;
-constexpr int VIBEQC_STATUS_SUCCESS=0, VIBEQC_STATUS_OUT_OF_MEMORY=2, cudaFailure=3;
+constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, cudaFailure=3;
 int mode=0, syncs=0, factor_calls=0;
 std::vector<std::function<void()>> pending;
 int cudaSetDevice(int) { return mode==1 ? cudaFailure : 0; }
@@ -143,7 +143,9 @@ def selector_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
     source = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text(encoding="utf-8")
-    begin = source.index("vibeqc_status select_corrected_occupied_response_factor(")
+    begin = source.index(
+        "generativeqc_status select_corrected_occupied_response_factor("
+    )
     end = source.index("\n}  // namespace", begin)
     body = source[begin:end]
     directory = tmp_path_factory.mktemp("corrected-upload-lifetime")

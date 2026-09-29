@@ -8,22 +8,22 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.df_cuda import emit_df_values_cpu
-from vibeqc_compiler.integral.df_derivatives import (
+from generativeqc_compiler.integral.df_cuda import emit_df_values_cpu
+from generativeqc_compiler.integral.df_derivatives import (
     axis_polynomial,
     build_df_derivative_ir,
     build_df_derivative_kernel,
     evaluate_df_derivative,
 )
-from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cpu
-from vibeqc_compiler.integral.df_values import (
+from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cpu
+from generativeqc_compiler.integral.df_values import (
     build_df_component_kernel,
     build_df_value_ir,
     evaluate_df_primitive,
 )
-from vibeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.shell_spec import cartesian_components
 
-from tools.vibeqc_validation.df_derivatives import make_df_derivative_fixture
+from tools.generativeqc_validation.df_derivatives import make_df_derivative_fixture
 
 SIGNATURES = [
     angular for count in (2, 3) for angular in product(range(4), repeat=count)
@@ -36,7 +36,7 @@ def test_cpu_derivative_lowering_is_host_only() -> None:
     assert "cuda_runtime" not in source
     assert "__device__" not in source
     assert "__forceinline__" not in source
-    assert "VIBEQC_GENERATED_DF_DERIVATIVES_CPU_HPP" in source
+    assert "GENERATIVEQC_GENERATED_DF_DERIVATIVES_CPU_HPP" in source
 
 
 def test_cpu_value_lowering_is_host_only() -> None:
@@ -45,7 +45,7 @@ def test_cpu_value_lowering_is_host_only() -> None:
     assert "cuda_runtime" not in source
     assert "__device__" not in source
     assert "__forceinline__" not in source
-    assert "VIBEQC_GENERATED_DF_VALUES_CPU_HPP" in source
+    assert "GENERATIVEQC_GENERATED_DF_VALUES_CPU_HPP" in source
 
 
 @pytest.mark.parametrize("angular", SIGNATURES)
@@ -125,7 +125,9 @@ def test_derivative_domain_layout_and_internal_moments() -> None:
 @pytest.fixture(scope="module")
 def emitted_library(tmp_path_factory: typing.Any) -> typing.Any:
     """Compile the actual bounded CUDA arithmetic as ordinary host C++."""
-    from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+    from generativeqc_compiler.integral.df_derivatives_cuda import (
+        emit_df_derivatives_cuda,
+    )
 
     compiler = shutil.which("c++")
     if compiler is None:
@@ -138,7 +140,7 @@ def emitted_library(tmp_path_factory: typing.Any) -> typing.Any:
 #define __forceinline__ inline
 #define __noinline__ __attribute__((noinline))
 #include "df_derivatives.cuh"
-using namespace vibeqc::scf::generated_df_derivatives;
+using namespace generativeqc::scf::generated_df_derivatives;
 extern "C" void derivative(unsigned count,const double* exponents,const double* centers,const unsigned* angular,double* out) {
   Vec3 A{centers[0],centers[1],centers[2]},B{centers[3],centers[4],centers[5]},C{centers[6],centers[7],centers[8]};
   Angular a{angular[0],angular[1],angular[2]},b{angular[3],angular[4],angular[5]},c{angular[6],angular[7],angular[8]};

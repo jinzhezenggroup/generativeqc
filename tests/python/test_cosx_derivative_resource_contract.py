@@ -64,7 +64,7 @@ def test_molecular_cosx_diagnostic_accounts_for_all_device_buffers(
 #include <utility>
 #include "dft/grid.hpp"
 using GridOwner = std::remove_cvref_t<decltype(
-    std::declval<const vibeqc::dft::MolecularGrid&>().owners())>::value_type;
+    std::declval<const generativeqc::dft::MolecularGrid&>().owners())>::value_type;
 struct System { std::size_t natom=3, nprimitive=8, nao=5; };
 struct AoBasis : System { explicit AoBasis(const System& s) : System(s) {} };
 struct MolecularGrid {

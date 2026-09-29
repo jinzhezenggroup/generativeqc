@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tools.vibeqc_numerics import scf_effort_geomopt_benchmark as bench
+from tools.generativeqc_numerics import scf_effort_geomopt_benchmark as bench
 
 
 @pytest.mark.parametrize("failed_index", (1, 2))

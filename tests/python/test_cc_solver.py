@@ -7,14 +7,14 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.solver_region import SolverRegion
+from generativeqc_compiler.common.solver_region import SolverRegion
 
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture, source_arguments
-from tools.vibeqc_cc import PreparedCCSD, SolverOptions, solve
-from tools.vibeqc_posthf import MOBlock
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.providers import BlockResult, ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_cc import PreparedCCSD, SolverOptions, solve
+from tools.generativeqc_posthf import MOBlock
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.providers import BlockResult, ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 class FixtureProvider(ConventionalProvider):
@@ -90,7 +90,7 @@ def test_preflight_failure_happens_before_integrals_and_iteration_failures_repla
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
     s, p, _meta, a = fixture_problem()
-    from tools.vibeqc_cc import evaluate
+    from tools.generativeqc_cc import evaluate
 
     with pytest.raises(ValueError):
         evaluate(s, p, a["t1"] * np.nan, a["t2"])

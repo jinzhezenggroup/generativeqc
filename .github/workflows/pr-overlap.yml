@@ -48,7 +48,7 @@ jobs:
           mapfile -t open_prs < <(grep -vx -- "$PR_NUMBER" "$open_numbers" || true)
           rm -f "$open_numbers"
 
-          hotspot_re='^(docs/cuda_ownership\.json|cmake/VibeQCGeneratedSources\.cmake|include/vibeqc/vibeqc\.h|python/vibeqc/_native\.py|python/vibeqc/calculator\.py|python/vibeqc_compiler/tensor/types\.py|python/vibeqc_compiler/method/stationary_cuda\.py|src/methods/registry\.cpp|src/methods/dft_method\.cpp|src/dft/cuda_ks\.cpp|pyproject\.toml)$'
+          hotspot_re='^(docs/cuda_ownership\.json|cmake/GenerativeQCGeneratedSources\.cmake|include/generativeqc/generativeqc\.h|python/generativeqc/_native\.py|python/generativeqc/calculator\.py|python/generativeqc_compiler/tensor/types\.py|python/generativeqc_compiler/method/stationary_cuda\.py|src/methods/registry\.cpp|src/methods/dft_method\.cpp|src/dft/cuda_ks\.cpp|pyproject\.toml)$'
 
           {
             echo "## PR overlap report"

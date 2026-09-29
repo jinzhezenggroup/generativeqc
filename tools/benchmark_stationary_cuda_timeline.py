@@ -21,20 +21,20 @@ from time import perf_counter
 from types import MappingProxyType
 
 import numpy as np
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cuda import (
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cuda import (
     PreparedStationaryCudaExecution,
     complete_rks_cuda_gradient_diagnostic,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.dft import NativeAO
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import atomic_json
+from generativeqc_compiler.dft import NativeAO
 
 from benchmarks.dft_force_components import normalize_force_work
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 
 SYSTEMS = {
     "h2": [
@@ -142,7 +142,7 @@ def _timeline_record(
     if not math.isfinite(endpoint) or not math.isfinite(reconciled):
         raise ValueError("stationary timeline duration sum is not finite")
     return {
-        "schema": "vibeqc.stationary-cuda-force-timeline.v1",
+        "schema": "generativeqc.stationary-cuda-force-timeline.v1",
         "scenario": scenario,
         "exclusive_wall_seconds": phases,
         "reconciled_seconds": reconciled,
@@ -420,7 +420,7 @@ def main() -> None:
     parser.add_argument("--same-state-repeats", type=int, default=3)
     parser.add_argument(
         "--target",
-        default=os.environ.get("VIBEQC_STATIONARY_CUDA_TARGET", "sm_120"),
+        default=os.environ.get("GENERATIVEQC_STATIONARY_CUDA_TARGET", "sm_120"),
     )
     args = parser.parse_args()
     methods = tuple(x for x in args.methods.split(",") if x)
@@ -432,17 +432,17 @@ def main() -> None:
         parser.error("--same-state-repeats must be in [1,20]")
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("issue #662 GPU benchmark requires a Slurm allocation")
-    library_text = os.environ.get("VIBEQC_LIBRARY")
+    library_text = os.environ.get("GENERATIVEQC_LIBRARY")
     if not library_text:
-        parser.error("set VIBEQC_LIBRARY to the qualified native CUDA library")
+        parser.error("set GENERATIVEQC_LIBRARY to the qualified native CUDA library")
     library = Path(library_text).resolve()
     if not library.is_file():
-        parser.error(f"VIBEQC_LIBRARY is not a file: {library}")
+        parser.error(f"GENERATIVEQC_LIBRARY is not a file: {library}")
     target = cuda_target_info(args.target)
 
     records: list[dict[str, typing.Any]] = []
     payload = {
-        "schema": "vibeqc.stationary-cuda-force-benchmark.v1",
+        "schema": "generativeqc.stationary-cuda-force-benchmark.v1",
         "issue": 662,
         "completed": False,
         "records": records,

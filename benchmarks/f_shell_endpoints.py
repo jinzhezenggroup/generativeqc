@@ -32,7 +32,7 @@ CASES = (
 
 def release_library_identity() -> dict:
     """Reject fast/unknown builds and bind endpoint results to the measured library."""
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     directory = library.parent
     settings = {}
     for line in (directory / "CMakeCache.txt").read_text().splitlines():
@@ -40,13 +40,16 @@ def release_library_identity() -> dict:
             name, value = line.split("=", 1)
             settings[name.split(":", 1)[0]] = value
     if (
-        settings.get("VIBEQC_CUDA_FAST_COMPILE") != "OFF"
+        settings.get("GENERATIVEQC_CUDA_FAST_COMPILE") != "OFF"
         or settings.get("CMAKE_BUILD_TYPE") != "Release"
     ):
         raise ValueError(
             "endpoint acceptance requires a verified Release build with fast compilation OFF"
         )
-    if settings.get("VIBEQC_CUDA_COMPILE_ARCHITECTURES") not in ("120", "120-real"):
+    if settings.get("GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES") not in (
+        "120",
+        "120-real",
+    ):
         raise ValueError(
             "endpoint acceptance requires the actual sm_120 release target"
         )
@@ -74,7 +77,7 @@ def release_library_identity() -> dict:
         "settings": {
             k: v
             for k, v in settings.items()
-            if k.startswith("VIBEQC_")
+            if k.startswith("GENERATIVEQC_")
             or k in ("CMAKE_BUILD_TYPE", "CMAKE_CUDA_COMPILER")
         },
     }
@@ -84,8 +87,8 @@ def inspected_basis(
     case: typing.Any, calculator: typing.Any, atoms: typing.Any
 ) -> tuple[dict, object]:
     """Inspect the loaded native and oracle shells, including contraction sizes."""
+    from generativeqc import Atom
     from pyscf import gto
-    from vibeqc import Atom
 
     shells = calculator._shells_for_atoms(tuple(Atom.from_value(a) for a in atoms))
     mol = gto.M(
@@ -104,7 +107,9 @@ def inspected_basis(
         for _ in range(mol.bas_nctr(i))
     ]
     if sorted(native) != sorted(reference):
-        raise ValueError("loaded VibeQC/PySCF shell and contraction catalogs differ")
+        raise ValueError(
+            "loaded GenerativeQC/PySCF shell and contraction catalogs differ"
+        )
     f_count = sum(angular == 3 for _, angular, _ in native)
     if f_count == 0:
         raise ValueError("endpoint does not contain loaded l=3 shells")
@@ -157,19 +162,19 @@ def run_endpoint(
     from _support import cuda_accelerator_metadata, environment_metadata
     from aot_shell_batch_gate import _execute_once, _fixed_dm0_measurement
     from compare_gpu4pyscf_batch import scaled_geometries
+    from generativeqc import Calculator
     from shell_class_histogram import (
         ShellWork,
         summarize_active_shell_classes,
         summarize_shell_classes,
     )
-    from vibeqc import Calculator
 
     case = benchmark_cases()[name]
     library_identity = release_library_identity()
     systems = scaled_geometries(case.atoms, batch_size)
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=100,
@@ -180,7 +185,7 @@ def run_endpoint(
     basis, _ = inspected_basis(case, calculator, systems[0])
     manifest = json.loads(
         (
-            ROOT / "python/vibeqc_compiler/integral/production_shell_classes.json"
+            ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
         ).read_text()
     )
     kernels = manifest["architectures"]["sm_120"]["kernels"]
@@ -272,7 +277,7 @@ def run_endpoint(
         raise ValueError("loaded f shells produced no measured active primitive work")
     oracle_passed = all(e["energy"] <= 1e-9 and e["force"] <= 1e-7 for e in errors)
     return {
-        "schema": "vibeqc.f_shell_endpoint",
+        "schema": "generativeqc.f_shell_endpoint",
         "schema_version": 1,
         "case": name,
         "batch_size": batch_size,
@@ -342,7 +347,7 @@ def main() -> int:
         # Retain a failed endpoint instead of leaving a missing file that could
         # later be mistaken for an unrequested or successful batch-size gate.
         failure = {
-            "schema": "vibeqc.f_shell_endpoint",
+            "schema": "generativeqc.f_shell_endpoint",
             "schema_version": 1,
             "case": args.case,
             "batch_size": args.batch,

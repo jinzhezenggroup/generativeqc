@@ -4,8 +4,8 @@ import typing
 from fractions import Fraction
 
 import pytest
-from vibeqc.extensions import API_VERSION, method, tensor, xc
-from vibeqc_compiler.method import resolve_method
+from generativeqc.extensions import API_VERSION, method, tensor, xc
+from generativeqc_compiler.method import resolve_method
 
 
 def test_custom_hybrid_and_builtin_share_canonical_method_ir() -> None:

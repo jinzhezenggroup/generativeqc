@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, _native, method_capabilities
+from generativeqc import Calculator, _native, method_capabilities
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCES = {
@@ -46,7 +46,10 @@ def _calculator(device: str = "cpu", **kwargs: typing.Any) -> Calculator:
 
 @pytest.fixture(params=("cpu", "cuda"))
 def device(request: pytest.FixtureRequest) -> str:
-    if request.param == "cuda" and os.environ.get("VIBEQC_RCCSD_CUDA_TEST") != "1":
+    if (
+        request.param == "cuda"
+        and os.environ.get("GENERATIVEQC_RCCSD_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires explicitly allocated RTX/CUDA native library")
     return request.param
 
@@ -81,6 +84,20 @@ def test_public_native_rccsd_matches_pinned_pyscf_endpoint(
     assert diag.equation_hash != diag.ccsd_replay_equation_hash
     assert 0 < diag.minimum_absolute_denominator
     assert diag.numeric_capacity_bytes <= 256 << 20
+    perf = result.cc_performance
+    assert perf is not None
+    assert perf.reference_seconds >= 0.0
+    assert perf.problem_seconds >= perf.provider_seconds >= 0.0
+    assert perf.provider_seconds >= perf.source_seconds >= 0.0
+    assert perf.solver_seconds >= 0.0
+    assert perf.source_scans > 0
+    assert perf.source_reads > 0
+    assert perf.source_values > 0
+    assert perf.transform_fmas > 0
+    assert perf.transform_stages > 0
+    assert perf.mo_blocks == 7
+    assert perf.iteration_graph_calls >= diag.ccsd_iterations
+    assert perf.replay_graph_calls == 1
     if device == "cuda":
         assert diag.correlation_owned_device_bytes > 0
         assert diag.ccsd_setup_h2d_bytes > 0
@@ -201,7 +218,7 @@ def test_public_rccsd_rejects_ragged_prepared_batch() -> None:
 def _prepare_c_owner(
     calc: Calculator, atoms: typing.Any
 ) -> tuple[ct.c_void_p, ct.c_void_p]:
-    from vibeqc import Atom
+    from generativeqc import Atom
 
     atoms = tuple(Atom(int(z), tuple(xyz)) for z, xyz in atoms)
     lib = calc._library
@@ -210,21 +227,21 @@ def _prepare_c_owner(
     calculation = ct.c_void_p()
     descriptor = calc._context_descriptor()
     _native.check(
-        lib, lib.vibeqc_context_create(ct.byref(descriptor), ct.byref(context))
+        lib, lib.generativeqc_context_create(ct.byref(descriptor), ct.byref(context))
     )
     try:
         system = calc._create_native_system(context, atoms, 0, 1)
         method = calc._method_descriptor()
         _native.check(
             lib,
-            lib.vibeqc_calculation_prepare(
+            lib.generativeqc_calculation_prepare(
                 context, system, ct.byref(method), ct.byref(calculation)
             ),
             context=context,
         )
     finally:
         if system:
-            lib.vibeqc_system_destroy(system)
+            lib.generativeqc_system_destroy(system)
     return context, calculation
 
 
@@ -236,7 +253,7 @@ def _execute_c_owner(
     out.abi_version = _native.ABI_VERSION
     _native.check(
         calc._library,
-        calc._library.vibeqc_calculation_execute(calculation, ct.byref(out)),
+        calc._library.generativeqc_calculation_execute(calculation, ct.byref(out)),
         context=context,
     )
     diag = _native.CorrelationDiagnostic()
@@ -244,7 +261,7 @@ def _execute_c_owner(
     diag.abi_version = _native.ABI_VERSION
     _native.check(
         calc._library,
-        calc._library.vibeqc_calculation_get_correlation_diagnostic(
+        calc._library.generativeqc_calculation_get_correlation_diagnostic(
             calculation, ct.byref(diag)
         ),
         context=context,
@@ -260,7 +277,9 @@ def test_c_api_rccsd_nonconvergence_retains_last_finite_diagnostic() -> None:
         out = _native.ResultDescriptor()
         out.struct_size = ct.sizeof(out)
         out.abi_version = _native.ABI_VERSION
-        status = calc._library.vibeqc_calculation_execute(calculation, ct.byref(out))
+        status = calc._library.generativeqc_calculation_execute(
+            calculation, ct.byref(out)
+        )
         assert status == _native.STATUS_NOT_CONVERGED
         assert not out.converged and np.isfinite(out.energy)
 
@@ -269,7 +288,7 @@ def test_c_api_rccsd_nonconvergence_retains_last_finite_diagnostic() -> None:
         diag.abi_version = _native.ABI_VERSION
         _native.check(
             calc._library,
-            calc._library.vibeqc_calculation_get_correlation_diagnostic(
+            calc._library.generativeqc_calculation_get_correlation_diagnostic(
                 calculation, ct.byref(diag)
             ),
             context=context,
@@ -279,8 +298,8 @@ def test_c_api_rccsd_nonconvergence_retains_last_finite_diagnostic() -> None:
         assert diag.ccsd_singles_residual_max > 0
         assert diag.ccsd_doubles_residual_max > 0
     finally:
-        calc._library.vibeqc_calculation_destroy(calculation)
-        calc._library.vibeqc_context_destroy(context)
+        calc._library.generativeqc_calculation_destroy(calculation)
+        calc._library.generativeqc_context_destroy(context)
 
 
 def test_c_api_rccsd_owner_outlives_input_system_repeats_and_isolates_two_contexts() -> (
@@ -307,6 +326,6 @@ def test_c_api_rccsd_owner_outlives_input_system_repeats_and_isolates_two_contex
     finally:
         for context, calculation in owners:
             if calculation:
-                calc._library.vibeqc_calculation_destroy(calculation)
+                calc._library.generativeqc_calculation_destroy(calculation)
             if context:
-                calc._library.vibeqc_context_destroy(context)
+                calc._library.generativeqc_context_destroy(context)

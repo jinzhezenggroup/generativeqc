@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 void launch_build_fock_direct_packed_kernel(
@@ -25,4 +25,4 @@ void launch_build_uhf_fock_direct_packed_kernel(
     const std::int32_t* ao_pair_second, std::size_t pair_count, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* fock);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

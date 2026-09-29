@@ -18,18 +18,19 @@ def staging_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     body = source[
         source.index("Vv10CudaDeviceLayout vv10_cuda_device_layout(") :
-    ].rsplit("}  // namespace vibeqc::dft::nlc", 1)[0]
+    ].rsplit("}  // namespace generativeqc::dft::nlc", 1)[0]
     body = re.sub(r"<<<.*?>>>", "", body, flags=re.DOTALL)
     folder = tmp_path_factory.mktemp("nonlocal-host-staging")
     cpp, binary = folder / "probe.cpp", folder / "probe"
     cpp.write_text(PREFIX + body + SUFFIX)
-    subprocess.run(
+    result = subprocess.run(
         [compiler, "-std=c++20", "-O0", str(cpp), "-o", str(binary)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=60,
     )
+    assert result.returncode == 0, result.stderr
     return binary
 
 
@@ -73,7 +74,10 @@ def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
         )[0]
     )
     assert "rho < threshold" in kernel
-    assert "effective_weights[i] = inactive ? 0.0 : weight" in kernel
+    assert (
+        "effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight)"
+        in kernel
+    )
     assert "effective_density[i] = inactive ? 1.0 : rho" in kernel
     assert "inactive ? 0.0 : gx" in kernel
     assert "if (!valid) atomicExch(failed, 1)" in kernel
@@ -146,7 +150,7 @@ template<class T> struct OwnedCudaBuffer {
  ~OwnedCudaBuffer() {pending=false;std::free(data);}
 };
 }
-namespace vibeqc::dft::nlc {
+namespace generativeqc::dft::nlc {
 enum class Vv10Variant {vv10=1,rvv10=2};
 struct Vv10Parameters {Vv10Variant variant=Vv10Variant::vv10;double b=6.0,c=0.01,coefficient=1.0;};
 struct Vv10CudaDeviceLayout {
@@ -158,6 +162,10 @@ Vv10CudaDeviceLayout vv10_cuda_device_layout(
 unsigned launch_blocks(std::size_t,unsigned) {return 1;}
 template<Vv10Variant, bool, class... T> void local_scales_kernel(T&&...) {}
 template<Vv10Variant, bool, bool, class... T> void launch_pair_rows(T&&...) {}
+// Numerical kernels are inert here: this probe isolates wrapper ownership.
+template<class... T> void count_active_partner_blocks_kernel(T&&...) {}
+template<class... T> void prefix_active_partner_blocks_kernel(T&&...) {}
+template<class... T> void scatter_active_partners_ordered_kernel(T&&...) {}
 template<class... T> void reduce_energy_ordered_kernel(T&&...) {}
 """
 
@@ -168,7 +176,7 @@ int main(int argc,char** argv) {
  double points[3]{},weight=1.0,density=1.0,gradient[3]{},energy=0.0;
  double vrho=0.0,vsigma=0.0,point[3]{},weight_derivative=0.0;
  bool threw=false;
- try {vibeqc::dft::nlc::execute_vv10_cuda(points,&weight,&density,gradient,1,1,{},0,
+ try {generativeqc::dft::nlc::execute_vv10_cuda(points,&weight,&density,gradient,1,1,{},0,
   energy,&vrho,&vsigma,point,&weight_derivative);}
  catch(const std::exception&) {threw=true;}
  if(threw!=(fail_download!=0)) {std::cerr<<"unexpected status";return 2;}

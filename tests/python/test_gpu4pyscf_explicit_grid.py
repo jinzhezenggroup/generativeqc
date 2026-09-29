@@ -10,7 +10,7 @@ import pytest
 from benchmarks._gpu4pyscf_grid import preserve_reference_grid_order
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_GPU4PYSCF_GRID_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GPU4PYSCF_GRID_TEST") != "1",
     reason="requires a finite Slurm GPU allocation and GPU4PySCF",
 )
 

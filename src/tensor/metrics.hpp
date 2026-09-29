@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-namespace vibeqc_tensor {
+namespace generativeqc_tensor {
 /** Shared plain-data diagnostics used by the native and generated tensor ABIs. */
 struct Metrics {
   uint64_t owned_device_bytes = 0;
@@ -14,4 +14,4 @@ struct Metrics {
   double library_ms = 0;
   double kernel_ms = 0;
 };
-}  // namespace vibeqc_tensor
+}  // namespace generativeqc_tensor

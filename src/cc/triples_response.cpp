@@ -10,7 +10,7 @@
 
 #include "generated_rccsd_cpu.hpp"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 namespace {
 
 std::size_t checked_add(std::size_t a, std::size_t b) { return generated::checked_add(a, b); }
@@ -170,4 +170,4 @@ TriplesResponseResult triples_response_cpu(const Problem& p, const SolverResult&
   return result;
 }
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

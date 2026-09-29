@@ -8,7 +8,7 @@
 #include "generated_scf_array_native.hpp"
 #include "runtime/resource_usage.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 bool valid_identity(DensityFactorIdentity identity) {
   return identity.basis && identity.reference && identity.orbital_generation &&
@@ -86,4 +86,4 @@ std::optional<std::vector<double>> occupied_density_fitting_exchange(
   return exchange;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

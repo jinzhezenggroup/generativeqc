@@ -6,9 +6,9 @@ from itertools import permutations
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.layout import SymmetricPairLayout
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.layout import SymmetricPairLayout
+from generativeqc_compiler.tensor import (
     DenseLayout,
     Index,
     IndexSpace,
@@ -26,10 +26,10 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_gemm import gemm_contract
-from vibeqc_compiler.tensor.cuda_layout import MAX_LAYOUT_TRIALS, conversion_bytes
-from vibeqc_compiler.tensor.cuda_plan import ALIGNMENT, TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
+from generativeqc_compiler.tensor.cuda_layout import MAX_LAYOUT_TRIALS, conversion_bytes
+from generativeqc_compiler.tensor.cuda_plan import ALIGNMENT, TensorSchedule, plan_cuda
 
 TARGET = cuda_target_info("sm_80")
 
@@ -474,7 +474,7 @@ def test_grouped_mnk_labels_preserve_physical_order() -> None:
 
 
 def test_layout_identity_can_fail_closed_in_shared_specialization_guards() -> None:
-    from vibeqc_compiler.common.specialization import GuardPredicate
+    from generativeqc_compiler.common.specialization import GuardPredicate
 
     program, _, _ = producer_case()
     baseline = plan_cuda(program, TARGET)
@@ -516,6 +516,6 @@ def test_dense_layout_equivalence_rejects_foreign_types(
     other: typing.Any,
 ) -> None:
     """Type annotations must not remove the existing runtime comparison guard."""
-    from vibeqc_compiler.common.layout import DenseLayout
+    from generativeqc_compiler.common.layout import DenseLayout
 
     assert DenseLayout((2, 3)).equivalent(other) is False

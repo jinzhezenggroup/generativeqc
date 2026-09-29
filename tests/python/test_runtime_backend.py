@@ -4,8 +4,8 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.backend import TargetInfo, TargetScheduleShape
-from vibeqc_compiler.integral.runtime_backend import (
+from generativeqc_compiler.common.backend import TargetInfo, TargetScheduleShape
+from generativeqc_compiler.integral.runtime_backend import (
     CompiledArtifactIdentity,
     ExecutionShape,
     LibraryRequest,
@@ -123,8 +123,8 @@ def test_atomic_local_executable_cache_rejects_corruption_and_wrong_identity(
 ) -> None:
     import json
 
-    from vibeqc import profiles
-    from vibeqc_compiler.integral.artifact_cache import LocalArtifactCache
+    from generativeqc import profiles
+    from generativeqc_compiler.integral.artifact_cache import LocalArtifactCache
 
     cache = LocalArtifactCache(tmp_path / "private")
     identity = CompiledArtifactIdentity(
@@ -161,7 +161,11 @@ def test_atomic_local_executable_cache_rejects_corruption_and_wrong_identity(
     path.write_text(json.dumps(payload))
     with pytest.raises(ValueError, match="corrupt"):
         cache.load(identity)
-    for malformed in ([], {}, {"schema": "vibeqc.backend_artifact", "version": 1}):
+    for malformed in (
+        [],
+        {},
+        {"schema": "generativeqc.backend_artifact", "version": 1},
+    ):
         path.write_text(json.dumps(malformed))
         with pytest.raises(ValueError):
             cache.load(identity)
@@ -170,7 +174,7 @@ def test_atomic_local_executable_cache_rejects_corruption_and_wrong_identity(
 def test_cache_rejects_shared_write_directories_and_symlink_records(
     tmp_path: typing.Any,
 ) -> None:
-    from vibeqc_compiler.integral.artifact_cache import LocalArtifactCache
+    from generativeqc_compiler.integral.artifact_cache import LocalArtifactCache
 
     shared = tmp_path / "shared"
     shared.mkdir(mode=0o777)

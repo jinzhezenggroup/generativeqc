@@ -4,8 +4,8 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from vibeqc_compiler.integral.cuda_schedule import ScheduleIR, ScheduleKind
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.cuda_schedule import ScheduleIR, ScheduleKind
+from generativeqc_compiler.integral.production import (
     _streaming_fock_source,
     emit_multi_registry_source,
     emit_registry_header,
@@ -18,7 +18,7 @@ def test_fock_claim_metadata_follows_the_selected_value_schedule() -> None:
     """Both registries expose packed width, including separate Fock policies."""
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
-        root / "python/vibeqc_compiler/integral/production_shell_classes.json",
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json",
         "sm_120",
     )
     packed = next(x for x in profile.selections if x.spec.name == "psss")
@@ -51,7 +51,9 @@ def test_profiled_fock_materialization_reaches_generated_registry(
     """A measured profile may select streaming without a handwritten class switch."""
 
     root = Path(__file__).resolve().parents[2]
-    source = root / "python/vibeqc_compiler/integral/production_shell_classes.json"
+    source = (
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
     payload = json.loads(source.read_text())
     kernels = payload["architectures"]["sm_120"]["kernels"]
     psss_row = next(row for row in kernels if row["shell_class"] == "psss")
@@ -104,7 +106,7 @@ def test_streaming_fock_emits_exchange_only_consumer_identity() -> None:
 
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
-        root / "python/vibeqc_compiler/integral/production_shell_classes.json",
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json",
         "sm_120",
     )
     selection = next(

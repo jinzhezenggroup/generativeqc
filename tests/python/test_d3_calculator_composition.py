@@ -5,9 +5,9 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions, evaluate_d3_correction
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.method import DispersionCorrectionPrimitive, resolve_method
+from generativeqc import Calculator, GridSpec, KsOptions, evaluate_d3_correction
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.method import DispersionCorrectionPrimitive, resolve_method
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 WATER = [
@@ -19,7 +19,7 @@ GRID = GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
 
 
 def _numbers_and_coordinates(atoms: typing.Any) -> tuple[list[int], np.ndarray]:
-    from vibeqc.calculator import Atom
+    from generativeqc.calculator import Atom
 
     normalized = tuple(Atom.from_value(atom) for atom in atoms)
     return (

@@ -10,7 +10,7 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.df_rys import (
+from generativeqc_compiler.integral.df_rys import (
     emit_df_rys_cuda,
     rys_roots,
 )
@@ -162,7 +162,7 @@ __global__ void evaluate(const double* arguments, size_t count, double* output) 
   const auto index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (index >= count) return;
   double nodes[4]{}, weights[4]{};
-  vibeqc::scf::generated_df_rys::roots<N>(arguments[index], nodes, weights);
+  generativeqc::scf::generated_df_rys::roots<N>(arguments[index], nodes, weights);
   for (unsigned root = 0; root < 4; ++root) {
     output[8 * index + root] = nodes[root];
     output[8 * index + 4 + root] = weights[root];
@@ -231,7 +231,7 @@ extern "C" int probe(unsigned roots, const double* input, size_t count, double* 
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 @pytest.mark.parametrize("nroots", (1, 2, 3, 4))
@@ -258,10 +258,10 @@ def emitted_evaluator(tmp_path_factory: typing.Any) -> typing.Any:
         + emit_df_rys_cuda()
         + r"""
 extern "C" void probe(unsigned n,double t,double* nodes,double* weights) {
-  if(n==1) vibeqc::scf::generated_df_rys::roots<1>(t,nodes,weights);
-  else if(n==2) vibeqc::scf::generated_df_rys::roots<2>(t,nodes,weights);
-  else if(n==3) vibeqc::scf::generated_df_rys::roots<3>(t,nodes,weights);
-  else vibeqc::scf::generated_df_rys::roots<4>(t,nodes,weights);
+  if(n==1) generativeqc::scf::generated_df_rys::roots<1>(t,nodes,weights);
+  else if(n==2) generativeqc::scf::generated_df_rys::roots<2>(t,nodes,weights);
+  else if(n==3) generativeqc::scf::generated_df_rys::roots<3>(t,nodes,weights);
+  else generativeqc::scf::generated_df_rys::roots<4>(t,nodes,weights);
 }
 """
     )

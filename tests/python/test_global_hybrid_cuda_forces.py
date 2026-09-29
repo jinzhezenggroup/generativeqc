@@ -1,6 +1,6 @@
 """Complete public CUDA hybrid forces against independent moving-grid PySCF.
 
-Run with VIBEQC_HYBRID_FORCE_CUDA_TEST=1 in a finite Slurm GPU allocation.
+Run with GENERATIVEQC_HYBRID_FORCE_CUDA_TEST=1 in a finite Slurm GPU allocation.
 Each case checks the converged endpoint, both reconverged finite-difference
 steps, source accounting, and reuse of the prepared force owner.
 """
@@ -14,13 +14,13 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_HYBRID_FORCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_HYBRID_FORCE_CUDA_TEST") != "1",
     reason="explicit Slurm CUDA hybrid-force gate",
 )
 
 
 def _record_evidence(name: str, payload: dict) -> None:
-    directory = os.environ.get("VIBEQC_HYBRID_FORCE_EVIDENCE")
+    directory = os.environ.get("GENERATIVEQC_HYBRID_FORCE_EVIDENCE")
     if directory:
         path = Path(directory)
         path.mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,7 @@ def pinned_reference() -> None:
 def test_global_hybrid_force_does_not_inherit_unqualified_execution(
     options: dict,
 ) -> None:
-    from vibeqc import Calculator, GridSpec, KsOptions
+    from generativeqc import Calculator, GridSpec, KsOptions
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     options = dict(options)
@@ -68,12 +68,12 @@ def test_global_hybrid_force_does_not_inherit_unqualified_execution(
 @pytest.mark.parametrize("name", ("PBE0", "B3LYP", "M06-2X", "MN15", "PBE0-alias"))
 @pytest.mark.parametrize("spin", ("rks", "uks"))
 def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
+    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.method import MethodSpec, resolve_method
     from test_dft_complete_cpu import independent_global_hybrid_gradient
     from test_dft_complete_cuda import no_cpu_derivatives
-    from vibeqc import Calculator, GridSpec, KsOptions
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
-    from vibeqc_compiler.method import MethodSpec, resolve_method
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     atoms = [
@@ -224,8 +224,8 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
 @pytest.mark.parametrize("spin", ("rks", "uks"))
 def test_force_coverage_does_not_bypass_native_composition_admission(spin: str) -> None:
     """The generic pullback does not promote unqualified CUDA SCF fractions."""
-    from vibeqc import Calculator, GridSpec, KsOptions
-    from vibeqc_compiler.method import MethodSpec, resolve_method
+    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc_compiler.method import MethodSpec, resolve_method
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     composition = resolve_method(
@@ -253,11 +253,11 @@ def test_force_coverage_does_not_bypass_native_composition_admission(spin: str) 
 
 def test_public_cuda_hybrid_p_shell_oracle() -> None:
     """Exercise non-s AO derivatives and Coulomb/exchange density permutations."""
+    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS, independent_global_hybrid_gradient
     from test_dft_complete_cuda import no_cpu_derivatives
-    from vibeqc import Calculator, GridSpec, KsOptions
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     calc = Calculator(

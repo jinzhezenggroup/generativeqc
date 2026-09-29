@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace
 from benchmarks.df_host_workloads import validate_final_eigen_counts
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -38,7 +38,7 @@ def test_setup_provider_matches_reference_across_replans(
     """
     assert os.environ.get("SLURM_JOB_ID")
     # Provider substitution must hold final work fixed after candidate reuse.
-    monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
     atoms = [("O", (0, 0, 0)), ("H", (0, 0, 1.8))]
     if method == "rhf":
         atoms.append(("H", (1.7, 0, -0.6)))
@@ -73,16 +73,16 @@ def test_setup_provider_matches_reference_across_replans(
             for reference, owner in ((True, oracle), (False, device)):
                 path = tmp_path / f"{step}-{reference}.jsonl"
                 monkeypatch.setenv(
-                    "VIBEQC_DF_REFERENCE_SETUP_EIGEN", "1" if reference else "0"
+                    "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN", "1" if reference else "0"
                 )
-                monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+                monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
                 try:
                     result = owner.execute(
                         positions, strict=True, properties=properties
                     )
                 finally:
-                    monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
-                    monkeypatch.delenv("VIBEQC_DF_REFERENCE_SETUP_EIGEN")
+                    monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
+                    monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN")
                 components = aggregate_host(read_host_trace(path))
                 validate_final_eigen_counts(
                     components,
@@ -145,7 +145,7 @@ def test_setup_empty_beta_channel(
     """The empty UHF spin stays empty while its shared cold frame is replaced."""
     assert os.environ.get("SLURM_JOB_ID")
     # Provider substitution must hold final work fixed after candidate reuse.
-    monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
     atoms = [("H", (0, 0, 0))]
     calc = Calculator(
         method="uhf", basis="def2-svp", device="cuda", density_fitting="cuda"
@@ -153,13 +153,15 @@ def test_setup_empty_beta_channel(
     results = []
     for reference in (True, False):
         path = tmp_path / f"empty-beta-{reference}.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_REFERENCE_SETUP_EIGEN", "1" if reference else "0")
-        monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN", "1" if reference else "0"
+        )
+        monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
         result = calc.singlepoint(
             atoms, multiplicity=2, properties=("energy", "forces")
         )
-        monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
-        monkeypatch.delenv("VIBEQC_DF_REFERENCE_SETUP_EIGEN")
+        monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
+        monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN")
         components = aggregate_host(read_host_trace(path))
         for reason in ("overlap", "core_guess"):
             assert components["eigensolves_by_reason"].get(reason, {}).get(

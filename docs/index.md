@@ -1,11 +1,11 @@
-# VibeQC documentation
+# GenerativeQC documentation
 
-VibeQC documentation is organized by **reader and task**, not by the internal source tree.
+GenerativeQC documentation is organized by **reader and task**, not by the internal source tree.
 
 ## Choose your path
 
 - **[Learn quantum chemistry](learn/index.md)** — start here if charge, spin, basis sets, SCF, DFT, gradients, or Hessians are unfamiliar.
-- **[User Guide](user/index.md)** — install VibeQC and run calculations.
+- **[User Guide](user/index.md)** — install GenerativeQC and run calculations.
 - **[Reference](reference/index.md)** — look up method identities, capabilities, units, and other authoritative facts.
 - **[Developer Guide](developer/index.md)** — understand or extend the implementation.
 - **[Maintainer Guide](maintainer/index.md)** — validation, performance qualification, evidence, ownership, generated artifacts, and roadmap work.

@@ -6,14 +6,14 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import canonical_hash
 from test_d3_generated_ragged import _PBE, make_spec
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import canonical_hash
 
 
 @pytest.fixture
 def runtime_case(monkeypatch: pytest.MonkeyPatch) -> tuple[typing.Any, ...]:
-    import vibeqc_compiler.geometry.d3_cuda as runtime
+    import generativeqc_compiler.geometry.d3_cuda as runtime
 
     case = _PBE[0]
     spec = make_spec(**case["parameters"])

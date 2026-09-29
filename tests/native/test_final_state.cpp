@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 #include "scf/solver/final_state.hpp"
-#ifdef VIBEQC_TEST_DEVICE_FINAL_STATE
+#ifdef GENERATIVEQC_TEST_DEVICE_FINAL_STATE
 #include <cuda_runtime_api.h>
 
 #include <memory>
@@ -14,8 +14,8 @@
 #endif
 
 namespace {
-using namespace vibeqc::scf;
-using namespace vibeqc::scf::solver;
+using namespace generativeqc::scf;
+using namespace generativeqc::scf::solver;
 using reference::Matrix;
 const FinalStateOperations* backend = nullptr;
 void require(bool value, const char* detail) {
@@ -423,7 +423,7 @@ void provider_failure_and_nonlinear_exhaustion() {
 
 int main() {
   try {
-#ifdef VIBEQC_TEST_DEVICE_FINAL_STATE
+#ifdef GENERATIVEQC_TEST_DEVICE_FINAL_STATE
     int devices = 0;
     if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
     CudaDensityFittingJkPlan* raw{};
@@ -431,7 +431,7 @@ int main() {
     std::string detail;
     const auto status = create_cuda_density_fitting_jk_plan_tiled(
         0, 1, 2, 1, {1}, Matrix(4, 0), 1e-10, 1, 4, &raw, metric, detail);
-    require(status == VIBEQC_STATUS_SUCCESS, detail.c_str());
+    require(status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
     std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
         raw, destroy_cuda_density_fitting_jk_plan);
     const auto operations = cuda_density_fitting_final_state_operations(raw);

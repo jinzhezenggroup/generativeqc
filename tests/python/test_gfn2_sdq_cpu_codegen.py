@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.gfn2_sdq_cpu import (
+from generativeqc_compiler.integral.gfn2_sdq_cpu import (
     emit_gfn2_sdq_cpu,
     emit_gfn2_sdq_cuda,
     gfn2_sdq_cpu_inventory,
@@ -14,7 +14,7 @@ from vibeqc_compiler.integral.gfn2_sdq_cpu import (
 
 def test_gfn2_sdq_cpu_inventory_is_bounded_to_public_spd() -> None:
     inventory = gfn2_sdq_cpu_inventory()
-    assert inventory["schema"] == "vibeqc.gfn2_sdq_cpu"
+    assert inventory["schema"] == "generativeqc.gfn2_sdq_cpu"
     assert inventory["version"] == 1
     assert inventory["precision"] == "fp64"
     assert inventory["public_maximum_angular"] == 2
@@ -63,7 +63,7 @@ def test_generated_dispatch_rejects_aliasing_and_invalid_inputs(tmp_path: Path) 
 #include <limits>
 #include "sdq.hpp"
 int main() {
-  using namespace vibeqc::xtb::generated;
+  using namespace generativeqc::xtb::generated;
   using Fn=bool(*)(unsigned,unsigned,unsigned,unsigned,double,double,const double*,Gfn2SdqPrimitive&);
   const Fn functions[]{evaluate_gfn2_overlap_primitive,evaluate_gfn2_overlap_gradient_primitive,evaluate_gfn2_sdq_values_primitive,evaluate_gfn2_sdq_primitive};
   double r[]{.1,.2,.3};Gfn2SdqPrimitive out{};out.values[0]=123.;

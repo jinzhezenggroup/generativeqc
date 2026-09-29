@@ -19,7 +19,7 @@
 #include "scf/density_fitting.hpp"
 
 namespace {
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 void require(bool value, const std::string& detail) {
   if (!value) throw std::runtime_error(detail);
 }
@@ -29,8 +29,8 @@ void check(cudaError_t error) { require(error == cudaSuccess, cudaGetErrorString
  * scratch addresses can be used by a device consumer.
  */
 void malformed_automatic_token() {
-  setenv("VIBEQC_DF_RESPONSE_STORAGE", "auto", 1);
-  setenv("VIBEQC_DF_RESPONSE_SPACE", "auto", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "auto", 1);
   CudaDensityFittingJkPlan plan;
   plan.device_id = 0;
   plan.batch_size = 1;
@@ -38,7 +38,7 @@ void malformed_automatic_token() {
   double unused = 0;
   plan.auxiliary_tile_values = plan.exchange_intermediate = plan.exchange_contributions = &unused;
   plan.metric_response_valid = {0};
-  vibeqc::core::System orbital;
+  generativeqc::core::System orbital;
   orbital.atoms = {{1, {0, 0, 0}}};
   orbital.shells.assign(768, {0, 0, {{1, 1}}});
   const std::vector<DensityFittingDensityResponse> terms{{{}, 1, .25}};
@@ -48,19 +48,19 @@ void malformed_automatic_token() {
   const auto status = execute_cuda_density_fitting_generated_force_response(
       &plan, 0, orbital, orbital, {}, {}, terms, 0, 4U << 20, 0, derivative, detail, nullptr,
       &empty);
-  require(status == VIBEQC_STATUS_NUMERICAL_FAILURE &&
+  require(status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
               detail == "DF metric rank crossing: retained/discarded subspaces are unresolved",
           "malformed automatic token did not reach the metric guard");
 }
 void lifecycle(bool uhf) {
-  setenv("VIBEQC_DF_EXCHANGE", "occupied", 1);
-  setenv("VIBEQC_DF_RESPONSE_STORAGE", "jk-scratch", 1);
-  setenv("VIBEQC_DF_RESPONSE_SPACE", "occupied", 1);
+  setenv("GENERATIVEQC_DF_EXCHANGE", "occupied", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "jk-scratch", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied", 1);
   CudaDensityFittingJkPlan* raw = nullptr;
   std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
   std::string detail;
   require(create_cuda_density_fitting_jk_plan(0, 1, 2, 1, {1}, {0, 0, 0, 0}, 1e-10, 1, &raw,
-                                              diagnostics, detail) == VIBEQC_STATUS_SUCCESS,
+                                              diagnostics, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
       raw, destroy_cuda_density_fitting_jk_plan);
@@ -74,21 +74,23 @@ void lifecycle(bool uhf) {
             : run_cuda_density_fitting_rhf_device_scf(plan.get(), {-1, 0, 0, 2}, {1, 0, 0, 1},
                                                       {2, 0, 0, 0}, {1}, {0}, 8, 1e-12, 1e-10,
                                                       density, records, detail);
-    require(status == VIBEQC_STATUS_SUCCESS && records[0].converged, detail);
+    require(status == GENERATIVEQC_STATUS_SUCCESS && records[0].converged, detail);
   };
   solve();
   CudaDfFinalStateToken token;
-  require(
-      cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
-  vibeqc::core::System orbital;
+  require(cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  generativeqc::core::System orbital;
   orbital.atoms = {{1, {0, 0, -0.7}}, {1, {0, 0, 0.7}}};
   orbital.shells = {{0, 0, {{1, 1}}}, {1, 0, {{1, 1}}}};
   auto auxiliary = orbital;
   auxiliary.shells.resize(1);
-  require(vibeqc::molecule::validate_and_normalize(orbital, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(orbital, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  require(vibeqc::molecule::validate_and_normalize(auxiliary, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(auxiliary, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
   const auto force = [&](const CudaDfFinalStateToken* expected, bool occupied) {
     auto total = density;
@@ -105,7 +107,7 @@ void lifecycle(bool uhf) {
     const auto status = execute_cuda_density_fitting_generated_force_response(
         plan.get(), 0, orbital, auxiliary, raw_values, metric, terms, 0, 4U << 20, 0, derivative,
         detail, &resources, expected);
-    require(status == VIBEQC_STATUS_SUCCESS, detail);
+    require(status == GENERATIVEQC_STATUS_SUCCESS, detail);
     require(resources.occupied_response == occupied, "wrong response factor selection");
     require(derivative == std::vector<double>(6), "zero-integral response changed");
   };
@@ -127,9 +129,9 @@ void lifecycle(bool uhf) {
   // Restore through a solve instead of assuming floating addition reverses.
   solve();
   force(&token, false);  // Epoch changes even when D and dimensions are identical.
-  require(
-      cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   force(&token, true);
   auto* state = static_cast<cuda_df::PersistentScfState*>(plan->persistent_scf_state);
   check(cudaMemsetAsync(state->d_alpha_factor_generation, 0, sizeof(std::uint32_t), plan->stream));
@@ -143,7 +145,7 @@ void lifecycle(bool uhf) {
  */
 void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStateToken& token,
                            const std::vector<double>& density,
-                           const vibeqc::integrals::DensityFittingIntegralData& oracle,
+                           const generativeqc::integrals::DensityFittingIntegralData& oracle,
                            double cutoff) {
   require(!plan.packed_raw && plan.three_center, "single-B fixture retained raw A");
   const auto fitted = orthonormalize_density_fitting_three_center(
@@ -156,7 +158,7 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
     std::string detail;
     plan.final_projection_token = token;  // Rejected calls must still revoke stale leases.
     require(try_cuda_density_fitting_final_rhf_jk(&plan, requested, d, j, k, used, detail) ==
-                    VIBEQC_STATUS_SUCCESS &&
+                    GENERATIVEQC_STATUS_SUCCESS &&
                 used == expected &&
                 plan.final_projection_token.has_value() == expected_fitted_lease,
             "single-B final qualification: " + detail);
@@ -173,7 +175,7 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
     }
   };
   for (const char* policy : {"auto", "occupied"}) {
-    setenv("VIBEQC_DF_FINAL_EXCHANGE", policy, 1);
+    setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", policy, 1);
     attempt(token, density, true, plan.metric_full_rank[0]);
     for (unsigned fault = 0; fault < 10; ++fault) {
       auto stale = token;
@@ -216,9 +218,9 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
     attempt(token, density, false);
     plan.value_storage.rank_capacity = rank_capacity;
   }
-  setenv("VIBEQC_DF_FINAL_EXCHANGE", "dense", 1);
+  setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "dense", 1);
   attempt(token, density, false);
-  setenv("VIBEQC_DF_FINAL_EXCHANGE", "auto", 1);
+  setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "auto", 1);
   auto* state = static_cast<cuda_df::PersistentScfState*>(plan.persistent_scf_state);
   check(cudaMemsetAsync(state->d_final_alpha_generation, 0, sizeof(std::uint64_t), plan.stream));
   attempt(token, density, false);
@@ -230,36 +232,38 @@ void single_final_exchange(CudaDensityFittingJkPlan& plan, const CudaDfFinalStat
  */
 void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, double cutoff,
                      std::int32_t occupied = 1, std::size_t qtile = 1, bool single = false) {
-  setenv("VIBEQC_DF_EXCHANGE", "occupied", 1);
-  setenv("VIBEQC_DF_RESPONSE_STORAGE", "auto", 1);
-  setenv("VIBEQC_DF_RESPONSE_SPACE", "occupied", 1);
-  setenv("VIBEQC_DF_FINAL_EXCHANGE", "occupied", 1);
-  setenv("VIBEQC_DF_FINAL_PROJECTION", "reuse", 1);
-  setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "generic", 1);
-  setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "auto", 1);
-  vibeqc::core::System orbital;
+  setenv("GENERATIVEQC_DF_EXCHANGE", "occupied", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "auto", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied", 1);
+  setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "occupied", 1);
+  setenv("GENERATIVEQC_DF_FINAL_PROJECTION", "reuse", 1);
+  setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "generic", 1);
+  setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "auto", 1);
+  generativeqc::core::System orbital;
   orbital.atoms = {{1, {0, 0, -.7}}, {1, {0, 0, .7}}};
   orbital.shells = {{0, 0, {{1, 1}}}, {0, 0, {{.3, 1}}}, {1, 0, {{1, 1}}}, {1, 0, {{.3, 1}}}};
   auto auxiliary = orbital;
   auxiliary.shells.push_back({0, 0, {{3, 1}}});
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(orbital, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(orbital, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  require(vibeqc::molecule::validate_and_normalize(auxiliary, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(auxiliary, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  const auto oracle = vibeqc::integrals::build_density_fitting_integrals(orbital, auxiliary);
+  const auto oracle = generativeqc::integrals::build_density_fitting_integrals(orbital, auxiliary);
   CudaDensityFittingIntegralSource* source{};
   std::vector<double> metric;
   std::size_t n{}, a{};
   require(create_cuda_density_fitting_integral_source(0, {orbital}, {auxiliary}, &source, metric, n,
-                                                      a, detail) == VIBEQC_STATUS_SUCCESS,
+                                                      a, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   CudaDensityFittingJkPlan* raw{};
   std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
   require(create_cuda_density_fitting_jk_plan_from_source(
               0, &source, 1, n, a, metric, cutoff, qtile, n * n, &raw, diagnostics, detail, true,
               {single ? DfPairStorage::SymmetricLowerSingle : DfPairStorage::SymmetricLower,
-               capacity}) == VIBEQC_STATUS_SUCCESS,
+               capacity}) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
       raw, destroy_cuda_density_fitting_jk_plan);
@@ -280,12 +284,12 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
                 records, detail)
           : run_cuda_density_fitting_rhf_device_scf(plan.get(), h, x, initial, {occupied}, {0}, 80,
                                                     1e-12, 1e-10, density, records, detail);
-  require(status == VIBEQC_STATUS_SUCCESS && records[0].converged,
+  require(status == GENERATIVEQC_STATUS_SUCCESS && records[0].converged,
           "packed response solve: " + detail);
   CudaDfFinalStateToken token;
-  require(
-      cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   if (single) {
     // One exact final occupied K now publishes a fitted U=B*C lease. The force
     // response must consume it without claiming raw-A ownership or changing
@@ -293,20 +297,20 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
     std::vector<double> j, k;
     bool used = false;
     require(try_cuda_density_fitting_final_rhf_jk(plan.get(), token, density, j, k, used, detail,
-                                                  false) == VIBEQC_STATUS_SUCCESS &&
+                                                  false) == GENERATIVEQC_STATUS_SUCCESS &&
                 used,
             "single-B fitted final projection build failed: " + detail);
     if (plan->metric_full_rank[0]) {
       require(plan->final_projection_token && *plan->final_projection_token == token,
               "single-B fitted final projection was not retained");
-      setenv("VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted", 1);
+      setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "fitted", 1);
       const std::vector<DensityFittingDensityResponse> terms{{density, 1, .25}};
       const auto reference = build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
       std::vector<double> derivative;
       DfGradientResources resources;
       require(execute_cuda_density_fitting_generated_force_response(
                   plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, 0, derivative,
-                  detail, &resources, &token) == VIBEQC_STATUS_SUCCESS,
+                  detail, &resources, &token) == GENERATIVEQC_STATUS_SUCCESS,
               "single-B fitted projection force response: " + detail);
       require(resources.occupied_response && !plan->final_projection_token,
               "single-B fitted response did not consume the final projection lease");
@@ -314,7 +318,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
       for (std::size_t i = 0; i < derivative.size(); ++i)
         require(std::abs(derivative[i] - reference[i]) < 8e-10,
                 "single-B final projection reuse differs from raw-integral force");
-      setenv("VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE", "auto", 1);
+      setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE", "auto", 1);
     } else {
       require(!plan->final_projection_token,
               "rank-truncated single-B plan published an unrecoverable fitted projection");
@@ -326,7 +330,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
     std::vector<double> j, k;
     bool used{};
     require(try_cuda_density_fitting_final_rhf_jk(plan.get(), token, density, j, k, used, detail) ==
-                    VIBEQC_STATUS_SUCCESS &&
+                    GENERATIVEQC_STATUS_SUCCESS &&
                 used,
             "packed final K: " + detail);
     require(plan->final_projection_token.has_value() ==
@@ -350,7 +354,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
     DfGradientResources resources;
     require(execute_cuda_density_fitting_generated_force_response(
                 plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, 4U << 20, maximum_tile,
-                derivative, detail, &resources, expected) == VIBEQC_STATUS_SUCCESS,
+                derivative, detail, &resources, expected) == GENERATIVEQC_STATUS_SUCCESS,
             detail);
     require(resources.occupied_response == expected_occupied,
             "packed response selected the wrong factor route");
@@ -381,8 +385,8 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
     // borrow. The physical oracle includes both UHF spins (including empty
     // beta), so overwritten projections or an extra density scale cannot hide
     // behind a zero-integral fixture.
-    setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "full", 1);
-    setenv("VIBEQC_DF_RESPONSE_ALGEBRA", "blas", 1);
+    setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "full", 1);
+    setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas", 1);
     auto total = density;
     if (uhf)
       for (std::size_t i = 0; i < total.size(); ++i) total[i] += beta[i];
@@ -416,7 +420,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
                   0, reinterpret_cast<void*>(plan->stream), plan->integral_source, 0, orbital,
                   auxiliary, {}, {}, {}, terms, cutoff, 0, allowance, 0, derivative, detail,
                   &resources, &metric_view, reinterpret_cast<void*>(plan->blas), nullptr, nullptr,
-                  nullptr, view) == VIBEQC_STATUS_SUCCESS,
+                  nullptr, view) == GENERATIVEQC_STATUS_SUCCESS,
               "streamed occupied bridge: " + detail);
       require(resources.occupied_response == expect_occupied, "streamed factor route not executed");
       require(resources.value_slices == a &&
@@ -449,18 +453,18 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
                   0, reinterpret_cast<void*>(plan->stream), plan->integral_source, 0, orbital,
                   auxiliary, {}, {}, {}, terms, cutoff, 0, 4U << 20, 0, derivative, detail, nullptr,
                   &metric_view, reinterpret_cast<void*>(plan->blas), nullptr, nullptr, nullptr,
-                  &invalid) == VIBEQC_STATUS_INVALID_ARGUMENT &&
+                  &invalid) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                   derivative == std::vector<double>{123},
               "invalid streamed view changed output");
     }
-    unsetenv("VIBEQC_DF_RESPONSE_ALGEBRA");
-    setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "auto", 1);
+    unsetenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
+    setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "auto", 1);
   }
   force(&token, fits);  // Optional final-U lease is consumed exactly once.
   require(!plan->final_projection_token, "packed response failed to revoke final U lease");
-  setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "shell", 1);
-  setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "packed", 1);
-  setenv("VIBEQC_DF_SHELL_SCHEDULE", "compact", 1);
+  setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell", 1);
+  setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "packed", 1);
+  setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", "compact", 1);
   force(&token, fits);  // Raw projection includes discarded metric directions.
   force(nullptr, false);
   // Bounded packed expansion must preserve later Q slices when its compact
@@ -488,7 +492,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
       // independent raw-integral derivative. The smaller allowance retains
       // one fitted tensor and one weight slice, including a partial AO-pair
       // transform batch; it must still evaluate each raw auxiliary slice once.
-      setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "full", 1);
+      setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "full", 1);
       const std::vector<DensityFittingDensityResponse> terms{{density, 1, .25}};
       const auto reference = build_density_fitting_rhf_gradient(oracle, density, cutoff).derivative;
       const auto force_with_allowance = [&](std::size_t allowance) {
@@ -498,7 +502,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
                     0, reinterpret_cast<void*>(plan->stream), plan->integral_source, 0, orbital,
                     auxiliary, {}, {}, {}, terms, cutoff, 0, allowance, 0, derivative, detail,
                     &resources, &metric_view,
-                    reinterpret_cast<void*>(plan->blas)) == VIBEQC_STATUS_SUCCESS,
+                    reinterpret_cast<void*>(plan->blas)) == GENERATIVEQC_STATUS_SUCCESS,
                 "owned fitted response: " + detail);
         require(!resources.borrowed_device_bytes && resources.device_bytes <= allowance,
                 "owned fitted response exceeded its allowance or borrowed storage");
@@ -516,7 +520,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
       const auto bounded =
           force_with_allowance(complete.device_bytes - (a - 1) * n * n * sizeof(double));
       require(bounded.auxiliary_weight_tile == 1, "single fitted tensor did not bound its weights");
-      setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "packed", 1);
+      setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "packed", 1);
     }
     CudaDfResponseBuffers valid;
     valid.staging_weights = plan->auxiliary_tile_values;
@@ -557,7 +561,7 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
               0, reinterpret_cast<void*>(plan->stream), plan->integral_source, 0, orbital,
               auxiliary, {}, {}, {}, terms, cutoff, 0, 4U << 20, 1, output, detail, nullptr,
               &metric_view, reinterpret_cast<void*>(plan->blas), fault == 13 ? nullptr : &buffers,
-              fault == 13 ? nullptr : &view, &whitened) == VIBEQC_STATUS_INVALID_ARGUMENT &&
+              fault == 13 ? nullptr : &view, &whitened) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               output == std::vector<double>{123},
           "invalid packed response borrow changed output");
     }
@@ -571,34 +575,37 @@ void packed_response(bool uhf, unsigned beta_occupied, std::size_t capacity, dou
  * an incorrect general route or evade the declared private scratch allowance.
  */
 void streamed_general_response() {
-  setenv("VIBEQC_DF_RESPONSE_STORAGE", "panel", 1);
-  setenv("VIBEQC_DF_RESPONSE_SPACE", "dense", 1);
-  setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "generic", 1);
-  setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "full", 1);
-  setenv("VIBEQC_DF_RESPONSE_ALGEBRA", "blas", 1);
-  vibeqc::core::System orbital;
+  setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "panel", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "dense", 1);
+  setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "generic", 1);
+  setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "full", 1);
+  setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas", 1);
+  generativeqc::core::System orbital;
   orbital.atoms = {{1, {0, 0, -.7}}, {1, {0, 0, .7}}};
   orbital.shells = {{0, 0, {{1, 1}}}, {0, 0, {{.3, 1}}}, {1, 0, {{1, 1}}}, {1, 0, {{.3, 1}}}};
   auto auxiliary = orbital;
   auxiliary.shells.push_back({0, 0, {{3, 1}}});
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(orbital, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(orbital, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  require(vibeqc::molecule::validate_and_normalize(auxiliary, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(auxiliary, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  const auto oracle = vibeqc::integrals::build_density_fitting_integrals(orbital, auxiliary);
+  const auto oracle = generativeqc::integrals::build_density_fitting_integrals(orbital, auxiliary);
   for (double cutoff : {1e-12, .2}) {
     CudaDensityFittingIntegralSource* source{};
     std::vector<double> metric;
     std::size_t n{}, a{};
-    require(create_cuda_density_fitting_integral_source(0, {orbital}, {auxiliary}, &source, metric,
-                                                        n, a, detail) == VIBEQC_STATUS_SUCCESS,
-            detail);
+    require(
+        create_cuda_density_fitting_integral_source(0, {orbital}, {auxiliary}, &source, metric, n,
+                                                    a, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        detail);
     CudaDensityFittingJkPlan* raw{};
     std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
     require(create_cuda_density_fitting_jk_plan_from_source(0, &source, 1, n, a, metric, cutoff, 1,
                                                             n * n, &raw, diagnostics, detail,
-                                                            false) == VIBEQC_STATUS_SUCCESS,
+                                                            false) == GENERATIVEQC_STATUS_SUCCESS,
             detail);
     std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> plan(
         raw, destroy_cuda_density_fitting_jk_plan);
@@ -628,7 +635,7 @@ void streamed_general_response() {
         DfGradientResources resources;
         require(execute_cuda_density_fitting_generated_force_response(
                     plan.get(), 0, orbital, auxiliary, {}, {}, terms, 0, allowance, 0, derivative,
-                    detail, &resources, nullptr) == VIBEQC_STATUS_SUCCESS,
+                    detail, &resources, nullptr) == GENERATIVEQC_STATUS_SUCCESS,
                 "bounded general response: " + detail);
         require(!resources.occupied_response && !resources.borrowed_device_bytes &&
                     resources.device_bytes <= allowance,
@@ -654,7 +661,7 @@ void streamed_general_response() {
       }
     }
   }
-  unsetenv("VIBEQC_DF_RESPONSE_ALGEBRA");
+  unsetenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
 }
 
 /** Source-first K uses the same physical integrals for both coefficient
@@ -664,33 +671,35 @@ void streamed_general_response() {
  * Truncation must retain the old spectral schedule and its independent oracle.
  */
 void streamed_projected_exchange(bool ragged) {
-  vibeqc::core::System orbital;
+  generativeqc::core::System orbital;
   orbital.atoms = {{1, {0, 0, -.7}}, {1, {0, 0, .7}}};
   orbital.shells = {{0, 0, {{1, 1}}}, {0, 0, {{.3, 1}}}, {1, 0, {{1, 1}}}, {1, 0, {{.3, 1}}}};
   if (ragged) orbital.shells.push_back({1, 0, {{.12, 1}}});
   auto auxiliary = orbital;
   auxiliary.shells.push_back({0, 0, {{3, 1}}});
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(orbital, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(orbital, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  require(vibeqc::molecule::validate_and_normalize(auxiliary, detail) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc::molecule::validate_and_normalize(auxiliary, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  const auto oracle = vibeqc::integrals::build_density_fitting_integrals(orbital, auxiliary);
+  const auto oracle = generativeqc::integrals::build_density_fitting_integrals(orbital, auxiliary);
   for (double cutoff : {1e-12, .2})
     for (const char* policy : {"auto", "full"}) {
-      setenv("VIBEQC_DF_RESIDENT_EXCHANGE", policy, 1);
+      setenv("GENERATIVEQC_DF_RESIDENT_EXCHANGE", policy, 1);
       CudaDensityFittingIntegralSource* source{};
       std::vector<double> metric;
       std::size_t n{}, a{};
       require(
           create_cuda_density_fitting_integral_source(0, {orbital}, {auxiliary}, &source, metric, n,
-                                                      a, detail) == VIBEQC_STATUS_SUCCESS,
+                                                      a, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
       CudaDensityFittingJkPlan* raw{};
       std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
       require(create_cuda_density_fitting_jk_plan_from_source(0, &source, 1, n, a, metric, cutoff,
                                                               1, n * n, &raw, diagnostics, detail,
-                                                              false) == VIBEQC_STATUS_SUCCESS,
+                                                              false) == GENERATIVEQC_STATUS_SUCCESS,
               detail);
       std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)>
           plan(raw, destroy_cuda_density_fitting_jk_plan);
@@ -731,7 +740,7 @@ void streamed_projected_exchange(bool ragged) {
           const auto build = [&] {
             require(cuda_df::build_occupied_exchange(*plan, 0, device_coefficients, rank,
                                                      column_major, 2, plan->alpha_exchange,
-                                                     detail) == VIBEQC_STATUS_SUCCESS,
+                                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
                     detail);
           };
           const auto compare = [&](double scale) {
@@ -765,7 +774,7 @@ void streamed_projected_exchange(bool ragged) {
           check(cudaGraphDestroy(graph));
         }
     }
-  unsetenv("VIBEQC_DF_RESIDENT_EXCHANGE");
+  unsetenv("GENERATIVEQC_DF_RESIDENT_EXCHANGE");
 }
 }  // namespace
 int main() {

@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_D4_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_D4_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_D4_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_D4_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -12,7 +12,7 @@
 #include "backends/cuda/gfn2_geometry.cuh"
 #include "backends/cuda/gfn2_scc_iteration_control.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 inline constexpr std::int64_t kGfn2D4MaximumReferences = 7;
 inline constexpr double kGfn2D4CoordinationCutoffBohr = 30.0;
@@ -344,6 +344,6 @@ cudaError_t add_gfn2_d4_atm_gradient_pairlist_cuda(
     double* gradients, const Gfn2D4DeviceWorkspace& workspace, std::uint32_t* device_error,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_D4_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_D4_CUH

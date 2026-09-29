@@ -1,10 +1,10 @@
 {
-  "schema": "vibeqc.independent-semilocal-hessian.v1",
+  "schema": "generativeqc.independent-semilocal-hessian.v1",
   "pyscf": "2.14.0",
   "libxc": "7.0.0",
   "seed": 609610,
   "generator": "generate_semilocal_hessian_cases.py",
-  "generator_sha256": "9246cd3a4e0de5e07afaab88554642849643adf0f5f87a1be73323d4281e875f",
+  "generator_sha256": "374a2000ec35457eb8cd887f9931aeb3bbf547ac734cfb743e6603ec18b5489e",
   "converter_function_sha256": "c098533365f8f7c9c651d81df333e48d5e9beec54d540c92ab553c7fd58aa6d9",
   "conventions": "energy density; feature gradient; packed upper feature Hessian; physical Cartesian sigma; tau=0 for LDA/GGA",
   "cases": [

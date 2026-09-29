@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace vibeqc::response {
+namespace generativeqc::response {
 
 using LinearOperator = std::function<void(std::span<const double> input, std::span<double> output)>;
 
@@ -64,4 +64,4 @@ class LinearResponseProblem {
   LinearOperator apply_transpose_;
 };
 
-}  // namespace vibeqc::response
+}  // namespace generativeqc::response

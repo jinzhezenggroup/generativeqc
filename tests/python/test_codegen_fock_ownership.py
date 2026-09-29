@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
+import typing
 from pathlib import Path
 
-from vibeqc_compiler.integral.lowering.fock_accumulation import (
+import pytest
+from generativeqc_compiler.integral import (
+    FUSED_SHELL_SPEC_BY_NAME,
+    PSPS_SPEC,
+    KernelConsumer,
+    ScheduleKind,
+    build_fused_shell_plan,
+    build_integral_ir,
+    cuda_target_info,
+    emit_shell_class_fused_cuda,
+)
+from generativeqc_compiler.integral.autotune import supported_schedule_trials
+from generativeqc_compiler.integral.benchmark import emit_shell_class_oracle_cuda
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
     emit_direct_force_component_weight,
     emit_direct_force_density_coefficient,
@@ -14,6 +29,7 @@ from vibeqc_compiler.integral.lowering.fock_accumulation import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
 
 def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
@@ -21,13 +37,13 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
 
     shared = (
         REPOSITORY_ROOT
-        / "python/vibeqc_compiler/integral/lowering/fock_accumulation.py"
+        / "python/generativeqc_compiler/integral/lowering/fock_accumulation.py"
     ).read_text(encoding="utf-8")
     native = (REPOSITORY_ROOT / "src/scf/cuda/direct_fock_accumulation.cuh").read_text(
         encoding="utf-8"
     )
     shell_lowering = (
-        REPOSITORY_ROOT / "python/vibeqc_compiler/integral/lowering/fock.py"
+        REPOSITORY_ROOT / "python/generativeqc_compiler/integral/lowering/fock.py"
     ).read_text(encoding="utf-8")
 
     assert "restricted_exchange_scale" in shared
@@ -54,14 +70,32 @@ def test_direct_force_density_has_one_compiler_equation_owner() -> None:
         encoding="utf-8"
     )
     for equation in (
-        "0.5 * total_ab * total_cd",
-        "0.25 * density[physical_offset + ac]",
+        "0.5 * coulomb_coefficient * total_ab * total_cd",
+        "0.5 * exchange_coefficient *",
         "unique_eri_symmetry_permutation",
     ):
         assert equation in generated
         assert equation not in native
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
     assert "direct_force_density_coefficient" in emit_direct_fock_accumulation_header()
+
+
+def test_direct_force_density_exposes_method_neutral_coefficients() -> None:
+    """Let DFT reuse Direct force contraction without changing HF defaults."""
+
+    generated = emit_direct_force_density_coefficient()
+    assert "direct_force_density_coefficient_scaled" in generated
+    assert "double coulomb_coefficient, double exchange_coefficient" in generated
+    assert "if (coulomb_coefficient != 0.0)" in generated
+    assert "if (exchange_coefficient != 0.0)" in generated
+    assert (
+        "constexpr double exchange_coefficient = Unrestricted ? -1.0 : -0.5;"
+        in generated
+    )
+    assert (
+        "n, physical_offset, spin_offset, density, i, j, k, l, 1.0, "
+        "exchange_coefficient" in generated
+    )
 
 
 def test_direct_force_component_normalization_has_one_compiler_owner() -> None:
@@ -131,3 +165,52 @@ def test_direct_fock_scatter_cli_is_deterministic(tmp_path: Path) -> None:
     subprocess.run(command, cwd=REPOSITORY_ROOT, check=True)
     assert output.read_text(encoding="utf-8") == first
     assert first == emit_direct_fock_accumulation_header()
+
+
+def test_packed_order2_fock_oracle_drops_force_wrappers() -> None:
+    """Keep packed low-order schedules available to Fock autotuning."""
+
+    trial = next(
+        trial
+        for trial in supported_schedule_trials(
+            PSPS_SPEC, KernelConsumer.FOCK, target=TEST_CUDA_TARGET
+        )
+        if trial.schedule.kind == ScheduleKind.PACKED_TASKS
+    )
+    plan = build_fused_shell_plan(
+        PSPS_SPEC,
+        consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
+        schedule=trial.schedule,
+        target=TEST_CUDA_TARGET,
+    )
+    source = emit_shell_class_oracle_cuda(PSPS_SPEC, plan, KernelConsumer.FOCK)
+    assert "generated_psps_shell_class_fock_rhf_kernel" in source
+    assert "generated_psps_shell_class_force_rhf_kernel" not in source
+
+
+@pytest.mark.parametrize("name", ["ppps", "dpps", "dddd"])
+def test_value_only_native_helpers_use_the_pruned_coulomb_table_stride(
+    name: typing.Any,
+) -> None:
+    """A Fock-only manifest must index each emitted state through its IR table."""
+    spec = FUSED_SHELL_SPEC_BY_NAME[name]
+    integral = build_integral_ir(spec, consumers=(KernelConsumer.FOCK,))
+    plan = build_fused_shell_plan(spec, integral=integral, target=TEST_CUDA_TARGET)
+    source = emit_shell_class_fused_cuda(spec, plan)
+    side = integral.maximum_coulomb_order + 1
+    table = re.search(
+        rf"generated_{spec.name}_coulomb_indices\[(\d+)\] = \{{(.*?)\}};",
+        source,
+        re.DOTALL,
+    )
+    assert table is not None
+    values = [int(value) for value in re.findall(r"-?\d+", table.group(2))]
+    assert int(table.group(1)) == len(values) == side**3
+    assert f"(x_order * {side}U + y_order) * {side}U + z_order" in source
+    # The common geometry helper still evaluates the derivative Boys order;
+    # shrinking its scratch arrays with the lookup stride would overwrite it.
+    geometry_side = spec.maximum_force_coulomb_order + 1
+    assert f"double boys[{geometry_side}];" in source
+    assert f"double coordinate_powers[3][{geometry_side}];" in source
+    for index, (x, y, z) in enumerate(plan.coulomb_states):
+        assert values[(x * side + y) * side + z] == index

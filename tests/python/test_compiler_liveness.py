@@ -3,14 +3,14 @@
 import typing
 
 import pytest
-from vibeqc_compiler.common.liveness import (
+from generativeqc_compiler.common.liveness import (
     EffectKind,
     LivenessNode,
     analyze_liveness,
 )
-from vibeqc_compiler.tensor.ir import add, constant, multiply
-from vibeqc_compiler.tensor.optimize import rewrite
-from vibeqc_compiler.tensor.program import Program
+from generativeqc_compiler.tensor.ir import add, constant, multiply
+from generativeqc_compiler.tensor.optimize import rewrite
+from generativeqc_compiler.tensor.program import Program
 
 
 def node(

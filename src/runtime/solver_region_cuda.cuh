@@ -8,7 +8,7 @@
 
 #include "cuda_graph_region.cuh"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 enum class SolverRegionCompletionMode : std::uint8_t { Scalar = 0, PerItemMask = 1 };
 
@@ -68,4 +68,4 @@ class SolverRegionCudaExecutor {
   CudaGraphRegion replay_;
 };
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

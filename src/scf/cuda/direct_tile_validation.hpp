@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_validate_direct_tile_descriptors_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -19,4 +19,4 @@ void launch_validate_direct_tile_descriptors_kernel(dim3 grid, dim3 block, std::
                                                     std::size_t total_tile_capacity,
                                                     DirectTileValidationRecord* record);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

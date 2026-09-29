@@ -1,6 +1,6 @@
 """Reproducibility tests for fixed-root GPU4PySCF table slices."""
 
-from vibeqc_compiler.integral.extract_rys_table import (
+from generativeqc_compiler.integral.extract_rys_table import (
     DEGREE,
     GPU4PYSCF_COMMIT,
     GPU4PYSCF_SOURCE_SHA256,

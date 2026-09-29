@@ -4,11 +4,11 @@ import typing
 
 import numpy as np
 import pytest
+from generativeqc.ecp import ecp_integrals
+from generativeqc.resources_hf import _ecp_workspace
+from generativeqc_compiler.integral.ecp_schedule import cuda_radial_tile
 from test_ecp import fixture, reference
 from test_ecp_f import require_device
-from vibeqc.ecp import ecp_integrals
-from vibeqc.resources_hf import _ecp_workspace
-from vibeqc_compiler.integral.ecp_schedule import cuda_radial_tile
 
 
 def test_radial_workspace_public_vs_cartesian_counts() -> None:

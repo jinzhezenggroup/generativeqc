@@ -6,7 +6,7 @@ tensors. That page documents the RHF/UHF reverse chain, metric rank-crossing
 diagnostics, and measured endpoint evidence. The positive-budget path uses
 [bounded device response](df_device_replay.md) for both J/K and final forces.
 
-VibeQC provides CPU-reference and CUDA density-fitting execution for RHF and
+GenerativeQC provides CPU-reference and CUDA density-fitting execution for RHF and
 UHF.  Single systems and homogeneous prepared-batch buckets share the same
 metric-factorization and RI-J/K implementation; the CUDA bucket path uses one
 batched plan for all compatible systems while retaining per-item convergence
@@ -75,7 +75,7 @@ and failure status.
   effective rank, metric condition number, solver workspace, selected auxiliary
   tile, and conservative host/device resident and peak byte counts. Native
   C++ callers use `FleetPlan::last_density_fitting_metric_diagnostics()`, C
-  callers use `vibeqc_batch_get_last_density_fitting_metric_diagnostics`, and
+  callers use `generativeqc_batch_get_last_density_fitting_metric_diagnostics`, and
   the Python equivalent is
   `PreparedBatch.last_density_fitting_metric_diagnostics()`.
 
@@ -165,11 +165,11 @@ both mappings at creation. The bulk compatibility builder retains its own
 one-thread-per-output schedule. The original transformed-source
 promotion evidence is in
 [`benchmarks/results/generated-df-values-142`](../../benchmarks/results/generated-df-values-142/README.md).
-`VIBEQC_DF_VALUES` is retired. Reproducing that historical Hermite evaluator
+`GENERATIVEQC_DF_VALUES` is retired. Reproducing that historical Hermite evaluator
 requires its recorded checkout. The separate [DF tuning](df_tuning.md) harness
 offers newly generated specialized polynomial/Rys candidates; these remain
 diagnostic after cold endpoint regressions and do not change the default.
-`VIBEQC_DF_VALUE_MAPPING=auto|auxiliary|component|primitive` compares contiguous
+`GENERATIVEQC_DF_VALUE_MAPPING=auto|auxiliary|component|primitive` compares contiguous
 auxiliary writes, contiguous AO-pair work, and one primitive-reduction warp per
 output. `auto` (also the unset default) selects the consumer-specific compiler
 schedule; explicit mappings override both consumers for reproducible comparison.
@@ -190,7 +190,7 @@ Manual validation tools must run through a finite Slurm allocation:
 - `tools/validate_df_values.py` checks every complete Cartesian shell block and
   independent host spherical projection against libcint, including contracted
   and coincident-center fixtures, and records exact object resource reports.
-- `tools/validate_df_source.py --probe build/cuda/vibeqc_df_value_probe` checks
+- `tools/validate_df_source.py --probe build/cuda/generativeqc_df_value_probe` checks
   reconstructed full tensors across native tile boundaries, different batch
   primitive offsets and geometries, and RHF/UHF RI-J/K with identical metric
   thresholds. It compares all three source mappings against independent libcint
@@ -222,11 +222,11 @@ bounded raw auxiliary slices directly into response scratch. It does not allocat
 a full raw device tensor or host response matrices; final forces are downloaded
 after the owning stream completes. Metric rank crossings still fail explicitly.
 
-`VIBEQC_DF_HOST_RESPONSE_WEIGHTS=1` selects the former host weight adapter for
+`GENERATIVEQC_DF_HOST_RESPONSE_WEIGHTS=1` selects the former host weight adapter for
 retained-host-value plans as a diagnostic ablation. Generated-source plans always
 use device weights. Both choices fit the same conservative global reservation;
 the existing global qualification remains at most 16 orbital and 128 auxiliary
-AOs. `VIBEQC_DF_TRACE` distinguishes raw tensor uploads from response-weight
+AOs. `GENERATIVEQC_DF_TRACE` distinguishes raw tensor uploads from response-weight
 uploads with `tensor_host_to_device_bytes` and `response_host_to_device_bytes`.
 Transfer, regeneration, derivative contraction and synchronization costs remain
 part of the complete force endpoint.
@@ -234,7 +234,7 @@ part of the complete force endpoint.
 The exchange metric contraction uses the plan's existing cuBLAS handle to dot
 the bounded raw panel against each density response. Its output stride updates
 the existing metric response, preserving Coulomb and both spin contributions.
-`VIBEQC_DF_SERIAL_RESPONSE_DOT=1` restores the original per-output serial dot
+`GENERATIVEQC_DF_SERIAL_RESPONSE_DOT=1` restores the original per-output serial dot
 kernel for an independent arithmetic ablation under the same scratch bound.
 Both paths retain FP64 and the complete spectral response. Provider failures
 propagate through stream cleanup; they do not select the serial calculation.
@@ -255,7 +255,7 @@ inactive items retain their state within a solve. History changes invalidate
 the plan's memory choice, and the native and global planners reserve the same
 capacity before choosing retained/streamed K panels. Requested iteration limits
 and failure statuses remain authoritative. The old internal overload/ABI keeps
-its fixed-point behavior. `VIBEQC_DF_DISABLE_DEVICE_DIIS=1` restores that compact
+its fixed-point behavior. `GENERATIVEQC_DF_DISABLE_DEVICE_DIIS=1` restores that compact
 behavior for diagnostics while preserving the same declared memory reservation.
 
 Metric setup and compact batched eigensolves also have separate checked
@@ -270,6 +270,6 @@ When the compact device iteration needs the existing host DIIS retry, CUDA
 DF keeps using the prepared ordinary device eigensolver. This applies to
 single and fleet RHF/UHF, and records the actual device leaves as `fallback`.
 The DIIS sequence, iteration limits and convergence thresholds are unchanged;
-provider failures propagate. `VIBEQC_DF_REFERENCE_ITERATION_EIGEN=1` selects the
+provider failures propagate. `GENERATIVEQC_DF_REFERENCE_ITERATION_EIGEN=1` selects the
 independent reference operation explicitly for a diagnostic comparison. It
 controls only retry iterations, independently of setup and finalization.

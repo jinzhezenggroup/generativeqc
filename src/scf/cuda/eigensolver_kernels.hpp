@@ -6,7 +6,7 @@
 
 #include "scf/cuda/eigensolver_types.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Narrow host-callable launch boundary; wrappers leave last-error inspection and synchronization
  * to their caller. */
@@ -52,4 +52,4 @@ void launch_symmetric_eigen_small_kernel(dim3 grid, dim3 block, std::size_t shar
                                          std::int32_t nbf, double* matrices, double* eigenvalues,
                                          int* info, const std::uint8_t* active);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

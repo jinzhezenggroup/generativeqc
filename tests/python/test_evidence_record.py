@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from tools.vibeqc_validation.record import (
+from tools.generativeqc_validation.record import (
     decode_json,
     decode_record,
     load_json,
     load_record,
 )
-from tools.vibeqc_validation.retention import digest
+from tools.generativeqc_validation.retention import digest
 
 
 def test_migrated_records_match_original_scientific_values() -> None:

@@ -18,7 +18,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 /** One ordinary frame is serialized across the bucket's items/spins. It never
  * aliases a captured SCF buffer, occupied factor or another item's result. */
@@ -68,10 +68,10 @@ std::vector<double> column_major(const std::vector<double>& matrix, std::size_t 
   return packed;
 }
 
-vibeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*& state,
-                      std::string& detail) {
+generativeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*& state,
+                            std::string& detail) {
   state = static_cast<OrdinaryEigensystem*>(plan.ordinary_eigensystem);
-  if (state) return VIBEQC_STATUS_SUCCESS;
+  if (state) return GENERATIVEQC_STATUS_SUCCESS;
   auto candidate = std::make_unique<OrdinaryEigensystem>();
   candidate->device = plan.device_id;
   candidate->n = plan.nbf;
@@ -79,23 +79,23 @@ vibeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*& stat
   const auto matrix_bytes = n * n * sizeof(double);
   auto allocate = [&](void** target, std::size_t bytes, const char* name) {
     const auto status = allocate_device(target, bytes, name, detail);
-    if (status == VIBEQC_STATUS_SUCCESS) candidate->device_bytes += bytes;
+    if (status == GENERATIVEQC_STATUS_SUCCESS) candidate->device_bytes += bytes;
     return status;
   };
   for (double** target : {&candidate->matrix, &candidate->x, &candidate->temporary}) {
     const auto status = allocate(reinterpret_cast<void**>(target), matrix_bytes,
                                  "allocate ordinary CUDA DF AO frame");
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   }
   auto status = allocate(reinterpret_cast<void**>(&candidate->values), n * sizeof(double),
                          "allocate ordinary CUDA DF eigenvalues");
-  if (status == VIBEQC_STATUS_SUCCESS)
+  if (status == GENERATIVEQC_STATUS_SUCCESS)
     status = allocate(reinterpret_cast<void**>(&candidate->info), sizeof(int),
                       "allocate ordinary CUDA DF solver info");
-  if (status == VIBEQC_STATUS_SUCCESS)
+  if (status == GENERATIVEQC_STATUS_SUCCESS)
     status = allocate(reinterpret_cast<void**>(&candidate->active), sizeof(std::uint8_t),
                       "allocate ordinary CUDA DF active mask");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   const auto sized = cusolverDnXsyevd_bufferSize(
       plan.solver, plan.solver_parameters, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
       static_cast<std::int64_t>(n), CUDA_R_64F, candidate->matrix, static_cast<std::int64_t>(n),
@@ -112,17 +112,17 @@ vibeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*& stat
              std::to_string(candidate->workspace_bytes) +
              ", host=" + std::to_string(candidate->host_workspace_bytes) +
              ", allowance=" + std::to_string(allowance);
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   if (candidate->workspace_bytes) {
     status = allocate(&candidate->workspace, candidate->workspace_bytes,
                       "allocate ordinary CUDA DF solver workspace");
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   }
   candidate->host_workspace.resize(candidate->host_workspace_bytes);
   state = candidate.release();
   plan.ordinary_eigensystem = state;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 }  // namespace
 
@@ -130,10 +130,10 @@ void destroy_ordinary_eigensystem(void*& opaque) noexcept {
   delete static_cast<OrdinaryEigensystem*>(opaque);
   opaque = nullptr;
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df
 
-namespace vibeqc::scf {
-vibeqc_status solve_cuda_density_fitting_eigen(
+namespace generativeqc::scf {
+generativeqc_status solve_cuda_density_fitting_eigen(
     CudaDensityFittingJkPlan* plan, const std::vector<double>& matrix,
     const std::vector<double>* overlap, const std::vector<double>* orthogonalizer,
     std::vector<double>& eigenvalues, std::vector<double>& coefficients,
@@ -145,7 +145,7 @@ vibeqc_status solve_cuda_density_fitting_eigen(
   detail.clear();
   if (df_eigen_outputs_alias(matrix, overlap, orthogonalizer, eigenvalues, coefficients)) {
     detail = "ordinary CUDA DF eigen inputs and outputs must not alias";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   eigenvalues.clear();
   coefficients.clear();
@@ -153,13 +153,13 @@ vibeqc_status solve_cuda_density_fitting_eigen(
       plan->nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       (overlap == nullptr) != (orthogonalizer == nullptr)) {
     detail = "invalid ordinary CUDA DF eigensolver plan or generalized inputs";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto n = plan->nbf;
   if (!symmetric_finite(matrix, n) ||
       (overlap && (!symmetric_finite(*overlap, n) || !symmetric_finite(*orthogonalizer, n)))) {
     detail = "ordinary CUDA DF eigensolve requires finite symmetric AO inputs";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   auto error = cudaSetDevice(plan->device_id);
   if (error != cudaSuccess) return cuda_failure(error, "select ordinary DF eigen device", detail);
@@ -170,7 +170,7 @@ vibeqc_status solve_cuda_density_fitting_eigen(
   if (error != cudaSuccess) return cuda_failure(error, "query ordinary DF eigen stream", detail);
   if (capture != cudaStreamCaptureStatusNone) {
     detail = "ordinary CUDA DF eigen operations require a noncapturing stream";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   trace::TraceOperation operation(
       "production_eigensolve", plan->stream,
@@ -182,7 +182,7 @@ vibeqc_status solve_cuda_density_fitting_eigen(
     OrdinaryEigensystem* state{};
     auto status = trace::trace_call("workspace_setup", plan->stream,
                                     [&] { return prepare(*plan, state, detail); });
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     diagnostic.device_bytes = state->device_bytes;
     diagnostic.host_workspace_bytes = state->host_workspace_bytes;
     auto packed = column_major(matrix, n);
@@ -206,9 +206,9 @@ vibeqc_status solve_cuda_density_fitting_eigen(
     if (orthogonalizer) {
       trace::TraceRegion transform("generalized_transform", plan->stream);
       status = scf_gemm(*plan, false, 1, n, state->matrix, state->x, state->temporary, detail);
-      if (status == VIBEQC_STATUS_SUCCESS)
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
         status = scf_gemm(*plan, true, 1, n, state->x, state->temporary, state->matrix, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
     const cuda_execution::EigensolverResources resources{
         plan->stream,
@@ -229,7 +229,7 @@ vibeqc_status solve_cuda_density_fitting_eigen(
                                              static_cast<int>(n), 1, state->matrix, nullptr,
                                              state->values, 0, state->info, state->active);
     }
-    if (status != VIBEQC_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
       detail = "ordinary CUDA DF Xsyevd submission failed";
       return status;
     }
@@ -237,7 +237,7 @@ vibeqc_status solve_cuda_density_fitting_eigen(
     if (orthogonalizer) {
       trace::TraceRegion transform("coefficient_backtransform", plan->stream);
       status = scf_gemm(*plan, false, 1, n, state->x, state->matrix, state->temporary, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       output = state->temporary;
     }
     {
@@ -259,20 +259,20 @@ vibeqc_status solve_cuda_density_fitting_eigen(
       host::Region validation("eigenframe_validation", n);
       if (!validate_cuda_density_fitting_eigen_frame(plan, matrix, overlap, values, vectors,
                                                      diagnostic, detail))
-        return VIBEQC_STATUS_NUMERICAL_FAILURE;
+        return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     eigenvalues = std::move(values);
     coefficients = std::move(vectors);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "ordinary CUDA DF eigensystem allocation failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::overflow_error& error) {
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::runtime_error& error) {
     detail = error.what();
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

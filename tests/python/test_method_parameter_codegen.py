@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vibeqc_compiler.method._generated_parameters import (
+from generativeqc_compiler.method._generated_parameters import (
     D3_BJ_PARAMETER_SETS,
     D4_PARAMETER_SETS,
     GCP_PARAMETER_SETS,

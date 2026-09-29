@@ -14,7 +14,7 @@
 #include "scf/cuda/df_shell_dispatch.cuh"
 #include "scf/cuda/df_shell_kernel.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 cudaError_t clear_work(DfShellDiagnostics* diagnostics, unsigned rows, cudaStream_t stream) {
   if (!diagnostics) return cudaSuccess;
@@ -102,7 +102,7 @@ cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
   if (pairs != DfDerivativePairs::full && A < B) return cudaSuccess;
   using Schedule = generated::Schedule<A, B, C, Variant>;
   constexpr auto maximum = static_cast<std::size_t>(std::numeric_limits<int>::max());
-  const char* trace = std::getenv("VIBEQC_DF_TRACE");
+  const char* trace = std::getenv("GENERATIVEQC_DF_TRACE");
   const bool profiling = trace && *trace;
   using Clock = std::chrono::steady_clock;
   auto preparation = profiling ? Clock::now() : Clock::time_point{};
@@ -219,7 +219,7 @@ cudaError_t launch_group(DfShellBasisView first, DfShellBasisView second, DfShel
   // intervals may include stream idle time; use Nsight for GPU activity and
   // a separate uninstrumented endpoint for promotion.
   char profile_name[128]{};
-  const char* tracing = std::getenv("VIBEQC_DF_TRACE");
+  const char* tracing = std::getenv("GENERATIVEQC_DF_TRACE");
   if (tracing && *tracing) {
     std::snprintf(profile_name, sizeof(profile_name), "shell_%u%u%u_p%zu_%zu_%zu", A, B, C,
                   first.primitives, second.primitives, x.primitives);
@@ -309,4 +309,4 @@ cudaError_t launch_packets_class(std::span<const DfShellBasisView> o,
       });
 }
 }  // namespace
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

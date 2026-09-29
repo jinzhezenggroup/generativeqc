@@ -3,10 +3,10 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc import ks
-from vibeqc_compiler.method import METHOD_CATALOG, resolve_method
+from generativeqc import ks
+from generativeqc_compiler.method import METHOD_CATALOG, resolve_method
 
-from tools.vibeqc_d3.reference import gfn1_compatibility
+from tools.generativeqc_d3.reference import gfn1_compatibility
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])

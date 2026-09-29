@@ -1,4 +1,4 @@
-# VibeQC agent instructions
+# GenerativeQC agent instructions
 
 These repository-local rules complement user-level agent instructions. They apply
 repo-wide unless a nested `AGENTS.md` adds more specific constraints.
@@ -37,7 +37,7 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 Read the closest applicable nested instructions before editing:
 
 - `docs/AGENTS.md` for current-state documentation versus historical rationale;
-- `python/vibeqc_compiler/AGENTS.md` for compiler ownership and generation rules;
+- `python/generativeqc_compiler/AGENTS.md` for compiler ownership and generation rules;
 - `src/integrals/AGENTS.md` for integral, derivative, precision, and scheduling
   constraints; and
 - `.agents/notes/AGENTS.md` before adding or revising an Agent Note.

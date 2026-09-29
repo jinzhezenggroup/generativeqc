@@ -5,7 +5,7 @@ import typing
 from copy import deepcopy
 from pathlib import Path
 
-from vibeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.common.evidence import canonical_hash
 
 from tools.cc_endpoint_fixtures import load as load_endpoint
 from tools.cc_endpoint_fixtures import source_arguments as endpoint_source_arguments
@@ -79,7 +79,7 @@ def source_arguments(value: typing.Any) -> typing.Any:
 def load(name: typing.Any, root: typing.Any = ROOT) -> typing.Any:
     data = json.loads((Path(root) / f"{name}.json").read_text())
     if (
-        data["schema"] != "vibeqc.ccsd.gradient_reference"
+        data["schema"] != "generativeqc.ccsd.gradient_reference"
         or data["schema_version"] != 1
         or data["pyscf"] != "2.14.0"
     ):

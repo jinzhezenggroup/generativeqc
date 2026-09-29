@@ -6,31 +6,31 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.integral.blocks import RawBlock, TensorLayout
-from vibeqc_compiler.integral.capabilities import query_integral_capability
-from vibeqc_compiler.integral.ir import four_center_eri_operator
-from vibeqc_compiler.integral.ir_serialization import (
+from generativeqc_compiler.integral.blocks import RawBlock, TensorLayout
+from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.ir import four_center_eri_operator
+from generativeqc_compiler.integral.ir_serialization import (
     integral_from_payload,
     integral_to_payload,
 )
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.second_derivatives import (
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
     build_second_derivative_kernel,
 )
-from vibeqc_compiler.integral.second_derivatives_execute import (
+from generativeqc_compiler.integral.second_derivatives_execute import (
     CompiledSecondDerivative,
     SecondPrimitive,
     pack_second_primitive,
 )
-from vibeqc_compiler.integral.second_derivatives_inputs import (
+from generativeqc_compiler.integral.second_derivatives_inputs import (
     prepare_second_shell_stream,
 )
-from vibeqc_compiler.integral.second_derivatives_native import (
+from generativeqc_compiler.integral.second_derivatives_native import (
     emit_second_derivative_primitive,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
 
 @pytest.mark.parametrize(
@@ -166,7 +166,9 @@ def test_lowering_requires_explicit_raw_and_bounded_output_selections() -> None:
 def test_native_capability_is_separate_from_first_force_and_requires_coordinate_tiles() -> (
     None
 ):
-    from vibeqc_compiler.integral.second_order_layout import second_coordinate_tiles
+    from generativeqc_compiler.integral.second_order_layout import (
+        second_coordinate_tiles,
+    )
 
     raw = build_eri_second_ir((3, 0, 0, 0), output="raw_hessian")
     for backend in ("cpu_second_derivatives", "cuda_second_derivatives"):

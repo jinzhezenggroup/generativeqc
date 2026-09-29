@@ -4,36 +4,36 @@
 #include "runtime/cuda_target_info.hpp"
 #include "scf/aot_shell_registry.hpp"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
-vibeqc_status initialize_cuda_context(core::ContextState& state, std::string& detail) {
+generativeqc_status initialize_cuda_context(core::ContextState& state, std::string& detail) {
   int count = 0;
   cudaError_t error = cudaGetDeviceCount(&count);
   if (error != cudaSuccess) {
     detail = cudaGetErrorString(error);
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
   if (state.device_id < 0 || state.device_id >= count) {
     detail = "CUDA device id is out of range";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   error = cudaSetDevice(state.device_id);
   if (error != cudaSuccess) {
     detail = cudaGetErrorString(error);
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
   cudaDeviceProp properties{};
   error = cudaGetDeviceProperties(&properties, state.device_id);
   if (error != cudaSuccess) {
     detail = cudaGetErrorString(error);
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
   // Force runtime initialization now so context creation, not the first
   // scientific call, owns and reports any driver/runtime incompatibility.
   error = cudaFree(nullptr);
   if (error != cudaSuccess) {
     detail = cudaGetErrorString(error);
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
   const CudaTargetInfo target = cuda_target_info_from_properties(properties);
   state.device_name = properties.name;
@@ -63,8 +63,8 @@ vibeqc_status initialize_cuda_context(core::ContextState& state, std::string& de
   // Context creation owns all CUDA-provider validation. RHF execution later
   // reports CUDA only after the device-resident scientific path is selected;
   // the CPU implementation remains a separately requested oracle backend.
-  state.executed_backend = VIBEQC_BACKEND_CUDA;
-  return VIBEQC_STATUS_SUCCESS;
+  state.executed_backend = GENERATIVEQC_BACKEND_CUDA;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

@@ -11,7 +11,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda_density_fitting_final_state.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 /** Detached, immutable warm input from strict final validation. Two entries
  * suffice for the latest returned density and a frozen replay seed; neither
@@ -177,4 +177,4 @@ struct PersistentScfState {
 
 void destroy_persistent_scf_state(void*& opaque) noexcept;
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

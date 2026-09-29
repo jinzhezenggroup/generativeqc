@@ -8,14 +8,14 @@
 
 #include "posthf/mp2_gradient.hpp"
 
-namespace vibeqc::core {
+namespace generativeqc::core {
 struct System;
 }
-namespace vibeqc::hf {
+namespace generativeqc::hf {
 struct PhysicalReference;
 }
 
-namespace vibeqc::mp2::detail {
+namespace generativeqc::mp2::detail {
 
 using OneElectronDerivativeContract =
     std::function<std::vector<double>(std::span<const double>, std::span<const double>)>;
@@ -28,4 +28,4 @@ std::vector<double> conventional_derivative(const core::System& system,
                                             const OneElectronDerivativeContract& one_electron,
                                             const EriShellDerivativeContract& eri_shell);
 
-}  // namespace vibeqc::mp2::detail
+}  // namespace generativeqc::mp2::detail
