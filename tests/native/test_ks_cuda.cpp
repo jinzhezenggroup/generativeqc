@@ -474,8 +474,7 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
                   features.point_count == grid.point_count() &&
                   features.owner == token.identity.model.owner &&
                   features.solve_epoch == token.identity.determinant.solve_epoch &&
-                  features.generation ==
-                      token.identity.determinant.factor.density_generation,
+                  features.generation == token.identity.determinant.factor.density_generation,
               "resident WB97M-V features lost final-state identity or grid shape");
       auto stale = token;
       ++stale.identity.determinant.factor.density_generation;

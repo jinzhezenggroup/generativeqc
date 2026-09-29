@@ -1584,8 +1584,12 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
       throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
     if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
       throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");
-    binding = {impl_->device,       impl_->nonlocal_raw_density, impl_->nonlocal_raw_gradient,
-               impl_->xc_layout.npoint, impl_->owner,           impl_->solve_epoch,
+    binding = {impl_->device,
+               impl_->nonlocal_raw_density,
+               impl_->nonlocal_raw_gradient,
+               impl_->xc_layout.npoint,
+               impl_->owner,
+               impl_->solve_epoch,
                impl_->final_generation};
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::invalid_argument& error) {
