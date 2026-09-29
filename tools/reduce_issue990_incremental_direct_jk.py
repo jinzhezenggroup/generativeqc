@@ -19,22 +19,32 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def _maximum_abs_difference(first: Any, second: Any) -> float:
-    """Return the maximum finite scalar difference in equally nested lists."""
+    """Return the maximum finite difference; missing results are not evidence."""
 
-    if isinstance(first, list) and isinstance(second, list):
+    if isinstance(first, list) or isinstance(second, list):
+        if not isinstance(first, list) or not isinstance(second, list):
+            raise ValueError("baseline/incremental result shapes differ")
         if len(first) != len(second):
             raise ValueError("baseline/incremental result shapes differ")
+        if not first:
+            raise ValueError("empty benchmark result")
         return max(
-            (_maximum_abs_difference(a, b) for a, b in zip(first, second, strict=True)),
-            default=0.0,
+            _maximum_abs_difference(a, b) for a, b in zip(first, second, strict=True)
         )
-    if first is None and second is None:
-        return 0.0
+    if type(first) not in (int, float) or type(second) not in (int, float):
+        raise ValueError("benchmark results require numeric values")
     a = float(first)
     b = float(second)
-    if not math.isfinite(a) or not math.isfinite(b):
+    difference = abs(a - b)
+    if not all(math.isfinite(value) for value in (a, b, difference)):
         raise ValueError("non-finite benchmark result")
-    return abs(a - b)
+    return difference
+
+
+def _positive_seconds(value: Any) -> float:
+    if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+        raise ValueError("benchmark timings must be finite and positive")
+    return float(value)
 
 
 def _branches(record: dict[str, Any]) -> list[tuple[int, ...]]:
@@ -94,6 +104,11 @@ def main() -> None:
     parser.add_argument("--maximum-force-difference", type=float, default=1.0e-7)
     parser.add_argument("--minimum-speedup", type=float, default=1.0)
     args = parser.parse_args()
+    for name in ("maximum_energy_difference", "maximum_force_difference"):
+        value = getattr(args, name)
+        if not math.isfinite(value) or value < 0:
+            parser.error(f"{name.replace('_', '-')} must be finite and nonnegative")
+    _positive_seconds(args.minimum_speedup)
 
     rows: list[dict[str, Any]] = []
     library_sha: str | None = None
@@ -116,9 +131,15 @@ def main() -> None:
                     "baseline/incremental matrix did not use one native library"
                 )
 
-        baseline_seconds = float(baseline["generativeqc"]["warm_median_seconds"])
-        incremental_seconds = float(incremental["generativeqc"]["warm_median_seconds"])
+        baseline_seconds = _positive_seconds(
+            baseline["generativeqc"]["warm_median_seconds"]
+        )
+        incremental_seconds = _positive_seconds(
+            incremental["generativeqc"]["warm_median_seconds"]
+        )
         speedup = baseline_seconds / incremental_seconds
+        if not math.isfinite(speedup):
+            raise ValueError("non-finite benchmark speedup")
         energy_difference = _maximum_abs_difference(
             baseline["generativeqc"]["energies_hartree"],
             incremental["generativeqc"]["energies_hartree"],
@@ -169,7 +190,7 @@ def main() -> None:
         "all_speed_gates_passed": all(row["speed_gate_passed"] for row in rows),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, indent=2) + "\n")
+    args.output.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
 
     print(
         "AOs  baseline_ms  incremental_ms  speedup  tile_reduce  shell_reduce  "
