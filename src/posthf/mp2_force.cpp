@@ -120,7 +120,7 @@ ConventionalForceResult conventional_force_impl(
       posthf::checked_mul(coordinate_count, sizeof(double)), budget_bytes, backend_stage_bytes);
   const auto h = hcore_mo(reference);
   auto adjoint = energy_adjoint(reference, provider, denominator_threshold, cuda, device_id);
-  const auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
+  auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
                                                       same_space_threshold, cuda, device_id);
   std::vector<double> diagonal(dimension);
   for (std::size_t i = 0; i < reference.nocc; ++i)
@@ -131,9 +131,9 @@ ConventionalForceResult conventional_force_impl(
       response::solve_response(plan, problem, orbital.response_rhs, {}, diagonal);
   if (!response_result.converged())
     throw std::runtime_error("canonical MP2 orbital response did not converge");
-  auto weights = canonical_lagrangian_weights_streamed(reference, h, provider, std::move(adjoint),
-                                                       response_result.solution,
-                                                       same_space_threshold, cuda, device_id);
+  auto weights = canonical_lagrangian_weights_streamed(
+      reference, h, provider, std::move(adjoint), std::move(orbital), response_result.solution,
+      same_space_threshold, cuda, device_id);
   if (!std::isfinite(weights.stationarity_residual) || weights.stationarity_residual > 1e-7)
     throw std::runtime_error("canonical MP2 relaxed Lagrangian is not stationary");
   auto derivative = cuda ? conventional_derivative_cuda(source.orbital(), reference, weights,
@@ -199,7 +199,7 @@ ConventionalForceResult density_fitted_force_cpu(
 
   const auto h = hcore_mo(reference);
   auto adjoint = energy_adjoint(reference, provider, denominator_threshold, false, 0);
-  const auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
+  auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
                                                       same_space_threshold, false, 0);
   const auto virtuals = reference.nbf - reference.nocc;
   std::vector<double> diagonal(posthf::checked_mul(reference.nocc, virtuals));
@@ -212,9 +212,9 @@ ConventionalForceResult density_fitted_force_cpu(
   if (!response_result.converged())
     throw std::runtime_error("RI-MP2 orbital response did not converge");
 
-  auto weights = canonical_lagrangian_weights_streamed(reference, h, provider, std::move(adjoint),
-                                                       response_result.solution,
-                                                       same_space_threshold, false, 0);
+  auto weights = canonical_lagrangian_weights_streamed(
+      reference, h, provider, std::move(adjoint), std::move(orbital), response_result.solution,
+      same_space_threshold, false, 0);
   if (!std::isfinite(weights.stationarity_residual) || weights.stationarity_residual > 1e-7)
     throw std::runtime_error("RI-MP2 relaxed Lagrangian is not stationary");
   auto fitted = density_fitted_lagrangian_weights(reference, provider, weights, budget_bytes);
