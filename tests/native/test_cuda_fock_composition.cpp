@@ -411,6 +411,83 @@ void retained_direct_derivative_reuse() {
   matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
+void shell_rsh_range_derivative_reuse() {
+  constexpr double omega = 0.31;
+  constexpr double short_exchange = 0.22;
+  constexpr double long_exchange = 0.67;
+  for (unsigned angular : {0U, 1U, 2U}) {
+    for (auto representation :
+         {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      auto system = fixture(false);
+      system.shells = {{0, 0, {{0.8, 1.0}}}, {1, angular, {{0.6, 1.0}}}};
+      system.basis_representation = representation;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      const auto n = generativeqc::molecule::ao_count(system);
+      const auto matrix_size = n * n;
+      std::vector<double> alpha(matrix_size), beta(matrix_size);
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j) {
+          alpha[i * n + j] = std::cos(0.31 * (i + j + 1)) / n;
+          beta[i * n + j] = std::sin(0.27 * (i + j + 1)) / (2 * n);
+        }
+
+      std::size_t primitives = 0;
+      for (const auto& shell : system.shells) primitives += shell.primitives.size();
+      for (auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+        const auto strategy = resolve_fock_build(
+            make_rsh_primary_fock_spec(spin, short_exchange), FockBackend::Cuda, 0.0);
+        const auto budget =
+            cuda_direct_coulomb_device_bytes(1, n, system.atoms.size(), system.shells.size(),
+                                             primitives, 1);
+        PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
+        const auto binding = prepared_cuda_direct_derivative_binding(plan);
+        require(binding, "range shell derivative plan did not retain Direct capability");
+
+        std::vector<double> expected;
+        require(execute_cuda_direct_rsh_energy_derivatives_item(
+                    plan.cuda_direct_source(), 0, spin, strategy.spec.coulomb.coefficient,
+                    strategy.spec.exchange.coefficient,
+                    (spin == FockSpin::Restricted ? -0.5 : -1.0) * long_exchange, omega, alpha,
+                    spin == FockSpin::Unrestricted ? beta : std::vector<double>{}, expected,
+                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+
+        double* device_alpha = nullptr;
+        double* device_beta = nullptr;
+        require(cudaMalloc(reinterpret_cast<void**>(&device_alpha),
+                           matrix_size * sizeof(double)) == cudaSuccess,
+                "range shell alpha density allocation failed");
+        require(cudaMemcpyAsync(device_alpha, alpha.data(), matrix_size * sizeof(double),
+                                cudaMemcpyHostToDevice, binding.stream) == cudaSuccess,
+                "range shell alpha density upload failed");
+        if (spin == FockSpin::Unrestricted) {
+          require(cudaMalloc(reinterpret_cast<void**>(&device_beta),
+                             matrix_size * sizeof(double)) == cudaSuccess,
+                  "range shell beta density allocation failed");
+          require(cudaMemcpyAsync(device_beta, beta.data(), matrix_size * sizeof(double),
+                                  cudaMemcpyHostToDevice, binding.stream) == cudaSuccess,
+                  "range shell beta density upload failed");
+        }
+        std::vector<double> actual;
+        require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                    plan.cuda_direct_source(), spin, strategy.spec.coulomb.coefficient,
+                    strategy.spec.exchange.coefficient,
+                    (spin == FockSpin::Restricted ? -0.5 : -1.0) * long_exchange, omega,
+                    device_alpha, device_beta, matrix_size, actual, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        require(cudaFree(device_alpha) == cudaSuccess, "range shell alpha density free failed");
+        if (device_beta)
+          require(cudaFree(device_beta) == cudaSuccess, "range shell beta density free failed");
+        matrix(actual, expected, "shell-native SR/LR derivative");
+      }
+    }
+  }
+}
+
 void independent_reference_export() {
   // Calling the prepared entry directly exercises the independent host driver
   // even for a standard fitted HF pair. Its exported physical frame must not
@@ -456,6 +533,7 @@ int main() {
     ragged_replay();
     prepared_replay();
     retained_direct_derivative_reuse();
+    shell_rsh_range_derivative_reuse();
     independent_reference_export();
     std::cout << "CUDA common Fock composition: exact/DF/absent pairs, signed gradients, batch "
                  "items, SCF/replay/geometry PASS\n";
