@@ -112,19 +112,17 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   require(diagnostic.quartet_work_counters_valid,
           "fixed-topology incremental Direct-J/K work counters are not valid");
   require(diagnostic.full_admitted_shell_quartets <= diagnostic.full_candidate_shell_quartets &&
-              diagnostic.delta_admitted_shell_quartets <=
-                  diagnostic.delta_candidate_shell_quartets,
+              diagnostic.delta_admitted_shell_quartets <= diagnostic.delta_candidate_shell_quartets,
           "incremental Direct-J/K admitted more shell quartets than it visited");
   require(diagnostic.full_admitted_quartet_tiles >= diagnostic.full_admitted_shell_quartets &&
               diagnostic.delta_admitted_quartet_tiles >= diagnostic.delta_admitted_shell_quartets,
           "incremental Direct-J/K tile census is smaller than its admitted shell-quartet census");
-  require(diagnostic.full_candidate_shell_quartets ==
-                  diagnostic.full_admitted_shell_quartets +
-                      diagnostic.full_rejected_shell_quartets &&
-              diagnostic.delta_candidate_shell_quartets ==
-                  diagnostic.delta_admitted_shell_quartets +
-                      diagnostic.delta_rejected_shell_quartets,
-          "incremental Direct-J/K candidate/admitted/rejected counters do not reconcile");
+  require(
+      diagnostic.full_candidate_shell_quartets ==
+              diagnostic.full_admitted_shell_quartets + diagnostic.full_rejected_shell_quartets &&
+          diagnostic.delta_candidate_shell_quartets ==
+              diagnostic.delta_admitted_shell_quartets + diagnostic.delta_rejected_shell_quartets,
+      "incremental Direct-J/K candidate/admitted/rejected counters do not reconcile");
 
   if (screening_tolerance == 0.0) {
     require(diagnostic.anchor_full_builds == 1U && diagnostic.periodic_rebuilds == 0U,

@@ -1428,23 +1428,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           : nullptr;
   unsigned long long* incremental_full_admitted_shell_quartets =
       incremental_direct_jk ? arena_pointer<unsigned long long>(
-                                  resources.arena_,
-                                  layout.incremental_full_admitted_shell_quartets)
+                                  resources.arena_, layout.incremental_full_admitted_shell_quartets)
                             : nullptr;
   unsigned long long* incremental_delta_admitted_shell_quartets =
-      incremental_direct_jk ? arena_pointer<unsigned long long>(
-                                  resources.arena_,
-                                  layout.incremental_delta_admitted_shell_quartets)
-                            : nullptr;
+      incremental_direct_jk
+          ? arena_pointer<unsigned long long>(resources.arena_,
+                                              layout.incremental_delta_admitted_shell_quartets)
+          : nullptr;
   unsigned long long* incremental_full_admitted_quartet_tiles =
       incremental_direct_jk ? arena_pointer<unsigned long long>(
-                                  resources.arena_,
-                                  layout.incremental_full_admitted_quartet_tiles)
+                                  resources.arena_, layout.incremental_full_admitted_quartet_tiles)
                             : nullptr;
   unsigned long long* incremental_delta_admitted_quartet_tiles =
       incremental_direct_jk ? arena_pointer<unsigned long long>(
-                                  resources.arena_,
-                                  layout.incremental_delta_admitted_quartet_tiles)
+                                  resources.arena_, layout.incremental_delta_admitted_quartet_tiles)
                             : nullptr;
   auto residual = arena_pointer<double>(resources.arena_, layout.residual);
   auto weighted_density = arena_pointer<double>(resources.arena_, layout.weighted_density);
@@ -1940,9 +1937,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         static_cast<std::int32_t>(nbf), temporary, active, residual);
     return cuda_status(cudaPeekAtLastError());
   };
-  const auto launch_direct_quartet_metadata =
-      [&](const double* density_input, bool allow_mixed_precision,
-          bool track_incremental_work) -> cudaError_t {
+  const auto launch_direct_quartet_metadata = [&](const double* density_input,
+                                                  bool allow_mixed_precision,
+                                                  bool track_incremental_work) -> cudaError_t {
     if (!quartet_direct) return cudaSuccess;
     if (direct_tile_validation && resources.direct_tile_validation_ != nullptr) {
       cudaError_t validation_error =
@@ -1990,8 +1987,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           allow_mixed_precision && mixed_precision_fock,
           requested_precision_policy.item_cutoff_ceiling,
           requested_precision_policy.item_budget_error, mixed_precision_item_census,
-          fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts,
-          fp32_shell_quartet_tiles, track_incremental_work ? incremental_full_build : nullptr,
+          fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts, fp32_shell_quartet_tiles,
+          track_incremental_work ? incremental_full_build : nullptr,
           track_incremental_work ? incremental_full_admitted_shell_quartets : nullptr,
           track_incremental_work ? incremental_delta_admitted_shell_quartets : nullptr,
           track_incremental_work ? incremental_full_admitted_quartet_tiles : nullptr,
@@ -2016,8 +2013,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           allow_mixed_precision && mixed_precision_fock,
           requested_precision_policy.item_cutoff_ceiling,
           requested_precision_policy.item_budget_error, mixed_precision_item_census,
-          fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts,
-          fp32_shell_quartet_tiles, track_incremental_work ? incremental_full_build : nullptr,
+          fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts, fp32_shell_quartet_tiles,
+          track_incremental_work ? incremental_full_build : nullptr,
           track_incremental_work ? incremental_full_admitted_shell_quartets : nullptr,
           track_incremental_work ? incremental_delta_admitted_shell_quartets : nullptr,
           track_incremental_work ? incremental_full_admitted_quartet_tiles : nullptr,
@@ -2430,9 +2427,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // The exact provider is resolved/validated by run_hf_cuda_bucket_cached.
   // Dense, packed, generated and streamed paths below are execution schedules
   // of that same operator; retain their fused standard-HF kernel ownership.
-  const auto launch_fock_builder =
-      [&](const double* density_input, bool allow_mixed_precision,
-          bool track_incremental_work) -> cudaError_t {
+  const auto launch_fock_builder = [&](const double* density_input, bool allow_mixed_precision,
+                                       bool track_incremental_work) -> cudaError_t {
     const double* quartet_density = transformed_direct ? direct_density : density_input;
     double* quartet_fock = transformed_direct ? direct_fock : fock;
     if (quartet_direct) {
