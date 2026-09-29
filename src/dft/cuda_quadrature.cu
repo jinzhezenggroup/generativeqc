@@ -33,7 +33,7 @@ std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points) {
   return q::sum(layout.device_bytes, cuda_resident_grid_bytes(points));
 }
 
-MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec, int device) {
+MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec, int device,\n                                      bool retain_device) {
   MolecularGrid result(system, spec, Deferred{});
   const auto per_atom =
       q::product(q::product(spec.radial_points, spec.angular_polar), spec.angular_azimuth);
@@ -64,10 +64,14 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   // Retain one immutable full-grid copy beside bounded generation scratch.
   // Its lifetime is independent of this private preparation stream: all writes
   // are ordered before the final stream drain below.
-  auto resident =
-      std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(4, l.points));
-  double* resident_points = resident->get();
-  double* resident_weights = resident_points + q::product(3, l.points);
+  std::shared_ptr<runtime::OwnedCudaBuffer<double>> resident;
+  double *resident_points = nullptr, *resident_weights = nullptr;
+  if (retain_device) {
+    resident =
+        std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(4, l.points));
+    resident_points = resident->get();
+    resident_weights = resident_points + q::product(3, l.points);
+  }
   runtime::OwnedCudaBuffer<double> storage(device, l.doubles, stream.get());
   runtime::OwnedCudaBuffer<int> invalid(device, 1, stream.get());
   const auto check = runtime::cuda_resource_check;
@@ -107,10 +111,12 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
     // publishing the exact generated values into one immutable full-grid
     // device owner. Downstream CUDA consumers borrow this owner directly and
     // therefore never re-upload the host copies.
-    check(cudaMemcpyAsync(resident_points + 3 * begin, data + l.xyz, 3 * count * sizeof(double),
-                          cudaMemcpyDeviceToDevice, stream.get()));
-    check(cudaMemcpyAsync(resident_weights + begin, data + l.weights, count * sizeof(double),
-                          cudaMemcpyDeviceToDevice, stream.get()));
+    if (resident) {
+      check(cudaMemcpyAsync(resident_points + 3 * begin, data + l.xyz, 3 * count * sizeof(double),
+                            cudaMemcpyDeviceToDevice, stream.get()));
+      check(cudaMemcpyAsync(resident_weights + begin, data + l.weights, count * sizeof(double),
+                            cudaMemcpyDeviceToDevice, stream.get()));
+    }
     check(cudaMemcpyAsync(result.points_.data() + 3 * begin, data + l.xyz,
                           3 * count * sizeof(double), cudaMemcpyDeviceToHost, stream.get()));
     check(cudaMemcpyAsync(result.weights_.data() + begin, data + l.weights, count * sizeof(double),
@@ -120,14 +126,16 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   check(cudaMemcpyAsync(&bad, invalid.get(), sizeof(int), cudaMemcpyDeviceToHost, stream.get()));
   stream.synchronize();
   if (bad) throw std::runtime_error("invalid CUDA Becke partition normalization");
-  const auto owner = next_grid_owner();
-  if (!owner) throw std::overflow_error("CUDA molecular-grid owner identity exhausted");
-  result.cuda_storage_ = resident;
-  result.cuda_points_ = resident_points;
-  result.cuda_weights_ = resident_weights;
-  result.cuda_device_bytes_ = cuda_resident_grid_bytes(l.points);
-  result.cuda_owner_ = owner;
-  result.cuda_device_ = device;
+  if (resident) {
+    const auto owner = next_grid_owner();
+    if (!owner) throw std::overflow_error("CUDA molecular-grid owner identity exhausted");
+    result.cuda_storage_ = resident;
+    result.cuda_points_ = resident_points;
+    result.cuda_weights_ = resident_weights;
+    result.cuda_device_bytes_ = cuda_resident_grid_bytes(l.points);
+    result.cuda_owner_ = owner;
+    result.cuda_device_ = device;
+  }
   return result;
 }
 }  // namespace generativeqc::dft
