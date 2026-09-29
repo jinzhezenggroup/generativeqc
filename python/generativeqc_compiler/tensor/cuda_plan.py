@@ -724,8 +724,9 @@ def plan_cuda(
 
     Outputs are indivisible resident tensors. An infeasible minimum fails on
     the CPU, before compiling or touching a device. User data is never needed
-    for shape/schedule selection. The baseline shares existing SSA nodes but
-    neither rewrites the equation nor uses an external chemistry program.
+    for shape/schedule selection. After compiler-owned strict-degree
+    preprocessing, the execution schedule shares the resulting SSA nodes and
+    never uses an external chemistry program.
 
     Symbolic contraction reassociation is enabled by default before CUDA
     storage/layout planning. It rewrites only when the compiler proves a
