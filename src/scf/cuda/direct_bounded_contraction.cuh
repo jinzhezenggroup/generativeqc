@@ -84,6 +84,38 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
 }
 
 template <bool Unrestricted>
+__device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_scaled(
+    DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
+    const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
+    const double* density, const std::uint8_t* active, double* forces, double exchange_coefficient,
+    generativeqc::integrals::CoulombRange range, double omega, std::size_t subtile, unsigned lane) {
+#define GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(order)                                            \
+  case order:                                                                                   \
+    contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(              \
+        batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
+        exchange_coefficient, range, omega, subtile, lane);                                     \
+    break
+  switch (angular_order) {
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(0);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(1);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(2);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(3);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(4);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(5);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(6);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(7);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(8);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(9);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(10);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(11);
+    GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(12);
+    default:
+      break;
+  }
+#undef GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE
+}
+
+template <bool Unrestricted>
 __device__ inline __noinline__ void contract_bounded_direct_force_subtile(
     DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
