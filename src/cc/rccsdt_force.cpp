@@ -463,8 +463,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   const auto hamiltonian_eri_arena = bytes(generated::hamiltonian_eri_weights_arena_elements(o, v));
   const auto fock_small_arena = bytes(generated::fock_small_weights_arena_elements(o, v));
   const auto core = checked_add(before_raw, raw_retained);
-  // Only the compact correlation response remains live through the Z solve.
-  // The dense ERI cotangent is isolated to one final derivative-boundary call.
+  // Correlation and canonicalization both remain live through the final
+  // pullbacks. The ERI cotangent is isolated, but the response owners are not freed.
   const auto response_base =
       sum({core, checked_mul(2, small_response_retained),
            bytes(generated::orbital_jvp_arena_elements(o, v)),
@@ -473,14 +473,19 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   z_options.restart = 30;
   z_options.max_workspace_bytes = max_bytes;
   const auto gmres = response::prepare_gmres(ov, z_options);
+  // Z solution and independent residual survive the solve; basis/action are
+  // already included in response_base. Moving final weights does not free them.
+  const auto final_response_base = checked_add(response_base, bytes(checked_mul(2, ov)));
   plan.response_phase_bytes = std::max(
       {sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
-       sum({core, checked_mul(2, small_response_retained), bytes(n2), fock_small_arena}),
+       sum({core, checked_mul(2, small_response_retained), bytes(checked_mul(2, n2)), fock_small_arena}),
        checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
        checked_add(response_base, gmres.workspace_bytes),
-       sum({core, small_response_retained, eri_response_retained, hamiltonian_eri_arena})});
+       sum({final_response_base, small_response_retained, hamiltonian_small_arena}),
+       sum({final_response_base, small_response_retained, eri_response_retained,
+            hamiltonian_eri_arena})});
   const auto derivative_live =
-      sum({core, small_response_retained, eri_response_retained, bytes(checked_mul(2, ov))});
+      sum({final_response_base, small_response_retained, eri_response_retained});
   const auto coordinates = checked_mul(3, system.atoms.size());
   const auto derivative_staging =
       bytes(sum({checked_mul(2, n2), checked_mul(shell, checked_mul(n, n2)),
