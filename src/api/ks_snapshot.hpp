@@ -25,6 +25,11 @@ void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+/** Optional prepared-shell J/K handoff. Successful output contains two
+ * source-major gradients, with all-zero K for a semilocal model. */
+generativeqc_status generativeqc_ks_snapshot_cuda_full_range_shell_gradient_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count, std::size_t maximum_host_bytes, std::uint64_t* retained_bytes);
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy);

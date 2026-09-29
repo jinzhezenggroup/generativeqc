@@ -998,3 +998,61 @@ def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
     }
     assert "serialized generated KS force device staging cap" in names
     assert "serialized generated KS force host staging cap" in names
+
+
+@pytest.mark.parametrize("family", ["pbe", "r2scan", "pbe0", "b3lyp"])
+@pytest.mark.parametrize("spin", ["rks", "uks"])
+def test_prepared_shell_join_matches_ao_oracle_and_rejects_stale_state(
+    family: str, spin: str, compiler: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc import _stationary_cuda as runtime
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+
+    atoms = [("H", (0.1, -0.2, -0.7)), ("H", (0.2, 0.1, 0.8))]
+    multiplicity = 1
+    if spin == "uks":
+        atoms.append(("H", (1.8, -0.1, -0.3)))
+        multiplicity = 2
+    calc = _calculator(f"{family}-{spin}")
+    with (
+        calc.prepare_batch(
+            [atoms], multiplicities=[multiplicity], warm_start=True
+        ) as batch,
+        NativeAO(atoms, multiplicity=multiplicity) as basis,
+    ):
+        batch.execute(properties=("energy",), strict=True)
+        state = StationaryKsState.from_native(batch, basis)
+        try:
+            selected = _diagnostic(state, basis, compiler, tile_points=31)
+            assert (
+                selected.work["two_electron_derivative_handoff"]["route"]
+                == "prepared-direct-shell"
+            )
+            assert selected.work["public_ao_quartets_submitted"] == 0
+            with monkeypatch.context() as patch:
+                patch.setattr(
+                    runtime,
+                    "seed_prepared_shell_sources",
+                    lambda *a, **k: ((), {"route": "test-ao-oracle"}),
+                )
+                oracle = _diagnostic(state, basis, compiler, tile_points=31)
+            for name in selected.components:
+                np.testing.assert_allclose(
+                    selected.components[name],
+                    oracle.components[name],
+                    atol=1e-8,
+                    rtol=0,
+                )
+            np.testing.assert_allclose(
+                selected.gradient, oracle.gradient, atol=1e-8, rtol=0
+            )
+            replay = _diagnostic(state, basis, compiler, tile_points=31)
+            np.testing.assert_allclose(
+                replay.gradient, selected.gradient, atol=1e-10, rtol=0
+            )
+            batch.execute(properties=("energy",), strict=True)
+            with pytest.raises((ValueError, RuntimeError)):
+                _diagnostic(state, basis, compiler, tile_points=31)
+        finally:
+            state._source.close()

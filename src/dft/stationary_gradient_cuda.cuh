@@ -18,6 +18,8 @@ struct Owner {
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
       max_page_primitive_work{}, bytes{};
   bool failed = true, topology_ready = false;
+  bool source_seed_ready = false;
+  uint64_t source_seed_launch_epoch{};
   bool profile = false, geometry_pending = false;
   cudaStream_t geometry_stream{};
   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
@@ -256,6 +258,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     p->context.check_device();
     drain_geometry(*p);
     p->failed = false;
+    p->source_seed_ready = false;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
@@ -271,8 +274,40 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     finished(*p, stream);
     profile_elapsed(*p, p->setup_transfer_ms, p->stage0, p->stage1);
     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
+    p->source_seed_launch_epoch = p->launches;
+    p->source_seed_ready = true;
   });
 }
+
+/** Import compact, fully contracted source gradients into a freshly reset owner.
+ * The existing compiler-generated source reduction remains the only final sum. */
+int stationary_seed_sources_v1(void* pointer, const double* values, size_t count, char* error,
+                               size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !values || count != 3 * stationary_source_count * p->atoms)
+      throw std::invalid_argument("invalid stationary source seed shape");
+    check(*p);
+    if (!p->source_seed_ready || p->geometry_pending || p->launches != p->source_seed_launch_epoch)
+      throw std::invalid_argument("stationary source seeds require a fresh reset");
+    for (size_t i = 0; i < count; ++i)
+      if (!std::isfinite(values[i]))
+        throw std::invalid_argument("nonfinite stationary source seed");
+    auto stream = p->context.stream;
+    try {
+      upload(*p, p->sources, values, count, stream);
+      cuda_check(cudaStreamSynchronize(stream));
+      ++p->synchronizations;
+    } catch (...) {
+      // The caller's host seed must outlive even a partially submitted upload.
+      if (cudaStreamSynchronize(stream) == cudaSuccess) ++p->synchronizations;
+      throw;
+    }
+    p->source_seed_ready = false;
+  });
+}
+
 int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges, size_t count,
                      char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;

@@ -85,6 +85,7 @@ from ._dft_gradient import (
     native_ao_geometry_identity,
 )
 from ._stationary_cpu import DiagnosticStationaryGradient
+from ._stationary_shell_cuda import seed_prepared_shell_sources
 
 _REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
     record["functional_code"] for record in SPLIT_HYBRIDS.values()
@@ -1975,6 +1976,18 @@ def _complete_rks_cuda_gradient_diagnostic(
                 spec.coincident_tolerance, state.density, state.weighted_density
             )
             ao.set_density(density)
+        with timeline.phase("prepared_shell_derivatives"):
+            # This compact O(Natom) staging finishes before source publication.
+            # It reuses the existing 120*Natom-double transient host allowance.
+            shell_sources, shell_work = seed_prepared_shell_sources(
+                state,
+                sources,
+                source_names,
+                na,
+                ecp=ecp,
+                maximum_host_bytes=120 * na * 8,
+            )
+        descriptor_records = records - len(shell_sources) * primitive_sum**4
         timeline.switch("python_packing")
         # integral_terms and primitive_tile are admitted independently. A fixed
         # producer must fit both the logical fixed threshold and the resident
@@ -1992,6 +2005,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             ("coulomb", 4, "four_center_eri"),
             *((("exact_exchange", 4, "four_center_eri"),) if has_exchange else ()),
         ):
+            if source in shell_sources:
+                continue
             domain = RuntimeTaskDomain.rectangular((n,) * rank)
             source_index = source_names.index(source)
 
@@ -2118,7 +2133,10 @@ def _complete_rks_cuda_gradient_diagnostic(
         timeline.switch("owner_cleanup")
     timeline.switch("publication_validation")
     contract.validate(state)  # Replay/replacement/closure revokes publication.
-    if work["primitive_records"] != records or work["grid_pair_visits"] != pair_visits:
+    if (
+        work["primitive_records"] != descriptor_records
+        or work["grid_pair_visits"] != pair_visits
+    ):
         raise RuntimeError("CUDA executed work disagrees with admitted source coverage")
     published_gradient = immutable(gradient)
     published_components = MappingProxyType(
@@ -2145,6 +2163,14 @@ def _complete_rks_cuda_gradient_diagnostic(
         ecp_ordered_pairs=2 * n * n if ecp else 0,
         ecp_quadrature_pair_samples=ecp_pair_samples,
         ecp_pair_sample_budget=max_ecp_pair_samples,
+        two_electron_derivative_handoff=shell_work,
+        public_ao_quartets_submitted=(1 + int(has_exchange) - len(shell_sources))
+        * n**4,
+        primitive_records_scope=(
+            "stationary-descriptor-owner; native shell work unavailable"
+            if shell_sources
+            else "complete-stationary-descriptor-owner"
+        ),
         ordered_pairs=n * n,
         ordered_quartets=(1 + int(has_exchange)) * n**4,
         exchange_ordered_quartets=n**4 if has_exchange else 0,
@@ -2184,7 +2210,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             "resident_capacity": primitive_tile,
             "page_capacity": primitive_tile,
             "primitive_record_page_budget": max_primitive_records,
-            "logical_primitive_records": records,
+            "logical_primitive_records": descriptor_records,
+            "logical_primitive_records_scope": "stationary-descriptor-owner",
             "sources": tuple(task_executions),
         },
         additional_host_numeric_bound=(

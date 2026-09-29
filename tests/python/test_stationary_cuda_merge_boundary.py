@@ -139,8 +139,9 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
 
 
 @pytest.mark.parametrize("aot", (False, True))
+@pytest.mark.parametrize("shell", (False, True))
 def test_weight_fusion_orchestration_runs_without_a_device(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool, shell: bool
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
@@ -238,6 +239,14 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     }
     owner.reduced.return_value = np.zeros((1, 3))
     admitted: dict[str, int] = {}
+    monkeypatch.setattr(
+        runtime,
+        "seed_prepared_shell_sources",
+        lambda *a, **k: (
+            ("coulomb",) if shell else (),
+            {"route": "test-shell" if shell else "test-ao"},
+        ),
+    )
 
     def make_owner(
         _basis: object,
@@ -338,7 +347,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         call(0, "kinetic", ((0, 0),)),
         call(0, "nuclear_attraction", ((0, 0),), 0, 1),
         call(5, "overlap", ((0, 0),)),
-        call(1, "four_center_eri", ((0, 0, 0, 0),)),
+        *([] if shell else [call(1, "four_center_eri", ((0, 0, 0, 0),))]),
     ]
     owner.reduced.assert_called_once_with()
     assert result.work["tensor_executions"] == 0
@@ -352,16 +361,14 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     assert task_schedule["fixed_capacity"] == 16
     assert task_schedule["resident_capacity"] == 16
     assert task_schedule["page_capacity"] == 16
-    assert [source["mode"] for source in task_schedule["sources"]] == [
-        "fixed",
-        "fixed",
-        "fixed",
-    ]
-    assert [source["producer_pages"] for source in task_schedule["sources"]] == [
-        1,
-        1,
-        1,
-    ]
+    assert [source["mode"] for source in task_schedule["sources"]] == ["fixed"] * (
+        2 if shell else 3
+    )
+    assert [source["producer_pages"] for source in task_schedule["sources"]] == [1] * (
+        2 if shell else 3
+    )
+    assert result.work["public_ao_quartets_submitted"] == (0 if shell else 1)
+    assert task_schedule["logical_primitive_records"] == (3 if shell else 4)
     assert result.execution.endswith("/generated-device-stationary-weights-v1")
 
 

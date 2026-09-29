@@ -504,6 +504,45 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
   }
 }
 
+// Compact two-source handoff for ordinary semilocal/global-hybrid stationary forces.
+// This does not reuse the WB97M-V five-source ABI or reinterpret its source order.
+generativeqc_status generativeqc_ks_snapshot_cuda_full_range_shell_gradient_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count, std::size_t maximum_host_bytes, std::uint64_t* retained_bytes) {
+  if (!batch || !snapshot || !values || !retained_bytes || !maximum_host_bytes)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!snapshot->all_electron) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    if (!snapshot->atoms || snapshot->atoms > 128 || count != 6 * snapshot->atoms)
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    // Native result/candidate staging is compact O(Natom), not a second SCF owner.
+    if (maximum_host_bytes / sizeof(double) / 3 < count) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    std::vector<double> candidate;
+    std::uint64_t retained = 0;
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_full_range_shell_gradient(
+        *batch->plan, snapshot->index, snapshot->token, candidate, retained, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    if (candidate.size() != count ||
+        !std::all_of(candidate.begin(), candidate.end(),
+                     [](double value) { return std::isfinite(value); }))
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy(candidate.begin(), candidate.end(), values);
+    *retained_bytes = retained;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy) {

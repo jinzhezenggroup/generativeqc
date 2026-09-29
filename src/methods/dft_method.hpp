@@ -25,6 +25,15 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
                                               const dft::CudaKsFinalStateToken& expected,
                                               KsDerivativeSnapshot& output, std::string& detail);
 
+/** Borrow the exact successful KS density and the prepared full-range Direct
+ * shell owner. Sources are [J,K]; K is zero when the prepared model has no K.
+ * Only unavailable capability returns NOT_IMPLEMENTED; execution errors propagate. */
+generativeqc_status dft_cuda_full_range_shell_gradient(PreparedBatch& batch, std::size_t index,
+                                                       const dft::CudaKsFinalStateToken& expected,
+                                                       std::vector<double>& output,
+                                                       std::uint64_t& retained_bytes,
+                                                       std::string& detail);
+
 /** Five explicit CUDA stationary sources: hcore, overlap/Pulay, J, SR-K,
  * LR-K. The live token binds D/W, geometry, radial parameters and spin.
  * XC, nonlocal correlation and nuclear repulsion are separate consumers. */
