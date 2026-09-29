@@ -40,6 +40,24 @@ struct IncrementalDirectJkDiagnostic {
   std::uint64_t anchor_updates{};
   /** Largest absolute alpha/beta delta-density element observed. */
   double max_abs_delta_density{};
+  /** Fixed-topology compaction counters below are complete for this item. */
+  bool quartet_work_counters_valid{};
+  /** Candidate shell quartets visited by full anchor/refresh builds. */
+  std::uint64_t full_candidate_shell_quartets{};
+  /** Candidate shell quartets rejected before Direct-J/K consumption. */
+  std::uint64_t full_rejected_shell_quartets{};
+  /** Shell quartets admitted by the physical screening predicate. */
+  std::uint64_t full_admitted_shell_quartets{};
+  /** AO quartet tiles materialized from admitted full-density shell quartets. */
+  std::uint64_t full_admitted_quartet_tiles{};
+  /** Candidate shell quartets visited by incremental delta-density builds. */
+  std::uint64_t delta_candidate_shell_quartets{};
+  /** Delta shell quartets rejected before Direct-J/K consumption. */
+  std::uint64_t delta_rejected_shell_quartets{};
+  /** Delta shell quartets admitted by the physical screening predicate. */
+  std::uint64_t delta_admitted_shell_quartets{};
+  /** AO quartet tiles materialized from admitted delta-density shell quartets. */
+  std::uint64_t delta_admitted_quartet_tiles{};
 };
 
 /** How the requested floating-point precision policy actually resolved. */
