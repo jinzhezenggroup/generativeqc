@@ -32,7 +32,7 @@ def load_join() -> typing.Any:
     exec(
         compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"),
         namespace,
-    )  # noqa: S102 -- execute only the checked-out adapter AST
+    )
     return namespace[function.name]
 
 

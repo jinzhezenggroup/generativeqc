@@ -21,7 +21,7 @@ def test_source_seed_rejects_replacement_and_drains_failed_uploads(
     begin = source.index("int stationary_seed_sources_v1(")
     end = source.index("int stationary_tasks(", begin)
     body = source[begin:end]
-    harness = r'''
+    harness = r"""
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -65,8 +65,8 @@ void upload(Owner& p, double* output, const double* input, size_t count, int) {
   if (throw_upload) throw std::runtime_error("partial submission");
 }
 }
-'''
-    main = r'''
+"""
+    main = r"""
 int main() {
   using namespace generativeqc_stationary_cuda;
   std::array<double, 42> input{}, output{};
@@ -95,16 +95,14 @@ int main() {
   before = sync_attempts;
   require(invoke() != 0 && p.failed && !pending_input && sync_attempts == before+2);
 }
-'''
+"""
     cpp = tmp_path / "seed.cpp"
     cpp.write_text(harness + body + main)
     binary = tmp_path / "seed"
-    subprocess.run(  # noqa: S603 -- compile checked-out source with fixed flags
+    subprocess.run(
         [compiler, "-std=c++20", "-Wall", "-Wextra", str(cpp), "-o", str(binary)],
         check=True,
         capture_output=True,
         text=True,
     )
-    subprocess.run(  # noqa: S603 -- run only the just-compiled test harness
-        [str(binary)], check=True, capture_output=True, text=True
-    )
+    subprocess.run([str(binary)], check=True, capture_output=True, text=True)
