@@ -114,11 +114,17 @@ std::vector<double> streamed_fock(std::span<const double> h,
   return fock;
 }
 
-std::vector<double> rotation_gradient_streamed(std::span<const double> one,
-                                               std::span<const double> two,
-                                               std::span<const double> h,
-                                               const posthf::MOBlockProvider& provider,
-                                               std::size_t n, bool cuda, int device_id) {
+std::vector<double> rotation_gradient_streamed(
+    std::span<const double> one, std::span<const double> fock_weights,
+    std::span<const double> correlation_iajb, std::span<const double> h,
+    const posthf::MOBlockProvider& provider, std::size_t n, std::size_t occupied, bool cuda,
+    int device_id) {
+  const auto virtuals = n - occupied;
+  const auto correlation_elements = posthf::checked_mul(square(occupied), square(virtuals));
+  if (one.size() != square(n) || fock_weights.size() != square(n) ||
+      correlation_iajb.size() != correlation_elements)
+    throw std::invalid_argument("factorized streamed MP2 rotation weights have wrong dimensions");
+
   std::vector<double> result(square(n), 0.0);
   for (std::size_t p = 0; p < n; ++p)
     for (std::size_t q = 0; q < n; ++q)
@@ -126,6 +132,10 @@ std::vector<double> rotation_gradient_streamed(std::span<const double> one,
         result[t * n + p] += one[p * n + q] * h[t * n + q];
         result[t * n + q] += one[p * n + q] * h[p * n + t];
       }
+
+  // Traverse only the structural support of the relaxed MP2 cotangent:
+  // O(N^2*Nocc) Fock-like terms plus the existing ijab correlation adjoint.
+  // This deliberately avoids the former dense t*p*q*r*s traversal.
   const auto all = all_orbitals(n);
   for (std::size_t t = 0; t < n; ++t) {
     const std::vector<std::size_t> orbital{t};
@@ -133,17 +143,29 @@ std::vector<double> rotation_gradient_streamed(std::span<const double> one,
     const auto second = provider.get({all, orbital, all, all}, cuda, device_id);
     const auto third = provider.get({all, all, orbital, all}, cuda, device_id);
     const auto fourth = provider.get({all, all, all, orbital}, cuda, device_id);
+    auto accumulate = [&](std::size_t p, std::size_t q, std::size_t r, std::size_t s,
+                          double weight) {
+      if (weight == 0.0) return;
+      result[t * n + p] += weight * first[(q * n + r) * n + s];
+      result[t * n + q] += weight * second[(p * n + r) * n + s];
+      result[t * n + r] += weight * third[(p * n + q) * n + s];
+      result[t * n + s] += weight * fourth[(p * n + q) * n + r];
+    };
     for (std::size_t p = 0; p < n; ++p)
-      for (std::size_t q = 0; q < n; ++q)
-        for (std::size_t r = 0; r < n; ++r)
-          for (std::size_t s = 0; s < n; ++s) {
-            const double weight = two[eri_index(n, p, q, r, s)];
-            if (weight == 0.0) continue;
-            result[t * n + p] += weight * first[(q * n + r) * n + s];
-            result[t * n + q] += weight * second[(p * n + r) * n + s];
-            result[t * n + r] += weight * third[(p * n + q) * n + s];
-            result[t * n + s] += weight * fourth[(p * n + q) * n + r];
-          }
+      for (std::size_t q = 0; q < n; ++q) {
+        const double weight = fock_weights[p * n + q];
+        if (weight == 0.0) continue;
+        for (std::size_t i = 0; i < occupied; ++i) {
+          accumulate(p, q, i, i, 2.0 * weight);
+          accumulate(p, i, i, q, -weight);
+        }
+      }
+    for (std::size_t i = 0; i < occupied; ++i)
+      for (std::size_t j = 0; j < occupied; ++j)
+        for (std::size_t a = 0; a < virtuals; ++a)
+          for (std::size_t b = 0; b < virtuals; ++b)
+            accumulate(i, occupied + a, j, occupied + b,
+                       correlation_iajb[g_index(occupied, virtuals, i, j, a, b)]);
   }
   if (!finite(result)) throw std::runtime_error("nonfinite streamed MP2 rotation gradient");
   return result;
@@ -174,6 +196,29 @@ OrbitalRhs initial_orbital_weights(const EnergyAdjoint& adjoint) {
   return result;
 }
 
+OrbitalRhs initial_orbital_weights_streamed(const EnergyAdjoint& adjoint) {
+  const auto n = adjoint.orbitals;
+  OrbitalRhs result;
+  result.orbitals = n;
+  result.occupied = adjoint.occupied;
+  result.one_electron.assign(square(n), 0.0);
+  result.fock_weights.assign(square(n), 0.0);
+  for (std::size_t p = 0; p < n; ++p) {
+    const double weight = adjoint.orbital_energies[p];
+    result.one_electron[p * n + p] = weight;
+    result.fock_weights[p * n + p] = weight;
+  }
+  return result;
+}
+
+void add_negative_fock_multiplier_factorized(std::vector<double>& one,
+                                             std::vector<double>& fock_weights,
+                                             std::size_t n, std::size_t row,
+                                             std::size_t column, double value) {
+  one[row * n + column] -= value;
+  fock_weights[row * n + column] -= value;
+}
+
 void add_negative_fock_multiplier(std::vector<double>& one, std::vector<double>& two, std::size_t n,
                                   std::size_t occupied, std::size_t row, std::size_t column,
                                   double value) {
@@ -184,6 +229,49 @@ void add_negative_fock_multiplier(std::vector<double>& one, std::vector<double>&
   }
 }
 }  // namespace
+
+bool valid_factorized_two_electron_weights(const FactorizedTwoElectronWeights& weights) {
+  if (weights.version != FactorizedTwoElectronWeights::current_version || !weights.orbitals ||
+      !weights.occupied || weights.occupied >= weights.orbitals ||
+      weights.fock.size() != square(weights.orbitals))
+    return false;
+  const auto virtuals = weights.orbitals - weights.occupied;
+  const auto expected = posthf::checked_mul(square(weights.occupied), square(virtuals));
+  return weights.correlation_iajb.size() == expected && finite(weights.fock) &&
+         finite(weights.correlation_iajb);
+}
+
+double factorized_two_electron_weight(const FactorizedTwoElectronWeights& weights, std::size_t p,
+                                      std::size_t q, std::size_t r, std::size_t s) {
+  const auto n = weights.orbitals, occupied = weights.occupied;
+  if (weights.version != FactorizedTwoElectronWeights::current_version || !n || !occupied ||
+      occupied >= n || p >= n || q >= n || r >= n || s >= n ||
+      weights.fock.size() != square(n))
+    throw std::invalid_argument("invalid factorized MP2 two-electron weight lookup");
+  const auto virtuals = n - occupied;
+  const auto expected = posthf::checked_mul(square(occupied), square(virtuals));
+  if (weights.correlation_iajb.size() != expected)
+    throw std::invalid_argument("factorized MP2 correlation adjoint has wrong dimensions");
+
+  double value = 0.0;
+  if (r == s && r < occupied) value += 2.0 * weights.fock[p * n + q];
+  if (q == r && q < occupied) value -= weights.fock[p * n + s];
+  if (p < occupied && q >= occupied && r < occupied && s >= occupied)
+    value += weights.correlation_iajb[g_index(occupied, virtuals, p, r, q - occupied, s - occupied)];
+  return value;
+}
+
+double two_electron_weight(const LagrangianWeights& weights, std::size_t p, std::size_t q,
+                           std::size_t r, std::size_t s) {
+  const auto n = weights.orbitals;
+  if (!weights.two_electron.empty()) {
+    if (!n || weights.two_electron.size() != fourth_power(n) || p >= n || q >= n || r >= n ||
+        s >= n)
+      throw std::invalid_argument("invalid dense MP2 two-electron weight lookup");
+    return weights.two_electron[eri_index(n, p, q, r, s)];
+  }
+  return factorized_two_electron_weight(weights.two_electron_factors, p, q, r, s);
+}
 
 EnergyAdjoint canonical_energy_adjoint(std::span<const double> integrals_iajb,
                                        std::span<const double> orbital_energies,
@@ -255,8 +343,8 @@ OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<con
                 "same-space canonical MP2 response has a nonstationary degenerate subspace");
           continue;
         }
-        add_negative_fock_multiplier(result.one_electron, result.two_electron, n, occupied, q, p,
-                                     derivative / denominator);
+        add_negative_fock_multiplier_factorized(result.one_electron, result.fock_weights, n, q, p,
+                                                derivative / denominator);
       }
   };
   correct_block(0, occupied);
@@ -287,10 +375,11 @@ OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference
   for (std::size_t p = 0; p < n; ++p)
     if (std::abs(fock[p * n + p] - reference.orbital_energies[p]) > 1e-8)
       throw std::invalid_argument("streamed MP2 Fock spectrum differs from the reference");
-  auto result = initial_orbital_weights(adjoint);
+  auto result = initial_orbital_weights_streamed(adjoint);
   const auto virtuals = n - occupied;
-  auto gradient = rotation_gradient_streamed(result.one_electron, result.two_electron, hcore_mo,
-                                             provider, n, cuda, device_id);
+  auto gradient = rotation_gradient_streamed(result.one_electron, result.fock_weights,
+                                             adjoint.integrals_iajb, hcore_mo, provider, n,
+                                             occupied, cuda, device_id);
   result.energy_gradient.resize(occupied * virtuals);
   for (std::size_t i = 0; i < occupied; ++i)
     for (std::size_t a = 0; a < virtuals; ++a)
@@ -313,8 +402,9 @@ OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference
   };
   correct_block(0, occupied);
   correct_block(occupied, n);
-  gradient = rotation_gradient_streamed(result.one_electron, result.two_electron, hcore_mo,
-                                        provider, n, cuda, device_id);
+  gradient = rotation_gradient_streamed(result.one_electron, result.fock_weights,
+                                        adjoint.integrals_iajb, hcore_mo, provider, n, occupied,
+                                        cuda, device_id);
   result.response_rhs.resize(occupied * virtuals);
   for (std::size_t i = 0; i < occupied; ++i)
     for (std::size_t a = 0; a < virtuals; ++a)
@@ -365,7 +455,7 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
 
 LagrangianWeights canonical_lagrangian_weights_streamed(
     const hf::PhysicalReference& reference, std::span<const double> hcore_mo,
-    const posthf::MOBlockProvider& provider, const EnergyAdjoint& adjoint,
+    const posthf::MOBlockProvider& provider, EnergyAdjoint adjoint,
     std::span<const double> response, double same_space_threshold, bool cuda, int device_id) {
   auto orbital = canonical_orbital_rhs_streamed(reference, hcore_mo, provider, adjoint,
                                                 same_space_threshold, cuda, device_id);
@@ -377,19 +467,22 @@ LagrangianWeights canonical_lagrangian_weights_streamed(
   result.orbitals = n;
   result.occupied = occupied;
   result.one_electron = std::move(orbital.one_electron);
-  result.two_electron = std::move(orbital.two_electron);
+  result.two_electron_factors.orbitals = n;
+  result.two_electron_factors.occupied = occupied;
+  result.two_electron_factors.fock = std::move(orbital.fock_weights);
+  result.two_electron_factors.correlation_iajb = std::move(adjoint.integrals_iajb);
   for (std::size_t i = 0; i < occupied; ++i) {
     result.one_electron[i * n + i] += 2.0;
-    for (std::size_t j = 0; j < occupied; ++j) {
-      result.two_electron[eri_index(n, i, i, j, j)] += 2.0;
-      result.two_electron[eri_index(n, i, j, j, i)] -= 1.0;
-    }
+    result.two_electron_factors.fock[i * n + i] += 1.0;
     for (std::size_t a = 0; a < virtuals; ++a)
-      add_negative_fock_multiplier(result.one_electron, result.two_electron, n, occupied,
-                                   occupied + a, i, response[i * virtuals + a]);
+      add_negative_fock_multiplier_factorized(
+          result.one_electron, result.two_electron_factors.fock, n, occupied + a, i,
+          response[i * virtuals + a]);
   }
-  const auto gradient = rotation_gradient_streamed(result.one_electron, result.two_electron,
-                                                   hcore_mo, provider, n, cuda, device_id);
+  const auto gradient = rotation_gradient_streamed(
+      result.one_electron, result.two_electron_factors.fock,
+      result.two_electron_factors.correlation_iajb, hcore_mo, provider, n, occupied, cuda,
+      device_id);
   result.overlap.resize(square(n));
   std::vector<double> stationarity(square(n));
   for (std::size_t p = 0; p < n; ++p)
