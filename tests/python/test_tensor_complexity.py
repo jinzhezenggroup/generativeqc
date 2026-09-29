@@ -29,6 +29,14 @@ def _matrix(name: str, space: IndexSpace, left: str, right: str) -> Node:
     )
 
 
+def test_symbolic_degree_is_independent_of_full_population_fixture_size() -> None:
+    space = IndexSpace("ao", "ao", 1)
+    matrix = _matrix("matrix", space, "i", "j")
+    complexity = node_complexity(matrix)
+    assert complexity.storage.powers == (("N", 2),)
+    assert complexity.storage.degree == 2
+
+
 def test_symbolic_degree_tracks_scientific_dimension_families() -> None:
     occupied = IndexSpace("occ", "occupied", 3)
     virtual = IndexSpace("vir", "virtual", 5)

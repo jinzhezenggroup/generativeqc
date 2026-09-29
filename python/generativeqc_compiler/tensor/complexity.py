@@ -75,7 +75,13 @@ class ComplexityMonomial:
 
 
 def _symbol(index: Index) -> str | None:
-    if index.extent <= 1 or index.space.kind in _CONSTANT_KINDS:
+    if index.space.kind in _CONSTANT_KINDS:
+        return None
+    if (
+        index.selection is not None
+        or index.start != 0
+        or index.stop != index.space.size
+    ):
         return None
     return _SYMBOL_BY_KIND.get(index.space.kind)
 
@@ -238,6 +244,37 @@ class _TreePlan:
     signature: tuple[typing.Any, ...]
 
 
+def _plan_key(plan: _TreePlan) -> tuple[typing.Any, ...]:
+    return (
+        plan.max_degree,
+        plan.concrete_work,
+        plan.peak_elements,
+        plan.signature,
+    )
+
+
+def _dominates(left: _TreePlan, right: _TreePlan) -> bool:
+    return (
+        left.max_degree <= right.max_degree
+        and left.concrete_work <= right.concrete_work
+        and left.peak_elements <= right.peak_elements
+    )
+
+
+def _pareto_frontier(candidates: typing.Iterable[_TreePlan]) -> tuple[_TreePlan, ...]:
+    frontier: list[_TreePlan] = []
+    for candidate in sorted(candidates, key=_plan_key):
+        if any(_dominates(existing, candidate) for existing in frontier):
+            continue
+        frontier = [
+            existing
+            for existing in frontier
+            if not _dominates(candidate, existing)
+        ]
+        frontier.append(candidate)
+    return tuple(frontier)
+
+
 def _binary_einsum(
     left: _TreePlan,
     right: _TreePlan,
@@ -300,25 +337,27 @@ def _reassociate_node(node: Node, *, max_operands: int) -> Node:
             and (label in final_set or appearances[label] & (full_mask ^ mask))
         )
 
-    plans: dict[int, _TreePlan] = {}
+    plans: dict[int, tuple[_TreePlan, ...]] = {}
     for position, (child, labels) in enumerate(
         zip(node.inputs, labels_by_operand, strict=True)
     ):
         mask = 1 << position
-        plans[mask] = _TreePlan(
-            child,
-            labels,
-            0,
-            0,
-            0,
-            ("leaf", position),
+        plans[mask] = (
+            _TreePlan(
+                child,
+                labels,
+                0,
+                0,
+                0,
+                ("leaf", position),
+            ),
         )
 
     masks = sorted(range(1, full_mask + 1), key=lambda value: value.bit_count())
     for mask in masks:
         if mask in plans:
             continue
-        best: _TreePlan | None = None
+        candidates: list[_TreePlan] = []
         left_mask = (mask - 1) & mask
         while left_mask:
             right_mask = mask ^ left_mask
@@ -328,52 +367,54 @@ def _reassociate_node(node: Node, *, max_operands: int) -> Node:
                 and left_mask in plans
                 and right_mask in plans
             ):
-                left = plans[left_mask]
-                right = plans[right_mask]
                 output_labels = retained_labels(mask)
-                work_labels = tuple(dict.fromkeys(left.labels + right.labels))
-                work = _monomial(domains[label] for label in work_labels)
-                elements = prod(domains[label].extent for label in work_labels)
-                output_elements = prod(
-                    (domains[label].extent for label in output_labels),
-                    start=1,
-                )
-                coefficient = node.attrs["coefficient"] if mask == full_mask else (1, 1)
-                candidate_node = _binary_einsum(
-                    left,
-                    right,
-                    output_labels,
-                    domains,
-                    coefficient,
-                    node.spec if mask == full_mask else None,
-                )
-                candidate = _TreePlan(
-                    candidate_node,
-                    output_labels,
-                    max(left.max_degree, right.max_degree, work.degree),
-                    left.concrete_work + right.concrete_work + 2 * elements,
-                    max(left.peak_elements, right.peak_elements, output_elements),
-                    ("pair", left.signature, right.signature),
-                )
-                if best is None or (
-                    candidate.max_degree,
-                    candidate.concrete_work,
-                    candidate.peak_elements,
-                    candidate.signature,
-                ) < (
-                    best.max_degree,
-                    best.concrete_work,
-                    best.peak_elements,
-                    best.signature,
-                ):
-                    best = candidate
+                for left in plans[left_mask]:
+                    for right in plans[right_mask]:
+                        work_labels = tuple(dict.fromkeys(left.labels + right.labels))
+                        work = _monomial(domains[label] for label in work_labels)
+                        elements = prod(
+                            domains[label].extent for label in work_labels
+                        )
+                        output_elements = prod(
+                            (domains[label].extent for label in output_labels),
+                            start=1,
+                        )
+                        coefficient = (
+                            node.attrs["coefficient"]
+                            if mask == full_mask
+                            else (1, 1)
+                        )
+                        candidate_node = _binary_einsum(
+                            left,
+                            right,
+                            output_labels,
+                            domains,
+                            coefficient,
+                            node.spec if mask == full_mask else None,
+                        )
+                        candidates.append(
+                            _TreePlan(
+                                candidate_node,
+                                output_labels,
+                                max(left.max_degree, right.max_degree, work.degree),
+                                left.concrete_work
+                                + right.concrete_work
+                                + 2 * elements,
+                                max(
+                                    left.peak_elements,
+                                    right.peak_elements,
+                                    output_elements,
+                                ),
+                                ("pair", left.signature, right.signature),
+                            )
+                        )
             left_mask = (left_mask - 1) & mask
-        if best is None:
+        if not candidates:
             return node
-        plans[mask] = best
+        plans[mask] = _pareto_frontier(candidates)
 
     direct_degree = _monomial(domains.values()).degree
-    best = plans[full_mask]
+    best = min(plans[full_mask], key=_plan_key)
     return best.node if best.max_degree < direct_degree else node
 
 
