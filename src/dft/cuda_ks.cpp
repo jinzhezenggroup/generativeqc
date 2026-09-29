@@ -511,9 +511,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
          nonlocal_correlation->resources().point_count != grid.point_count()))
       throw std::invalid_argument("CUDA KS nonlocal owner is incompatible with the grid or device");
     current_device();
+    const auto resident_grid = grid.cuda_view();
+    if (resident_grid && resident_grid.device != device)
+      throw std::invalid_argument("CUDA KS resident grid belongs to a different device");
+    const bool borrow_resident_grid = static_cast<bool>(resident_grid);
     xc_layout =
         cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
-                       options.semilocal_exchange_scale, options.semilocal_correlation_scale);
+                       options.semilocal_exchange_scale, options.semilocal_correlation_scale,
+                       borrow_resident_grid);
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     if (host_unfused &&
@@ -542,6 +547,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction, nullptr);
     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
     resource.xc_device_bytes = host_unfused ? 0 : xc_layout.device_bytes;
+    resource.grid_device_bytes = borrow_resident_grid ? resident_grid.device_bytes : 0;
     resource.provider_device_bytes = provider.diagnostic().device_bytes;
     const auto diagnostic_iterations =
         mixed_j ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
@@ -584,7 +590,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         xc = std::make_unique<CudaXcPlan>(basis, grid, functional, spins == 2, tile, xc_arena,
                                           resource.xc_device_bytes, stream, CudaXcAoPrecision::Fp64,
                                           options.semilocal_exchange_scale,
-                                          options.semilocal_correlation_scale);
+                                          options.semilocal_correlation_scale,
+                                          borrow_resident_grid);
       }
       // This owner uses ordinary stream execution. Reuse the common provider
       // instead of forcing the graph-safe maximum-pivot fallback at every size.
