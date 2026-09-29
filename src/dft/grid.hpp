@@ -59,7 +59,8 @@ class MolecularGrid {
   explicit MolecularGrid(const core::System& system, GridSpec spec = {});
   /** Materialize with compiler-generated CUDA kernels. No CPU partition
    * fallback; throws on unsupported input, allocation or normalization error. */
-  static MolecularGrid from_cuda(const core::System& system, GridSpec spec, int device,\n                                 bool retain_device = true);
+  static MolecularGrid from_cuda(const core::System& system, GridSpec spec,
+                                 int device,\n bool retain_device = true);
 
   const GridSpec& spec() const noexcept { return spec_; }
   const core::System& system() const noexcept { return system_; }
@@ -71,8 +72,8 @@ class MolecularGrid {
    * from from_cuda(). CPU grids return an empty view. */
   CudaMolecularGridView cuda_view() const noexcept {
     if (!cuda_storage_) return {};
-    return {cuda_device_, cuda_points_, cuda_weights_, point_count(), cuda_device_bytes_,
-            cuda_owner_, cuda_storage_};
+    return {cuda_device_,       cuda_points_, cuda_weights_, point_count(),
+            cuda_device_bytes_, cuda_owner_,  cuda_storage_};
   }
   /** Explicit derivative export of the atomic measure before partitioning.
    * Reconstruct only quadrature rules, not Becke weights, on request; energy

@@ -77,18 +77,17 @@ void accounting(const System& system, GridSpec spec) {
   {
     const auto grid = MolecularGrid::from_cuda(system, spec, 0);
     const auto view = grid.cuda_view();
-    require(view && view.device == 0 && view.point_count == points &&
-                view.device_bytes == retained,
+    require(view && view.device == 0 && view.point_count == points && view.device_bytes == retained,
             "CUDA quadrature did not publish its immutable resident grid");
     require(ledger->peak == expected && ledger->live == retained && ledger->allocations == 3,
             "quadrature resident/scratch inventory differs from actual allocations");
     std::vector<double> device_points(grid.points().size()), device_weights(grid.weights().size());
-    require(cudaMemcpy(device_points.data(), view.points, device_points.size() * sizeof(double),
-                       cudaMemcpyDeviceToHost) == cudaSuccess &&
-                cudaMemcpy(device_weights.data(), view.weights,
-                           device_weights.size() * sizeof(double),
-                           cudaMemcpyDeviceToHost) == cudaSuccess,
-            "resident quadrature export failed");
+    require(
+        cudaMemcpy(device_points.data(), view.points, device_points.size() * sizeof(double),
+                   cudaMemcpyDeviceToHost) == cudaSuccess &&
+            cudaMemcpy(device_weights.data(), view.weights, device_weights.size() * sizeof(double),
+                       cudaMemcpyDeviceToHost) == cudaSuccess,
+        "resident quadrature export failed");
     close(device_points, grid.points(), 0, 0, "resident grid coordinate mismatch");
     close(device_weights, grid.weights(), 0, 0, "resident grid weight mismatch");
   }

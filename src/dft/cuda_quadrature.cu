@@ -33,7 +33,8 @@ std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points) {
   return q::sum(layout.device_bytes, cuda_resident_grid_bytes(points));
 }
 
-MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec, int device,\n                                      bool retain_device) {
+MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec,
+                                       int device,\n bool retain_device) {
   MolecularGrid result(system, spec, Deferred{});
   const auto per_atom =
       q::product(q::product(spec.radial_points, spec.angular_polar), spec.angular_azimuth);
@@ -67,8 +68,7 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   std::shared_ptr<runtime::OwnedCudaBuffer<double>> resident;
   double *resident_points = nullptr, *resident_weights = nullptr;
   if (retain_device) {
-    resident =
-        std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(4, l.points));
+    resident = std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(4, l.points));
     resident_points = resident->get();
     resident_weights = resident_points + q::product(3, l.points);
   }

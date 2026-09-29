@@ -171,8 +171,7 @@ void resident_grid_borrow_case(const generativeqc::core::System& molecule, const
   const auto borrowed_layout =
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
   require(borrowed_layout.borrowed_grid &&
-              owned_layout.device_bytes ==
-                  borrowed_layout.device_bytes + resident.device_bytes,
+              owned_layout.device_bytes == borrowed_layout.device_bytes + resident.device_bytes,
           "resident-grid XC layout did not retire duplicate point/weight storage");
 
   cudaStream_t stream{};
@@ -187,8 +186,7 @@ void resident_grid_borrow_case(const generativeqc::core::System& molecule, const
       require(view.points == resident.points && view.weights == resident.weights &&
                   view.point_count == resident.point_count,
               "XC plan copied instead of borrowing the resident molecular grid");
-      require(plan.transfers().setup_h2d_bytes ==
-                  borrowed_layout.packed_elements * sizeof(double),
+      require(plan.transfers().setup_h2d_bytes == borrowed_layout.packed_elements * sizeof(double),
               "resident-grid XC setup re-uploaded points or weights");
 
       const auto host_density = density(basis.nao, 1);

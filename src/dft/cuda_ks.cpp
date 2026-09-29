@@ -515,10 +515,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (resident_grid && resident_grid.device != device)
       throw std::invalid_argument("CUDA KS resident grid belongs to a different device");
     const bool borrow_resident_grid = static_cast<bool>(resident_grid);
-    xc_layout =
-        cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
-                       options.semilocal_exchange_scale, options.semilocal_correlation_scale,
-                       borrow_resident_grid);
+    xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
+                               options.semilocal_exchange_scale,
+                               options.semilocal_correlation_scale, borrow_resident_grid);
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     if (host_unfused &&
@@ -587,11 +586,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       upload(final_enabled, &host_one, sizeof(host_one));
       if (!host_unfused) {
         // Device-fused XC setup drains this same stream.
-        xc = std::make_unique<CudaXcPlan>(basis, grid, functional, spins == 2, tile, xc_arena,
-                                          resource.xc_device_bytes, stream, CudaXcAoPrecision::Fp64,
-                                          options.semilocal_exchange_scale,
-                                          options.semilocal_correlation_scale,
-                                          borrow_resident_grid);
+        xc = std::make_unique<CudaXcPlan>(
+            basis, grid, functional, spins == 2, tile, xc_arena, resource.xc_device_bytes, stream,
+            CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
+            options.semilocal_correlation_scale, borrow_resident_grid);
       }
       // This owner uses ordinary stream execution. Reuse the common provider
       // instead of forcing the graph-safe maximum-pivot fallback at every size.

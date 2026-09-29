@@ -647,8 +647,7 @@ std::optional<core::System> ks_auxiliary_for_system(const core::System& system,
 /** Backend selection must precede materialization: constructing the reference
  * grid and then uploading it hides cubic host work in CUDA preparation. */
 dft::MolecularGrid ks_molecular_grid(const core::System& system, dft::GridSpec spec,
-                                     generativeqc_backend backend, int device,
-                                     bool retain_device) {
+                                     generativeqc_backend backend, int device, bool retain_device) {
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
 #if GENERATIVEQC_HAS_CUDA
     return dft::MolecularGrid::from_cuda(system, spec, device, retain_device);
