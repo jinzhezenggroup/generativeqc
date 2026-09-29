@@ -450,6 +450,10 @@ def _curated_semilocal_record(
     """Resolve one curated native lowerer from generated semantic metadata."""
     components = dict(functional_spec.components)
     for record in SEMILOCAL_FAMILIES:
+        # Point/geometry lowerers may exist before a complete production KS
+        # domain is qualified. Representation must not grant public KS capability.
+        if not record["cuda_ks"]:
+            continue
         expected = _record_components(record)
         if record["coefficient_policy"] == "native-scales":
             if not set(components) <= set(expected):
