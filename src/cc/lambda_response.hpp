@@ -130,8 +130,7 @@ class CudaHamiltonianResponseOwner {
 
   CudaHamiltonianSmallResponseResult hamiltonian_small(CudaParameterResponseView parameters,
                                                        double reference_seed);
-  std::vector<double> hamiltonian_eri(CudaParameterResponseView parameters,
-                                      double reference_seed);
+  std::vector<double> hamiltonian_eri(CudaParameterResponseView parameters, double reference_seed);
   CudaHamiltonianSmallResponseResult fock_small(std::span<const double> bar_fock);
   std::vector<double> orbital_jvp(std::span<const double> d_rotation);
 

@@ -215,15 +215,13 @@ CudaParameterResponseView cuda_parameter_view(const ParameterWeights& bar) {
 }
 
 SmallResponseWeights detach_cuda_small(CudaHamiltonianSmallResponseResult result) {
-  return {std::move(result.hcore), std::move(result.overlap),
-          std::move(result.rotation_gradient), std::move(result.stationarity),
-          std::move(result.orbital_rhs)};
+  return {std::move(result.hcore), std::move(result.overlap), std::move(result.rotation_gradient),
+          std::move(result.stationarity), std::move(result.orbital_rhs)};
 }
 #endif
 
 SmallResponseWeights copy_small_hamiltonian_outputs(
-    const generated::HamiltonianSmallOutputs& output, std::size_t n, std::size_t o,
-    std::size_t v) {
+    const generated::HamiltonianSmallOutputs& output, std::size_t n, std::size_t o, std::size_t v) {
   const auto n2 = square(n), ov = checked_mul(o, v);
   return {{output.hcore, output.hcore + n2},
           {output.overlap, output.overlap + n2},
@@ -331,8 +329,7 @@ void add_fock_seed(ParameterWeights& target, std::span<const double> bar_fock, s
     for (std::size_t a = 0; a < v; ++a) target.fov[i * v + a] += bar_fock[i * n + o + a];
   }
   for (std::size_t a = 0; a < v; ++a)
-    for (std::size_t b = 0; b < v; ++b)
-      target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
+    for (std::size_t b = 0; b < v; ++b) target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
 }
 
 double max_abs(std::span<const double> values) {
@@ -463,27 +460,25 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   const auto eri_response_retained = bytes(n4);
   const auto hamiltonian_small_arena =
       bytes(generated::hamiltonian_small_weights_arena_elements(o, v));
-  const auto hamiltonian_eri_arena =
-      bytes(generated::hamiltonian_eri_weights_arena_elements(o, v));
+  const auto hamiltonian_eri_arena = bytes(generated::hamiltonian_eri_weights_arena_elements(o, v));
   const auto fock_small_arena = bytes(generated::fock_small_weights_arena_elements(o, v));
   const auto core = checked_add(before_raw, raw_retained);
   // Only the compact correlation response remains live through the Z solve.
   // The dense ERI cotangent is isolated to one final derivative-boundary call.
-  const auto response_base = sum(
-      {core, checked_mul(2, small_response_retained),
-       bytes(generated::orbital_jvp_arena_elements(o, v)),
-       bytes(sum({checked_mul(3, n2), square(ov), checked_mul(2, ov)}))});
+  const auto response_base =
+      sum({core, checked_mul(2, small_response_retained),
+           bytes(generated::orbital_jvp_arena_elements(o, v)),
+           bytes(sum({checked_mul(3, n2), square(ov), checked_mul(2, ov)}))});
   response::GmresOptions z_options;
   z_options.restart = 30;
   z_options.max_workspace_bytes = max_bytes;
   const auto gmres = response::prepare_gmres(ov, z_options);
-  plan.response_phase_bytes =
-      std::max({sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
-                sum({core, checked_mul(2, small_response_retained), bytes(n2), fock_small_arena}),
-                checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
-                checked_add(response_base, gmres.workspace_bytes),
-                sum({core, small_response_retained, eri_response_retained,
-                     hamiltonian_eri_arena})});
+  plan.response_phase_bytes = std::max(
+      {sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
+       sum({core, checked_mul(2, small_response_retained), bytes(n2), fock_small_arena}),
+       checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
+       checked_add(response_base, gmres.workspace_bytes),
+       sum({core, small_response_retained, eri_response_retained, hamiltonian_eri_arena})});
   const auto derivative_live =
       sum({core, small_response_retained, eri_response_retained, bytes(checked_mul(2, ov))});
   const auto coordinates = checked_mul(3, system.atoms.size());

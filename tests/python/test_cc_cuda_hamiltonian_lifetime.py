@@ -237,7 +237,11 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             )
             for i in range(1, count + 1)
         ),
-        *(("invalid", op, i) for op in ("hamiltonian_small", "hamiltonian_eri") for i in range(10)),
+        *(
+            ("invalid", op, i)
+            for op in ("hamiltonian_small", "hamiltonian_eri")
+            for i in range(10)
+        ),
     ],
 )
 def test_response_call_owns_device_and_host_lifetimes(

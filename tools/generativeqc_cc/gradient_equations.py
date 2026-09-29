@@ -211,7 +211,6 @@ def build_fock_weight_program(
     )
 
 
-
 _HAMILTONIAN_SMALL_OUTPUTS = (
     "hcore",
     "overlap",
@@ -221,7 +220,9 @@ _HAMILTONIAN_SMALL_OUTPUTS = (
 )
 
 
-def _select_weight_outputs(parent: Program, outputs: tuple[str, ...], *, scope: str) -> Program:
+def _select_weight_outputs(
+    parent: Program, outputs: tuple[str, ...], *, scope: str
+) -> Program:
     """Keep one generated response publication boundary without changing its AD math."""
     return Program(
         {name: parent.outputs[name] for name in outputs},
@@ -265,6 +266,7 @@ def build_fock_small_weight_program(
     return _select_weight_outputs(
         parent, _HAMILTONIAN_SMALL_OUTPUTS, scope="fock-small-response"
     )
+
 
 def build_ao_weight_program(n: int) -> Program:
     """Generate staged MO -> AO cotangent transforms (no new AD formula)."""

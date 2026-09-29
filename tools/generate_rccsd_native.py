@@ -829,9 +829,7 @@ def cpu_header() -> str:
             ),
             _required_function(orbital_jvp, "orbital_jvp_arena_elements"),
             _required_function(fock_weights, "fock_weights_arena_elements"),
-            _required_function(
-                fock_small_weights, "fock_small_weights_arena_elements"
-            ),
+            _required_function(fock_small_weights, "fock_small_weights_arena_elements"),
             _required_function(
                 triples_response, "triples_response_arena_elements", batch_dim=True
             ),

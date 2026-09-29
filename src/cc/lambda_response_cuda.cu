@@ -681,8 +681,8 @@ struct CudaHamiltonianResponseOwner::Impl {
     h2d = checked_add(h2d, sizeof(double));
   }
 
-  CudaHamiltonianSmallResponseResult hamiltonian_small(
-      CudaParameterResponseView parameters, double reference_seed) {
+  CudaHamiltonianSmallResponseResult hamiltonian_small(CudaParameterResponseView parameters,
+                                                       double reference_seed) {
     DeviceScope active_device(device_id);
     HostTransferFence transfers(stream);
     stage_parameters(parameters);
@@ -693,8 +693,7 @@ struct CudaHamiltonianResponseOwner::Impl {
     return result;
   }
 
-  std::vector<double> hamiltonian_eri(CudaParameterResponseView parameters,
-                                      double reference_seed) {
+  std::vector<double> hamiltonian_eri(CudaParameterResponseView parameters, double reference_seed) {
     DeviceScope active_device(device_id);
     HostTransferFence transfers(stream);
     stage_parameters(parameters);
