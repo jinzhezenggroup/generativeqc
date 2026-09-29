@@ -361,10 +361,9 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None
     assert profitability.compile_seconds == 1.25
     assert assessment.schedule_contract.resources.registers_per_thread == 72
     assert assessment.schedule_contract.resources.shared_bytes == 4352
-    assert (
-        dict(assessment.schedule_contract.provenance)["compiled_resource_evidence"]
-        == "common.gpu_profitability"
-    )
+    provenance = dict(assessment.schedule_contract.provenance)
+    assert provenance["compiled_resource_evidence"] == "dft.grid_xc.compiled_region"
+    assert provenance["compiled_profitability_contract"] == "common.gpu_profitability"
 
     wrong_source = native_grid_xc_compiled_region_evidence(
         rows,
