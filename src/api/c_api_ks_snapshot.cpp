@@ -22,7 +22,7 @@
 
 extern "C" generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
     generativeqc_nonlocal_cuda_force* owner, generativeqc_context* expected_context, int device,
-    const double* density, const double* gradient, std::size_t point_count,
+    const double* density, const double* gradient, std::size_t point_count, void* source_stream,
     const generativeqc::dft::GridTaskView* view);
 #endif
 
@@ -523,16 +523,17 @@ generativeqc_status generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1(
     const double* density = nullptr;
     const double* gradient = nullptr;
     std::size_t point_count = 0;
+    void* source_stream = nullptr;
     std::string detail;
     status = generativeqc::methods::detail::dft_cuda_resident_nonlocal_features(
         *batch->plan, snapshot->index, snapshot->token, device, density, gradient, point_count,
-        detail);
+        source_stream, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       return status;
     }
     status = generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
-        owner, batch->context, device, density, gradient, point_count, view);
+        owner, batch->context, device, density, gradient, point_count, source_stream, view);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     return check_current(*batch, *snapshot);
   } catch (...) {
