@@ -29,7 +29,12 @@ void launch_compact_active_shell_quartet_tiles_kernel(
     const std::uint32_t* mixed_precision_item_census,
     const std::uint32_t* fp32_shell_quartet_tile_offsets,
     std::uint32_t* fp32_shell_quartet_tile_counts,
-    ActiveShellQuartetTile* fp32_shell_quartet_tiles);
+    ActiveShellQuartetTile* fp32_shell_quartet_tiles,
+    const std::uint8_t* incremental_full_build = nullptr,
+    unsigned long long* full_admitted_shell_quartets = nullptr,
+    unsigned long long* delta_admitted_shell_quartets = nullptr,
+    unsigned long long* full_admitted_quartet_tiles = nullptr,
+    unsigned long long* delta_admitted_quartet_tiles = nullptr);
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_compact_generic_order5_tiles_kernel(
