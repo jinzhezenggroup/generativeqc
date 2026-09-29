@@ -24,10 +24,24 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         assert token in header
         assert token in source
     assert "launch_bounded_shell_energy_derivative(" in source
-    assert "launch_bounded_shell_range_exchange_derivative(" in source
+    assert "launch_bounded_shell_rsh_derivatives(" in source
+    rsh_begin = source.index("cudaError_t execute_generated_rsh_energy_derivatives(")
+    rsh_end = source.index("cudaError_t enqueue_generated_coulomb(", rsh_begin)
+    rsh_body = source[rsh_begin:rsh_end]
+    assert rsh_body.count("launch_bounded_shell_rsh_derivatives(") == 1
+    assert "launch_bounded_shell_range_exchange_derivative(" not in rsh_body
+    assert "for (unsigned source" not in rsh_body
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
     assert "DirectScreeningPurpose::Force" in consumer
+
+
+def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
+    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    capacity = _source("src/scf/cuda/direct_jk.cpp")
+    assert "charge(product(atoms, 9), sizeof(double))" in owner
+    assert "plan->force = doubles(product(atoms, 9))" in owner
+    assert "add(atoms, 9 * sizeof(double))" in capacity
 
 
 def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
@@ -52,3 +66,19 @@ def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
     assert "c.exchange.omega" in body
     assert "unit_long_range" not in body
     assert "full_range[coordinates + coordinate]" not in body
+
+
+def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
+    direct = _source("src/scf/cuda/direct_jk.cpp")
+    generated = _source("src/scf/cuda/direct_coulomb.cpp")
+    bridge = _source("src/scf/cuda/one_electron_gradient_bridge.cu")
+    method = _source("src/methods/dft_method.cpp")
+
+    assert "F(atomic_numbers)" in direct
+    assert "F(shell_ao_offsets)" in generated
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in bridge
+    assert "cuda_execution::one_electron_view(shared.batch)" in bridge
+    assert "constexpr unsigned schedule = 1" in bridge
+    assert "auto* output = exchange->force" in bridge
+    assert 'trace_counter("host_to_device_bytes", 0)' in bridge
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in method
