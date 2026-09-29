@@ -26,6 +26,7 @@ from generativeqc_compiler.common.source_cache import cache_source
 
 from .batch_schedule import scatter_add_inverted_table
 from .cuda_emit import _coordinate, _flat
+from .optimize import prepare_for_backend
 from .program import Program
 from .types import checked_size
 
@@ -115,6 +116,7 @@ def emit_cpu(
     """
     if not isinstance(program, Program):
         raise TypeError("CPU lowering requires a TensorIR Program")
+    program = prepare_for_backend(program, "cpu")
     if (
         not isinstance(symbol, str)
         or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", symbol) is None
