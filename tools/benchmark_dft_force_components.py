@@ -410,9 +410,7 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         outcomes[status] = outcomes.get(status, 0) + 1
         metadata = row.get("metadata")
         scenario = (
-            str(metadata.get("scenario", ""))
-            if isinstance(metadata, Mapping)
-            else ""
+            str(metadata.get("scenario", "")) if isinstance(metadata, Mapping) else ""
         )
         if scenario.startswith("fixed_final_state_"):
             fixed_final_state_records += 1
@@ -470,9 +468,7 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         "work_count_stages_observed": sorted(work_stages),
         "work_capacity_metrics_observed": sorted(capacity_metrics),
         "fixed_final_state_records": fixed_final_state_records,
-        "fixed_density_scf_expected_components_missing": sorted(
-            fixed_density_missing
-        ),
+        "fixed_density_scf_expected_components_missing": sorted(fixed_density_missing),
     }
 
 
