@@ -458,9 +458,13 @@ LagrangianWeights canonical_lagrangian_weights_streamed(
     const hf::PhysicalReference& reference, std::span<const double> hcore_mo,
     const posthf::MOBlockProvider& provider, EnergyAdjoint adjoint, OrbitalRhs orbital,
     std::span<const double> response, double same_space_threshold, bool cuda, int device_id) {
+  validate_adjoint(adjoint);
   const auto n = adjoint.orbitals, occupied = adjoint.occupied;
   const auto virtuals = n - occupied;
-  if (response.size() != posthf::checked_mul(occupied, virtuals) || !finite(response) ||
+  if (&provider.reference() != &reference || reference.nbf != n || reference.nocc != occupied ||
+      reference.orbital_energies.size() != n || hcore_mo.size() != square(n) || !finite(hcore_mo) ||
+      !std::isfinite(same_space_threshold) || same_space_threshold <= 0.0 ||
+      response.size() != posthf::checked_mul(occupied, virtuals) || !finite(response) ||
       orbital.orbitals != n || orbital.occupied != occupied ||
       orbital.one_electron.size() != square(n) || orbital.fock_weights.size() != square(n) ||
       !orbital.two_electron.empty() || !finite(orbital.one_electron) ||
