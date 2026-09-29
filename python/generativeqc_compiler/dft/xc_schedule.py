@@ -7,6 +7,7 @@ or density source look like the same candidate.
 
 from __future__ import annotations
 
+import collections.abc
 import typing
 from dataclasses import asdict, dataclass, replace
 
@@ -292,6 +293,70 @@ def grid_xc_domain_identity(shape: GridXcCandidateShape) -> str:
             name: getattr(shape, name)
             for name in ("npoint", "nao", "max_active_ao", "spins", "jet_components")
         }
+    )
+
+
+GRID_XC_COMPILED_REGION_STAGES = (
+    "ao_collocation",
+    "density_features",
+    "xc_expression",
+    "vxc_contraction",
+)
+
+
+def aggregate_grid_xc_compiled_evidence(
+    stages: collections.abc.Mapping[str, GpuProfitability],
+) -> GpuProfitability:
+    """Combine complete device-fused stage pressure into one region record.
+
+    Every native stage must be present before the result is eligible for
+    ProgramIR region selection. Kernel pressure uses the worst reported value;
+    occupancy uses the most constrained stage. Artifact bytes and compile time
+    are deliberately left unset because several stages may share one native
+    library and summing per-stage values would double-count that artifact.
+    """
+
+    if not isinstance(stages, collections.abc.Mapping):
+        raise TypeError("grid/XC compiled region evidence requires a stage mapping")
+    expected = set(GRID_XC_COMPILED_REGION_STAGES)
+    actual = set(stages)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise ValueError(
+            "grid/XC compiled region evidence requires exact stages; "
+            f"missing={missing}, extra={extra}"
+        )
+    compiled = {
+        name: _compiled_profitability_fields(stages[name])
+        for name in GRID_XC_COMPILED_REGION_STAGES
+    }
+
+    def maximum(field: str) -> int | None:
+        values = [row[field] for row in compiled.values() if row[field] is not None]
+        return max(values) if values else None
+
+    occupancies = [
+        row["compiled_occupancy_upper_bound"] for row in compiled.values()
+    ]
+    occupancy = (
+        None
+        if any(value is None for value in occupancies)
+        else min(typing.cast("list[float]", occupancies))
+    )
+    local_values = [row["local_bytes"] for row in compiled.values()]
+    local_bytes = (
+        None
+        if any(value is None for value in local_values)
+        else max(typing.cast("list[int]", local_values))
+    )
+    return GpuProfitability(
+        compiled_registers_per_thread=maximum("compiled_registers_per_thread"),
+        spill_store_bytes=maximum("spill_store_bytes"),
+        spill_load_bytes=maximum("spill_load_bytes"),
+        local_bytes=local_bytes,
+        shared_bytes=maximum("shared_bytes"),
+        compiled_occupancy_upper_bound=occupancy,
     )
 
 
