@@ -11,8 +11,6 @@ namespace generativeqc::scf::cuda_execution {
 
 struct ShellPairDensityBounds;
 
-enum class DirectCoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
-
 // Shared one-output-owner reduction width, unchanged from the direct source.
 constexpr unsigned kIndependentJkThreads = 32;
 
