@@ -61,7 +61,13 @@ def copy_contract_files(tmp_path: Path, files: tuple[str, ...]) -> None:
 
 
 def stationary_contract_tree(tmp_path: Path, source: str) -> None:
-    copy_contract_files(tmp_path, ("src/dft/stationary_gradient_cuda.cuh",))
+    copy_contract_files(
+        tmp_path,
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "python/vibeqc/_ks_snapshot.py",
+        ),
+    )
     target = tmp_path / "python/vibeqc/_stationary_cuda.py"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source, encoding="utf-8")
@@ -304,7 +310,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "3c4b114f6d33b41f577268209218fbc89d95524dbf280ca5f54f01687cb3fcde"
+            "b3d827509e231c851a3729b47d77132d54ba06b1814105c102fd2e34d57b8a10"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -348,14 +354,25 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
     )
     assert result["admission_limits"]["grid_derivative_order_definition"] == (
-        "functional != 0"
+        "'sigma' in ingredients"
     )
     assert result["admission_limits"]["method_ir_definition"] == (
         "state._source.method_ir"
     )
     assert result["admission_limits"]["functional_lowering_definition"] == (
-        "_native_semilocal_family(method)"
+        "int(state._source.metadata[6])"
     )
+    assert result["admission_limits"]["functional_ingredients_definition"] == (
+        "state._source.functional.ingredients"
+    )
+    assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
+        "__init___sha256": (
+            "8ca4c03c87157777c7f05de836e9b2d77c88dc7ec2c96df28532713b96bdd68d"
+        ),
+        "decode_sha256": (
+            "1514138c9b75b5c0f6735bf5ed9d20a4beb1f9fca0b6f8435006537848ec9a28"
+        ),
+    }
     assert result["admission_limits"]["grid_plan_definition"] == (
         "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
         "tile_points=tile_points, active_ao_capacity=n, "
@@ -1200,7 +1217,7 @@ def test_grid_memory_fails_closed_when_functional_lowering_moves(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
-    old = "functional = _native_semilocal_family(method)"
+    old = "functional = int(state._source.metadata[6])"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "functional = 0", 1))
 
@@ -1211,7 +1228,7 @@ def test_grid_memory_fails_closed_when_functional_lowering_moves(
 def test_public_selector_contract_rejects_changed_functional_lowering(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(qualify_capacity, "_native_semilocal_family", lambda _: 0)
+    monkeypatch.setattr(qualify_capacity, "native_xc_functional_code", lambda _: 0)
     plan = qualify_capacity._qualified_aot_plan(1, "unpolarized")
 
     with pytest.raises(RuntimeError, match="native functional-family lowering"):
