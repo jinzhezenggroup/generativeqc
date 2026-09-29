@@ -1076,7 +1076,10 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         getter.argtypes = [*arguments, ctypes.POINTER(PrecisionProvenance)]
         getter.restype = ctypes.c_int
     for name, arguments in (
-        ("generativeqc_calculation_get_incremental_direct_jk_diagnostic", [ctypes.c_void_p]),
+        (
+            "generativeqc_calculation_get_incremental_direct_jk_diagnostic",
+            [ctypes.c_void_p],
+        ),
         (
             "generativeqc_batch_get_incremental_direct_jk_diagnostic",
             [ctypes.c_void_p, ctypes.c_uint32],
@@ -1084,7 +1087,10 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
     ):
         getter = getattr(library, name, None)
         if getter is not None:
-            getter.argtypes = [*arguments, ctypes.POINTER(IncrementalDirectJkDiagnostic)]
+            getter.argtypes = [
+                *arguments,
+                ctypes.POINTER(IncrementalDirectJkDiagnostic),
+            ]
             getter.restype = ctypes.c_int
     for name, arguments in (
         ("generativeqc_calculation_get_precision_work", [ctypes.c_void_p]),

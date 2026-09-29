@@ -505,8 +505,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   // Invalidate before validation/execution so rejected or throwing replays
   // cannot expose a record from the previous run.
   std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
-  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(),
-            std::nullopt);
+  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(), std::nullopt);
   std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
   std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
   const std::uint32_t system_count = generativeqc_batch_get_system_count(batch);

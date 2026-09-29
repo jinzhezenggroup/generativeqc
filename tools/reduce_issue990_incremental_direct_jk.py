@@ -63,7 +63,9 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
     full_tiles = sum(int(value["full_admitted_quartet_tiles"]) for value in typed)
     delta_tiles = sum(int(value["delta_admitted_quartet_tiles"]) for value in typed)
     if full_builds == 0 or delta_builds == 0 or full_shells == 0 or full_tiles == 0:
-        raise ValueError("incremental benchmark lacks measurable full/delta Direct-J/K work")
+        raise ValueError(
+            "incremental benchmark lacks measurable full/delta Direct-J/K work"
+        )
     full_shells_per_build = full_shells / full_builds
     delta_shells_per_build = delta_shells / delta_builds
     full_tiles_per_build = full_tiles / full_builds
@@ -74,10 +76,12 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
         "delta_builds": delta_builds,
         "full_admitted_shell_quartets_per_build": full_shells_per_build,
         "delta_admitted_shell_quartets_per_build": delta_shells_per_build,
-        "shell_quartet_reduction_fraction": 1.0 - delta_shells_per_build / full_shells_per_build,
+        "shell_quartet_reduction_fraction": 1.0
+        - delta_shells_per_build / full_shells_per_build,
         "full_admitted_quartet_tiles_per_build": full_tiles_per_build,
         "delta_admitted_quartet_tiles_per_build": delta_tiles_per_build,
-        "quartet_tile_reduction_fraction": 1.0 - delta_tiles_per_build / full_tiles_per_build,
+        "quartet_tile_reduction_fraction": 1.0
+        - delta_tiles_per_build / full_tiles_per_build,
         "samples": typed,
     }
 

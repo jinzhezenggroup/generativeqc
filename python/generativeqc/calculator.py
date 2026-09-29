@@ -2097,7 +2097,9 @@ class Calculator:
                 executed_backend=backend,
                 resource_diagnostics=resource_diagnostics,
                 precision=self._precision_provenance(calculation),
-                incremental_direct_jk=self._incremental_direct_jk_diagnostic(calculation),
+                incremental_direct_jk=self._incremental_direct_jk_diagnostic(
+                    calculation
+                ),
                 basis_metadata=self.basis_metadata(
                     native_atoms, charge=charge, multiplicity=multiplicity
                 ),
