@@ -274,7 +274,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "6ae30e757b7dd4d8df4729d3431d5631db0e53434b58cd2c886eefb8190ab2c6"
+            "e529ebefad5e10fd56184b6b36b433f1922ba8432595a80e63af1014dd6bfb5b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -295,7 +295,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
         "sources_owner_sha256": (
-            "674f7c5befe7b844d2c92e75d9f87e74a69b4734191ab466b5a86ac4f205f271"
+            "31286c9474290ba7f86ed359eca8e505c329758052898ce6e90554cc76644a72"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "a216fe7c0b2425360a207eeaf46ab3dafe28aa249089ad360fcb42ad77a1b274"
+            "9ec94f61e0acfbb37265c16b1e36a7cf496633a1b52def4d7088e7f3202b8aaf"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -747,7 +747,6 @@ def test_clean_git_sha_rejects_hidden_index_paths(
             capture_output=True,
             text=True,
         )
-
     git("init")
     git("config", "user.name", "Capacity Test")
     git("config", "user.email", "capacity@example.invalid")
@@ -1747,7 +1746,6 @@ def test_report_rejects_dependencies_preloaded_before_qualifier_import(
         "_PRELOADED_LOCAL_MODULES",
         frozenset({"generativeqc_compiler.dft.plan"}),
     )
-
     with pytest.raises(RuntimeError, match="requires a fresh interpreter"):
         qualify_capacity.build_report(ROOT)
 
