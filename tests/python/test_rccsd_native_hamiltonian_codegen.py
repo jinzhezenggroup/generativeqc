@@ -114,6 +114,25 @@ def _case_cpp(o: int, v: int) -> str:
                 f"return {10 * (group + 1) + len(section)};"
             )
         sections.extend(section)
+
+    control_feeds, control_expected = groups[0]
+    control_inputs = sorted(control_feeds)
+    sections.extend(
+        [
+            "generativeqc::cc::generated::HamiltonianWeightInputs control_in{};",
+            *[f"control_in.{name}=g0_{name};" for name in control_inputs],
+            "std::vector<double> control_arena(hamiltonian_control_arena_elements(o,v));",
+            "auto control=run_hamiltonian_control_cpu(o,v,control_in,control_arena.data(),control_arena.size());",
+            (
+                "if(!close(control.stationarity,g0_expected_stationarity,o+v==0 ? 0 : (o+v)*(o+v))) "
+                "return 71;"
+            ),
+            (
+                "if(!close(control.orbital_rhs,g0_expected_orbital_rhs,o*v)) "
+                "return 72;"
+            ),
+        ]
+    )
     return "\n".join(
         [
             f"static int case_{o}_{v}(){{",
@@ -163,6 +182,14 @@ def test_runtime_shape_hamiltonian_response_matches_tensorir(tmp_path: Path) -> 
         text=True,
         timeout=90,
     )
+    generated = header.read_text()
+    assert (
+        "struct HamiltonianControlOutputs { const double* stationarity{}; "
+        "const double* orbital_rhs{}; };" in generated
+    )
+    assert "run_hamiltonian_control_cpu" in generated
+    assert "hamiltonian_control_arena_elements" in generated
+
     cases = ((1, 2), (2, 2))
     source = tmp_path / "hamiltonian.cpp"
     source.write_text(
