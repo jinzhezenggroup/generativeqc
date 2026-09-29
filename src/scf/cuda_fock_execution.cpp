@@ -182,9 +182,8 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
       binding && source && strategy.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
       spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact &&
       spec.coulomb.op == FockOperator::FullRange &&
-      (!spec.exchange.present ||
-       (spec.exchange.approximation == FockApproximation::Exact &&
-        spec.exchange.op == FockOperator::FullRange)) &&
+      (!spec.exchange.present || (spec.exchange.approximation == FockApproximation::Exact &&
+                                  spec.exchange.op == FockOperator::FullRange)) &&
       matrix_elements == binding.nbf * binding.nbf;
   if (!valid) {
     detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";

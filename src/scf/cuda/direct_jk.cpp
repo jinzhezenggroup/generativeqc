@@ -363,9 +363,9 @@ generativeqc_status create_cuda_direct_jk_plan(
     // derivatives; value-only plans keep its force scratch disabled.
     if (budget > required) {
       const auto optional_budget = budget - required;
-      plan->generated_exchange = prepare_generated_exchange(
-          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
-          derivative_order != 0);
+      plan->generated_exchange =
+          prepare_generated_exchange(host, plan->batch, plan->stream, device_id,
+                                     screening_tolerance, optional_budget, derivative_order != 0);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
@@ -640,9 +640,9 @@ generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan*
 }
 
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
-    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
-    double exchange_coefficient, const double* density, const double* beta,
-    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";

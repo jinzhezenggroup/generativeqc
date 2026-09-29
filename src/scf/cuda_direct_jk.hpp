@@ -110,7 +110,7 @@ generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
  * shell topology. The resident public-AO density is transformed once and
  * shell Schwarz+density screening drives the bounded production scheduler. */
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
-    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
-    double exchange_coefficient, const double* density, const double* beta,
-    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail);
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail);
 }  // namespace generativeqc::scf

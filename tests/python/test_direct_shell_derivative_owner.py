@@ -34,9 +34,7 @@ def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
 
 def test_prepared_rsh_uses_shell_full_range_and_lr_only_reconstruction() -> None:
     source = _source("src/scf/cuda_fock_execution.cpp")
-    begin = source.index(
-        "execute_prepared_cuda_direct_rsh_energy_derivatives_device("
-    )
+    begin = source.index("execute_prepared_cuda_direct_rsh_energy_derivatives_device(")
     end = source.index(
         "execute_prepared_cuda_direct_shell_full_range_derivatives_device(", begin
     )

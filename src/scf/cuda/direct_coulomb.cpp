@@ -91,18 +91,18 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   const auto charge = [&](std::size_t count, std::size_t width) {
     required = runtime::size_add(required, product(count, width));
   };
-#define COULOMB_METADATA(F)                     \
-  F(system_shell_offsets);                      \
-  F(system_shell_pair_offsets);                 \
-  F(system_shell_pair_block_offsets);           \
-  F(system_shell_pair_block_quartet_offsets);   \
-  F(shell_direct_ao_offsets);                   \
-  F(shell_pair_systems);           \
-  F(shell_pair_first);             \
-  F(shell_pair_second);            \
-  F(shell_pair_primitive_offsets); \
-  F(direct_ao_shells);             \
-  F(direct_ao_angular);            \
+#define COULOMB_METADATA(F)                   \
+  F(system_shell_offsets);                    \
+  F(system_shell_pair_offsets);               \
+  F(system_shell_pair_block_offsets);         \
+  F(system_shell_pair_block_quartet_offsets); \
+  F(shell_direct_ao_offsets);                 \
+  F(shell_pair_systems);                      \
+  F(shell_pair_first);                        \
+  F(shell_pair_second);                       \
+  F(shell_pair_primitive_offsets);            \
+  F(direct_ao_shells);                        \
+  F(direct_ao_angular);                       \
   F(direct_ao_coefficients)
 #define COUNT(field) charge(host.field.size(), sizeof(host.field[0]))
   COULOMB_METADATA(COUNT);
@@ -123,8 +123,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   plan->batch = borrowed;
   plan->batch.total_shell_pairs = pairs;
   plan->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
-  plan->batch.total_shell_pair_block_quartets =
-      host.system_shell_pair_block_quartet_offsets.back();
+  plan->batch.total_shell_pair_block_quartets = host.system_shell_pair_block_quartet_offsets.back();
   plan->stream = stream;
   plan->screening = screening;
   plan->class_mask = present;
@@ -335,8 +334,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
         allocate(pairs, sizeof(std::uint32_t), bounded_pair_order.data()));
     plan->shell_pair_block_bounds = doubles(pair_blocks);
     plan->force = doubles(product(atoms, 3));
-    plan->force_cursor =
-        static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
+    plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
   }
 
   const auto& b = plan->shared->batch;
@@ -529,8 +527,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   const auto b = shared.batch;
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   std::vector<double> result(2U * coordinates);
-  error = cudaMemsetAsync(p.heads, 0,
-                          detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
   const double coefficients[2][2] = {{coulomb_coefficient, 0.0}, {0.0, exchange_coefficient}};
@@ -540,8 +537,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
     launch_bounded_direct_shell_quartet_kernel_scaled(
-        unrestricted, DirectScreeningPurpose::Force, shared.worker_blocks, kBoundedDirectThreads,
-        0, shared.stream, b, shared.screening, shared.shell_bounds, p.shell_pair_density_bounds,
+        unrestricted, DirectScreeningPurpose::Force, shared.worker_blocks, kBoundedDirectThreads, 0,
+        shared.stream, b, shared.screening, shared.shell_bounds, p.shell_pair_density_bounds,
         p.bounded_pair_order, p.shell_pair_block_bounds, p.system_density_bounds, nullptr, 0U,
         p.heads, shared.schwarz, p.direct_spin, shared.active, p.force, p.force_cursor, nullptr,
         coefficients[source][0], coefficients[source][1]);

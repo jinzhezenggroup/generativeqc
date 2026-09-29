@@ -383,16 +383,14 @@ void retained_direct_derivative_reuse() {
   j_spec.exchange.present = false;
   std::vector<double> expected_j;
   require(execute_cuda_direct_energy_derivative(plan.cuda_direct_source(), j_spec, density, {},
-                                                expected_j, detail) ==
-              GENERATIVEQC_STATUS_SUCCESS,
+                                                expected_j, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   auto k_spec = strategy.spec;
   k_spec.derivative_order = 1;
   k_spec.coulomb.present = false;
   std::vector<double> expected_k;
   require(execute_cuda_direct_energy_derivative(plan.cuda_direct_source(), k_spec, density, {},
-                                                expected_k, detail) ==
-              GENERATIVEQC_STATUS_SUCCESS,
+                                                expected_k, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   matrix(std::vector<double>(shell_full_range.begin(),
                              shell_full_range.begin() + derivative.coordinates_per_item),
