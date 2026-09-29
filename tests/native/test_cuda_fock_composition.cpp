@@ -411,10 +411,8 @@ void retained_direct_derivative_reuse() {
   matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
-
 void retained_range_shell_d_parity() {
-  for (const auto representation :
-       {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
     System system;
     system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
     system.shells = {
@@ -433,9 +431,8 @@ void retained_range_shell_d_parity() {
             detail.c_str());
 
     constexpr double omega = 0.4;
-    const auto strategy =
-        resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
-                           FockBackend::Cuda, 0.0);
+    const auto strategy = resolve_fock_build(make_rsh_primary_fock_spec(FockSpin::Restricted, 0.2),
+                                             FockBackend::Cuda, 0.0);
     const auto correction =
         resolve_fock_build(make_rsh_correction_fock_spec(FockSpin::Restricted, 0.2, 0.5, omega),
                            FockBackend::Cuda, 0.0);
@@ -452,11 +449,10 @@ void retained_range_shell_d_parity() {
     std::vector<double> density(n * n);
     for (std::size_t i = 0; i < n; ++i)
       for (std::size_t j = 0; j <= i; ++j) {
-        const double value =
-            (0.31 * std::cos(0.27 * static_cast<double>(i + 1) +
-                             0.19 * static_cast<double>(j + 1)) +
-             (i == j ? 0.7 : 0.0)) /
-            static_cast<double>(n);
+        const double value = (0.31 * std::cos(0.27 * static_cast<double>(i + 1) +
+                                              0.19 * static_cast<double>(j + 1)) +
+                              (i == j ? 0.7 : 0.0)) /
+                             static_cast<double>(n);
         density[i * n + j] = value;
         density[j * n + i] = value;
       }
@@ -468,8 +464,8 @@ void retained_range_shell_d_parity() {
 
     double* device_density = nullptr;
     require(cudaSetDevice(derivative.device_id) == cudaSuccess, "CUDA device selection failed");
-    require(cudaMalloc(reinterpret_cast<void**>(&device_density), density.size() * sizeof(double)) ==
-                cudaSuccess,
+    require(cudaMalloc(reinterpret_cast<void**>(&device_density),
+                       density.size() * sizeof(double)) == cudaSuccess,
             "d-shell device density allocation failed");
     require(cudaMemcpyAsync(device_density, density.data(), density.size() * sizeof(double),
                             cudaMemcpyHostToDevice, derivative.stream) == cudaSuccess,
