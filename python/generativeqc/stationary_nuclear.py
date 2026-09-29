@@ -193,7 +193,11 @@ def _validate_operator(operator: typing.Any) -> tuple[typing.Any, typing.Any]:
 
 
 def _prepare_stationary_nuclear_perturbation(
-    operator: typing.Any, frozen_fock: typing.Any, overlap: typing.Any
+    operator: typing.Any,
+    frozen_fock: typing.Any,
+    overlap: typing.Any,
+    *,
+    metric_response: typing.Callable[..., typing.Any] = metric_density_response_mo,
 ) -> _PreparedNuclearPerturbation:
     ref, _ = _validate_operator(operator)
     nmo, nocc = ref.nmo, ref.nocc
@@ -203,7 +207,9 @@ def _prepare_stationary_nuclear_perturbation(
 
     frozen_mo = coefficients.T @ frozen @ coefficients
     overlap_mo = coefficients.T @ s1 @ coefficients
-    metric_dm_mo = metric_density_response_mo(overlap_mo, nocc=nocc)
+    if not callable(metric_response):
+        raise TypeError("metric_response must be callable")
+    metric_dm_mo = metric_response(overlap_mo, nocc=nocc)
     metric_fock_mo = (
         coefficients.T
         @ operator.induced_fock(coefficients @ metric_dm_mo @ coefficients.T)
@@ -271,6 +277,7 @@ def solve_stationary_nuclear_perturbation(
     solver: typing.Callable[..., typing.Any],
     options: typing.Any,
     resident_reconstruction_consumer: typing.Any = None,
+    metric_response: typing.Callable[..., typing.Any] = metric_density_response_mo,
 ) -> StationaryNuclearResponse:
     """Solve one closed-shell nuclear perturbation through an injected solver."""
     if not callable(solver):
@@ -279,7 +286,12 @@ def solve_stationary_nuclear_perturbation(
         resident_reconstruction_consumer
     ):
         raise TypeError("resident_reconstruction_consumer must be callable")
-    prepared = _prepare_stationary_nuclear_perturbation(operator, frozen_fock, overlap)
+    prepared = _prepare_stationary_nuclear_perturbation(
+        operator,
+        frozen_fock,
+        overlap,
+        metric_response=metric_response,
+    )
     _, layout = _validate_operator(operator)
 
     def consume_resident_solution(engine: typing.Any, solution: typing.Any) -> None:
@@ -316,6 +328,7 @@ def solve_stationary_nuclear_perturbations(
     strategy: str,
     options: typing.Any,
     resident_reconstruction_consumers: typing.Any = None,
+    metric_response: typing.Callable[..., typing.Any] = metric_density_response_mo,
 ) -> StationaryNuclearBatchResponse:
     """Solve a bounded set of perturbations through one injected multi-RHS solver."""
     if not callable(solver):
@@ -338,7 +351,12 @@ def solve_stationary_nuclear_perturbations(
             "(nrhs, nmo, nmo) with nrhs >= 1"
         )
     prepared = tuple(
-        _prepare_stationary_nuclear_perturbation(operator, frozen, overlap)
+        _prepare_stationary_nuclear_perturbation(
+            operator,
+            frozen,
+            overlap,
+            metric_response=metric_response,
+        )
         for frozen, overlap in zip(frozen_values, overlap_values, strict=True)
     )
     consumers = (
