@@ -15,8 +15,8 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
-std::vector<double> oracle(std::span<const double> c, std::span<const double> a,
-                           std::size_t n, bool transposed) {
+std::vector<double> oracle(std::span<const double> c, std::span<const double> a, std::size_t n,
+                           bool transposed) {
   std::vector<double> result(n * n, 0.0);
   for (std::size_t i = 0; i < n; ++i)
     for (std::size_t j = 0; j < n; ++j)
@@ -61,11 +61,11 @@ void nonfinite_comparisons_fail_closed() {
 
 void transforms_match_independent_oracles() {
   constexpr std::size_t n = 4;
-  const std::array<double, n * n> c{0.91, 0.12, -0.08, 0.03, 0.16, 0.88, 0.17, -0.04,
-                                   -0.07, 0.19, 0.93, 0.11, 0.05, -0.03, 0.14, 0.96};
+  const std::array<double, n * n> c{0.91,  0.12, -0.08, 0.03, 0.16, 0.88,  0.17, -0.04,
+                                    -0.07, 0.19, 0.93,  0.11, 0.05, -0.03, 0.14, 0.96};
   // Nonsymmetric data catches accidental transpose assumptions as well.
-  const std::array<double, n * n> matrix{-1.2, 0.07, -0.03, 0.11, 0.02, -0.4, 0.09, -0.02,
-                                        -0.05, 0.13, 0.25, 0.06, 0.17, -0.01, 0.04, 0.71};
+  const std::array<double, n * n> matrix{-1.2,  0.07, -0.03, 0.11, 0.02, -0.4,  0.09, -0.02,
+                                         -0.05, 0.13, 0.25,  0.06, 0.17, -0.01, 0.04, 0.71};
   using namespace generativeqc::tensor;
   for (const auto provider : {CpuLinalgProvider::scalar, CpuLinalgProvider::automatic}) {
     const CpuLinalgPlan plan{provider, CpuLinalgThreadOwnership::task_parallel, 1};
@@ -90,7 +90,10 @@ void invalid_storage_fails_closed() {
     try {
       cpu_congruence(failure == 0 ? 'X' : 'N', 2, coefficients.data(), matrix.data(),
                      failure == 1 ? matrix.data() : result.data(),
-                     failure == 2 ? result.data() : failure == 3 ? nullptr : workspace.data(), plan);
+                     failure == 2   ? result.data()
+                     : failure == 3 ? nullptr
+                                    : workspace.data(),
+                     plan);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }
