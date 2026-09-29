@@ -9,6 +9,7 @@ import generativeqc.response_operator as production_operator
 import generativeqc.response_problem as production_problem
 import generativeqc.response_xc as production_xc
 
+import tools.generativeqc_response as response_api
 from tools.generativeqc_response import native_ks
 from tools.generativeqc_response import operators as operator_shim
 from tools.generativeqc_response import problem as problem_shim
@@ -38,6 +39,20 @@ def test_response_operator_shim_reuses_installed_objects() -> None:
         "validate_rotation_layout",
     ):
         assert getattr(operator_shim, name) is getattr(production_operator, name)
+
+
+def test_top_level_tools_response_api_reuses_installed_closed_shell_objects() -> None:
+    assert (
+        response_api.CPKSResponseOperator is production_operator.CPKSResponseOperator
+    )
+    assert (
+        response_api.RHFResponseOperator is production_operator.RHFResponseOperator
+    )
+    assert response_api.ResponseProblem is production_problem.ResponseProblem
+    assert (
+        response_api.FixedDensityXCDerivativeKernel
+        is production_xc.FixedDensityXCDerivativeKernel
+    )
 
 
 def test_response_xc_shim_reuses_installed_objects() -> None:
