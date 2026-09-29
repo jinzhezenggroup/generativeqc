@@ -153,7 +153,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
         ),
         "native_cuda_grid_sha256": (
-            "32c767b6c52f3a2f46367f1caf1780e497d764fab9f5ae383e741f577ad112c5"
+            "d58a4e16088098728987dd5ff268df271d4a174de54ac43c69c9355ba62628c9"
         ),
         "native_cuda_grid_route_sha256": (
             "9d2bab6b4af36a41cbfaaf2e34dbb0f6de09ec2211c387e39641f902d29eec70"
