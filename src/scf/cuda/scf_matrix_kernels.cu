@@ -194,9 +194,11 @@ __global__ void prepare_incremental_direct_jk_kernel(
     anchor_fock[element] = hcore[system * matrix_size + physical_element];
   }
 
-  const double magnitude = fabs(delta);
-  atomicMax(reinterpret_cast<unsigned long long*>(max_abs_delta_density + system),
-            static_cast<unsigned long long>(__double_as_longlong(magnitude)));
+  if (!rebuild) {
+    const double magnitude = fabs(delta);
+    atomicMax(reinterpret_cast<unsigned long long*>(max_abs_delta_density + system),
+              static_cast<unsigned long long>(__double_as_longlong(magnitude)));
+  }
 }
 
 /** Advance the retained full-Fock/density anchor after one completed Direct-J/K build. */
