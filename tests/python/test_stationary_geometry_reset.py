@@ -5,8 +5,8 @@ from __future__ import annotations
 import ast
 import ctypes as ct
 from pathlib import Path
-from typing import TYPE_CHECKING
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 
