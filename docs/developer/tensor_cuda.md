@@ -545,4 +545,3 @@ The rewritten `Program` is stored on `TensorPlan.program`, so plan identity, emi
 resource accounting, and cuBLAS admission all bind to the same lowered equation. In particular,
 the rank-2 congruence `C^T h C` can lower from one three-operand O(N^4) einsum to two O(N^3)
 binary contractions, each eligible for the existing CUDA GEMM lowerer.
-
