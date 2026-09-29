@@ -38,6 +38,7 @@ from .batch_schedule import (
 from .cuda_dtype import program_precision, scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
+from .complexity import reassociate_einsums
 from .ir import TRANSCENDENTALS, Node
 from .precision import PrecisionSchedule, ValuePrecision, describe_precision
 from .program import Program, _hash
@@ -717,6 +718,7 @@ def plan_cuda(
     reservations: Reservations = NO_RESERVATIONS,
     library_bytes: int = 4 * 1024**2,
     provider_bytes: int = MIN_PROVIDER_BYTES,
+    reassociate_contractions: bool = False,
 ) -> TensorPlan:
     """Plan all allocations before preparation; shrink packing tiles to fit.
 
@@ -724,9 +726,17 @@ def plan_cuda(
     the CPU, before compiling or touching a device. User data is never needed
     for shape/schedule selection. The baseline shares existing SSA nodes but
     neither rewrites the equation nor uses an external chemistry program.
+
+    `reassociate_contractions=True` runs the symbolic contraction-tree rewrite
+    before CUDA storage/layout planning. This is explicit opt-in because an
+    equivalent binary tree changes floating-point reduction order.
     """
     if not isinstance(program, Program) or not isinstance(target, CudaTargetInfo):
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
+    if type(reassociate_contractions) is not bool:
+        raise TypeError("reassociate_contractions must be a Boolean")
+    if reassociate_contractions:
+        program = reassociate_einsums(program)
     checked_size(max_bytes, "tensor byte budget")
     checked_size(library_bytes, "library workspace")
     checked_size(provider_bytes, "provider allowance")
