@@ -36,6 +36,14 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     assert "DirectScreeningPurpose::Force" in consumer
 
 
+def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
+    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    capacity = _source("src/scf/cuda/direct_jk.cpp")
+    assert "charge(product(atoms, 9), sizeof(double))" in owner
+    assert "plan->force = doubles(product(atoms, 9))" in owner
+    assert "add(atoms, 9 * sizeof(double))" in capacity
+
+
 def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
     source = _source("src/scf/cuda/direct_jk.cpp")
     assert "prepare_generated_exchange(" in source
