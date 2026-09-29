@@ -43,7 +43,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
-    double coulomb_coefficient, double exchange_coefficient) {
+    double coulomb_coefficient, double exchange_coefficient, DirectRangeOperator radial_operator,
+    double omega) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
   __shared__ unsigned long long block_quartet;
@@ -149,6 +150,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
             batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
         if constexpr (Force) {
+          if (radial_operator != DirectRangeOperator::Full) {
+            continue;
+          }
           if (angular_order == 0U) {
             contract_two_electron_force_ssss_task_scaled<Unrestricted>(
                 batch, task, screening_tolerance, schwarz_bounds, density, active, output,
@@ -196,8 +200,10 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
             batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
         if constexpr (Force) {
-          // The generated scalar force adapter also covers order three.
-          if (angular_order <= 3U) continue;
+          // Full-range order 0--3 is already consumed by exact shell workers.
+          // Range-separated exchange deliberately falls through to the generic
+          // Cartesian source evaluator for every angular order.
+          if (radial_operator == DirectRangeOperator::Full && angular_order <= 3U) continue;
         } else {
           // Fock order one has no psss-specific handwritten fallback anymore.
           // When generated psss is unavailable, evaluate it through the shared
@@ -217,10 +223,20 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
           __syncwarp();
           for (std::size_t subtile = 0; subtile < subtile_count; ++subtile) {
             if constexpr (Force) {
-              contract_bounded_direct_force_subtile_scaled<Unrestricted>(
-                  batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                  schwarz_bounds, density, active, output, coulomb_coefficient,
-                  exchange_coefficient, subtile, lane);
+              if (radial_operator == DirectRangeOperator::Full) {
+                contract_bounded_direct_force_subtile_scaled<Unrestricted>(
+                    batch, angular_order, &queue_count, queue + slot, screening_tolerance,
+                    schwarz_bounds, density, active, output, coulomb_coefficient,
+                    exchange_coefficient, subtile, lane);
+              } else {
+                const auto range = radial_operator == DirectRangeOperator::Long
+                                       ? generativeqc::integrals::CoulombRange::Long
+                                       : generativeqc::integrals::CoulombRange::Short;
+                contract_bounded_direct_force_subtile_range_scaled<Unrestricted>(
+                    batch, angular_order, &queue_count, queue + slot, screening_tolerance,
+                    schwarz_bounds, density, active, output, exchange_coefficient, range, omega,
+                    subtile, lane);
+              }
             } else {
               contract_bounded_direct_fock_subtile<Unrestricted>(
                   batch, angular_order, &queue_count, queue + slot, screening_tolerance,
@@ -253,7 +269,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0);
     } else {
       bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
@@ -261,7 +277,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -271,7 +287,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0);
     } else {
       bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
@@ -279,8 +295,35 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0);
     }
+  }
+}
+
+void launch_bounded_direct_range_exchange_force_kernel(
+    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+    DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
+    const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega,
+    double exchange_coefficient) {
+  if (radial_operator == DirectRangeOperator::Full) return;
+  if (unrestricted) {
+    bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
+        <<<grid, block, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
+            bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega);
+  } else {
+    bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
+        <<<grid, block, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
+            bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega);
   }
 }
 
@@ -316,14 +359,16 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
-            global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5);
+            global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5, DirectRangeOperator::Full,
+            0.0);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
-            global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5);
+            global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5, DirectRangeOperator::Full,
+            0.0);
   }
 }
 
