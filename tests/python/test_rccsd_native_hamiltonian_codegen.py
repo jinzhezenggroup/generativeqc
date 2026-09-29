@@ -13,8 +13,11 @@ import pytest
 from generativeqc_compiler.tensor import PackedLayout, Program, execute
 
 from tools.generativeqc_cc.gradient_equations import (
+    build_fock_small_weight_program,
     build_fock_weight_program,
+    build_hamiltonian_eri_weight_program,
     build_hamiltonian_programs,
+    build_hamiltonian_small_weight_program,
 )
 
 
@@ -143,6 +146,50 @@ static bool close(const double* actual,const double* expected,std::size_t n){
 }
 """
 
+
+
+def _input_subset(program: Program, feeds: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    names = {
+        node.attrs["name"]
+        for node in program.live_nodes
+        if node.op == "input"
+    }
+    return {name: feeds[name] for name in names}
+
+
+@pytest.mark.parametrize("o,v", [(1, 2), (2, 2)])
+def test_split_hamiltonian_response_matches_dense_parent(o: int, v: int) -> None:
+    rng = np.random.default_rng(12000 + 10 * o + v)
+    parent = build_hamiltonian_programs(o, v, explicit_density_input=True).weights
+    feeds = _feeds(parent, o, v, rng)
+    expected = execute(parent, feeds).outputs
+
+    small = build_hamiltonian_small_weight_program(
+        o, v, explicit_density_input=True
+    )
+    small_outputs = execute(small, _input_subset(small, feeds)).outputs
+    for name in ("hcore", "overlap", "rotation_gradient", "stationarity", "orbital_rhs"):
+        np.testing.assert_allclose(small_outputs[name], expected[name], rtol=0, atol=1e-12)
+
+    eri = build_hamiltonian_eri_weight_program(
+        o, v, explicit_density_input=True
+    )
+    eri_outputs = execute(eri, _input_subset(eri, feeds)).outputs
+    np.testing.assert_allclose(eri_outputs["eri"], expected["eri"], rtol=0, atol=1e-12)
+
+    fock = build_fock_weight_program(o, v, explicit_density_input=True)
+    fock_feeds = _feeds(fock, o, v, rng)
+    fock_expected = execute(fock, fock_feeds).outputs
+    fock_small = build_fock_small_weight_program(
+        o, v, explicit_density_input=True
+    )
+    fock_small_outputs = execute(
+        fock_small, _input_subset(fock_small, fock_feeds)
+    ).outputs
+    for name in ("hcore", "overlap", "rotation_gradient", "stationarity", "orbital_rhs"):
+        np.testing.assert_allclose(
+            fock_small_outputs[name], fock_expected[name], rtol=0, atol=1e-12
+        )
 
 def test_runtime_shape_hamiltonian_response_matches_tensorir(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
