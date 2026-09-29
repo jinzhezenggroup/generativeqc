@@ -33,31 +33,29 @@ generativeqc::core::System asymmetric_two_center(bool unrestricted) {
       {1, {0.0, 0.0, 0.85}},
   };
   system.shells = {
-      {0, 0, {{6.36242139, 0.15432897}, {1.15892300, 0.53532814},
-              {0.31364979, 0.44463454}}},
-      {1, 0, {{3.42525091, 0.15432897}, {0.62391373, 0.53532814},
-              {0.16885540, 0.44463454}}},
+      {0, 0, {{6.36242139, 0.15432897}, {1.15892300, 0.53532814}, {0.31364979, 0.44463454}}},
+      {1, 0, {{3.42525091, 0.15432897}, {0.62391373, 0.53532814}, {0.16885540, 0.44463454}}},
   };
   system.charge = unrestricted ? 0 : 1;
   system.multiplicity = unrestricted ? 2 : 1;
   system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   std::string detail;
-  require(generativeqc::molecule::validate_and_normalize(system, detail) ==
-              GENERATIVEQC_STATUS_SUCCESS,
-          "incremental Direct-J/K fixture normalization failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "incremental Direct-J/K fixture normalization failed");
   return system;
 }
 
-generativeqc::scf::RhfBucketItem run_cached(
-    generativeqc::scf::CudaRhfBucketPlan** plan, const generativeqc::core::System& system,
-    const generativeqc::scf::ScfOptions& options, bool unrestricted) {
+generativeqc::scf::RhfBucketItem run_cached(generativeqc::scf::CudaRhfBucketPlan** plan,
+                                            const generativeqc::core::System& system,
+                                            const generativeqc::scf::ScfOptions& options,
+                                            bool unrestricted) {
   const std::vector<generativeqc::core::System> systems{system};
   const std::vector<const std::vector<double>*> cold{nullptr};
-  const auto rows = unrestricted
-                        ? generativeqc::scf::run_uhf_cuda_bucket_cached(plan, systems, options, cold,
-                                                                       0, false)
-                        : generativeqc::scf::run_rhf_cuda_bucket_cached(plan, systems, options, cold,
-                                                                       0, false);
+  const auto rows =
+      unrestricted
+          ? generativeqc::scf::run_uhf_cuda_bucket_cached(plan, systems, options, cold, 0, false)
+          : generativeqc::scf::run_rhf_cuda_bucket_cached(plan, systems, options, cold, 0, false);
   require(rows.size() == 1, "incremental Direct-J/K CUDA bucket returned wrong size");
   return rows.front();
 }
@@ -97,8 +95,7 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   const auto incremental = run_cached(&plan, system, incremental_options, unrestricted);
   require(incremental.status == GENERATIVEQC_STATUS_SUCCESS && incremental.scf.converged,
           "incremental CUDA Direct-J/K fixture failed");
-  compare_final_state(baseline.scf, incremental.scf,
-                      screening_tolerance == 0.0 ? 5.0e-10 : 5.0e-8);
+  compare_final_state(baseline.scf, incremental.scf, screening_tolerance == 0.0 ? 5.0e-10 : 5.0e-8);
 
   const auto& diagnostic = incremental.scf.incremental_direct_jk;
   require(diagnostic.requested && diagnostic.active,
