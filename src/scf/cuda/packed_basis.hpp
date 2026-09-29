@@ -7,6 +7,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+enum class DirectCoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
+
 /** Borrowed device basis view and primitive-pair storage ABI. The owning plan outlives every
  * submitted kernel. */
 template <typename Scalar>
