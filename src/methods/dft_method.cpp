@@ -133,6 +133,9 @@ struct SemilocalAdmission {
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const generativeqc_ks_options& input) {
   for (const auto& metadata : dft::kSemilocalFamilyMetadata) {
+    // A curated point/geometry graph is not itself prepared-KS qualification.
+    // Point-only families remain available to bounded CUDA XC consumers.
+    if (!metadata.cuda_ks) continue;
     if (input.semilocal_component_count != metadata.component_count ||
         input.semilocal_range_omega != metadata.range_omega)
       continue;
