@@ -548,9 +548,7 @@ def _cpp_block_sha256(source: str, marker: str) -> str:
 def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     """Bind native snapshot selector provenance consumed by stationary CUDA."""
 
-    source = (repository / "python/vibeqc/_ks_snapshot.py").read_text(
-        encoding="utf-8"
-    )
+    source = (repository / "python/vibeqc/_ks_snapshot.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     owners = [
         node
