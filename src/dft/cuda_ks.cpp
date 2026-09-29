@@ -1588,6 +1588,7 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
                impl_->nonlocal_raw_density,
                impl_->nonlocal_raw_gradient,
                impl_->xc_layout.npoint,
+               reinterpret_cast<void*>(impl_->stream),
                impl_->owner,
                impl_->solve_epoch,
                impl_->final_generation};
