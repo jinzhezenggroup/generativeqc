@@ -90,17 +90,18 @@ def test_complete_cuda_force_matches_independent_engine(
         assert work["nonlocal_seed_generation"] > 0
         assert "nonlocal_pair_evaluations" not in work
         assert len(work["source_names"]) == 12
-        assert work["two_electron_quartet_traversals"] == 0
-        assert work["symmetry_unique_quartets_per_integral_source"] == 0
-        assert work["maximum_center_dual3_evaluations_total"] == 0
-        assert work["two_electron_shell_traversals"] == 3
+        assert work["two_electron_quartet_traversals"] is None
+        assert work["symmetry_unique_quartets_per_integral_source"] is None
+        assert work["maximum_center_dual3_evaluations_total"] is None
+        assert work["two_electron_shell_traversals"] is None
+        assert work["range_recurrences_per_participating_center"] is None
         assert work["two_electron_radial_operators"] == [
             "full-range",
             "short-range",
             "long-range",
         ]
         assert (
-            "public-AO quartet domain is not materialized"
+            "native execution route is not exported"
             in work["two_electron_work_scope"]
         )
         native = work["native_integral_resources"]

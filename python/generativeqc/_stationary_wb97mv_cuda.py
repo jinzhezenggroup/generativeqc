@@ -385,22 +385,22 @@ class PreparedWb97mvCudaGradient:
             "grid_points": npnt,
             **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
-            # The retained native Direct owner now performs all three stationary
-            # two-electron sources on screened shell tasks. Keep the legacy
-            # public-AO counters explicit at zero rather than reporting the old
-            # symmetry-unique N^4 traversal as if it still executed.
-            "symmetry_unique_quartets_per_integral_source": 0,
-            "two_electron_quartet_traversals": 0,
-            "maximum_center_dual3_evaluations_total": 0,
-            "two_electron_shell_traversals": 3,
+            # The native v1 result does not identify whether optional shell
+            # capability or its public-AO fallback executed. Do not infer work
+            # from the method name or turn unavailable evidence into zero.
+            "symmetry_unique_quartets_per_integral_source": None,
+            "two_electron_quartet_traversals": None,
+            "maximum_center_dual3_evaluations_total": None,
+            "two_electron_shell_traversals": None,
             "two_electron_radial_operators": [
                 "full-range",
                 "short-range",
                 "long-range",
             ],
-            "range_recurrences_per_participating_center": 2,
+            "range_recurrences_per_participating_center": None,
             "two_electron_work_scope": (
-                "native screened shell scheduler; public-AO quartet domain is not materialized"
+                "unavailable: native execution route is not exported; screened shell "
+                "scheduler and public-AO capability fallback are both supported"
             ),
             "additional_device_peak_bound": device_bound,
             "additional_host_numeric_bound": host_bound,
