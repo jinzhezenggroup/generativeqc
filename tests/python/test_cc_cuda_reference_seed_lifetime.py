@@ -91,6 +91,6 @@ def test_reference_seed_upload_borrows_fenced_caller_storage(tmp_path: Path) -> 
         timeout=60,
     )
     result = subprocess.run(
-        [str(executable)], capture_output=True, text=True, timeout=10
+        [str(executable)], check=False, capture_output=True, text=True, timeout=10
     )
     assert result.returncode == 0, result.stdout + result.stderr
