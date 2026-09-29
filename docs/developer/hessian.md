@@ -84,24 +84,22 @@ canonical installed owner is now `generativeqc.stationary_nuclear`: metric-densi
 RHS construction, occupied-orbital/density reconstruction and the single-/multi-
 RHS consumer contract live there without importing repository `tools.*`.
 Method-specific Fock physics remains injected through the response operator's
-`induced_fock(delta_density)` contract, while the existing #179 GMRES
-implementation is still supplied by the response adapter rather than copied
-into production. `tools.generativeqc_hessian.response` is a pure algebra
-compatibility re-export and `tools.generativeqc_hessian.perturbation` only
-binds the existing solver. Existing `solve_rhf_nuclear_perturbation[s]` names
-remain strict RHF compatibility wrappers. This boundary alone does not supply
-DFT AO/grid/partition geometric derivatives.
+`induced_fock(delta_density)` contract. The shared #179 GMRES implementation
+is now installed as `generativeqc.response_solver`; tools response/Hessian
+imports are compatibility aliases or wrappers around the same production
+objects. Existing `solve_rhf_nuclear_perturbation[s]` names remain strict RHF
+compatibility wrappers.
 
-The CPU direct all-electron Cartesian LDA/PBE RKS tools path now has native
-geometric directional consumers, complete seven-source molecular HVPs, shared
-multi-RHS CPKS, raw full-Hessian assembly, finite-difference validation and
-resource-gated execution beyond the historical 12-AO validation boundary.
-The closed-shell response problem/operator/XC stack, bounded GMRES solver and
-live NativeRKS state/J binding are now installed production owners. Public
-Calculator DFT Hessian/HVP capability remains off because the method-specific
-RKS nuclear-direction, integral-response and molecular HVP/full-Hessian
-consumers are still repository tools, and no public Hessian capability/resource
-contract has been promoted.
+The CPU direct all-electron Cartesian LDA/PBE RKS path now has installed
+production owners for the live CPKS state/J/XC binding, nuclear-direction
+response, NativeAO-owned generated first/second integral response, complete
+seven-source molecular HVP, shared multi-RHS CPKS and raw bounded full-Hessian
+assembly. The existing finite-difference, raw-symmetry and resource-admission
+tests continue to qualify this same scientific slice. Repository
+`tools.generativeqc_hessian.rks_directional` and `rks_molecular` are module
+aliases to those installed consumers. Public Calculator DFT Hessian/HVP
+capability remains off only because no public Hessian capability/resource
+contract has been promoted; wider method/backend support remains separate.
 
 ## Scope of this slice
 
@@ -111,12 +109,12 @@ CPU-only.
 
 Explicitly outside this slice, and left fail-closed rather than approximated:
 
-- **DFT native execution** (slice C) — the generic MethodIR-derived HVP planner
-  exists, but complete AO/grid/partition directional consumers and molecular
-  LDA/GGA HVP assembly remain separately qualified;
-- **bounded full-Hessian execution** (slice B4) remains a small-system tools
-  capability rather than a public production endpoint; B2 device-resident
-  response and B3 matrix-free HVP are implemented under the same bounded tools boundary;
+- **DFT public execution** (slice C) — the installed CPU direct Cartesian
+  LDA/PBE RKS HVP/full-Hessian consumer exists, but Calculator capability and
+  complete public resource publication remain separate promotion work;
+- **bounded full-Hessian execution** (slice B4) is installed but remains an
+  internal capability rather than a public Calculator endpoint; its raw matrix
+  is never post-hoc symmetrized;
 - **DF, ECP, range-separated and meta-GGA Hessians** — each needs its own
   complete second-derivative/response chain and is *not* inherited from energy
   or first-force support;
