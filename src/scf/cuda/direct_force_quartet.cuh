@@ -31,11 +31,11 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
-    double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane) {
+    double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane,
+    generativeqc::integrals::CoulombRange radial_range =
+        generativeqc::integrals::CoulombRange::Full,
+    double radial_omega = 0.0) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
-  static_assert(AngularOrder >= 2U, "order-0/1 Direct force uses generated exact shell tasks");
-  static_assert(AngularOrder != 3U,
-                "order-three Direct force is owned by generated shell-task workers");
   constexpr std::size_t subtiles_per_tile = detail::direct_quartet_subtiles_per_tile(AngularOrder);
   const std::size_t active_tile = active_subtile / subtiles_per_tile;
   // Consume the identical compact tile list as direct Fock so energy and
@@ -115,33 +115,37 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     const unsigned unique_center_count =
         direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
     double explicit_unique_gradient[4][3]{};
-    if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
-      CartesianQuartetGradient explicit_gradient{};
-      if constexpr (AngularOrder == 2) {
-        explicit_gradient = contracted_eri_cartesian_source_order2_generated_gradient(
-            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
-      } else if constexpr (AngularOrder == 4) {
-        explicit_gradient = contracted_eri_cartesian_source_order4_gradient(
-            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
-      } else if constexpr (AngularOrder == 5) {
-        explicit_gradient = contracted_eri_cartesian_source_order5_gradient(
-            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
-      } else {
-        explicit_gradient = contracted_eri_cartesian_source_order6_gradient(
-            batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
-      }
-      for (unsigned center = 0; center < 4; ++center) {
-        unsigned unique_center = 0;
-        while (unique_center_atoms[unique_center] != center_atoms[center]) {
-          ++unique_center;
+    const bool use_specialized_full_range =
+        radial_range == generativeqc::integrals::CoulombRange::Full;
+    if (use_specialized_full_range) {
+      if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
+        CartesianQuartetGradient explicit_gradient{};
+        if constexpr (AngularOrder == 2) {
+          explicit_gradient = contracted_eri_cartesian_source_order2_generated_gradient(
+              batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+        } else if constexpr (AngularOrder == 4) {
+          explicit_gradient = contracted_eri_cartesian_source_order4_gradient(
+              batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+        } else if constexpr (AngularOrder == 5) {
+          explicit_gradient = contracted_eri_cartesian_source_order5_gradient(
+              batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+        } else {
+          explicit_gradient = contracted_eri_cartesian_source_order6_gradient(
+              batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
         }
-        for (unsigned coordinate = 0; coordinate < 3; ++coordinate) {
-          explicit_unique_gradient[unique_center][coordinate] +=
-              explicit_gradient.center[center][coordinate];
+        for (unsigned center = 0; center < 4; ++center) {
+          unsigned unique_center = 0;
+          while (unique_center_atoms[unique_center] != center_atoms[center]) {
+            ++unique_center;
+          }
+          for (unsigned coordinate = 0; coordinate < 3; ++coordinate) {
+            explicit_unique_gradient[unique_center][coordinate] +=
+                explicit_gradient.center[center][coordinate];
+          }
         }
       }
     }
@@ -153,16 +157,27 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
       double derivative_x = 0.0;
       double derivative_y = 0.0;
       double derivative_z = 0.0;
-      if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
-        derivative_x = explicit_unique_gradient[center][0];
-        derivative_y = explicit_unique_gradient[center][1];
-        derivative_z = explicit_unique_gradient[center][2];
+      if (use_specialized_full_range) {
+        if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
+          derivative_x = explicit_unique_gradient[center][0];
+          derivative_y = explicit_unique_gradient[center][1];
+          derivative_z = explicit_unique_gradient[center][2];
+        } else {
+          const Dual3 derivative =
+              dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
+                  shell_class, batch, system, static_cast<std::int32_t>(i),
+                  static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
+                  static_cast<std::int32_t>(l), coordinate);
+          derivative_x = derivative.derivative_x;
+          derivative_y = derivative.derivative_y;
+          derivative_z = derivative.derivative_z;
+        }
       } else {
         const Dual3 derivative =
             dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
                 shell_class, batch, system, static_cast<std::int32_t>(i),
                 static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
-                static_cast<std::int32_t>(l), coordinate);
+                static_cast<std::int32_t>(l), coordinate, radial_range, radial_omega);
         derivative_x = derivative.derivative_x;
         derivative_y = derivative.derivative_y;
         derivative_z = derivative.derivative_z;
