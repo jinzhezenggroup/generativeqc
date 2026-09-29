@@ -47,6 +47,7 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     candidate->atom_counts = std::move(atom_counts);
     candidate->last_fock_builds.resize(system_count);
     candidate->precision.resize(system_count);
+    candidate->incremental_direct_jk.resize(system_count);
     candidate->precision_work.resize(system_count);
     candidate->scf_diagnostics.resize(system_count);
     candidate->ks_diagnostics.resize(system_count);
@@ -504,6 +505,8 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   // Invalidate before validation/execution so rejected or throwing replays
   // cannot expose a record from the previous run.
   std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
+  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(),
+            std::nullopt);
   std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
   std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
   const std::uint32_t system_count = generativeqc_batch_get_system_count(batch);
@@ -561,6 +564,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
           item.status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
         batch->ks_diagnostics[i] = std::move(item.calculation.ks_diagnostic);
         batch->precision[i] = item.calculation.precision;
+        batch->incremental_direct_jk[i] = item.calculation.incremental_direct_jk;
         if (item.calculation.physical_residual_rms)
           batch->scf_diagnostics[i] = generativeqc_scf_diagnostic{
               sizeof(generativeqc_scf_diagnostic), GENERATIVEQC_ABI_VERSION,
@@ -615,6 +619,20 @@ generativeqc_status generativeqc_batch_get_precision_provenance(
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   if (!batch->precision[index].has_value()) return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
   return generativeqc::api::copy_precision_provenance(*batch->precision[index], out);
+}
+
+generativeqc_status generativeqc_batch_get_incremental_direct_jk_diagnostic(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_incremental_direct_jk_diagnostic* out) {
+  if (batch == nullptr || index >= batch->incremental_direct_jk.size()) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  if (!batch->incremental_direct_jk[index].has_value()) {
+    return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  }
+  return generativeqc::api::copy_incremental_direct_jk_diagnostic(
+      *batch->incremental_direct_jk[index], out);
 }
 
 generativeqc_status generativeqc_batch_get_precision_work(
