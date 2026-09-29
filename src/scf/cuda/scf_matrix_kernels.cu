@@ -171,9 +171,8 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
 __global__ void prepare_incremental_direct_jk_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
     std::uint32_t rebuild_interval, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock,
-    double* delta_density, std::uint32_t* delta_updates, std::uint8_t* full_build,
-    double* max_abs_delta_density) {
+    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* delta_density,
+    std::uint32_t* delta_updates, std::uint8_t* full_build, double* max_abs_delta_density) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
@@ -202,10 +201,9 @@ __global__ void prepare_incremental_direct_jk_kernel(
 
 /** Advance the retained full-Fock/density anchor after one completed Direct-J/K build. */
 __global__ void finalize_incremental_direct_jk_kernel(
-    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
-    const double* density, const double* hcore, const std::uint8_t* active,
-    double* anchor_density, double* anchor_fock, double* fock,
-    std::uint32_t* delta_updates, const std::uint8_t* full_build) {
+    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf, const double* density,
+    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
+    double* fock, std::uint32_t* delta_updates, const std::uint8_t* full_build) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
@@ -303,22 +301,20 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
 }
 
 void launch_prepare_incremental_direct_jk_kernel(
-    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
-    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
-    std::uint32_t rebuild_interval, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock,
-    double* delta_density, std::uint32_t* delta_updates, std::uint8_t* full_build,
-    double* max_abs_delta_density) {
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
+    std::int32_t spin_count, std::int32_t nbf, std::uint32_t rebuild_interval,
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
+    std::uint8_t* full_build, double* max_abs_delta_density) {
   prepare_incremental_direct_jk_kernel<<<grid, block, shared_bytes, stream>>>(
       batch_size, spin_count, nbf, rebuild_interval, density, hcore, active, anchor_density,
       anchor_fock, delta_density, delta_updates, full_build, max_abs_delta_density);
 }
 
 void launch_finalize_incremental_direct_jk_kernel(
-    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
-    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
-    const double* density, const double* hcore, const std::uint8_t* active,
-    double* anchor_density, double* anchor_fock, double* fock,
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
+    std::int32_t spin_count, std::int32_t nbf, const double* density, const double* hcore,
+    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
     std::uint32_t* delta_updates, const std::uint8_t* full_build) {
   finalize_incremental_direct_jk_kernel<<<grid, block, shared_bytes, stream>>>(
       batch_size, spin_count, nbf, density, hcore, active, anchor_density, anchor_fock, fock,

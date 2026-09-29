@@ -2843,8 +2843,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
   }
 
-  const auto launch_iteration_fock_builder =
-      [&](const double* density_input, bool allow_mixed_precision) -> cudaError_t {
+  const auto launch_iteration_fock_builder = [&](const double* density_input,
+                                                 bool allow_mixed_precision) -> cudaError_t {
     if (!incremental_iteration_enabled) {
       return launch_fock_builder(density_input, allow_mixed_precision);
     }
@@ -2866,9 +2866,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     launch_finalize_incremental_direct_jk_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-        static_cast<std::int32_t>(nbf), density_input, hcore, active,
-        incremental_anchor_density, incremental_anchor_fock, fock, incremental_delta_updates,
-        incremental_full_build);
+        static_cast<std::int32_t>(nbf), density_input, hcore, active, incremental_anchor_density,
+        incremental_anchor_fock, fock, incremental_delta_updates, incremental_full_build);
     return cudaPeekAtLastError();
   };
 
@@ -2896,8 +2895,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
 
   const auto launch_iteration_pre_eigensolver =
       [&](bool allow_mixed_precision) -> generativeqc_status {
-    const cudaError_t fock_error =
-        launch_iteration_fock_builder(density, allow_mixed_precision);
+    const cudaError_t fock_error = launch_iteration_fock_builder(density, allow_mixed_precision);
     if (fock_error != cudaSuccess) return cuda_status(fock_error);
     if (fock_only_iteration) return GENERATIVEQC_STATUS_SUCCESS;
 
@@ -4823,14 +4821,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           builds == 0U ? 0U : (interval == 0U ? 1U : 1U + (builds - 1U) / (interval + 1U));
       result.incremental_direct_jk.anchor_full_builds = full_builds;
       result.incremental_direct_jk.delta_builds = builds - full_builds;
-      result.incremental_direct_jk.periodic_rebuilds =
-          full_builds == 0U ? 0U : full_builds - 1U;
+      result.incremental_direct_jk.periodic_rebuilds = full_builds == 0U ? 0U : full_builds - 1U;
       result.incremental_direct_jk.anchor_updates = builds;
       result.incremental_direct_jk.max_abs_delta_density =
           host_incremental_max_abs_delta_density[system];
       result.incremental_direct_jk.bypass_full_builds = 0U;
-      result.incremental_direct_jk.post_scf_full_builds =
-          result.precision.post_scf_fock_builds;
+      result.incremental_direct_jk.post_scf_full_builds = result.precision.post_scf_fock_builds;
     }
     if (entered_finalization &&
         (scf_force_ready_state ||
