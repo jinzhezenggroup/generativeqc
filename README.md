@@ -101,7 +101,7 @@ cmake --build --preset cuda-dev-fast
 An installed native SDK/runtime does not require Python:
 
 ```bash
-cmake --install build --prefix /opt/generativeqc
+cmake --install build/cuda-dev-fast --prefix /opt/generativeqc
 /opt/generativeqc/bin/generativeqc methods
 ```
 
