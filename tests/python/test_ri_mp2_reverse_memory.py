@@ -227,6 +227,13 @@ int main(int argc,char** argv) {
     if(retained+trace::peak>planned) return 4;
     const auto result_bytes=sizeof(double)*(2*n*n+n*n*na+na*na);
     if(planned!=retained+result_bytes+result.workspace_bytes) return 5;
+    if(n>=4) {
+      const auto dense_n4=n*n*n*n;
+      const auto correlation=(n-1)*(n-1);
+      const auto old_dense_required=
+          planned+sizeof(double)*(dense_n4-n*n-correlation);
+      if(old_dense_required<=planned) return 7;
+    }
   }
   trace::start();
   bool rejected=false;
@@ -275,7 +282,9 @@ def reverse_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("n,na", ((2, 1), (2, 2), (2, 4), (2, 12), (3, 64), (4, 128)))
+@pytest.mark.parametrize(
+    "n,na", ((2, 1), (2, 2), (2, 4), (2, 12), (3, 64), (4, 128), (32, 8))
+)
 def test_reverse_budget_covers_measured_nested_peak(
     reverse_probe: Path, n: int, na: int
 ) -> None:
