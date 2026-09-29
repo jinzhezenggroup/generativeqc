@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
-from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
