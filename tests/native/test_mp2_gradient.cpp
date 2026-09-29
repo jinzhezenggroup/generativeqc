@@ -43,11 +43,37 @@ bool factorized_matches_dense(const generativeqc::mp2::FactorizedTwoElectronWeig
   for (std::size_t p = 0; p < n; ++p)
     for (std::size_t q = 0; q < n; ++q)
       for (std::size_t r = 0; r < n; ++r)
-        for (std::size_t s = 0; s < n; ++s)
-          if (std::abs(generativeqc::mp2::factorized_two_electron_weight(factorized, p, q, r, s) -
-                       dense[eri_index(n, p, q, r, s)]) > tolerance)
+        for (std::size_t s = 0; s < n; ++s) {
+          const double actual =
+              generativeqc::mp2::factorized_two_electron_weight(factorized, p, q, r, s);
+          const double expected = dense[eri_index(n, p, q, r, s)];
+          if (!std::isfinite(actual) || !std::isfinite(expected) ||
+              std::abs(actual - expected) > tolerance)
             return false;
+        }
   return true;
+}
+
+void factorized_oracle_rejects_nonfinite_values() {
+  generativeqc::mp2::FactorizedTwoElectronWeights factors;
+  factors.orbitals = 2;
+  factors.occupied = 1;
+  factors.fock.assign(4, 0.0);
+  factors.correlation_iajb.assign(1, 0.0);
+  std::vector<double> dense(16, 0.0);
+  require(factorized_matches_dense(factors, dense, 1e-12), "finite zero oracle rejected");
+  for (const double invalid : {std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::infinity(),
+                               -std::numeric_limits<double>::infinity()}) {
+    dense[3] = invalid;
+    require(!factorized_matches_dense(factors, dense, 1e-12),
+            "factorized comparison accepted a nonfinite dense oracle");
+    dense[3] = 0.0;
+    factors.fock[0] = invalid;
+    require(!factorized_matches_dense(factors, dense, 1e-12),
+            "factorized comparison accepted nonfinite factors");
+    factors.fock[0] = 0.0;
+  }
 }
 
 double mp2_energy(std::span<const double> g, std::span<const double> eps, std::size_t no) {
@@ -710,6 +736,8 @@ void invalid_inputs_and_resource_boundaries() {
           "gradient resource plan retained dense N^4 relaxed-weight storage");
   require(probe.relaxed_weight_bytes < 4 * 4 * 4 * 4 * sizeof(double),
           "factorized relaxed-weight storage is not below one dense N^4 tensor");
+  require(probe.rank2_transform_workspace_bytes == 16 * sizeof(double),
+          "rank-2 congruence workspace is not budgeted");
   require(probe.shell_cotangent_bytes == 81 * sizeof(double),
           "shell-quartet cotangent ownership is not isolated");
   require(probe.derivative_staging_bytes == 485 * sizeof(double),
@@ -746,6 +774,7 @@ void invalid_inputs_and_resource_boundaries() {
 
 int main() {
   try {
+    factorized_oracle_rejects_nonfinite_values();
     energy_adjoint_matches_independent_finite_difference();
     orbital_rhs_and_relaxed_weights_match_independent_oracles();
     streamed_provider_matches_dense_oracle();
