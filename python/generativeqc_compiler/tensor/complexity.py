@@ -17,7 +17,6 @@ from .precision import remap_precision_execution
 from .program import Program
 from .types import Index
 
-
 _SYMBOL_BY_KIND = {
     "ao": "N",
     "orbital": "N",
@@ -44,9 +43,7 @@ class ComplexityMonomial:
 
     def __post_init__(self) -> None:
         if any(
-            not isinstance(symbol, str)
-            or type(power) is not int
-            or power <= 0
+            not isinstance(symbol, str) or type(power) is not int or power <= 0
             for symbol, power in self.powers
         ):
             raise ValueError("complexity powers must be positive integer exponents")
@@ -167,7 +164,9 @@ class ComplexityReport:
 
     @property
     def max_storage_degree(self) -> int:
-        return max((entry.complexity.storage.degree for entry in self.entries), default=0)
+        return max(
+            (entry.complexity.storage.degree for entry in self.entries), default=0
+        )
 
     @property
     def max_work_degree(self) -> int:
@@ -188,9 +187,7 @@ class ComplexityReport:
             and entry.complexity.storage.degree >= threshold
         ]
         work = [
-            entry
-            for entry in self.entries
-            if entry.complexity.work.degree >= threshold
+            entry for entry in self.entries if entry.complexity.work.degree >= threshold
         ]
 
         def bounded(values: list[ComplexityEntry]) -> dict[str, typing.Any]:
@@ -273,11 +270,7 @@ def _binary_einsum(
 
 
 def _reassociate_node(node: Node, *, max_operands: int) -> Node:
-    if (
-        node.op != "einsum"
-        or len(node.inputs) < 3
-        or len(node.inputs) > max_operands
-    ):
+    if node.op != "einsum" or len(node.inputs) < 3 or len(node.inputs) > max_operands:
         return node
     labels_by_operand = tuple(tuple(labels) for labels in node.attrs["labels"])
     if any(len(labels) != len(set(labels)) for labels in labels_by_operand):
@@ -343,9 +336,7 @@ def _reassociate_node(node: Node, *, max_operands: int) -> Node:
                     (domains[label].extent for label in output_labels),
                     start=1,
                 )
-                coefficient = (
-                    node.attrs["coefficient"] if mask == full_mask else (1, 1)
-                )
+                coefficient = node.attrs["coefficient"] if mask == full_mask else (1, 1)
                 candidate_node = _binary_einsum(
                     left,
                     right,

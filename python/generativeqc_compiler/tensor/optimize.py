@@ -468,9 +468,7 @@ def optimize(
     run = _optimizer(value_numbering_diagnostics).run(requested)
     baseline = run.value
     pruning = _pruning_diagnostics(program, requested, baseline)
-    result = (
-        reassociate_einsums(baseline) if reassociate_contractions else baseline
-    )
+    result = reassociate_einsums(baseline) if reassociate_contractions else baseline
     complexity_diagnostics = None
     if reassociate_contractions:
         complexity_diagnostics = {
