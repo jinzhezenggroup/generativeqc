@@ -13,7 +13,11 @@ from generativeqc_compiler.integral.derivative_cuda_shell_aot import (
     emit_cuda_derivative_shell_aot_header,
 )
 from generativeqc_compiler.integral.ir import KernelConsumer
-from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_profile import (
+    ResolvedProductionProfile,
+    resolve_production_profile,
+)
+from generativeqc_compiler.integral.range_separation import CoulombKernel
 
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION = (
@@ -22,7 +26,7 @@ PRODUCTION = (
 RADIALS = ROOT / "manifests/derivative_aot_radials.json"
 
 
-def _inputs():
+def _inputs() -> tuple[ResolvedProductionProfile, tuple[CoulombKernel, ...]]:
     profile = resolve_production_profile(PRODUCTION, "sm_120")
     payload = json.loads(RADIALS.read_text(encoding="utf-8"))
     radials = radial_inventory_from_payload(payload, backend="cuda")
