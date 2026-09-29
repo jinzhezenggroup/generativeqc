@@ -100,7 +100,11 @@ def run(args: argparse.Namespace) -> dict:
             ROOT / "include",
             generated_dir,
         ),
-        options=("--fmad=false",),
+        options=(
+            "--fmad=false",
+            "-DNDEBUG",
+            "-DGENERATIVEQC_HAS_CUDA=1",
+        ),
     )
     (args.output / "compiler.log").write_text(result.stdout + result.stderr)
     if result.returncode:
@@ -136,6 +140,8 @@ def run(args: argparse.Namespace) -> dict:
             "seconds": result.duration_seconds,
             "object_bytes": object_path.stat().st_size,
             "fmad": False,
+            "ndebug": True,
+            "generativeqc_has_cuda": True,
         },
         "compiled_region": evidence.to_payload(),
     }
