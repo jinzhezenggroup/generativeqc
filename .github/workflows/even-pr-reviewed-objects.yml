@@ -1,0 +1,80 @@
+name: Stage reviewed even-PR repairs
+on:
+  push:
+    branches: [agent/even-pr-repair-20260930]
+    paths: [.review/repairs.b64]
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+      - name: Materialize exact reviewed trees on scratch refs only
+        env:
+          GIT_AUTHOR_NAME: ChatGPT
+          GIT_AUTHOR_EMAIL: noreply@openai.com
+          GIT_COMMITTER_NAME: ChatGPT
+          GIT_COMMITTER_EMAIL: noreply@openai.com
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, subprocess
+          from pathlib import Path
+          packed = base64.b64decode(Path('.review/repairs.b64').read_text(), validate=True)
+          expected = '59c9477124af58cb90e7c6b220227fa8dff9d2cd617f538c5a51163d3b1aedf1'
+          if hashlib.sha256(packed).hexdigest() != expected:
+              raise SystemExit('repair manifest digest mismatch')
+          records = json.loads(gzip.decompress(packed))['records']
+          def git(*args, input=None, check=True):
+              return subprocess.run(['git', *args], input=input, text=True,
+                                    capture_output=True, check=check)
+          heads = sorted({r['head'] for r in records} | {r['master'] for r in records if r['master']})
+          git('fetch', '--no-tags', '--depth=128', 'origin', *heads)
+          git('config', 'merge.conflictStyle', 'merge')
+          git('config', 'core.autocrlf', 'false')
+          results = []
+          for record in records:
+              try:
+                  git('reset', '--hard')
+                  git('checkout', '--detach', record['head'])
+                  if record['master']:
+                      git('update-ref', 'refs/remotes/origin/master', record['master'])
+                      merged = git('merge', '--no-commit', '--no-ff', 'origin/master', check=False)
+                      if merged.returncode not in (0, 1):
+                          raise RuntimeError(merged.stderr)
+                  git('add', '-A')
+                  pre_tree = git('write-tree').stdout.strip()
+                  if pre_tree != record['pre_tree']:
+                      raise RuntimeError(f'unreviewed merge tree {pre_tree}; expected {record["pre_tree"]}')
+                  if record['patch']:
+                      git('apply', '--index', '-', input=record['patch'])
+                  tree = git('write-tree').stdout.strip()
+                  if tree != record['tree']:
+                      raise RuntimeError(f'repaired tree mismatch: {tree}')
+                  git('diff', '--cached', '--check')
+                  args = ['commit-tree', tree, '-p', record['head']]
+                  if record['master']:
+                      args += ['-p', record['master']]
+                  commit = git(*args, input=record['message']).stdout.strip()
+                  # Deliberately never push to the original PR or default branch.
+                  ref = f'agent/even-pr-reviewed-{record["pr"]}-{record["head"][:8]}'
+                  git('push', 'origin', f'{commit}:refs/heads/{ref}')
+                  result = {'pr': record['pr'], 'head': record['head'], 'tree': tree,
+                            'commit': commit, 'scratch_ref': ref}
+              except Exception as error:
+                  result = {'pr': record['pr'], 'error': str(error)}
+              results.append(result)
+              print('REVIEW_RESULT ' + json.dumps(result), flush=True)
+          Path('/tmp/review-object-results.json').write_text(json.dumps(results, indent=2))
+          if any('error' in result for result in results):
+              raise SystemExit('one or more trees failed closed; no original PR refs were changed')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: reviewed-even-pr-objects
+          path: /tmp/review-object-results.json
+          retention-days: 1
