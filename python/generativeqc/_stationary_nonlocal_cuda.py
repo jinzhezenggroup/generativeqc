@@ -3,7 +3,9 @@
 This module owns scheduling only. AO/XC pullbacks and VV10 mathematics remain
 in their existing generated/native owners. The final SCF rho/grad-rho are
 seeded D2D into the resident VV10 owner, so both geometry consumers share one
-bounded AO/grid collocation pass without retaining O(N*AO) jets.
+bounded AO/grid collocation pass without retaining O(N*AO) jets. If that
+optional binding is unavailable, two bounded passes collect device features
+and consume device seeds without exporting either array to the host.
 """
 
 from __future__ import annotations
@@ -27,13 +29,16 @@ def resident_nonlocal_geometry(
     functional: int,
     ingredients: tuple[str, ...],
 ) -> tuple[dict[str, np.ndarray], dict[str, float], dict[str, typing.Any]]:
-    """Seed pairs from the live SCF state and consume each grid lease once.
+    """Prefer live SCF features, retaining the bounded device collection fallback.
 
     The caller has reset both stationary accumulators and enqueued the nuclear
     term only on the semilocal source. The first grid lease supplies the shared
     CUDA stream used to D2D-seed the full-grid resident VV10 owner from the exact
     current KS snapshot. Pair seeds are then available before that same lease
-    reaches the nonlocal geometry consumer. No AO jet survives the lease.
+    reaches the nonlocal geometry consumer. A capability miss instead collects
+    features alongside semilocal geometry and consumes pairs in a second pass.
+    Token, device, allocation and numerical errors never select that fallback.
+    No AO jet survives its lease; failed calls publish no component dictionary.
     """
     if type(tile_points) is not int or tile_points <= 0:
         raise ValueError("resident nonlocal tile_points must be a positive integer")
@@ -64,58 +69,82 @@ def resident_nonlocal_geometry(
     seed_seconds = 0.0
     pair_seconds = 0.0
     seeds = None
-    for begin in range(0, count, tile_points):
-        end = min(begin + tile_points, count)
-        with grid.feature_task(
-            points[begin:end],
-            None,
-            ingredients,
-            defer_error_to_consumer=True,
-        ) as task:
-            owners = np.asarray(state.grid.owners[begin:end], dtype=np.int64)
-            weights = state.grid.weights[begin:end]
-            raw = raw_weights[begin:end]
-            sources.geometry(
-                task,
-                owners,
-                weights,
-                raw,
-                functional=functional,
-            )
-            if begin == 0:
-                began = perf_counter()
-                nonlocal_owner.seed_from_snapshot(state._source, task)
-                seed_seconds = perf_counter() - began
-                began = perf_counter()
-                seeds = nonlocal_owner.execute()
-                pair_seconds = perf_counter() - began
-                if (
-                    not seeds.pointer
-                    or seeds.stride != count
-                    or not seeds.stream
-                    or seeds.generation <= 0
-                ):
-                    raise ValueError(
-                        "resident nonlocal producer returned an invalid seed lease"
+    local = None
+    snapshot_seeded = True
+    for phase in range(2):
+        if phase == 1 and snapshot_seeded:
+            break
+        for begin in range(0, count, tile_points):
+            end = min(begin + tile_points, count)
+            with grid.feature_task(
+                points[begin:end],
+                None,
+                ingredients,
+                defer_error_to_consumer=True,
+            ) as task:
+                owners = np.asarray(state.grid.owners[begin:end], dtype=np.int64)
+                weights = state.grid.weights[begin:end]
+                raw = raw_weights[begin:end]
+                if phase == 0:
+                    sources.geometry(
+                        task,
+                        owners,
+                        weights,
+                        raw,
+                        functional=functional,
                     )
-            if seeds is None:
-                raise RuntimeError("resident nonlocal pair seed was not initialized")
-            if task.view.stream != seeds.stream:
-                raise ValueError("resident nonlocal seed and geometry streams differ")
-            # Inactive MolecularV1 rows have all six seeds zeroed by the native
-            # producer. Original weights are therefore correct without a host
-            # active mask; no density or seed values cross this boundary.
-            nonlocal_sources.geometry_external_device(
-                task,
-                owners,
-                weights,
-                raw,
-                seeds.pointer,
-                seeds.stride,
-                begin,
-            )
+                    if begin == 0:
+                        began = perf_counter()
+                        try:
+                            nonlocal_owner.seed_from_snapshot(state._source, task)
+                        except NotImplementedError:
+                            # The native bridge checks the exact token before
+                            # returning a capability miss, without seeding or
+                            # enqueueing copies. Do not catch execution errors.
+                            diagnostic = nonlocal_owner.diagnostic()
+                            if diagnostic.executed or diagnostic.collected_points:
+                                raise RuntimeError(
+                                    "feature capability miss modified "
+                                    "the nonlocal owner"
+                                ) from None
+                            snapshot_seeded = False
+                        seed_seconds = perf_counter() - began
+                    if not snapshot_seeded:
+                        nonlocal_owner.collect(task, begin)
+                        continue
+                if seeds is None:
+                    began = perf_counter()
+                    seeds = nonlocal_owner.execute()
+                    pair_seconds = perf_counter() - began
+                    if (
+                        not seeds.pointer
+                        or seeds.stride != count
+                        or not seeds.stream
+                        or seeds.generation <= 0
+                    ):
+                        raise ValueError(
+                            "resident nonlocal producer returned an invalid seed lease"
+                        )
+                if task.view.stream != seeds.stream:
+                    raise ValueError(
+                        "resident nonlocal seed and geometry streams differ"
+                    )
+                # Inactive MolecularV1 rows have all six seeds zeroed by the
+                # native producer, so no host active mask is needed.
+                nonlocal_sources.geometry_external_device(
+                    task,
+                    owners,
+                    weights,
+                    raw,
+                    seeds.pointer,
+                    seeds.stride,
+                    begin,
+                )
+        if phase == 0:
+            local = sources.finish()
 
-    local = sources.finish()
+    if local is None or seeds is None:
+        raise RuntimeError("resident nonlocal geometry did not complete")
     nonlocal_parts = nonlocal_sources.finish()
     components = {
         name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
@@ -129,22 +158,34 @@ def resident_nonlocal_geometry(
     geometry_and_drain_seconds = (
         perf_counter() - pass_began - seed_seconds - pair_seconds
     )
+    geometry_passes = 1 if snapshot_seeded else 2
+    geometry_timing = (
+        "single_pass_geometry_and_pair_drain"
+        if snapshot_seeded
+        else "two_pass_geometry_and_pair_drain"
+    )
     seconds = {
         "nonlocal_reset": reset_seconds,
         "resident_feature_seed_enqueue": seed_seconds,
         "vv10_pair_enqueue": pair_seconds,
-        "single_pass_geometry_and_pair_drain": geometry_and_drain_seconds,
+        geometry_timing: geometry_and_drain_seconds,
     }
     work = {
         "nonlocal_execution": "resident-full-grid-device-seeds",
-        "nonlocal_feature_source": "exact-final-scf-device-binding",
-        "nonlocal_feature_d2d_bytes": 4 * count * 8,
+        "nonlocal_feature_source": (
+            "exact-final-scf-device-binding"
+            if snapshot_seeded
+            else "bounded-grid-feature-collection"
+        ),
+        # D2D copy enqueues are distinct from the fallback collection kernel.
+        "nonlocal_feature_d2d_bytes": 4 * count * 8 if snapshot_seeded else 0,
+        "nonlocal_feature_collection_point_visits": 0 if snapshot_seeded else count,
         "nonlocal_feature_d2h_bytes": 0,
         "nonlocal_seed_h2d_bytes": 0,
         "nonlocal_dense_pair_capacity": count * count,
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
-        "ao_collocation_point_visits": count,
+        "ao_collocation_point_visits": geometry_passes * count,
         "geometry_point_visits": 2 * count,
     }
     return components, seconds, work
