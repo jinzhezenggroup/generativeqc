@@ -98,7 +98,8 @@ def resident_nonlocal_geometry(
                     raise ValueError(
                         "resident nonlocal producer returned an invalid seed lease"
                     )
-            assert seeds is not None
+            if seeds is None:
+                raise RuntimeError("resident nonlocal pair seed was not initialized")
             if task.view.stream != seeds.stream:
                 raise ValueError("resident nonlocal seed and geometry streams differ")
             # Inactive MolecularV1 rows have all six seeds zeroed by the native
