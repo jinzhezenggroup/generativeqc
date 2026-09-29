@@ -117,7 +117,6 @@ def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
     fused = quartet[fused_begin:]
     assert "if (coulomb_coefficient != 0.0)" in fused
     assert (
-        "short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0"
-        in fused
+        "short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0" in fused
     )
     assert "CoulombRange::Long, omega" in fused
