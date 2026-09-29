@@ -212,9 +212,9 @@ ConventionalForceResult density_fitted_force_cpu(
   if (!response_result.converged())
     throw std::runtime_error("RI-MP2 orbital response did not converge");
 
-  auto weights = canonical_lagrangian_weights_streamed(
-      reference, h, provider, std::move(adjoint), response_result.solution, same_space_threshold,
-      false, 0);
+  auto weights = canonical_lagrangian_weights_streamed(reference, h, provider, std::move(adjoint),
+                                                       response_result.solution,
+                                                       same_space_threshold, false, 0);
   if (!std::isfinite(weights.stationarity_residual) || weights.stationarity_residual > 1e-7)
     throw std::runtime_error("RI-MP2 relaxed Lagrangian is not stationary");
   auto fitted = density_fitted_lagrangian_weights(reference, provider, weights, budget_bytes);

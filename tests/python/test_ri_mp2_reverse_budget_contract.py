@@ -112,9 +112,9 @@ def test_reverse_peak_covers_live_metric_pullback(
     occupied = n // 2
     virtuals = n - occupied
     correlation = occupied**2 * virtuals**2
-    live_bytes = 4096 + 8 * (
-        5 * n**2 + correlation + 3 * n**2 * na + 6 * na**2
-    ) + 9 * na
+    live_bytes = (
+        4096 + 8 * (5 * n**2 + correlation + 3 * n**2 * na + 6 * na**2) + 9 * na
+    )
     assert planned >= live_bytes
     assert run(planned).returncode == 0
     assert run(planned - 1).returncode == 2

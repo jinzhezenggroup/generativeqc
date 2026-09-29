@@ -42,8 +42,7 @@ bool factorized_matches_dense(const generativeqc::mp2::FactorizedTwoElectronWeig
     for (std::size_t q = 0; q < n; ++q)
       for (std::size_t r = 0; r < n; ++r)
         for (std::size_t s = 0; s < n; ++s)
-          if (std::abs(generativeqc::mp2::factorized_two_electron_weight(
-                           factorized, p, q, r, s) -
+          if (std::abs(generativeqc::mp2::factorized_two_electron_weight(factorized, p, q, r, s) -
                        dense[eri_index(n, p, q, r, s)]) > tolerance)
             return false;
   return true;
@@ -463,8 +462,7 @@ void density_fitted_provider_matches_dense_ri_oracle() {
             double eri = 0.0;
             for (std::size_t Q = 0; Q < na; ++Q)
               eri += local_whitened[three(p, q, Q)] * local_whitened[three(r, t, Q)];
-            value +=
-                generativeqc::mp2::two_electron_weight(streamed_weights, p, q, r, t) * eri;
+            value += generativeqc::mp2::two_electron_weight(streamed_weights, p, q, r, t) * eri;
           }
     return value;
   };

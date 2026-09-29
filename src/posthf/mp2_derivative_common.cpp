@@ -105,9 +105,8 @@ std::vector<double> conventional_derivative(const core::System& system,
   bool dense_two = false;
   if (!weights.two_electron.empty())
     dense_two = weights.two_electron.size() == fourth(n) && finite(weights.two_electron);
-  const bool factorized_two =
-      weights.two_electron.empty() &&
-      valid_factorized_two_electron_weights(weights.two_electron_factors);
+  const bool factorized_two = weights.two_electron.empty() &&
+                              valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (!n || molecule::ao_count(system) != n || reference.coefficients.size() != square(n) ||
       weights.orbitals != n || weights.occupied != reference.nocc ||
       weights.one_electron.size() != square(n) || weights.overlap.size() != square(n) ||
@@ -141,7 +140,7 @@ std::vector<double> conventional_derivative(const core::System& system,
       const auto& factors = weights.two_electron_factors;
       const auto occupied = factors.occupied, virtuals = n - occupied;
       auto g_index = [occupied, virtuals](std::size_t i, std::size_t j, std::size_t a,
-                                         std::size_t b) {
+                                          std::size_t b) {
         return ((i * occupied + j) * virtuals + a) * virtuals + b;
       };
       for (std::size_t iu = 0; iu < di; ++iu) {

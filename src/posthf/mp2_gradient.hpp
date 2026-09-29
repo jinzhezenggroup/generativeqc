@@ -130,9 +130,8 @@ LagrangianWeights canonical_lagrangian_weights_streamed(const hf::PhysicalRefere
                                                         bool cuda = false, int device_id = 0);
 
 bool valid_factorized_two_electron_weights(const FactorizedTwoElectronWeights& weights);
-double factorized_two_electron_weight(const FactorizedTwoElectronWeights& weights,
-                                      std::size_t p, std::size_t q, std::size_t r,
-                                      std::size_t s);
+double factorized_two_electron_weight(const FactorizedTwoElectronWeights& weights, std::size_t p,
+                                      std::size_t q, std::size_t r, std::size_t s);
 double two_electron_weight(const LagrangianWeights& weights, std::size_t p, std::size_t q,
                            std::size_t r, std::size_t s);
 /** Reverse relaxed MO-basis MP2 weights through the RI factorization.

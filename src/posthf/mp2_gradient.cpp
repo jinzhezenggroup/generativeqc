@@ -114,11 +114,13 @@ std::vector<double> streamed_fock(std::span<const double> h,
   return fock;
 }
 
-std::vector<double> rotation_gradient_streamed(
-    std::span<const double> one, std::span<const double> fock_weights,
-    std::span<const double> correlation_iajb, std::span<const double> h,
-    const posthf::MOBlockProvider& provider, std::size_t n, std::size_t occupied, bool cuda,
-    int device_id) {
+std::vector<double> rotation_gradient_streamed(std::span<const double> one,
+                                               std::span<const double> fock_weights,
+                                               std::span<const double> correlation_iajb,
+                                               std::span<const double> h,
+                                               const posthf::MOBlockProvider& provider,
+                                               std::size_t n, std::size_t occupied, bool cuda,
+                                               int device_id) {
   const auto virtuals = n - occupied;
   const auto correlation_elements = posthf::checked_mul(square(occupied), square(virtuals));
   if (one.size() != square(n) || fock_weights.size() != square(n) ||
@@ -212,9 +214,8 @@ OrbitalRhs initial_orbital_weights_streamed(const EnergyAdjoint& adjoint) {
 }
 
 void add_negative_fock_multiplier_factorized(std::vector<double>& one,
-                                             std::vector<double>& fock_weights,
-                                             std::size_t n, std::size_t row,
-                                             std::size_t column, double value) {
+                                             std::vector<double>& fock_weights, std::size_t n,
+                                             std::size_t row, std::size_t column, double value) {
   one[row * n + column] -= value;
   fock_weights[row * n + column] -= value;
 }
@@ -245,8 +246,7 @@ double factorized_two_electron_weight(const FactorizedTwoElectronWeights& weight
                                       std::size_t q, std::size_t r, std::size_t s) {
   const auto n = weights.orbitals, occupied = weights.occupied;
   if (weights.version != FactorizedTwoElectronWeights::current_version || !n || !occupied ||
-      occupied >= n || p >= n || q >= n || r >= n || s >= n ||
-      weights.fock.size() != square(n))
+      occupied >= n || p >= n || q >= n || r >= n || s >= n || weights.fock.size() != square(n))
     throw std::invalid_argument("invalid factorized MP2 two-electron weight lookup");
   const auto virtuals = n - occupied;
   const auto expected = posthf::checked_mul(square(occupied), square(virtuals));
@@ -257,7 +257,8 @@ double factorized_two_electron_weight(const FactorizedTwoElectronWeights& weight
   if (r == s && r < occupied) value += 2.0 * weights.fock[p * n + q];
   if (q == r && q < occupied) value -= weights.fock[p * n + s];
   if (p < occupied && q >= occupied && r < occupied && s >= occupied)
-    value += weights.correlation_iajb[g_index(occupied, virtuals, p, r, q - occupied, s - occupied)];
+    value +=
+        weights.correlation_iajb[g_index(occupied, virtuals, p, r, q - occupied, s - occupied)];
   return value;
 }
 
@@ -377,9 +378,9 @@ OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference
       throw std::invalid_argument("streamed MP2 Fock spectrum differs from the reference");
   auto result = initial_orbital_weights_streamed(adjoint);
   const auto virtuals = n - occupied;
-  auto gradient = rotation_gradient_streamed(result.one_electron, result.fock_weights,
-                                             adjoint.integrals_iajb, hcore_mo, provider, n,
-                                             occupied, cuda, device_id);
+  auto gradient =
+      rotation_gradient_streamed(result.one_electron, result.fock_weights, adjoint.integrals_iajb,
+                                 hcore_mo, provider, n, occupied, cuda, device_id);
   result.energy_gradient.resize(occupied * virtuals);
   for (std::size_t i = 0; i < occupied; ++i)
     for (std::size_t a = 0; a < virtuals; ++a)
@@ -402,9 +403,9 @@ OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference
   };
   correct_block(0, occupied);
   correct_block(occupied, n);
-  gradient = rotation_gradient_streamed(result.one_electron, result.fock_weights,
-                                        adjoint.integrals_iajb, hcore_mo, provider, n, occupied,
-                                        cuda, device_id);
+  gradient =
+      rotation_gradient_streamed(result.one_electron, result.fock_weights, adjoint.integrals_iajb,
+                                 hcore_mo, provider, n, occupied, cuda, device_id);
   result.response_rhs.resize(occupied * virtuals);
   for (std::size_t i = 0; i < occupied; ++i)
     for (std::size_t a = 0; a < virtuals; ++a)
@@ -475,14 +476,13 @@ LagrangianWeights canonical_lagrangian_weights_streamed(
     result.one_electron[i * n + i] += 2.0;
     result.two_electron_factors.fock[i * n + i] += 1.0;
     for (std::size_t a = 0; a < virtuals; ++a)
-      add_negative_fock_multiplier_factorized(
-          result.one_electron, result.two_electron_factors.fock, n, occupied + a, i,
-          response[i * virtuals + a]);
+      add_negative_fock_multiplier_factorized(result.one_electron, result.two_electron_factors.fock,
+                                              n, occupied + a, i, response[i * virtuals + a]);
   }
-  const auto gradient = rotation_gradient_streamed(
-      result.one_electron, result.two_electron_factors.fock,
-      result.two_electron_factors.correlation_iajb, hcore_mo, provider, n, occupied, cuda,
-      device_id);
+  const auto gradient =
+      rotation_gradient_streamed(result.one_electron, result.two_electron_factors.fock,
+                                 result.two_electron_factors.correlation_iajb, hcore_mo, provider,
+                                 n, occupied, cuda, device_id);
   result.overlap.resize(square(n));
   std::vector<double> stationarity(square(n));
   for (std::size_t p = 0; p < n; ++p)
@@ -505,11 +505,9 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
   const auto three = posthf::checked_mul(n2, na);
   bool dense_two = false;
   if (!weights.two_electron.empty())
-    dense_two =
-        weights.two_electron.size() == fourth_power(n) && finite(weights.two_electron);
-  const bool factorized_two =
-      weights.two_electron.empty() &&
-      valid_factorized_two_electron_weights(weights.two_electron_factors);
+    dense_two = weights.two_electron.size() == fourth_power(n) && finite(weights.two_electron);
+  const bool factorized_two = weights.two_electron.empty() &&
+                              valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (reference.coefficients.size() != n2 || weights.one_electron.size() != n2 ||
       weights.overlap.size() != n2 || (!dense_two && !factorized_two) ||
       provider.metric().size() != a2 || provider.inverse_square_root().size() != a2 ||
