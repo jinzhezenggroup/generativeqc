@@ -412,6 +412,26 @@ void launch_bounded_shell_energy_derivative(
       density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient);
 }
 
+void launch_bounded_shell_range_exchange_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DirectCoulombRange range, double omega, double exchange_coefficient) {
+  const DirectRangeOperator radial_operator =
+      range == DirectCoulombRange::Long
+          ? DirectRangeOperator::Long
+          : (range == DirectCoulombRange::Short ? DirectRangeOperator::Short
+                                                : DirectRangeOperator::Full);
+  launch_bounded_direct_range_exchange_force_kernel(
+      unrestricted, worker_blocks, kBoundedDirectThreads, 0, stream, batch, screening,
+      shell_pair_bounds, shell_pair_density_bounds, pair_order, shell_pair_block_bounds,
+      system_density_bounds, class_state, schwarz_bounds, density, active, output, cursor,
+      radial_operator, omega, exchange_coefficient);
+}
+
 }  // namespace cuda_execution
 
 }  // namespace generativeqc::scf

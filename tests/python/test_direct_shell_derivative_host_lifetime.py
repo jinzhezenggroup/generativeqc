@@ -1,4 +1,4 @@
-"""Fault-inject the production shell derivative wrapper without CUDA hardware."""
+"""Fault-inject the production shell derivative wrappers without CUDA hardware."""
 
 import shutil
 import subprocess
@@ -15,8 +15,11 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if compiler is None:
         pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    symbol = "cudaError_t execute_generated_full_range_energy_derivatives("
-    body = symbol + source.split(symbol, 1)[1].split("\ncudaError_t ", 1)[0]
+    bodies = []
+    for route in ("full_range", "rsh"):
+        symbol = f"cudaError_t execute_generated_{route}_energy_derivatives("
+        bodies.append(symbol + source.split(symbol, 1)[1].split("\ncudaError_t ", 1)[0])
+    body = "\n".join(bodies)
     folder = tmp_path_factory.mktemp("direct-shell-host-lifetime")
     cpp, binary = folder / "probe.cpp", folder / "probe"
     cpp.write_text(PREFIX + body + SUFFIX)
@@ -32,12 +35,19 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("throw_error", [False, True])
-@pytest.mark.parametrize("failed_step", range(12))
+@pytest.mark.parametrize(
+    ("route", "failed_step"),
+    [
+        (route, step)
+        for route, count in (("full_range", 12), ("rsh", 16))
+        for step in range(count)
+    ],
+)
 def test_pending_downloads_outlive_early_returns_and_exceptions(
-    host_lifetime_probe: Path, failed_step: int, throw_error: bool
+    host_lifetime_probe: Path, route: str, failed_step: int, throw_error: bool
 ) -> None:
     result = subprocess.run(
-        [str(host_lifetime_probe), str(failed_step), str(int(throw_error))],
+        [str(host_lifetime_probe), str(failed_step), str(int(throw_error)), route],
         capture_output=True,
         text=True,
         check=False,
@@ -71,12 +81,13 @@ using cudaError_t = int;
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaMemcpyDeviceToHost=2;
 int step=0, fail_step=0, syncs=0; bool throw_error=false;
+unsigned source_count=2;
 bool tracking=false, pending=false, freed_pending=false;
 void* watched=nullptr;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
   if(!p) throw std::bad_alloc();
-  if(tracking && n==6*sizeof(double)) watched=p;
+  if(tracking && n==3*source_count*sizeof(double)) watched=p;
   return p;
 }
 void operator delete(void* p) noexcept {
@@ -90,7 +101,7 @@ int operation() {
   return 7;
 }
 struct Copy {void* dst; double values[3];};
-Copy copies[2]{}; unsigned copy_count=0;
+Copy copies[3]{}; unsigned copy_count=0;
 int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
   int error=operation(); if(error) return error;
   std::memset(dst,value,n); return cudaSuccess;
@@ -98,7 +109,7 @@ int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
 int cudaGetLastError() { return operation(); }
 int cudaMemcpyAsync(void* dst,const void* src,std::size_t n,int,cudaStream_t) {
   int error=operation(); if(error) return error;
-  if(n!=3*sizeof(double) || copy_count>=2) throw std::runtime_error("bad copy");
+  if(n!=3*sizeof(double) || copy_count>=source_count) throw std::runtime_error("bad copy");
   copies[copy_count].dst=dst;
   std::memcpy(copies[copy_count++].values,src,n);
   pending=true; return cudaSuccess;
@@ -112,6 +123,7 @@ int cudaStreamSynchronize(cudaStream_t) {
 }
 namespace generativeqc::scf::cuda_execution {
 namespace detail { constexpr unsigned kDirectQuartetShellClassCount=1; }
+enum class DirectCoulombRange { Short, Long };
 struct Batch { int total_atoms=1; };
 struct Shared {
   Batch batch; cudaStream_t stream=1; unsigned worker_blocks=1;
@@ -131,6 +143,7 @@ int prepare_generated_exchange_density(GeneratedExchangePlan&,bool,const double*
   return operation();
 }
 template<class... Args> void launch_bounded_shell_energy_derivative(Args&&...) {}
+template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&...) {}
 """
 
 SUFFIX = r"""
@@ -138,16 +151,23 @@ SUFFIX = r"""
 int main(int argc,char** argv) {
   fail_step=argc>1 ? std::atoi(argv[1]) : 0;
   throw_error=argc>2 && std::atoi(argv[2]);
+  source_count=(argc>3 && std::strcmp(argv[3],"rsh")==0) ? 3U : 2U;
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
   double force[3]{}, bound=1, density=1;
   GeneratedExchangePlan plan{&shared,true,&pair,&bound,force,&cursor,&head};
   std::vector<double> output{99.0};
+  const auto execute = [&]() {
+    return source_count==2
+        ? execute_generated_full_range_energy_derivatives(
+            plan,false,&density,nullptr,1.0,-0.5,output)
+        : execute_generated_rsh_energy_derivatives(
+            plan,false,&density,nullptr,1.0,-0.1,-0.5,0.4,output);
+  };
   tracking=true;
   int status=0; bool threw=false;
-  try { status=execute_generated_full_range_energy_derivatives(
-      plan,false,&density,nullptr,1.0,-0.5,output); }
+  try { status=execute(); }
   catch(const std::exception&) { threw=true; }
   tracking=false;
   if(freed_pending) {std::cerr<<"result freed before queued D2H drained";return 2;}
@@ -156,15 +176,14 @@ int main(int argc,char** argv) {
     if(throw_error ? !threw : status!=7) {std::cerr<<"lost injected failure";return 4;}
     if(output!=std::vector<double>{99.0}) {std::cerr<<"published partial result";return 5;}
   } else {
-    if(threw || status || output!=std::vector<double>(6,0.0)) {
+    if(threw || status || output!=std::vector<double>(3*source_count,0.0)) {
       std::cerr<<"successful result changed";return 6;
     }
     if(syncs!=1) {std::cerr<<"extra success-path synchronization";return 7;}
   }
   // Reuse the same retained owner after the failed call.
   step=0;fail_step=0;syncs=0;throw_error=false;
-  if(execute_generated_full_range_energy_derivatives(
-      plan,false,&density,nullptr,1.0,-0.5,output)!=cudaSuccess || pending || syncs!=1) {
+  if(execute()!=cudaSuccess || pending || syncs!=1) {
     std::cerr<<"owner did not recover";return 8;
   }
 }

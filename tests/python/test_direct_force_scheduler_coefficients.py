@@ -90,3 +90,19 @@ def test_top_level_hf_shell_dispatch_pins_historical_coefficients() -> None:
     source = _source("src/scf/cuda/direct_angular_force.cu")
     assert source.count("unrestricted ? -1.0 : -0.5") >= 2
     assert "generated_shell_class_mask, 1.0, exchange_coefficient" in source
+
+
+def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
+    header = _source("src/scf/cuda/direct_bounded_fallback.hpp")
+    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
+    contraction = _source("src/scf/cuda/direct_bounded_contraction.cuh")
+    quartet = _source("src/scf/cuda/direct_force_quartet.cuh")
+    provider = _source("src/scf/cuda/direct_jk_kernels.cu")
+    assert "enum class DirectRangeOperator" in header
+    assert "launch_bounded_direct_range_exchange_force_kernel" in header
+    assert "DirectRangeOperator::Long" in bounded
+    assert "generativeqc::integrals::CoulombRange::Short" in bounded
+    assert "DirectRangeOperator::Short" in provider
+    assert "contract_bounded_direct_force_subtile_range_scaled" in contraction
+    assert "contract_two_electron_force_quartet_subtile_range_scaled" in quartet
+    assert "launch_bounded_shell_range_exchange_derivative" in provider

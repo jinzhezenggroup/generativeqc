@@ -25,6 +25,18 @@ def test_direct_cartesian_contraction_is_compiler_owned() -> None:
     assert "contracted_eri_order(" in contraction
 
 
+def test_range_derivative_keeps_dual_scalars_and_rejects_mixed_float() -> None:
+    contraction = emit_direct_cartesian_contraction_headers()[
+        "generated_direct_contraction.cuh"
+    ]
+    range_block = contraction.split(
+        "if (range != generativeqc::integrals::CoulombRange::Full)", maxsplit=1
+    )[1].split("if constexpr (MaximumAngular == 0)", maxsplit=1)[0]
+    assert "std::is_same_v<Scalar, MixedPrecisionFloat>" in range_block
+    assert "contracted_eri_cartesian<MaximumAngular, Scalar>" in range_block
+    assert "std::is_same_v<Scalar, double>" not in range_block
+
+
 def test_native_cartesian_contraction_owners_are_retired() -> None:
     for name in ("direct_native_cartesian.cuh", "direct_native_contraction.cuh"):
         assert not (ROOT / "src/scf/cuda" / name).exists()

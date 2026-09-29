@@ -577,6 +577,77 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   return cudaSuccess;
 }
 
+cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double coulomb_coefficient,
+                                                     double short_exchange_coefficient,
+                                                     double long_exchange_coefficient, double omega,
+                                                     std::vector<double>& derivatives) {
+  if (!p.force_capability || p.bounded_pair_order == nullptr ||
+      p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
+      !std::isfinite(coulomb_coefficient) || !std::isfinite(short_exchange_coefficient) ||
+      !std::isfinite(long_exchange_coefficient) || !std::isfinite(omega) || omega <= 0.0)
+    return cudaErrorInvalidValue;
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (error != cudaSuccess) return error;
+
+  auto& shared = *p.shared;
+  const auto b = shared.batch;
+  const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
+  std::vector<double> result(3U * coordinates);
+  // A previous source may already have a D2H queued when a later source
+  // fails. The retained device owner cannot protect this local host result.
+  struct HostResultDrain {
+    cudaStream_t stream;
+    bool active{true};
+    ~HostResultDrain() {
+      if (active) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
+  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+                          shared.stream);
+  if (error != cudaSuccess) return error;
+
+  const double coefficients[3] = {
+      coulomb_coefficient,
+      short_exchange_coefficient,
+      long_exchange_coefficient,
+  };
+  for (unsigned source = 0; source < 3; ++source) {
+    if (coefficients[source] == 0.0) continue;
+    error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    if (source == 0U) {
+      launch_bounded_shell_energy_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor, coefficients[source], 0.0);
+    } else {
+      launch_bounded_shell_range_exchange_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor,
+          source == 1U ? DirectCoulombRange::Short : DirectCoulombRange::Long, omega,
+          coefficients[source]);
+    }
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    error = cudaMemcpyAsync(result.data() + source * coordinates, p.force,
+                            coordinates * sizeof(double), cudaMemcpyDeviceToHost, shared.stream);
+    if (error != cudaSuccess) return error;
+  }
+  error = cudaStreamSynchronize(shared.stream);
+  if (error != cudaSuccess) return error;
+  drain.active = false;
+  for (double& value : result) value = -value;
+  derivatives = std::move(result);
+  return cudaSuccess;
+}
+
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
                                       const double* beta, double* coulomb) {
   const auto b = p.batch;
