@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "integrals/range_moments.hpp"
 #include "scf/cuda/direct_bounded_contraction.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
@@ -45,7 +44,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient,
-    generativeqc::integrals::CoulombRange radial_range, double radial_omega) {
+    DirectCoulombRange radial_range, double radial_omega) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
   __shared__ unsigned long long block_quartet;
@@ -151,7 +150,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
             batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
         if constexpr (Force) {
-          if (radial_range != generativeqc::integrals::CoulombRange::Full) {
+          if (radial_range != DirectCoulombRange::Full) {
             continue;
           }
           if (angular_order == 0U) {
@@ -204,7 +203,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
           // Full-range low orders were already consumed by exact scalar workers.
           // Range-separated work deliberately falls through to the generic
           // Cartesian shell source for every angular order.
-          if (radial_range == generativeqc::integrals::CoulombRange::Full && angular_order <= 3U)
+          if (radial_range == DirectCoulombRange::Full && angular_order <= 3U)
             continue;
         } else {
           // Fock order one has no psss-specific handwritten fallback anymore.
@@ -253,7 +252,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient,
-    generativeqc::integrals::CoulombRange radial_range, double radial_omega) {
+    DirectCoulombRange radial_range, double radial_omega) {
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
       bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>
@@ -307,7 +306,7 @@ void launch_bounded_direct_shell_quartet_kernel(
       shell_pair_bounds, shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
       system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
       schwarz_bounds, density, active, output, global_cursor, profile, 1.0,
-      unrestricted ? -1.0 : -0.5, generativeqc::integrals::CoulombRange::Full, 0.0);
+      unrestricted ? -1.0 : -0.5, DirectCoulombRange::Full, 0.0);
 }
 
 void launch_bounded_direct_fock_shell_quartet_kernel(
@@ -326,7 +325,7 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
             global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5,
-            generativeqc::integrals::CoulombRange::Full, 0.0);
+            DirectCoulombRange::Full, 0.0);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>
         <<<grid, block, shared_bytes, stream>>>(
@@ -334,7 +333,7 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
             global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5,
-            generativeqc::integrals::CoulombRange::Full, 0.0);
+            DirectCoulombRange::Full, 0.0);
   }
 }
 
