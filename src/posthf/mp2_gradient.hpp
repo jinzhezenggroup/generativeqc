@@ -57,6 +57,7 @@ struct GradientResourcePlan {
   std::size_t provider_bytes{};
   std::size_t adjoint_bytes{};
   std::size_t response_bytes{};
+  std::size_t rank2_transform_bytes{};
   std::size_t relaxed_weight_bytes{};
   std::size_t shell_cotangent_bytes{};
   std::size_t derivative_staging_bytes{};
@@ -69,6 +70,7 @@ struct DensityFittedGradientResourcePlan {
   std::size_t provider_bytes{};
   std::size_t adjoint_bytes{};
   std::size_t response_bytes{};
+  std::size_t rank2_transform_bytes{};
   std::size_t relaxed_weight_bytes{};
   std::size_t reverse_result_bytes{};
   std::size_t reverse_workspace_bytes{};
