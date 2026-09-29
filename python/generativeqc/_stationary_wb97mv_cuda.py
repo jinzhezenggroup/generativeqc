@@ -392,15 +392,17 @@ class PreparedWb97mvCudaGradient:
             "symmetry_unique_quartets_per_integral_source": 0,
             "two_electron_quartet_traversals": 0,
             "maximum_center_dual3_evaluations_total": 0,
-            "two_electron_shell_traversals": 3,
-            "two_electron_radial_operators": [
-                "full-range",
-                "short-range",
-                "long-range",
+            "two_electron_shell_traversals": 1,
+            "two_electron_radial_operators": ["full-range", "long-range"],
+            "two_electron_source_outputs": [
+                "coulomb",
+                "short-range-exchange",
+                "long-range-exchange",
             ],
-            "range_recurrences_per_participating_center": 2,
+            "range_recurrences_per_participating_center": 1,
             "two_electron_work_scope": (
-                "native screened shell scheduler; public-AO quartet domain is not materialized"
+                "one fused native screened shell traversal; SR exchange is Full-LR; "
+                "public-AO quartet domain is not materialized"
             ),
             "additional_device_peak_bound": device_bound,
             "additional_host_numeric_bound": host_bound,
