@@ -88,8 +88,13 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
             gates=raw["settings"]["gates"],
             engines={},
         )
+        # Raw retained HF records keep the engine key from their measurement.
+        engine_keys = {"generativeqc", "vibeqc"} & raw.keys()
+        if len(engine_keys) != 1:
+            raise ValueError("HF evidence needs exactly one native engine record")
+        native_engine = engine_keys.pop()
         for engine, label in (
-            ("generativeqc", "GenerativeQC"),
+            (native_engine, "GenerativeQC"),
             ("gpu4pyscf", "GPU4PySCF"),
         ):
             record["engines"][label] = {
@@ -103,7 +108,7 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
             role: {key: value for key, value in basis.items() if key != "electrons"}
             if isinstance(basis, dict)
             else basis
-            for role, basis in raw["vibeqc"]["cold_convergence"][0]
+            for role, basis in raw[native_engine]["cold_convergence"][0]
             .get("basis_metadata", {})
             .items()
         }
