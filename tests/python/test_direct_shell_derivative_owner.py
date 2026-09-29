@@ -12,6 +12,7 @@ def _source(relative: str) -> str:
 def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     header = _source("src/scf/cuda/direct_coulomb.hpp")
     source = _source("src/scf/cuda/direct_coulomb.cpp")
+    consumer = _source("src/scf/cuda/direct_jk_kernels.cu")
     for token in (
         "force_capability",
         "bounded_pair_order",
@@ -22,7 +23,9 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         assert token in header
         assert token in source
     assert "launch_bounded_shell_energy_derivative(" in source
-    assert "DirectScreeningPurpose::Force" in source
+    assert "direct_bounded_fallback.hpp" not in source
+    assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
+    assert "DirectScreeningPurpose::Force" in consumer
 
 
 def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
