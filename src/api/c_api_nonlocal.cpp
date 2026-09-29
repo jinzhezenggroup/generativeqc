@@ -300,6 +300,38 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_c
   }
 }
 
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+    generativeqc_nonlocal_cuda_force* owner, generativeqc_context* expected_context, int device,
+    const double* density, const double* gradient, std::size_t point_count,
+    const generativeqc::dft::GridTaskView* view) {
+  if (!owner || !expected_context || !density || !gradient || !view)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (owner->context != expected_context) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  try {
+    if (owner->executed || owner->next_offset != 0 || device != owner->device ||
+        point_count != owner->point_count || !view->stream)
+      throw std::invalid_argument("invalid resident nonlocal CUDA feature seed");
+    if (!owner->stream)
+      owner->stream = view->stream;
+    else if (owner->stream != view->stream)
+      throw std::invalid_argument("resident nonlocal CUDA feature stream changed");
+    generativeqc::runtime::CudaDeviceScope scope(owner->device);
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(owner->errors.get(), 0, sizeof(int), owner->stream));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        owner->raw_density, density, point_count * sizeof(double), cudaMemcpyDeviceToDevice,
+        owner->stream));
+    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
+        owner->raw_gradient, gradient, 3 * point_count * sizeof(double), cudaMemcpyDeviceToDevice,
+        owner->stream));
+    owner->next_offset = owner->point_count;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&owner->context->last_detail);
+  }
+}
+
 GENERATIVEQC_API generativeqc_status
 generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_force* owner) {
   if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
