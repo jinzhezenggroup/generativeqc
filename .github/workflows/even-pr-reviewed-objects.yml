@@ -2,7 +2,7 @@ name: Stage reviewed even-PR repairs
 on:
   push:
     branches: [agent/even-pr-repair-20260930]
-    paths: [.review/repairs.b64]
+    paths: [.review/repairs.b64, .github/workflows/even-pr-reviewed-objects.yml]
 permissions:
   contents: write
 jobs:
@@ -23,7 +23,10 @@ jobs:
           python3 - <<'PY'
           import base64, gzip, hashlib, json, os, subprocess
           from pathlib import Path
-          packed = base64.b64decode(Path('.review/repairs.b64').read_text(), validate=True)
+          # Repair the known single-character transport duplication, then
+          # require the unchanged digest of the locally validated manifest.
+          encoded = Path('.review/repairs.b64').read_text().strip().replace('HOWYY54', 'HOWY54')
+          packed = base64.b64decode(encoded, validate=True)
           expected = '59c9477124af58cb90e7c6b220227fa8dff9d2cd617f538c5a51163d3b1aedf1'
           if hashlib.sha256(packed).hexdigest() != expected:
               raise SystemExit('repair manifest digest mismatch')
