@@ -293,14 +293,14 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
                                       made.incremental_full_build) ||
       !workspace.append<double>(incremental_direct_jk ? batch_size : 0,
                                 made.incremental_max_abs_delta_density) ||
-      !workspace.append<unsigned long long>(
-          incremental_direct_jk ? batch_size : 0, made.incremental_full_admitted_shell_quartets) ||
-      !workspace.append<unsigned long long>(
-          incremental_direct_jk ? batch_size : 0, made.incremental_delta_admitted_shell_quartets) ||
-      !workspace.append<unsigned long long>(
-          incremental_direct_jk ? batch_size : 0, made.incremental_full_admitted_quartet_tiles) ||
-      !workspace.append<unsigned long long>(
-          incremental_direct_jk ? batch_size : 0, made.incremental_delta_admitted_quartet_tiles) ||
+      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+                                            made.incremental_full_admitted_shell_quartets) ||
+      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+                                            made.incremental_delta_admitted_shell_quartets) ||
+      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+                                            made.incremental_full_admitted_quartet_tiles) ||
+      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+                                            made.incremental_delta_admitted_quartet_tiles) ||
       !workspace.append<double>(spin_matrices, made.residual) ||
       !workspace.append<double>(spin_matrices, made.weighted_density) ||
       !workspace.append<double>(spin_count == 2 ? matrices : 0, made.total_density) ||
