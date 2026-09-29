@@ -34,6 +34,7 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -62,6 +63,17 @@ struct State {
 int failure_mode{};
 bool cuda_mode{};
 int force_backend{};
+namespace integrals { struct ElectronInteractionSource {}; }
+namespace posthf {
+struct RawSource : integrals::ElectronInteractionSource {
+  explicit RawSource(int) {}
+};
+}
+namespace scf {
+struct PreparedFockInteractionSourceView : integrals::ElectronInteractionSource {
+  explicit PreparedFockInteractionSourceView(int) {}
+};
+}
 namespace cc {
 namespace triples::generated { constexpr char inventory_hash[]="triples"; }
 struct Force {
@@ -113,6 +125,7 @@ struct Owner {
   std::optional<Diagnostic> last_;
   std::optional<Performance> last_performance_;
   int system_{};
+  std::optional<int> cpu_exact_plan_{1};
   struct { double ccsd_denominator_threshold{1e-10}; } descriptor_;
   Result run(bool compute_forces) {
     State state;
