@@ -214,7 +214,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(pairs, 3 * sizeof(double) + sizeof(std::uint32_t) + sizeof(double));
     add(batch, 11 * sizeof(double));
     add(detail::kDirectQuartetShellClassCount, sizeof(std::uint32_t));
-    add(atoms, 3 * sizeof(double));
+    add(atoms, 9 * sizeof(double));
     add(batch + 1, 2 * sizeof(std::int64_t));
     add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
   }

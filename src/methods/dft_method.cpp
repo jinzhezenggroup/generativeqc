@@ -863,8 +863,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if GENERATIVEQC_HAS_CUDA
-    if (!cuda_ || execution_plan_.semilocal_family != dft::SemilocalFamily::Wb97mv ||
-        !system_.ecp_terms.empty())
+    if (!cuda_ || !execution_plan_.range_exchange || !range_strategy_ || !system_.ecp_terms.empty())
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
       detail = "cached CUDA stationary D/W must be supplied together";
@@ -950,10 +949,6 @@ class KsPreparedCalculation final : public PreparedCalculation {
     work[5] += one.device_to_host_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
-    if (!range_strategy_) {
-      detail = "CUDA RSH integral gradient is missing its resolved range correction";
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
     status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
         fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
         resident_density.matrix_elements, value, detail);

@@ -24,10 +24,24 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         assert token in header
         assert token in source
     assert "launch_bounded_shell_energy_derivative(" in source
-    assert "launch_bounded_shell_range_exchange_derivative(" in source
+    assert "launch_bounded_shell_rsh_derivatives(" in source
+    rsh_begin = source.index("cudaError_t execute_generated_rsh_energy_derivatives(")
+    rsh_end = source.index("cudaError_t enqueue_generated_coulomb(", rsh_begin)
+    rsh_body = source[rsh_begin:rsh_end]
+    assert rsh_body.count("launch_bounded_shell_rsh_derivatives(") == 1
+    assert "launch_bounded_shell_range_exchange_derivative(" not in rsh_body
+    assert "for (unsigned source" not in rsh_body
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
     assert "DirectScreeningPurpose::Force" in consumer
+
+
+def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
+    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    capacity = _source("src/scf/cuda/direct_jk.cpp")
+    assert "charge(product(atoms, 9), sizeof(double))" in owner
+    assert "plan->force = doubles(product(atoms, 9))" in owner
+    assert "add(atoms, 9 * sizeof(double))" in capacity
 
 
 def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:

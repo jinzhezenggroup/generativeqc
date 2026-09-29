@@ -295,23 +295,48 @@ def grid_xc_domain_identity(shape: GridXcCandidateShape) -> str:
     )
 
 
+def _compiled_profitability_fields(
+    evidence: GpuProfitability | None,
+) -> dict[str, typing.Any]:
+    """Validate compiled GPU evidence without duplicating static/endpoint facts."""
+
+    if evidence is None:
+        return {}
+    if not isinstance(evidence, GpuProfitability):
+        raise TypeError("grid/XC compiled evidence requires GpuProfitability")
+    payload = evidence.to_payload()
+    static = typing.cast("dict[str, typing.Any]", payload["static"])
+    compiled = typing.cast("dict[str, typing.Any]", payload["compiled"])
+    if (
+        any(value is not None for value in static.values())
+        or payload["endpoint_seconds"] is not None
+    ):
+        raise ValueError(
+            "grid/XC compiled evidence must contain only compiled GPU profitability facts"
+        )
+    return dict(compiled)
+
+
 @dataclass(frozen=True)
 class GridXcScheduleCandidate:
     """One executable DFT schedule paired with its own measured/planned shape.
 
     Candidate-local shapes are required when schedules change point tiling:
     workspace, source size, live pressure and launch count must not be borrowed
-    from a different tile shape merely to make candidates comparable.
+    from a different tile shape merely to make candidates comparable. Optional
+    compiled evidence carries PTXAS/artifact pressure for this exact candidate.
     """
 
     schedule: GridXcExecutionSchedule
     shape: GridXcCandidateShape
+    compiled_evidence: GpuProfitability | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.schedule, GridXcExecutionSchedule):
             raise TypeError("grid/XC schedule candidate requires a typed schedule")
         if not isinstance(self.shape, GridXcCandidateShape):
             raise TypeError("grid/XC schedule candidate requires a candidate shape")
+        _compiled_profitability_fields(self.compiled_evidence)
         resolved = self.schedule.resolved(self.shape.tile_points)
         object.__setattr__(self, "schedule", resolved)
 
@@ -497,6 +522,7 @@ def assess_grid_xc_schedule(
     functional: str,
     scientific: GridXcScientificIdentity | None = None,
     precision_schedule: ExecutionPrecisionSchedule | None = None,
+    compiled_evidence: GpuProfitability | None = None,
 ) -> GridXcCandidateAssessment:
     """Reject impossible/incompatible candidates before any timing comparison."""
 
@@ -512,6 +538,7 @@ def assess_grid_xc_schedule(
                 "scientific identity disagrees with admitted grid/XC workload"
             )
     resolved = grid_xc_schedule(schedule).resolved(shape.tile_points)
+    compiled = _compiled_profitability_fields(compiled_evidence)
     if precision_schedule is None:
         precision_schedule = uniform_precision_schedule("dft.grid_xc")
     if not isinstance(precision_schedule, ExecutionPrecisionSchedule):
@@ -540,6 +567,8 @@ def assess_grid_xc_schedule(
         host_bytes=storage_peaks.get("host"),
         workspace_bytes=shape.device_workspace_bytes,
         peak_live_values=live,
+        registers_per_thread=compiled.get("compiled_registers_per_thread"),
+        shared_bytes=compiled.get("shared_bytes"),
         source_bytes=shape.generated_source_bytes,
     )
     reasons.extend(schedule_resource_rejections(resources, limits.shared()))
@@ -585,6 +614,7 @@ def assess_grid_xc_schedule(
             precision_widened_accumulation_terms=(
                 0 if precision_schedule.is_strict_fp64 else None
             ),
+            **compiled,
         ),
         provenance=(
             ("domain_schedule", resolved.name),
@@ -594,6 +624,11 @@ def assess_grid_xc_schedule(
             ("lifetime_analysis", "common.storage"),
             ("resource_admission", "common.schedule"),
             ("resource_scope", "grid-xc-admission"),
+        )
+        + (
+            (("compiled_resource_evidence", "common.gpu_profitability"),)
+            if compiled_evidence is not None
+            else ()
         ),
     )
     return GridXcCandidateAssessment(
@@ -648,6 +683,7 @@ def rank_grid_xc_candidates(
             functional=functional,
             scientific=scientific,
             precision_schedule=precision_schedule,
+            compiled_evidence=candidate.compiled_evidence,
         )
         for candidate in materialized
     )
