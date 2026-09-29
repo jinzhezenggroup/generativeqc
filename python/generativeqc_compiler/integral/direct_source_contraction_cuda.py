@@ -46,7 +46,9 @@ template <unsigned FirstShellAngular, unsigned SecondShellAngular, unsigned Thir
 __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
     const DeviceBatch& batch, std::int64_t ao_i, std::int64_t ao_j, std::int64_t ao_k,
     std::int64_t ao_l, std::int32_t shell_i, std::int32_t shell_j, std::int32_t shell_k,
-    std::int32_t shell_l, std::int64_t derivative_coordinate) {
+    std::int32_t shell_l, std::int64_t derivative_coordinate,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
   constexpr unsigned MaximumAngular =
       FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
   const Vec3<Scalar> first =
@@ -81,11 +83,21 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                                            batch.primitive_coefficients[c] *
                                            batch.primitive_coefficients[d];
           if constexpr (MaximumAngular == 0) {
-            result = result + weight * primitive_eri(batch.primitive_exponents[a], first,
-                                                     batch.primitive_exponents[b], second,
-                                                     batch.primitive_exponents[c], third,
-                                                     batch.primitive_exponents[d], fourth);
-          } else {
+            if (range == generativeqc::integrals::CoulombRange::Full) {
+              result = result + weight * primitive_eri(batch.primitive_exponents[a], first,
+                                                       batch.primitive_exponents[b], second,
+                                                       batch.primitive_exponents[c], third,
+                                                       batch.primitive_exponents[d], fourth);
+            } else {
+              result =
+                  result +
+                  weight * primitive_eri_cartesian<0>(
+                               batch.primitive_exponents[a], first, angular_first,
+                               batch.primitive_exponents[b], second, angular_second,
+                               batch.primitive_exponents[c], third, angular_third,
+                               batch.primitive_exponents[d], fourth, angular_fourth, range, omega);
+            }
+          } else if (range == generativeqc::integrals::CoulombRange::Full) {
             result =
                 result +
                 weight * primitive_eri_cartesian_shell_class<FirstShellAngular, SecondShellAngular,
@@ -94,6 +106,14 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                              batch.primitive_exponents[b], second, angular_second,
                              batch.primitive_exponents[c], third, angular_third,
                              batch.primitive_exponents[d], fourth, angular_fourth);
+          } else {
+            result =
+                result +
+                weight * primitive_eri_cartesian<MaximumAngular>(
+                             batch.primitive_exponents[a], first, angular_first,
+                             batch.primitive_exponents[b], second, angular_second,
+                             batch.primitive_exponents[c], third, angular_third,
+                             batch.primitive_exponents[d], fourth, angular_fourth, range, omega);
           }
         }
       }
@@ -106,7 +126,9 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
 template <unsigned ShellClass, typename Scalar>
 __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
     const DeviceBatch& batch, std::int32_t system, std::int32_t i, std::int32_t j, std::int32_t k,
-    std::int32_t l, std::int64_t derivative_coordinate) {
+    std::int32_t l, std::int64_t derivative_coordinate,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
   static_assert(ShellClass < detail::kDirectQuartetShellClassCount);
   constexpr unsigned FirstPairClass = direct_triangular_class_high(ShellClass);
   constexpr unsigned SecondPairClass = ShellClass - FirstPairClass * (FirstPairClass + 1) / 2;
@@ -172,6 +194,7 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
   // a much larger recurrence frame alive and can exceed CUDA's per-thread local
   // stack on p/s and d/s quartets even though the order-two result is tiny.
   if constexpr (ShellClass == 2 || ShellClass == 3 || ShellClass == 6) {
+    if (range == generativeqc::integrals::CoulombRange::Full) {
     const unsigned first_count = (static_cast<unsigned>(FirstShellAngular) + 1U) *
                                  (static_cast<unsigned>(FirstShellAngular) + 2U) / 2U;
     const unsigned second_count = (static_cast<unsigned>(SecondShellAngular) + 1U) *
@@ -211,25 +234,28 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
           batch, shell_i, shell_j, shell_k, shell_l, active_component_mask);
     }
     return static_cast<Scalar>(integral.component[component]);
+    }
   }
 
   return contracted_eri_cartesian_source_shell_class<FirstShellAngular, SecondShellAngular,
                                                      ThirdShellAngular, FourthShellAngular, Scalar>(
       batch, base + i, base + j, base + k, base + l, shell_i, shell_j, shell_k, shell_l,
-      derivative_coordinate);
+      derivative_coordinate, range, omega);
 }
 
 /** Dispatch one angular-order task to its Cartesian source evaluator. */
 template <unsigned AngularOrder, typename Scalar>
 __device__ inline Scalar dispatch_contracted_eri_cartesian_source_shell_class(
     unsigned runtime_shell_class, const DeviceBatch& batch, std::int32_t system, std::int32_t i,
-    std::int32_t j, std::int32_t k, std::int32_t l, std::int64_t derivative_coordinate) {
+    std::int32_t j, std::int32_t k, std::int32_t l, std::int64_t derivative_coordinate,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
 #define GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE(ShellClass)                         \
   case ShellClass:                                                                \
     if constexpr (direct_shell_class_angular_order(ShellClass) == AngularOrder) { \
       return contracted_eri_cartesian_source_shell_class<ShellClass, Scalar>(     \
-          batch, system, i, j, k, l, derivative_coordinate);                      \
+          batch, system, i, j, k, l, derivative_coordinate, range, omega);         \
     }                                                                             \
     break
   switch (runtime_shell_class) {
@@ -298,7 +324,10 @@ __device__ inline Scalar contracted_eri_cartesian_source(const DeviceBatch& batc
                                                          std::int32_t system, std::int32_t i,
                                                          std::int32_t j, std::int32_t k,
                                                          std::int32_t l,
-                                                         std::int64_t derivative_coordinate) {
+                                                         std::int64_t derivative_coordinate,
+                                                         generativeqc::integrals::CoulombRange range =
+                                                             generativeqc::integrals::CoulombRange::Full,
+                                                         double omega = 0.0) {
   const std::int64_t base = static_cast<std::int64_t>(system) * batch.direct_nbf;
   const std::int32_t shell_i = batch.direct_ao_shells[base + i];
   const std::int32_t shell_j = batch.direct_ao_shells[base + j];
@@ -312,7 +341,7 @@ __device__ inline Scalar contracted_eri_cartesian_source(const DeviceBatch& batc
 #define GENERATIVEQC_DIRECT_SOURCE_ANGULAR_CASE(Order)                                \
   case Order:                                                                   \
     return dispatch_contracted_eri_cartesian_source_shell_class<Order, Scalar>( \
-        shell_class, batch, system, i, j, k, l, derivative_coordinate)
+        shell_class, batch, system, i, j, k, l, derivative_coordinate, range, omega)
   switch (angular_order) {
     GENERATIVEQC_DIRECT_SOURCE_ANGULAR_CASE(0);
     GENERATIVEQC_DIRECT_SOURCE_ANGULAR_CASE(1);
