@@ -3,7 +3,6 @@
 from types import SimpleNamespace
 
 import pytest
-
 from generativeqc.rks_response import _RKSIntegralSourceView
 
 
