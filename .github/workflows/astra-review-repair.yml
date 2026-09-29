@@ -19,7 +19,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, pathlib, subprocess, tempfile
+          import base64, hashlib, json, pathlib, re, subprocess, tempfile
           repo = 'jinzhezenggroup/generativeqc'
           out = pathlib.Path('/tmp/astra-staged-repairs')
           out.mkdir()
@@ -34,34 +34,58 @@ jobs:
               n = int(job['pr'])
               pr = api(f'repos/{repo}/pulls/{n}')
               expected = job['expected_head']
+              assert re.fullmatch('[0-9a-f]{40}', expected)
               assert pr['state'] == 'open' and pr['head']['sha'] == expected, f'PR {n} moved or closed'
               assert pr['head']['repo']['full_name'] == repo
               patch = job['patch'].encode()
               assert hashlib.sha256(patch).hexdigest() == job['patch_sha256']
-              assert all(not p.startswith(('.git/', '.github/')) and '..' not in pathlib.PurePosixPath(p).parts for p in job['paths'])
+              assert all(not p.startswith(('/', '.git/', '.github/')) and '..' not in pathlib.PurePosixPath(p).parts for p in job['paths'])
               subprocess.run(['git', 'fetch', '--no-tags', 'origin', expected], check=True)
               work = pathlib.Path(tempfile.mkdtemp(prefix=f'astra-{n}-'))
               subprocess.run(['git', 'worktree', 'add', '--detach', str(work), expected], check=True)
               def git(*args, **kw):
                   return subprocess.check_output(['git', '-C', str(work), *args], **kw)
-              git('apply', '--check', '-', input=patch)
-              git('apply', '-', input=patch)
-              git('diff', '--check')
-              changed = git('diff', '--name-only', text=True).splitlines()
+              parent = job.get('merge_parent')
+              if parent:
+                  assert re.fullmatch('[0-9a-f]{40}', parent)
+                  assert set(job['conflict_paths']).issubset(job['paths'])
+                  ref = 'refs/snapshot2/remotes/origin/master'
+                  git('fetch', '--no-tags', 'origin', f'+{parent}:{ref}')
+                  merged = subprocess.run(['git', '-C', str(work), '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', ref])
+                  assert merged.returncode in (0, 1)
+                  conflicts = git('diff', '--name-only', '--diff-filter=U', text=True).splitlines()
+                  assert sorted(conflicts) == sorted(job['conflict_paths']), conflicts
+              if patch:
+                  git('apply', '--check', '-', input=patch)
+                  git('apply', '-', input=patch)
+              git('add', '--', *job['paths'])
+              assert not git('diff', '--name-only', '--diff-filter=U', text=True).strip()
+              git('diff', '--cached', '--check')
+              final_tree = git('write-tree', text=True).strip()
+              if 'expected_tree' in job:
+                  assert final_tree == job['expected_tree'], (final_tree, job['expected_tree'])
+              baseline = parent or expected
+              changed = git('diff', '--cached', '--name-only', baseline, text=True).splitlines()
               assert sorted(changed) == sorted(job['paths']), (n, changed)
               elements = []
               for path in changed:
+                  if not (work / path).exists():
+                      mode = git('ls-tree', baseline, '--', path, text=True).split()[0]
+                      elements.append({'path': path, 'mode': mode, 'type': 'blob', 'sha': None})
+                      continue
                   data = (work / path).read_bytes()
                   blob = api(f'repos/{repo}/git/blobs', {'content': base64.b64encode(data).decode(), 'encoding': 'base64'})
                   mode = git('ls-files', '--stage', '--', path, text=True).split()[0]
                   elements.append({'path': path, 'mode': mode, 'type': 'blob', 'sha': blob['sha']})
-              base = api(f'repos/{repo}/git/commits/{expected}')
+              base = api(f'repos/{repo}/git/commits/{baseline}')
               tree = api(f'repos/{repo}/git/trees', {'base_tree': base['tree']['sha'], 'tree': elements})
+              assert tree['sha'] == final_tree
               message = job['message'] + '\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
-              commit = api(f'repos/{repo}/git/commits', {'message': message, 'tree': tree['sha'], 'parents': [expected]})
-              record = {'pr': n, 'expected_head': expected, 'branch': pr['head']['ref'], 'commit': commit['sha'], 'tree': tree['sha'], 'files': elements}
+              parents = [expected] + ([parent] if parent else [])
+              commit = api(f'repos/{repo}/git/commits', {'message': message, 'tree': tree['sha'], 'parents': parents})
+              record = {'pr': n, 'expected_head': expected, 'parents': parents, 'branch': pr['head']['ref'], 'commit': commit['sha'], 'tree': tree['sha'], 'files': elements}
               results.append(record)
-              (out / f'{n}.diff').write_bytes(git('diff', '--binary'))
+              (out / f'{n}.diff').write_bytes(git('diff', '--cached', '--binary', baseline))
               (out / 'staged.json').write_text(json.dumps(results, indent=2))
               print(json.dumps(record))
           PY
