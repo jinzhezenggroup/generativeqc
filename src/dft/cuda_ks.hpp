@@ -113,11 +113,14 @@ struct CudaKsResidentNonlocalFeaturesBinding {
   const double* density{};
   const double* gradient{};
   std::size_t point_count{};
+  /** Producer stream that owns the final feature generation. Downstream
+   * cross-stream copies must order against this stream before source reuse. */
+  void* stream{};
   std::uint64_t owner{}, solve_epoch{}, generation{};
 
   explicit operator bool() const noexcept {
     return device_id >= 0 && density != nullptr && gradient != nullptr && point_count != 0 &&
-           owner != 0 && solve_epoch != 0 && generation != 0;
+           stream != nullptr && owner != 0 && solve_epoch != 0 && generation != 0;
   }
 };
 
