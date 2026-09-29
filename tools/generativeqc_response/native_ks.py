@@ -11,13 +11,13 @@ import typing
 from time import perf_counter
 
 import numpy as np
+from generativeqc import rks_response as _rks_response
 from generativeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
 from generativeqc.fock import FockBuildSpec, FockTerm
 from generativeqc.ks import resolve_ks_method
 from generativeqc.profiles import canonical_hash
 from generativeqc.response_problem import ResponseUnsupported
 from generativeqc.response_xc import FixedDensityXCDerivativeKernel
-from generativeqc.rks_response import NativeRKSResponse as NativeRKSResponse
 from generativeqc_compiler.dft.features import density_features, spin_densities
 from generativeqc_compiler.xc.potential import assemble_coefficients
 
@@ -27,6 +27,8 @@ from tools.generativeqc_posthf.sources import NativeSource
 from .backends import NativeJKBackend, _checked_density
 from .spin_cuda import CudaSpinJKBackend
 from .uhf import UHFReferenceSnapshot, UKSResponseOperator, uks_operator_identity
+
+NativeRKSResponse = _rks_response.NativeRKSResponse
 
 
 class _NativeCudaJBackend(CudaSpinJKBackend):
