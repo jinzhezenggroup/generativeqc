@@ -265,7 +265,8 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     int device_id, const core::System& system, std::span<const double> density,
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
-    OneElectronGradientResources* resources) {
+    OneElectronGradientResources* resources, const double* resident_density,
+    const double* resident_weighted_density) {
   if (resources) *resources = {};
   const std::size_t n = molecule::ao_count(system), atoms = system.atoms.size();
   if (device_id < 0 || schedule > 3 || !maximum_bytes || !n || !atoms ||
@@ -275,13 +276,22 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     detail = "invalid paired one-electron gradient dimensions or budget";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  for (auto weights : {density, weighted_density})
-    if (weights.size() != n * n || !std::all_of(weights.begin(), weights.end(), [](double value) {
-          return std::isfinite(value);
-        })) {
-      detail = "paired stationary D/W must be finite full public-AO matrices";
+  const bool resident_weights = resident_density != nullptr || resident_weighted_density != nullptr;
+  if (resident_weights) {
+    if (!resident_density || !resident_weighted_density || !density.empty() ||
+        !weighted_density.empty()) {
+      detail = "resident paired stationary D/W must be supplied together without host weights";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+  } else {
+    for (auto weights : {density, weighted_density})
+      if (weights.size() != n * n || !std::all_of(weights.begin(), weights.end(), [](double value) {
+            return std::isfinite(value);
+          })) {
+        detail = "paired stationary D/W must be finite full public-AO matrices";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+  }
 
   long double primitives = 0;
   for (const auto& shell : system.shells) primitives += shell.primitives.size();
@@ -329,8 +339,9 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
                                arena.upload(host.coefficients)};
     const auto* first = arena.upload(host.pair_first);
     const auto* second = arena.upload(host.pair_second);
-    const auto* d_device = arena.upload(density);
-    const auto* w_device = arena.upload(weighted_density);
+    const auto* d_device = resident_weights ? resident_density : arena.upload(density);
+    const auto* w_device =
+        resident_weights ? resident_weighted_density : arena.upload(weighted_density);
     OneElectronWeightView hcore_weights{nullptr, d_device, d_device};
     OneElectronWeightView pulay_weights{w_device, nullptr, nullptr};
     pulay_weights.overlap_scale = -1.0;
