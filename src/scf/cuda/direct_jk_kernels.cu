@@ -2,9 +2,9 @@
 #include <cmath>
 
 #include "generated_direct_contraction.cuh"
-#include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 
@@ -383,21 +383,21 @@ void launch_independent_rsh_derivative_kernel(
       batch, system_begin, system_count, source_stride, cj, short_ck, long_ck, unrestricted, omega,
       screening, bounds, density, beta, out);
 
-void launch_bounded_shell_energy_derivative(
-    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
-    double screening, const double* shell_pair_bounds, const void* shell_pair_density_bounds,
-    const std::uint32_t* pair_order, const double* shell_pair_block_bounds,
-    const double* system_density_bounds, const std::uint32_t* class_state,
-    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
-    unsigned long long* cursor, double coulomb_coefficient, double exchange_coefficient) {
-  launch_bounded_direct_shell_quartet_kernel_scaled(
-      unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
-      batch, screening, shell_pair_bounds,
-      static_cast<const ShellPairDensityBounds*>(shell_pair_density_bounds), pair_order,
-      shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
-      density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient);
-}
-
+  void launch_bounded_shell_energy_derivative(
+      bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+      double screening, const double* shell_pair_bounds, const void* shell_pair_density_bounds,
+      const std::uint32_t* pair_order, const double* shell_pair_block_bounds,
+      const double* system_density_bounds, const std::uint32_t* class_state,
+      const double* schwarz_bounds, const double* density, const std::uint8_t* active,
+      double* output, unsigned long long* cursor, double coulomb_coefficient,
+      double exchange_coefficient) {
+    launch_bounded_direct_shell_quartet_kernel_scaled(
+        unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0,
+        stream, batch, screening, shell_pair_bounds,
+        static_cast<const ShellPairDensityBounds*>(shell_pair_density_bounds), pair_order,
+        shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
+        density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient);
+  }
 }
 
 }  // namespace cuda_execution
