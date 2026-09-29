@@ -293,6 +293,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   }
   if (shared->device_bytes > budget || additional > budget - shared->device_bytes) return {};
 
+  // The owner drains H2D on failed preparation before this staging is freed.
+  std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
@@ -325,7 +327,6 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   plan->system_density_bounds = doubles(batch);
   plan->system_pair_density_bounds = doubles(product(batch, pair_classes));
   plan->heads = static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
-  std::vector<std::uint32_t> bounded_pair_order;
   if (force_capability) {
     bounded_pair_order.resize(pairs);
     std::iota(bounded_pair_order.begin(), bounded_pair_order.end(), 0U);
@@ -535,6 +536,16 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   const auto b = shared.batch;
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   std::vector<double> result(2U * coordinates);
+  // Later source submissions can fail after an earlier D2H was queued. Drain
+  // before result is destroyed on every return/exception; success still has
+  // only the existing synchronization below.
+  struct HostResultDrain {
+    cudaStream_t stream;
+    bool active{true};
+    ~HostResultDrain() {
+      if (active) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
@@ -558,6 +569,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   }
   error = cudaStreamSynchronize(shared.stream);
   if (error != cudaSuccess) return error;
+  drain.active = false;
   // Native shell force kernels accumulate -dE/dR. This API publishes the
   // derivative convention used by the stationary integral-source reducer.
   for (double& value : result) value = -value;
