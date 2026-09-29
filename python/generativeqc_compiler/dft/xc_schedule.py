@@ -31,6 +31,11 @@ from generativeqc_compiler.common.storage import (
     analyze_storage,
 )
 
+from .xc_compiled_resources import (
+    GridXcCompiledRegionEvidence,
+    GridXcCompiledResourceShape,
+)
+
 
 @dataclass(frozen=True)
 class GridXcExecutionSchedule:
@@ -296,25 +301,39 @@ def grid_xc_domain_identity(shape: GridXcCandidateShape) -> str:
 
 
 def _compiled_profitability_fields(
-    evidence: GpuProfitability | None,
+    evidence: GridXcCompiledRegionEvidence | None,
+    *,
+    shape: GridXcCandidateShape,
+    functional: str,
+    scientific: GridXcScientificIdentity | None,
 ) -> dict[str, typing.Any]:
-    """Validate compiled GPU evidence without duplicating static/endpoint facts."""
+    """Bind complete native-region PTXAS evidence to this exact DFT candidate."""
 
     if evidence is None:
         return {}
-    if not isinstance(evidence, GpuProfitability):
-        raise TypeError("grid/XC compiled evidence requires GpuProfitability")
-    payload = evidence.to_payload()
-    static = typing.cast("dict[str, typing.Any]", payload["static"])
-    compiled = typing.cast("dict[str, typing.Any]", payload["compiled"])
-    if (
-        any(value is not None for value in static.values())
-        or payload["endpoint_seconds"] is not None
-    ):
-        raise ValueError(
-            "grid/XC compiled evidence must contain only compiled GPU profitability facts"
+    if not isinstance(evidence, GridXcCompiledRegionEvidence):
+        raise TypeError(
+            "grid/XC compiled evidence requires GridXcCompiledRegionEvidence"
         )
-    return dict(compiled)
+    if scientific is None:
+        raise ValueError("compiled grid/XC evidence requires scientific identity")
+    expected_shape = GridXcCompiledResourceShape(
+        npoint=shape.npoint,
+        tile_points=shape.tile_points,
+        nao=shape.nao,
+        spins=shape.spins,
+    )
+    if evidence.shape != expected_shape:
+        raise ValueError("compiled grid/XC evidence shape differs from the candidate")
+    if evidence.functional != functional:
+        raise ValueError("compiled grid/XC evidence functional differs from the candidate")
+    if (
+        evidence.architecture != scientific.architecture
+        or evidence.source_identity != scientific.source_identity
+    ):
+        raise ValueError("compiled grid/XC evidence target/source identity differs")
+    payload = evidence.profitability.to_payload()
+    return typing.cast("dict[str, typing.Any]", payload["compiled"])
 
 
 @dataclass(frozen=True)
@@ -329,14 +348,15 @@ class GridXcScheduleCandidate:
 
     schedule: GridXcExecutionSchedule
     shape: GridXcCandidateShape
-    compiled_evidence: GpuProfitability | None = None
+    compiled_evidence: GridXcCompiledRegionEvidence | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.schedule, GridXcExecutionSchedule):
             raise TypeError("grid/XC schedule candidate requires a typed schedule")
         if not isinstance(self.shape, GridXcCandidateShape):
             raise TypeError("grid/XC schedule candidate requires a candidate shape")
-        _compiled_profitability_fields(self.compiled_evidence)
+        if self.compiled_evidence is not None and self.schedule.name != "device_fused":
+            raise ValueError("compiled grid/XC region evidence belongs to device_fused only")
         resolved = self.schedule.resolved(self.shape.tile_points)
         object.__setattr__(self, "schedule", resolved)
 
@@ -522,7 +542,7 @@ def assess_grid_xc_schedule(
     functional: str,
     scientific: GridXcScientificIdentity | None = None,
     precision_schedule: ExecutionPrecisionSchedule | None = None,
-    compiled_evidence: GpuProfitability | None = None,
+    compiled_evidence: GridXcCompiledRegionEvidence | None = None,
 ) -> GridXcCandidateAssessment:
     """Reject impossible/incompatible candidates before any timing comparison."""
 
@@ -538,7 +558,14 @@ def assess_grid_xc_schedule(
                 "scientific identity disagrees with admitted grid/XC workload"
             )
     resolved = grid_xc_schedule(schedule).resolved(shape.tile_points)
-    compiled = _compiled_profitability_fields(compiled_evidence)
+    if compiled_evidence is not None and resolved.name != "device_fused":
+        raise ValueError("compiled grid/XC region evidence belongs to device_fused only")
+    compiled = _compiled_profitability_fields(
+        compiled_evidence,
+        shape=shape,
+        functional=functional,
+        scientific=scientific,
+    )
     if precision_schedule is None:
         precision_schedule = uniform_precision_schedule("dft.grid_xc")
     if not isinstance(precision_schedule, ExecutionPrecisionSchedule):
