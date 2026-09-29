@@ -4637,16 +4637,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
        incremental_direct_jk ? incremental_max_abs_delta_density : density,
        incremental_direct_jk ? batch_size * sizeof(double) : 0U},
       {host_incremental_full_admitted_shell_quartets.data(),
-       incremental_direct_jk ? incremental_full_admitted_shell_quartets : iterations,
+       incremental_direct_jk ? static_cast<const void*>(incremental_full_admitted_shell_quartets)
+                             : static_cast<const void*>(iterations),
        incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
       {host_incremental_delta_admitted_shell_quartets.data(),
-       incremental_direct_jk ? incremental_delta_admitted_shell_quartets : iterations,
+       incremental_direct_jk ? static_cast<const void*>(incremental_delta_admitted_shell_quartets)
+                             : static_cast<const void*>(iterations),
        incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
       {host_incremental_full_admitted_quartet_tiles.data(),
-       incremental_direct_jk ? incremental_full_admitted_quartet_tiles : iterations,
+       incremental_direct_jk ? static_cast<const void*>(incremental_full_admitted_quartet_tiles)
+                             : static_cast<const void*>(iterations),
        incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
       {host_incremental_delta_admitted_quartet_tiles.data(),
-       incremental_direct_jk ? incremental_delta_admitted_quartet_tiles : iterations,
+       incremental_direct_jk ? static_cast<const void*>(incremental_delta_admitted_quartet_tiles)
+                             : static_cast<const void*>(iterations),
        incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
       {host_final_fock_reuse_mask.data(), final_fock_reuse_mask,
        reuse_converged_fock && !scf_force_ready_state ? batch_size * sizeof(std::uint8_t) : 0U},
