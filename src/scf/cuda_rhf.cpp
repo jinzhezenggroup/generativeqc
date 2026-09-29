@@ -2830,6 +2830,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool incremental_iteration_enabled =
       incremental_direct_jk && !bounded_direct_count_diagnostic &&
       !bounded_direct_aot_only_diagnostic && !bounded_direct_fock_only_diagnostic;
+  // With density screening enabled, allow at most one approximate ΔD
+  // application before rebuilding from the full density. This prevents omitted
+  // update contributions from accumulating across an arbitrarily long anchor
+  // chain. Unscreened execution can use the caller's wider exact-linear interval.
+  const std::uint32_t incremental_rebuild_interval =
+      options.screening_tolerance == 0.0 ? options.incremental_direct_jk_rebuild_interval : 1U;
   if (incremental_direct_jk) {
     cuda_error = cudaMemsetAsync(incremental_delta_updates, 0xff,
                                  batch_size * sizeof(std::uint32_t), resources.stream_);
@@ -2853,8 +2859,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     launch_prepare_incremental_direct_jk_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-        static_cast<std::int32_t>(nbf), options.incremental_direct_jk_rebuild_interval,
-        density_input, hcore, active, incremental_anchor_density, incremental_anchor_fock,
+        static_cast<std::int32_t>(nbf), incremental_rebuild_interval, density_input, hcore,
+        active, incremental_anchor_density, incremental_anchor_fock,
         next_density, incremental_delta_updates, incremental_full_build,
         incremental_max_abs_delta_density);
     cudaError_t error = cudaPeekAtLastError();
@@ -4582,7 +4588,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       {host_converged.data(), converged, batch_size * sizeof(std::uint8_t)},
       {host_failed.data(), failed, batch_size * sizeof(std::uint8_t)},
       {host_iterations.data(), iterations, batch_size * sizeof(std::uint32_t)},
-      {host_incremental_max_abs_delta_density.data(), incremental_max_abs_delta_density,
+      {host_incremental_max_abs_delta_density.data(),
+       incremental_direct_jk ? incremental_max_abs_delta_density : density,
        incremental_direct_jk ? batch_size * sizeof(double) : 0U},
       {host_final_fock_reuse_mask.data(), final_fock_reuse_mask,
        reuse_converged_fock && !scf_force_ready_state ? batch_size * sizeof(std::uint8_t) : 0U},
@@ -4816,7 +4823,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     result.incremental_direct_jk.active = incremental_iteration_enabled;
     if (incremental_iteration_enabled) {
       const std::uint64_t builds = host_iterations[system];
-      const std::uint64_t interval = options.incremental_direct_jk_rebuild_interval;
+      const std::uint64_t interval = incremental_rebuild_interval;
       const std::uint64_t full_builds =
           builds == 0U ? 0U : (interval == 0U ? 1U : 1U + (builds - 1U) / (interval + 1U));
       result.incremental_direct_jk.anchor_full_builds = full_builds;
