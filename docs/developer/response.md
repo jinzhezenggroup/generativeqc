@@ -1,10 +1,14 @@
 # Shared orbital response and bounded Krylov solves
 
-`tools/generativeqc_response` is the shared response-solver tooling for RHF and
-semilocal-KS orbital response. Its Krylov controller is Python/host-controlled;
-the operator backends include native J/K execution. It separates the problem snapshot, the
-matrix-free operator, and the linear-solver/recycling state so downstream
-property, Hessian, and correlated-gradient code can reuse one implementation.
+The installed runtime now owns the shared closed-shell response mathematics:
+`generativeqc.response_problem` owns problem/layout compatibility,
+`generativeqc.response_operator` owns RHF/CPKS matrix-free equations, and
+`generativeqc.response_xc` owns the fixed-density semilocal XC response kernel.
+`tools/generativeqc_response` retains solver/backend/live-state adapters and
+compatibility re-exports. Its Krylov controller is Python/host-controlled; the
+operator backends include native J/K execution. This split lets downstream
+property, Hessian, and correlated-gradient code reuse one scientific owner
+without making installed runtime code depend on repository `tools.*`.
 This slice is partial: the RHF response layer and the direct-CPU UHF response
 layer (including `export_uhf`), host-orchestrated spin CUDA exact/DF J/K, and
 native CPU/CUDA LDA/PBE RKS/UKS CPKS handoffs are delivered. Exact-RHF resident
@@ -116,11 +120,13 @@ outside this solver numeric-buffer budget and require separate accounting.
 
 ## CPKS boundary
 
-`FixedDensityXCDerivativeKernel` evaluates the audited semilocal feature
-Hessian from #161 and contracts it with the exact first-order density-feature
-response. `CPKSResponseOperator` adds that kernel to the J/K response action.
-The kernel/reference basis, grid, functional, and density identities must
-match exactly.
+`generativeqc.response_xc.FixedDensityXCDerivativeKernel` evaluates the
+audited semilocal feature Hessian from #161 and contracts it with the exact
+first-order density-feature response.
+`generativeqc.response_operator.CPKSResponseOperator` adds that kernel to the
+J/K response action. The tools modules re-export the same objects; they do not
+retain a second response equation. The kernel/reference basis, grid, functional,
+and density identities must match exactly.
 
 The [common contraction generator](xc_contractions.md) owns the scalar-Hessian
 chain rule and AO assembly. `apply_spin()` preserves functional-spin channels
