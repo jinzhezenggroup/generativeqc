@@ -97,9 +97,7 @@ def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
     bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
     contraction = _source("src/scf/cuda/direct_bounded_contraction.cuh")
     quartet = _source("src/scf/cuda/direct_force_quartet.cuh")
-    provider = _source("src/scf/cuda/direct_jk_kernels.cpp") if False else _source(
-        "src/scf/cuda/direct_jk_kernels.cu"
-    )
+    provider = _source("src/scf/cuda/direct_jk_kernels.cu")
     assert "enum class DirectRangeOperator" in header
     assert "launch_bounded_direct_range_exchange_force_kernel" in header
     assert "DirectRangeOperator::Long" in bounded
