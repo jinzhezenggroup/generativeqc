@@ -170,7 +170,7 @@ class Result:
 
 @dataclass(frozen=True)
 class MethodCapabilities:
-    """Executable properties reported by the native method registry."""
+    """Executable properties exposed by one public capability boundary.\n\n    ``method_capabilities()`` reports the backend-neutral registry view.\n    ``Calculator.capabilities`` and ``PreparedBatch.capabilities`` may refine\n    that view after backend, basis, and composed endpoint admission are known.\n    """
 
     method: str
     family: str

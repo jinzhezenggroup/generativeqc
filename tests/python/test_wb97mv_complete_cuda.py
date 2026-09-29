@@ -77,9 +77,11 @@ def test_complete_cuda_force_matches_independent_engine(
         screening_tolerance=1e-14,
         max_iterations=200,
     )
+    assert calc.capabilities.supported_properties == frozenset({"energy", "forces"})
     with calc.prepare_batch(
         [atoms], multiplicities=[spin + 1], warm_start=True
     ) as batch:
+        assert batch.capabilities == calc.capabilities
         cold = batch.execute(strict=True).items[0]
         warm = batch.execute(strict=True).items[0]
         if spin == 0:

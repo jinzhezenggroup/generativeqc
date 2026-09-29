@@ -9,8 +9,8 @@ alpha/beta densities with total-density J and validated integer spin
 occupations. LDA uses `GridSpec v1` and versioned unpolarized/polarized tails;
 PBE uses exact interior expressions plus explicit versioned production-tail
 policies. Small RKS and UKS matched-grid references pass the recorded `1e-8 Eh`
-energy gates. `WB97M_V` and `RCCSD_T` retain stable identifiers for capability
-discovery but return `GENERATIVEQC_STATUS_NOT_IMPLEMENTED`.
+energy gates. Compiler-resolved DFT names such as WB97M-V reuse stable native
+DFT carriers rather than adding a method-specific C ABI scientific driver.
 
 ## Method execution boundary
 
@@ -37,9 +37,19 @@ owner. System validation, SCF option translation, backend selection and retained
 execution state remain private to the adapter.
 
 The ABI registry reports method family, executable properties, and batch support.
-Unimplemented DFT and coupled-cluster identifiers remain discoverable with zero
-executable properties. LDA/PBE RKS and UKS advertise energy only and no
-prepared batch.
+Unimplemented identifiers remain discoverable without inflating executable
+properties. Native DFT carrier metadata remains backend-neutral and conservative.
+Python ``method_capabilities()`` reflects that registry view.
+
+``Calculator.capabilities`` is the second, execution-context layer: after the
+backend, basis, precision, density-fitting mode, and composed MethodIR endpoint
+are fixed, it may expose an independently qualified property that is not a
+native C action. ``PreparedBatch.capabilities`` mirrors the same record. Thus
+CUDA WB97M-V RKS/UKS can advertise analytic forces through the public Python
+calculator while the native carrier manifest remains energy-only. This split is
+intentional and regression-tested; it must not be used to infer forces for an
+unqualified backend/basis/method combination.
+
 Result publication is method-neutral internally; the
 ABI-0 `density_rms` field retains the density-update convergence measure.
 The additive `generativeqc_calculation_get_scf_diagnostic` query publishes separate
