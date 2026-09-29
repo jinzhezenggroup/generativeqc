@@ -126,6 +126,10 @@ struct ArenaLayout {
   std::size_t incremental_delta_updates{};
   std::size_t incremental_full_build{};
   std::size_t incremental_max_abs_delta_density{};
+  std::size_t incremental_full_admitted_shell_quartets{};
+  std::size_t incremental_delta_admitted_shell_quartets{};
+  std::size_t incremental_full_admitted_quartet_tiles{};
+  std::size_t incremental_delta_admitted_quartet_tiles{};
   std::size_t residual{};
   std::size_t weighted_density{};
   std::size_t total_density{};
