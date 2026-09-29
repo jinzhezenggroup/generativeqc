@@ -69,7 +69,7 @@ def test_ptxas_profitability_preserves_unknown_local_memory() -> None:
     assert profitability.local_bytes is None
 
 
-def test_xc_artifact_exposes_scoped_compiled_profitability(tmp_path) -> None:
+def test_xc_artifact_exposes_scoped_compiled_profitability(tmp_path: Path) -> None:
     library = tmp_path / "runtime.so"
     library.write_bytes(b"compiled-xc")
     metadata = {
