@@ -194,7 +194,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
       3 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint32_t) + sizeof(double));
   add(runtime::size_mul(primitives, primitives), sizeof(cuda_execution::PrimitivePairData));
   add(shells, sizeof(std::int64_t));
-  add(batch + 1, 4 * sizeof(std::int64_t) + 10 * sizeof(std::uint32_t));
+  add(batch + 1, 2 * sizeof(std::int64_t) + 10 * sizeof(std::uint32_t));
   add(batch, sizeof(std::uint8_t));
   add(1, sizeof(cuda_execution::GeneratedShellPairStream) + 2 * sizeof(std::int64_t) +
              detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t));
@@ -211,6 +211,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(batch, 11 * sizeof(double));
     add(detail::kDirectQuartetShellClassCount, sizeof(std::uint32_t));
     add(atoms, 3 * sizeof(double));
+    add(batch + 1, 2 * sizeof(std::int64_t));
     add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
   }
   return bytes;
