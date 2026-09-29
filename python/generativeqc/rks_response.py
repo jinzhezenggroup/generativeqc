@@ -354,6 +354,9 @@ class _PreparedRKSJBackend:
         }
 
     def validate_reference(self, reference: typing.Any) -> typing.Self:
+        # Identity alone does not prove the provider is live. Zero-RHS solves
+        # can bypass evaluate(), so reject closure at this validation boundary.
+        self._plan._ensure_open()
         for name, expected in (
             ("geometry_hash", self.geometry_hash),
             ("basis_hash", self.basis_hash),
