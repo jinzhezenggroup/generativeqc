@@ -101,7 +101,8 @@ def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
     assert "enum class DirectRangeOperator" in header
     assert "launch_bounded_direct_range_exchange_force_kernel" in header
     assert "DirectRangeOperator::Long" in bounded
-    assert "DirectRangeOperator::Short" in bounded
+    assert "generativeqc::integrals::CoulombRange::Short" in bounded
+    assert "DirectRangeOperator::Short" in provider
     assert "contract_bounded_direct_force_subtile_range_scaled" in contraction
     assert "contract_two_electron_force_quartet_subtile_range_scaled" in quartet
     assert "launch_bounded_shell_range_exchange_derivative" in provider
