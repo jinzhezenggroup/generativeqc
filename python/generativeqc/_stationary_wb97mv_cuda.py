@@ -385,14 +385,23 @@ class PreparedWb97mvCudaGradient:
             "grid_points": npnt,
             **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
-            "symmetry_unique_quartets_per_integral_source": (
-                (n * (n + 1) // 2) * (n * (n + 1) // 2 + 1) // 2
-            ),
-            "two_electron_quartet_traversals": 1,
-            "maximum_center_dual3_evaluations_total": (
-                6 * (n * (n + 1) // 2) * (n * (n + 1) // 2 + 1) // 2
-            ),
+            # The retained native Direct owner now performs all three stationary
+            # two-electron sources on screened shell tasks. Keep the legacy
+            # public-AO counters explicit at zero rather than reporting the old
+            # symmetry-unique N^4 traversal as if it still executed.
+            "symmetry_unique_quartets_per_integral_source": 0,
+            "two_electron_quartet_traversals": 0,
+            "maximum_center_dual3_evaluations_total": 0,
+            "two_electron_shell_traversals": 3,
+            "two_electron_radial_operators": [
+                "full-range",
+                "short-range",
+                "long-range",
+            ],
             "range_recurrences_per_participating_center": 2,
+            "two_electron_work_scope": (
+                "native screened shell scheduler; public-AO quartet domain is not materialized"
+            ),
             "additional_device_peak_bound": device_bound,
             "additional_host_numeric_bound": host_bound,
             "native_integral_resources": dict(
