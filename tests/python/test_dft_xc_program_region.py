@@ -229,12 +229,8 @@ def test_region_selection_rejects_gpu_pressure_regression_inside_timing_noise() 
     )
     kwargs = {
         "program": _program(),
-        "host_unfused": _assessment(
-            HOST_UNFUSED, compiled_evidence=host_evidence
-        ),
-        "device_fused": _assessment(
-            DEVICE_FUSED, compiled_evidence=device_evidence
-        ),
+        "host_unfused": _assessment(HOST_UNFUSED, compiled_evidence=host_evidence),
+        "device_fused": _assessment(DEVICE_FUSED, compiled_evidence=device_evidence),
         "source": _source(),
         "device_xc_identity": "cuda-xc-plan-pbe-v1",
         "minimum_speedup": 1.0,
