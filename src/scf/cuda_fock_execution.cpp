@@ -144,113 +144,110 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
 }
 
 generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
-      const PreparedFockPlan& plan, const double* density, const double* beta,
-      std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
-    const auto binding = prepared_cuda_direct_derivative_binding(plan);
-    auto* source = plan.cuda_direct_source();
-    const auto& strategy = plan.strategy();
-    const auto& spec = strategy.spec;
-    const bool valid =
-        binding && source && strategy.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
-        spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact &&
-        spec.coulomb.op == FockOperator::FullRange &&
-        (!spec.exchange.present || (spec.exchange.approximation == FockApproximation::Exact &&
-                                    spec.exchange.op == FockOperator::FullRange)) &&
-        matrix_elements == binding.nbf * binding.nbf;
-    if (!valid) {
-      detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";
-      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    }
-    return execute_cuda_direct_shell_full_range_derivatives_device(
-        source, spec.spin, spec.coulomb.coefficient,
-        spec.exchange.present ? spec.exchange.coefficient : 0.0, density, beta, matrix_elements,
-        derivatives, detail);
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
+  const auto binding = prepared_cuda_direct_derivative_binding(plan);
+  auto* source = plan.cuda_direct_source();
+  const auto& strategy = plan.strategy();
+  const auto& spec = strategy.spec;
+  const bool valid =
+      binding && source && strategy.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
+      spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact &&
+      spec.coulomb.op == FockOperator::FullRange &&
+      (!spec.exchange.present || (spec.exchange.approximation == FockApproximation::Exact &&
+                                  spec.exchange.op == FockOperator::FullRange)) &&
+      matrix_elements == binding.nbf * binding.nbf;
+  if (!valid) {
+    detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return execute_cuda_direct_shell_full_range_derivatives_device(
+      source, spec.spin, spec.coulomb.coefficient,
+      spec.exchange.present ? spec.exchange.coefficient : 0.0, density, beta, matrix_elements,
+      derivatives, detail);
+}
+
+generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
+                                               const double* beta, std::size_t matrix_elements,
+                                               double* coulomb, double* alpha_exchange,
+                                               double* beta_exchange, int* numerical_error,
+                                               bool mixed_coulomb, std::string& detail) {
+  const auto binding = prepared_cuda_fock_binding(plan);
+  if (!binding) {
+    detail = "prepared CUDA Fock owner has no single-provider resident value execution";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
-  generativeqc_status enqueue_prepared_cuda_fock(
-      const PreparedFockPlan& plan, const double* density, const double* beta,
-      std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-      int* numerical_error, bool mixed_coulomb, std::string& detail) {
-    const auto binding = prepared_cuda_fock_binding(plan);
-    if (!binding) {
-      detail = "prepared CUDA Fock owner has no single-provider resident value execution";
+  auto* exact = plan.cuda_direct_source();
+  auto* fitted = plan.cuda_fitted_source();
+  if (exact) {
+    if (fitted) {
+      detail = "prepared CUDA Fock facade refuses mixed resident providers";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
-
-    auto* exact = plan.cuda_direct_source();
-    auto* fitted = plan.cuda_fitted_source();
-    if (exact) {
-      if (fitted) {
-        detail = "prepared CUDA Fock facade refuses mixed resident providers";
-        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-      }
-      return mixed_coulomb
-                 ? enqueue_cuda_direct_jk_device_mixed_j(exact, plan.strategy().spec, density, beta,
+    return mixed_coulomb ? enqueue_cuda_direct_jk_device_mixed_j(
+                               exact, plan.strategy().spec, density, beta, matrix_elements, coulomb,
+                               alpha_exchange, beta_exchange, numerical_error, detail)
+                         : enqueue_cuda_direct_jk_device(exact, plan.strategy().spec, density, beta,
                                                          matrix_elements, coulomb, alpha_exchange,
-                                                         beta_exchange, numerical_error, detail)
-                 : enqueue_cuda_direct_jk_device(exact, plan.strategy().spec, density, beta,
-                                                 matrix_elements, coulomb, alpha_exchange,
-                                                 beta_exchange, numerical_error, detail);
-    }
-
-    if (!fitted) {
-      detail = "prepared CUDA Fock source became unavailable";
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
-    if (mixed_coulomb) {
-      detail = "prepared density-fitted CUDA Fock does not support mixed Coulomb precision";
-      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    }
-    const auto& spec = plan.strategy().spec;
-    const bool unrestricted = spec.spin == FockSpin::Unrestricted;
-    const bool valid_outputs =
-        (spec.coulomb.present ? coulomb != nullptr : coulomb == nullptr) &&
-        (spec.exchange.present ? alpha_exchange != nullptr : alpha_exchange == nullptr) &&
-        (spec.exchange.present && unrestricted ? beta_exchange != nullptr
-                                               : beta_exchange == nullptr);
-    if (matrix_elements != binding.nbf * binding.nbf || numerical_error == nullptr ||
-        density == nullptr || (unrestricted ? beta == nullptr : beta != nullptr) ||
-        !valid_outputs) {
-      detail = "prepared density-fitted CUDA Fock buffers, spin or dimensions are invalid";
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
-    const auto reset =
-        cudaMemsetAsync(numerical_error, 0, sizeof(*numerical_error), binding.stream);
-    if (reset != cudaSuccess) {
-      detail = std::string("reset prepared density-fitted CUDA Fock status: ") +
-               cudaGetErrorString(reset);
-      return cuda_execution::source_cuda_status(reset);
-    }
-
-    const JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
-    return spec.spin == FockSpin::Unrestricted
-               ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb,
-                                                            alpha_exchange, beta_exchange, detail,
-                                                            terms, FockMatrixLayout::RowMajor)
-               : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb,
-                                                            alpha_exchange, detail, terms,
-                                                            FockMatrixLayout::RowMajor);
+                                                         beta_exchange, numerical_error, detail);
   }
 
-  generativeqc_status enqueue_prepared_cuda_exchange_correction(
-      const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
-      const double* beta, std::size_t matrix_elements, double* alpha_exchange,
-      double* beta_exchange, int* numerical_error, std::string& detail) {
-    const auto binding = prepared_cuda_fock_binding(plan);
-    auto* source = plan.cuda_direct_source();
-    const auto& primary = plan.strategy();
-    const auto& spec = correction.spec;
-    if (!binding || !source || correction.backend != FockBackend::Cuda ||
-        spec.derivative_order != 0 || spec.spin != primary.spec.spin || spec.coulomb.present ||
-        !spec.exchange.present || spec.exchange.approximation != FockApproximation::Exact ||
-        spec.exchange.op != FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
-        correction.screening_tolerance != primary.screening_tolerance) {
-      detail = "CUDA range correction is incompatible with the prepared primary Fock owner";
-      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    }
-
-    return enqueue_cuda_direct_jk_device(source, spec, density, beta, matrix_elements, nullptr,
-                                         alpha_exchange, beta_exchange, numerical_error, detail);
+  if (!fitted) {
+    detail = "prepared CUDA Fock source became unavailable";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  if (mixed_coulomb) {
+    detail = "prepared density-fitted CUDA Fock does not support mixed Coulomb precision";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto& spec = plan.strategy().spec;
+  const bool unrestricted = spec.spin == FockSpin::Unrestricted;
+  const bool valid_outputs =
+      (spec.coulomb.present ? coulomb != nullptr : coulomb == nullptr) &&
+      (spec.exchange.present ? alpha_exchange != nullptr : alpha_exchange == nullptr) &&
+      (spec.exchange.present && unrestricted ? beta_exchange != nullptr : beta_exchange == nullptr);
+  if (matrix_elements != binding.nbf * binding.nbf || numerical_error == nullptr ||
+      density == nullptr || (unrestricted ? beta == nullptr : beta != nullptr) || !valid_outputs) {
+    detail = "prepared density-fitted CUDA Fock buffers, spin or dimensions are invalid";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto reset = cudaMemsetAsync(numerical_error, 0, sizeof(*numerical_error), binding.stream);
+  if (reset != cudaSuccess) {
+    detail =
+        std::string("reset prepared density-fitted CUDA Fock status: ") + cudaGetErrorString(reset);
+    return cuda_execution::source_cuda_status(reset);
+  }
+
+  const JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
+  return spec.spin == FockSpin::Unrestricted
+             ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb,
+                                                          alpha_exchange, beta_exchange, detail,
+                                                          terms, FockMatrixLayout::RowMajor)
+             : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, alpha_exchange,
+                                                          detail, terms,
+                                                          FockMatrixLayout::RowMajor);
+}
+
+generativeqc_status enqueue_prepared_cuda_exchange_correction(
+    const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
+    const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, std::string& detail) {
+  const auto binding = prepared_cuda_fock_binding(plan);
+  auto* source = plan.cuda_direct_source();
+  const auto& primary = plan.strategy();
+  const auto& spec = correction.spec;
+  if (!binding || !source || correction.backend != FockBackend::Cuda ||
+      spec.derivative_order != 0 || spec.spin != primary.spec.spin || spec.coulomb.present ||
+      !spec.exchange.present || spec.exchange.approximation != FockApproximation::Exact ||
+      spec.exchange.op != FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
+      correction.screening_tolerance != primary.screening_tolerance) {
+    detail = "CUDA range correction is incompatible with the prepared primary Fock owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
+  return enqueue_cuda_direct_jk_device(source, spec, density, beta, matrix_elements, nullptr,
+                                       alpha_exchange, beta_exchange, numerical_error, detail);
+}
 
 }  // namespace generativeqc::scf
