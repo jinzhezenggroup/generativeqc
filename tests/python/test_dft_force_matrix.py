@@ -261,7 +261,9 @@ def test_fixed_final_state_force_sample_never_reenters_scf(
         def synchronize() -> None:
             pass
 
-    cupy = SimpleNamespace(cuda=SimpleNamespace(Stream=SimpleNamespace(null=NullStream())))
+    cupy = SimpleNamespace(
+        cuda=SimpleNamespace(Stream=SimpleNamespace(null=NullStream()))
+    )
     batch = SimpleNamespace(
         execute=lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("fixed-final-state replay must not execute SCF")

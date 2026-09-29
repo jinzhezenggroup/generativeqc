@@ -351,9 +351,7 @@ def test_extract_matrix_retains_fixed_final_state_and_fixed_density_gap() -> Non
 
     rows = extract_records(payload)
     fixed = next(
-        row
-        for row in rows
-        if row["metadata"]["scenario"] == "fixed_final_state_0"
+        row for row in rows if row["metadata"]["scenario"] == "fixed_final_state_0"
     )
     missing = next(
         row

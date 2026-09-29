@@ -248,6 +248,7 @@ def test_wb97mv_capacity_is_not_promoted_to_executed_pair_or_quartet_work() -> N
     assert counts["screened"] == {}
     assert counts["compacted"] == {}
     assert counts["observed"]["nonlocal_geometry_point_visits_scheduled"] == 200
-    assert "screening occurs inside" in record["work_count_notes"][
-        "stationary_integral_derivatives"
-    ]
+    assert (
+        "screening occurs inside"
+        in record["work_count_notes"]["stationary_integral_derivatives"]
+    )

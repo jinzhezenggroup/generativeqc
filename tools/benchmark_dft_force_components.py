@@ -406,9 +406,9 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         status = str(row.get("status", "unknown"))
         outcomes[status] = outcomes.get(status, 0) + 1
         metadata = row.get("metadata")
-        if isinstance(metadata, Mapping) and str(metadata.get("scenario", "")).startswith(
-            "fixed_final_state_"
-        ):
+        if isinstance(metadata, Mapping) and str(
+            metadata.get("scenario", "")
+        ).startswith("fixed_final_state_"):
             fixed_final_state_records += 1
         components = row.get("components")
         if isinstance(components, Mapping):
