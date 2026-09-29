@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -40,9 +41,32 @@ void require_close(std::span<const double> actual, std::span<const double> expec
                    const char* message) {
   require(actual.size() == expected.size(), "rank-2 transform result shape mismatch");
   double maximum = 0.0;
-  for (std::size_t i = 0; i < actual.size(); ++i)
+  for (std::size_t i = 0; i < actual.size(); ++i) {
+    require(std::isfinite(actual[i]) && std::isfinite(expected[i]),
+            "rank-2 transform comparison requires finite values");
     maximum = std::max(maximum, std::abs(actual[i] - expected[i]));
+  }
   require(maximum < 2e-13, message);
+}
+
+void nonfinite_comparisons_fail_closed() {
+  const std::array<double, 2> finite{0.0, 1.0};
+  for (const double invalid : {std::numeric_limits<double>::quiet_NaN(),
+                               std::numeric_limits<double>::infinity(),
+                               -std::numeric_limits<double>::infinity()}) {
+    const std::array<double, 2> nonfinite{0.0, invalid};
+    for (const bool invalid_actual : {false, true}) {
+      bool rejected = false;
+      try {
+        require_close(invalid_actual ? nonfinite : finite,
+                      invalid_actual ? finite : nonfinite, "nonfinite comparison accepted");
+      } catch (const std::runtime_error&) {
+        rejected = true;
+      }
+      require(rejected, "rank-2 oracle comparison accepted NaN or infinity");
+    }
+  }
+  require_close(finite, finite, "finite equality failed");
 }
 
 void transforms_match_independent_oracles() {
@@ -92,6 +116,7 @@ void invalid_shapes_fail_closed() {
 
 int main() {
   try {
+    nonfinite_comparisons_fail_closed();
     transforms_match_independent_oracles();
     invalid_shapes_fail_closed();
     std::cout << "post-HF rank-2 transforms passed\n";
