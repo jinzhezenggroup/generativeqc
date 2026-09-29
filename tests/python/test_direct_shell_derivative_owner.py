@@ -72,6 +72,8 @@ def test_shell_rsh_runs_explicit_full_short_and_long_range_passes() -> None:
     assert "DirectCoulombRange::Full" in source
     assert "DirectCoulombRange::Short" in source
     assert "DirectCoulombRange::Long" in source
-    assert "{0.0, short_exchange_coefficient, DirectCoulombRange::Short, omega}" in source
+    assert (
+        "{0.0, short_exchange_coefficient, DirectCoulombRange::Short, omega}" in source
+    )
     assert "{0.0, long_exchange_coefficient, DirectCoulombRange::Long, omega}" in source
     assert "long_unit" not in source

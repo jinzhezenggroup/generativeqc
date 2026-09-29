@@ -6,8 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "scf/cuda/direct_metadata.hpp"
 #include "integrals/range_moments.hpp"
+#include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {

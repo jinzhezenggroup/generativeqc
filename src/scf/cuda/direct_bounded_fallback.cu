@@ -203,8 +203,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
           // Full-range low orders were already consumed by exact scalar workers.
           // Range-separated work deliberately falls through to the generic
           // Cartesian shell source for every angular order.
-          if (radial_range == generativeqc::integrals::CoulombRange::Full &&
-              angular_order <= 3U)
+          if (radial_range == generativeqc::integrals::CoulombRange::Full && angular_order <= 3U)
             continue;
         } else {
           // Fock order one has no psss-specific handwritten fallback anymore.

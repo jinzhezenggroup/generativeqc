@@ -98,9 +98,11 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 /** Execute source-major [J', SR-K', LR-K'] entirely through shell topology.
  * Full, short-range and long-range operators share one resident Cartesian
  * density lease and retain explicit omega identity. */
-cudaError_t execute_generated_rsh_energy_derivatives(
-    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double short_exchange_coefficient,
-    double long_exchange_coefficient, double omega, std::vector<double>& derivatives);
+cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& plan, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double coulomb_coefficient,
+                                                     double short_exchange_coefficient,
+                                                     double long_exchange_coefficient, double omega,
+                                                     std::vector<double>& derivatives);
 
 }  // namespace generativeqc::scf::cuda_execution

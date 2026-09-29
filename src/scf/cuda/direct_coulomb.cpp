@@ -95,12 +95,12 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   F(system_shell_offsets);         \
   F(system_shell_pair_offsets);    \
   F(shell_direct_ao_offsets);      \
-  F(shell_pair_systems);                      \
-  F(shell_pair_first);                        \
-  F(shell_pair_second);                       \
-  F(shell_pair_primitive_offsets);            \
-  F(direct_ao_shells);                        \
-  F(direct_ao_angular);                       \
+  F(shell_pair_systems);           \
+  F(shell_pair_first);             \
+  F(shell_pair_second);            \
+  F(shell_pair_primitive_offsets); \
+  F(direct_ao_shells);             \
+  F(direct_ao_angular);            \
   F(direct_ao_coefficients)
 #define COUNT(field) charge(host.field.size(), sizeof(host.field[0]))
   COULOMB_METADATA(COUNT);
@@ -334,18 +334,15 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     plan->shell_pair_block_bounds = doubles(pair_blocks);
     plan->force = doubles(product(atoms, 3));
     plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
-    plan->shared->batch.total_shell_pair_blocks =
-        host.system_shell_pair_block_offsets.back();
+    plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
         host.system_shell_pair_block_quartet_offsets.back();
-    plan->shared->batch.system_shell_pair_block_offsets =
-        static_cast<const std::int64_t*>(
-            allocate(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t),
-                     host.system_shell_pair_block_offsets.data()));
-    plan->shared->batch.system_shell_pair_block_quartet_offsets =
-        static_cast<const std::int64_t*>(
-            allocate(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t),
-                     host.system_shell_pair_block_quartet_offsets.data()));
+    plan->shared->batch.system_shell_pair_block_offsets = static_cast<const std::int64_t*>(
+        allocate(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t),
+                 host.system_shell_pair_block_offsets.data()));
+    plan->shared->batch.system_shell_pair_block_quartet_offsets = static_cast<const std::int64_t*>(
+        allocate(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t),
+                 host.system_shell_pair_block_quartet_offsets.data()));
   }
 
   const auto& b = plan->shared->batch;
@@ -568,10 +565,12 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   return cudaSuccess;
 }
 
-cudaError_t execute_generated_rsh_energy_derivatives(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double short_exchange_coefficient,
-    double long_exchange_coefficient, double omega, std::vector<double>& derivatives) {
+cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, bool unrestricted,
+                                                     const double* alpha, const double* beta,
+                                                     double coulomb_coefficient,
+                                                     double short_exchange_coefficient,
+                                                     double long_exchange_coefficient, double omega,
+                                                     std::vector<double>& derivatives) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(short_exchange_coefficient) ||

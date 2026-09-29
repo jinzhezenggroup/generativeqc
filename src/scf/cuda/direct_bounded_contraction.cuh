@@ -61,10 +61,10 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
     generativeqc::integrals::CoulombRange radial_range =
         generativeqc::integrals::CoulombRange::Full,
     double radial_omega = 0.0) {
-#define GENERATIVEQC_BOUNDED_FORCE_CASE(order)                                                  \
-  case order:                                                                                   \
-    contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order>(                    \
-        batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
+#define GENERATIVEQC_BOUNDED_FORCE_CASE(order)                                                     \
+  case order:                                                                                      \
+    contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order>(                       \
+        batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces,    \
         0U, coulomb_coefficient, exchange_coefficient, subtile, lane, radial_range, radial_omega); \
     break
   // Total order 0/1 is consumed by the generated ssss/psss exact-shell
