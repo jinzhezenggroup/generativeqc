@@ -52,7 +52,10 @@ def test_native_rks_adapter_consumes_production_cpks_owner() -> None:
         native_ks.NativeRKSResponse,
         production_operator.CPKSResponseOperator,
     )
-    assert native_ks.FixedDensityXCDerivativeKernel is production_xc.FixedDensityXCDerivativeKernel
+    assert (
+        native_ks.FixedDensityXCDerivativeKernel
+        is production_xc.FixedDensityXCDerivativeKernel
+    )
 
 
 def test_installed_response_owners_never_import_tools() -> None:
