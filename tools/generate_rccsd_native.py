@@ -54,6 +54,7 @@ from generativeqc_compiler.tensor.ir import (
     slice_tensor,
     transpose,
 )
+from generativeqc_compiler.tensor.optimize import optimize, prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
 
@@ -92,7 +93,7 @@ for _name, _value in {
     "VJPProgram": VJPProgram,
     "linearize": linearize,
     "transpose_program": transpose_program,
-    "optimize": lambda program: program,
+    "optimize": optimize,
 }.items():
     setattr(_tensor_package, _name, _value)
 
@@ -120,6 +121,19 @@ from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_progr
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)
+def _prepare_production(
+    program: Program,
+    backend: str,
+    *,
+    preserve_reduction_order: bool = False,
+) -> Program:
+    return prepare_for_backend(
+        program,
+        backend,
+        preserve_reduction_order=preserve_reduction_order,
+    )
+
+
 TRIPLES_RESPONSE_INPUTS = (
     "ovvv",
     "ovoo",
@@ -669,25 +683,43 @@ def _required_function(program: Program, name: str, *, batch_dim: bool = False) 
 
 
 def cpu_header() -> str:
-    iteration = iteration_program(*REPRESENTATIVE)
-    replay = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
+    iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
+    replay = _prepare_production(
+        build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False),
+        "cpu",
+        preserve_reduction_order=True,
+    )
     lambda_programs = build_lambda_programs(*REPRESENTATIVE, form="shared")
     lambda_independent = build_lambda_programs(*REPRESENTATIVE, form="expanded")
-    lambda_rhs = lambda_programs.energy_vjp.program
-    lambda_transpose = lambda_programs.residual_vjp.program
-    independent_rhs = lambda_independent.energy_vjp.program
-    independent_transpose = lambda_independent.residual_vjp.program
+    lambda_rhs = _prepare_production(lambda_programs.energy_vjp.program, "cpu")
+    lambda_transpose = _prepare_production(lambda_programs.residual_vjp.program, "cpu")
+    independent_rhs = _prepare_production(
+        lambda_independent.energy_vjp.program,
+        "cpu",
+        preserve_reduction_order=True,
+    )
+    independent_transpose = _prepare_production(
+        lambda_independent.residual_vjp.program,
+        "cpu",
+        preserve_reduction_order=True,
+    )
     parameter_vjps = {
-        parameter: build_parameter_vjp(lambda_programs.primal, parameter).program
+        parameter: _prepare_production(
+            build_parameter_vjp(lambda_programs.primal, parameter).program,
+            "cpu",
+        )
         for parameter in PARAMETERS
     }
     hamiltonian = build_hamiltonian_programs(
         *REPRESENTATIVE, explicit_density_input=True
     )
-    hamiltonian_weights = hamiltonian.weights
-    orbital_jvp = hamiltonian.orbital_jvp.program
-    fock_weights = build_fock_weight_program(
-        *REPRESENTATIVE, explicit_density_input=True
+    hamiltonian_weights = _prepare_production(hamiltonian.weights, "cpu")
+    orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "cpu")
+    fock_weights = _prepare_production(
+        build_fock_weight_program(
+            *REPRESENTATIVE, explicit_density_input=True
+        ),
+        "cpu",
     )
     hamiltonian_input_names = tuple(
         sorted(
@@ -701,12 +733,15 @@ def cpu_header() -> str:
         sorted(n.attrs["name"] for n in fock_weights.live_nodes if n.op == "input")
     )
     triples_primal = build_runtime_tile_triples_program(*REPRESENTATIVE, capacity=6)
-    triples_response = transpose_program(
-        triples_primal,
-        ("triples_energy",),
-        inputs=TRIPLES_RESPONSE_INPUTS,
-        max_elements=100_000_000,
-    ).program
+    triples_response = _prepare_production(
+        transpose_program(
+            triples_primal,
+            ("triples_energy",),
+            inputs=TRIPLES_RESPONSE_INPUTS,
+            max_elements=100_000_000,
+        ).program,
+        "cpu",
+    )
     triples_input_nodes = {
         n.attrs["name"]: n for n in triples_response.live_nodes if n.op == "input"
     }
@@ -1135,25 +1170,43 @@ def _cuda_program(
 
 
 def cuda_source() -> str:
-    iteration = iteration_program(*REPRESENTATIVE)
-    replay = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
+    iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
+    replay = _prepare_production(
+        build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False),
+        "cuda",
+        preserve_reduction_order=True,
+    )
     lambda_programs = build_lambda_programs(*REPRESENTATIVE, form="shared")
     lambda_independent = build_lambda_programs(*REPRESENTATIVE, form="expanded")
-    lambda_rhs = lambda_programs.energy_vjp.program
-    lambda_transpose = lambda_programs.residual_vjp.program
-    independent_rhs = lambda_independent.energy_vjp.program
-    independent_transpose = lambda_independent.residual_vjp.program
+    lambda_rhs = _prepare_production(lambda_programs.energy_vjp.program, "cuda")
+    lambda_transpose = _prepare_production(lambda_programs.residual_vjp.program, "cuda")
+    independent_rhs = _prepare_production(
+        lambda_independent.energy_vjp.program,
+        "cuda",
+        preserve_reduction_order=True,
+    )
+    independent_transpose = _prepare_production(
+        lambda_independent.residual_vjp.program,
+        "cuda",
+        preserve_reduction_order=True,
+    )
     parameter_vjps = {
-        parameter: build_parameter_vjp(lambda_programs.primal, parameter).program
+        parameter: _prepare_production(
+            build_parameter_vjp(lambda_programs.primal, parameter).program,
+            "cuda",
+        )
         for parameter in PARAMETERS
     }
     hamiltonian = build_hamiltonian_programs(
         *REPRESENTATIVE, explicit_density_input=True
     )
-    hamiltonian_weights = hamiltonian.weights
-    orbital_jvp = hamiltonian.orbital_jvp.program
-    fock_weights = build_fock_weight_program(
-        *REPRESENTATIVE, explicit_density_input=True
+    hamiltonian_weights = _prepare_production(hamiltonian.weights, "cuda")
+    orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "cuda")
+    fock_weights = _prepare_production(
+        build_fock_weight_program(
+            *REPRESENTATIVE, explicit_density_input=True
+        ),
+        "cuda",
     )
     hamiltonian_input_names = tuple(
         sorted(
