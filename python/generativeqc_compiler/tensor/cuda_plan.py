@@ -760,7 +760,7 @@ def plan_cuda(
             "CUB reduction provider requires stream_reductions for the pilot"
         )
     nodes, inputs, outputs = _occurrences(program, schedule.recompute)
-    mixed_accumulation_steps: frozenset[int] = frozenset()
+    mixed_accumulation_steps = frozenset[int]()
     if program.provenance.get("precision_execution") is not None:
         program_names = program.debug_names
         precision_values = {
