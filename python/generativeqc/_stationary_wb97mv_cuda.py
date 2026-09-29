@@ -354,9 +354,7 @@ class PreparedWb97mvCudaGradient:
         self.sources.reset(
             source.grid_spec.coincident_tolerance, state.density, state.weighted_density
         )
-        self.nonlocal_sources.reset(
-            source.grid_spec.coincident_tolerance, state.density, state.weighted_density
-        )
+        self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
         for atom in range(na):
             for other in range(atom):
