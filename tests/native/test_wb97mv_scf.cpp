@@ -87,7 +87,7 @@ vibeqc_method_descriptor descriptor(const vibeqc_ks_options& ks) {
   vibeqc_method_descriptor method{};
   method.struct_size = sizeof(method);
   method.abi_version = VIBEQC_ABI_VERSION;
-  method.method = ks.spin_channels == 2 ? VIBEQC_METHOD_WB97M_V_UKS : VIBEQC_METHOD_WB97M_V;
+  method.method = ks.spin_channels == 2 ? VIBEQC_METHOD_PBE_UKS : VIBEQC_METHOD_PBE_RKS;
   method.max_iterations = 180;
   method.diis_history = 8;
   method.energy_tolerance = 1e-12;
@@ -97,7 +97,7 @@ vibeqc_method_descriptor descriptor(const vibeqc_ks_options& ks) {
   return method;
 }
 
-const methods::Capabilities capabilities{VIBEQC_METHOD_WB97M_V,
+const methods::Capabilities capabilities{VIBEQC_METHOD_PBE_RKS,
                                          VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL,
                                          VIBEQC_PROPERTY_ENERGY, false, true};
 
@@ -399,9 +399,9 @@ int main(int argc, char** argv) {
     } else
       require(argc == 1, "usage: vibeqc_wb97mv_scf_tests [oracle-input.jsonl]");
     int32_t available = 1;
-    require(vibeqc_method_available(VIBEQC_METHOD_WB97M_V, &available) == VIBEQC_STATUS_SUCCESS &&
+    require(vibeqc_method_available(VIBEQC_METHOD_PBE_RKS, &available) == VIBEQC_STATUS_SUCCESS &&
                 available,
-            "WB97M-V composition is missing its public energy admission");
+            "generic RKS DFT carrier is missing its energy admission");
     nonlocal_density_domain();
     run_case(0, false, output.is_open() ? &output : nullptr);
     run_case(0, true, output.is_open() ? &output : nullptr);

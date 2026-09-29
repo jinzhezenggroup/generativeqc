@@ -8,7 +8,6 @@ interior-only reference contract. Unsupported compositions fail before prepare.
 import math
 import typing
 from dataclasses import asdict, dataclass, field, replace
-from enum import IntEnum
 from fractions import Fraction
 
 from vibeqc_compiler.common.provenance import canonical_hash
@@ -34,6 +33,10 @@ from vibeqc_compiler.method import (
     d4_composite_method_identifiers,
     resolve_method,
 )
+from vibeqc_compiler.xc._generated_native_semilocal import (
+    SCF_DOMAIN_BY_VERSION,
+    SEMILOCAL_FAMILIES,
+)
 from vibeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from vibeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
@@ -41,15 +44,13 @@ from vibeqc_compiler.xc.automatic_semilocal import (
 )
 from vibeqc_compiler.xc.spec import CATALOG, FunctionalSpec, UnsupportedXC, functional
 
-SCF_DOMAIN = "semilocal-scaled-v1/pbe-spin-c2-1e-18"
-B3LYP_SCF_DOMAIN = "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18"
-WB97MV_SCF_DOMAIN = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
+SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
+B3LYP_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[2]
+WB97MV_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[3]
 SPLIT_HYBRID_SCF_DOMAIN = "libxc-7.0/split-global-hybrid-v1"
 _NATIVE_SCF_DOMAINS = frozenset(
     (
-        SCF_DOMAIN,
-        B3LYP_SCF_DOMAIN,
-        WB97MV_SCF_DOMAIN,
+        *SCF_DOMAIN_BY_VERSION.values(),
         SPLIT_HYBRID_SCF_DOMAIN,
         AUTOMATIC_SCF_DOMAIN,
     )
@@ -77,21 +78,6 @@ def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None
         return name, spin
     return None
 
-
-class _NativeSemilocalFamily(IntEnum):
-    """Stable curated functional codes consumed by the native KS runtime."""
-
-    LDA = 0
-    PBE = 1
-    R2SCAN = 2
-    B3LYP = 3
-    WB97MV = 4
-
-
-_NATIVE_CURATED_SCF_DOMAINS = {
-    _NativeSemilocalFamily.B3LYP: B3LYP_SCF_DOMAIN,
-    _NativeSemilocalFamily.WB97MV: WB97MV_SCF_DOMAIN,
-}
 
 # DFT scientific identity belongs to the compiler catalog, not the native ABI
 # manifest.  Keep only genuine compatibility spellings here; ordinary
@@ -446,59 +432,80 @@ def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
     )
 
 
-def _curated_semilocal_family(plan: typing.Any) -> _NativeSemilocalFamily:
-    """Classify one curated semilocal component inventory without method promotion."""
-    components = dict(plan.semilocal.functional.components)
-    if components == {"LDA_X": Fraction(1), "LDA_C_PW": Fraction(1)}:
-        return _NativeSemilocalFamily.LDA
-    if set(components) <= {"GGA_X_PBE", "GGA_C_PBE"}:
-        return _NativeSemilocalFamily.PBE
-    if components == {
-        "MGGA_X_R2SCAN": Fraction(1),
-        "MGGA_C_R2SCAN": Fraction(1),
-    }:
-        return _NativeSemilocalFamily.R2SCAN
-    if components == dict(
-        _native_semilocal(
-            resolve_method("B3LYP", spin=plan.semilocal.functional.spin)
-        ).components
-    ):
-        return _NativeSemilocalFamily.B3LYP
-    if components == {"MGGA_X_WB97M_V": Fraction(1), "MGGA_C_WB97M_V": Fraction(1)}:
-        return _NativeSemilocalFamily.WB97MV
-    raise NotImplementedError("native KS semilocal family has no qualified lowerer")
+def _record_components(record: typing.Mapping[str, typing.Any]) -> dict[str, Fraction]:
+    return {name: Fraction(coefficient) for name, coefficient in record["components"]}
 
 
-def _native_semilocal_family(method_ir: typing.Any) -> int:
-    """Return the stable curated/generated selector consumed by native KS execution."""
-    # The named PBE-D4 ABI retains its separately qualified native correction
-    # owner. Do not route that explicit composition through electronic-only
-    # admission, or generalize its exception to arbitrary post-SCF corrections.
-    if _is_pbe_d4_composition(method_ir):
-        return int(_NativeSemilocalFamily.PBE)
-    automatic_name = _automatic_semilocal_name(method_ir)
-    if automatic_name is not None:
-        return automatic_functional_code(automatic_name)
-    plan = _native_execution_plan(method_ir)
-    split = _split_hybrid_record(method_ir)
-    if split is not None:
-        return int(split["functional_code"])
-    family = _curated_semilocal_family(plan)
-    if family == _NativeSemilocalFamily.WB97MV:
-        canonical = compile_ks_execution_plan(
-            resolve_method("WB97M-V", spin=method_ir.spin)
-        )
-        # The current native evaluator is generated for this exact composition.
-        # Names are not selectors, and changed omega/NLC terms must not alias it.
-        if (
-            plan.semilocal.semantic_payload() != canonical.semilocal.semantic_payload()
-            or plan.exchange != canonical.exchange
-            or plan.nonlocal_correlation != canonical.nonlocal_correlation
-        ):
+def _curated_semilocal_record(
+    functional_spec: FunctionalSpec,
+    *,
+    plan: typing.Any = None,
+    method_ir: MethodIR | None = None,
+) -> typing.Mapping[str, typing.Any]:
+    """Resolve one curated native lowerer from generated semantic metadata."""
+    components = dict(functional_spec.components)
+    for record in SEMILOCAL_FAMILIES:
+        expected = _record_components(record)
+        if record["coefficient_policy"] == "native-scales":
+            if not set(components) <= set(expected):
+                continue
+        elif components != expected:
+            continue
+        # A zero registry omega denotes an omega-independent point program.
+        # Exchange primitives still own and validate their own range parameter.
+        # Nonzero semilocal omega, notably canonical B97M, must match exactly.
+        expected_omega = Fraction(record["range_omega"])
+        if expected_omega and functional_spec.range_omega != expected_omega:
             raise NotImplementedError(
-                "native B97M lowerer requires canonical WB97M-V composition"
+                f"native {record['name']} lowerer requires canonical semilocal omega"
             )
-    return int(family)
+        if plan is not None:
+            policy = record["exchange_policy"]
+            if policy == "none" and (
+                plan.exchange or plan.nonlocal_correlation is not None
+            ):
+                raise NotImplementedError("unsupported native KS semilocal composition")
+            if policy == "canonical":
+                if method_ir is None:
+                    continue
+                canonical = compile_ks_execution_plan(
+                    resolve_method(record["canonical_method"], spin=method_ir.spin)
+                )
+                if (
+                    plan.semilocal.semantic_payload()
+                    != canonical.semilocal.semantic_payload()
+                    or plan.exchange != canonical.exchange
+                    or plan.nonlocal_correlation != canonical.nonlocal_correlation
+                ):
+                    raise NotImplementedError(
+                        f"native {record['name']} lowerer requires canonical "
+                        f"{record['canonical_method']} composition"
+                    )
+        return record
+    raise NotImplementedError(
+        "native KS semilocal primitive graph has no qualified lowerer"
+    )
+
+
+def _native_semilocal_record(method_ir: typing.Any) -> typing.Mapping[str, typing.Any]:
+    if _is_pbe_d4_composition(method_ir):
+        return _curated_semilocal_record(_native_pbe_d4_semilocal(method_ir))
+    plan = _native_execution_plan(method_ir)
+    return _curated_semilocal_record(
+        plan.semilocal.functional, plan=plan, method_ir=method_ir
+    )
+
+
+def _native_semilocal_code(method_ir: typing.Any) -> int:
+    """Return the stable curated/generated selector consumed by native KS execution."""
+    if not _is_pbe_d4_composition(method_ir):
+        automatic_name = _automatic_semilocal_name(method_ir)
+        if automatic_name is not None:
+            return automatic_functional_code(automatic_name)
+        split = _split_hybrid_record(method_ir)
+        if split is not None:
+            return int(split["functional_code"])
+    return int(_native_semilocal_record(method_ir)["code"])
 
 
 def ks_coefficients(method_ir: typing.Any) -> typing.Any:
@@ -512,20 +519,14 @@ def ks_coefficients(method_ir: typing.Any) -> typing.Any:
     if automatic_name is not None or split is not None:
         exchange_scale = correlation_scale = Fraction(1)
     else:
-        family = _curated_semilocal_family(plan)
-        if family == _NativeSemilocalFamily.PBE:
-            exchange_scale = components.get("GGA_X_PBE", Fraction(0))
-            correlation_scale = components.get("GGA_C_PBE", Fraction(0))
-        elif family in (
-            _NativeSemilocalFamily.LDA,
-            _NativeSemilocalFamily.R2SCAN,
-        ):
-            if len(method_ir.primitives) != 1:
-                raise NotImplementedError("unsupported native KS semilocal composition")
-            exchange_scale = correlation_scale = Fraction(1)
+        record = _native_semilocal_record(method_ir)
+        if record["coefficient_policy"] == "native-scales":
+            component_names = tuple(name for name, _ in record["components"])
+            exchange_scale = components.get(component_names[0], Fraction(0))
+            correlation_scale = components.get(component_names[1], Fraction(0))
         else:
-            # B3LYP/WB97M-V point programs own their internal component
-            # coefficients. Native outer X/C scales stay unity.
+            # Exact point programs own their internal component coefficients.
+            # Native outer X/C scales stay unity.
             exchange_scale = correlation_scale = Fraction(1)
     if not plan.exchange:
         fock_exchange = Fraction(0)
@@ -671,10 +672,11 @@ def _scf_domain_for_ir(method_ir: typing.Any) -> str:
         method_ir = d4_electronic
     if _automatic_semilocal_name(method_ir) is not None:
         return AUTOMATIC_SCF_DOMAIN
-    code = _native_semilocal_family(method_ir)
-    if code >= 0x10000:
-        return SPLIT_HYBRID_SCF_DOMAIN
-    return _NATIVE_CURATED_SCF_DOMAINS.get(code, SCF_DOMAIN)
+    if not _is_pbe_d4_composition(method_ir):
+        split = _split_hybrid_record(method_ir)
+        if split is not None:
+            return SPLIT_HYBRID_SCF_DOMAIN
+    return str(_native_semilocal_record(method_ir)["scf_domain"])
 
 
 def scf_domain_for_method(method: typing.Any) -> str:
@@ -693,7 +695,7 @@ def native_xc_functional_code(method: typing.Any) -> int:
     d4_electronic = _d4_electronic_projection(method_ir)
     if d4_electronic is not None:
         method_ir = d4_electronic
-    return int(_native_semilocal_family(method_ir))
+    return _native_semilocal_code(method_ir)
 
 
 def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing.Any:
@@ -757,9 +759,12 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if _native_semilocal_family(native_named_ir) == _NativeSemilocalFamily.R2SCAN:
-            # The v2 policy has no qualified meta-GGA profile. Preserve the
-            # existing explicit v1 default rather than assigning a GGA grid.
+        if (
+            "tau" in expected.ingredients
+            and not compile_ks_execution_plan(native_named_ir).exchange
+        ):
+            # The v2 policy has no qualified pure meta-GGA profile. Preserve
+            # the existing explicit v1 default rather than assigning a GGA grid.
             if options.grid_accuracy != "standard":
                 raise NotImplementedError(
                     "r2SCAN grid accuracy profiles require an explicit GridSpec"

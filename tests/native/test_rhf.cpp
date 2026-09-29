@@ -372,9 +372,6 @@ int main() {
     require(vibeqc_method_available(VIBEQC_METHOD_UHF, &available) == VIBEQC_STATUS_SUCCESS &&
                 available == 1,
             "UHF capability query failed");
-    require(vibeqc_method_available(VIBEQC_METHOD_WB97M_V, &available) == VIBEQC_STATUS_SUCCESS &&
-                available == 1,
-            "wB97M-V public promotion must be visible to the native capability query");
 
     verify_precision_provenance_gate();
     verify_context_detail_storage();

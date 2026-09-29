@@ -5,16 +5,11 @@ import math
 import typing
 from dataclasses import asdict, dataclass
 
+from vibeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
 from vibeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 from . import _native
-from .ks import (
-    AUTOMATIC_SCF_DOMAIN,
-    B3LYP_SCF_DOMAIN,
-    SCF_DOMAIN,
-    SPLIT_HYBRID_SCF_DOMAIN,
-    WB97MV_SCF_DOMAIN,
-)
+from .ks import AUTOMATIC_SCF_DOMAIN, SPLIT_HYBRID_SCF_DOMAIN
 
 
 @dataclass(frozen=True)
@@ -130,7 +125,6 @@ def read_ks_diagnostic(
         return None
     _native.check(library, status)
     # Domain IDs identify numerical policies, independently of method aliases.
-    domains = {1: SCF_DOMAIN, 2: B3LYP_SCF_DOMAIN, 3: WB97MV_SCF_DOMAIN}
     if expected_domain == AUTOMATIC_SCF_DOMAIN:
         if summary.scf_domain_version != LIBXC_WORK_DOMAIN_VERSION:
             raise RuntimeError("native automatic Libxc diagnostic domain mismatch")
@@ -139,8 +133,8 @@ def read_ks_diagnostic(
         if summary.scf_domain_version != 4:
             raise RuntimeError("native split-hybrid diagnostic domain mismatch")
         domain = SPLIT_HYBRID_SCF_DOMAIN
-    elif summary.scf_domain_version in domains:
-        domain = domains[summary.scf_domain_version]
+    elif summary.scf_domain_version in SCF_DOMAIN_BY_VERSION:
+        domain = SCF_DOMAIN_BY_VERSION[summary.scf_domain_version]
     else:
         raise RuntimeError("unsupported native KS diagnostic domain version")
     history = (_native.KsIterationDescriptor * summary.history_count)()
