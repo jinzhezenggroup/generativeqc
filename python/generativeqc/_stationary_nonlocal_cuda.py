@@ -22,6 +22,7 @@ def resident_nonlocal_geometry(
     state: typing.Any,
     raw_weights: typing.Any,
     tile_points: int,
+    ao_count: int,
     functional: int,
     ingredients: tuple[str, ...],
 ) -> tuple[dict[str, np.ndarray], dict[str, float], dict[str, typing.Any]]:
@@ -42,6 +43,8 @@ def resident_nonlocal_geometry(
         raise ValueError("resident nonlocal owner/grid point count differs")
     if len(raw_weights) != count:
         raise ValueError("resident nonlocal raw quadrature size differs")
+    if type(ao_count) is not int or ao_count <= 0:
+        raise ValueError("resident nonlocal AO count must be a positive integer")
     began = perf_counter()
     diagnostic = nonlocal_owner.diagnostic()
     if diagnostic.executed:
