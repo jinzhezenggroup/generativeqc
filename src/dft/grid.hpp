@@ -59,7 +59,7 @@ class MolecularGrid {
   explicit MolecularGrid(const core::System& system, GridSpec spec = {});
   /** Materialize with compiler-generated CUDA kernels. No CPU partition
    * fallback; throws on unsupported input, allocation or normalization error. */
-  static MolecularGrid from_cuda(const core::System& system, GridSpec spec, int device);
+  static MolecularGrid from_cuda(const core::System& system, GridSpec spec, int device,\n                                 bool retain_device = true);
 
   const GridSpec& spec() const noexcept { return spec_; }
   const core::System& system() const noexcept { return system_; }
