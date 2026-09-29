@@ -242,7 +242,9 @@ def test_resident_feature_handoff_imports_cuda_stream_wait_event() -> None:
 
 def test_resident_feature_handoff_failure_cleanup_is_not_on_success_path() -> None:
     source = (ROOT / "src/api/c_api_nonlocal.cpp").read_text()
-    helper = source.split("void drain_failed_seed_source(", 1)[1].split("}  // namespace", 1)[0]
+    helper = source.split("void drain_failed_seed_source(", 1)[1].split(
+        "}  // namespace", 1
+    )[0]
     assert "cudaStreamSynchronize" in helper
     hot = source.split(
         "GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_device_v1(",
