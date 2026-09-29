@@ -105,6 +105,7 @@ def run(args: argparse.Namespace) -> dict:
             "-DNDEBUG",
             "-DGENERATIVEQC_HAS_CUDA=1",
         ),
+        standard="c++20",
     )
     (args.output / "compiler.log").write_text(result.stdout + result.stderr)
     if result.returncode:
