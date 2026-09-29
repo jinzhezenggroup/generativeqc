@@ -367,3 +367,7 @@ def test_extract_matrix_retains_fixed_final_state_and_fixed_density_gap() -> Non
     assert coverage["fixed_final_state_records"] == 1
     assert coverage["work_count_stages_observed"] == ["executed", "generated"]
     assert coverage["work_capacity_metrics_observed"] == ["ordered_quartets"]
+    assert coverage["fixed_density_scf_expected_components_missing"] == [
+        "scf_fock_j",
+        "semilocal_ao_grid_xc",
+    ]

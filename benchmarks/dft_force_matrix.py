@@ -583,6 +583,8 @@ def benchmark_case(
                             if isinstance(error, NotImplementedError)
                             else "failed"
                         ),
+                        "measurement_boundary": "full_scf_replay",
+                        "fixed_density": False,
                         "error_type": type(error).__name__,
                         "reason": str(error),
                     }

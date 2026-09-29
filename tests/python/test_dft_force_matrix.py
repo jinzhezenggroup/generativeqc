@@ -164,6 +164,8 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
     assert len(result["fixed_final_state"]) == 2
     assert all(not sample["scf_replayed"] for sample in result["fixed_final_state"])
     assert result["scf_profile"]["status"] == "failed"
+    assert result["scf_profile"]["measurement_boundary"] == "full_scf_replay"
+    assert result["scf_profile"]["fixed_density"] is False
     assert result["scf_profile"]["reason"] == "trace failed"
     assert result["fixed_density_scf_profile"]["status"] == "unavailable"
     assert result["changed_geometry"]["status"] == "failed"

@@ -47,6 +47,8 @@ def _metadata(record: Mapping[str, typing.Any]) -> dict[str, typing.Any]:
         "method_identity",
         "ks_options_identity",
         "library_sha256",
+        "measurement_boundary",
+        "scf_replayed",
     )
     return {key: record[key] for key in keys if key in record}
 
@@ -402,14 +404,22 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
     work_stages: set[str] = set()
     capacity_metrics: set[str] = set()
     fixed_final_state_records = 0
+    fixed_density_missing: set[str] = set()
     for row in records:
         status = str(row.get("status", "unknown"))
         outcomes[status] = outcomes.get(status, 0) + 1
         metadata = row.get("metadata")
-        if isinstance(metadata, Mapping) and str(
-            metadata.get("scenario", "")
-        ).startswith("fixed_final_state_"):
+        scenario = (
+            str(metadata.get("scenario", ""))
+            if isinstance(metadata, Mapping)
+            else ""
+        )
+        if scenario.startswith("fixed_final_state_"):
             fixed_final_state_records += 1
+        if scenario == "diagnostic_fixed_density_scf_profile":
+            expected = row.get("expected_components")
+            if isinstance(expected, list):
+                fixed_density_missing.update(str(name) for name in expected)
         components = row.get("components")
         if isinstance(components, Mapping):
             routes.add(str(components.get("source_route")))
@@ -460,6 +470,9 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         "work_count_stages_observed": sorted(work_stages),
         "work_capacity_metrics_observed": sorted(capacity_metrics),
         "fixed_final_state_records": fixed_final_state_records,
+        "fixed_density_scf_expected_components_missing": sorted(
+            fixed_density_missing
+        ),
     }
 
 
