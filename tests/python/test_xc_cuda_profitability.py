@@ -1,5 +1,6 @@
 """Compiled CUDA resource evidence for shared XC profitability."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
