@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/direct_bounded_contraction.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
