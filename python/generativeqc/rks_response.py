@@ -26,7 +26,7 @@ from .ks import resolve_ks_method
 from .profiles import canonical_hash
 from .response_operator import CPKSResponseOperator, cpks_operator_identity
 from .response_problem import ResponseUnsupported
-from .response_solver import GMRESOptions, solve, solve_many
+from .response_solver import solve, solve_many
 from .response_xc import FixedDensityXCDerivativeKernel
 
 __all__ = [
@@ -144,7 +144,7 @@ class RKSResponseReference:
         expected = np.zeros(n)
         expected[: self.electron_count // 2] = 2.0
         if not np.array_equal(self.occupations, expected):
-            raise ValueError("RKS response occupations must be ordered closed-shell 2/0")
+            raise ValueError(\n                "RKS response occupations must be ordered closed-shell 2/0"\n            )
         if np.any(np.diff(self.orbital_energies) < -self.validation_tolerance):
             raise ValueError("canonical RKS orbital energies must be ascending")
         try:
@@ -156,7 +156,7 @@ class RKSResponseReference:
             raise ValueError("RKS response overlap eigenvalues must be finite")
         smallest = float(overlap_eigenvalues[0])
         if smallest <= self.overlap_threshold:
-            raise ValueError("linearly dependent RKS response AO overlap is unsupported")
+            raise ValueError(\n                "linearly dependent RKS response AO overlap is unsupported"\n            )
 
         with np.errstate(over="ignore", invalid="ignore"):
             orthogonality = float(
