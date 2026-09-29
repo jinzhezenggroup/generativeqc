@@ -206,6 +206,10 @@ struct ResponseWeights {
   std::vector<double> hcore, eri, overlap, rotation_gradient, stationarity, orbital_rhs;
 };
 
+struct ControlWeights {
+  std::vector<double> stationarity, orbital_rhs;
+};
+
 #if GENERATIVEQC_HAS_CUDA
 CudaParameterResponseView cuda_parameter_view(const ParameterWeights& bar) {
   return {std::span<const double>{bar.foo},  std::span<const double>{bar.fov},
@@ -264,6 +268,37 @@ ResponseWeights hamiltonian_pullback(const ParameterWeights& bar, double referen
   return copy_hamiltonian_outputs(output, n, o, v);
 }
 
+ControlWeights hamiltonian_control_pullback(const ParameterWeights& bar,
+                                            double reference_seed,
+                                            const RawHamiltonian& raw, std::size_t o,
+                                            std::size_t v, std::size_t max_bytes) {
+  const auto n = checked_add(o, v), ov = checked_mul(o, v);
+  const auto arena_elements = generated::hamiltonian_control_arena_elements(o, v);
+  if (checked_add(bytes(arena_elements), bytes(checked_add(square(n), ov))) > max_bytes)
+    throw std::length_error("RCCSD(T) Hamiltonian control response exceeds host budget");
+  std::vector<double> arena(arena_elements);
+  generated::HamiltonianWeightInputs inputs{};
+  inputs.bar_foo = bar.foo.data();
+  inputs.bar_fov = bar.fov.data();
+  inputs.bar_fvv = bar.fvv.data();
+  inputs.bar_ovov = bar.ovov.data();
+  inputs.bar_ovvo = bar.ovvo.data();
+  inputs.bar_oovv = bar.oovv.data();
+  inputs.bar_ovvv = bar.ovvv.data();
+  inputs.bar_ovoo = bar.ovoo.data();
+  inputs.bar_oooo = bar.oooo.data();
+  inputs.bar_vvvv = bar.vvvv.data();
+  inputs.bar_reference_electronic_energy = &reference_seed;
+  inputs.density = raw.density.data();
+  inputs.g = raw.g.data();
+  inputs.h = raw.h.data();
+  inputs.rotation = raw.rotation.data();
+  const auto output =
+      generated::run_hamiltonian_control_cpu(o, v, inputs, arena.data(), arena.size());
+  return {{output.stationarity, output.stationarity + square(n)},
+          {output.orbital_rhs, output.orbital_rhs + ov}};
+}
+
 ResponseWeights fock_pullback(std::span<const double> bar_fock, const RawHamiltonian& raw,
                               std::size_t o, std::size_t v, std::size_t max_bytes) {
   const auto n = checked_add(o, v);
@@ -296,6 +331,41 @@ void add_in_place(ResponseWeights& target, const ResponseWeights& source) {
   add(target.rotation_gradient, source.rotation_gradient);
   add(target.stationarity, source.stationarity);
   add(target.orbital_rhs, source.orbital_rhs);
+}
+
+void add_same_space_fock_seed(ParameterWeights& target, std::span<const double> bar_fock,
+                              std::size_t o, std::size_t v) {
+  const auto n = checked_add(o, v);
+  if (bar_fock.size() != square(n))
+    throw std::invalid_argument("RCCSD(T) Fock seed shape mismatch");
+  for (std::size_t i = 0; i < o; ++i)
+    for (std::size_t a = 0; a < v; ++a)
+      if (bar_fock[i * n + o + a] != 0.0 || bar_fock[(o + a) * n + i] != 0.0)
+        throw std::logic_error("RCCSD(T) control folding accepts same-space Fock seeds only");
+  for (std::size_t i = 0; i < o; ++i)
+    for (std::size_t j = 0; j < o; ++j)
+      target.foo[i * o + j] += bar_fock[i * n + j];
+  for (std::size_t a = 0; a < v; ++a)
+    for (std::size_t b = 0; b < v; ++b)
+      target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
+}
+
+void add_parameter_weights(ParameterWeights& target, const ParameterWeights& source) {
+  auto add = [](std::vector<double>& first, const std::vector<double>& second) {
+    if (first.size() != second.size())
+      throw std::invalid_argument("RCCSD(T) parameter response shape mismatch");
+    for (std::size_t i = 0; i < first.size(); ++i) first[i] += second[i];
+  };
+  add(target.foo, source.foo);
+  add(target.fov, source.fov);
+  add(target.fvv, source.fvv);
+  add(target.ovov, source.ovov);
+  add(target.ovvo, source.ovvo);
+  add(target.oovv, source.oovv);
+  add(target.ovvv, source.ovvv);
+  add(target.ovoo, source.ovoo);
+  add(target.oooo, source.oooo);
+  add(target.vvvv, source.vvvv);
 }
 
 ParameterWeights zero_parameters(std::size_t o, std::size_t v) {
