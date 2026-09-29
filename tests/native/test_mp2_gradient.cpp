@@ -625,9 +625,9 @@ void factorized_consumer_population_guards() {
   system.shells.push_back({0, 0, {{0.13, 1.0}}});
   system.shells.push_back({1, 0, {{0.17, 1.0}}});
   std::string detail;
-  require(generativeqc::molecule::validate_and_normalize(system, detail) ==
-              GENERATIVEQC_STATUS_SUCCESS,
-          "factorized population fixture is invalid");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "factorized population fixture is invalid");
   generativeqc::hf::PhysicalReference reference;
   reference.nbf = generativeqc::molecule::ao_count(system);
   reference.nocc = 1;
