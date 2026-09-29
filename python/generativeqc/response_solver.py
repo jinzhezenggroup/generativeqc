@@ -8,9 +8,9 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 
 import numpy as np
-from generativeqc.profiles import canonical_hash
-
 from generativeqc_compiler.common.arrays import immutable
+
+from generativeqc.profiles import canonical_hash
 
 from .response_problem import ResponseCompatibilityError, ResponseSolveError
 

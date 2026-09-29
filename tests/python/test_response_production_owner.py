@@ -7,8 +7,8 @@ from pathlib import Path
 
 import generativeqc.response_operator as production_operator
 import generativeqc.response_problem as production_problem
-import generativeqc.response_xc as production_xc
 import generativeqc.response_solver as production_solver
+import generativeqc.response_xc as production_xc
 import generativeqc.rks_response as production_rks
 
 import tools.generativeqc_response as response_api
@@ -119,8 +119,6 @@ def test_tools_native_ks_no_longer_defines_rks_response() -> None:
     tree = ast.parse(
         (ROOT / "tools/generativeqc_response/native_ks.py").read_text(encoding="utf-8")
     )
-    classes = {
-        node.name for node in tree.body if isinstance(node, ast.ClassDef)
-    }
+    classes = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
     assert "NativeRKSResponse" not in classes
     assert "NativeUKSResponse" in classes

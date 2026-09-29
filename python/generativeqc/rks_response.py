@@ -106,9 +106,7 @@ class RKSResponseReference:
             "overlap_threshold",
         ):
             value = getattr(self, name)
-            if not math.isfinite(value) or (
-                name != "reference_energy" and value < 0.0
-            ):
+            if not math.isfinite(value) or (name != "reference_energy" and value < 0.0):
                 raise ValueError(f"invalid {name}")
         if (
             not 0 < self.validation_tolerance <= 1e-6
@@ -336,9 +334,7 @@ class _PreparedRKSJBackend:
                 raise ValueError(f"native RKS J/reference {name} mismatch")
         return self
 
-    def coulomb_exchange(
-        self, density: typing.Any
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def coulomb_exchange(self, density: typing.Any) -> tuple[np.ndarray, np.ndarray]:
         value = np.asarray(density)
         if (
             value.shape != (self.basis.nao, self.basis.nao)
@@ -488,10 +484,7 @@ class NativeRKSResponse(CPKSResponseOperator):
             raise TypeError("native RKS response requires NativeAO")
         if type(axis_tile) is not int or axis_tile < 1:
             raise ValueError("axis_tile must be a positive integer")
-        if (
-            type(device_budget_bytes) is not int
-            or not 0 < device_budget_bytes < 2**64
-        ):
+        if type(device_budget_bytes) is not int or not 0 < device_budget_bytes < 2**64:
             raise ValueError("native RKS response budget must be a positive uint64")
 
         state = StationaryKsState.from_native(batch, basis, grid, index=index)
@@ -506,9 +499,7 @@ class NativeRKSResponse(CPKSResponseOperator):
                     "native CPKS requires all-electron RKS LDA/PBE"
                 )
             if state._source.coefficients != (1.0, 1.0, 0.0):
-                raise ResponseUnsupported(
-                    "native CPKS requires unscaled LDA/PBE RKS"
-                )
+                raise ResponseUnsupported("native CPKS requires unscaled LDA/PBE RKS")
             _, expected = resolve_ks_method(state.identity.method)
             spec = expected if functional is None else functional
             if spec.identity != state.identity.functional_identity:
@@ -528,9 +519,7 @@ class NativeRKSResponse(CPKSResponseOperator):
                     device_budget_bytes - kernel._cuda.diagnostics["device_bytes"]
                 )
                 if remaining <= 0:
-                    raise MemoryError(
-                        "native CPKS budget cannot hold Coulomb after XC"
-                    )
+                    raise MemoryError("native CPKS budget cannot hold Coulomb after XC")
                 backend = _PreparedRKSJBackend(
                     state,
                     basis,
