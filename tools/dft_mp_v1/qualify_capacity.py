@@ -575,7 +575,8 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
         digest = _source_node_sha256(source, candidates[0])
         if digest != expected_digest:
             raise RuntimeError("native KS snapshot functional contract changed")
-        methods[f"{name}_sha256"] = digest
+        key = "init_sha256" if name == "__init__" else f"{name}_sha256"
+        methods[key] = digest
     return methods
 
 
