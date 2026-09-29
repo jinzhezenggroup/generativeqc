@@ -253,8 +253,8 @@ void streamed_provider_matches_dense_oracle() {
   const auto adjoint = generativeqc::mp2::canonical_energy_adjoint(g, reference.orbital_energies,
                                                                    reference.nocc, 1e-10);
   const auto dense = generativeqc::mp2::canonical_orbital_rhs(hcore_mo, eri, adjoint, 1e-10);
-  auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo,
-                                                                          provider, adjoint, 1e-10);
+  auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo, provider,
+                                                                    adjoint, 1e-10);
   auto close = [](std::span<const double> first, std::span<const double> second) {
     if (first.size() != second.size()) return false;
     for (std::size_t i = 0; i < first.size(); ++i)
@@ -393,8 +393,8 @@ void density_fitted_provider_matches_dense_ri_oracle() {
                                                                    reference.nocc, 1e-10);
   const auto dense =
       generativeqc::mp2::canonical_orbital_rhs(hcore_mo, expected_eri, adjoint, 1e-10);
-  auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo,
-                                                                          provider, adjoint, 1e-10);
+  auto streamed = generativeqc::mp2::canonical_orbital_rhs_streamed(reference, hcore_mo, provider,
+                                                                    adjoint, 1e-10);
   generativeqc::mp2::FactorizedTwoElectronWeights ri_orbital_factors;
   ri_orbital_factors.orbitals = n;
   ri_orbital_factors.occupied = reference.nocc;
