@@ -20,7 +20,7 @@ def _function_body(relative: str, signature: str) -> str:
     raise AssertionError(f"unbalanced function body for {relative}:{signature}")
 
 
-def test_production_rank2_transforms_use_shared_cubic_primitive():
+def test_production_rank2_transforms_use_shared_cubic_primitive() -> None:
     cases = [
         (
             "src/posthf/mp2_derivative_common.cpp",
