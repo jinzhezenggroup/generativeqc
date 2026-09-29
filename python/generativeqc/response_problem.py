@@ -123,7 +123,8 @@ class RotationLayout:
         vector = np.asarray(values)
         if vector.shape != (self.dimension,):
             raise ValueError(
-                f"response vector must have shape ({self.dimension},), got {vector.shape}"
+                "response vector must have shape "
+                f"({self.dimension},), got {vector.shape}"
             )
         if np.iscomplexobj(vector) or not np.isfinite(vector).all():
             raise ValueError("response vectors must be finite real FP64 values")
