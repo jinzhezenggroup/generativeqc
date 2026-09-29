@@ -1,8 +1,8 @@
 """The source-aware CC force admission must bind the actual nuclear system."""
 
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -33,7 +33,8 @@ def test_force_source_identity_precedes_admission_and_reads(tmp_path):
         _function(source, f"RccsdtForcePlan plan_{name}_force_cpu(")
         for name in ("rccsd", "rccsdt")
     )
-    code = r'''
+    code = (
+        r"""
 #include <iostream>
 #include <stdexcept>
 #include "hf/reference.hpp"
@@ -49,7 +50,11 @@ RccsdtForcePlan plan_relaxed_rccsd_force_cpu(
   ++planner_calls;
   return {};
 }
-''' + helper + "\n" + wrappers + r'''
+"""
+        + helper
+        + "\n"
+        + wrappers
+        + r"""
 }
 class Source final : public generativeqc::integrals::ElectronInteractionSource {
  public:
@@ -112,14 +117,25 @@ int main() {
   }
   std::cout << "32 source identity admission cases passed\n";
 }
-'''
+"""
+    )
     path = tmp_path / "source.cpp"
     path.write_text(code)
     exe = tmp_path / "source"
     subprocess.run(
-        [compiler, "-std=c++20", "-I" + str(ROOT / "src"),
-         "-I" + str(ROOT / "include"), str(path), "-o", str(exe)],
-        check=True, capture_output=True, text=True, timeout=60,
+        [
+            compiler,
+            "-std=c++20",
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
+            str(path),
+            "-o",
+            str(exe),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     result = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr
