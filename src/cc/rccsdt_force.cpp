@@ -645,7 +645,9 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
       }
   }
   add_same_space_fock_seed(parameters, bar_fock, o, v);
+  correlation = ControlWeights{};
   correlation = control_dispatch(parameters, 0.0);
+  std::vector<double>().swap(bar_fock);
   double same_space_stationarity = 0.0;
   for (const auto& bounds :
        {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}})
@@ -731,6 +733,16 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   if (std::max(z.residual_norm, independent_residual) > kOrbitalResidualTolerance)
     throw std::runtime_error("independent RCCSD(T) physical Z-vector residual failed");
 
+  // The control response and dense curvature oracle are dead after the checked
+  // physical Z solve. Release them before the one complete derivative VJP.
+  correlation = ControlWeights{};
+  std::vector<double>().swap(independent);
+  std::vector<double>().swap(response_matrix);
+  std::vector<double>().swap(basis);
+  std::vector<double>().swap(action);
+  std::vector<double>().swap(d_rotation);
+  std::vector<double>().swap(orbital_arena);
+
   for (std::size_t index = 0; index < dimension; ++index)
     parameters.fov[index] -= z.solution[index];
 
@@ -741,6 +753,10 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   const double stationarity = max_abs(total.stationarity);
   if (stationarity > kStationarityTolerance)
     throw std::runtime_error("complete HF+RCCSD(T)+Z orbital stationarity failed");
+  parameters = ParameterWeights{};
+  std::vector<double>().swap(total.rotation_gradient);
+  std::vector<double>().swap(total.stationarity);
+  std::vector<double>().swap(total.orbital_rhs);
 
   mp2::LagrangianWeights weights;
   weights.orbitals = n;
