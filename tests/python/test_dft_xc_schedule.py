@@ -6,11 +6,16 @@ import copy
 
 import pytest
 from generativeqc.autotune import dft_endpoint_gate
-from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.cuda_resources import KernelResources
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.dft.grid import (
     GridSpec,
     MolecularGrid,
     molecular_grid_identity,
+)
+from generativeqc_compiler.dft.xc_compiled_resources import (
+    GridXcCompiledResourceShape,
+    native_grid_xc_compiled_region_evidence,
 )
 from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
@@ -315,13 +320,26 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None
         live_values=2_000_000,
         source_bytes=300_000,
     )
-    compiled = GpuProfitability(
-        compiled_registers_per_thread=72,
-        spill_store_bytes=16,
-        spill_load_bytes=8,
-        local_bytes=32,
-        shared_bytes=2048,
-        compiled_occupancy_upper_bound=0.5,
+    rows = (
+        KernelResources("validate_density(double*)", 24, 0, 0, 0, 0),
+        KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0),
+        KernelResources("tiled_density_product<false>(double*)", 64, 0, 0, 0, 4352),
+        KernelResources("density_features<true>(double*)", 56, 0, 0, 0, 0),
+        KernelResources("evaluate_points<1, false>(double*)", 72, 0, 16, 8, 0, 32),
+        KernelResources("compact_potential_panels(double*)", 40, 0, 0, 0, 0),
+        KernelResources("tiled_potential(double*)", 68, 0, 0, 0, 2048),
+    )
+    compiled = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            npoint=shape.npoint,
+            tile_points=shape.tile_points,
+            nao=shape.nao,
+            spins=shape.spins,
+        ),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity=scientific().source_identity,
         object_bytes=96_000,
         compile_seconds=1.25,
     )
@@ -331,27 +349,34 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None
         device_xc_available=True,
         observable="potential",
         functional="PBE",
+        scientific=scientific(),
     )
     profitability = assessment.schedule_contract.profitability
     assert profitability.compiled_registers_per_thread == 72
     assert profitability.spill_bytes == 24
     assert profitability.local_bytes == 32
-    assert profitability.shared_bytes == 2048
-    assert profitability.compiled_occupancy_upper_bound == 0.5
+    assert profitability.shared_bytes == 4352
+    assert profitability.compiled_occupancy_upper_bound is not None
     assert profitability.object_bytes == 96_000
     assert profitability.compile_seconds == 1.25
     assert assessment.schedule_contract.resources.registers_per_thread == 72
-    assert assessment.schedule_contract.resources.shared_bytes == 2048
+    assert assessment.schedule_contract.resources.shared_bytes == 4352
     assert (
         dict(assessment.schedule_contract.provenance)["compiled_resource_evidence"]
         == "common.gpu_profitability"
     )
 
-    with pytest.raises(ValueError, match="only compiled GPU profitability facts"):
-        GridXcScheduleCandidate(
+    wrong_source = replace(compiled, source_identity="different-source")
+    with pytest.raises(ValueError, match="target/source"):
+        assess_grid_xc_schedule(
             DEVICE_FUSED,
             shape,
-            GpuProfitability(semantic_traffic_bytes=1),
+            limits,
+            device_xc_available=True,
+            observable="potential",
+            functional="PBE",
+            scientific=scientific(),
+            compiled_evidence=wrong_source,
         )
 
 
