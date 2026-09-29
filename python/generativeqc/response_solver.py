@@ -758,7 +758,8 @@ class KrylovRecycleSpace:
         """Fail closed on a changed reference/model/operator/layout."""
         if problem.compatibility_identity != self.key:
             raise ResponseCompatibilityError(
-                "stale Krylov subspace: reference/model/operator compatibility key changed"
+                "stale Krylov subspace: reference/model/operator "
+                "compatibility key changed"
             )
         if self._engine is not None:
             self._engine._backend._ensure_open()
