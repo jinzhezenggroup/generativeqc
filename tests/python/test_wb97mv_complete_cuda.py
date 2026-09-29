@@ -101,8 +101,7 @@ def test_complete_cuda_force_matches_independent_engine(
             "long-range",
         ]
         assert (
-            "native execution route is not exported"
-            in work["two_electron_work_scope"]
+            "native execution route is not exported" in work["two_electron_work_scope"]
         )
         native = work["native_integral_resources"]
         assert native["final_state_export_d2h_bytes"] == 0
