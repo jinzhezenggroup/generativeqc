@@ -44,7 +44,7 @@ def _solver_options(value: typing.Any) -> GMRESOptions:
     return value
 
 
-def _solve_one(
+def solve_stationary_nuclear_perturbation(
     operator: NativeRKSResponse,
     frozen_fock: typing.Any,
     overlap: typing.Any,
@@ -60,7 +60,7 @@ def _solve_one(
     )
 
 
-def _solve_many(
+def solve_stationary_nuclear_perturbations(
     operator: NativeRKSResponse,
     frozen_focks: typing.Any,
     overlaps: typing.Any,
@@ -614,7 +614,7 @@ def directional_rks_responses(
         frozen.append(immutable(np.asarray(integral) + np.asarray(xc)))
         branches.append(branch_identity)
 
-    batch = _solve_many(
+    batch = solve_stationary_nuclear_perturbations(
         operator,
         np.stack(frozen),
         np.stack(overlaps),
@@ -688,7 +688,7 @@ def directional_rks_response(
     )
     xc, branch_identity = _native_rks_xc_geometry_direction(operator, vector)
     frozen = immutable(integral + xc)
-    solved = _solve_one(
+    solved = solve_stationary_nuclear_perturbation(
         operator,
         frozen,
         overlap,
