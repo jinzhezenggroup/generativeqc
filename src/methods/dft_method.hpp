@@ -46,13 +46,16 @@ generativeqc_status dft_cuda_integral_gradient_cached(
 
 /** Borrow the final device-resident total rho/grad-rho for the exact KS
  * token. Pointers remain owned by the prepared CUDA KS plan and are valid only
- * while that owner and token remain current. This helper performs no transfer
- * or synchronization. */
+ * while that owner and token remain current. source_stream identifies the CUDA
+ * stream that owns the final feature generation so a downstream D2D handoff can
+ * establish a device-side dependency before source reuse. This helper performs
+ * no transfer or synchronization. */
 generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, std::size_t index,
                                                         const dft::CudaKsFinalStateToken& expected,
                                                         int& device, const double*& density,
                                                         const double*& gradient,
                                                         std::size_t& point_count,
+                                                        void*& source_stream,
                                                         std::string& detail);
 
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
