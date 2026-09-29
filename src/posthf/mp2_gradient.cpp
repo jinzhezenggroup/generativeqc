@@ -501,11 +501,15 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
   if (&provider.reference() != &reference || !n || !occupied || occupied >= n || !na ||
       weights.orbitals != n || weights.occupied != occupied || !maximum_bytes)
     throw std::invalid_argument("RI-MP2 Lagrangian/reference/provider mismatch");
-  const auto n2 = square(n), n4 = fourth_power(n), a2 = square(na);
+  const auto n2 = square(n), a2 = square(na);
   const auto three = posthf::checked_mul(n2, na);
-  const bool dense_two = weights.two_electron.size() == n4 && finite(weights.two_electron);
+  bool dense_two = false;
+  if (!weights.two_electron.empty())
+    dense_two =
+        weights.two_electron.size() == fourth_power(n) && finite(weights.two_electron);
   const bool factorized_two =
-      weights.two_electron.empty() && valid_factorized_two_electron_weights(weights.two_electron_factors);
+      weights.two_electron.empty() &&
+      valid_factorized_two_electron_weights(weights.two_electron_factors);
   if (reference.coefficients.size() != n2 || weights.one_electron.size() != n2 ||
       weights.overlap.size() != n2 || (!dense_two && !factorized_two) ||
       provider.metric().size() != a2 || provider.inverse_square_root().size() != a2 ||
@@ -529,7 +533,7 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
   scratch_elements = posthf::checked_add(scratch_elements, n2);
   auto weight_elements = posthf::checked_mul(2, n2);
   if (dense_two) {
-    weight_elements = posthf::checked_add(weight_elements, n4);
+    weight_elements = posthf::checked_add(weight_elements, weights.two_electron.size());
   } else {
     weight_elements =
         posthf::checked_add(weight_elements, weights.two_electron_factors.fock.size());
