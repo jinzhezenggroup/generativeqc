@@ -308,6 +308,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         atomic_weights=np.empty(0),
         values=np.zeros(1),
         export_work={"reads": 1},
+        cuda_shell_full_range_derivatives=lambda: None,
     )
     state = SimpleNamespace(
         identity=SimpleNamespace(
