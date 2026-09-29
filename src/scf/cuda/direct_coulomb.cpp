@@ -270,6 +270,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   constexpr std::size_t quartet_classes = detail::kDirectQuartetShellClassCount;
   const auto atoms = host.atomic_numbers.size();
   const auto pair_blocks = static_cast<std::size_t>(host.system_shell_pair_block_offsets.back());
+  if (force_capability && pair_blocks > std::numeric_limits<unsigned>::max()) return {};
 
   std::size_t additional = 0;
   const auto charge = [&](std::size_t count, std::size_t width) {
