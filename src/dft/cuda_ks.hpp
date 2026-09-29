@@ -22,7 +22,7 @@ namespace generativeqc::dft {
  * overhead and host quadrature preparation remain distinct from the native
  * iteration arena. No independent user-level memory allowance is introduced. */
 struct CudaKsResources {
-  std::size_t state_device_bytes{}, xc_device_bytes{}, provider_device_bytes{};
+  std::size_t state_device_bytes{}, xc_device_bytes{}, grid_device_bytes{}, provider_device_bytes{};
   std::size_t retained_host_numeric_bytes{};
 };
 
