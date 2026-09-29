@@ -390,6 +390,14 @@ jobs:
           python3 tools/validate_xc.py --tier cuda-compile
           --functionals PBE --nvcc "$CUDACXX"
           --cache build/xc-cache --output build/xc-compile
+      - name: Compile native grid/XC region resources
+        run: >-
+          python3 tools/validate_native_xc_resources.py
+          --nvcc "$CUDACXX" --architecture sm_120
+          --generated-dir build/cuda-release-sm120/generated
+          --cmake-source build/cuda-release-sm120/generated/generated_grid_policy.cu
+          --output build/native-xc-resource
+          --functional PBE --npoint 4096 --tile-points 256 --nao 96 --spins 2
       - name: Restore stationary CUDA compile cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -418,7 +426,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: xc-release-compile
-          path: build/xc-compile
+          path: |
+            build/xc-compile
+            build/native-xc-resource
       - name: Preserve f-shell release resource report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
