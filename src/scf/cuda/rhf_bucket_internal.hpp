@@ -92,6 +92,8 @@ struct CudaRhfBucketPlan {
   bool graph_native_eigensolver_override{};
   bool reuse_converged_fock{};
   bool mixed_precision_fock{};
+  /** True only when #990's retained-anchor iteration route is allocated/captured. */
+  bool incremental_direct_jk{};
   double mixed_precision_fock_threshold{};
   /** Largest item census the batch admission ceiling was bound to. */
   std::size_t mixed_precision_eligible_tile_count{};
@@ -182,6 +184,9 @@ inline bool same_hf_bucket_options(const ScfOptions& first, const ScfOptions& se
          first.export_physical_reference == second.export_physical_reference &&
          first.reference_memory_budget_bytes == second.reference_memory_budget_bytes &&
          first.precision_mode == second.precision_mode &&
+         first.incremental_direct_jk == second.incremental_direct_jk &&
+         first.incremental_direct_jk_rebuild_interval ==
+             second.incremental_direct_jk_rebuild_interval &&
          first.resolved_fock_build == second.resolved_fock_build;
 }
 
