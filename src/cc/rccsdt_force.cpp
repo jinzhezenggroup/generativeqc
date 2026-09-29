@@ -476,14 +476,15 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // Z solution and independent residual survive the solve; basis/action are
   // already included in response_base. Moving final weights does not free them.
   const auto final_response_base = checked_add(response_base, bytes(checked_mul(2, ov)));
-  plan.response_phase_bytes = std::max(
-      {sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
-       sum({core, checked_mul(2, small_response_retained), bytes(checked_mul(2, n2)), fock_small_arena}),
-       checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
-       checked_add(response_base, gmres.workspace_bytes),
-       sum({final_response_base, small_response_retained, hamiltonian_small_arena}),
-       sum({final_response_base, small_response_retained, eri_response_retained,
-            hamiltonian_eri_arena})});
+  plan.response_phase_bytes =
+      std::max({sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
+                sum({core, checked_mul(2, small_response_retained), bytes(checked_mul(2, n2)),
+                     fock_small_arena}),
+                checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
+                checked_add(response_base, gmres.workspace_bytes),
+                sum({final_response_base, small_response_retained, hamiltonian_small_arena}),
+                sum({final_response_base, small_response_retained, eri_response_retained,
+                     hamiltonian_eri_arena})});
   const auto derivative_live =
       sum({final_response_base, small_response_retained, eri_response_retained});
   const auto coordinates = checked_mul(3, system.atoms.size());
