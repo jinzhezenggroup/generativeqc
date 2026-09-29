@@ -67,6 +67,7 @@ def test_scientific_identity_is_schedule_independent() -> None:
     fused = DEVICE_FUSED.resolved(256)
     unfused = HOST_UNFUSED.resolved(256)
     assert fused.identity != unfused.identity
+    assert identity.identity == scientific().identity
     assert "schedule" not in identity.to_payload()
     assert grid_xc_schedule(unfused.to_payload()) == unfused
     with pytest.raises(ValueError, match="profile payload"):
