@@ -48,6 +48,15 @@ void cpu_gemm(char a_trans, char b_trans, std::size_t m, std::size_t n, std::siz
               const double* a, const double* b, double* c, double alpha = 1.0, double beta = 0.0,
               const CpuLinalgPlan& plan = {});
 
+/** Square rank-2 congruence transform with row-major storage.
+ * `coefficient_transpose == 'T'` computes result := C^T * A * C.
+ * `coefficient_transpose == 'N'` computes result := C * A * C^T.
+ * `workspace` must contain n*n doubles and must not alias C, A, or result.
+ */
+void cpu_congruence(char coefficient_transpose, std::size_t n, const double* coefficients,
+                    const double* matrix, double* result, double* workspace,
+                    const CpuLinalgPlan& plan = {});
+
 /** Matrix-vector product with row-major A.
  * `trans == 'N'` consumes an m-by-n A and n-vector x, producing an m-vector y.
  * `trans == 'T'` consumes the same storage and an m-vector x, producing an n-vector y.
