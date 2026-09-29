@@ -960,7 +960,7 @@ class Calculator:
 
     @property
     def capabilities(self) -> MethodCapabilities:
-        """Report capabilities for this selected backend/basis execution context."""
+        """Report capabilities for the selected backend/basis execution context."""
         return self._capabilities
 
     @property

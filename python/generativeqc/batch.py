@@ -129,7 +129,7 @@ class PreparedBatch:
 
     @property
     def capabilities(self) -> MethodCapabilities:
-        """Report the execution-context capabilities inherited from the calculator."""
+        """Report execution-context capabilities inherited from the calculator."""
         return self._calculator.capabilities
 
     # Compatibility views preserve the private attributes used by checkpoint
