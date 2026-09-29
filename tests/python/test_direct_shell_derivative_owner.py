@@ -52,3 +52,19 @@ def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
     assert "c.exchange.omega" in body
     assert "unit_long_range" not in body
     assert "full_range[coordinates + coordinate]" not in body
+
+
+def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
+    direct = _source("src/scf/cuda/direct_jk.cpp")
+    generated = _source("src/scf/cuda/direct_coulomb.cpp")
+    bridge = _source("src/scf/cuda/one_electron_gradient_bridge.cu")
+    method = _source("src/methods/dft_method.cpp")
+
+    assert "F(atomic_numbers)" in direct
+    assert "F(shell_ao_offsets)" in generated
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in bridge
+    assert "cuda_execution::one_electron_view(shared.batch)" in bridge
+    assert "constexpr unsigned schedule = 1" in bridge
+    assert "auto* output = exchange->force" in bridge
+    assert 'trace_counter("host_to_device_bytes", 0)' in bridge
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in method

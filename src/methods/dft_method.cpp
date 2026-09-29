@@ -927,16 +927,22 @@ class KsPreparedCalculation final : public PreparedCalculation {
             transfers_after.final_state_reads - transfers_before.final_state_reads,
             transfers_after.synchronizations - transfers_before.synchronizations};
     scf::OneElectronGradientResources one;
-    // D and W share immutable geometry/topology. Their total matrices were
-    // staged on the final-state stream before its validation drain, so this
-    // paired consumer borrows them directly and uploads metadata only.
+    // The retained Direct shell owner already has this exact immutable basis,
+    // geometry and stream. Borrow its one-electron view and force scratch so
+    // the hot path performs no pack/allocation/metadata H2D. The standalone
+    // bridge remains a bounded correctness fallback if optional shell state was
+    // not admitted by an unusually small provider budget.
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
     candidate.reserve(5 * nc);
     std::vector<double> hcore, pulay, value;
-    status = scf::execute_cuda_stationary_one_electron_pair(
-        device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
-        resident_weights.weighted_density);
+    status = scf::execute_prepared_cuda_stationary_one_electron_pair(
+        fock_.cuda_direct_source(), resident_weights.density, resident_weights.weighted_density,
+        resident_weights.matrix_elements, bytes, hcore, pulay, detail, &one);
+    if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+      status = scf::execute_cuda_stationary_one_electron_pair(
+          device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
+          resident_weights.weighted_density);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
     work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
