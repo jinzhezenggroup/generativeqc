@@ -617,6 +617,8 @@ void invalid_inputs_and_resource_boundaries() {
       static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()));
   require(probe.peak_bytes > probe.response_bytes && probe.shell_cotangent_bytes > 0,
           "gradient resource plan omitted a simultaneous owner");
+  require(probe.rank2_transform_bytes == 16 * sizeof(double),
+          "rank-2 transform scratch is not charged exactly once");
   require(probe.shell_cotangent_bytes == 81 * sizeof(double),
           "shell-quartet cotangent ownership is not isolated");
   require(probe.derivative_staging_bytes == 485 * sizeof(double),
