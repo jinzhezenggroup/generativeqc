@@ -18,8 +18,8 @@
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
-#include "posthf/raw_source.hpp"
 #include "posthf/rank2_transform.hpp"
+#include "posthf/raw_source.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::cc {

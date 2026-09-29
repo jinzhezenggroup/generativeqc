@@ -12,8 +12,7 @@ std::size_t matrix_elements(std::size_t n) {
   return checked_mul(n, n);
 }
 
-void validate(std::span<const double> coefficients, std::span<const double> matrix,
-              std::size_t n) {
+void validate(std::span<const double> coefficients, std::span<const double> matrix, std::size_t n) {
   const auto elements = matrix_elements(n);
   if (coefficients.size() != elements || matrix.size() != elements)
     throw std::invalid_argument("rank-2 basis transform matrix shape mismatch");
@@ -26,9 +25,8 @@ std::size_t rank2_transform_workspace_bytes(std::size_t n) {
   return checked_mul(matrix_elements(n), sizeof(double));
 }
 
-std::vector<double> rank2_ao_to_mo(std::span<const double> coefficients,
-                                   std::span<const double> ao, std::size_t n,
-                                   const tensor::CpuLinalgPlan& plan) {
+std::vector<double> rank2_ao_to_mo(std::span<const double> coefficients, std::span<const double> ao,
+                                   std::size_t n, const tensor::CpuLinalgPlan& plan) {
   validate(coefficients, ao, n);
   const auto elements = matrix_elements(n);
   std::vector<double> temporary(elements), result(elements);
@@ -39,9 +37,8 @@ std::vector<double> rank2_ao_to_mo(std::span<const double> coefficients,
   return result;
 }
 
-std::vector<double> rank2_mo_to_ao(std::span<const double> coefficients,
-                                   std::span<const double> mo, std::size_t n,
-                                   const tensor::CpuLinalgPlan& plan) {
+std::vector<double> rank2_mo_to_ao(std::span<const double> coefficients, std::span<const double> mo,
+                                   std::size_t n, const tensor::CpuLinalgPlan& plan) {
   validate(coefficients, mo, n);
   const auto elements = matrix_elements(n);
   std::vector<double> temporary(elements), result(elements);
