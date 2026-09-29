@@ -38,14 +38,40 @@ def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
     )
 
 
-def test_prepared_rsh_uses_shell_full_range_and_lr_only_reconstruction() -> None:
+def test_prepared_rsh_prefers_shell_native_radial_derivatives() -> None:
     source = _source("src/scf/cuda_fock_execution.cpp")
     begin = source.index("execute_prepared_cuda_direct_rsh_energy_derivatives_device(")
     end = source.index(
         "execute_prepared_cuda_direct_shell_full_range_derivatives_device(", begin
     )
     body = source[begin:end]
-    assert "execute_cuda_direct_shell_full_range_derivatives_device(" in body
-    assert "source, p.spin, 0.0, 0.0, 1.0, c.exchange.omega" in body
-    assert "full_range[coordinates + coordinate]" in body
-    assert "p.exchange.coefficient * long_unit" in body
+    shell = body.index("execute_cuda_direct_shell_rsh_energy_derivatives_device(")
+    fallback = body.index("execute_cuda_direct_rsh_energy_derivatives_device(")
+    assert shell < fallback
+    assert "status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED" in body
+    assert "unit_long_range" not in body
+
+
+def test_range_identity_reaches_generic_cartesian_shell_source() -> None:
+    source = _source(
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py"
+    )
+    quartet = _source("src/scf/cuda/direct_force_quartet.cuh")
+    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
+    assert "CoulombRange range" in source
+    assert "primitive_eri_cartesian<MaximumAngular>" in source
+    assert "derivative_coordinate, range, omega" in source
+    assert "radial_range, radial_omega" in quartet
+    assert "radial_range != generativeqc::integrals::CoulombRange::Full" in bounded
+    assert "radial_range, radial_omega" in bounded
+
+
+def test_shell_rsh_runs_explicit_full_short_and_long_range_passes() -> None:
+    source = _source("src/scf/cuda/direct_coulomb.cpp")
+    assert "execute_generated_rsh_energy_derivatives(" in source
+    assert "DirectCoulombRange::Full" in source
+    assert "DirectCoulombRange::Short" in source
+    assert "DirectCoulombRange::Long" in source
+    assert "{0.0, short_exchange_coefficient, DirectCoulombRange::Short, omega}" in source
+    assert "{0.0, long_exchange_coefficient, DirectCoulombRange::Long, omega}" in source
+    assert "long_unit" not in source
