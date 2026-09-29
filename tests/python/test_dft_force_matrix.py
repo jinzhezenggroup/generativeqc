@@ -131,6 +131,17 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         }
 
     monkeypatch.setattr(matrix, "_clean_sample", sample)
+    monkeypatch.setattr(
+        matrix,
+        "_fixed_final_state_force_sample",
+        lambda *_args, scenario, **_kwargs: {
+            "scenario": scenario,
+            "measurement_boundary": "fixed_final_state_force",
+            "scf_replayed": False,
+            "force_status": "ok",
+            "force_components": {"schema": "generativeqc.dft-force-components.v1"},
+        },
+    )
 
     def fail_trace(*_args: typing.Any, **_kwargs: typing.Any) -> typing.NoReturn:
         raise RuntimeError("trace failed")
@@ -150,8 +161,11 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
     assert result["status"] == "measured"
     assert result["cold"]["scenario"] == "cold"
     assert len(result["warm"]) == 2
+    assert len(result["fixed_final_state"]) == 2
+    assert all(not sample["scf_replayed"] for sample in result["fixed_final_state"])
     assert result["scf_profile"]["status"] == "failed"
     assert result["scf_profile"]["reason"] == "trace failed"
+    assert result["fixed_density_scf_profile"]["status"] == "unavailable"
     assert result["changed_geometry"]["status"] == "failed"
     assert result["changed_geometry"]["error"] == "changed replay failed"
     assert calls[:4] == [
@@ -233,3 +247,50 @@ def test_partial_warm_failure_preserves_prior_warm_samples(
     assert result["warm"][1]["error"] == "warm replay failed"
     assert result["scf_profile"]["status"] == "skipped"
     assert result["changed_geometry"]["status"] == "skipped"
+
+
+def test_fixed_final_state_force_sample_never_reenters_scf(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import benchmarks.dft_force_matrix as matrix
+
+    class NullStream:
+        @staticmethod
+        def synchronize() -> None:
+            pass
+
+    cupy = SimpleNamespace(cuda=SimpleNamespace(Stream=SimpleNamespace(null=NullStream())))
+    batch = SimpleNamespace(
+        execute=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("fixed-final-state replay must not execute SCF")
+        )
+    )
+    atoms = matrix._atoms("water-3")
+    monkeypatch.setattr(
+        matrix,
+        "_force_diagnostic",
+        lambda _batch, _atoms: (
+            np.zeros((len(_atoms), 3)),
+            {
+                "endpoint_seconds": 0.2,
+                "timeline": {
+                    "endpoint_seconds": 0.2,
+                    "exclusive_wall_seconds": {},
+                },
+            },
+        ),
+    )
+
+    sample = matrix._fixed_final_state_force_sample(
+        batch,
+        atoms,
+        cupy,
+        scenario="fixed_final_state_0",
+    )
+
+    assert sample["measurement_boundary"] == "fixed_final_state_force"
+    assert sample["scf_replayed"] is False
+    assert sample["force_status"] == "ok"
+    assert sample["force_components"]["endpoint_seconds"] == pytest.approx(0.2)
