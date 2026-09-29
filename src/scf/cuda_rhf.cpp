@@ -4828,7 +4828,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       result.incremental_direct_jk.anchor_full_builds = full_builds;
       result.incremental_direct_jk.delta_builds = builds - full_builds;
       result.incremental_direct_jk.periodic_rebuilds = full_builds == 0U ? 0U : full_builds - 1U;
-      result.incremental_direct_jk.anchor_updates = builds;
+      result.incremental_direct_jk.anchor_updates = result.incremental_direct_jk.delta_builds;
       result.incremental_direct_jk.max_abs_delta_density =
           host_incremental_max_abs_delta_density[system];
       result.incremental_direct_jk.bypass_full_builds = 0U;
