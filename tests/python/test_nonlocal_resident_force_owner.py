@@ -42,6 +42,12 @@ def _fake_library() -> tuple[SimpleNamespace, list[tuple[object, ...]]]:
         calls.append(("collect", int(offset)))
         return 0
 
+    def seed_snapshot(
+        _batch: object, _snapshot: object, _owner: object, _view: object
+    ) -> int:
+        calls.append(("seed_snapshot",))
+        return 0
+
     def execute(_owner: object) -> int:
         calls.append(("execute",))
         return 0
@@ -88,6 +94,9 @@ def _fake_library() -> tuple[SimpleNamespace, list[tuple[object, ...]]]:
         ),
         generativeqc_internal_nonlocal_cuda_force_collect_v1=MagicMock(
             side_effect=collect
+        ),
+        generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1=MagicMock(
+            side_effect=seed_snapshot
         ),
         generativeqc_internal_nonlocal_cuda_force_execute_v1=MagicMock(
             side_effect=execute
@@ -152,6 +161,38 @@ def test_resident_force_owner_publishes_only_borrowed_device_identity() -> None:
     assert calls[-2:] == [("reset",), ("destroy",)]
 
 
+def test_resident_force_seeds_from_live_snapshot_without_host_materialization() -> None:
+    library, calls = _fake_library()
+    owner = _ResidentNonlocalForceOwner(
+        original_nonlocal_correlation("vv10"),
+        np.arange(12, dtype=np.float64).reshape(4, 3) / 10.0,
+        np.full(4, 0.25),
+        coefficient=Fraction(1),
+        tile_points=2,
+        maximum_bytes=1 << 20,
+        density_threshold=1.0e-12,
+        device_id=0,
+        context=ctypes.c_void_p(0x2222),
+        library=library,
+    )
+    task = SimpleNamespace(
+        view=_View(2, ctypes.c_void_p(0x3333)),
+        _owner=SimpleNamespace(device_id=0),
+    )
+    metadata = [0] * 16
+    metadata[12] = 0
+    snapshot = SimpleNamespace(
+        backend="cuda",
+        metadata=tuple(metadata),
+        _handle=0x4444,
+        _batch=SimpleNamespace(_batch=ctypes.c_void_p(0x5555)),
+    )
+
+    owner.seed_from_snapshot(snapshot, task)
+    assert calls[-1] == ("seed_snapshot",)
+    owner.close()
+
+
 def test_resident_force_hot_path_has_no_host_transfer_or_fence() -> None:
     source = (ROOT / "src/api/c_api_nonlocal.cpp").read_text()
     hot = source.split(
@@ -169,6 +210,7 @@ def test_resident_force_hot_path_has_no_host_transfer_or_fence() -> None:
     ):
         assert forbidden not in hot
     assert "enqueue_vv10_collect_total_features_cuda" in hot
+    assert "cudaMemcpyDeviceToDevice" in hot
     assert "enqueue_vv10_molecular_domain_cuda" in hot
     assert "enqueue_vv10_cuda_device" in hot
     assert "enqueue_vv10_pack_force_seeds_cuda" in hot
