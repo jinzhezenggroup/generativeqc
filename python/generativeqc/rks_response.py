@@ -262,7 +262,9 @@ class _RKSIntegralSourceView:
         self.atoms = tuple(basis.atoms)
         self.shells = tuple(basis.shells)
         self.shell_sizes = tuple(
-            (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
+            2 * shell.angular_momentum + 1
+            if basis.representation == "real_spherical"
+            else (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
             for shell in basis.shells
         )
         if sum(self.shell_sizes) != basis.nao:
