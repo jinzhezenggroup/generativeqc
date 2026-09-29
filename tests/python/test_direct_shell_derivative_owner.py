@@ -33,7 +33,9 @@ def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
     assert "prepare_generated_exchange(" in source
     assert "derivative_order != 0" in source
     assert "execute_cuda_direct_shell_full_range_derivatives_device(" in source
-    assert "plan->derivative_order == 0 && plan->generated_exchange != nullptr" in source
+    assert (
+        "plan->derivative_order == 0 && plan->generated_exchange != nullptr" in source
+    )
 
 
 def test_prepared_rsh_uses_shell_full_range_and_lr_only_reconstruction() -> None:
