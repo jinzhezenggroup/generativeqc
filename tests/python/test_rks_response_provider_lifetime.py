@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from generativeqc.response_solver import solve, solve_many
 from generativeqc.rks_response import _PreparedRKSJBackend
 
