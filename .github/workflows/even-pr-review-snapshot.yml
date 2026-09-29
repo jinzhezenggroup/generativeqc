@@ -1,0 +1,34 @@
+name: Even PR review source snapshot
+on:
+  push:
+    branches: [agent/even-pr-review-snapshot-20260930]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Fetch bounded review history
+        shell: bash
+        run: |
+          set -euo pipefail
+          refs=("+refs/heads/master:refs/remotes/origin/master")
+          for pr in 1510 1566 1572 1573 1578 1582 1584 1586 1588 1590 1592 1594 1595 1596; do
+            refs+=("+refs/pull/${pr}/head:refs/remotes/origin/review-${pr}")
+          done
+          git fetch --no-tags --depth=128 origin "${refs[@]}"
+          git for-each-ref --format='%(refname) %(objectname)' refs/remotes/origin
+          # No credentials are persisted by checkout. Keep only the source object
+          # database and refs so the local review can use real three-way merges.
+          tar -czf /tmp/even-pr-source-snapshot.tar.gz .git
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: even-pr-source-snapshot
+          path: /tmp/even-pr-source-snapshot.tar.gz
+          retention-days: 1
+          compression-level: 0
