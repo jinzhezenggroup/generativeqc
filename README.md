@@ -31,20 +31,40 @@ references, and performance claims require reproducible gates.
 
 ## Features
 
-- CPU reference and CUDA backends.
-- Molecular GFN2-xTB energy and analytic forces on CPU and native CUDA SDK builds,
-  including charged and standard restricted open-shell states for H-Rn. The method
-  uses its intrinsic minimal basis; CUDA wheels and ragged-batch admission remain
-  separate gates.
-- Ragged batches, per-system failure isolation, and density warm starts.
-- Contracted Cartesian and real-spherical Gaussian bases: `s` through `g` on
-  CPU, `s` through `f` on CUDA. See [higher angular momentum](docs/user/high_angular_momentum.md).
-- Bundled STO-3G, def2-SVP, and def2-TZVP basis data for H-Ar.
-- [Offline local/custom basis input](docs/user/external_basis.md) with provenance,
-  H–Og element identities, and explicit rejection of unsupported high-l execution.
-  [Scalar Gaussian ECPs](docs/user/ecp.md) support bounded CPU/CUDA direct RHF/UHF
-  values and complete first nuclear derivatives for orbital s/p/d.
-- Python, C, and C++ interfaces; optional PyTorch analytic backward.
+- **Compiler-generated quantum chemistry.** MethodIR, ProgramIR, and IntegralIR
+  turn declarative scientific definitions into validated execution graphs,
+  derivative/response programs, schedules, and specialized CPU/CUDA kernels.
+  Built-in paths are AOT-first; JIT and autotuning are explicit opt-in workflows.
+- **Hartree–Fock and correlated methods.** RHF/UHF provide energies and analytic
+  nuclear forces with direct and density-fitted execution paths. Qualified public
+  post-HF domains include MP2, RCCSD, and RCCSD(T), behind the same method registry
+  and prepared-execution contracts.
+- **Broad Kohn–Sham DFT.** RKS/UKS execution covers semilocal LDA/GGA/meta-GGA,
+  global-hybrid, range-separated, and nonlocal-correlation compositions. MethodIR
+  drives named and automatically imported Libxc selectors; qualified examples
+  include PBE, PBE0, B3LYP, r2SCAN, WB97M-V, generic D4 compositions, and
+  r2SCAN-3c.
+- **Analytic derivatives with fail-closed capability gates.** Supported
+  method/backend/property combinations expose native analytic forces, including
+  CUDA HF, global-hybrid DFT, WB97M-V, composite r2SCAN-3c, and qualified
+  correlated-method paths. Unsupported derivative domains fail explicitly rather
+  than silently changing methods or backends.
+- **GPU-native prepared execution.** Reusable CPU/CUDA plans retain topology and
+  numerical state across calls, with density warm starts, ragged batches,
+  per-system failure isolation, CUDA-resident execution, and resource/precision
+  diagnostics.
+- **GFN2-xTB.** Molecular energies and analytic forces are available on CPU and
+  native CUDA SDK builds, including charged and standard restricted open-shell
+  states for H-Rn with the method's intrinsic minimal basis.
+- **Gaussian basis and ECP support.** Contracted Cartesian and real-spherical
+  bases reach `s` through `g` on CPU and `s` through `f` on CUDA. Bundled
+  basis data, [offline local/custom basis input](docs/user/external_basis.md) with
+  H–Og identities, and [scalar Gaussian ECPs](docs/user/ecp.md) share explicit
+  provenance and capability checks.
+- **Multiple interfaces, one scientific core.** Python, C, C++, and a Python-free
+  native CLI share the native runtime; PyTorch and JAX bindings reuse native
+  analytic derivatives for custom backward paths.
+
 
 ## Build and install
 
