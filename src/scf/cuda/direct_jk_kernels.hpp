@@ -72,4 +72,15 @@ void launch_bounded_shell_range_exchange_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DirectCoulombRange range, double omega, double exchange_coefficient);
 
+/** Fused [J', SR-K', LR-K'] over one screened shell traversal. */
+void launch_bounded_shell_rsh_derivatives(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* source_forces, unsigned long long* cursor, double omega,
+    double coulomb_coefficient, double short_exchange_coefficient,
+    double long_exchange_coefficient);
+
 }  // namespace generativeqc::scf::cuda_execution

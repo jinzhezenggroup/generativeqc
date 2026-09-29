@@ -20,14 +20,34 @@ benchmarks/results/ instead of expanding this file.
 </p>
 
 <p align="center">
+  <strong>Quantum chemistry generated across the stack.</strong><br>
   GPU-native, batched quantum chemistry with analytic forces.
 </p>
 
-GenerativeQC uses compiler and code generation workflows to build specialized
-CPU and CUDA electronic-structure kernels. Humans set scientific goals,
-constraints, and review standards; coding agents help develop the code, tests,
-benchmarks, and documentation. Numerical results are checked against independent
-references, and performance claims require reproducible gates.
+## Why *Generative*QC?
+
+GenerativeQC treats **generation as a design principle across the software stack**:
+
+- **LLM-generated source** — coding agents and large language models help generate
+  and evolve human-readable source code, tests, benchmarks, and documentation
+  under human scientific review.
+- **Generated scientific methods** — declarative descriptions such as `MethodIR`
+  let method families, compositions, and metadata be generated instead of
+  hand-wiring every variant.
+- **Generated computational programs** — compiler IRs lower high-level
+  electronic-structure definitions into executable program and computation-graph
+  representations.
+- **Generated kernels** — code generation and AOT specialization emit CPU and
+  CUDA kernels specialized for methods, basis and shell structure, and target
+  hardware.
+
+In short: **scientific intent → LLM-generated source → generated methods →
+generated programs → generated kernels**.
+
+The LLM layer is a development workflow, not a surrogate for the underlying
+quantum chemistry. Numerical results come from explicit electronic-structure
+methods, are checked against independent references, and performance claims
+require reproducible gates.
 
 ## Features
 

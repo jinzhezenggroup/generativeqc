@@ -846,10 +846,48 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
               snapshot_transfer.final_state_reads == before_snapshot.final_state_reads + 1 &&
               snapshot_transfer.synchronizations == before_snapshot.synchronizations + 1,
           "CUDA KS final snapshot transfer accounting is incomplete");
+  dft::CudaKsResidentStationaryWeightsBinding not_staged;
+  require(plan.resident_final_stationary_weights(token, not_staged, snapshot_detail) !=
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              !not_staged,
+          "CUDA KS published resident W before a weighted final-state read");
   require(plan.read_final_state(token, true, snapshot, snapshot_detail) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
               snapshot.weighted_density.size() == spins,
           snapshot_detail);
+  const auto before_stationary_binding = plan.transfers();
+  dft::CudaKsResidentStationaryWeightsBinding stationary_weights;
+  require(plan.resident_final_stationary_weights(token, stationary_weights, snapshot_detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          snapshot_detail);
+  require(stationary_weights && stationary_weights.matrix_elements == basis.nao * basis.nao &&
+              stationary_weights.spins == spins,
+          "CUDA KS resident stationary D/W binding has the wrong shape");
+  require(
+      plan.transfers().final_state_d2h_bytes == before_stationary_binding.final_state_d2h_bytes &&
+          plan.transfers().final_state_reads == before_stationary_binding.final_state_reads &&
+          plan.transfers().synchronizations == before_stationary_binding.synchronizations,
+      "CUDA KS resident stationary D/W binding transferred or synchronized");
+  std::vector<double> resident_d(stationary_weights.matrix_elements);
+  std::vector<double> resident_w(stationary_weights.matrix_elements);
+  require(
+      cudaSetDevice(stationary_weights.device_id) == cudaSuccess &&
+          cudaMemcpy(resident_d.data(), stationary_weights.density,
+                     resident_d.size() * sizeof(double), cudaMemcpyDeviceToHost) == cudaSuccess &&
+          cudaMemcpy(resident_w.data(), stationary_weights.weighted_density,
+                     resident_w.size() * sizeof(double), cudaMemcpyDeviceToHost) == cudaSuccess,
+      "failed to inspect CUDA KS resident stationary D/W");
+  for (std::size_t i = 0; i < resident_d.size(); ++i) {
+    double expected_d = snapshot.density[0][i];
+    double expected_w = snapshot.weighted_density[0][i];
+    if (spins == 2) {
+      expected_d += snapshot.density[1][i];
+      expected_w += snapshot.weighted_density[1][i];
+    }
+    require(std::abs(resident_d[i] - expected_d) < 1e-12 &&
+                std::abs(resident_w[i] - expected_w) < 1e-11,
+            "CUDA KS resident stationary D/W disagrees with validated host state");
+  }
   if (!restricted && atoms == 1)
     require(std::all_of(snapshot.weighted_density[1].begin(), snapshot.weighted_density[1].end(),
                         [](double value) { return value == 0.0; }),

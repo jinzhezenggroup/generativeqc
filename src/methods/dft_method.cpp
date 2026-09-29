@@ -863,8 +863,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if GENERATIVEQC_HAS_CUDA
-    if (!cuda_ || execution_plan_.semilocal_family != dft::SemilocalFamily::Wb97mv ||
-        !system_.ecp_terms.empty())
+    if (!cuda_ || !execution_plan_.range_exchange || !range_strategy_ || !system_.ecp_terms.empty())
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
       detail = "cached CUDA stationary D/W must be supplied together";
@@ -906,6 +905,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "CUDA stationary derivative density is incompatible with the prepared Direct owner";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+    dft::CudaKsResidentStationaryWeightsBinding resident_weights;
+    status = cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!resident_weights || resident_weights.device_id != derivative_source.device_id ||
+        resident_weights.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+      detail = "CUDA stationary one-electron D/W is incompatible with the prepared Direct owner";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
     const auto transfers_after = cuda_->transfers();
     // The Direct source belongs to the already-budgeted SCF owner. Report its
     // retained footprint, but force-time source preparation is now exactly zero.
@@ -919,21 +926,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
             transfers_after.final_state_reads - transfers_before.final_state_reads,
             transfers_after.synchronizations - transfers_before.synchronizations};
     scf::OneElectronGradientResources one;
-    // D and W share immutable geometry/topology. Prepare that metadata once,
-    // launch the two existing generated contractions on one stream, and drain
-    // once while retaining separate hcore and Pulay component outputs.
-    auto density = (*cached_density)[0], weighted = (*cached_weighted_density)[0];
-    if (cached_density->size() == 2)
-      for (std::size_t i = 0; i < density.size(); ++i) {
-        density[i] += (*cached_density)[1][i];
-        weighted[i] += (*cached_weighted_density)[1][i];
-      }
+    // D and W share immutable geometry/topology. Their total matrices were
+    // staged on the final-state stream before its validation drain, so this
+    // paired consumer borrows them directly and uploads metadata only.
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
     candidate.reserve(5 * nc);
     std::vector<double> hcore, pulay, value;
-    status = scf::execute_cuda_stationary_one_electron_pair(device, system_, density, weighted, 0,
-                                                            bytes, hcore, pulay, detail, &one);
+    status = scf::execute_cuda_stationary_one_electron_pair(
+        device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
+        resident_weights.weighted_density);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
     work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
@@ -941,10 +943,6 @@ class KsPreparedCalculation final : public PreparedCalculation {
     work[5] += one.device_to_host_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
-    if (!range_strategy_) {
-      detail = "CUDA RSH integral gradient is missing its resolved range correction";
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
     status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
         fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
         resident_density.matrix_elements, value, detail);
