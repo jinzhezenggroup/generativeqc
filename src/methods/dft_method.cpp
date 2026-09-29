@@ -825,9 +825,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  generativeqc_status resident_nonlocal_features(
-      const dft::CudaKsFinalStateToken& expected, int& device, const double*& density,
-      const double*& gradient, std::size_t& point_count, std::string& detail) {
+  generativeqc_status resident_nonlocal_features(const dft::CudaKsFinalStateToken& expected,
+                                                 int& device, const double*& density,
+                                                 const double*& gradient, std::size_t& point_count,
+                                                 std::string& detail) {
     device = -1;
     density = nullptr;
     gradient = nullptr;
@@ -1535,10 +1536,11 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  generativeqc_status resident_nonlocal_features(
-      std::size_t index, const dft::CudaKsFinalStateToken& expected, int& device,
-      const double*& density, const double*& gradient, std::size_t& point_count,
-      std::string& detail) {
+  generativeqc_status resident_nonlocal_features(std::size_t index,
+                                                 const dft::CudaKsFinalStateToken& expected,
+                                                 int& device, const double*& density,
+                                                 const double*& gradient, std::size_t& point_count,
+                                                 std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->resident_nonlocal_features(expected, device, density, gradient,
                                                             point_count, detail);
@@ -1715,10 +1717,12 @@ generativeqc_status dft_cuda_integral_gradient_cached(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-generativeqc_status dft_cuda_resident_nonlocal_features(
-    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
-    int& device, const double*& density, const double*& gradient, std::size_t& point_count,
-    std::string& detail) {
+generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        int& device, const double*& density,
+                                                        const double*& gradient,
+                                                        std::size_t& point_count,
+                                                        std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->resident_nonlocal_features(index, expected, device, density, gradient, point_count,

@@ -48,10 +48,12 @@ generativeqc_status dft_cuda_integral_gradient_cached(
  * token. Pointers remain owned by the prepared CUDA KS plan and are valid only
  * while that owner and token remain current. This helper performs no transfer
  * or synchronization. */
-generativeqc_status dft_cuda_resident_nonlocal_features(
-    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
-    int& device, const double*& density, const double*& gradient, std::size_t& point_count,
-    std::string& detail);
+generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        int& device, const double*& density,
+                                                        const double*& gradient,
+                                                        std::size_t& point_count,
+                                                        std::string& detail);
 
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
                                         std::string& detail);

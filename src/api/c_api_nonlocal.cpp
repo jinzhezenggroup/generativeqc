@@ -319,12 +319,12 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_s
     generativeqc::runtime::CudaDeviceScope scope(owner->device);
     generativeqc::runtime::cuda_resource_check(
         cudaMemsetAsync(owner->errors.get(), 0, sizeof(int), owner->stream));
-    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
-        owner->raw_density, density, point_count * sizeof(double), cudaMemcpyDeviceToDevice,
-        owner->stream));
-    generativeqc::runtime::cuda_resource_check(cudaMemcpyAsync(
-        owner->raw_gradient, gradient, 3 * point_count * sizeof(double), cudaMemcpyDeviceToDevice,
-        owner->stream));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemcpyAsync(owner->raw_density, density, point_count * sizeof(double),
+                        cudaMemcpyDeviceToDevice, owner->stream));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemcpyAsync(owner->raw_gradient, gradient, 3 * point_count * sizeof(double),
+                        cudaMemcpyDeviceToDevice, owner->stream));
     owner->next_offset = owner->point_count;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {

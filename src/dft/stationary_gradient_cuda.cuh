@@ -273,8 +273,8 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
   });
 }
-int stationary_geometry_reset(void* pointer, const double* centers, double tolerance,
-                              char* error, size_t size) {
+int stationary_geometry_reset(void* pointer, const double* centers, double tolerance, char* error,
+                              size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {

@@ -575,7 +575,9 @@ class _ResidentNonlocalForceOwner:
         batch = getattr(snapshot, "_batch", None)
         handle = getattr(snapshot, "_handle", 0)
         if batch is None or not handle or getattr(snapshot, "backend", None) != "cuda":
-            raise ValueError("resident nonlocal feature seed requires a live CUDA KS snapshot")
+            raise ValueError(
+                "resident nonlocal feature seed requires a live CUDA KS snapshot"
+            )
         if int(snapshot.metadata[12]) != self.device_id:
             raise ValueError("resident nonlocal/snapshot device mismatch")
         if task._owner.device_id != self.device_id:
