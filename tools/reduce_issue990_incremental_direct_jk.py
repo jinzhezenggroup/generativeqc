@@ -44,6 +44,44 @@ def _branches(record: dict[str, Any]) -> list[tuple[int, ...]]:
     ]
 
 
+def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
+    diagnostics = [
+        sample["convergence"][0].get("incremental_direct_jk")
+        for sample in record["generativeqc"]["warm_samples"]
+    ]
+    if not diagnostics or any(type(value) is not dict for value in diagnostics):
+        raise ValueError("incremental benchmark is missing Direct-J/K work diagnostics")
+    typed = [value for value in diagnostics if isinstance(value, dict)]
+    if any(not value.get("active") for value in typed):
+        raise ValueError("incremental benchmark did not activate Direct-J/K updates")
+    if any(not value.get("quartet_work_counters_valid") for value in typed):
+        raise ValueError("incremental quartet work counters are not complete")
+    full_builds = sum(int(value["anchor_full_builds"]) for value in typed)
+    delta_builds = sum(int(value["delta_builds"]) for value in typed)
+    full_shells = sum(int(value["full_admitted_shell_quartets"]) for value in typed)
+    delta_shells = sum(int(value["delta_admitted_shell_quartets"]) for value in typed)
+    full_tiles = sum(int(value["full_admitted_quartet_tiles"]) for value in typed)
+    delta_tiles = sum(int(value["delta_admitted_quartet_tiles"]) for value in typed)
+    if full_builds == 0 or delta_builds == 0 or full_shells == 0 or full_tiles == 0:
+        raise ValueError("incremental benchmark lacks measurable full/delta Direct-J/K work")
+    full_shells_per_build = full_shells / full_builds
+    delta_shells_per_build = delta_shells / delta_builds
+    full_tiles_per_build = full_tiles / full_builds
+    delta_tiles_per_build = delta_tiles / delta_builds
+    return {
+        "sample_count": len(typed),
+        "full_builds": full_builds,
+        "delta_builds": delta_builds,
+        "full_admitted_shell_quartets_per_build": full_shells_per_build,
+        "delta_admitted_shell_quartets_per_build": delta_shells_per_build,
+        "shell_quartet_reduction_fraction": 1.0 - delta_shells_per_build / full_shells_per_build,
+        "full_admitted_quartet_tiles_per_build": full_tiles_per_build,
+        "delta_admitted_quartet_tiles_per_build": delta_tiles_per_build,
+        "quartet_tile_reduction_fraction": 1.0 - delta_tiles_per_build / full_tiles_per_build,
+        "samples": typed,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
@@ -87,6 +125,7 @@ def main() -> None:
         )
         baseline_branches = _branches(baseline)
         incremental_branches = _branches(incremental)
+        work = _incremental_work(incremental)
         rows.append(
             {
                 "atoms": atoms,
@@ -104,6 +143,7 @@ def main() -> None:
                     and force_difference <= args.maximum_force_difference
                 ),
                 "speed_gate_passed": speedup >= args.minimum_speedup,
+                "incremental_work": work,
             }
         )
 
@@ -127,13 +167,18 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2) + "\n")
 
-    print("AOs  baseline_ms  incremental_ms  speedup  branch_match  numerical_gate")
+    print(
+        "AOs  baseline_ms  incremental_ms  speedup  tile_reduce  shell_reduce  "
+        "branch_match  numerical_gate"
+    )
     for row in rows:
         print(
             f"{row['ao_count']:>3}  "
             f"{row['baseline_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['incremental_warm_median_seconds'] * 1e3:>14.3f}  "
             f"{row['speedup']:>7.3f}  "
+            f"{row['incremental_work']['quartet_tile_reduction_fraction']:>11.3%}  "
+            f"{row['incremental_work']['shell_quartet_reduction_fraction']:>12.3%}  "
             f"{row['iteration_branches_match']!s:>12}  "
             f"{row['numerical_gate_passed']!s:>14}"
         )
