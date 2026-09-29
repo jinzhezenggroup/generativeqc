@@ -747,6 +747,7 @@ def test_clean_git_sha_rejects_hidden_index_paths(
             capture_output=True,
             text=True,
         )
+
     git("init")
     git("config", "user.name", "Capacity Test")
     git("config", "user.email", "capacity@example.invalid")
