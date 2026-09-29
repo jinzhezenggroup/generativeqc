@@ -18,7 +18,7 @@ def _seed_helper(text: str) -> str:
 
 def _probe(helper: str) -> str:
     return (
-        r'''
+        r"""
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -41,9 +41,9 @@ struct Probe {
   struct State { double* bar_reference_electronic_energy; } state{&device_seed};
   void* stream = nullptr;
   std::size_t h2d = 0;
-'''
+"""
         + helper
-        + r'''
+        + r"""
 };
 int main() {
   Probe owner;
@@ -71,7 +71,7 @@ int main() {
   if (owner.h2d != 3 * sizeof(double)) return 4;
   std::cout << "caller-owned deferred scalar and nonfinite guards passed\n";
 }
-'''
+"""
     )
 
 
