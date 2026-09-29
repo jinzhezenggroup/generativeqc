@@ -310,10 +310,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "9ad99d384ac2b665c5883fc728d93a428d139411ca0c847d29347f2c034617d6"
+            "ed28ffc46b3a388adcaf468a1721c01a70c493144890235400ab829d5dabfdee"
         ),
         "native_owner_sha256": (
-            "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
+            "03f7469d2b8377cf0a3ba75deca66750ede5723e7d69a53774cdd463ee9540a5"
         ),
         "native_allocation_sha256": (
             "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
@@ -322,7 +322,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "0690d2e8ed965c27150051eb1f4957e26038a8c2e1307de13db8458df032fa7b"
         ),
         "native_reset_sha256": (
-            "78b78cdf74f26e51d470452b94b872750a88770001ec51a8293f4f1685e4ba9f"
+            "8a1702df8311cf2f25efa3dda7ebe53db41315310d27c9ceffd096d685edf1f5"
         ),
         "native_tasks_sha256": (
             "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "a216fe7c0b2425360a207eeaf46ab3dafe28aa249089ad360fcb42ad77a1b274"
+            "8cfe5ed4fa343ed319307d816857d7bed0dcd787112baf17a1b4a65be62d4dd8"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
