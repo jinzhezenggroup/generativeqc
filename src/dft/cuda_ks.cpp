@@ -431,10 +431,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
         strategy.spec.coulomb.coefficient != 1.0 ||
         (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact && !fitted_coulomb) ||
-        (has_exchange &&
-         (strategy.spec.exchange.op != scf::FockOperator::FullRange ||
-          (fitted_coulomb ? !fitted_exchange
-                           : strategy.spec.exchange.approximation != scf::FockApproximation::Exact))) ||
+        (has_exchange && (strategy.spec.exchange.op != scf::FockOperator::FullRange ||
+                          (fitted_coulomb ? !fitted_exchange
+                                          : strategy.spec.exchange.approximation !=
+                                                scf::FockApproximation::Exact))) ||
         !fock_binding || (fitted_exchange && !occupied_fock_binding))
       throw std::invalid_argument(
           "CUDA KS requires one prepared Coulomb provider and matching full-range exchange");

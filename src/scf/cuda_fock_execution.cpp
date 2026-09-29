@@ -265,15 +265,14 @@ generativeqc_status enqueue_prepared_cuda_occupied_fock(
   const bool valid_factors =
       occupied.alpha_rank <= binding.nbf &&
       (!occupied.alpha_rank || occupied.alpha_coefficients != nullptr) &&
-      (unrestricted
-           ? occupied.beta_rank <= binding.nbf &&
-                 (!occupied.beta_rank || occupied.beta_coefficients != nullptr)
-           : occupied.beta_rank == 0 && occupied.beta_coefficients == nullptr);
-  const bool valid_buffers =
-      matrix_elements == binding.nbf * binding.nbf && density != nullptr && coulomb != nullptr &&
-      alpha_exchange != nullptr && numerical_error != nullptr &&
-      (unrestricted ? beta != nullptr && beta_exchange != nullptr
-                    : beta == nullptr && beta_exchange == nullptr);
+      (unrestricted ? occupied.beta_rank <= binding.nbf &&
+                          (!occupied.beta_rank || occupied.beta_coefficients != nullptr)
+                    : occupied.beta_rank == 0 && occupied.beta_coefficients == nullptr);
+  const bool valid_buffers = matrix_elements == binding.nbf * binding.nbf && density != nullptr &&
+                             coulomb != nullptr && alpha_exchange != nullptr &&
+                             numerical_error != nullptr &&
+                             (unrestricted ? beta != nullptr && beta_exchange != nullptr
+                                           : beta == nullptr && beta_exchange == nullptr);
   if (!valid_factors || !valid_buffers) {
     detail = "prepared occupied fitted Fock buffers, factors, spin or dimensions are invalid";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -289,16 +288,16 @@ generativeqc_status enqueue_prepared_cuda_occupied_fock(
   const JkTermSelection coulomb_only{true, false};
   auto status =
       unrestricted
-          ? execute_cuda_density_fitting_uhf_jk_device(
-                fitted, density, beta, coulomb, nullptr, nullptr, detail, coulomb_only,
-                FockMatrixLayout::RowMajor)
-          : execute_cuda_density_fitting_rhf_jk_device(
-                fitted, density, coulomb, nullptr, detail, coulomb_only, FockMatrixLayout::RowMajor);
+          ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb, nullptr,
+                                                       nullptr, detail, coulomb_only,
+                                                       FockMatrixLayout::RowMajor)
+          : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, nullptr, detail,
+                                                       coulomb_only, FockMatrixLayout::RowMajor);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
 
-  status = cuda_df::build_occupied_exchange(*fitted, 0, occupied.alpha_coefficients,
-                                            occupied.alpha_rank, true, unrestricted ? 1.0 : 2.0,
-                                            alpha_exchange, detail);
+  status =
+      cuda_df::build_occupied_exchange(*fitted, 0, occupied.alpha_coefficients, occupied.alpha_rank,
+                                       true, unrestricted ? 1.0 : 2.0, alpha_exchange, detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (unrestricted)
     status = cuda_df::build_occupied_exchange(*fitted, 0, occupied.beta_coefficients,

@@ -315,10 +315,10 @@ void run_density_fitted_exchange_case(bool restricted) {
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
-  const scf::PreparedFockPlan cpu(
-      system, &system, fitted_exchange_strategy(restricted, scf::FockBackend::Cpu));
-  const scf::PreparedFockPlan gpu(
-      system, &system, fitted_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
+  const scf::PreparedFockPlan cpu(system, &system,
+                                  fitted_exchange_strategy(restricted, scf::FockBackend::Cpu));
+  const scf::PreparedFockPlan gpu(system, &system,
+                                  fitted_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
   scf::ScfOptions options;
   options.compute_forces = false;
   options.energy_tolerance = 1e-12;
