@@ -647,10 +647,11 @@ std::optional<core::System> ks_auxiliary_for_system(const core::System& system,
 /** Backend selection must precede materialization: constructing the reference
  * grid and then uploading it hides cubic host work in CUDA preparation. */
 dft::MolecularGrid ks_molecular_grid(const core::System& system, dft::GridSpec spec,
-                                     generativeqc_backend backend, int device) {
+                                     generativeqc_backend backend, int device,
+                                     bool retain_device) {
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
 #if GENERATIVEQC_HAS_CUDA
-    return dft::MolecularGrid::from_cuda(system, spec, device);
+    return dft::MolecularGrid::from_cuda(system, spec, device, retain_device);
 #else
     throw std::runtime_error("CUDA quadrature is unavailable in this build");
 #endif
@@ -679,7 +680,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U),
         basis_(system_),
-        grid_(ks_molecular_grid(system_, grid, backend_, device)) {
+        grid_(ks_molecular_grid(
+            system_, grid, backend_, device,
+            options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
