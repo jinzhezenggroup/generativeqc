@@ -21,7 +21,7 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
                  std::size_t spin_count, bool persistent_eri, bool transformed_direct,
                  bool shell_class_profiling, bool inactive_eigensolver_profiling,
                  bool bounded_fock_class_timing, bool bounded_direct_streaming,
-                 bool mixed_precision_fock, ArenaLayout& layout) {
+                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout) {
   std::size_t matrix_size = 0;
   std::size_t eri_size = 0;
   std::size_t matrices = 0;
@@ -283,6 +283,16 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
       !workspace.append<double>(spin_matrices, made.density) ||
       !workspace.append<double>(spin_matrices, made.next_density) ||
       !workspace.append<double>(spin_matrices, made.fock) ||
+      !workspace.append<double>(incremental_direct_jk ? spin_matrices : 0,
+                                made.incremental_anchor_density) ||
+      !workspace.append<double>(incremental_direct_jk ? spin_matrices : 0,
+                                made.incremental_anchor_fock) ||
+      !workspace.append<std::uint32_t>(incremental_direct_jk ? batch_size : 0,
+                                       made.incremental_delta_updates) ||
+      !workspace.append<std::uint8_t>(incremental_direct_jk ? batch_size : 0,
+                                      made.incremental_full_build) ||
+      !workspace.append<double>(incremental_direct_jk ? batch_size : 0,
+                                made.incremental_max_abs_delta_density) ||
       !workspace.append<double>(spin_matrices, made.residual) ||
       !workspace.append<double>(spin_matrices, made.weighted_density) ||
       !workspace.append<double>(spin_count == 2 ? matrices : 0, made.total_density) ||
