@@ -102,7 +102,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "32 * len(self.shells) + 16 * self.nprimitive"
     )
     assert result["basis"]["spd_expansion_contract_sha256"] == (
-        "f0d9be746f30067f6dba8293bcc35a9dc06db74037a6c76d322d21051bc61334"
+        "a482b3ace40fd01758f504c1e47bfa795dcabb5483149873fcd36e71c6b47ae0"
     )
     assert result["basis"]["sparse_spherical_component_terms"] == {
         "s": 1,
@@ -113,10 +113,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "07858ba7f9a78fe6348bbcb9430eb4f8321db8774ea3ce1ecef495629abe2a1c"
     )
     assert result["basis"]["ao_pack_bridge_contract_sha256"] == (
-        "c5c8a0181075e7d171e1d189c875d5cc9e69467cb069b13267f91e73b1e1dd7e"
+        "aba8691ce81438c66517604c5b2e1e0d39df474888763b4d44686ca8816fabbc"
     )
     assert result["basis"]["native_ao_constructor_contract_sha256"] == (
-        "c08f40375765a126782325dd4d03ded0ea9bf3caa25f23953a8a5cdc5c75c01b"
+        "9e210b215cd43f21af6899b328ee738b87f53eaa9b20654b16de760274a8c372"
     )
     assert result["basis"]["basis_snapshot_contract_sha256"] == (
         "4dea9a2041897bf843012c01f64c580b6b8696f444611a54c0d161141f1894fd"
@@ -128,7 +128,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "af7bd2da7d571fb6d92dee7f984bf8de95f32b263c8b75fe69555772d60a44b6"
     )
     assert result["basis"]["native_system_basis_forwarding_contract_sha256"] == (
-        "61424398d9b4aaeb2047e715f3edcc3ccd96cc1818e6a5b8b4e389946b1600f4"
+        "120936d57b90062a8a888892ce4d514ca8a62a0b2ced671afe3fce660b0414d5"
     )
     assert result["basis"]["production_shell_expansion"] == (
         "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
@@ -137,7 +137,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
     )
     assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
-        "23785e9e006f9a100b4fecc690e6936a348581beba073507c154b185564832c6"
+        "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
     )
     assert result["grid"] == {
         "source_only_molecular_grid_sha256": (
@@ -147,16 +147,16 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
         ),
         "native_grid_abi_sha256": (
-            "0fa29ffe02ff05df801d8986d06ba03cd492f73d6f621543a96c3f8fc79700af"
+            "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
         ),
         "generated_quadrature_layout_sha256": (
-            "7ad4c84286cce70329233f7aa2dcaf2b934e2e7cf46137cc3ed32cc6076754c3"
+            "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
         ),
         "native_cuda_grid_sha256": (
             "eed5f5bff7c67622c75fd0d21448b66502b581c102637036a748b459a288a41b"
         ),
         "native_cuda_grid_route_sha256": (
-            "cc639c77e261810ff35a30f3bf4967a398b6408e72f86446f94a4d5e760e1a42"
+            "1dc638a529158c28150096a80f8e13ec0dedefeb604eeccbf1270a5456508894"
         ),
         "native_grid_point_count_sha256": (
             "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
@@ -176,7 +176,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
         ),
         "cuda_force_method_sha256": (
-            "1d0df874a38441e94168f329e8055f9b9d27e7f26649e15e106db9ab7694c79e"
+            "4c3d56e2bcc1ba02e48d6f2bd063b52609e5bc31e48dff2ccb47a7bcb525888d"
         ),
         "prepared_aot_selection_sha256": (
             "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
@@ -301,7 +301,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
         ),
         "executor_sha256": (
-            "71bac6eddd844fcd29830994ad9528bda276557c45efeb12f6dd80ee1fe1146b"
+            "5f4bf38658ca1da15d845e1a65ebd72195191aebf6009873f131c2cbe8a34195"
         ),
         "submit_page_sha256": (
             "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
@@ -310,7 +310,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "b3d827509e231c851a3729b47d77132d54ba06b1814105c102fd2e34d57b8a10"
+            "9ad99d384ac2b665c5883fc728d93a428d139411ca0c847d29347f2c034617d6"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -319,31 +319,31 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
         ),
         "native_create_sha256": (
-            "9aee878f0f32fae3f756934074fca0ea57062658e38b32deba9b6af98c94ab26"
+            "0690d2e8ed965c27150051eb1f4957e26038a8c2e1307de13db8458df032fa7b"
         ),
         "native_reset_sha256": (
-            "ea2a7df22edca3c3e1f6afad7185dfa7d06ddda5fec0610f8fd31f19ba585a9b"
+            "78b78cdf74f26e51d470452b94b872750a88770001ec51a8293f4f1685e4ba9f"
         ),
         "native_tasks_sha256": (
-            "e05af602b22c92dc71b056b0339910a8ac9f7dcc9816b2175d889620ef1024a0"
+            "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
         ),
         "native_nuclear_sha256": (
-            "f5106ec4c238357ece702013e10044c945705b5c9435aae1078ebfa85847c1c2"
+            "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "471074659e044cb4306af4ff98cdac91e625665554497b8a61cbee031310e08d"
+            "8090ded22d15a0be0f3fd591a7e9ffc1f52e899eb0813942ca6b5fd9f9f89219"
         ),
         "native_geometry_enqueue_sha256": (
-            "0ce8cad05cd402f162e786cc9ff25ae37c699cf67a6dd2ef336eb0f7c9f0208e"
+            "6333b07540ae8b28f8cc04cdfbe2d11a2faa0c8abf5fd9f47a53848d09478724"
         ),
         "native_geometry_route_sha256": (
-            "a94fde0e6735f2afc4ed153f020a3fede1629da24a47325d5b5a14f1c9123722"
+            "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_metrics_sha256": (
-            "c3aa6c1360bdfb13ddad49ada5c6c0ffba883a5448813063c7d099934bf849de"
+            "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "03a36e1d3681b9a80d6acdcae015ba8df892ae22a1fe6b6471dee95b4ff3f9e9"
+            "a216fe7c0b2425360a207eeaf46ab3dafe28aa249089ad360fcb42ad77a1b274"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -367,10 +367,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
         "init_sha256": (
-            "8ca4c03c87157777c7f05de836e9b2d77c88dc7ec2c96df28532713b96bdd68d"
+            "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
         ),
         "decode_sha256": (
-            "1514138c9b75b5c0f6735bf5ed9d20a4beb1f9fca0b6f8435006537848ec9a28"
+            "b22d47e054209d55f27ca68c8fbcb37577743835b3c4dffd175dd560d1b79429"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
@@ -490,7 +490,7 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
-            "c35064b2f437a6fb5bbce301b90e92c806c718b469d9ab539d8ae83237b8cd49"
+            "7d95518ef56532d978c5015ee116b356f63a0599f45ca50e8e1ab452efc9574d"
         ),
         "profiles": [
             "lda_rks",
