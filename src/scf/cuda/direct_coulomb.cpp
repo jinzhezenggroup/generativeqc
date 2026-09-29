@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 
 #include "runtime/bounded_workspace.hpp"
@@ -13,6 +14,7 @@
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/direct_bounded_dddd.hpp"
+#include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
@@ -89,10 +91,12 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   const auto charge = [&](std::size_t count, std::size_t width) {
     required = runtime::size_add(required, product(count, width));
   };
-#define COULOMB_METADATA(F)        \
-  F(system_shell_offsets);         \
-  F(system_shell_pair_offsets);    \
-  F(shell_direct_ao_offsets);      \
+#define COULOMB_METADATA(F)                     \
+  F(system_shell_offsets);                      \
+  F(system_shell_pair_offsets);                 \
+  F(system_shell_pair_block_offsets);           \
+  F(system_shell_pair_block_quartet_offsets);   \
+  F(shell_direct_ao_offsets);                   \
   F(shell_pair_systems);           \
   F(shell_pair_first);             \
   F(shell_pair_second);            \
@@ -118,6 +122,9 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
   plan->batch.total_shell_pairs = pairs;
+  plan->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
+  plan->batch.total_shell_pair_block_quartets =
+      host.system_shell_pair_block_quartet_offsets.back();
   plan->stream = stream;
   plan->screening = screening;
   plan->class_mask = present;
@@ -249,11 +256,9 @@ GeneratedExchangePlan::~GeneratedExchangePlan() {
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
 }
 
-std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatch& host,
-                                                                  DeviceBatch borrowed,
-                                                                  cudaStream_t stream, int device,
-                                                                  double screening,
-                                                                  std::size_t budget) try {
+std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
+    const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
+    std::size_t budget, bool force_capability) try {
   auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget);
   if (!shared) return {};
 
@@ -264,6 +269,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatc
   const auto pairs = host.shell_pair_first.size();
   constexpr std::size_t pair_classes = detail::kDirectShellPairClassCount;
   constexpr std::size_t quartet_classes = detail::kDirectQuartetShellClassCount;
+  const auto atoms = host.atomic_numbers.size();
+  const auto pair_blocks = static_cast<std::size_t>(host.system_shell_pair_block_offsets.back());
 
   std::size_t additional = 0;
   const auto charge = [&](std::size_t count, std::size_t width) {
@@ -280,10 +287,17 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatc
   charge(product(batch, pair_classes), sizeof(double));
   charge(quartet_classes, sizeof(std::uint32_t));
   charge(1, sizeof(GeneratedShellPairStream));
+  if (force_capability) {
+    charge(pairs, sizeof(std::uint32_t));
+    charge(pair_blocks, sizeof(double));
+    charge(product(atoms, 3), sizeof(double));
+    charge(1, sizeof(unsigned long long));
+  }
   if (shared->device_bytes > budget || additional > budget - shared->device_bytes) return {};
 
   auto plan = std::make_unique<GeneratedExchangePlan>();
   plan->shared = std::move(shared);
+  plan->force_capability = force_capability;
   plan->device_bytes = plan->shared->device_bytes;
   auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
     void* pointer{};
@@ -313,6 +327,17 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatc
   plan->system_density_bounds = doubles(batch);
   plan->system_pair_density_bounds = doubles(product(batch, pair_classes));
   plan->heads = static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
+  std::vector<std::uint32_t> bounded_pair_order;
+  if (force_capability) {
+    bounded_pair_order.resize(pairs);
+    std::iota(bounded_pair_order.begin(), bounded_pair_order.end(), 0U);
+    plan->bounded_pair_order = static_cast<const std::uint32_t*>(
+        allocate(pairs, sizeof(std::uint32_t), bounded_pair_order.data()));
+    plan->shell_pair_block_bounds = doubles(pair_blocks);
+    plan->force = doubles(product(atoms, 3));
+    plan->force_cursor =
+        static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
+  }
 
   const auto& b = plan->shared->batch;
   const GeneratedShellPairStream topology{
@@ -338,12 +363,18 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(const HostBatc
       plan->shared->active,
       detail::GeneratedFockConsumer::Exchange};
   plan->topology = static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
+  if (force_capability) {
+    launch_reduce_bounded_shell_pair_block_bounds_kernel(
+        static_cast<unsigned>(pair_blocks), 128U, 128U * sizeof(double), stream, b,
+        plan->bounded_pair_order, plan->shared->shell_bounds, plan->shell_pair_block_bounds);
+    check(cudaGetLastError());
+  }
   check(cudaStreamSynchronize(stream));
   if (plan->device_bytes != runtime::size_add(plan->shared->device_bytes, additional))
     throw std::logic_error("generated K inventory drift");
-  plan->host_preparation_bytes =
-      runtime::size_add(plan->shared->host_preparation_bytes,
-                        sizeof(*plan) + runtime::vector_bytes(plan->allocations));
+  plan->host_preparation_bytes = runtime::size_add(
+      plan->shared->host_preparation_bytes,
+      sizeof(*plan) + runtime::vector_capacities(plan->allocations, bounded_pair_order));
   return plan;
 } catch (cudaError_t error) {
   if (error != cudaErrorMemoryAllocation) throw;
