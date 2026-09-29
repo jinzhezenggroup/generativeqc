@@ -346,7 +346,7 @@ def test_schedule_contract_carries_resolved_lowering_identity() -> None:
 
     assert provenance["lowering_identity"] == lowering["identity"]
     assert (
-        provenance["lowering_providers"] == "nvidia.cublas,generativeqc.generated_cuda"
+        provenance["lowering_providers"] == "generativeqc.generated_cuda,nvidia.cublas"
     )
 
 

@@ -186,7 +186,7 @@ def evaluate_r2scan3c_gcp(
         provenance=CorrectionProvenance(
             source=data["upstream"]["repository"],
             source_revision=data["upstream"]["commit"],
-            data_sha256="c1cede24b2527a2b688981b651d91da7206d8da1a223c3f217a86800c47eded2",
+            data_sha256="24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65",
             license=data["upstream"]["license"],
             implementation="generativeqc-gcp-cpu-reference-v1",
         ),

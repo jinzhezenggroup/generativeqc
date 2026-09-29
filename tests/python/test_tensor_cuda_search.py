@@ -263,7 +263,7 @@ def test_new_schedule_dimensions_change_generated_execution_without_changing_def
     assert cub_contract.resources.shared_bytes == 128 * 8
     assert (
         dict(cub_contract.provenance)["lowering_providers"]
-        == "nvidia.cccl.cub,generativeqc.generated_cuda"
+        == "generativeqc.generated_cuda,nvidia.cccl.cub"
     )
 
     packed = plan_cuda(

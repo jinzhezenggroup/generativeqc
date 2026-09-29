@@ -1,6 +1,6 @@
 {
   "basis": {
-    "basis_identity": "11c25a32851c1fd54ca318162d46a1c436280c53c75df931e51b2520153a2c2f",
+    "basis_identity": "af55e4a3e21efd9d813231d5c5b043429ebc6ca3878d2cb08802b97920719996",
     "license": "BSD-3-Clause",
     "license_file": "LICENSES/bse-data-BSD-3-Clause.txt",
     "name": "def2-mTZVPP",
@@ -12,8 +12,8 @@
     "version": "1"
   },
   "gcp": {
-    "data_sha256": "c1cede24b2527a2b688981b651d91da7206d8da1a223c3f217a86800c47eded2",
-    "generated_header_sha256": "c922446ecbdc113d90074af397688dac6ccdac832b5665c8ddaf60795355240c",
+    "data_sha256": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65",
+    "generated_header_sha256": "e28086d977ad9245fce12dce492924bb2255a5c9f4418824f45c03ff084c9561",
     "implementation_source_sha256": "c1d69f640c9a7498618998a97b40a1629554ede31001ceab3060dc2f84c8be1e",
     "license": "LGPL-3.0-or-later",
     "license_files": [

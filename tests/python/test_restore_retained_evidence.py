@@ -335,7 +335,7 @@ def test_checked_in_snapshot_has_only_git_identity() -> None:
         module.ROOT / "benchmarks/results/retention-checkout/snapshot.manifest.json"
     )
     audit = json.loads(manifest.read_text())
-    assert audit["schema"] == "generativeqc.git-snapshot.v1"
+    assert audit["schema"] == "vibeqc.git-snapshot.v1"
     assert not any(key.startswith("archive_") for key in audit)
     records = module._records(manifest)
     assert len(records) == audit["file_count"] == 955
@@ -349,7 +349,7 @@ def test_checked_in_snapshot_has_only_git_identity() -> None:
 def test_2026_09_21_trim_manifest_tracks_only_removed_git_objects() -> None:
     manifest = module.ROOT / "benchmarks/results/retention-2026-09-21/migration.json"
     audit = json.loads(manifest.read_text())
-    assert audit["schema"] == "generativeqc.git-snapshot.v1"
+    assert audit["schema"] == "vibeqc.git-snapshot.v1"
     records = module._records(manifest)
     assert len(records) == audit["file_count"] == audit["moved_files"] == 15
     assert (

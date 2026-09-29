@@ -103,7 +103,7 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
             role: {key: value for key, value in basis.items() if key != "electrons"}
             if isinstance(basis, dict)
             else basis
-            for role, basis in raw["generativeqc"]["cold_convergence"][0]
+            for role, basis in raw["vibeqc"]["cold_convergence"][0]
             .get("basis_metadata", {})
             .items()
         }

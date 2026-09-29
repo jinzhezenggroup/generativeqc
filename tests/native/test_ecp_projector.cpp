@@ -51,7 +51,7 @@ void check_grid() {
     std::vector<Radial> radii;
     std::vector<Point> sphere;
     ecp_make_grid(orders[0], orders[1], radii, sphere);
-    if (radii.size() != orders[0] || sphere.size() != 2 * orders[1] * orders[1])
+    if (radii.size() != orders[0] || sphere.size() != std::size_t{2} * orders[1] * orders[1])
       throw std::runtime_error("generated grid size mismatch");
     long double gram[16][16]{};
     for (const auto& p : sphere) {

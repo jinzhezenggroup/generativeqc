@@ -200,7 +200,7 @@ def validate_evidence(record: dict) -> None:
     if not isinstance(record, dict) or not required <= record.keys():
         raise ValueError("incomplete validation record")
     if (
-        record["schema"] != SCHEMA
+        record["schema"] not in {SCHEMA, "vibeqc.validation"}
         or type(record["schema_version"]) is not int
         or record["schema_version"] != VERSION
     ):

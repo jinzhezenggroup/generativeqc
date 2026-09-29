@@ -94,7 +94,8 @@ def independent_reference(
         "density_tolerance": 1e-10,
         "reference_gradient_tolerance": 1e-10,
         "max_iterations": 100,
-        "generativeqc_screening_tolerance": 1e-12,
+        # The retained oracle labels this setting with its original name.
+        "vibeqc_screening_tolerance": 1e-12,
         "direct_scf_tolerance": 1e-14,
         "geometries": [
             [
@@ -110,7 +111,8 @@ def independent_reference(
             raise RuntimeError(f"independent reference workload differs: {key}")
     retained_basis = [
         row.get("basis_metadata")
-        for row in reference["generativeqc"]["cold_convergence"]
+        # The retained independent oracle keeps its original engine key.
+        for row in reference["vibeqc"]["cold_convergence"]
     ]
     # Live electron metadata contains tuples; JSON necessarily retains lists.
     # Canonicalize that representation without weakening identity comparisons.

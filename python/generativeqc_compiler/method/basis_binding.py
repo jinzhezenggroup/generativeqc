@@ -98,7 +98,7 @@ def r2scan3c_def2_mtzvpp_h_ar() -> typing.Any:
 
     return BasisBinding(
         name="def2-mTZVPP",
-        basis_identity="11c25a32851c1fd54ca318162d46a1c436280c53c75df931e51b2520153a2c2f",
+        basis_identity="af55e4a3e21efd9d813231d5c5b043429ebc6ca3878d2cb08802b97920719996",
         source_sha256="b769650c71373053790db59191e68f35e20e7cfab85e011776aea1450d1a8d6f",
         source="MolSSI Basis Set Exchange",
         source_revision="4adaf1372c7101620ca1a9f3130be9ae97fb8f30",

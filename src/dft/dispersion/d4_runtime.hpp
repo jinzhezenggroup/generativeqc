@@ -13,7 +13,7 @@
 namespace generativeqc::dft::dispersion {
 
 inline constexpr char kD4EEQTableSha256[] =
-    "f0caaa42a0604d2d0c429e34eb84f5078769058ab02cccc55ae492746c6bc34c";
+    "6e3915221b62f5125c6f9d193689160a8d490be7af262cd4a51e7f1853148ff8";
 inline constexpr char kD4EEQChargeParameterSha256[] =
     "02b8bee49c10b4c31914caf149d9f58164e58d6dc7ae2ab21e9d12f5bc22797a";
 inline constexpr char kD4ProductionProviderIdentity[] = "generativeqc-native-d4-bj-eeq-v1";

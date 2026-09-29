@@ -36,7 +36,11 @@ def write(path: typing.Any, value: typing.Any) -> None:
 def validate_run(run: typing.Any, *, dense_only: typing.Any = False) -> typing.Any:
     """Reject partial inventories, stale resource accounting and failed numerical gates."""
     if (
-        run["schema"] != "generativeqc.spatial-task-benchmark.v1"
+        run["schema"]
+        not in {
+            "generativeqc.spatial-task-benchmark.v1",
+            "vibeqc.spatial-task-benchmark.v1",
+        }
         or run["dirty"] is not False
         or not re.fullmatch(r"[0-9a-f]{40}", run["revision"])
     ):
@@ -199,7 +203,11 @@ def summarize(run: typing.Any) -> typing.Any:
             summary["active_aos"] = row["active_aos"]
         rows.append(summary)
     return {
-        "schema": "generativeqc.spatial-task-summary.v1",
+        "schema": (
+            "vibeqc.spatial-task-summary.v1"
+            if run["schema"] == "vibeqc.spatial-task-benchmark.v1"
+            else "generativeqc.spatial-task-summary.v1"
+        ),
         "backend": run["backend"],
         "endpoints": rows,
         "production_promoted": False,

@@ -83,7 +83,11 @@ def load_workloads(directory: typing.Any) -> typing.Any:
         meta = json.loads((directory / f"{name}.json").read_text())
         identity = meta.pop("identity")
         if (
-            meta["schema"] != "generativeqc.density-workload-reference.v1"
+            meta["schema"]
+            not in {
+                "generativeqc.density-workload-reference.v1",
+                "vibeqc.density-workload-reference.v1",
+            }
             or identity != entry["identity"]
             or canonical_hash(meta) != identity
             or canonical_hash(meta["inputs"]) != meta["inputs_hash"]
@@ -133,7 +137,14 @@ def load_workloads(directory: typing.Any) -> typing.Any:
             tuple(map(int, arrays["owners"])),
             meta["grid_provenance"],
         )
-        if grid.identity != meta["grid_identity"]:
+        # The archived grid hash includes the schema spelling used when the
+        # measurements were generated; reconstruct that exact record for audit.
+        grid_identity = (
+            canonical_hash({**grid.record(), "schema": "vibeqc.explicit-grid"})
+            if meta["schema"] == "vibeqc.density-workload-reference.v1"
+            else grid.identity
+        )
+        if grid_identity != meta["grid_identity"]:
             raise ValueError("density workload grid mismatch")
         meta["identity"] = identity
         yield name, meta, arrays, grid

@@ -38,7 +38,7 @@ def test_frozen_benchmark_checkpoint_rejects_changed_geometry() -> None:
 def reference_inputs(aos: typing.Any) -> typing.Any:
     """Reuse the versioned independent results without loading a native backend."""
     reference = json.loads((EVIDENCE / f"{CASES[aos]}.json").read_text())
-    metadata = json.loads(json.dumps(reference["generativeqc"]["cold_convergence"]))
+    metadata = json.loads(json.dumps(reference["vibeqc"]["cold_convergence"]))
     for row in metadata:
         for role in ("orbital", "auxiliary"):
             electrons = row["basis_metadata"][role]["electrons"]
@@ -107,7 +107,7 @@ def test_reference_rejects_changed_geometry_or_basis(change: typing.Any) -> None
         # Copy the caller metadata so changing the retained basis cannot also
         # mutate the independently supplied actual metadata through an alias.
         args = (*args[:3], json.loads(json.dumps(args[3])))
-        reference["generativeqc"]["cold_convergence"][0]["basis_metadata"]["orbital"][
+        reference["vibeqc"]["cold_convergence"][0]["basis_metadata"]["orbital"][
             "basis_identity"
         ] = "stale-basis"
     with pytest.raises(RuntimeError, match="differs"):

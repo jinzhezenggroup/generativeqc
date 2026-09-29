@@ -47,7 +47,11 @@ def validate_run(run: typing.Any) -> typing.Any:
     """Bind complete timing, source, derivative and resource inventories."""
     canonical_hash(run)  # Reject nonfinite values anywhere in retained evidence.
     if (
-        run["schema"] != "generativeqc.xc-contraction-benchmark.v1"
+        run["schema"]
+        not in {
+            "generativeqc.xc-contraction-benchmark.v1",
+            "vibeqc.xc-contraction-benchmark.v1",
+        }
         or run["dirty"] is not False
         or not re.fullmatch(r"[0-9a-f]{40}", run["revision"])
     ):
@@ -217,7 +221,11 @@ def summarize(run: typing.Any) -> typing.Any:
     """Reconstruct medians from retained samples without a speedup decision."""
     validate_run(run)
     return {
-        "schema": "generativeqc.xc-contraction-summary.v1",
+        "schema": (
+            "vibeqc.xc-contraction-summary.v1"
+            if run["schema"] == "vibeqc.xc-contraction-benchmark.v1"
+            else "generativeqc.xc-contraction-summary.v1"
+        ),
         "revision": run["revision"],
         "decision": "numerical acceptance; explicit experimental CPU candidate; no performance promotion",
         "cases": [

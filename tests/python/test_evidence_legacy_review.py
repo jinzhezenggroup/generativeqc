@@ -165,7 +165,7 @@ def test_retention_488_snapshot_binds_removed_checkout_bytes() -> None:
     )
     audit = json.loads(manifest.read_text(encoding="utf-8"))
     records = _records(manifest)
-    assert audit["schema"] == "generativeqc.git-snapshot.v1"
+    assert audit["schema"] == "vibeqc.git-snapshot.v1"
     assert audit["history_rewritten"] is False
     assert len(records) == audit["file_count"] == audit["moved_files"] == 48
     assert (

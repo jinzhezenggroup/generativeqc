@@ -38,12 +38,15 @@ def _records(manifest: Path | None) -> list[dict]:
     if not isinstance(audit, dict):
         raise TypeError("unsupported evidence migration manifest")
     schema = audit.get("schema")
-    if schema == "generativeqc.storage-migration.v1":
+    if schema in {"generativeqc.storage-migration.v1", "vibeqc.storage-migration.v1"}:
         records = audit.get("archives")
     elif schema in {
         "generativeqc.evidence-archive.v1",
         "generativeqc.git-snapshot.v1",
         "generativeqc.git-object-snapshot.v1",
+        "vibeqc.evidence-archive.v1",
+        "vibeqc.git-snapshot.v1",
+        "vibeqc.git-object-snapshot.v1",
     }:
         records = audit.get("files")
     else:
@@ -56,7 +59,10 @@ def _records(manifest: Path | None) -> list[dict]:
         if not isinstance(record, dict):
             raise TypeError("invalid historical evidence identity")
         entry = dict(record)
-        if schema != "generativeqc.storage-migration.v1":
+        if schema not in {
+            "generativeqc.storage-migration.v1",
+            "vibeqc.storage-migration.v1",
+        }:
             entry["revision"] = audit.get("source_revision")
         _safe_path(entry.get("path"))
         if entry["path"] in paths:
@@ -65,7 +71,8 @@ def _records(manifest: Path | None) -> list[dict]:
         digest_ok = (
             isinstance(entry.get("git_blob_sha1"), str)
             and re.fullmatch(r"[0-9a-f]{40}", entry["git_blob_sha1"])
-            if schema == "generativeqc.git-object-snapshot.v1"
+            if schema
+            in {"generativeqc.git-object-snapshot.v1", "vibeqc.git-object-snapshot.v1"}
             else isinstance(entry.get("sha256"), str)
             and re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
         )
@@ -87,6 +94,8 @@ def _records(manifest: Path | None) -> list[dict]:
     if schema in {
         "generativeqc.git-snapshot.v1",
         "generativeqc.git-object-snapshot.v1",
+        "vibeqc.git-snapshot.v1",
+        "vibeqc.git-object-snapshot.v1",
     } and (
         type(audit.get("file_count")) is not int
         or audit["file_count"] != len(result)

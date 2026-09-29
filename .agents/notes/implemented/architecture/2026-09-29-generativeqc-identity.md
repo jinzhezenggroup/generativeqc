@@ -46,6 +46,28 @@ refreshed for 44 repository-owned inputs and outputs whose bytes changed. The re
 reference schema also required new outer record hashes for 14 fixtures;
 numeric data and hashed original environment provenance remain intact.
 
+## CI follow-up: retained evidence and active identities
+
+The first full Python CI run exposed a boundary missed by the focused tests.
+Active fixtures whose schema spelling changed need their enclosing canonical
+hash recalculated from their actual new bytes. The CC gradient, explicit grid,
+XC integration, basis and local-space numeric arrays did not change. Their
+active method bindings must agree with those new identities.
+
+Published benchmark bundles and evidence archives are different: their original
+schema and nested hashes are part of the measurement. Their readers validate
+the original `vibeqc.*` schema as recorded, including reconstructing the old
+explicit-grid schema when checking density workload hashes. This data-reading
+boundary is not a Python package, CLI, native ABI or CMake compatibility alias.
+Historical result files remain byte-for-byte unchanged. Source migration
+receipts record the exact current exporter bytes, including the deliberate
+identifier and schema rename; no new scientific reference execution is claimed.
+
+A synthetic test that pinned a literal hash of a hand-built cache payload now
+checks the canonical-hash relationship and mutation behavior. Tests that
+verify reference arrays, published attachments, native source provenance or
+generated source reproducibility retain exact hashes.
+
 ## References
 
 - Issue #1548.

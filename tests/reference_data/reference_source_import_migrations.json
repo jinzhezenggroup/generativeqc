@@ -1,14 +1,14 @@
 {
   "schema": "generativeqc.reference-source-import-migrations.v1",
   "source_base_commit": "09820aade255ab42c5d4a17fe90d080621f8e93b",
-  "scope": "Exact import-only source migration; no new reference execution, numerical values, historical metadata or archive identity. Unlisted source changes remain rejected.",
-  "normalization": "Remove only Import/ImportFrom nodes; retain all other AST fields, annotations, docstrings and literals. Omit empty Python-version-specific type_params fields.",
+  "scope": "Exact reviewed import and GenerativeQC identifier/path/schema rename; no new reference execution, numerical values or historical archive identity. Unlisted source changes remain rejected.",
+  "normalization": "Current non-import AST is fingerprinted exactly, including renamed literals and paths; remove only Import/ImportFrom nodes and empty Python-version-specific type_params fields.",
   "sources": [
     {
       "path": "tools/generate_accuracy_references.py",
       "historical_sha256": "a21a587f51f954ef12742482d0f0a9a97a30714136f9fe16921c664b33993b45",
-      "current_sha256": "60ca564620751dc1ba9a58fa1b36a92c4869c19ed2f1d2bfaf768f150d752af5",
-      "non_import_ast_sha256": "b4a1fb2d37de8d5e3c813c336d440d114a60ddaa68b763f2b48ff9fa018d4c7e",
+      "current_sha256": "58122d600708cd854b21f355eee4c42b5b03c6fb0aee2b93eb16dee11b16d3bd",
+      "non_import_ast_sha256": "486398b0c5d68e6ecc55c108986ef4eb024b606005e3aa8a241ee1620ffd3fe5",
       "removed_imports": [
         "from tools.generativeqc_validation.schema import canonical_hash, file_hash"
       ],
@@ -19,7 +19,7 @@
     {
       "path": "tools/generate_cc_endpoints.py",
       "historical_sha256": "87a206c3c9f879115e6e962df6c297900c9ccc45d887f98683fa12694a922ab8",
-      "current_sha256": "059c843f92f34cddcd4825fec1576e634f1fab0be455246283b9d8e53424fd90",
+      "current_sha256": "6ac83a5bda1e0d0621605903956f30d21b20f044efe734a473defe9a274228cb",
       "non_import_ast_sha256": "4956e09da51562dd470246694b64b250f2c5d123aff2f66625ef4a8536b5a4a2",
       "removed_imports": [
         "from tools.generativeqc_validation.schema import canonical_hash, file_hash"
@@ -31,8 +31,8 @@
     {
       "path": "tools/generate_cc_triples_references.py",
       "historical_sha256": "90c51308796b765d8a8f3a2345d397e1aae205c7f62b300d9d9122cd0d94f3aa",
-      "current_sha256": "c6049016d5054205c2130dd7d9c9308cb2eaf82be7d00104ec2a5c6a8f99f0cb",
-      "non_import_ast_sha256": "abfafcec13372fcd79e1d50c9566663cdc4a67d273815422256d6541eec7d77b",
+      "current_sha256": "0fe807bdb468fef05a733dc59f4f4d8f70ed4d63adfbfd5e2055b982d69dcb90",
+      "non_import_ast_sha256": "71d9ab30536ba7dff01ffd1937fffd218002db7d32afef12c5973e333fd52bcb",
       "removed_imports": [
         "from tools.generativeqc_validation.schema import canonical_hash, file_hash"
       ],
@@ -43,8 +43,8 @@
     {
       "path": "tools/generate_validation_references.py",
       "historical_sha256": "210765088eda3366537b0e7baefb89dacc634ee82b032bf972bf991475168b3e",
-      "current_sha256": "610069f7a0e6ad0f1a88bbdccd176f0fc12b26e787f5c77914da2df3b4b5899f",
-      "non_import_ast_sha256": "894197fc48887f5c6175631bdd53be0a4e87ebb7c88cf0c2c583c41bb821b61f",
+      "current_sha256": "798e5e696b23a0721fc5840505748c094a8d4a68011dd8dfa9db044e3c5f450b",
+      "non_import_ast_sha256": "ed1ffc1f5f09bcd43bfd860c733b0354ed57c29b678aa6814550b9b9e35e1fb4",
       "removed_imports": [
         "from tools.generativeqc_validation.schema import block_error, canonical_hash, file_hash"
       ],
@@ -55,8 +55,8 @@
     {
       "path": "tools/generate_xc_integration_references.py",
       "historical_sha256": "84cebf0c7646151d2e8c756bf2eb0452ace1018a35c78e687386a9446c63413d",
-      "current_sha256": "4ca9ae49ac9f751f1545ab7e473a5f9e3611832dc45eee9dac9cbef3f68bfba4",
-      "non_import_ast_sha256": "198684eab9f66b6f6722e08a75d8a03167f3e3297946c91040222f7384659562",
+      "current_sha256": "78c36d8f02102f168343baa9e1657ffbb1f32aba7452c066392f334f95f6c11b",
+      "non_import_ast_sha256": "dd96f15ef233b10977400e18d918a3793a1245d6d36616c889b9a5889795f91c",
       "removed_imports": [
         "from tools.generativeqc_dft.fixtures import load_fixture"
       ],
@@ -67,13 +67,31 @@
     {
       "path": "tools/generativeqc_validation/fixtures.py",
       "historical_sha256": "7259560d24fbb675e3e527678ccf058ec6bb417116349170381d16b1979baef5",
-      "current_sha256": "9408a5393335a991b50398f893e4df53595e3ed09049b08527c58ca1a92c9d0c",
-      "non_import_ast_sha256": "22abe25947f8104ae1ea819ab7fb9564cd48e4c1902435732c8f29acd370bde5",
+      "current_sha256": "c14325583b310da2623e822f6ca3cefeb9e5a24bed4c3d87efb6fab19f780b4f",
+      "non_import_ast_sha256": "e0c0162202ca4f96c572ed2c3eaa7f55a774e07111bc9523ef3c9f85b142c503",
       "removed_imports": [
         "from .schema import canonical_hash"
       ],
       "added_imports": [
         "from generativeqc_compiler.common.evidence import canonical_hash"
+      ]
+    },
+    {
+      "path": "tools/generate_density_workload_references.py",
+      "historical_sha256": "3a4ead4f2dcb6154e6a884c73cd26eb2b10ffba79f19f8e8feb745660717be71",
+      "current_sha256": "0d041faa96ea0932d473ff61f666df98f8287ede141e28e8d2a21fa70f835346",
+      "non_import_ast_sha256": "990236f65e3a4677a06e98139a1b4734cc85cfac241e9536484311a1cc9c45f6",
+      "removed_imports": [
+        "from vibeqc import Atom, Primitive, Shell",
+        "from vibeqc.calculator import _named_basis_shells",
+        "from vibeqc_compiler.common.provenance import canonical_hash, file_hash",
+        "from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid"
+      ],
+      "added_imports": [
+        "from generativeqc import Atom, Primitive, Shell",
+        "from generativeqc.calculator import _named_basis_shells",
+        "from generativeqc_compiler.common.provenance import canonical_hash, file_hash",
+        "from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid"
       ]
     }
   ]

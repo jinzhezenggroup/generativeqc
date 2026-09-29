@@ -89,8 +89,14 @@ def compact_comparison(directory: typing.Any) -> typing.Any:
         interned[key] = value
         return key
 
+    # Reconstructed workers retain the schema and build options of their run.
+    historical = records[0][2].get("schema") == "vibeqc.cuda-ownership-endpoints.v1"
     compact = {
-        "schema": "generativeqc.cuda-ownership-samples.v1",
+        "schema": (
+            "vibeqc.cuda-ownership-samples.v1"
+            if historical
+            else "generativeqc.cuda-ownership-samples.v1"
+        ),
         "records": interned,
         "runs": [],
     }
@@ -101,12 +107,22 @@ def compact_comparison(directory: typing.Any) -> typing.Any:
         if run["dirty"] or source != sources.setdefault(label, source):
             raise ValueError("dirty or changing measured source/binary")
         if (
-            run["schema"] != "generativeqc.cuda-ownership-endpoints.v1"
+            run["schema"]
+            != (
+                "vibeqc.cuda-ownership-endpoints.v1"
+                if historical
+                else "generativeqc.cuda-ownership-endpoints.v1"
+            )
             or run["selection"] != ("reference" if label == "baseline" else "generated")
             or not run["slurm_job_id"]
             or not run["gpu"]
             or "CMAKE_BUILD_TYPE:STRING=Release" not in run["build_settings"]
-            or "GENERATIVEQC_CUDA_FAST_COMPILE:BOOL=OFF" not in run["build_settings"]
+            or (
+                "VIBEQC_CUDA_FAST_COMPILE:BOOL=OFF"
+                if historical
+                else "GENERATIVEQC_CUDA_FAST_COMPILE:BOOL=OFF"
+            )
+            not in run["build_settings"]
         ):
             raise ValueError("missing optimized scheduled-worker provenance")
         compact["runs"].append(

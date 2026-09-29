@@ -56,7 +56,8 @@ def validate_publication(manifest: dict, files: dict[str, bytes]) -> None:
     historical review reasons. Remote archives are optional debugging material;
     permanent test/reproduction inputs belong in the bundle or source tree.
     """
-    if manifest.get("schema") != SCHEMA:
+    # Published measurements keep the schema recorded by their original run.
+    if manifest.get("schema") not in {SCHEMA, "vibeqc.benchmark-publication.v1"}:
         raise ValueError("unsupported publication manifest")
     source = manifest["source"]
     if (
