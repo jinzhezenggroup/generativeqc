@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from generativeqc_compiler.integral.derivative_aot_registry import (
     radial_inventory_from_payload,
@@ -13,11 +14,11 @@ from generativeqc_compiler.integral.derivative_cuda_shell_aot import (
     emit_cuda_derivative_shell_aot_header,
 )
 from generativeqc_compiler.integral.ir import KernelConsumer
-from generativeqc_compiler.integral.production_profile import (
-    ResolvedProductionProfile,
-    resolve_production_profile,
-)
-from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.integral.production_profile import ResolvedProductionProfile
+    from generativeqc_compiler.integral.range_separation import CoulombKernel
 
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION = (
