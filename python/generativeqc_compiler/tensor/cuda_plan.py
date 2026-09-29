@@ -718,7 +718,7 @@ def plan_cuda(
     reservations: Reservations = NO_RESERVATIONS,
     library_bytes: int = 4 * 1024**2,
     provider_bytes: int = MIN_PROVIDER_BYTES,
-    reassociate_contractions: bool = False,
+    reassociate_contractions: bool = True,
 ) -> TensorPlan:
     """Plan all allocations before preparation; shrink packing tiles to fit.
 
@@ -727,15 +727,21 @@ def plan_cuda(
     for shape/schedule selection. The baseline shares existing SSA nodes but
     neither rewrites the equation nor uses an external chemistry program.
 
-    `reassociate_contractions=True` runs the symbolic contraction-tree rewrite
-    before CUDA storage/layout planning. This is explicit opt-in because an
-    equivalent binary tree changes floating-point reduction order.
+    Symbolic contraction reassociation is enabled by default before CUDA
+    storage/layout planning. It rewrites only when the compiler proves a
+    strictly lower symbolic degree. Set `reassociate_contractions=False` to
+    preserve the original contraction tree. Programs carrying an explicit
+    precision-execution contract keep their original tree until intermediate
+    precision propagation through reassociation is defined.
     """
     if not isinstance(program, Program) or not isinstance(target, CudaTargetInfo):
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
     if type(reassociate_contractions) is not bool:
         raise TypeError("reassociate_contractions must be a Boolean")
-    if reassociate_contractions:
+    if (
+        reassociate_contractions
+        and program.provenance.get("precision_execution") is None
+    ):
         program = reassociate_einsums(program)
     checked_size(max_bytes, "tensor byte budget")
     checked_size(library_bytes, "library workspace")
