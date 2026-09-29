@@ -19,6 +19,7 @@ from tools.generativeqc_cc.gradient_equations import (
     build_hamiltonian_programs,
     build_hamiltonian_small_weight_program,
 )
+from tools.generativeqc_cc.lambda_equations import PARAMETERS
 
 
 def _literal(value: float) -> str:
@@ -196,6 +197,83 @@ def test_split_hamiltonian_response_matches_dense_parent(o: int, v: int) -> None
             fock_small_outputs[name], fock_expected[name], rtol=0, atol=1e-12
         )
 
+
+
+@pytest.mark.parametrize("o,v", [(1, 2), (2, 2)])
+def test_combined_force_seed_matches_sum_of_response_vjps(o: int, v: int) -> None:
+    """The compact force path is exactly the linear sum of the old response stages."""
+    rng = np.random.default_rng(13000 + 10 * o + v)
+    n = o + v
+    hamiltonian = build_hamiltonian_programs(o, v, explicit_density_input=True).weights
+    fock = build_fock_weight_program(o, v, explicit_density_input=True)
+    feeds = _feeds(hamiltonian, o, v, rng)
+    raw_names = ("h", "g", "density", "rotation")
+
+    correlation_feeds = dict(feeds)
+    correlation_feeds["bar_reference_electronic_energy"] = np.asarray(0.0)
+    correlation = execute(hamiltonian, correlation_feeds).outputs
+
+    # The production denominator/canonicalization seeds have no vo block. Include
+    # diagonal, same-space and ov terms here to cover every supported add_fock_seed
+    # branch while keeping vo identically zero.
+    bar_fock = np.zeros((n, n), dtype=np.float64)
+    bar_fock[np.arange(n), np.arange(n)] = rng.normal(size=n)
+    for start, stop in ((0, o), (o, n)):
+        block = rng.normal(size=(stop - start, stop - start))
+        block = 0.5 * (block + block.T)
+        bar_fock[start:stop, start:stop] += block
+    bar_fock[:o, o:] = rng.normal(size=(o, v))
+
+    fock_feeds = _feeds(fock, o, v, rng)
+    for name in raw_names:
+        fock_feeds[name] = feeds[name]
+    fock_feeds["bar_fock"] = bar_fock
+    fock_response = execute(fock, fock_feeds).outputs
+
+    zero_parameters = {
+        "bar_" + name: np.zeros_like(feeds["bar_" + name])
+        for name in PARAMETERS
+    }
+    z = rng.normal(size=(o, v))
+    orbital_feeds = {
+        **{name: feeds[name] for name in raw_names},
+        **zero_parameters,
+        "bar_reference_electronic_energy": np.asarray(0.0),
+    }
+    orbital_feeds["bar_fov"] = -z
+    orbital = execute(hamiltonian, orbital_feeds).outputs
+
+    hf_feeds = {
+        **{name: feeds[name] for name in raw_names},
+        **zero_parameters,
+        "bar_reference_electronic_energy": np.asarray(1.0),
+    }
+    hf = execute(hamiltonian, hf_feeds).outputs
+
+    combined = dict(correlation_feeds)
+    combined["bar_reference_electronic_energy"] = np.asarray(1.0)
+    combined["bar_foo"] = np.asarray(combined["bar_foo"]) + bar_fock[:o, :o]
+    combined["bar_fov"] = (
+        np.asarray(combined["bar_fov"]) + bar_fock[:o, o:] - z
+    )
+    combined["bar_fvv"] = np.asarray(combined["bar_fvv"]) + bar_fock[o:, o:]
+    compact = execute(hamiltonian, combined).outputs
+
+    for name in (
+        "hcore",
+        "eri",
+        "overlap",
+        "rotation_gradient",
+        "stationarity",
+        "orbital_rhs",
+    ):
+        expected = (
+            np.asarray(correlation[name])
+            + np.asarray(fock_response[name])
+            + np.asarray(orbital[name])
+            + np.asarray(hf[name])
+        )
+        np.testing.assert_allclose(compact[name], expected, rtol=2e-12, atol=2e-11)
 
 def test_runtime_shape_hamiltonian_response_matches_tensorir(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
