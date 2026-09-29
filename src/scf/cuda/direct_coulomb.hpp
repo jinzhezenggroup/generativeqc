@@ -52,7 +52,8 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
  * Value-only direct CUDA plans prefer this owner when the supported shell
  * classes and optional device budget admit it. Density screening uses the same
- * shell-pair reductions as Direct HF; no range-separated operator is represented here.
+ * shell-pair reductions as Direct HF. Value K remains full-range; the optional
+ * stationary-force lease may reuse this topology for explicit SR/LR operators.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
@@ -94,5 +95,12 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestr
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives);
+
+/** Stationary RSH sources [J(full), K(short), K(long)] through one retained
+ * shell owner and one public-to-Cartesian density transform. */
+cudaError_t execute_generated_rsh_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double short_exchange_coefficient,
+    double long_exchange_coefficient, double omega, std::vector<double>& derivatives);
 
 }  // namespace generativeqc::scf::cuda_execution
