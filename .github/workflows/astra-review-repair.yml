@@ -1,0 +1,74 @@
+name: Astra reviewed patch staging
+on:
+  push:
+    branches: [review/astra-snapshot-20260929]
+    paths: [.agents/astra-reviewed-repairs.json]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Stage reviewed Git objects without branch writes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, pathlib, subprocess, tempfile
+          repo = 'jinzhezenggroup/generativeqc'
+          out = pathlib.Path('/tmp/astra-staged-repairs')
+          out.mkdir()
+          def api(path, data=None):
+              cmd = ['gh', 'api', path]
+              if data is not None:
+                  cmd += ['--method', 'POST', '--input', '-']
+              return json.loads(subprocess.check_output(cmd, input=None if data is None else json.dumps(data), text=True))
+          jobs = json.loads(pathlib.Path('.agents/astra-reviewed-repairs.json').read_text())
+          results = []
+          for job in jobs:
+              n = int(job['pr'])
+              pr = api(f'repos/{repo}/pulls/{n}')
+              expected = job['expected_head']
+              assert pr['state'] == 'open' and pr['head']['sha'] == expected, f'PR {n} moved or closed'
+              assert pr['head']['repo']['full_name'] == repo
+              patch = job['patch'].encode()
+              assert hashlib.sha256(patch).hexdigest() == job['patch_sha256']
+              assert all(not p.startswith(('.git/', '.github/')) and '..' not in pathlib.PurePosixPath(p).parts for p in job['paths'])
+              subprocess.run(['git', 'fetch', '--no-tags', 'origin', expected], check=True)
+              work = pathlib.Path(tempfile.mkdtemp(prefix=f'astra-{n}-'))
+              subprocess.run(['git', 'worktree', 'add', '--detach', str(work), expected], check=True)
+              def git(*args, **kw):
+                  return subprocess.check_output(['git', '-C', str(work), *args], **kw)
+              git('apply', '--check', '-', input=patch)
+              git('apply', '-', input=patch)
+              git('diff', '--check')
+              changed = git('diff', '--name-only', text=True).splitlines()
+              assert sorted(changed) == sorted(job['paths']), (n, changed)
+              elements = []
+              for path in changed:
+                  data = (work / path).read_bytes()
+                  blob = api(f'repos/{repo}/git/blobs', {'content': base64.b64encode(data).decode(), 'encoding': 'base64'})
+                  mode = git('ls-files', '--stage', '--', path, text=True).split()[0]
+                  elements.append({'path': path, 'mode': mode, 'type': 'blob', 'sha': blob['sha']})
+              base = api(f'repos/{repo}/git/commits/{expected}')
+              tree = api(f'repos/{repo}/git/trees', {'base_tree': base['tree']['sha'], 'tree': elements})
+              message = job['message'] + '\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+              commit = api(f'repos/{repo}/git/commits', {'message': message, 'tree': tree['sha'], 'parents': [expected]})
+              record = {'pr': n, 'expected_head': expected, 'branch': pr['head']['ref'], 'commit': commit['sha'], 'tree': tree['sha'], 'files': elements}
+              results.append(record)
+              (out / f'{n}.diff').write_bytes(git('diff', '--binary'))
+              (out / 'staged.json').write_text(json.dumps(results, indent=2))
+              print(json.dumps(record))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: astra-staged-repairs-${{ github.run_id }}
+          path: /tmp/astra-staged-repairs/
+          retention-days: 3
+          if-no-files-found: error
