@@ -532,6 +532,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   if (error != cudaSuccess) return error;
   const double coefficients[2][2] = {{coulomb_coefficient, 0.0}, {0.0, exchange_coefficient}};
   for (unsigned source = 0; source < 2; ++source) {
+    if (coefficients[source][0] == 0.0 && coefficients[source][1] == 0.0) continue;
     error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
