@@ -673,7 +673,9 @@ struct CudaHamiltonianResponseOwner::Impl {
       upload(values[index], fields[index]);
   }
 
-  void stage_reference_seed(double reference_seed) {
+  // Borrow the enclosing Hamiltonian call's scalar, whose transfer fence drains
+  // before it leaves scope. A by-value helper argument would expire too early.
+  void stage_reference_seed(const double& reference_seed) {
     if (!std::isfinite(reference_seed))
       throw std::invalid_argument("nonfinite RCCSD CUDA Hamiltonian reference seed");
     cuda_check(cudaMemcpyAsync(state.bar_reference_electronic_energy, &reference_seed,
