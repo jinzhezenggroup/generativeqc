@@ -6,7 +6,13 @@ import typing
 from dataclasses import replace
 
 import pytest
-from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.cuda_resources import KernelResources
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.dft.xc_compiled_resources import (
+    GridXcCompiledRegionEvidence,
+    GridXcCompiledResourceShape,
+    native_grid_xc_compiled_region_evidence,
+)
 from generativeqc_compiler.dft.xc_program import (
     NativeKsXcSource,
     bind_native_ks_xc_region_candidates,
@@ -74,7 +80,7 @@ def _assessment(
     *,
     device_xc_available: bool = True,
     spins: int = 2,
-    compiled_evidence: GpuProfitability | None = None,
+    compiled_evidence: GridXcCompiledRegionEvidence | None = None,
 ) -> GridXcCandidateAssessment:
     return assess_grid_xc_schedule(
         schedule,
@@ -85,6 +91,30 @@ def _assessment(
         functional="PBE",
         scientific=_scientific(spins=spins),
         compiled_evidence=compiled_evidence,
+    )
+
+
+def _compiled_evidence(*, spins: int = 2) -> GridXcCompiledRegionEvidence:
+    rows = (
+        KernelResources("validate_density(double*)", 24, 0, 0, 0, 0),
+        KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0),
+        KernelResources("density_product<false>(double*)", 61, 0, 0, 0, 0),
+        KernelResources("density_features<false>(double*)", 62, 0, 0, 0, 0),
+        KernelResources("evaluate_points<1, false>(double*)", 80, 0, 16, 0, 0),
+        KernelResources("assemble_potential(double*)", 64, 0, 0, 0, 0),
+        KernelResources("accumulate_totals(double*)", 8, 0, 0, 0, 0),
+    )
+    return native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            npoint=_shape(spins=spins).npoint,
+            tile_points=_shape(spins=spins).tile_points,
+            nao=_shape(spins=spins).nao,
+            spins=spins,
+        ),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity=_scientific(spins=spins).source_identity,
     )
 
 
@@ -215,22 +245,13 @@ def test_measured_device_fused_route_replaces_complete_host_region() -> None:
 
 
 def test_region_selection_rejects_gpu_pressure_regression_inside_timing_noise() -> None:
-    host_evidence = GpuProfitability(
-        compiled_registers_per_thread=48,
-        spill_store_bytes=0,
-        spill_load_bytes=0,
-        compiled_occupancy_upper_bound=0.75,
-    )
-    device_evidence = GpuProfitability(
-        compiled_registers_per_thread=80,
-        spill_store_bytes=16,
-        spill_load_bytes=0,
-        compiled_occupancy_upper_bound=0.5,
-    )
+    program = _program()
     kwargs = {
-        "program": _program(),
-        "host_unfused": _assessment(HOST_UNFUSED, compiled_evidence=host_evidence),
-        "device_fused": _assessment(DEVICE_FUSED, compiled_evidence=device_evidence),
+        "program": program,
+        "host_unfused": _assessment(HOST_UNFUSED),
+        "device_fused": _assessment(
+            DEVICE_FUSED, compiled_evidence=_compiled_evidence()
+        ),
         "source": _source(),
         "device_xc_identity": "cuda-xc-plan-pbe-v1",
         "minimum_speedup": 1.0,
@@ -241,7 +262,7 @@ def test_region_selection_rejects_gpu_pressure_regression_inside_timing_noise() 
         **kwargs,
     )
     assert tied.candidate.name == "host_unfused"
-    assert tied.program is kwargs["program"]
+    assert tied.program is program
 
     faster = select_native_ks_xc_region_program(
         endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.97},
