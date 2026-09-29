@@ -21,7 +21,7 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     ):
         assert token in header
         assert token in source
-    assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in source
+    assert "launch_bounded_shell_energy_derivative(" in source
     assert "DirectScreeningPurpose::Force" in source
 
 
