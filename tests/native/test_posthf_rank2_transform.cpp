@@ -51,15 +51,15 @@ void require_close(std::span<const double> actual, std::span<const double> expec
 
 void nonfinite_comparisons_fail_closed() {
   const std::array<double, 2> finite{0.0, 1.0};
-  for (const double invalid : {std::numeric_limits<double>::quiet_NaN(),
-                               std::numeric_limits<double>::infinity(),
-                               -std::numeric_limits<double>::infinity()}) {
+  for (const double invalid :
+       {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity()}) {
     const std::array<double, 2> nonfinite{0.0, invalid};
     for (const bool invalid_actual : {false, true}) {
       bool rejected = false;
       try {
-        require_close(invalid_actual ? nonfinite : finite,
-                      invalid_actual ? finite : nonfinite, "nonfinite comparison accepted");
+        require_close(invalid_actual ? nonfinite : finite, invalid_actual ? finite : nonfinite,
+                      "nonfinite comparison accepted");
       } catch (const std::runtime_error&) {
         rejected = true;
       }
