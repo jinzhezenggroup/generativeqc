@@ -84,12 +84,21 @@ reference's pair orientation and ordering. Versions 1/2, radii, coincidence,
 normalization and derivative exports share the same prescription.
 
 The native owner retains host coordinates, weights and owners for current export
-contracts; tile downloads and the subsequent XC upload are part of preparation.
-All temporary CUDA arrays are charged through the resource ledger and the pure
-`generativeqc_resource_quadrature_cuda_v1` shape bridge. Quadrature scratch coexists with
-the prepared Fock provider and retires before KS/XC state allocation. Unsupported
-inputs or failed normalization throw without a CPU partition fallback. The
-ordinary `MolecularGrid` constructor remains the independent CPU reference.
+contracts. Device-fused KS additionally retains the exact CUDA-generated
+coordinates and weights in one immutable full-grid allocation. The generated
+quadrature still downloads the host export once, but XC borrows the resident
+device view directly: it neither uploads those host copies again nor reserves a
+second full-grid points/weights region in its private arena. Host-unfused KS does
+not retain the device view.
+
+The pure `generativeqc_resource_quadrature_cuda_v1` shape bridge reports the
+preparation peak: bounded quadrature scratch plus the resident full-grid
+allocation that coexists with it. The legacy KS resource ABI keeps its XC slot
+as the combined persistent XC+grid bound, preserving the established three-slot
+planner while the native owner reports private XC and resident-grid bytes
+separately. Unsupported inputs or failed normalization throw without a CPU
+partition fallback. The ordinary `MolecularGrid` constructor remains the
+independent CPU reference.
 See the [CUDA quadrature decision](../../.agents/notes/implemented/performance/2026-09-23-cuda-molecular-quadrature.md).
 
 `grid.explicit(max_points=...)` is a guarded small-grid exporter. `ExplicitGrid`
