@@ -127,10 +127,7 @@ def _case_cpp(o: int, v: int) -> str:
                 "if(!close(control.stationarity,g0_expected_stationarity,o+v==0 ? 0 : (o+v)*(o+v))) "
                 "return 71;"
             ),
-            (
-                "if(!close(control.orbital_rhs,g0_expected_orbital_rhs,o*v)) "
-                "return 72;"
-            ),
+            ("if(!close(control.orbital_rhs,g0_expected_orbital_rhs,o*v)) return 72;"),
         ]
     )
     return "\n".join(

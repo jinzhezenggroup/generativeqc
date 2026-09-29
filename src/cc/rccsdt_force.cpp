@@ -268,10 +268,9 @@ ResponseWeights hamiltonian_pullback(const ParameterWeights& bar, double referen
   return copy_hamiltonian_outputs(output, n, o, v);
 }
 
-ControlWeights hamiltonian_control_pullback(const ParameterWeights& bar,
-                                            double reference_seed,
-                                            const RawHamiltonian& raw, std::size_t o,
-                                            std::size_t v, std::size_t max_bytes) {
+ControlWeights hamiltonian_control_pullback(const ParameterWeights& bar, double reference_seed,
+                                            const RawHamiltonian& raw, std::size_t o, std::size_t v,
+                                            std::size_t max_bytes) {
   const auto n = checked_add(o, v), ov = checked_mul(o, v);
   const auto arena_elements = generated::hamiltonian_control_arena_elements(o, v);
   if (checked_add(bytes(arena_elements), bytes(checked_add(square(n), ov))) > max_bytes)
@@ -309,11 +308,9 @@ void add_same_space_fock_seed(ParameterWeights& target, std::span<const double> 
       if (bar_fock[i * n + o + a] != 0.0 || bar_fock[(o + a) * n + i] != 0.0)
         throw std::logic_error("RCCSD(T) control folding accepts same-space Fock seeds only");
   for (std::size_t i = 0; i < o; ++i)
-    for (std::size_t j = 0; j < o; ++j)
-      target.foo[i * o + j] += bar_fock[i * n + j];
+    for (std::size_t j = 0; j < o; ++j) target.foo[i * o + j] += bar_fock[i * n + j];
   for (std::size_t a = 0; a < v; ++a)
-    for (std::size_t b = 0; b < v; ++b)
-      target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
+    for (std::size_t b = 0; b < v; ++b) target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
 }
 
 double max_abs(std::span<const double> values) {
@@ -610,8 +607,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
                               double reference_seed) -> ControlWeights {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_response) {
-      auto full =
-          detach_cuda_response(cuda_response->hamiltonian(cuda_parameter_view(bar), reference_seed));
+      auto full = detach_cuda_response(
+          cuda_response->hamiltonian(cuda_parameter_view(bar), reference_seed));
       return {std::move(full.stationarity), std::move(full.orbital_rhs)};
     }
 #endif
