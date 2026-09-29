@@ -29,7 +29,7 @@ def load_join() -> typing.Any:
         "typing": typing,
         "_native": SimpleNamespace(check=check),
     }
-    exec(
+    exec(  # noqa: S102 -- execute only the checked-out adapter AST
         compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"),
         namespace,
     )
