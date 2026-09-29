@@ -20,7 +20,7 @@ def test_manifest_hashes_requested_library_in_bounded_chunks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A preflight identifies file bytes without loading or whole-file reads."""
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     content = b"protocol-only native library" * 100_000
     library.write_bytes(content)
     alias = tmp_path / "selected-library.so"
@@ -77,7 +77,7 @@ def test_manifest_only_cli_records_unbuilt_library_without_gpu(
     )
     matrix.main()
     payload = json.loads((output / "manifest.json").read_text())
-    assert payload["schema"] == "vibeqc.issue206.df_matrix"
+    assert payload["schema"] == "generativeqc.issue206.df_matrix"
     assert payload["version"] == 1
     assert payload["source"]["native_library"] == {
         "path": str(library),
@@ -90,7 +90,7 @@ def test_manifest_only_cli_records_unbuilt_library_without_gpu(
 
 
 def test_library_identity_changes_when_same_path_is_rebuilt(tmp_path: Path) -> None:
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"original")
     before = matrix._native_library_metadata(library)
     library.write_bytes(b"rebuilt")
@@ -506,8 +506,10 @@ def test_host_branch_rejection_retains_raw_samples_and_failed_manifest(
     def reject(**kwargs: typing.Any) -> typing.Any:
         raise failure
 
-    # The CLI assigns VIBEQC_LIBRARY directly; restore it after this test.
-    monkeypatch.setenv("VIBEQC_LIBRARY", os.environ.get("VIBEQC_LIBRARY", ""))
+    # The CLI assigns GENERATIVEQC_LIBRARY directly; restore it after this test.
+    monkeypatch.setenv(
+        "GENERATIVEQC_LIBRARY", os.environ.get("GENERATIVEQC_LIBRARY", "")
+    )
     monkeypatch.setattr(host, "host_workloads", reject)
     monkeypatch.setattr(
         sys,

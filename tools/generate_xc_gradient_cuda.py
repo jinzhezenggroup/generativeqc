@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.xc.geometry_cuda import emit_native_geometry_cuda
+from generativeqc_compiler.xc.geometry_cuda import emit_native_geometry_cuda
 
 from tools.generate_df_kernels import write_if_changed
 

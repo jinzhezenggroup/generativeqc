@@ -7,16 +7,17 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import block_error
-from vibeqc_compiler.dft import GridSpec, NativeAO
-from vibeqc_compiler.dft.cuda import CudaGrid, compile_cuda
-from vibeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
-from vibeqc_compiler.dft.prepared import PreparedGrid, PreparedGridBatch
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import block_error
+from generativeqc_compiler.dft import GridSpec, NativeAO
+from generativeqc_compiler.dft.cuda import CudaGrid, compile_cuda
+from generativeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
+from generativeqc_compiler.dft.prepared import PreparedGrid, PreparedGridBatch
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_GRID_CUDA_TEST") != "1", reason="opt-in Slurm CUDA gate"
+    os.environ.get("GENERATIVEQC_GRID_CUDA_TEST") != "1",
+    reason="opt-in Slurm CUDA gate",
 )
 
 
@@ -24,8 +25,12 @@ pytestmark = pytest.mark.skipif(
 def artifact() -> typing.Any:
     return compile_cuda(
         CudaCompilerAdapter(
-            Path(os.environ.get("VIBEQC_NVCC", "/group/software/cuda-12.9.1/bin/nvcc")),
-            cuda_target_info(os.environ.get("VIBEQC_GRID_CUDA_ARCH", "sm_120")),
+            Path(
+                os.environ.get(
+                    "GENERATIVEQC_NVCC", "/group/software/cuda-12.9.1/bin/nvcc"
+                )
+            ),
+            cuda_target_info(os.environ.get("GENERATIVEQC_GRID_CUDA_ARCH", "sm_120")),
         ),
         Path("/tmp/dft160-cuda-cache"),
     )
@@ -219,17 +224,21 @@ def test_prepared_reuse_changed_geometry_and_ragged_failures(
 
 def test_shared_posthf_runtime_after_cache_extraction() -> None:
     """Exercise the existing cuBLAS MO consumer after extracting shared caching."""
-    from tools.vibeqc_posthf.conventions import MOBlock
-    from tools.vibeqc_posthf.cuda import compile_cuda as compile_posthf
-    from tools.vibeqc_posthf.fixtures import fixture_snapshot, source_arguments
-    from tools.vibeqc_posthf.fixtures import load_fixture as load_posthf
-    from tools.vibeqc_posthf.providers import ConventionalProvider
-    from tools.vibeqc_posthf.sources import NativeSource
+    from tools.generativeqc_posthf.conventions import MOBlock
+    from tools.generativeqc_posthf.cuda import compile_cuda as compile_posthf
+    from tools.generativeqc_posthf.fixtures import fixture_snapshot, source_arguments
+    from tools.generativeqc_posthf.fixtures import load_fixture as load_posthf
+    from tools.generativeqc_posthf.providers import ConventionalProvider
+    from tools.generativeqc_posthf.sources import NativeSource
 
     artifact = compile_posthf(
         CudaCompilerAdapter(
-            Path(os.environ.get("VIBEQC_NVCC", "/group/software/cuda-12.9.1/bin/nvcc")),
-            cuda_target_info(os.environ.get("VIBEQC_GRID_CUDA_ARCH", "sm_120")),
+            Path(
+                os.environ.get(
+                    "GENERATIVEQC_NVCC", "/group/software/cuda-12.9.1/bin/nvcc"
+                )
+            ),
+            cuda_target_info(os.environ.get("GENERATIVEQC_GRID_CUDA_ARCH", "sm_120")),
         ),
         Path("/tmp/dft160-posthf-cache"),
     )

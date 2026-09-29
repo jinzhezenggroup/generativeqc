@@ -3,7 +3,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 
 def _cuda_tolerances() -> tuple[float, float]:
@@ -70,14 +70,14 @@ def test_cuda_resident_rhf_response_matches_host_operator(
     """B2: keep RHF response operator/Krylov vectors resident on the CUDA stream."""
     if (
         os.environ.get("CUMETAL_ROOT")
-        or os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1"
+        or os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
     ):
         pytest.skip(
             "resident RHF response requires explicitly allocated native NVIDIA CUDA"
         )
-    from tools.vibeqc_posthf.export import export_rhf
-    from tools.vibeqc_posthf.sources import NativeSource
-    from tools.vibeqc_response import (
+    from tools.generativeqc_posthf.export import export_rhf
+    from tools.generativeqc_posthf.sources import NativeSource
+    from tools.generativeqc_response import (
         CudaDirectJKBackend,
         GMRESOptions,
         RHFResponseOperator,
@@ -91,7 +91,7 @@ def test_cuda_resident_rhf_response_matches_host_operator(
     )
     inputs = {"atoms": atoms, "basis": basis}
     if fixture_name != "minimal_h2":
-        from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+        from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
         # Non-square occupied/virtual blocks expose layout and gap-action bugs
         # that the original one-dimensional H2 response cannot exercise.

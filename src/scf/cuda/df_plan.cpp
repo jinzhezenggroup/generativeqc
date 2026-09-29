@@ -12,11 +12,11 @@
 #include "scf/cuda/df_plan_setup.hpp"
 #include "scf/df_exchange_policy.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 using namespace cuda_df;
 
 // Public plan adapters retain their opaque ABI and source-transfer contract.
-vibeqc_status create_cuda_density_fitting_jk_plan_tiled(
+generativeqc_status create_cuda_density_fitting_jk_plan_tiled(
     int device_id, std::size_t batch_size, std::size_t nbf, std::size_t naux,
     const std::vector<double>& metrics, const std::vector<double>& three_center,
     double relative_threshold, std::size_t auxiliary_tile, std::size_t ao_pair_tile,
@@ -27,7 +27,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled(
       ao_pair_tile, plan, diagnostics, detail, nullptr, false, {}, automatic_rhf_rank);
 }
 
-vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
+generativeqc_status create_cuda_density_fitting_jk_plan_from_source(
     int device_id, CudaDensityFittingIntegralSource** source, std::size_t batch_size,
     std::size_t nbf, std::size_t naux, const std::vector<double>& metrics,
     double relative_threshold, std::size_t auxiliary_tile, std::size_t ao_pair_tile,
@@ -38,7 +38,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
       ao_pair_tile, plan, diagnostics, detail, false);
 }
 
-vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
+generativeqc_status create_cuda_density_fitting_jk_plan_from_source(
     int device_id, CudaDensityFittingIntegralSource** source, std::size_t batch_size,
     std::size_t nbf, std::size_t naux, const std::vector<double>& metrics,
     double relative_threshold, std::size_t auxiliary_tile, std::size_t ao_pair_tile,
@@ -49,7 +49,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
       ao_pair_tile, plan, diagnostics, detail, retain_three_center, {});
 }
 
-vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
+generativeqc_status create_cuda_density_fitting_jk_plan_from_source(
     int device_id, CudaDensityFittingIntegralSource** source, std::size_t batch_size,
     std::size_t nbf, std::size_t naux, const std::vector<double>& metrics,
     double relative_threshold, std::size_t auxiliary_tile, std::size_t ao_pair_tile,
@@ -59,16 +59,16 @@ vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
   if (plan != nullptr) *plan = nullptr;
   if (source == nullptr || *source == nullptr) {
     detail = "source-backed CUDA DF plan requires a source";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // The implementation owns the handle for the duration of this call,
   // including validation/allocation failures.  It destroys the handle on
   // every failure path; clear the caller slot unconditionally below.
-  vibeqc_status status = create_cuda_density_fitting_jk_plan_tiled_impl(
+  generativeqc_status status = create_cuda_density_fitting_jk_plan_tiled_impl(
       device_id, batch_size, nbf, naux, metrics, {}, relative_threshold, auxiliary_tile,
       ao_pair_tile, plan, diagnostics, detail, *source, retain_three_center, storage,
       automatic_rhf_rank);
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     *source = nullptr;  // ownership transfers to the prepared plan
   } else {
     // The implementation has already destroyed the transferred source on
@@ -78,7 +78,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
   return status;
 }
 
-vibeqc_status create_cuda_density_fitting_jk_plan(
+generativeqc_status create_cuda_density_fitting_jk_plan(
     int device_id, std::size_t batch_size, std::size_t nbf, std::size_t naux,
     const std::vector<double>& metrics, const std::vector<double>& three_center,
     double relative_threshold, std::size_t auxiliary_tile, CudaDensityFittingJkPlan** plan,
@@ -129,8 +129,8 @@ unsigned cuda_density_fitting_scf_diis_history(const CudaDensityFittingJkPlan* p
 }
 
 bool cuda_density_fitting_scf_policy_matches(const CudaDensityFittingJkPlan* plan) noexcept {
-  const char* resident = std::getenv("VIBEQC_DF_RESIDENT_EXCHANGE");
-  const char* diis = std::getenv("VIBEQC_DF_DIIS_DOTS");
+  const char* resident = std::getenv("GENERATIVEQC_DF_RESIDENT_EXCHANGE");
+  const char* diis = std::getenv("GENERATIVEQC_DF_DIIS_DOTS");
   return plan != nullptr &&
          (!resident || std::strcmp(resident, "auto") == 0 || std::strcmp(resident, "full") == 0 ||
           std::strcmp(resident, "flat") == 0 || std::strcmp(resident, "legacy") == 0) &&
@@ -155,4 +155,4 @@ bool cuda_density_fitting_jk_plan_matches(const CudaDensityFittingJkPlan* plan, 
          plan->metric_relative_threshold == relative_threshold;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

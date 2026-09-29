@@ -8,9 +8,16 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Atom, BasisProvenance, BasisSet, BasisShell, Calculator, ElementBasis
-from vibeqc.ecp import ecp_integrals, resolve_ecp
-from vibeqc.profiles import canonical_hash
+from generativeqc import (
+    Atom,
+    BasisProvenance,
+    BasisSet,
+    BasisShell,
+    Calculator,
+    ElementBasis,
+)
+from generativeqc.ecp import ecp_integrals, resolve_ecp
+from generativeqc.profiles import canonical_hash
 
 
 def fixture(
@@ -239,14 +246,14 @@ def detached_native(
     f_projector: typing.Any = False,
 ) -> typing.Any:
     """An ECP atom with no Gaussian shell tests its independent center motion."""
-    from vibeqc import _native
+    from generativeqc import _native
 
     calculator = Calculator(device=device)
     library = calculator._library
     context = ctypes.c_void_p()
     _native.check(
         library,
-        library.vibeqc_context_create(
+        library.generativeqc_context_create(
             ctypes.byref(calculator._context_descriptor()), ctypes.byref(context)
         ),
     )
@@ -285,7 +292,7 @@ def detached_native(
     try:
         _native.check(
             library,
-            library.vibeqc_system_create_ecp(
+            library.generativeqc_system_create_ecp(
                 context,
                 ctypes.byref(descriptor),
                 cores,
@@ -298,7 +305,7 @@ def detached_native(
         result = np.empty((2, 10, n, n))
         _native.check(
             library,
-            library.vibeqc_system_ecp_integrals(
+            library.generativeqc_system_ecp_integrals(
                 context,
                 system,
                 160,
@@ -311,8 +318,8 @@ def detached_native(
         return result
     finally:
         if system:
-            library.vibeqc_system_destroy(system)
-        library.vibeqc_context_destroy(context)
+            library.generativeqc_system_destroy(system)
+        library.generativeqc_context_destroy(context)
 
 
 def detached_reference(
@@ -394,7 +401,7 @@ def test_isolated_valence_atom_and_wrong_core_count() -> None:
     )
     with pytest.raises(
         RuntimeError,
-        match="VIBEQC error 1: RHF requires an even electron count",
+        match="GENERATIVEQC error 1: RHF requires an even electron count",
     ):
         Calculator(basis=bad).singlepoint(atoms)
 
@@ -416,7 +423,8 @@ def test_unresolved_quadrature_rejects_full_method() -> None:
 
 
 @pytest.mark.skipif(
-    os.getenv("VIBEQC_ECP_CUDA_TEST") != "1", reason="requires explicit real CUDA run"
+    os.getenv("GENERATIVEQC_ECP_CUDA_TEST") != "1",
+    reason="requires explicit real CUDA run",
 )
 @pytest.mark.parametrize("spin", [0, 1])
 def test_real_cuda_matrices_complete_hf_and_replay(spin: typing.Any) -> None:
@@ -463,9 +471,9 @@ def test_real_cuda_matrices_complete_hf_and_replay(spin: typing.Any) -> None:
 def test_ecp_resource_budget_and_parameter_invalidation(
     device: typing.Any,
 ) -> None:
-    if device == "cuda" and os.getenv("VIBEQC_ECP_CUDA_TEST") != "1":
+    if device == "cuda" and os.getenv("GENERATIVEQC_ECP_CUDA_TEST") != "1":
         pytest.skip("requires explicit real CUDA run")
-    from vibeqc import ResourceBudget
+    from generativeqc import ResourceBudget
 
     atoms, basis, _ = fixture()
     calculator = Calculator(basis=basis, device=device)
@@ -536,7 +544,8 @@ def test_unsupported_ecp_formats_reject_before_execution(
 
 
 @pytest.mark.skipif(
-    os.getenv("VIBEQC_ECP_CUDA_TEST") != "1", reason="requires explicit real CUDA run"
+    os.getenv("GENERATIVEQC_ECP_CUDA_TEST") != "1",
+    reason="requires explicit real CUDA run",
 )
 @pytest.mark.parametrize("representation", ["spherical", "cartesian"])
 def test_cuda_d_shell_and_independent_potential_center(
@@ -563,7 +572,7 @@ def test_cuda_d_shell_and_independent_potential_center(
 def test_all_radial_powers_and_d_projector_libcint(
     power: typing.Any, device: typing.Any
 ) -> None:
-    if device == "cuda" and os.getenv("VIBEQC_ECP_CUDA_TEST") != "1":
+    if device == "cuda" and os.getenv("GENERATIVEQC_ECP_CUDA_TEST") != "1":
         pytest.skip("requires explicit real CUDA run")
     xyz = np.array([[0.13, -0.27, 0.32], [0.43, 0.38, 1.12], [-0.31, 0.12, -0.62]])
     actual = detached_native(xyz, device=device, power=power, d_projector=True)

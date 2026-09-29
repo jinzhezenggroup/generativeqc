@@ -4,8 +4,8 @@ import json
 import typing
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import (
     ResourceBudget,
     ResourceCandidate,
     ResourceEstimate,
@@ -13,7 +13,7 @@ from vibeqc_compiler.common.resources import (
     ResourceRequest,
     plan_resources,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -22,7 +22,7 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.resources import tensor_resource_choices
+from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
 
 def fragment() -> typing.Any:

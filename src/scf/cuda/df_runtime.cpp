@@ -12,7 +12,7 @@
 
 #include "runtime/resource_cuda.cuh"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 // Allocation registration stays with the common resource ledger.
 bool checked_multiply(std::size_t first, std::size_t second, std::size_t& product) {
@@ -38,30 +38,33 @@ bool finite_values(const std::vector<double>& values) {
                      [](double value) { return std::isfinite(value); });
 }
 
-vibeqc_status cuda_failure(cudaError_t error, const char* operation, std::string& detail) {
+generativeqc_status cuda_failure(cudaError_t error, const char* operation, std::string& detail) {
   detail = std::string(operation) + ": " + cudaGetErrorString(error);
-  return error == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                            : VIBEQC_STATUS_CUDA_ERROR;
+  return error == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                            : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
-vibeqc_status blas_failure(cublasStatus_t status, const char* operation, std::string& detail) {
+generativeqc_status blas_failure(cublasStatus_t status, const char* operation,
+                                 std::string& detail) {
   detail = std::string(operation) + " failed with cuBLAS status " +
            std::to_string(static_cast<int>(status));
-  return status == CUBLAS_STATUS_ALLOC_FAILED ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                              : VIBEQC_STATUS_CUDA_ERROR;
+  return status == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                              : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
-vibeqc_status solver_failure(cusolverStatus_t status, const char* operation, std::string& detail) {
+generativeqc_status solver_failure(cusolverStatus_t status, const char* operation,
+                                   std::string& detail) {
   detail = std::string(operation) + " failed with cuSOLVER status " +
            std::to_string(static_cast<int>(status));
-  return status == CUSOLVER_STATUS_ALLOC_FAILED ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                : VIBEQC_STATUS_CUDA_ERROR;
+  return status == CUSOLVER_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
-vibeqc_status allocate_device(void** pointer, std::size_t bytes, const char* description,
-                              std::string& detail) {
+generativeqc_status allocate_device(void** pointer, std::size_t bytes, const char* description,
+                                    std::string& detail) {
   const cudaError_t error = runtime::resource_cuda_malloc(pointer, bytes);
-  return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS : cuda_failure(error, description, detail);
+  return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
+                              : cuda_failure(error, description, detail);
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

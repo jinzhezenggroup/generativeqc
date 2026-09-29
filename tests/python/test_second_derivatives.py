@@ -6,30 +6,30 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.expr import AlgebraForm
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.expr import AlgebraForm
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
     build_one_electron_derivative_kernel,
     evaluate_one_electron_derivative_primitive,
 )
-from vibeqc_compiler.integral.second_derivatives import (
+from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
     build_second_derivative_kernel,
 )
-from vibeqc_compiler.integral.second_order_layout import HessianLayout
-from vibeqc_compiler.integral.shell_spec import cartesian_components
-from vibeqc_compiler.integral.weighted_eri import (
+from generativeqc_compiler.integral.second_order_layout import HessianLayout
+from generativeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
 
-from tools.vibeqc_validation.second_derivatives import (
+from tools.generativeqc_validation.second_derivatives import (
     evaluate_second_primitive,
     libcint_eri_hessian,
     libcint_one_electron_hessian,
 )
-from tools.vibeqc_validation.weighted_eri import primitive_variables
+from tools.generativeqc_validation.weighted_eri import primitive_variables
 
 CENTERS = np.array(
     [
@@ -204,7 +204,7 @@ def test_f_shell_second_moment_bound_and_nonfinal_recovery() -> None:
     ir = build_eri_second_ir((3, 3, 3, 3))
     kernel = build_second_derivative_kernel(ir, (0,), output_indices=(0,))
     assert kernel.boys_count == 15
-    from vibeqc_compiler.integral.ir import TranslationInvariant
+    from generativeqc_compiler.integral.ir import TranslationInvariant
 
     invariant = TranslationInvariant(dependent_center=1)
     changed = replace(

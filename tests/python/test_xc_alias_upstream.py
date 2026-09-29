@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     METHOD_ALIASES,
     METHOD_CATALOG,
     UnsupportedMethod,
     resolve_method,
 )
-from vibeqc_compiler.method._generated_xc_aliases import (
+from generativeqc_compiler.method._generated_xc_aliases import (
     UPSTREAM_XC_ALIAS_PROVENANCE,
 )
 

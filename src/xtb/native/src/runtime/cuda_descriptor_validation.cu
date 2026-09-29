@@ -11,7 +11,7 @@
 #include "nvidia_host_api.h"
 #include "runtime/cuda_descriptor_validation.hpp"
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 namespace {
 
 struct PointerFacts {
@@ -43,18 +43,18 @@ void consume_validation_error(cudaError_t status) noexcept {
   if (status != cudaSuccess) (void)cudaGetLastError();
 }
 
-vibeqc_xtb_status_t invalid(const char* name, const char* detail, std::string& error) {
+generativeqc_xtb_status_t invalid(const char* name, const char* detail, std::string& error) {
   error = std::string(display_name(name)) + detail;
-  return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
 }
 
-vibeqc_xtb_status_t finish_with_restore(ScopedCudaDevice& device, vibeqc_xtb_status_t status,
+generativeqc_xtb_status_t finish_with_restore(ScopedCudaDevice& device, generativeqc_xtb_status_t status,
                                      std::string& error) {
   std::string restore_error;
-  const vibeqc_xtb_status_t restore_status = device.restore(restore_error);
-  if (restore_status == VIBEQC_XTB_STATUS_SUCCESS) return status;
+  const generativeqc_xtb_status_t restore_status = device.restore(restore_error);
+  if (restore_status == GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
-  if (status != VIBEQC_XTB_STATUS_SUCCESS && !error.empty()) {
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS && !error.empty()) {
     error += "; additionally, " + restore_error;
   } else {
     error = std::move(restore_error);
@@ -62,23 +62,23 @@ vibeqc_xtb_status_t finish_with_restore(ScopedCudaDevice& device, vibeqc_xtb_sta
   return restore_status;
 }
 
-vibeqc_xtb_status_t validate_basic_descriptor(const char* name, const void* data,
+generativeqc_xtb_status_t validate_basic_descriptor(const char* name, const void* data,
                                            std::size_t size_bytes,
-                                           vibeqc_xtb_memory_space_t memory_space,
+                                           generativeqc_xtb_memory_space_t memory_space,
                                            std::uint32_t reserved, std::size_t logical_bytes,
                                            std::size_t alignment, std::string& error) {
   if (reserved != 0u) return invalid(name, ".reserved must be zero", error);
-  if (memory_space == VIBEQC_XTB_MEMORY_ROCM_DEVICE) {
+  if (memory_space == GENERATIVEQC_XTB_MEMORY_ROCM_DEVICE) {
     error = std::string(display_name(name)) + " uses reserved ROCm device memory";
-    return VIBEQC_XTB_STATUS_NOT_SUPPORTED;
+    return GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED;
   }
-  if (memory_space != VIBEQC_XTB_MEMORY_HOST && memory_space != VIBEQC_XTB_MEMORY_CUDA_DEVICE) {
+  if (memory_space != GENERATIVEQC_XTB_MEMORY_HOST && memory_space != GENERATIVEQC_XTB_MEMORY_CUDA_DEVICE) {
     return invalid(name, " has an unknown memory_space value", error);
   }
   if (data == nullptr && size_bytes != 0u) {
     return invalid(name, " has nonzero size_bytes but a NULL data pointer", error);
   }
-  if (logical_bytes == 0u) return VIBEQC_XTB_STATUS_SUCCESS;
+  if (logical_bytes == 0u) return GENERATIVEQC_XTB_STATUS_SUCCESS;
   if (data == nullptr) return invalid(name, " is required but its data pointer is NULL", error);
   if (size_bytes < logical_bytes) {
     return invalid(name, " is smaller than the required logical byte range", error);
@@ -97,10 +97,10 @@ vibeqc_xtb_status_t validate_basic_descriptor(const char* name, const void* data
   if (size_bytes > std::numeric_limits<std::uintptr_t>::max() - address) {
     return invalid(name, " declared address range overflows uintptr_t", error);
   }
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t validate_device_allocation_range(const char* name, const void* data,
+generativeqc_xtb_status_t validate_device_allocation_range(const char* name, const void* data,
                                                   std::size_t declared_bytes, std::string& error) {
   CUdeviceptr allocation_base = 0u;
   std::size_t allocation_bytes = 0u;
@@ -109,13 +109,13 @@ vibeqc_xtb_status_t validate_device_allocation_range(const char* name, const voi
   if (range_status != CUDA_SUCCESS) {
     error = cuda_driver_error_message("cuMemGetAddressRange", range_status);
     if (range_status == CUDA_ERROR_INVALID_VALUE || range_status == CUDA_ERROR_NOT_FOUND) {
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
     if (range_status == CUDA_ERROR_DEINITIALIZED || range_status == CUDA_ERROR_NOT_INITIALIZED ||
         range_status == CUDA_ERROR_INVALID_CONTEXT) {
-      return VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+      return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     }
-    return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   }
 
   /* cudaMemGetAddressRange accepts an interior device pointer and returns the
@@ -133,11 +133,11 @@ vibeqc_xtb_status_t validate_device_allocation_range(const char* name, const voi
   if (offset > allocation_bytes || declared_bytes > allocation_bytes - offset) {
     return invalid(name, " declared byte range extends past its CUDA allocation", error);
   }
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const char* name, const void* data,
-                                        vibeqc_xtb_memory_space_t memory_space,
+generativeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const char* name, const void* data,
+                                        generativeqc_xtb_memory_space_t memory_space,
                                         CudaManagedMemoryPolicy managed_policy, bool writable,
                                         PointerFacts& facts, std::string& error) {
   if (managed_policy != CudaManagedMemoryPolicy::kReject &&
@@ -155,14 +155,14 @@ vibeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const char* n
   } else if (attribute_status != cudaSuccess) {
     consume_validation_error(attribute_status);
     error = cuda_error_message("cudaPointerGetAttributes", attribute_status);
-    return attribute_status == cudaErrorInvalidDevice ? VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE
-                                                      : VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+    return attribute_status == cudaErrorInvalidDevice ? GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE
+                                                      : GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   } else {
     facts.type = attributes.type;
     facts.allocation_device = attributes.device;
   }
 
-  if (memory_space == VIBEQC_XTB_MEMORY_HOST) {
+  if (memory_space == GENERATIVEQC_XTB_MEMORY_HOST) {
     if (facts.type == cudaMemoryTypeDevice || facts.type == cudaMemoryTypeManaged) {
       return invalid(name, " is CUDA-accessible memory mislabeled as HOST", error);
     }
@@ -178,14 +178,14 @@ vibeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const char* n
       if (flag_status != cudaSuccess) {
         consume_validation_error(flag_status);
         error = cuda_error_message("cudaHostGetFlags", flag_status);
-        return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
       }
       if ((flags & cudaHostRegisterReadOnly) != 0u) {
         return invalid(name, " is a read-only CUDA host registration used as writable output",
                        error);
       }
     }
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
 
   if (facts.type == cudaMemoryTypeManaged) {
@@ -198,7 +198,7 @@ vibeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const char* n
     if (attributes.devicePointer == nullptr) {
       return invalid(name, " is managed memory without a device-accessible alias", error);
     }
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
   if (facts.type != cudaMemoryTypeDevice) {
     return invalid(name, " is host memory mislabeled as CUDA_DEVICE", error);
@@ -209,7 +209,7 @@ vibeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const char* n
   if (attributes.devicePointer == nullptr) {
     return invalid(name, " has no device-accessible alias on the context device", error);
   }
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
 }  // namespace
@@ -219,7 +219,7 @@ ScopedCudaDevice::ScopedCudaDevice(std::int32_t device_id, std::string& error)
   error.clear();
   if (device_id < 0) {
     error = "CUDA device id must be nonnegative";
-    status_ = VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    status_ = GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     return;
   }
 
@@ -227,11 +227,11 @@ ScopedCudaDevice::ScopedCudaDevice(std::int32_t device_id, std::string& error)
   if (cuda_status != cudaSuccess) {
     consume_validation_error(cuda_status);
     error = cuda_error_message("cudaGetDevice", cuda_status);
-    status_ = VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+    status_ = GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     return;
   }
   if (previous_device_ == selected_device_) {
-    status_ = VIBEQC_XTB_STATUS_SUCCESS;
+    status_ = GENERATIVEQC_XTB_STATUS_SUCCESS;
     return;
   }
 
@@ -239,12 +239,12 @@ ScopedCudaDevice::ScopedCudaDevice(std::int32_t device_id, std::string& error)
   if (cuda_status != cudaSuccess) {
     consume_validation_error(cuda_status);
     error = cuda_error_message("cudaSetDevice", cuda_status);
-    status_ = cuda_status == cudaErrorInvalidDevice ? VIBEQC_XTB_STATUS_INVALID_ARGUMENT
-                                                    : VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+    status_ = cuda_status == cudaErrorInvalidDevice ? GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT
+                                                    : GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     return;
   }
   restore_pending_ = true;
-  status_ = VIBEQC_XTB_STATUS_SUCCESS;
+  status_ = GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
 ScopedCudaDevice::~ScopedCudaDevice() {
@@ -254,19 +254,19 @@ ScopedCudaDevice::~ScopedCudaDevice() {
   }
 }
 
-vibeqc_xtb_status_t ScopedCudaDevice::restore(std::string& error) {
-  if (!restore_pending_) return VIBEQC_XTB_STATUS_SUCCESS;
+generativeqc_xtb_status_t ScopedCudaDevice::restore(std::string& error) {
+  if (!restore_pending_) return GENERATIVEQC_XTB_STATUS_SUCCESS;
   const cudaError_t cuda_status = cudaSetDevice(previous_device_);
   if (cuda_status != cudaSuccess) {
     consume_validation_error(cuda_status);
     error = cuda_error_message("cudaSetDevice while restoring the caller device", cuda_status);
-    return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   }
   restore_pending_ = false;
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t validate_cuda_stream_owner(std::int32_t device_id, cudaStream_t stream,
+generativeqc_xtb_status_t validate_cuda_stream_owner(std::int32_t device_id, cudaStream_t stream,
                                             bool reject_capture, std::string& error) {
   error.clear();
   ScopedCudaDevice device(device_id, error);
@@ -278,11 +278,11 @@ vibeqc_xtb_status_t validate_cuda_stream_owner(std::int32_t device_id, cudaStrea
     if (capture_query_status != cudaSuccess) {
       consume_validation_error(capture_query_status);
       error = cuda_error_message("cudaStreamIsCapturing", capture_query_status);
-      return finish_with_restore(device, VIBEQC_XTB_STATUS_INVALID_ARGUMENT, error);
+      return finish_with_restore(device, GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT, error);
     }
     if (capture_status != cudaStreamCaptureStatusNone) {
       error = "CUDA stream capture is incompatible with this synchronous execution boundary";
-      return finish_with_restore(device, VIBEQC_XTB_STATUS_NOT_SUPPORTED, error);
+      return finish_with_restore(device, GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED, error);
     }
   }
 
@@ -291,75 +291,75 @@ vibeqc_xtb_status_t validate_cuda_stream_owner(std::int32_t device_id, cudaStrea
   if (cuda_status != cudaSuccess) {
     consume_validation_error(cuda_status);
     error = cuda_error_message("cudaStreamGetDevice", cuda_status);
-    const vibeqc_xtb_status_t status =
+    const generativeqc_xtb_status_t status =
         cuda_status == cudaErrorInvalidValue || cuda_status == cudaErrorInvalidResourceHandle
-            ? VIBEQC_XTB_STATUS_INVALID_ARGUMENT
-            : VIBEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+            ? GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT
+            : GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     return finish_with_restore(device, status, error);
   }
   if (stream_device != device_id) {
     error = "CUDA stream belongs to device " + std::to_string(stream_device) +
             ", not context device " + std::to_string(device_id);
-    return finish_with_restore(device, VIBEQC_XTB_STATUS_INVALID_ARGUMENT, error);
+    return finish_with_restore(device, GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT, error);
   }
 
-  return finish_with_restore(device, VIBEQC_XTB_STATUS_SUCCESS, error);
+  return finish_with_restore(device, GENERATIVEQC_XTB_STATUS_SUCCESS, error);
 }
 
-vibeqc_xtb_status_t validate_cuda_const_buffer(std::int32_t device_id, const char* name,
-                                            const vibeqc_xtb_const_buffer_t& buffer,
+generativeqc_xtb_status_t validate_cuda_const_buffer(std::int32_t device_id, const char* name,
+                                            const generativeqc_xtb_const_buffer_t& buffer,
                                             std::size_t logical_bytes, std::size_t alignment,
                                             CudaManagedMemoryPolicy managed_policy,
                                             CudaValidatedConstBuffer& validated,
                                             std::string& error) {
   validated = {};
   error.clear();
-  vibeqc_xtb_status_t status =
+  generativeqc_xtb_status_t status =
       validate_basic_descriptor(name, buffer.data, buffer.size_bytes, buffer.memory_space,
                                 buffer.reserved, logical_bytes, alignment, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS || logical_bytes == 0u) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS || logical_bytes == 0u) return status;
 
   ScopedCudaDevice device(device_id, error);
   if (!device.ok()) return device.status();
   PointerFacts facts{};
   status = validate_pointer_facts(device_id, name, buffer.data, buffer.memory_space, managed_policy,
                                   false, facts, error);
-  if (status == VIBEQC_XTB_STATUS_SUCCESS && buffer.memory_space == VIBEQC_XTB_MEMORY_CUDA_DEVICE) {
+  if (status == GENERATIVEQC_XTB_STATUS_SUCCESS && buffer.memory_space == GENERATIVEQC_XTB_MEMORY_CUDA_DEVICE) {
     status = validate_device_allocation_range(name, buffer.data, buffer.size_bytes, error);
   }
   status = finish_with_restore(device, status, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   validated = {buffer.data, logical_bytes, buffer.memory_space, facts.type,
                facts.allocation_device};
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t validate_cuda_buffer(std::int32_t device_id, const char* name,
-                                      const vibeqc_xtb_buffer_t& buffer, std::size_t logical_bytes,
+generativeqc_xtb_status_t validate_cuda_buffer(std::int32_t device_id, const char* name,
+                                      const generativeqc_xtb_buffer_t& buffer, std::size_t logical_bytes,
                                       std::size_t alignment, CudaManagedMemoryPolicy managed_policy,
                                       CudaValidatedBuffer& validated, std::string& error) {
   validated = {};
   error.clear();
-  vibeqc_xtb_status_t status =
+  generativeqc_xtb_status_t status =
       validate_basic_descriptor(name, buffer.data, buffer.size_bytes, buffer.memory_space,
                                 buffer.reserved, logical_bytes, alignment, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS || logical_bytes == 0u) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS || logical_bytes == 0u) return status;
 
   ScopedCudaDevice device(device_id, error);
   if (!device.ok()) return device.status();
   PointerFacts facts{};
   status = validate_pointer_facts(device_id, name, buffer.data, buffer.memory_space, managed_policy,
                                   true, facts, error);
-  if (status == VIBEQC_XTB_STATUS_SUCCESS && buffer.memory_space == VIBEQC_XTB_MEMORY_CUDA_DEVICE) {
+  if (status == GENERATIVEQC_XTB_STATUS_SUCCESS && buffer.memory_space == GENERATIVEQC_XTB_MEMORY_CUDA_DEVICE) {
     status = validate_device_allocation_range(name, buffer.data, buffer.size_bytes, error);
   }
   status = finish_with_restore(device, status, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   validated = {buffer.data, logical_bytes, buffer.memory_space, facts.type,
                facts.allocation_device};
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail

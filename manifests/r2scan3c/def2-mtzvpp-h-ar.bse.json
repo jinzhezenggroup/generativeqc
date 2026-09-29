@@ -1,5 +1,5 @@
 {
-  "description": "def2-mTZVPP basis for r2SCAN-3c method; H-Ar canonical VibeQC slice",
+  "description": "def2-mTZVPP basis for r2SCAN-3c method; H-Ar canonical GenerativeQC slice",
   "elements": {
     "1": {
       "electron_shells": [

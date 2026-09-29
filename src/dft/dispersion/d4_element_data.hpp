@@ -10,7 +10,7 @@
 
 #include "dft/dispersion/d4_types.hpp"
 
-namespace vibeqc::dft::dispersion::data {
+namespace generativeqc::dft::dispersion::data {
 
 inline constexpr char kElementSourceRevision[] = "6e1f59c3f39d919a2dbef0601d2576727c8b30e8";
 inline constexpr char kElementSourceDigest[] = "9201fd82434f37dc0d8466326ebfc5038f2df174176a31e998c84e3accd06db6";
@@ -105,5 +105,5 @@ inline constexpr std::array<D4ElementData, kElementCount> kElements{{
     D4ElementData{261, 1, 3.5778814626147, 2.2000000000000002, 26.0, 0.21240777999999999, 6.0952796570444292},
 }};
 
-}  // namespace vibeqc::dft::dispersion::data
+}  // namespace generativeqc::dft::dispersion::data
 // clang-format on

@@ -25,7 +25,7 @@ def actual_calls(components: typing.Any, reason: typing.Any) -> typing.Any:
 def host_record() -> typing.Any:
     base = {"reason": "overlap", "item": 0, "nbf": 2, "finished": True, "failed": False}
     return {
-        "schema": "vibeqc.df_host_trace",
+        "schema": "generativeqc.df_host_trace",
         "version": 1,
         "id": 0,
         "valid": True,
@@ -124,9 +124,9 @@ def test_native_solver_calls_include_warm_preparation_and_finalization(
     Both spin modes still require actual physical-F validation; removing
     trace hooks must never satisfy the zero-reference-call gates.
     """
-    if device == "cuda" and os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated GPU")
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     charge, spin = (0, 1) if method == "rhf" else (1, 2)
@@ -143,9 +143,9 @@ def test_native_solver_calls_include_warm_preparation_and_finalization(
         cold = batch.execute(strict=True, properties=("energy",))
         batch.set_warm_start_updates(False)
         path = tmp_path / "warm.host.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+        monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
         warm = batch.execute(strict=True, properties=("energy",))
-        monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+        monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
         assert [r.energy for r in warm.items] == pytest.approx(
             [r.energy for r in cold.items], abs=1e-10
         )
@@ -188,8 +188,8 @@ def test_native_solver_calls_include_warm_preparation_and_finalization(
         assert path.read_bytes() == before
         if device == "cuda":
             eager_path = tmp_path / "eager.host.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(eager_path))
-            monkeypatch.setenv("VIBEQC_DF_EAGER_CORE_GUESS", "1")
+            monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(eager_path))
+            monkeypatch.setenv("GENERATIVEQC_DF_EAGER_CORE_GUESS", "1")
             eager = batch.execute(strict=True, properties=("energy",))
             eager_components = aggregate_host(read_host_trace(eager_path))
             assert actual_calls(eager_components, "core_guess") == 2
@@ -207,10 +207,10 @@ def test_overlap_cache_survives_output_replans_and_isolates_changed_items(
     budget: typing.Any,
 ) -> None:
     """Same-sized neighbors keep separate X; geometry and failures cannot alias it."""
-    if os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated GPU")
     import numpy as np
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     assert os.environ.get("SLURM_JOB_ID")
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
@@ -235,11 +235,11 @@ def test_overlap_cache_survives_output_replans_and_isolates_changed_items(
         nonlocal sequence
         path = tmp_path / f"step-{sequence}.jsonl"
         sequence += 1
-        monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+        monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
         try:
             result = batch.execute(coordinates, properties=properties, strict=strict)
         finally:
-            monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
         return result, aggregate_host(read_host_trace(path))
 
     def overlap_calls(summary: typing.Any) -> typing.Any:
@@ -298,12 +298,12 @@ def test_prepared_single_overlap_survives_energy_force_dispatch(
     Its API has no warm-density input: core guesses remain necessary while
     repeated overlap solves must disappear, independently of SCF iterations.
     """
-    if os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated GPU")
     import ctypes as ct
 
     import numpy as np
-    from vibeqc import Atom, Calculator, _native
+    from generativeqc import Atom, Calculator, _native
 
     assert os.environ.get("SLURM_JOB_ID")
     calc = Calculator(
@@ -320,7 +320,7 @@ def test_prepared_single_overlap_survives_energy_force_dispatch(
     atoms = (Atom(1, (0, 0, -0.7)), Atom(1, (0, 0, 0.7)))
     _native.check(
         lib,
-        lib.vibeqc_context_create(
+        lib.generativeqc_context_create(
             ct.byref(calc._context_descriptor()), ct.byref(context)
         ),
     )
@@ -328,7 +328,7 @@ def test_prepared_single_overlap_survives_energy_force_dispatch(
         system = calc._create_native_system(context, atoms, 0, 1)
         _native.check(
             lib,
-            lib.vibeqc_calculation_prepare(
+            lib.generativeqc_calculation_prepare(
                 context,
                 system,
                 ct.byref(calc._method_descriptor()),
@@ -338,7 +338,7 @@ def test_prepared_single_overlap_survives_energy_force_dispatch(
         values, gradients = [], []
         for step, force in enumerate((False, True, False, True)):
             path = tmp_path / f"single-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+            monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
             forces = (ct.c_double * 6)() if force else None
             out = _native.ResultDescriptor(
                 ct.sizeof(_native.ResultDescriptor),
@@ -354,10 +354,10 @@ def test_prepared_single_overlap_survives_energy_force_dispatch(
             )
             _native.check(
                 lib,
-                lib.vibeqc_calculation_execute(calculation, ct.byref(out)),
+                lib.generativeqc_calculation_execute(calculation, ct.byref(out)),
                 context=context,
             )
-            monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+            monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
             trace = aggregate_host(read_host_trace(path))
             assert actual_calls(trace, "overlap") == (step == 0)
             assert actual_calls(trace, "core_guess") == 1
@@ -367,9 +367,9 @@ def test_prepared_single_overlap_survives_energy_force_dispatch(
         np.testing.assert_allclose(values, values[0], atol=1e-9, rtol=0)
         np.testing.assert_allclose(gradients[0], gradients[1], atol=1e-8, rtol=0)
     finally:
-        lib.vibeqc_calculation_destroy(calculation)
-        lib.vibeqc_system_destroy(system)
-        lib.vibeqc_context_destroy(context)
+        lib.generativeqc_calculation_destroy(calculation)
+        lib.generativeqc_system_destroy(system)
+        lib.generativeqc_context_destroy(context)
 
 
 @pytest.mark.parametrize("spin", ("restricted", "unrestricted"))
@@ -381,12 +381,12 @@ def test_independent_fock_overlap_owners_distinguish_same_size_basis(
     representation: typing.Any,
 ) -> None:
     """Equal AO counts cannot let distinct basis owners share an orthogonalizer."""
-    if os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly Slurm-allocated GPU")
     import numpy as np
-    from vibeqc import Primitive, Shell
-    from vibeqc.fock import FockBuildSpec, FockPlan
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc import Primitive, Shell
+    from generativeqc.fock import FockBuildSpec, FockPlan
+    from generativeqc_compiler.dft import NativeAO
 
     assert os.environ.get("SLURM_JOB_ID")
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
@@ -408,13 +408,13 @@ def test_independent_fock_overlap_owners_distinguish_same_size_basis(
             nonlocal sequence
             path = tmp_path / f"independent-{sequence}.jsonl"
             sequence += 1
-            monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+            monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
             try:
                 result = plan.solve(
                     energy_tolerance=1e-12, density_tolerance=1e-10, **kwargs
                 )
             finally:
-                monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+                monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
             trace = aggregate_host(read_host_trace(path))
             return result, actual_calls(trace, "overlap")
 
@@ -425,9 +425,9 @@ def test_independent_fock_overlap_owners_distinguish_same_size_basis(
         for plan, cold in ((first, cold_a), (second, cold_b)):
             warm, count = traced(plan, initial_density=cold.density)
             assert count == 0 and warm.initial_density_used
-            monkeypatch.setenv("VIBEQC_DF_REBUILD_OVERLAP", "1")
+            monkeypatch.setenv("GENERATIVEQC_DF_REBUILD_OVERLAP", "1")
             rebuilt, count = traced(plan, initial_density=cold.density)
-            monkeypatch.delenv("VIBEQC_DF_REBUILD_OVERLAP")
+            monkeypatch.delenv("GENERATIVEQC_DF_REBUILD_OVERLAP")
             assert count == 1
             assert rebuilt.energy == pytest.approx(warm.energy, abs=1e-10)
             np.testing.assert_allclose(

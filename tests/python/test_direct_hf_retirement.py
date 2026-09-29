@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.weighted_eri_cuda import emit_low_order_weighted_header
+from generativeqc_compiler.integral.weighted_eri_cuda import (
+    emit_low_order_weighted_header,
+)
 
 from tools.check_direct_hf_retirement import (
     DEFAULT_LEDGER,

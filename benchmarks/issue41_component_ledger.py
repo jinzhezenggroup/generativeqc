@@ -27,7 +27,7 @@ try:
 except ModuleNotFoundError:
     from _retention import raw_output_path
 
-VIBEQC_RANGE = ":vibeqc/warm/energy-plus-force"
+GENERATIVEQC_RANGE = ":generativeqc/warm/energy-plus-force"
 GPU4PYSCF_SCF_RANGE = ":gpu4pyscf/warm/scf"
 GPU4PYSCF_FORCE_RANGE = ":gpu4pyscf/warm/force"
 
@@ -47,7 +47,7 @@ def _median(values: Iterable[float]) -> float:
 
 
 def _component(name: str) -> str:
-    """Classify one VibeQC kernel without relying on launch order."""
+    """Classify one GenerativeQC kernel without relying on launch order."""
 
     if "one_electron_force" in name:
         return "one_electron_force"
@@ -121,11 +121,11 @@ def _kernel_ledger(
     replay_counts: set[int] = set()
     with path.open(newline="", encoding="utf-8") as stream:
         for row in csv.DictReader(stream):
-            if row["NVTX Range"] != VIBEQC_RANGE:
+            if row["NVTX Range"] != GENERATIVEQC_RANGE:
                 continue
             replay_count = int(row["NVTX Inst"])
             if replay_count <= 0:
-                raise ValueError("VibeQC kernel row has no containing NVTX range")
+                raise ValueError("GenerativeQC kernel row has no containing NVTX range")
             replay_counts.add(replay_count)
             total_ns = float(row["Total Time (ns)"])
             name = row["Kernel Name"]
@@ -137,7 +137,7 @@ def _kernel_ledger(
             retained.append((total_ns, int(row["Kern Inst"]), component, name))
     if len(replay_counts) != 1:
         raise ValueError(
-            f"expected one VibeQC replay count, found {sorted(replay_counts)}"
+            f"expected one GenerativeQC replay count, found {sorted(replay_counts)}"
         )
     replay_count = replay_counts.pop()
 
@@ -212,9 +212,9 @@ def build_ledger(
         kernel_summary_path
     )
     range_medians = _range_medians(nvtx_summary_path)
-    profiled_vibeqc_ms = range_medians[VIBEQC_RANGE]
+    profiled_generativeqc_ms = range_medians[GENERATIVEQC_RANGE]
     device_total_ms = sum(components.values())
-    raw_unattributed_ms = profiled_vibeqc_ms - device_total_ms
+    raw_unattributed_ms = profiled_generativeqc_ms - device_total_ms
     # Nsight projects GPU timestamps into the host NVTX range. Small clock
     # conversion and graph-node attribution differences can make summed
     # kernel durations slightly exceed the enclosing host interval; never
@@ -235,9 +235,9 @@ def build_ledger(
             "unattributed remainder."
         )
     timing = endpoint["timing_summary"]["iteration_matched"]
-    vibeqc_seconds = float(timing["vibeqc_median_seconds"])
+    generativeqc_seconds = float(timing["generativeqc_median_seconds"])
     gpu4pyscf_seconds = float(timing["gpu4pyscf_median_seconds"])
-    issue_baseline_vibeqc_seconds = 3.181492
+    issue_baseline_generativeqc_seconds = 3.181492
     issue_baseline_gpu4pyscf_seconds = 2.143182
     return {
         "benchmark": "issue_41_current_head_component_ledger",
@@ -261,7 +261,7 @@ def build_ledger(
             "repeats_per_engine": endpoint["settings"]["repeats_per_engine"],
             "iteration_branch": timing["iteration_branch"],
             "profiled_replays": replay_count,
-            "profiled_nvtx_range": VIBEQC_RANGE.removeprefix(":"),
+            "profiled_nvtx_range": GENERATIVEQC_RANGE.removeprefix(":"),
             "warning": (
                 "Nsight component values are average device kernel time per "
                 "replay. Headline endpoint medians come from the separate "
@@ -269,10 +269,10 @@ def build_ledger(
             ),
         },
         "headline": {
-            "vibeqc_median_seconds": vibeqc_seconds,
+            "generativeqc_median_seconds": generativeqc_seconds,
             "gpu4pyscf_median_seconds": gpu4pyscf_seconds,
-            "gap_seconds": vibeqc_seconds - gpu4pyscf_seconds,
-            "vibeqc_over_gpu4pyscf": vibeqc_seconds / gpu4pyscf_seconds,
+            "gap_seconds": generativeqc_seconds - gpu4pyscf_seconds,
+            "generativeqc_over_gpu4pyscf": generativeqc_seconds / gpu4pyscf_seconds,
             "maximum_energy_error_hartree": endpoint["accuracy"]["gate_selection"][
                 "maximum_energy_error_hartree"
             ],
@@ -282,26 +282,26 @@ def build_ledger(
             "gate_passed": endpoint["gate"]["passed"],
         },
         "change_from_issue_baseline": {
-            "issue_vibeqc_seconds": issue_baseline_vibeqc_seconds,
+            "issue_generativeqc_seconds": issue_baseline_generativeqc_seconds,
             "issue_gpu4pyscf_seconds": issue_baseline_gpu4pyscf_seconds,
             "issue_gap_seconds": (
-                issue_baseline_vibeqc_seconds - issue_baseline_gpu4pyscf_seconds
+                issue_baseline_generativeqc_seconds - issue_baseline_gpu4pyscf_seconds
             ),
-            "vibeqc_endpoint_saving_seconds": (
-                issue_baseline_vibeqc_seconds - vibeqc_seconds
+            "generativeqc_endpoint_saving_seconds": (
+                issue_baseline_generativeqc_seconds - generativeqc_seconds
             ),
             "gap_reduction_seconds": (
-                issue_baseline_vibeqc_seconds
+                issue_baseline_generativeqc_seconds
                 - issue_baseline_gpu4pyscf_seconds
-                - (vibeqc_seconds - gpu4pyscf_seconds)
+                - (generativeqc_seconds - gpu4pyscf_seconds)
             ),
         },
         "component_ledger": {
-            "vibeqc_profiled_host_interval_milliseconds": profiled_vibeqc_ms,
-            "vibeqc_device_kernel_milliseconds": device_total_ms,
-            "vibeqc_host_api_sync_and_idle_unattributed_milliseconds": unattributed_ms,
-            "vibeqc_device_projection_excess_milliseconds": projection_excess_ms,
-            "vibeqc_device_components_milliseconds": components,
+            "generativeqc_profiled_host_interval_milliseconds": profiled_generativeqc_ms,
+            "generativeqc_device_kernel_milliseconds": device_total_ms,
+            "generativeqc_host_api_sync_and_idle_unattributed_milliseconds": unattributed_ms,
+            "generativeqc_device_projection_excess_milliseconds": projection_excess_ms,
+            "generativeqc_device_components_milliseconds": components,
             "gpu4pyscf_unprofiled_host_component_medians_milliseconds": _gpu4pyscf_component_medians(
                 endpoint
             ),

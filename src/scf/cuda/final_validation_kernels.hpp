@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 // Fixed-size two-stage reductions keep the scratch independent of AO count.
 // Norms are merged with hypot, and signed traces/energies use compensation.
 inline constexpr unsigned validation_threads = 128;
@@ -56,4 +56,4 @@ void launch_validation_finish(cudaStream_t stream, ValidationPartial* partial,
 void launch_validation_columns(cudaStream_t stream, std::size_t n, std::size_t occupied,
                                const double* c, const double* values, double weight,
                                double* columns);
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

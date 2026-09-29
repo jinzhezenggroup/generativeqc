@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace vibeqc::runtime::cuda_trace {
+namespace generativeqc::runtime::cuda_trace {
 
 /** Shape and route of one mathematical DF operation, independent of plan ownership. */
 struct TraceShape {
@@ -20,7 +20,7 @@ struct TraceShape {
 };
 
 /** Opt-in component trace for one J, K, or analytic-response invocation.
- * Set VIBEQC_DF_TRACE to a JSONL path before execution. Ordinary execution then
+ * Set GENERATIVEQC_DF_TRACE to a JSONL path before execution. Ordinary execution then
  * records CUDA events and drains only this operation's final event before
  * writing a record. Timing runs with tracing are diagnostic runs; compare
  * endpoint performance separately with tracing disabled.
@@ -89,4 +89,4 @@ void trace_tile(std::size_t system, std::size_t pair_begin, std::size_t pair_cou
                 std::size_t auxiliary_begin, std::size_t auxiliary_count,
                 std::int64_t derivative_coordinate, bool transformed) noexcept;
 
-}  // namespace vibeqc::runtime::cuda_trace
+}  // namespace generativeqc::runtime::cuda_trace

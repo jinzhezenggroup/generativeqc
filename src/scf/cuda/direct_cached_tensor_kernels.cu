@@ -13,7 +13,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void build_eri_kernel(DeviceBatch batch, double* eri) {
   const std::size_t n = static_cast<std::size_t>(batch.nbf);
@@ -112,4 +112,4 @@ void launch_build_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                                                active, fock);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

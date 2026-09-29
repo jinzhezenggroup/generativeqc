@@ -27,17 +27,17 @@ extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 using scf::reference::Matrix;
 void require(bool value, const std::string& message) {
   if (!value) throw std::runtime_error(message);
 }
 bool expect_iteration_chunking() {
-  const char* selection = std::getenv("VIBEQC_CUDA_KS_CHUNK");
+  const char* selection = std::getenv("GENERATIVEQC_CUDA_KS_CHUNK");
   return selection != nullptr && std::string(selection) == "2";
 }
 bool expect_iteration_replay() {
-  const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
+  const char* selection = std::getenv("GENERATIVEQC_CUDA_KS_REPLAY");
   if (selection == nullptr) return false;
   const std::string value(selection);
   return value == "1" || value == "on" || value == "true" || value == "small-native";
@@ -54,7 +54,7 @@ core::System hydrogens(unsigned count, bool restricted, double shift = 0.0) {
          {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}});
   }
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   return system;
 }
 core::System water() {
@@ -72,7 +72,7 @@ core::System water() {
     system.shells.push_back(hydrogen);
   }
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   return system;
 }
 scf::ResolvedFockBuild strategy(bool restricted, scf::FockBackend backend) {
@@ -277,9 +277,10 @@ void run_exact_exchange_case(bool restricted) {
   // final-state validator; the host predicate probe alone cannot establish it.
   dft::CudaKsFinalStateToken token;
   std::string detail;
-  require(plan.final_state_token(token, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   dft::VerifiedKsFinalState snapshot;
-  require(plan.read_final_state(token, false, snapshot, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   require(snapshot.density.size() == spins && snapshot.fock.size() == spins &&
               snapshot.identity.determinant.model == gpu.strategy() &&
               std::abs(snapshot.components.total() - result.energy) < 1e-10 &&
@@ -334,9 +335,10 @@ void run_range_exchange_case(bool restricted) {
 
   dft::CudaKsFinalStateToken token;
   std::string detail;
-  require(plan.final_state_token(token, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   dft::VerifiedKsFinalState snapshot;
-  require(plan.read_final_state(token, false, snapshot, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   require(snapshot.identity.model.range_correction &&
               *snapshot.identity.model.range_correction == gpu_strategy.correction &&
               snapshot.identity.determinant.model == gpu_strategy.primary &&
@@ -382,12 +384,12 @@ void run_wb97mv_semilocal_rsh_case(bool restricted) {
             "WB97M-V semilocal/RSH entered an unqualified CUDA KS chunk path");
     dft::CudaKsFinalStateToken token;
     std::string detail;
-    require(plan.final_state_token(token, detail) == VIBEQC_STATUS_SUCCESS,
+    require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS,
             "converged internal WB97M-V semilocal/RSH state lacks an owner token");
     dft::VerifiedKsFinalState rejected;
-    require(
-        plan.read_final_state(token, false, rejected, detail) == VIBEQC_STATUS_NUMERICAL_FAILURE,
-        "incomplete WB97M-V composition escaped the final-state fail-closed gate");
+    require(plan.read_final_state(token, false, rejected, detail) ==
+                GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+            "incomplete WB97M-V composition escaped the final-state fail-closed gate");
     return result;
   };
 
@@ -402,15 +404,15 @@ void run_wb97mv_semilocal_rsh_case(bool restricted) {
       "CUDA WB97M-V semilocal/RSH components disagree with the host-unfused route");
 }
 
-std::unique_ptr<dft::nlc::Vv10Plan> prepare_wb97mv_nonlocal(vibeqc_backend backend, int device,
-                                                            std::size_t points,
+std::unique_ptr<dft::nlc::Vv10Plan> prepare_wb97mv_nonlocal(generativeqc_backend backend,
+                                                            int device, std::size_t points,
                                                             std::size_t tile_points) {
   std::string detail;
-  vibeqc_status status = VIBEQC_STATUS_INTERNAL_ERROR;
+  generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
   auto plan = dft::nlc::Vv10Plan::prepare(
       backend, device, static_cast<std::uint32_t>(points), static_cast<std::uint32_t>(tile_points),
       {dft::nlc::Vv10Variant::vv10, 6.0, 0.01, 1.0}, 16ULL * 1024ULL * 1024ULL, detail, status);
-  require(plan != nullptr && status == VIBEQC_STATUS_SUCCESS,
+  require(plan != nullptr && status == GENERATIVEQC_STATUS_SUCCESS,
           detail.empty() ? "WB97M-V nonlocal plan preparation failed" : detail);
   return plan;
 }
@@ -427,10 +429,10 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
   const scf::PreparedFockPlan cpu_primary(system, nullptr, cpu_model.primary);
   const scf::PreparedFockPlan cpu_correction(system, nullptr, cpu_model.correction);
   const scf::PreparedFockPlan gpu_primary(system, nullptr, gpu_model.primary, 0);
-  auto cpu_nonlocal =
-      prepare_wb97mv_nonlocal(VIBEQC_BACKEND_CPU_REFERENCE, -1, grid.point_count(), tile_points);
+  auto cpu_nonlocal = prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
+                                              grid.point_count(), tile_points);
   auto gpu_nonlocal =
-      prepare_wb97mv_nonlocal(VIBEQC_BACKEND_CUDA, 0, grid.point_count(), tile_points);
+      prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CUDA, 0, grid.point_count(), tile_points);
 
   scf::ScfOptions options;
   options.compute_forces = false;
@@ -462,9 +464,10 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
             "CUDA WB97M-V nonlocal composition did not converge");
     dft::CudaKsFinalStateToken token;
     std::string detail;
-    require(plan.final_state_token(token, detail) == VIBEQC_STATUS_SUCCESS, detail);
+    require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
     dft::VerifiedKsFinalState snapshot;
-    require(plan.read_final_state(token, false, snapshot, detail) == VIBEQC_STATUS_SUCCESS, detail);
+    require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
     return Endpoint{std::move(result), plan.transfers(), plan.resources(), std::move(snapshot)};
   };
 
@@ -512,7 +515,7 @@ void compare_rks_chunk_history(bool pbe) {
   options.density_tolerance = 1e-10;
   options.max_iterations = 150;
   const auto solve = [&](const char* width) {
-    require(::setenv("VIBEQC_CUDA_KS_CHUNK", width, 1) == 0,
+    require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", width, 1) == 0,
             "could not select CUDA RKS history route");
     const scf::PreparedFockPlan gpu(system, nullptr, strategy(true, scf::FockBackend::Cuda), 0);
     dft::CudaKsPlan plan(gpu, basis, grid, options,
@@ -552,7 +555,7 @@ void compare_rks_chunk_history(bool pbe) {
             chunked.second.execution_region_fallbacks == 0,
         "CUDA RKS qualification did not reach a cached shared-region replay");
   }
-  require(::setenv("VIBEQC_CUDA_KS_CHUNK", "2", 1) == 0,
+  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
           "could not restore CUDA RKS chunk qualification");
 }
 
@@ -574,7 +577,7 @@ void run_hydroxyl(bool pbe) {
        0,
        {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}}};
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   const dft::AoBasis basis(system);
   const dft::MolecularGrid grid(system);
   const scf::PreparedFockPlan cpu(system, nullptr, strategy(false, scf::FockBackend::Cpu));
@@ -650,8 +653,9 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::semilocal_family_from_code(functional), 257);
   dft::CudaKsFinalStateToken unavailable;
   std::string snapshot_detail;
-  require(plan.final_state_token(unavailable, snapshot_detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
-          "fresh CUDA KS owner published a final-state token");
+  require(
+      plan.final_state_token(unavailable, snapshot_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+      "fresh CUDA KS owner published a final-state token");
   plan.begin(nullptr, false);
   while (plan.active()) {
     plan.enqueue_iteration();
@@ -707,12 +711,13 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   physical_check(cpu, basis, grid, functional, result);
   const auto before_snapshot = plan.transfers();
   dft::CudaKsFinalStateToken token;
-  require(plan.final_state_token(token, snapshot_detail) == VIBEQC_STATUS_SUCCESS, snapshot_detail);
+  require(plan.final_state_token(token, snapshot_detail) == GENERATIVEQC_STATUS_SUCCESS,
+          snapshot_detail);
   require(plan.transfers().final_state_d2h_bytes == before_snapshot.final_state_d2h_bytes,
           "CUDA KS token query transferred device state");
   dft::CudaKsResidentDensityBinding resident_density;
   require(plan.resident_final_density(token, resident_density, snapshot_detail) ==
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           snapshot_detail);
   const auto resident_spins = restricted ? 1U : 2U;
   require(resident_density && resident_density.spins == resident_spins &&
@@ -725,8 +730,9 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
               plan.transfers().synchronizations == before_snapshot.synchronizations,
           "CUDA KS resident density binding transferred or synchronized");
   dft::VerifiedKsFinalState snapshot;
-  require(plan.read_final_state(token, false, snapshot, snapshot_detail) == VIBEQC_STATUS_SUCCESS,
-          snapshot_detail);
+  require(
+      plan.read_final_state(token, false, snapshot, snapshot_detail) == GENERATIVEQC_STATUS_SUCCESS,
+      snapshot_detail);
   const auto snapshot_transfer = plan.transfers();
   const auto spins = restricted ? 1U : 2U;
   const auto expected_snapshot_bytes =
@@ -746,7 +752,8 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
               snapshot_transfer.final_state_reads == before_snapshot.final_state_reads + 1 &&
               snapshot_transfer.synchronizations == before_snapshot.synchronizations + 1,
           "CUDA KS final snapshot transfer accounting is incomplete");
-  require(plan.read_final_state(token, true, snapshot, snapshot_detail) == VIBEQC_STATUS_SUCCESS &&
+  require(plan.read_final_state(token, true, snapshot, snapshot_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
               snapshot.weighted_density.size() == spins,
           snapshot_detail);
   if (!restricted && atoms == 1)
@@ -777,16 +784,17 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
     dft::VerifiedKsFinalState rejected;
     const auto before_rejection = plan.transfers();
     require(plan.read_final_state(stale, false, rejected, snapshot_detail) ==
-                    VIBEQC_STATUS_INVALID_ARGUMENT &&
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                 rejected.density.empty() &&
                 plan.transfers().final_state_d2h_bytes == before_rejection.final_state_d2h_bytes,
             "stale CUDA KS token transferred or published state");
   }
   plan.invalidate_final_state();
-  require(plan.final_state_token(unavailable, snapshot_detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
-          "explicit result invalidation preserved CUDA KS eligibility");
+  require(
+      plan.final_state_token(unavailable, snapshot_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+      "explicit result invalidation preserved CUDA KS eligibility");
   require(plan.run(nullptr, true, false).converged &&
-              plan.final_state_token(token, snapshot_detail) == VIBEQC_STATUS_SUCCESS,
+              plan.final_state_token(token, snapshot_detail) == GENERATIVEQC_STATUS_SUCCESS,
           "CUDA KS owner did not recover eligibility after explicit invalidation");
   require(result.iterations == result.dft_diagnostic.history.size(),
           "missing CUDA iteration history");
@@ -799,7 +807,7 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
           "unchanged-geometry replay did not reuse resident warm density");
   dft::VerifiedKsFinalState stale_snapshot;
   require(plan.read_final_state(token, false, stale_snapshot, snapshot_detail) ==
-                  VIBEQC_STATUS_INVALID_ARGUMENT &&
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               stale_snapshot.density.empty(),
           "warm replay accepted the preceding CUDA KS solve epoch");
   const auto energy_only = plan.run(nullptr, true, false);
@@ -831,7 +839,8 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
     invalid[matrix_size - 1] = 2.0;
     const auto failed = plan.run(&invalid);
     require(plan.failed() && !failed.converged, "invalid grid density did not fail the CUDA item");
-    require(plan.final_state_token(unavailable, snapshot_detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+    require(plan.final_state_token(unavailable, snapshot_detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
             "failed CUDA KS solve preserved final-state eligibility");
     const auto recovered = plan.run();
     require(recovered.converged && std::abs(recovered.energy - result.energy) < 1e-11,
@@ -870,9 +879,9 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   const auto limited = unfinished.run();
   require(!limited.converged && !unfinished.failed(), "iteration limit misreported its status");
   require(unfinished.warm_density().empty(), "unfinished solve published a good warm state");
-  require(
-      unfinished.final_state_token(unavailable, snapshot_detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
-      "unfinished CUDA KS solve published a final-state token");
+  require(unfinished.final_state_token(unavailable, snapshot_detail) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "unfinished CUDA KS solve published a final-state token");
   physical_check(cpu, basis, grid, functional, limited);
 
   // Exact arena request is charged through the existing #203 device ledger.
@@ -901,21 +910,21 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
 }
 /** Exercise the C validation layer, which can reject a request before the
  * prepared method's execute() invalidation is reached. */
-vibeqc_ks_options public_wb97mv_options(bool unrestricted) {
-  static const std::array<vibeqc_ks_semilocal_component, 2> components{
+generativeqc_ks_options public_wb97mv_options(bool unrestricted) {
+  static const std::array<generativeqc_ks_semilocal_component, 2> components{
       {{"MGGA_X_WB97M_V", 1.0}, {"MGGA_C_WB97M_V", 1.0}}};
-  static const std::array<vibeqc_ks_exchange_term, 2> restricted_exchange{{
-      {VIBEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.075},
-      {VIBEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -0.5},
+  static const std::array<generativeqc_ks_exchange_term, 2> restricted_exchange{{
+      {GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.075},
+      {GENERATIVEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -0.5},
   }};
-  static const std::array<vibeqc_ks_exchange_term, 2> unrestricted_exchange{{
-      {VIBEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.15},
-      {VIBEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -1.0},
+  static const std::array<generativeqc_ks_exchange_term, 2> unrestricted_exchange{{
+      {GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.15},
+      {GENERATIVEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -1.0},
   }};
   const auto& exchange = unrestricted ? unrestricted_exchange : restricted_exchange;
-  vibeqc_ks_options ks{};
+  generativeqc_ks_options ks{};
   ks.struct_size = sizeof(ks);
-  ks.abi_version = VIBEQC_ABI_VERSION;
+  ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.scf_domain = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16";
   ks.grid_version = 1;
   ks.radial_points = 12;
@@ -924,7 +933,7 @@ vibeqc_ks_options public_wb97mv_options(bool unrestricted) {
   ks.partition_iterations = 3;
   ks.coincident_tolerance = 1e-12;
   ks.tile_points = 64;
-  ks.xc_execution_schedule = VIBEQC_XC_EXECUTION_DEVICE_FUSED;
+  ks.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
   ks.spin_channels = unrestricted ? 2 : 1;
   ks.semilocal_components = components.data();
   ks.semilocal_component_count = components.size();
@@ -932,7 +941,7 @@ vibeqc_ks_options public_wb97mv_options(bool unrestricted) {
   ks.exchange_terms = exchange.data();
   ks.exchange_term_count = exchange.size();
   ks.has_nonlocal_correlation = 1;
-  ks.nonlocal_variant = VIBEQC_NONLOCAL_VV10;
+  ks.nonlocal_variant = GENERATIVEQC_NONLOCAL_VV10;
   ks.nonlocal_b = 6.0;
   ks.nonlocal_c = 0.01;
   ks.nonlocal_coefficient = 1.0;
@@ -940,217 +949,226 @@ vibeqc_ks_options public_wb97mv_options(bool unrestricted) {
   return ks;
 }
 
-vibeqc_method_descriptor public_wb97mv_descriptor(const vibeqc_ks_options& ks) {
-  vibeqc_method_descriptor method{};
+generativeqc_method_descriptor public_wb97mv_descriptor(const generativeqc_ks_options& ks) {
+  generativeqc_method_descriptor method{};
   method.struct_size = sizeof(method);
-  method.abi_version = VIBEQC_ABI_VERSION;
-  method.method = ks.spin_channels == 2 ? VIBEQC_METHOD_PBE_UKS : VIBEQC_METHOD_PBE_RKS;
+  method.abi_version = GENERATIVEQC_ABI_VERSION;
+  method.method = ks.spin_channels == 2 ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
   method.max_iterations = 250;
   method.diis_history = 8;
   method.energy_tolerance = 1e-10;
   method.density_tolerance = 1e-8;
   method.screening_tolerance = 1e-12;
-  method.precision_mode = VIBEQC_PRECISION_FP64;
-  method.density_fitting_mode = VIBEQC_DENSITY_FITTING_NONE;
+  method.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   method.ks_options = &ks;
   return method;
 }
 
 void public_wb97mv_cuda_case(bool unrestricted) {
-  vibeqc_system system{hydrogens(unrestricted ? 3U : 2U, !unrestricted)};
+  generativeqc_system system{hydrogens(unrestricted ? 3U : 2U, !unrestricted)};
   auto ks = public_wb97mv_options(unrestricted);
   auto method = public_wb97mv_descriptor(ks);
-  const auto execute = [&](vibeqc_backend backend) {
-    vibeqc_context_descriptor context_spec{sizeof(vibeqc_context_descriptor), VIBEQC_ABI_VERSION, 0,
-                                           backend};
-    vibeqc_context* raw_context{};
-    require(vibeqc_context_create(&context_spec, &raw_context) == VIBEQC_STATUS_SUCCESS,
+  const auto execute = [&](generativeqc_backend backend) {
+    generativeqc_context_descriptor context_spec{sizeof(generativeqc_context_descriptor),
+                                                 GENERATIVEQC_ABI_VERSION, 0, backend};
+    generativeqc_context* raw_context{};
+    require(generativeqc_context_create(&context_spec, &raw_context) == GENERATIVEQC_STATUS_SUCCESS,
             "WB97M-V public context creation failed");
-    std::unique_ptr<vibeqc_context, decltype(&vibeqc_context_destroy)> context(
-        raw_context, vibeqc_context_destroy);
-    vibeqc_calculation* raw_calculation{};
-    require(vibeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
-                VIBEQC_STATUS_SUCCESS,
+    std::unique_ptr<generativeqc_context, decltype(&generativeqc_context_destroy)> context(
+        raw_context, generativeqc_context_destroy);
+    generativeqc_calculation* raw_calculation{};
+    require(generativeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
+                GENERATIVEQC_STATUS_SUCCESS,
             "WB97M-V public calculation preparation failed");
-    std::unique_ptr<vibeqc_calculation, decltype(&vibeqc_calculation_destroy)> calculation(
-        raw_calculation, vibeqc_calculation_destroy);
-    vibeqc_result_descriptor result{};
+    std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)>
+        calculation(raw_calculation, generativeqc_calculation_destroy);
+    generativeqc_result_descriptor result{};
     result.struct_size = sizeof(result);
-    result.abi_version = VIBEQC_ABI_VERSION;
-    require(vibeqc_calculation_execute(calculation.get(), &result) == VIBEQC_STATUS_SUCCESS &&
+    result.abi_version = GENERATIVEQC_ABI_VERSION;
+    require(generativeqc_calculation_execute(calculation.get(), &result) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
                 std::isfinite(result.energy) && result.converged &&
                 result.executed_backend == backend,
             "WB97M-V public energy execution failed");
-    vibeqc_ks_diagnostic diagnostic{};
+    generativeqc_ks_diagnostic diagnostic{};
     diagnostic.struct_size = sizeof(diagnostic);
-    diagnostic.abi_version = VIBEQC_ABI_VERSION;
-    require(vibeqc_calculation_get_ks_diagnostic(calculation.get(), &diagnostic, nullptr, 0) ==
-                    VIBEQC_STATUS_SUCCESS &&
+    diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
+    require(generativeqc_calculation_get_ks_diagnostic(calculation.get(), &diagnostic, nullptr,
+                                                       0) == GENERATIVEQC_STATUS_SUCCESS &&
                 diagnostic.scf_domain_version ==
                     dft::semilocal_family_domain_version(dft::SemilocalFamily::Wb97mv),
             "public WB97M-V diagnostic lost its domain identity");
     return result.energy;
   };
-  const auto cpu = execute(VIBEQC_BACKEND_CPU_REFERENCE);
-  const auto gpu = execute(VIBEQC_BACKEND_CUDA);
+  const auto cpu = execute(GENERATIVEQC_BACKEND_CPU_REFERENCE);
+  const auto gpu = execute(GENERATIVEQC_BACKEND_CUDA);
   require(std::abs(cpu - gpu) < 2e-8, "public CUDA WB97M-V endpoint disagrees with public CPU");
 
   auto unfused = ks;
-  unfused.xc_execution_schedule = VIBEQC_XC_EXECUTION_HOST_UNFUSED;
+  unfused.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
   auto unfused_method = public_wb97mv_descriptor(unfused);
-  vibeqc_context_descriptor cuda_spec{sizeof(vibeqc_context_descriptor), VIBEQC_ABI_VERSION, 0,
-                                      VIBEQC_BACKEND_CUDA};
-  vibeqc_context* raw_context{};
-  require(vibeqc_context_create(&cuda_spec, &raw_context) == VIBEQC_STATUS_SUCCESS,
+  generativeqc_context_descriptor cuda_spec{sizeof(generativeqc_context_descriptor),
+                                            GENERATIVEQC_ABI_VERSION, 0, GENERATIVEQC_BACKEND_CUDA};
+  generativeqc_context* raw_context{};
+  require(generativeqc_context_create(&cuda_spec, &raw_context) == GENERATIVEQC_STATUS_SUCCESS,
           "WB97M-V rejection context creation failed");
-  std::unique_ptr<vibeqc_context, decltype(&vibeqc_context_destroy)> context(
-      raw_context, vibeqc_context_destroy);
-  vibeqc_calculation* rejected{};
-  require(vibeqc_calculation_prepare(context.get(), &system, &unfused_method, &rejected) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  std::unique_ptr<generativeqc_context, decltype(&generativeqc_context_destroy)> context(
+      raw_context, generativeqc_context_destroy);
+  generativeqc_calculation* rejected{};
+  require(generativeqc_calculation_prepare(context.get(), &system, &unfused_method, &rejected) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               rejected == nullptr,
           "public CUDA WB97M-V accepted the host-unfused nonlocal route");
 
-  vibeqc_calculation* raw_calculation{};
-  require(vibeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
-              VIBEQC_STATUS_SUCCESS,
+  generativeqc_calculation* raw_calculation{};
+  require(generativeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           "WB97M-V force-gate preparation failed");
-  std::unique_ptr<vibeqc_calculation, decltype(&vibeqc_calculation_destroy)> calculation(
-      raw_calculation, vibeqc_calculation_destroy);
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)>
+      calculation(raw_calculation, generativeqc_calculation_destroy);
 
   using fail_function = void (*)();
-  const std::array<std::pair<fail_function, vibeqc_status>, 2> failures{{
-      {&xc_cuda_fail_next_nonlocal_runtime_for_test_v1, VIBEQC_STATUS_CUDA_ERROR},
-      {&xc_cuda_fail_next_nonlocal_allocation_for_test_v1, VIBEQC_STATUS_OUT_OF_MEMORY},
+  const std::array<std::pair<fail_function, generativeqc_status>, 2> failures{{
+      {&xc_cuda_fail_next_nonlocal_runtime_for_test_v1, GENERATIVEQC_STATUS_CUDA_ERROR},
+      {&xc_cuda_fail_next_nonlocal_allocation_for_test_v1, GENERATIVEQC_STATUS_OUT_OF_MEMORY},
   }};
   for (const auto& [fail, expected] : failures) {
-    vibeqc_result_descriptor failed{};
+    generativeqc_result_descriptor failed{};
     failed.struct_size = sizeof(failed);
-    failed.abi_version = VIBEQC_ABI_VERSION;
+    failed.abi_version = GENERATIVEQC_ABI_VERSION;
     fail();
-    require(vibeqc_calculation_execute(calculation.get(), &failed) == expected,
+    require(generativeqc_calculation_execute(calculation.get(), &failed) == expected,
             "public CUDA WB97M-V nonlocal failure lost its status");
-    vibeqc_ks_diagnostic stale{};
+    generativeqc_ks_diagnostic stale{};
     stale.struct_size = sizeof(stale);
-    stale.abi_version = VIBEQC_ABI_VERSION;
-    require(vibeqc_calculation_get_ks_diagnostic(calculation.get(), &stale, nullptr, 0) ==
-                VIBEQC_STATUS_NOT_IMPLEMENTED,
+    stale.abi_version = GENERATIVEQC_ABI_VERSION;
+    require(generativeqc_calculation_get_ks_diagnostic(calculation.get(), &stale, nullptr, 0) ==
+                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
             "failed public CUDA WB97M-V execution retained a stale diagnostic");
-    require(vibeqc_calculation_execute(calculation.get(), &failed) == VIBEQC_STATUS_SUCCESS &&
+    require(generativeqc_calculation_execute(calculation.get(), &failed) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
                 failed.converged,
             "public CUDA WB97M-V did not recover after a nonlocal failure");
   }
 
   std::vector<double> forces(3 * system.data.atoms.size());
-  vibeqc_result_descriptor force_result{};
+  generativeqc_result_descriptor force_result{};
   force_result.struct_size = sizeof(force_result);
-  force_result.abi_version = VIBEQC_ABI_VERSION;
+  force_result.abi_version = GENERATIVEQC_ABI_VERSION;
   force_result.forces = forces.data();
   force_result.force_count = forces.size();
-  require(
-      vibeqc_calculation_execute(calculation.get(), &force_result) == VIBEQC_STATUS_NOT_IMPLEMENTED,
-      "public CUDA WB97M-V force capability was promoted without qualification");
+  require(generativeqc_calculation_execute(calculation.get(), &force_result) ==
+              GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "public CUDA WB97M-V force capability was promoted without qualification");
 }
 
 void rejected_api_requests_revoke_tokens() {
-  vibeqc_context_descriptor context_spec{sizeof(vibeqc_context_descriptor), VIBEQC_ABI_VERSION, 0,
-                                         VIBEQC_BACKEND_CUDA};
-  vibeqc_context* raw_context{};
-  require(vibeqc_context_create(&context_spec, &raw_context) == VIBEQC_STATUS_SUCCESS,
+  generativeqc_context_descriptor context_spec{sizeof(generativeqc_context_descriptor),
+                                               GENERATIVEQC_ABI_VERSION, 0,
+                                               GENERATIVEQC_BACKEND_CUDA};
+  generativeqc_context* raw_context{};
+  require(generativeqc_context_create(&context_spec, &raw_context) == GENERATIVEQC_STATUS_SUCCESS,
           "KS token API test context failed");
-  std::unique_ptr<vibeqc_context, decltype(&vibeqc_context_destroy)> context(
-      raw_context, vibeqc_context_destroy);
-  vibeqc_system system{hydrogens(2, true)};
-  vibeqc_method_descriptor method{sizeof(vibeqc_method_descriptor),
-                                  VIBEQC_ABI_VERSION,
-                                  VIBEQC_METHOD_LDA_RKS,
-                                  150,
-                                  8,
-                                  1e-12,
-                                  1e-10,
-                                  1e-12,
-                                  VIBEQC_DENSITY_FITTING_NONE,
-                                  nullptr,
-                                  1e-10,
-                                  0};
-  vibeqc_calculation* raw_calculation{};
-  require(vibeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
-              VIBEQC_STATUS_SUCCESS,
+  std::unique_ptr<generativeqc_context, decltype(&generativeqc_context_destroy)> context(
+      raw_context, generativeqc_context_destroy);
+  generativeqc_system system{hydrogens(2, true)};
+  generativeqc_method_descriptor method{sizeof(generativeqc_method_descriptor),
+                                        GENERATIVEQC_ABI_VERSION,
+                                        GENERATIVEQC_METHOD_LDA_RKS,
+                                        150,
+                                        8,
+                                        1e-12,
+                                        1e-10,
+                                        1e-12,
+                                        GENERATIVEQC_DENSITY_FITTING_NONE,
+                                        nullptr,
+                                        1e-10,
+                                        0};
+  generativeqc_calculation* raw_calculation{};
+  require(generativeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           "KS token API test preparation failed");
-  std::unique_ptr<vibeqc_calculation, decltype(&vibeqc_calculation_destroy)> calculation(
-      raw_calculation, vibeqc_calculation_destroy);
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)>
+      calculation(raw_calculation, generativeqc_calculation_destroy);
   std::string detail;
   dft::CudaKsFinalStateToken token;
   dft::VerifiedKsFinalState snapshot;
   for (int rejected = 0; rejected < 3; ++rejected) {
-    vibeqc_result_descriptor output{};
+    generativeqc_result_descriptor output{};
     output.struct_size = sizeof(output);
-    output.abi_version = VIBEQC_ABI_VERSION;
-    require(vibeqc_calculation_execute(calculation.get(), &output) == VIBEQC_STATUS_SUCCESS &&
+    output.abi_version = GENERATIVEQC_ABI_VERSION;
+    require(generativeqc_calculation_execute(calculation.get(), &output) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
                 methods::detail::dft_final_state_token(*calculation->plan, token, detail) ==
-                    VIBEQC_STATUS_SUCCESS,
+                    GENERATIVEQC_STATUS_SUCCESS,
             "KS calculation failed to publish current token");
     if (rejected == 1) ++output.abi_version;
     if (rejected == 2) output.force_count = 1;
-    require(vibeqc_calculation_execute(calculation.get(), rejected == 0 ? nullptr : &output) !=
-                VIBEQC_STATUS_SUCCESS,
-            "malformed KS calculation unexpectedly executed");
+    require(
+        generativeqc_calculation_execute(calculation.get(), rejected == 0 ? nullptr : &output) !=
+            GENERATIVEQC_STATUS_SUCCESS,
+        "malformed KS calculation unexpectedly executed");
     require(methods::detail::read_dft_final_state(*calculation->plan, token, false, snapshot,
-                                                  detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                                  detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
             "rejected C calculation request retained a previous token");
   }
 
-  const vibeqc_system* systems[]{&system, &system};
-  vibeqc_batch* raw_batch{};
-  require(vibeqc_batch_prepare(context.get(), systems, 2, &method, VIBEQC_BATCH_ENABLE_WARM_STARTS,
-                               &raw_batch) == VIBEQC_STATUS_SUCCESS,
+  const generativeqc_system* systems[]{&system, &system};
+  generativeqc_batch* raw_batch{};
+  require(generativeqc_batch_prepare(context.get(), systems, 2, &method,
+                                     GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
+                                     &raw_batch) == GENERATIVEQC_STATUS_SUCCESS,
           "KS token batch preparation failed");
-  std::unique_ptr<vibeqc_batch, decltype(&vibeqc_batch_destroy)> batch(raw_batch,
-                                                                       vibeqc_batch_destroy);
+  std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> batch(
+      raw_batch, generativeqc_batch_destroy);
   for (int rejected = 0; rejected < 3; ++rejected) {
-    vibeqc_batch_item_result_descriptor outputs[2]{};
+    generativeqc_batch_item_result_descriptor outputs[2]{};
     for (auto& output : outputs) {
       output.struct_size = sizeof(output);
-      output.abi_version = VIBEQC_ABI_VERSION;
+      output.abi_version = GENERATIVEQC_ABI_VERSION;
     }
-    require(vibeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) == VIBEQC_STATUS_SUCCESS,
+    require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
+                GENERATIVEQC_STATUS_SUCCESS,
             "KS token batch execution failed");
     dft::CudaKsFinalStateToken tokens[2];
     for (std::size_t i = 0; i < 2; ++i)
       require(methods::detail::dft_final_state_token(*batch->plan, i, tokens[i], detail) ==
-                  VIBEQC_STATUS_SUCCESS,
+                  GENERATIVEQC_STATUS_SUCCESS,
               "KS batch failed to publish current token");
     std::uint64_t metadata[16]{};
-    vibeqc_ks_snapshot* raw_snapshot{};
-    require(vibeqc_ks_snapshot_create_v1(batch.get(), 0, &raw_snapshot, metadata, 16) ==
-                VIBEQC_STATUS_SUCCESS,
+    generativeqc_ks_snapshot* raw_snapshot{};
+    require(generativeqc_ks_snapshot_create_v1(batch.get(), 0, &raw_snapshot, metadata, 16) ==
+                GENERATIVEQC_STATUS_SUCCESS,
             "stationary bridge did not consume the native #162 handoff");
-    std::unique_ptr<vibeqc_ks_snapshot, decltype(&vibeqc_ks_snapshot_destroy_v1)> proof(
-        raw_snapshot, vibeqc_ks_snapshot_destroy_v1);
+    std::unique_ptr<generativeqc_ks_snapshot, decltype(&generativeqc_ks_snapshot_destroy_v1)> proof(
+        raw_snapshot, generativeqc_ks_snapshot_destroy_v1);
     std::vector<double> values(metadata[15], 79.0);
     require(metadata[0] == 3 && metadata[1] == 2 && metadata[2] == 1 &&
-                vibeqc_ks_snapshot_copy_v1(batch.get(), proof.get(), values.data(),
-                                           values.size()) == VIBEQC_STATUS_SUCCESS,
+                generativeqc_ks_snapshot_copy_v1(batch.get(), proof.get(), values.data(),
+                                                 values.size()) == GENERATIVEQC_STATUS_SUCCESS,
             "stationary bridge failed to export the native sources");
     require(values.size() >= 3 && values[values.size() - 3] > 0 && values[values.size() - 2] == 1 &&
                 values[values.size() - 1] == 1,
             "CUDA KS snapshot v3 omitted measured export work");
-    require(vibeqc_ks_snapshot_check_v1(batch.get(), proof.get()) == VIBEQC_STATUS_SUCCESS,
-            "current stationary proof failed validation");
+    require(
+        generativeqc_ks_snapshot_check_v1(batch.get(), proof.get()) == GENERATIVEQC_STATUS_SUCCESS,
+        "current stationary proof failed validation");
     if (rejected == 2) ++outputs[1].abi_version;
-    require(vibeqc_batch_execute(batch.get(), nullptr, 0, rejected == 0 ? nullptr : outputs,
-                                 rejected == 1 ? 1 : 2) != VIBEQC_STATUS_SUCCESS,
+    require(generativeqc_batch_execute(batch.get(), nullptr, 0, rejected == 0 ? nullptr : outputs,
+                                       rejected == 1 ? 1 : 2) != GENERATIVEQC_STATUS_SUCCESS,
             "malformed KS batch unexpectedly executed");
     std::fill(values.begin(), values.end(), 79.0);
-    require(
-        vibeqc_ks_snapshot_check_v1(batch.get(), proof.get()) == VIBEQC_STATUS_INVALID_ARGUMENT &&
-            vibeqc_ks_snapshot_copy_v1(batch.get(), proof.get(), values.data(), values.size()) ==
-                VIBEQC_STATUS_INVALID_ARGUMENT &&
-            std::all_of(values.begin(), values.end(), [](double v) { return v == 79.0; }),
-        "revoked stationary proof validated or copied stale arrays");
+    require(generativeqc_ks_snapshot_check_v1(batch.get(), proof.get()) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                generativeqc_ks_snapshot_copy_v1(batch.get(), proof.get(), values.data(),
+                                                 values.size()) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                std::all_of(values.begin(), values.end(), [](double v) { return v == 79.0; }),
+            "revoked stationary proof validated or copied stale arrays");
     for (std::size_t i = 0; i < 2; ++i)
       require(methods::detail::read_dft_final_state(*batch->plan, i, tokens[i], false, snapshot,
-                                                    detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                                    detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
               "rejected C batch request retained a previous token");
   }
 }
@@ -1162,18 +1180,18 @@ int main() {
   try {
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
-    if (std::getenv("VIBEQC_CUDA_KS_CHUNK") == nullptr) {
-      require(::setenv("VIBEQC_CUDA_KS_CHUNK", "2", 1) == 0,
+    if (std::getenv("GENERATIVEQC_CUDA_KS_CHUNK") == nullptr) {
+      require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");
-      require(::setenv("VIBEQC_CUDA_KS_REPLAY", "1", 1) == 0,
+      require(::setenv("GENERATIVEQC_CUDA_KS_REPLAY", "1", 1) == 0,
               "could not enable CUDA RKS replay qualification");
       for (bool pbe : {false, true}) {
         compare_rks_chunk_history(pbe);
         run_case(2, true, pbe);
       }
-      require(::unsetenv("VIBEQC_CUDA_KS_REPLAY") == 0,
+      require(::unsetenv("GENERATIVEQC_CUDA_KS_REPLAY") == 0,
               "could not restore CUDA KS replay baseline");
-      require(::unsetenv("VIBEQC_CUDA_KS_CHUNK") == 0,
+      require(::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
               "could not restore CUDA KS synchronization baseline");
     }
     public_wb97mv_cuda_case(false);

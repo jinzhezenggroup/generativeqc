@@ -10,7 +10,7 @@
 
 // Cartesian powers and packed/public AO mappings shared by retained
 // integral evaluators. No queue scheduling policy belongs in this layer.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 struct Angular {
   unsigned x;
@@ -66,4 +66,4 @@ __device__ inline Scalar vec_axis(const Vec3<Scalar>& vector, int axis) {
   return axis == 0 ? vector.x : (axis == 1 ? vector.y : vector.z);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

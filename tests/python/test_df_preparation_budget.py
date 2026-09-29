@@ -22,7 +22,7 @@ def test_preparation_shapes_and_resource_policy_envelopes(
 #include "scf/df_preparation_budget.hpp"
 #include <iostream>
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   // 96 atoms: the measured 800 Cartesian / 768 public AO workload. This
   // shape-only check must not allocate its multi-gigabyte derivative tensors.
   DfPreparationShape shape{800, 768, 96, 448, 736, 448, 736, false, false};
@@ -130,7 +130,7 @@ def test_constrained_headroom_reports_the_actual_reservation(tmp_path: Path) -> 
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   const DfBudgetWorkload shape{300,700,80,8,8,true};
   const auto tight = resolve_df_budget(shape,{400ULL<<20,8ULL<<30,true},0);
   if (tight.reserved_headroom_bytes > tight.observed_free_bytes) return 1;
@@ -171,7 +171,7 @@ def test_live_auto_budget_can_retain_large_values_without_widening_caps(
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   const DfResourceEnvelope roomy{30ULL<<30,32ULL<<30,true};
   for (bool forces : {false,true}) {
     const DfBudgetWorkload shape{768,768,96,1,6,forces};
@@ -226,7 +226,7 @@ def test_roomy_live_budget_admits_the_batch_resident_value_owner(
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   const DfBudgetWorkload work{96, 96, 12, 4, 8, true};
   const auto floor = df_resident_value_admission_floor(work);
   const auto roomy = resolve_df_budget(work, {30ULL << 30, 32ULL << 30, true}, 0);
@@ -270,17 +270,17 @@ def test_single_packed_value_owner_has_distinct_capacity_and_identity(
 #include "scf/df_value_storage.hpp"
 #include <cstdlib>
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   const auto full = df_packed_value_capacity(1,768,3712,160,8);
   const auto single = df_packed_value_capacity(1,768,3712,160,8,false);
   if (single.factor_bytes != 8769110016ULL ||
       single.factor_bytes != full.factor_bytes ||
       single.scratch_bytes != full.scratch_bytes) return 1;
-  if (setenv("VIBEQC_DF_VALUE_STORAGE","packed-single",1)) return 2;
+  if (setenv("GENERATIVEQC_DF_VALUE_STORAGE","packed-single",1)) return 2;
   const auto selected = requested_df_pair_storage();
   if (!df_packed_pairs(selected) || df_retains_packed_raw(selected) ||
       selected == DfPairStorage::SymmetricLower) return 3;
-  if (setenv("VIBEQC_DF_VALUE_STORAGE","auto",1)) return 4;
+  if (setenv("GENERATIVEQC_DF_VALUE_STORAGE","auto",1)) return 4;
   if (requested_df_pair_storage_request() != DfPairStorageRequest::Automatic ||
       requested_df_pair_storage() != DfPairStorage::Dense) return 5;
   if (df_packed_pairs(static_cast<DfPairStorage>(123))) return 6;
@@ -316,7 +316,7 @@ def test_single_packed_96_atom_plan_keeps_values_when_occupied_scratch_does_not_
     root = Path(__file__).resolve().parents[2]
     # CI passes the binary directory of its CPU build. Local preset/out-of-tree
     # builds can supply the same variable; never borrow another preset's output.
-    binary_dir = Path(os.environ.get("VIBEQC_BUILD_DIR", root / "build"))
+    binary_dir = Path(os.environ.get("GENERATIVEQC_BUILD_DIR", root / "build"))
     generated = binary_dir / "generated"
     if not (generated / "generated_df_exchange_schedule.hpp").exists():
         pytest.skip(f"requires generated DF source schedule in {generated}")
@@ -325,7 +325,7 @@ def test_single_packed_96_atom_plan_keeps_values_when_occupied_scratch_does_not_
 #include <iostream>
 #include "src/scf/density_fitting.cpp"
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   const auto default_budget = plan_packed_density_fitting_tiles(
       1,768,3712,160,13685173124ULL,0,160,false);
   if (!default_budget.stores_full_three_center ||

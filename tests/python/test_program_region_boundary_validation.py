@@ -5,17 +5,17 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.gpu_profitability import GpuProfitability
-from vibeqc_compiler.common.liveness import EffectKind
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.program_region import (
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.liveness import EffectKind
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.program_region import (
     ProgramRegion,
     ProgramRegionCandidate,
     apply_program_region_candidate,
     derive_program_region,
 )
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.schedule import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.schedule import (
     ScheduleContract,
     ScheduleResources,
     ScheduleTopology,

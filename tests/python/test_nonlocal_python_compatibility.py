@@ -13,12 +13,12 @@ import builtins
 original_import = builtins.__import__
 def checked_import(name, globals=None, locals=None, fromlist=(), level=0):
     if (name in ("typing", "typing_extensions") and "Self" in (fromlist or ())
-            and (globals or {}).get("__name__") == "vibeqc.nonlocal_runtime"):
+            and (globals or {}).get("__name__") == "generativeqc.nonlocal_runtime"):
         raise ImportError("Self is annotation-only and unavailable at runtime")
     return original_import(name, globals, locals, fromlist, level)
 builtins.__import__ = checked_import
 sys.path.insert(0, sys.argv[1])
-from vibeqc.nonlocal_runtime import NonlocalFixedGridPlan
+from generativeqc.nonlocal_runtime import NonlocalFixedGridPlan
 assert callable(NonlocalFixedGridPlan.__enter__)
 """
     subprocess.run(

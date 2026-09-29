@@ -8,7 +8,7 @@
 #include "molecule/basis.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Shell-local public AO expansion into the existing normalized Cartesian ABI.
  * One record per public AO and per batch item; indices remain in Cartesian
@@ -60,4 +60,4 @@ void launch_build_cuda_df_transformed_tile_kernel(
     const DfPublicAoExpansion* auxiliary_to_cartesian, const double* inverse_square_root,
     bool apply_metric_transform, double* output, unsigned mapping = 0U, unsigned math = 0U);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

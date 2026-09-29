@@ -49,7 +49,7 @@ def test_shared_evidence_schema_and_replay_exports(tmp_path: typing.Any) -> None
 
 def test_production_facade_does_not_import_reference_or_pyscf() -> None:
     for name in ("__init__.py", "evaluate.py", "equations.py", "inventory.py"):
-        tree = ast.parse((ROOT / "tools/vibeqc_cc" / name).read_text())
+        tree = ast.parse((ROOT / "tools/generativeqc_cc" / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = [n.name for n in node.names]
@@ -67,8 +67,8 @@ def test_production_facade_does_not_transitively_load_df_oracle() -> None:
             sys.executable,
             "-c",
             (
-                "import sys; import tools.vibeqc_cc; "
-                "assert 'tools.vibeqc_cc.df_ccsdt_oracle' not in sys.modules; "
+                "import sys; import tools.generativeqc_cc; "
+                "assert 'tools.generativeqc_cc.df_ccsdt_oracle' not in sys.modules; "
                 "assert not any(n == 'pyscf' or n.startswith('pyscf.') for n in sys.modules)"
             ),
         ],
@@ -80,7 +80,7 @@ def test_production_facade_does_not_transitively_load_df_oracle() -> None:
 
 
 def test_df_oracle_shares_the_production_method_contract() -> None:
-    from tools.vibeqc_cc import df_ccsdt_oracle, df_contract
+    from tools.generativeqc_cc import df_ccsdt_oracle, df_contract
 
     assert df_ccsdt_oracle.DFCCSDTMethodContract is df_contract.DFCCSDTMethodContract
     assert (

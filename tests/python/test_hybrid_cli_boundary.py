@@ -1,8 +1,12 @@
 """Do not advertise hybrid dry runs before the CLI exposes explicit grids."""
 
 import pytest
-from vibeqc import _generated_methods
-from vibeqc.__main__ import _automatic_libxc_method_rows, _public_method_rows, parser
+from generativeqc import _generated_methods
+from generativeqc.__main__ import (
+    _automatic_libxc_method_rows,
+    _public_method_rows,
+    parser,
+)
 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
@@ -70,7 +74,7 @@ def test_methods_command_can_discover_default_allow_libxc() -> None:
 def test_methods_libxc_discovery_honors_public_blacklist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from vibeqc_compiler.method import bulk_ks
+    from generativeqc_compiler.method import bulk_ks
 
     original = bulk_ks.blacklist_reason
 

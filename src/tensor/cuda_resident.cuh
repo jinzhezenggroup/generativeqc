@@ -9,8 +9,8 @@
 #pragma once
 #include "cuda_runtime.cuh"
 
-namespace vibeqc_resident {
-using namespace vibeqc_tensor;
+namespace generativeqc_resident {
+using namespace generativeqc_tensor;
 struct Span {
   size_t offset, bytes;
 };
@@ -97,4 +97,4 @@ inline int copy(void* source, const Span* source_spans, size_t source_count, siz
     return 1;
   }
 }
-}  // namespace vibeqc_resident
+}  // namespace generativeqc_resident

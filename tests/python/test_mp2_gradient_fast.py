@@ -3,22 +3,22 @@
 import typing
 
 import numpy as np
-from vibeqc import Calculator
+from generativeqc import Calculator
 
-from tools.vibeqc_mp2.gradient import (
+from tools.generativeqc_mp2.gradient import (
     canonical_energy_adjoint,
     canonical_lagrangian_weights,
     canonical_orbital_rhs,
     dense_molecular_gradient_oracle,
     solve_canonical_orbital_response,
 )
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import DenseAOResponseBackend, GMRESOptions
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import DenseAOResponseBackend, GMRESOptions
 
 
 def _internal_directions(shape: typing.Any) -> typing.Any:

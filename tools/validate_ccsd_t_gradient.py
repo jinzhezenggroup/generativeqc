@@ -1,7 +1,7 @@
 """Independent pinned-PySCF RCCSD(T) analytic-gradient validation for issue #155.
 
 This module is test/qualification infrastructure only. It deliberately does not
-call VibeQC's incomplete RCCSD(T) force endpoint. PySCF 2.14.0 provides an
+call GenerativeQC's incomplete RCCSD(T) force endpoint. PySCF 2.14.0 provides an
 independent canonical-RHF analytic gradient oracle, and central finite
 differences re-solve RHF, RCCSD, and (T) at every displaced geometry.
 """
@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.common.evidence import canonical_hash
 
 from tools.cc_gradient_fixtures import inputs
 from tools.generate_validation_references import pyscf_molecule
@@ -207,7 +207,7 @@ def analytic_oracle(name: str) -> dict[str, typing.Any]:
     if name not in CASES:
         raise ValueError(f"unsupported CCSD(T) gradient validation case: {name}")
     record = {
-        "schema": "vibeqc.ccsd_t.gradient_validation",
+        "schema": "generativeqc.ccsd_t.gradient_validation",
         "schema_version": 1,
         "pyscf": PYSCF_VERSION,
         "case": name,
@@ -331,7 +331,7 @@ def main() -> None:
     args = parser.parse_args()
     selected = tuple(args.case or CASES)
     payload = {
-        "schema": "vibeqc.ccsd_t.gradient_validation_bundle",
+        "schema": "generativeqc.ccsd_t.gradient_validation_bundle",
         "schema_version": 1,
         "pyscf": PYSCF_VERSION,
         "cases": [

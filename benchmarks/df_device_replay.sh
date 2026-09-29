@@ -5,17 +5,17 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 : "${SLURM_JOB_ID:?run through a finite Slurm allocation}"
 : "${CUDA_VISIBLE_DEVICES:?preserve scheduler-assigned visibility}"
 : "${CUDA_ROOT:?set the CUDA toolkit directory}"
-: "${VIBEQC_LIBRARY:?set the tested native library}"
-: "${PYTHON:?set the Python environment with VibeQC test dependencies}"
+: "${GENERATIVEQC_LIBRARY:?set the tested native library}"
+: "${PYTHON:?set the Python environment with GenerativeQC test dependencies}"
 export PYTHONPATH=python:. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 export LD_LIBRARY_PATH="$CUDA_ROOT/lib64:${LD_LIBRARY_PATH:-}"
-replay_dir=${OUTPUT_DIR:-/tmp/vibeqc-df-device-${SLURM_JOB_ID}}
+replay_dir=${OUTPUT_DIR:-/tmp/generativeqc-df-device-${SLURM_JOB_ID}}
 mkdir -- "$replay_dir"
 "$PYTHON" benchmarks/df_run_provenance.py "$replay_dir"
-replay_lib=$(dirname -- "$VIBEQC_LIBRARY")
+replay_lib=$(dirname -- "$GENERATIVEQC_LIBRARY")
 ${CXX:-c++} -std=c++20 -O2 -Iinclude -Isrc -I"$CUDA_ROOT/include" \
-  -DVIBEQC_DF_PROBE_PROFILE benchmarks/df_response_probe.cpp \
-  -L"$replay_lib" -Wl,-rpath,"$replay_lib" -lvibeqc \
+  -DGENERATIVEQC_DF_PROBE_PROFILE benchmarks/df_response_probe.cpp \
+  -L"$replay_lib" -Wl,-rpath,"$replay_lib" -lgenerativeqc \
   -L"$CUDA_ROOT/lib64" -Wl,-rpath,"$CUDA_ROOT/lib64" -lcudart -o "$replay_dir/probe"
 for replay_spin in rhf uhf; do
   for replay_mode in generated_source generated_resident; do

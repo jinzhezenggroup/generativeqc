@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -25,30 +25,30 @@ from vibeqc_compiler.tensor import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 
 
 @pytest.fixture(scope="module")
 def compiler() -> typing.Any:
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
 
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
     return CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
 
 
 @pytest.fixture(scope="module")
 def cache(tmp_path_factory: typing.Any) -> typing.Any:
     return (
-        Path(os.environ["VIBEQC_TENSOR_CACHE"])
-        if "VIBEQC_TENSOR_CACHE" in os.environ
+        Path(os.environ["GENERATIVEQC_TENSOR_CACHE"])
+        if "GENERATIVEQC_TENSOR_CACHE" in os.environ
         else tmp_path_factory.mktemp("transcendentals-cuda")
     )
 
@@ -65,10 +65,13 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
     schedule_id: typing.Any,
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc_compiler.tensor import interpreter
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-    from vibeqc_compiler.tensor.cuda_resident import PreparedResident, compile_resident
+    from generativeqc_compiler.tensor import interpreter
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc_compiler.tensor.cuda_resident import (
+        PreparedResident,
+        compile_resident,
+    )
 
     schedules = [
         TensorSchedule(),
@@ -134,9 +137,12 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
 def test_cuda_error_propagation_recovery_and_no_stale_resident_outputs(
     compiler: typing.Any, cache: typing.Any, kind: typing.Any
 ) -> None:
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-    from vibeqc_compiler.tensor.cuda_resident import PreparedResident, compile_resident
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc_compiler.tensor.cuda_resident import (
+        PreparedResident,
+        compile_resident,
+    )
 
     x = _input()
     if kind.startswith("power"):

@@ -51,7 +51,7 @@ def historical(tmp_path: typing.Any, monkeypatch: typing.Any) -> typing.Any:
         "sha256": hashlib.sha256(payload).hexdigest(),
     }
     audit = {
-        "schema": "vibeqc.evidence-archive.v1",
+        "schema": "generativeqc.evidence-archive.v1",
         "source_revision": revision,
         "files": [entry],
     }
@@ -69,7 +69,7 @@ def test_restore_keeps_original_bytes_and_refuses_overwrite(
     root, name, payload, manifest, audit = historical
     if legacy:
         audit = {
-            "schema": "vibeqc.storage-migration.v1",
+            "schema": "generativeqc.storage-migration.v1",
             "archives": [{**audit["files"][0], "revision": audit["source_revision"]}],
         }
         manifest.write_text(json.dumps(audit))
@@ -189,7 +189,7 @@ def snapshot(historical: typing.Any) -> typing.Any:
         text=True,
     ).strip()
     source.unlink()
-    audit["schema"] = "vibeqc.git-snapshot.v1"
+    audit["schema"] = "generativeqc.git-snapshot.v1"
     audit["files"].append(
         {
             "path": binary,
@@ -369,7 +369,7 @@ def test_git_object_snapshot_restores_by_blob_identity(historical: typing.Any) -
         ["git", "rev-parse", f"{revision}:{name}"], cwd=root, text=True
     ).strip()
     object_audit = {
-        "schema": "vibeqc.git-object-snapshot.v1",
+        "schema": "generativeqc.git-object-snapshot.v1",
         "source_revision": revision,
         "history_rewritten": False,
         "file_count": 1,

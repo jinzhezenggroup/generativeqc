@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_es2.cuh"
 #include "generated_gfn2_es2_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -129,7 +129,7 @@ __device__ void validate_shell_charges(const SystemRanges& ranges, const double*
 }
 
 __device__ bool arithmetic_hardness(double first, double second, double* average) {
-  return vibeqc::xtb::generated::evaluate_gfn2_es2_arithmetic_hardness(
+  return generativeqc::xtb::generated::evaluate_gfn2_es2_arithmetic_hardness(
       first, second, *average);
 }
 
@@ -139,7 +139,7 @@ __device__ bool softened_kernel(double dx, double dy, double dz, double first_ha
   if (!arithmetic_hardness(first_hardness, second_hardness, &average)) {
     return false;
   }
-  return vibeqc::xtb::generated::evaluate_gfn2_es2_kernel_from_hardness(
+  return generativeqc::xtb::generated::evaluate_gfn2_es2_kernel_from_hardness(
       dx, dy, dz, average, *kernel);
 }
 
@@ -226,7 +226,7 @@ __global__ void potential_preflight_kernel(Gfn2ES2DeviceBatch batch, Gfn2ES2Devi
         finite_result = false;
         break;
       }
-      if (!vibeqc::xtb::generated::accumulate_gfn2_es2_potential(
+      if (!generativeqc::xtb::generated::accumulate_gfn2_es2_potential(
               kernel, charge, potential)) {
         record_error(device_error, Gfn2ES2DeviceError::kNonfinitePotentialArithmetic);
         finite_result = false;
@@ -281,7 +281,7 @@ __global__ void energy_preflight_kernel(Gfn2ES2DeviceBatch batch, Gfn2ES2DeviceC
         finite_result = false;
         break;
       }
-      if (!vibeqc::xtb::generated::accumulate_gfn2_es2_potential(
+      if (!generativeqc::xtb::generated::accumulate_gfn2_es2_potential(
               kernel, column_charge, potential)) {
         record_error(device_error, Gfn2ES2DeviceError::kNonfiniteEnergyArithmetic);
         finite_result = false;
@@ -291,7 +291,7 @@ __global__ void energy_preflight_kernel(Gfn2ES2DeviceBatch batch, Gfn2ES2DeviceC
     if (!finite_result) {
       break;
     }
-    if (!vibeqc::xtb::generated::accumulate_gfn2_es2_energy(
+    if (!generativeqc::xtb::generated::accumulate_gfn2_es2_energy(
             row_charge, potential, local_energy)) {
       record_error(device_error, Gfn2ES2DeviceError::kNonfiniteEnergyArithmetic);
       finite_result = false;
@@ -386,7 +386,7 @@ __global__ void gradient_preflight_kernel(Gfn2ES2DeviceBatch batch, Gfn2ES2Devic
             return;
           }
           double shell_weight = 0.0;
-          if (!vibeqc::xtb::generated::evaluate_gfn2_es2_cached_gradient_weight(
+          if (!generativeqc::xtb::generated::evaluate_gfn2_es2_cached_gradient_weight(
                   kernel, first_charge, second_charge, shell_weight)) {
             record_error(device_error, Gfn2ES2DeviceError::kNonfiniteGradientArithmetic);
             return;
@@ -400,7 +400,7 @@ __global__ void gradient_preflight_kernel(Gfn2ES2DeviceBatch batch, Gfn2ES2Devic
         }
       }
       double pair_gradient[3]{};
-      if (!vibeqc::xtb::generated::project_gfn2_es2_gradient(
+      if (!generativeqc::xtb::generated::project_gfn2_es2_gradient(
               weighted_derivative, dx, dy, dz,
               pair_gradient[0], pair_gradient[1], pair_gradient[2])) {
         record_error(device_error, Gfn2ES2DeviceError::kNonfiniteGradientArithmetic);
@@ -607,7 +607,7 @@ __global__ void es2_scc_potential_preflight_kernel(
         record_scc_system_error(system_errors, system, Gfn2ES2DeviceError::kNonfiniteShellCharge);
         return;
       }
-      if (!vibeqc::xtb::generated::accumulate_gfn2_es2_potential(
+      if (!generativeqc::xtb::generated::accumulate_gfn2_es2_potential(
               kernel, charge, potential)) {
         record_scc_system_error(system_errors, system,
                                 Gfn2ES2DeviceError::kNonfinitePotentialArithmetic);
@@ -680,14 +680,14 @@ __global__ void es2_scc_energy_preflight_kernel(Gfn2ES2DeviceBatch batch, Gfn2ES
         atomicCAS(&failure_code, 0, static_cast<int>(Gfn2ES2DeviceError::kNonfiniteShellCharge));
         continue;
       }
-      if (!vibeqc::xtb::generated::accumulate_gfn2_es2_potential(
+      if (!generativeqc::xtb::generated::accumulate_gfn2_es2_potential(
               kernel, column_charge, potential)) {
         atomicCAS(&failure_code, 0,
                   static_cast<int>(Gfn2ES2DeviceError::kNonfiniteEnergyArithmetic));
         continue;
       }
     }
-    if (!vibeqc::xtb::generated::accumulate_gfn2_es2_energy(
+    if (!generativeqc::xtb::generated::accumulate_gfn2_es2_energy(
             row_charge, potential, local_energy)) {
       atomicCAS(&failure_code, 0, static_cast<int>(Gfn2ES2DeviceError::kNonfiniteEnergyArithmetic));
       continue;
@@ -1245,4 +1245,4 @@ cudaError_t evaluate_gfn2_es2_scc_energy_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

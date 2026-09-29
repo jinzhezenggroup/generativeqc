@@ -2,21 +2,21 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     MethodSpec,
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_execution import (
+from generativeqc_compiler.method.stationary_execution import (
     StationaryExecutionGraph,
     compile_stationary_execution_graph,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.method.stationary_lifetime import (
+from generativeqc_compiler.method.stationary_lifetime import (
     DEVICE_BORROWED,
     DEVICE_RETAINED,
     HOST_PUBLISHED,

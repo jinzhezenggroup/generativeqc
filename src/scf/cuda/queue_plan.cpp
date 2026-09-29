@@ -7,7 +7,7 @@
 #include "scf/aot_shell_registry.hpp"
 #include "scf/cuda/direct_constants.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Host queue partitioning and partial-page arithmetic. Keep enumeration and truncation rules
  * identical to the device consumer. */
@@ -318,4 +318,4 @@ BoundedGeneratedPageRange bounded_generated_page_range(
   };
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

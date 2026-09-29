@@ -1,9 +1,9 @@
-#ifndef VIBEQC_RUNTIME_CUDA_SUBGROUP_CUH
-#define VIBEQC_RUNTIME_CUDA_SUBGROUP_CUH
+#ifndef GENERATIVEQC_RUNTIME_CUDA_SUBGROUP_CUH
+#define GENERATIVEQC_RUNTIME_CUDA_SUBGROUP_CUH
 
 #include <cuda_runtime.h>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Sum fixed channel arrays within a power-of-two subgroup.
  * The caller captures mask before divergent work and keeps every participating
@@ -22,5 +22,5 @@ __device__ void subgroup_sum(double (&values)[Capacity][Channels], unsigned mask
         values[row][channel] += __shfl_down_sync(mask, values[row][channel], shift, Width);
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 #endif

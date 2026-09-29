@@ -4,7 +4,7 @@
 #include "scf/cuda/direct_resident_tasks.hpp"
 #include "scf/cuda/direct_task_encoding.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Count force-eligible canonical ppps tiles by their ``pp`` bra pair.
@@ -172,4 +172,4 @@ void launch_materialize_ppps_resident_bra_tasks_kernel(
       resident_signature_write_counts, resident_ket_tasks, resident_ket_signatures);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

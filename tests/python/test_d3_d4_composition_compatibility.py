@@ -1,8 +1,8 @@
 """D3 composition must preserve the existing explicit/resolved PBE-D4 seam."""
 
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc_compiler.method import resolve_method
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc_compiler.method import resolve_method
 
 
 @pytest.mark.parametrize("mode", ("explicit", "resolved"))

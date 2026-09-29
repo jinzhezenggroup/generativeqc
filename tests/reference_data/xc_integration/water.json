@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.xc-integration-reference",
+  "schema": "generativeqc.xc-integration-reference",
   "version": 1,
   "inputs": {
     "name": "water",
@@ -270,5 +270,5 @@
       "sha256": "0b85f1dd9e547afdaf0654dffaaca0e45e12b930df0a4e1c4d1ea7a35786fb88"
     }
   },
-  "identity": "6b3b6ffd9fe955f161786fe11f0f9b2fd2bc2990718696ae206afed9e0d8bac5"
+  "identity": "f7ef893098cf70902b95b6167b46ac29d1e96465cef1d8eac547907d2d907599"
 }

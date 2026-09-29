@@ -40,7 +40,7 @@ def sample_archive(
     with ZipFile(directory / "raw-evidence.zip", "w") as archive:
         archive.writestr(name, data)
     manifest = {
-        "schema": "vibeqc.evidence-archive.v1",
+        "schema": "generativeqc.evidence-archive.v1",
         "archive_sha256": sha256(
             (directory / "raw-evidence.zip").read_bytes()
         ).hexdigest(),

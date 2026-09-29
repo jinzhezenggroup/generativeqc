@@ -8,7 +8,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::molecule {
+namespace generativeqc::molecule {
 
 /** Exact immutable integral-source identity, not a hash or mutable pointer token.
  * Coulomb integral values depend on geometry, basis and representation, not occupations.
@@ -73,4 +73,4 @@ class BasisGeometryIdentity {
   std::vector<std::uint64_t> words_;
 };
 
-}  // namespace vibeqc::molecule
+}  // namespace generativeqc::molecule

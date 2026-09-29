@@ -7,19 +7,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.evidence import canonical_hash
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.tensor import execute
 
-from tools.vibeqc_cc import build_program, evaluate
-from tools.vibeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_cc import build_program, evaluate
+from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,14 +54,14 @@ def test_pinned_pyscf_updates_reconstruct_shift_independent_physical_residual(
 
 
 @pytest.mark.parametrize("name", ["h2", "water", "lih"])
-def test_native_provider_same_C_and_new_vibeqc_HF(name: typing.Any) -> None:
+def test_native_provider_same_C_and_new_generativeqc_HF(name: typing.Any) -> None:
     meta, arrays = load_fixture(name)
     try:
         source = NativeSource(**source_arguments(meta))
     except (OSError, FileNotFoundError) as error:
         pytest.skip(f"native post-HF library unavailable: {error}")
     except RuntimeError as error:
-        if "VIBEQC native library was not found" not in str(error):
+        if "GENERATIVEQC native library was not found" not in str(error):
             raise
         pytest.skip(str(error))
     with source:
@@ -89,7 +89,7 @@ def test_native_provider_same_C_and_new_vibeqc_HF(name: typing.Any) -> None:
             assert provider.statistics["transformations"] == count == 5
             with pytest.raises(ValueError, match="identit"):
                 evaluate(replace(snapshot, generation_id="other"), provider, x, y)
-        # Newly converged VibeQC HF, its own C, native block provider. This is
+        # Newly converged GenerativeQC HF, its own C, native block provider. This is
         # a fixed-amplitude smoke check, not an end-to-end CCSD solve (slice C).
         fresh, _ = export_rhf(source)
         _, _, x, y = random_case(fresh.nocc, fresh.nmo - fresh.nocc)

@@ -22,14 +22,13 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT / "tools")]
 
 import numpy as np
 import pyscf
-from validate_weighted_eri import make_fixture
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import (
     CudaCompilerAdapter,
     resolve_cuda_execution_profile,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -37,15 +36,18 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.paths import source_hashes
-from vibeqc_compiler.integral.blocks import WeightTile
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.weighted_eri_execute import (
+from generativeqc_compiler.common.paths import source_hashes
+from generativeqc_compiler.integral.blocks import WeightTile
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.weighted_eri_execute import (
     PreparedWeightedEri,
     compile_weighted_eri,
 )
-from vibeqc_compiler.integral.weighted_eri_inputs import prepare_weighted_eri_stream
-from vibeqc_validation.publication import publish
+from generativeqc_compiler.integral.weighted_eri_inputs import (
+    prepare_weighted_eri_stream,
+)
+from generativeqc_validation.publication import publish
+from validate_weighted_eri import make_fixture
 
 
 def command(*argv: typing.Any) -> typing.Any:
@@ -309,7 +311,7 @@ def run(args: typing.Any) -> typing.Any:
                     "src/scf/weighted_eri_runtime.hpp",
                     "src/scf/cuda_weighted_eri.hpp",
                     "src/tensor/cuda_runtime.cuh",
-                    "include/vibeqc/vibeqc.h",
+                    "include/generativeqc/generativeqc.h",
                 ),
             )
         ),

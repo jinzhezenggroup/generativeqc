@@ -1,6 +1,6 @@
 # Symmetric matrix-function custom rule
 
-`vibeqc_compiler.method.SymmetricMatrixFunctionSpec` defines a backend-neutral
+`generativeqc_compiler.method.SymmetricMatrixFunctionSpec` defines a backend-neutral
 matrix-function contract and CPU reference implementations of symmetric inverse
 square root and pseudoinverse first-order JVP/VJP rules. It is a reusable
 mathematical primitive, not a DFT energy component or an MP2-specific response
@@ -33,7 +33,7 @@ of surrounding FP64 matrix products or the precomputed reference graph. See the
 
 ```python
 import numpy as np
-from vibeqc_compiler.method import SymmetricMatrixFunctionSpec
+from generativeqc_compiler.method import SymmetricMatrixFunctionSpec
 
 spec = SymmetricMatrixFunctionSpec(2, "example-metric", relative_threshold=0.1)
 state = spec.prepare(np.diag([0.0, 4.0]))

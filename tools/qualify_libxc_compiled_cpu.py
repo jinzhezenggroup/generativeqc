@@ -15,19 +15,23 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.compiler_process import run_compiler
-from vibeqc_compiler.common.provenance import atomic_json, canonical_hash, file_hash
-from vibeqc_compiler.xc.bulk_point_program import (
+from generativeqc_compiler.common.compiler_process import run_compiler
+from generativeqc_compiler.common.provenance import (
+    atomic_json,
+    canonical_hash,
+    file_hash,
+)
+from generativeqc_compiler.xc.bulk_point_program import (
     bind_runtime_semilocal_point_program,
 )
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
-from vibeqc_compiler.xc.compiled_cpu_evidence import build_result, stage_evidence
+from generativeqc_compiler.xc.compiled_cpu_evidence import build_result, stage_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
-SMOKE_SCHEMA = "vibeqc.libxc-compiled-cpu-smoke-input/v2"
+SMOKE_SCHEMA = "generativeqc.libxc-compiled-cpu-smoke-input/v2"
 SMOKE_CASE_LABELS = ("interior", "vacuum")
 
 
@@ -110,7 +114,7 @@ def _translation_unit(
     for index, (_, rho, gradient, tau) in enumerate(cases):
         evaluate_line = (
             f"  const auto value_{index} = "
-            f"vibeqc::dft::bulk_generated::evaluate_point("
+            f"generativeqc::dft::bulk_generated::evaluate_point("
             f"rho_{index}, gradient_{index}, tau_{index});"
         )
         header_line = (
@@ -240,7 +244,7 @@ def qualify_compiled_cpu(
     )
     translation_sha = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
-    with tempfile.TemporaryDirectory(prefix="vibeqc-libxc-cpu-") as directory:
+    with tempfile.TemporaryDirectory(prefix="generativeqc-libxc-cpu-") as directory:
         root = Path(directory)
         source_path = root / "point.cpp"
         executable_path = root / "point"

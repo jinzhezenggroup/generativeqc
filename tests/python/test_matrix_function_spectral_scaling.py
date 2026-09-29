@@ -46,7 +46,7 @@ CPP = r"""
 #include <exception>
 #include <iostream>
 int main() {
-  using namespace vibeqc::tensor;
+  using namespace generativeqc::tensor;
   const std::array<double,1> q{1.0};
   const std::array<std::uint8_t,1> keep{1};
   for (const auto function : {SymmetricMatrixFunction::inverse_sqrt,
@@ -78,7 +78,7 @@ def test_cuda_seeded_spectral_extremes(
 
     import test_matrix_function_native_range as reference
 
-    if os.environ.get("VIBEQC_MATRIX_FUNCTION_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_MATRIX_FUNCTION_CUDA_TEST") != "1":
         pytest.skip("explicit allocated CUDA tier")
     seed = 1023 if spectral > 0 else -1022
     source = (

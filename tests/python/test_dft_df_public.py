@@ -7,13 +7,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-from vibeqc import Atom, Calculator, KsOptions
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
+from generativeqc import Atom, Calculator, KsOptions
+from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 
 
 @pytest.fixture(params=("cpu", "cuda"))
 def device(request: pytest.FixtureRequest) -> str:
-    if request.param == "cuda" and os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1":
+    if request.param == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an allocated native CUDA library/device")
     return request.param
 
@@ -135,7 +135,7 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
     with calc.prepare_batch([WATER, WATER], warm_start=True) as batch:
         cold = batch.execute(strict=True)
         # Private/native snapshots also reject the conventional force path.
-        from vibeqc._ks_snapshot import NativeKsSnapshot
+        from generativeqc._ks_snapshot import NativeKsSnapshot
 
         with pytest.raises(NotImplementedError):
             NativeKsSnapshot(batch, 0)

@@ -15,10 +15,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 SCHEMAS = (
-    "vibeqc.storage-migration.v1",
-    "vibeqc.evidence-archive.v1",
-    "vibeqc.git-snapshot.v1",
-    "vibeqc.git-object-snapshot.v1",
+    "generativeqc.storage-migration.v1",
+    "generativeqc.evidence-archive.v1",
+    "generativeqc.git-snapshot.v1",
+    "generativeqc.git-object-snapshot.v1",
 )
 DATA = b"\x00retained binary evidence\xff\r\n"
 MEMBER = "campaign/data.bin"
@@ -77,10 +77,14 @@ def manifest(path: Path, revision: str, schema: str, checksum: str) -> None:
         entry["git_blob_sha1"] = "0" * 40
     elif checksum == "single":
         extra = (
-            "sha256" if schema == "vibeqc.git-object-snapshot.v1" else "git_blob_sha1"
+            "sha256"
+            if schema == "generativeqc.git-object-snapshot.v1"
+            else "git_blob_sha1"
         )
         del entry[extra]
-    record_key = "archives" if schema == "vibeqc.storage-migration.v1" else "files"
+    record_key = (
+        "archives" if schema == "generativeqc.storage-migration.v1" else "files"
+    )
     path.write_text(
         json.dumps(
             {

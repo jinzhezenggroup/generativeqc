@@ -17,10 +17,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 import numpy as np
-from vibeqc import Atom, Primitive, Shell
-from vibeqc.calculator import _named_basis_shells
-from vibeqc.profiles import canonical_hash
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid
+from generativeqc import Atom, Primitive, Shell
+from generativeqc.calculator import _named_basis_shells
+from generativeqc.profiles import canonical_hash
+from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 
 from tools.generate_validation_references import pyscf_molecule
 
@@ -170,7 +170,7 @@ def generate(directory: typing.Any) -> typing.Any:
             k: np.asarray(v, dtype=np.float64, order="C") for k, v in arrays.items()
         }
         metadata = {
-            "schema": "vibeqc.grid-reference",
+            "schema": "generativeqc.grid-reference",
             "version": 1,
             "inputs": inputs,
             "inputs_hash": canonical_hash(inputs),

@@ -7,13 +7,13 @@
 #include "posthf/mp2_cpu_generated.hpp"
 #include "posthf/mp2_cuda_plan.hpp"
 #include "posthf/mp2_schedule_generated.hpp"
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include "posthf/ri_mp2_cuda.hpp"
 #endif
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/density_fitting.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 namespace {
 void validate_reference(const hf::PhysicalReference& ref, double threshold,
                         unsigned requested_tile) {
@@ -61,7 +61,7 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   const auto cpu = generated::cpu_plan(tile);
   generated::CudaPlan gpu{};
   if (cuda) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     gpu = generated::cuda_plan(tile, device);
 #else
     throw std::runtime_error("CUDA MP2 kernels are not compiled");
@@ -153,7 +153,7 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
     double out[2]{};
     if (cuda) {
       char error[2048]{};
-      vibeqc_tensor::Metrics measured;
+      generativeqc_tensor::Metrics measured;
       const auto status =
           gpu.run(kernel.pointer, g.data(), x.data(), eps[job.i], eps[job.j], job.ea.data(),
                   job.eb.data(), out, &measured, error, sizeof(error));
@@ -265,7 +265,7 @@ Energy density_fitted_energy(const hf::PhysicalReference& ref, const posthf::Raw
   const auto cpu = generated::cpu_plan(tile);
 
   if (cuda) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     const auto gpu =
         density_fitted_energy_cuda(ref, source, budget, metric_relative_threshold, device);
     Energy result;
@@ -348,4 +348,4 @@ Energy density_fitted_energy(const hf::PhysicalReference& ref, const posthf::Raw
   return result;
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

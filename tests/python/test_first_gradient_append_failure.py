@@ -56,7 +56,7 @@ int cudaStreamSynchronize(int) {
   ++drains; host_pending=kernel_pending=false;
   return drain_failure ? 999 : 0;
 }
-namespace vibeqc_tensor {
+namespace generativeqc_tensor {
 void cuda_check(int status) { if(status) throw DeviceError(status); }
 }
 struct Mapping { std::size_t offsets[4]{}, atoms[4]{}; };

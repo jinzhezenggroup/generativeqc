@@ -9,21 +9,21 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc._stationary_cpu_components import ComponentPrimitiveExecutor
-from vibeqc._stationary_cpu_streaming import (
+from generativeqc._stationary_cpu_components import ComponentPrimitiveExecutor
+from generativeqc._stationary_cpu_streaming import (
     CompiledComponentExecutor,
     Dispatch,
     DoublePointer,
     IndexPointer,
 )
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 
 
 def test_native_failure_is_transactional_and_header_is_revalidated(
     tmp_path: Path,
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _stationary_cpu_streaming as module
+    from generativeqc import _stationary_cpu_streaming as module
 
     executable = shutil.which(os.environ.get("CXX", "c++"))
     if executable is None:

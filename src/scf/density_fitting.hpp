@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_DENSITY_FITTING_HPP
-#define VIBEQC_SCF_DENSITY_FITTING_HPP
+#ifndef GENERATIVEQC_SCF_DENSITY_FITTING_HPP
+#define GENERATIVEQC_SCF_DENSITY_FITTING_HPP
 
 #include <cstddef>
 #include <optional>
@@ -12,7 +12,7 @@
 #include "scf/df_value_storage.hpp"
 #include "scf/fock_build.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Diagnostic A/B control: retain coordinate-resolved CPU DF derivative tensors. */
 [[nodiscard]] bool cpu_materialized_df_derivatives_requested() noexcept;
@@ -95,7 +95,7 @@ struct DensityFittingRhfJk {
 /**
  * Build the host-reference RHF RI-J/K matrices.
  *
- * `density` uses VibeQC's existing closed-shell convention and includes the
+ * `density` uses GenerativeQC's existing closed-shell convention and includes the
  * factor of two for doubly occupied orbitals. The caller therefore assembles
  * the standard HF contribution as J - 0.5 K. Unselected raw outputs are empty
  * and their contractions are skipped, including exchange scratch allocation.
@@ -333,6 +333,6 @@ class DensityFittingBudgetError : public std::invalid_argument {
     std::size_t batch, std::size_t atoms, std::size_t shells, std::size_t cartesian_aos,
     std::size_t primitives, std::size_t transform_elements);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

@@ -26,8 +26,8 @@
 
 namespace {
 using Clock = std::chrono::steady_clock;
-using vibeqc::core::System;
-using namespace vibeqc::scf;
+using generativeqc::core::System;
+using namespace generativeqc::scf;
 
 void check(cudaError_t status) {
   if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
@@ -46,7 +46,7 @@ void write_values(const std::string& path, const std::vector<double>& values) {
 void read_shells(std::istream& input, System& system, std::size_t count) {
   require(count > 0 && count <= 100, "invalid fixture shell count");
   for (std::size_t shell = 0; shell < count; ++shell) {
-    vibeqc::core::Shell value;
+    generativeqc::core::Shell value;
     std::size_t primitives;
     input >> value.atom_index >> value.angular_momentum >> primitives;
     require(primitives > 0 && primitives <= 64, "invalid fixture contraction length");
@@ -59,8 +59,9 @@ void read_shells(std::istream& input, System& system, std::size_t count) {
   }
   std::string detail;
   require(static_cast<bool>(input), "truncated fixture input");
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          detail);
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail);
 }
 }  // namespace
 
@@ -90,15 +91,16 @@ int main(int argc, char** argv) {
       input >> atoms >> orbital_shells >> auxiliary_shells;
       require(atoms > 0 && atoms <= 100, "invalid fixture geometry");
       for (std::size_t atom = 0; atom < atoms; ++atom) {
-        vibeqc::core::Atom value;
+        generativeqc::core::Atom value;
         input >> value.atomic_number >> value.position[0] >> value.position[1] >> value.position[2];
         orbital[system].atoms.push_back(value);
       }
       orbital[system].basis_representation =
-          orbital_representation == 0 ? VIBEQC_BASIS_CARTESIAN : VIBEQC_BASIS_SPHERICAL;
+          orbital_representation == 0 ? GENERATIVEQC_BASIS_CARTESIAN : GENERATIVEQC_BASIS_SPHERICAL;
       auxiliary[system] = orbital[system];
-      auxiliary[system].basis_representation =
-          auxiliary_representation == 0 ? VIBEQC_BASIS_CARTESIAN : VIBEQC_BASIS_SPHERICAL;
+      auxiliary[system].basis_representation = auxiliary_representation == 0
+                                                   ? GENERATIVEQC_BASIS_CARTESIAN
+                                                   : GENERATIVEQC_BASIS_SPHERICAL;
       read_shells(input, orbital[system], orbital_shells);
       read_shells(input, auxiliary[system], auxiliary_shells);
     }
@@ -107,9 +109,10 @@ int main(int argc, char** argv) {
     std::vector<double> metric;
     std::size_t nbf = 0, naux = 0;
     auto start = Clock::now();
-    require(create_cuda_density_fitting_integral_source(0, orbital, auxiliary, &raw_source, metric,
-                                                        nbf, naux, detail) == VIBEQC_STATUS_SUCCESS,
-            detail);
+    require(
+        create_cuda_density_fitting_integral_source(0, orbital, auxiliary, &raw_source, metric, nbf,
+                                                    naux, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        detail);
     const double setup_ms = milliseconds(start);
     auto source = std::unique_ptr<CudaDensityFittingIntegralSource,
                                   decltype(&destroy_cuda_density_fitting_integral_source)>(
@@ -130,26 +133,27 @@ int main(int argc, char** argv) {
     // Exact last offsets, empty tiles, and overflowing/out-of-range requests
     // exercise the public tile guard before any kernel can touch device memory.
     require(generate_cuda_density_fitting_raw_tile(source.get(), 0, pairs, 0, naux, 0, -1, stream,
-                                                   device, detail) == VIBEQC_STATUS_SUCCESS,
+                                                   device, detail) == GENERATIVEQC_STATUS_SUCCESS,
             "empty tile rejected");
     require(generate_cuda_density_fitting_raw_tile(
                 source.get(), 0, 1, std::numeric_limits<std::size_t>::max(), 0, 1, -1, stream,
-                device, detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                device, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
             "overflowing tile accepted");
     require(
         generate_cuda_density_fitting_raw_tile(source.get(), count, 0, 1, 0, 1, -1, stream, device,
-                                               detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                                               detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
         "invalid batch offset accepted");
     auto unsupported_auxiliary = auxiliary;
     unsupported_auxiliary[0].shells[0].angular_momentum = 4U;
     CudaDensityFittingIntegralSource* unsupported = nullptr;
     std::vector<double> unsupported_metric;
     std::size_t unsupported_nbf = 0, unsupported_naux = 0;
-    require(create_cuda_density_fitting_integral_source(
-                0, orbital, unsupported_auxiliary, &unsupported, unsupported_metric,
-                unsupported_nbf, unsupported_naux, detail) == VIBEQC_STATUS_INVALID_ARGUMENT &&
-                unsupported == nullptr && detail.find("beyond f") != std::string::npos,
-            "unsupported auxiliary g shell was not explicitly rejected");
+    require(
+        create_cuda_density_fitting_integral_source(
+            0, orbital, unsupported_auxiliary, &unsupported, unsupported_metric, unsupported_nbf,
+            unsupported_naux, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+            unsupported == nullptr && detail.find("beyond f") != std::string::npos,
+        "unsupported auxiliary g shell was not explicitly rejected");
     std::vector<double> values(count * pairs * naux), tile(tile_elements);
     start = Clock::now();
     for (std::size_t system = 0; system < count; ++system) {
@@ -159,7 +163,7 @@ int main(int argc, char** argv) {
           const auto acount = std::min(auxiliary_tile, naux - aux);
           require(generate_cuda_density_fitting_raw_tile(source.get(), system, pair, pcount, aux,
                                                          acount, -1, stream, device,
-                                                         detail) == VIBEQC_STATUS_SUCCESS,
+                                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
                   detail);
           check(cudaMemcpyAsync(tile.data(), device, pcount * acount * sizeof(double),
                                 cudaMemcpyDeviceToHost, stream));
@@ -177,12 +181,12 @@ int main(int argc, char** argv) {
       // libcint center derivatives. The second system catches accidental use
       // of a local coordinate as a packed fleet-global derivative seed.
       std::vector<double> da, dm, bulk_da, bulk_dm;
-      std::vector<vibeqc::integrals::DensityFittingIntegralData> bulk;
+      std::vector<generativeqc::integrals::DensityFittingIntegralData> bulk;
       require(build_cuda_density_fitting_integrals_batch(0, orbital, auxiliary, bulk, detail) ==
-                  VIBEQC_STATUS_SUCCESS,
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail);
       for (std::size_t system = 0; system < count; ++system) {
-        const auto projected = vibeqc::integrals::transform_density_fitting_integrals(
+        const auto projected = generativeqc::integrals::transform_density_fitting_integrals(
             bulk[system], orbital[system], auxiliary[system]);
         bulk_da.insert(bulk_da.end(), projected.three_center_derivative.begin(),
                        projected.three_center_derivative.end());
@@ -199,7 +203,7 @@ int main(int argc, char** argv) {
               const auto acount = std::min(auxiliary_tile, naux - aux);
               require(generate_cuda_density_fitting_raw_tile(
                           source.get(), system, pair, pcount, aux, acount, coordinate, stream,
-                          device, detail) == VIBEQC_STATUS_SUCCESS,
+                          device, detail) == GENERATIVEQC_STATUS_SUCCESS,
                       detail);
               check(cudaMemcpyAsync(tile.data(), device, pcount * acount * sizeof(double),
                                     cudaMemcpyDeviceToHost, stream));
@@ -213,7 +217,7 @@ int main(int argc, char** argv) {
             const auto rows = std::min(auxiliary_tile, naux - row);
             require(generate_cuda_density_fitting_metric_derivative_tile(
                         source.get(), system, row, rows, coordinate, stream, device, detail) ==
-                        VIBEQC_STATUS_SUCCESS,
+                        GENERATIVEQC_STATUS_SUCCESS,
                     detail);
             check(cudaMemcpyAsync(dm.data() + mbase + (coordinate * naux + row) * naux, device,
                                   rows * naux * sizeof(double), cudaMemcpyDeviceToHost, stream));
@@ -243,7 +247,7 @@ int main(int argc, char** argv) {
     raw_source = source.release();
     require(create_cuda_density_fitting_jk_plan_from_source(
                 0, &raw_source, count, nbf, naux, metric, 1.0e-12, auxiliary_tile, jk_pair_tile,
-                &raw_plan, diagnostics, detail) == VIBEQC_STATUS_SUCCESS,
+                &raw_plan, diagnostics, detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail);
     auto plan =
         std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)>(
@@ -266,15 +270,16 @@ int main(int argc, char** argv) {
     for (unsigned sample = 0; sample < 5; ++sample) {
       start = Clock::now();
       require(execute_cuda_density_fitting_rhf_jk(plan.get(), density, coulomb, exchange, detail) ==
-                  VIBEQC_STATUS_SUCCESS,
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail);
       if (sample > 0) warm_ms.push_back(milliseconds(start));
     }
     write_values(prefix + "-j.bin", coulomb);
     write_values(prefix + "-k.bin", exchange);
-    require(execute_cuda_density_fitting_uhf_jk(plan.get(), alpha, beta, coulomb, alpha_exchange,
-                                                beta_exchange, detail) == VIBEQC_STATUS_SUCCESS,
-            detail);
+    require(
+        execute_cuda_density_fitting_uhf_jk(plan.get(), alpha, beta, coulomb, alpha_exchange,
+                                            beta_exchange, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        detail);
     write_values(prefix + "-uj.bin", coulomb);
     write_values(prefix + "-ka.bin", alpha_exchange);
     write_values(prefix + "-kb.bin", beta_exchange);

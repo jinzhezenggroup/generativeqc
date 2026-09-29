@@ -8,27 +8,30 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cpu_target import (
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cpu_target import (
     AVX2_FMA_TARGET,
     AVX512F_FMA_TARGET,
     GENERIC_CPU_TARGET,
 )
-from vibeqc_compiler.integral.cpu_lane import emit_first_components_cpu_lanes
-from vibeqc_compiler.integral.cpu_lane_execute import (
+from generativeqc_compiler.integral.cpu_lane import emit_first_components_cpu_lanes
+from generativeqc_compiler.integral.cpu_lane_execute import (
     FirstDerivativeCpuLaneShellEvaluator,
     compile_first_derivative_cpu_lane,
     compile_first_derivative_cpu_lane_shell,
 )
-from vibeqc_compiler.integral.cpu_schedule import CpuScheduleIR, default_cpu_schedule
-from vibeqc_compiler.integral.weight_pullback import (
+from generativeqc_compiler.integral.cpu_schedule import (
+    CpuScheduleIR,
+    default_cpu_schedule,
+)
+from generativeqc_compiler.integral.weight_pullback import (
     normalized_cartesian_components,
     normalized_radial_primitives,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def _x86() -> typing.Any:
@@ -239,7 +242,7 @@ def test_simd_target_requires_matching_isa_flags() -> None:
 def test_strict_lane_execution_rejects_nonfinite_primitive(
     compiler: typing.Any, tmp_path: typing.Any
 ) -> None:
-    from vibeqc_compiler.integral.cpu_lane_execute import (
+    from generativeqc_compiler.integral.cpu_lane_execute import (
         FirstDerivativeCpuLaneEvaluator,
     )
 

@@ -7,8 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.dft.ao_cuda import emit_grid_source
-from vibeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule
+from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule
 
 from tools.generate_df_kernels import write_if_changed
 

@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, import_bse
+from generativeqc import Calculator, import_bse
 
 from tools.validate_external_basis import (
     DATA,
@@ -18,7 +18,8 @@ from tools.validate_external_basis import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_BASIS_CUDA_TEST") != "1", reason="opt-in Slurm CUDA gate"
+    os.environ.get("GENERATIVEQC_BASIS_CUDA_TEST") != "1",
+    reason="opt-in Slurm CUDA gate",
 )
 
 

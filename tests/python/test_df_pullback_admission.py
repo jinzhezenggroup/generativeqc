@@ -3,7 +3,10 @@
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc.df_gradient import DFThreeIndexCotangent, pullback_df_three_index
+from tools.generativeqc_cc.df_gradient import (
+    DFThreeIndexCotangent,
+    pullback_df_three_index,
+)
 
 
 def test_finite_large_metric_is_not_overflowed_by_symmetrization() -> None:

@@ -11,8 +11,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
-PYTHON_OUTPUT = ROOT / "python/vibeqc_compiler/xc/_generated_native_semilocal.py"
-SCHEMA = "vibeqc.native-semilocal-families.v1"
+PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+SCHEMA = "generativeqc.native-semilocal-families.v1"
 
 
 def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
@@ -118,7 +118,7 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
 #include <cstdint>
 #include <stdexcept>
 
-namespace vibeqc::dft {{
+namespace generativeqc::dft {{
 
 /** Native curated semilocal execution identity shared by CPU and CUDA KS.
  *
@@ -202,7 +202,7 @@ static_assert(semilocal_family_code(SemilocalFamily::{families[0]["symbol"]}) ==
 static_assert(semilocal_family_code(SemilocalFamily::{families[-1]["symbol"]}) + 1U ==
               kSemilocalFamilyMetadata.size());
 
-}}  // namespace vibeqc::dft
+}}  // namespace generativeqc::dft
 """
 
 

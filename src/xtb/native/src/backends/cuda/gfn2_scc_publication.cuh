@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_PUBLICATION_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_PUBLICATION_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_PUBLICATION_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_PUBLICATION_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -18,7 +18,7 @@
 #include "backends/cuda/gfn2_scc_iteration_control.cuh"
 #include "backends/cuda/gfn2_scc_mixer.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /*
  * Stage-local publication diagnostics. Codes 1 and 2 are structural plan
@@ -143,7 +143,7 @@ struct Gfn2SccPublicationDeviceWorkspace {
   double* previous_free_energies = nullptr;
   double* free_energy_changes = nullptr;
   std::uint64_t* next_iterations = nullptr;
-  vibeqc_xtb_status_t* next_statuses = nullptr;
+  generativeqc_xtb_status_t* next_statuses = nullptr;
   std::uint8_t* next_converged = nullptr;
   std::int64_t batch_elements = 0;
 
@@ -201,6 +201,6 @@ cudaError_t commit_gfn2_scc_publication_cuda(
     const Gfn2SccPublicationDevicePublicState& public_state,
     const Gfn2SccPublicationDeviceWorkspace& workspace, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_PUBLICATION_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_PUBLICATION_CUH

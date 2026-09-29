@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
 import argparse
 
-from vibeqc_compiler.integral.ecp_projector import emit_ecp_quadrature_cpp
+from generativeqc_compiler.integral.ecp_projector import emit_ecp_quadrature_cpp
 
 
 def main() -> None:

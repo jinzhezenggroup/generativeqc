@@ -4,7 +4,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 
 // Residual Gaussian terms: c r^(power-2) exp(-exponent r^2).
 // The Coulomb tail -Zeff/r is evaluated by nuclear attraction separately.
@@ -28,4 +28,4 @@ EcpData ecp_integrals(const core::System& system, unsigned radial = 160, unsigne
 EcpData checked_ecp_integrals(const core::System& system, bool derivatives);
 void add_ecp(const EcpData& ecp, std::vector<double>& hcore, std::vector<double>& derivative);
 
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

@@ -7,8 +7,14 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.tensor import Program, TensorSpec, add, input_tensor, multiply
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor import (
+    Program,
+    TensorSpec,
+    add,
+    input_tensor,
+    multiply,
+)
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
 def _compiled(tmp_path: Path, name: str) -> typing.Any:

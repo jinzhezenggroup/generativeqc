@@ -50,8 +50,8 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
         in cache
     )
     assert "upstream/manifest.json" in cache and "tools/source_registry.py" in cache
-    assert ".cache/vibeqc-sources/xtbloom-gfn1-parameters" in cache
-    assert ".cache/vibeqc-sources/xtbloom-gfn1-d3" in cache
+    assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in cache
+    assert ".cache/generativeqc-sources/xtbloom-gfn1-d3" in cache
     assert "restore-keys:" not in cache
     other_jobs = workflow.replace(python_job, "")
     assert "source_registry.py sync" not in other_jobs

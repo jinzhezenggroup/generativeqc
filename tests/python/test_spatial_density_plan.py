@@ -5,12 +5,12 @@ import typing
 # Imported pytest fixtures are intentionally reused as test arguments.
 # ruff: noqa: F811
 import pytest
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import DensitySource
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 from test_spatial_execution import local_case  # noqa: F401
 from test_xc_contractions_native import native_factory  # noqa: F401
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import DensitySource
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 
 
 def test_orbital_capacity_is_charged_before_cuda_allocation(
@@ -21,7 +21,9 @@ def test_orbital_capacity_is_charged_before_cuda_allocation(
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("allocated CUDA before the combined orbital-capacity preflight")
 
-    monkeypatch.setattr("vibeqc_compiler.dft.spatial_prepared.CudaGrid", forbidden)
+    monkeypatch.setattr(
+        "generativeqc_compiler.dft.spatial_prepared.CudaGrid", forbidden
+    )
     with pytest.raises(MemoryError):
         PreparedSpatialGrid(
             basis,
@@ -78,8 +80,8 @@ def test_xc_construction_serializes_spatial_snapshot_and_replacement(
     from dataclasses import replace
     from threading import Event
 
-    from vibeqc_compiler.xc.contracts import DiscreteEnergyContract
-    from vibeqc_compiler.xc.prepared import PreparedXCContractions
+    from generativeqc_compiler.xc.contracts import DiscreteEnergyContract
+    from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
     basis, grid, density = local_case
     native = native_factory("PBE", "potential")
@@ -126,7 +128,7 @@ def test_xc_construction_serializes_spatial_snapshot_and_replacement(
 def test_same_mask_cpu_replacement_invalidates_borrowed_resource_plan(
     local_case: typing.Any, native_factory: typing.Any
 ) -> None:
-    from vibeqc_compiler.xc.prepared import PreparedXCContractions
+    from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
     basis, grid, density = local_case
     with (

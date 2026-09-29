@@ -14,16 +14,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
+from generativeqc_compiler.common.evidence import (
     canonical_hash,
     new_evidence,
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.resources import ResourcePlan
+from generativeqc_compiler.common.resources import ResourcePlan
 
-from tools.vibeqc_validation.publication import publish
+from tools.generativeqc_validation.publication import publish
 
 
 def write(path: typing.Any, value: typing.Any) -> None:
@@ -36,7 +36,11 @@ def write(path: typing.Any, value: typing.Any) -> None:
 def validate_run(run: typing.Any, *, dense_only: typing.Any = False) -> typing.Any:
     """Reject partial inventories, stale resource accounting and failed numerical gates."""
     if (
-        run["schema"] != "vibeqc.spatial-task-benchmark.v1"
+        run["schema"]
+        not in {
+            "generativeqc.spatial-task-benchmark.v1",
+            "vibeqc.spatial-task-benchmark.v1",
+        }
         or run["dirty"] is not False
         or not re.fullmatch(r"[0-9a-f]{40}", run["revision"])
     ):
@@ -199,7 +203,11 @@ def summarize(run: typing.Any) -> typing.Any:
             summary["active_aos"] = row["active_aos"]
         rows.append(summary)
     return {
-        "schema": "vibeqc.spatial-task-summary.v1",
+        "schema": (
+            "vibeqc.spatial-task-summary.v1"
+            if run["schema"] == "vibeqc.spatial-task-benchmark.v1"
+            else "generativeqc.spatial-task-summary.v1"
+        ),
         "backend": run["backend"],
         "endpoints": rows,
         "production_promoted": False,
@@ -438,7 +446,7 @@ def main() -> None:
             "source": {"revision": run["revision"], "dirty": False},
             "reproduction": {
                 "command": command,
-                "source_repository": "https://github.com/njzjz-bot/vibeqc",
+                "source_repository": "https://github.com/njzjz-bot/generativeqc",
                 "source_ref": "refs/heads/evidence/issue-234-measured",
                 "note": "Fetch the durable measured-source branch and exact recorded revision; use OMP_NUM_THREADS=1 and OPENBLAS_NUM_THREADS=1. Match the recorded native build identity. See README for historical dense sweep and its separate source ref.",
             },

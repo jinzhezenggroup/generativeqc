@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from codegen_fixtures import boys_values, factored_dppp_variables, sample_variables
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DPPP_SPEC,
     FOUR_CENTER_ERI_OPERATOR,
     FUSED_SHELL_SPEC_BY_NAME,

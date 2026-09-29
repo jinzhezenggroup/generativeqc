@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     ElectronicMethodIR,
     EnergySpec,
     IterationSpec,
@@ -17,7 +17,7 @@ from vibeqc_compiler.method import (
     rks_electronic_method_ir,
 )
 
-from tools.vibeqc_cc.doubles import build_ccsd_program
+from tools.generativeqc_cc.doubles import build_ccsd_program
 
 
 def _before(order: tuple[str, ...], first: str, second: str) -> bool:

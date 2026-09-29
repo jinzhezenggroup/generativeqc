@@ -5,9 +5,12 @@ from __future__ import annotations
 import typing
 
 import pytest
-from vibeqc._stationary_cuda import _BoundedStationaryTaskExecutor
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain, RuntimeTaskPage
+from generativeqc._stationary_cuda import _BoundedStationaryTaskExecutor
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.runtime_domain import (
+    RuntimeTaskDomain,
+    RuntimeTaskPage,
+)
 
 
 @pytest.mark.parametrize(
@@ -166,7 +169,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
 
     class Source:
         payload: typing.ClassVar[dict[str, str]] = {
-            "schema": "vibeqc.synthetic_stationary_task_source.v1",
+            "schema": "generativeqc.synthetic_stationary_task_source.v1",
             "logical_source": "fixture",
         }
         identity = canonical_hash(payload)
@@ -217,7 +220,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
         @classmethod
         def to_payload(cls) -> dict[str, object]:
             return {
-                "schema": "vibeqc.synthetic_stationary_task_source.v1",
+                "schema": "generativeqc.synthetic_stationary_task_source.v1",
                 "logical_source": "changed",
             }
 
@@ -228,7 +231,7 @@ def test_executor_accepts_structural_task_source_and_checks_page_identity() -> N
 def test_executor_admits_empty_screened_task_source_without_pages() -> None:
     class EmptySource:
         payload: typing.ClassVar[dict[str, str]] = {
-            "schema": "vibeqc.synthetic_stationary_task_source.v1",
+            "schema": "generativeqc.synthetic_stationary_task_source.v1",
             "logical_source": "screened-empty",
         }
         identity = canonical_hash(payload)

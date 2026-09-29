@@ -9,7 +9,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.range_separation import CoulombKernel, reference_moments
+from generativeqc_compiler.integral.range_separation import (
+    CoulombKernel,
+    reference_moments,
+)
 
 
 @pytest.fixture(scope="module", params=("cpu", "cuda"))
@@ -17,8 +20,8 @@ def native_moments(request: typing.Any, tmp_path_factory: typing.Any) -> typing.
     """Compile identical host/device arithmetic; CUDA execution is opt-in Slurm."""
     pytest.importorskip("scipy")
     cuda = request.param == "cuda"
-    if cuda and os.environ.get("VIBEQC_TEST_RANGE_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
+    if cuda and os.environ.get("GENERATIVEQC_TEST_RANGE_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
     if cuda and not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("native CUDA validation requires a Slurm allocation")
     compiler = shutil.which("nvcc" if cuda else "c++")
@@ -31,8 +34,8 @@ def native_moments(request: typing.Any, tmp_path_factory: typing.Any) -> typing.
 #include <cuda_runtime.h>
 __global__ void kernel(unsigned order, double t, double rho, unsigned range,
                        double omega, double* out) {
-  out[14] = vibeqc::integrals::range_moments(
-      order, t, rho, static_cast<vibeqc::integrals::CoulombRange>(range), omega, out);
+  out[14] = generativeqc::integrals::range_moments(
+      order, t, rho, static_cast<generativeqc::integrals::CoulombRange>(range), omega, out);
 }
 extern "C" int evaluate(unsigned order, double t, double rho, unsigned range,
                         double omega, double* out) {
@@ -53,8 +56,8 @@ extern "C" int evaluate(unsigned order, double t, double rho, unsigned range,
         source += r"""
 extern "C" int evaluate(unsigned order, double t, double rho, unsigned range,
                         double omega, double* out) {
-  return vibeqc::integrals::range_moments(
-      order, t, rho, static_cast<vibeqc::integrals::CoulombRange>(range), omega, out);
+  return generativeqc::integrals::range_moments(
+      order, t, rho, static_cast<generativeqc::integrals::CoulombRange>(range), omega, out);
 }
 """
     path = folder / ("probe.cu" if cuda else "probe.cpp")

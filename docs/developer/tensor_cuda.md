@@ -24,11 +24,11 @@ site's scheduler and preserve its assigned device visibility.
 
 ```python
 from pathlib import Path
-from vibeqc_compiler.integral.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.integral.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda, Reservations
-from vibeqc_compiler.tensor.cuda_execute import compile_cuda, PreparedCuda
-from vibeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.integral.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.integral.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda, Reservations
+from generativeqc_compiler.tensor.cuda_execute import compile_cuda, PreparedCuda
+from generativeqc_compiler.tensor.examples import example_cases
 
 case = example_cases()[1]
 target = cuda_target_info("sm_120")  # choose the actual allocated architecture
@@ -489,7 +489,7 @@ PYTHONPATH=.:python python tools/tensor_cuda_examples.py --mode compile \
   --nvcc /path/to/nvcc --architecture sm_120 --output /tmp/tensor-compile
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
-  env PYTHONPATH=.:python VIBEQC_TENSOR_CUDA_TEST=1 VIBEQC_NVCC=/path/to/nvcc \
+  env PYTHONPATH=.:python GENERATIVEQC_TENSOR_CUDA_TEST=1 GENERATIVEQC_NVCC=/path/to/nvcc \
   python -m pytest tests/python/test_tensor_cuda_execution.py -q
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00 \

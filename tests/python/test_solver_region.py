@@ -5,9 +5,9 @@ import json
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.resources import ResourceBudget, plan_resources
-from vibeqc_compiler.common.solver_region import (
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+from generativeqc_compiler.common.solver_region import (
     RegionCarry,
     RegionCheckpoint,
     RegionCompletion,

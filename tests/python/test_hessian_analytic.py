@@ -10,14 +10,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian.analytic import (
+from tools.generativeqc_hessian.analytic import (
     analytic_hessian,
     build_reference,
     cphf_relaxation,
 )
-from tools.vibeqc_hessian.native import NativeRHFState
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs, oracle_system
+from tools.generativeqc_hessian.native import NativeRHFState
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs, oracle_system
 
 
 @pytest.fixture(scope="module", params=("h2", "water"))
@@ -77,7 +77,7 @@ def test_components_match_independent_finite_difference_oracle(
     case: typing.Any,
 ) -> None:
     pytest.importorskip("pyscf")
-    from tools.vibeqc_hessian.reference import hessian_components
+    from tools.generativeqc_hessian.reference import hessian_components
 
     _, state, comp = case
     oracle = oracle_system(state.source)
@@ -121,7 +121,7 @@ def test_invalid_relaxation_rejected_before_provider_work(
             raise AssertionError("invalid input reached the derivative provider")
 
         monkeypatch.setattr(
-            "tools.vibeqc_hessian.analytic.provider_components", unexpected
+            "tools.generativeqc_hessian.analytic.provider_components", unexpected
         )
         with pytest.raises(ValueError, match="relaxation"):
             analytic_hessian(state, relax=relax)
@@ -151,13 +151,13 @@ import importlib.abc
 import sys
 class BlockOracles(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == 'pyscf' or fullname.startswith('pyscf.') or fullname == 'tools.vibeqc_hessian.reference':
+        if fullname == 'pyscf' or fullname.startswith('pyscf.') or fullname == 'tools.generativeqc_hessian.reference':
             raise AssertionError('native Hessian imported an oracle: ' + fullname)
 sys.meta_path.insert(0, BlockOracles())
 import numpy as np
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response.backends import DenseAOResponseBackend
-from tools.vibeqc_hessian import NativeRHFState, analytic_hessian
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response.backends import DenseAOResponseBackend
+from tools.generativeqc_hessian import NativeRHFState, analytic_hessian
 
 def forbidden(*args, **kwargs):
     raise AssertionError('native Hessian called a dense derivative/response oracle')
@@ -192,7 +192,7 @@ with NativeSource([(1, [0, 0, 0]), (1, [0, 0, 1.4])]) as source:
 @pytest.mark.parametrize("name", ["h2", "water", "water_sdf"])
 def test_reduced_response_matches_full_space(name: typing.Any) -> None:
     pytest.importorskip("pyscf")
-    from tools.vibeqc_hessian.reference import (
+    from tools.generativeqc_hessian.reference import (
         _first_order_mo1_e1,
         _first_order_mo1_e1_vir_only,
         h1ao,
@@ -215,7 +215,7 @@ def test_reduced_response_matches_full_space(name: typing.Any) -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_HESSIAN_SLOW") != "1",
+    os.environ.get("GENERATIVEQC_HESSIAN_SLOW") != "1",
     reason="explicit 12-AO d-shell generated Hessian qualification",
 )
 def test_native_d_shell_hessian_matches_external_oracle() -> None:
@@ -234,7 +234,7 @@ def test_native_d_shell_hessian_matches_external_oracle() -> None:
 def test_three_step_directional_differences_of_native_forces(
     case: typing.Any,
 ) -> None:
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     _, state, comp = case
     calculator = Calculator(
@@ -272,7 +272,7 @@ def test_three_step_directional_differences_of_native_forces(
 def test_large_domain_is_rejected_before_native_scf(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import Primitive, Shell
+    from generativeqc import Primitive, Shell
 
     shells = tuple(
         Shell(i % 2, 0, (Primitive(0.2 + i * 0.13, 1.0),)) for i in range(13)

@@ -1,6 +1,6 @@
 """Source/work-count gates for CUDA molecular-grid normalization."""
 
-from vibeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 
 def test_normalize_reuses_owner_exponential() -> None:

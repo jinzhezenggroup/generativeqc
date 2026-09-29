@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 void launch_two_electron_force_direct_kernel(
@@ -25,4 +25,4 @@ void launch_two_electron_uhf_force_direct_kernel(
     std::size_t pair_count, const double* schwarz_bounds, const double* spin_density,
     const std::uint8_t* active, double* forces);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

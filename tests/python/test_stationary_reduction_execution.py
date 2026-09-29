@@ -7,9 +7,9 @@ import subprocess
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_cuda import emit_stationary_reduction_cuda
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import emit_stationary_reduction_cuda
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -21,9 +21,9 @@ def reduction(
     request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
 ) -> ct.CDLL:
     cuda = request.param == "cuda"
-    if cuda and os.environ.get("VIBEQC_STATIONARY_REDUCTION_CUDA_TEST") != "1":
+    if cuda and os.environ.get("GENERATIVEQC_STATIONARY_REDUCTION_CUDA_TEST") != "1":
         pytest.skip(
-            "set VIBEQC_STATIONARY_REDUCTION_CUDA_TEST=1 in an allocated GPU job"
+            "set GENERATIVEQC_STATIONARY_REDUCTION_CUDA_TEST=1 in an allocated GPU job"
         )
     if cuda and not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("CUDA reduction qualification requires Slurm allocation")
@@ -39,7 +39,7 @@ def reduction(
         prefix += "#include <cuda_runtime.h>\n"
     else:
         prefix += "#define __global__\n#define __device__\nstruct Dim {size_t x;};\nDim blockIdx{},blockDim{64},threadIdx{};\nint atomicExch(int* p,int v){int old=*p;*p=v;return old;}\n"
-    prefix += "namespace vibeqc_stationary_cuda { __device__ double finite(double x,int* error,int){if(!isfinite(x)) atomicExch(error,1);return x;} }\n"
+    prefix += "namespace generativeqc_stationary_cuda { __device__ double finite(double x,int* error,int){if(!isfinite(x)) atomicExch(error,1);return x;} }\n"
     if not cuda:
         prefix = prefix.replace("isfinite(x)", "std::isfinite(x)")
     wrapper = CUDA if cuda else HOST
@@ -49,7 +49,7 @@ def reduction(
     library = folder / "reduction.so"
     flags = (
         [
-            "-arch=" + os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120"),
+            "-arch=" + os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120"),
             "--fmad=false",
             "-Xcompiler=-fPIC",
         ]
@@ -86,7 +86,7 @@ HOST = r"""
 extern "C" int run(const double* input,size_t na,double* output) {
   int error=0;std::vector<double> candidate(3*na,-99);
   for(size_t i=0;i<3*na+7;++i){blockIdx.x=i/64;threadIdx.x=i%64;
-    vibeqc_stationary_cuda::source_reduce(input,na,candidate.data(),&error);}
+    generativeqc_stationary_cuda::source_reduce(input,na,candidate.data(),&error);}
   if(error) return error;
   for(size_t i=0;i<3*na;++i) output[i]=candidate[i];
   return 0;
@@ -98,7 +98,7 @@ extern "C" int run(const double* input,size_t na,double* output) {
   do {
     if(cudaMalloc(&in,21*na*8)!=cudaSuccess || cudaMalloc(&out,3*na*8)!=cudaSuccess || cudaMalloc(&error,4)!=cudaSuccess) break;
     if(cudaMemcpy(in,input,21*na*8,cudaMemcpyHostToDevice)!=cudaSuccess || cudaMemset(error,0,4)!=cudaSuccess) break;
-    vibeqc_stationary_cuda::source_reduce<<<(3*na+63)/64,64>>>(in,na,out,error);
+    generativeqc_stationary_cuda::source_reduce<<<(3*na+63)/64,64>>>(in,na,out,error);
     if(cudaGetLastError()!=cudaSuccess || cudaMemcpy(&result,error,4,cudaMemcpyDeviceToHost)!=cudaSuccess) {result=-1;break;}
     if(!result && cudaMemcpy(output,out,3*na*8,cudaMemcpyDeviceToHost)!=cudaSuccess) result=-1;
   }while(false);

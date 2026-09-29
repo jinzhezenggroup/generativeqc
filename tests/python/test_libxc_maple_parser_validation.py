@@ -1,7 +1,7 @@
 """Malformed Maple must not silently select another function or branch."""
 
 import pytest
-from vibeqc_compiler.xc.libxc_maple import MapleImportError, import_maple_source
+from generativeqc_compiler.xc.libxc_maple import MapleImportError, import_maple_source
 
 
 @pytest.mark.parametrize("parameters", ("x,x", "x,,y", ",x", "x,"))

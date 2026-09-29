@@ -10,7 +10,7 @@
 
 // Retained Boys table recurrence, shared by direct and one-electron
 // evaluators with the existing precision and small-argument branches.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <unsigned MaximumOrder, typename Scalar>
 __device__ inline void boys_values(Scalar argument, Scalar* values) {
@@ -67,4 +67,4 @@ __device__ inline void boys_values(Scalar argument, Scalar* values) {
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

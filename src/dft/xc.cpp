@@ -11,7 +11,7 @@
 #include "runtime/resource_usage.hpp"
 #include "xc_cpu_generated.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 std::size_t matrix_size(std::size_t n) {
@@ -694,7 +694,7 @@ Wb97mvPointValue evaluate_wb97mv_point(const double rho[2], const double (&gradi
 
   // Reproduce the pinned Libxc 7.0.0 work_mgga input policy before entering
   // the Maple-generated functional. This is an audited definition-domain
-  // continuation, not a VibeQC density clip: total density below the functional
+  // continuation, not a GenerativeQC density clip: total density below the functional
   // threshold is zeroed, while surviving spin features use Libxc's floors.
   const double total_density = rho[0] + rho[1];
   if (total_density < generated::kWb97mvDensityThreshold) return {};
@@ -1034,4 +1034,4 @@ SpinXcIntegral integrate_pbe_uks_with_tail(const AoBasis& basis, const Molecular
   return integrate_pbe_uks(basis, grid, alpha, beta, tile_points);
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

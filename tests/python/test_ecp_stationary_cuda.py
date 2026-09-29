@@ -9,29 +9,29 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, KsOptions
+from generativeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
+from generativeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
 from test_dft_complete_cuda import no_cpu_derivatives
 from test_ecp import fixture
 from test_ecp_stationary_cpu import GRID, reference
-from vibeqc import Calculator, KsOptions
-from vibeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
-from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1",
     reason="explicit real-device ECP gate",
 )
 
 
 @pytest.fixture(scope="module")
 def compiler() -> typing.Any:
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
 
     # The caller selects an allocated GPU and its actual target explicitly.
     return CudaCompilerAdapter(
         Path(os.environ["CUDACXX"]),
-        cuda_target_info(os.environ["VIBEQC_ECP_CUDA_TARGET"]),
+        cuda_target_info(os.environ["GENERATIVEQC_ECP_CUDA_TARGET"]),
         compile_timeout=600,
     )
 
@@ -45,7 +45,7 @@ def diagnostic(
             basis,
             compiler=compiler,
             cache=os.environ.get(
-                "VIBEQC_STATIONARY_CACHE", ".cache/ecp-stationary-cuda"
+                "GENERATIVEQC_STATIONARY_CACHE", ".cache/ecp-stationary-cuda"
             ),
             tile_points=137,
             primitive_tile=29,
@@ -95,7 +95,7 @@ def test_ecp_complete_cuda_gradient_analytic_fd_and_live_owner(
             result.work["additional_device_peak_bound"]
             <= result.work["additional_device_budget"]
         )
-        from vibeqc.ecp import ecp_integrals
+        from generativeqc.ecp import ecp_integrals
 
         oracle = ecp_integrals(
             atoms,
@@ -219,7 +219,7 @@ def test_cuda_same_core_count_different_ecp_is_bound_to_actual_energy_owner() ->
 def test_cuda_ecp_admission_failure_recovery_and_legacy_guard(
     compiler: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from vibeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc._ks_snapshot import NativeKsSnapshot
 
     atoms, record, _ = fixture(representation="cartesian")
     calc = Calculator(

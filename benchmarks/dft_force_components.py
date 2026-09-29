@@ -192,7 +192,7 @@ def _normalize_wb97mv(
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
     return {
-        "schema": "vibeqc.dft-force-components.v1",
+        "schema": "generativeqc.dft-force-components.v1",
         "source_route": "wb97mv-component-seconds",
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
@@ -317,7 +317,7 @@ def _normalize_stationary(
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
     return {
-        "schema": "vibeqc.dft-force-components.v1",
+        "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
@@ -437,7 +437,7 @@ def normalize_scf_trace(
     )
     missing = [name for name in expected if profiled[name] is None]
     return {
-        "schema": "vibeqc.dft-scf-components.v1",
+        "schema": "generativeqc.dft-scf-components.v1",
         "profiled_ms": profiled,
         "expected_components": list(expected),
         "missing_expected_components": missing,
@@ -457,9 +457,9 @@ def merge_scf_profile(
 ) -> dict[str, typing.Any]:
     """Attach measured SCF component events to one force-component record."""
 
-    if force_components.get("schema") != "vibeqc.dft-force-components.v1":
+    if force_components.get("schema") != "generativeqc.dft-force-components.v1":
         raise ValueError("force component schema mismatch")
-    if scf_profile.get("schema") != "vibeqc.dft-scf-components.v1":
+    if scf_profile.get("schema") != "generativeqc.dft-scf-components.v1":
         raise ValueError("SCF component schema mismatch")
     result = {
         **force_components,

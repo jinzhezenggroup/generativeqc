@@ -7,7 +7,7 @@ Estimation builds basis/topology metadata without SCF iteration or production
 integral, density, derivative or tensor arrays.
 
 ```python
-from vibeqc import Calculator, ResourceBudget, estimate_hf_resources
+from generativeqc import Calculator, ResourceBudget, estimate_hf_resources
 
 h2 = [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]  # coordinates in bohr
 budget = ResourceBudget(host_bytes=128 << 20, headroom_fraction=0.1)
@@ -30,13 +30,13 @@ itself can select a profile and initialize the CUDA runtime; use the standalone
 estimator or CLI for a dry run without those side effects.
 
 ```bash
-python -m vibeqc resources molecule.xyz --basis def2-svp --method rhf \
+python -m generativeqc resources molecule.xyz --basis def2-svp --method rhf \
   --backend cpu --host-bytes 1073741824 --headroom-fraction 0.1
 ```
 
 XYZ units default to angstrom; `--units bohr` is available. The CLI emits JSON
 and exits 2 for unsupported or infeasible plans. CUDA estimation uses scalar
-layout queries from the library selected by `VIBEQC_LIBRARY`, loaded without
+layout queries from the library selected by `GENERATIVEQC_LIBRARY`, loaded without
 profile selection or a device query. It does not choose a GPU by free memory.
 
 ## Accounting contract
@@ -153,13 +153,13 @@ measured library usage or minimum physical GPU requirements.
 
 ## Composing HF with TensorIR
 
-`tensor_resource_choices` in `vibeqc_compiler.tensor.resources` adapts the existing
+`tensor_resource_choices` in `generativeqc_compiler.tensor.resources` adapts the existing
 TensorIR planner. Its `request` joins an HF request in the same global plan;
 `choices.selected(plan)` returns the corresponding exact TensorIR plan.
 
 ```python
-from vibeqc import ResourceSession, plan_resources
-from vibeqc_compiler.tensor.resources import tensor_resource_choices
+from generativeqc import ResourceSession, plan_resources
+from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
 # program, compiler and cache are ordinary TensorIR objects/paths.
 budget = ResourceBudget(host_bytes=1 << 30, device_bytes=1 << 30)

@@ -18,11 +18,11 @@ def test_benchmark_pins_snapshot_preparation(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_TIMELINE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TIMELINE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated CUDA timeline qualification run",
 )
 def test_changed_geometry_keeps_strict_snapshot_eligible() -> None:
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft import NativeAO
 
     assert os.environ.get("SLURM_JOB_ID"), "CUDA qualification requires Slurm"
     atoms = benchmark.SYSTEMS["water"]

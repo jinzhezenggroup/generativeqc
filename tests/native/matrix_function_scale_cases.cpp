@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "tensor/symmetric_matrix_function.hpp"
-using namespace vibeqc::tensor;
+using namespace generativeqc::tensor;
 int main() {
   const std::array<double, 1> q{1.0};
   const std::array<std::uint8_t, 1> keep{1};

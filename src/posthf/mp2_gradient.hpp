@@ -6,15 +6,15 @@
 
 #include "response/native_gmres.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 class MOBlockProvider;
 class DensityFittedBlockProvider;
-}  // namespace vibeqc::posthf
-namespace vibeqc::hf {
+}  // namespace generativeqc::posthf
+namespace generativeqc::hf {
 struct PhysicalReference;
 }
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 
 struct EnergyAdjoint {
   std::size_t orbitals{};
@@ -121,4 +121,4 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
     std::size_t cartesian_auxiliaries, std::size_t coordinate_count,
     std::size_t candidate_output_bytes, std::size_t budget_bytes);
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

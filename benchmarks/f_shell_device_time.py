@@ -74,7 +74,7 @@ def summarize(rows: list[dict]) -> dict:
             f_fraction_upper=(counts["f"] + counts["mixed"]) / total,
         )
     return {
-        "schema": "vibeqc.f_shell_device_time",
+        "schema": "generativeqc.f_shell_device_time",
         "schema_version": 1,
         "method": "summed measured kernel durations; mixed generic angular groups remain unresolved",
         "consumers": result,

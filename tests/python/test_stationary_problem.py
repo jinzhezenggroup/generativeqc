@@ -10,13 +10,13 @@ from dataclasses import FrozenInstanceError, replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.stationary import (
+from generativeqc_compiler.method.stationary import (
     ParameterSource,
     StationaryDerivativePlan,
     StationaryProblem,
     StationaryState,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -575,8 +575,8 @@ def test_large_diagonal_problem_does_not_materialize_state_jacobian() -> None:
 
 
 def test_generated_fragments_reuse_cuda_planning_without_device_or_runtime() -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     problem, _ = _nonsymmetric()
     generated = problem.compile()
@@ -756,7 +756,7 @@ def test_identifiers_reject_invalid_types_and_spellings(name: typing.Any) -> Non
 
 
 def test_malformed_replay_records_and_wrong_compiler_object_reject() -> None:
-    from vibeqc_compiler.method.stationary import compile_stationary
+    from generativeqc_compiler.method.stationary import compile_stationary
 
     payload = _scalar().to_payload()
     payload["states"] = 42

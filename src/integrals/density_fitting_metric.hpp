@@ -5,7 +5,7 @@
 
 #include "tensor/symmetric_matrix_function.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 /** Conditioning diagnostics and symmetric inverse square root of (P|Q). */
 struct DensityFittingMetricFactor {
   std::size_t dimension{};
@@ -28,4 +28,4 @@ std::vector<double> density_fitting_metric_response(
     const std::vector<double>& metric, const std::vector<double>& function_value_matrix,
     const std::vector<double>& response, std::size_t dimension, double relative_threshold,
     tensor::SymmetricMatrixFunction function);
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

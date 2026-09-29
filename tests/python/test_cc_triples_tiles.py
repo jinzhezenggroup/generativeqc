@@ -11,10 +11,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc.triples import (
+from tools.generativeqc_cc.triples import (
     triples_energy,
 )
-from tools.vibeqc_cc.triples_tiles import (
+from tools.generativeqc_cc.triples_tiles import (
     TileSpec,
     TriplesTileEnumerator,
     build_runtime_tile_triples_program,
@@ -198,8 +198,8 @@ def test_tile_tensorir_program_roundtrip(
     o: typing.Any, v: typing.Any, seed: typing.Any
 ) -> None:
     """The tile TensorIR program produces the same output after JSON roundtrip."""
-    from vibeqc_compiler.tensor import Program
-    from vibeqc_compiler.tensor import execute as tensor_execute
+    from generativeqc_compiler.tensor import Program
+    from generativeqc_compiler.tensor import execute as tensor_execute
 
     arrays = _random_case(o, v, seed)
     for chunk in ((0, v), (0, v // 2 + 1) if v > 1 else (0, v)):
@@ -216,7 +216,7 @@ def test_tile_tensorir_vs_cpu_reference(
     o: typing.Any, v: typing.Any, seed: typing.Any
 ) -> None:
     """Tile TensorIR matches the CPU tile reference to < 1e-11."""
-    from vibeqc_compiler.tensor import execute as tensor_execute
+    from generativeqc_compiler.tensor import execute as tensor_execute
 
     arrays = _random_case(o, v, seed)
     for chunk_size in [1, 2, v]:
@@ -233,7 +233,7 @@ def test_tile_tensorir_vs_cpu_reference(
 
 def test_partial_tile_tensorir_bounds_labels_but_keeps_full_f_axis() -> None:
     """Partial-tile specs retain full summation axes and bounded label axes."""
-    from vibeqc_compiler.tensor import execute as tensor_execute
+    from generativeqc_compiler.tensor import execute as tensor_execute
 
     o, v = 2, 4
     arrays = _random_case(o, v, 208)
@@ -254,7 +254,7 @@ def test_tile_tensorir_is_differentiable(
     o: typing.Any, v: typing.Any, seed: typing.Any
 ) -> None:
     """The tile TensorIR program passes the adjoint dot test."""
-    from vibeqc_compiler.tensor import dot_test
+    from generativeqc_compiler.tensor import dot_test
 
     arrays = _random_case(o, v, seed)
     feeds = {n: a for n, a in zip(INPUT_NAMES, arrays)}
@@ -276,7 +276,7 @@ def test_tile_tensorir_is_differentiable(
 def test_runtime_indexed_tile_program_reuses_one_graph_and_matches_reference(
     o: typing.Any, v: typing.Any, seed: typing.Any, chunk: typing.Any
 ) -> None:
-    from vibeqc_compiler.tensor import execute as tensor_execute
+    from generativeqc_compiler.tensor import execute as tensor_execute
 
     arrays = dict(zip(INPUT_NAMES, _random_case(o, v, seed), strict=True))
     tiles = tuple(TriplesTileEnumerator(o, v, vir_chunk_size=chunk))
@@ -337,8 +337,8 @@ def test_runtime_indexed_graph_size_does_not_scale_with_virtual_triple_count() -
 def test_runtime_indexed_streaming_schedule_bounds_high_rank_intermediates(
     nocc: int, nvir: int, capacity: int
 ) -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_plan import (
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_plan import (
         TensorSchedule,
         estimated_cuda_launches,
         plan_cuda,
@@ -396,9 +396,9 @@ def test_runtime_indexed_streaming_schedule_bounds_high_rank_intermediates(
 
 
 def test_streamed_generated_reduction_costs_virtual_recomputation() -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-    from vibeqc_compiler.tensor.cuda_search import estimate_schedule
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
     program = build_runtime_tile_triples_program(2, 3, capacity=6)
     target = cuda_target_info("sm_120")
@@ -562,7 +562,7 @@ def test_build_tile_program_refuses_invalid_inputs() -> None:
 def test_runtime_domain_planner_shrinks_only_after_budget_rejection(
     tmp_path: typing.Any,
 ) -> None:
-    from tools.vibeqc_cc.triples_cuda import CudaTriplesTiles, TriplesTileConfig
+    from tools.generativeqc_cc.triples_cuda import CudaTriplesTiles, TriplesTileConfig
 
     config = TriplesTileConfig(2, 3, vir_chunk_size=1, max_bytes=256 << 20)
     compiler = SimpleNamespace(target=object())
@@ -596,7 +596,7 @@ def test_cuda_runtime_domain_reuses_one_plan_artifact_and_owner(
     tmp_path: typing.Any,
 ) -> None:
     """Multiple logical tiles must not rebuild the scientific CUDA program."""
-    from tools.vibeqc_cc.triples_cuda import CudaTriplesTiles, TriplesTileConfig
+    from tools.generativeqc_cc.triples_cuda import CudaTriplesTiles, TriplesTileConfig
 
     arrays = dict(zip(INPUT_NAMES, _random_case(2, 3, 402), strict=True))
     config = TriplesTileConfig(2, 3, vir_chunk_size=1, max_bytes=256 << 20)
@@ -715,7 +715,7 @@ def test_cuda_input_guards_precede_planning(
     tmp_path: typing.Any, invalid: typing.Any, message: typing.Any
 ) -> None:
     """Invalid scientific inputs fail before compilation or device allocation."""
-    from tools.vibeqc_cc.triples_cuda import CudaTriplesTiles, TriplesTileConfig
+    from tools.generativeqc_cc.triples_cuda import CudaTriplesTiles, TriplesTileConfig
 
     arrays = dict(zip(INPUT_NAMES, _random_case(2, 3, 401), strict=True))
     if invalid in ("nan", "inf"):

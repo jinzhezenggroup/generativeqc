@@ -7,7 +7,7 @@
 
 // Shared device scalar/AD and special-function arithmetic. Ordinary inline
 // linkage permits reuse across CUDA owners without forcing compiler inlining.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
@@ -206,4 +206,4 @@ __device__ inline Scalar boys0(Scalar x) {
   return 0.5 * qsqrt(scalar<Scalar>(kPi) / x) * qerf(qsqrt(x));
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

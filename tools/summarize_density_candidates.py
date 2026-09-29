@@ -11,9 +11,9 @@ from statistics import median, stdev
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-from vibeqc_compiler.common.evidence import validate_evidence
+from generativeqc_compiler.common.evidence import validate_evidence
 
-from tools.vibeqc_validation.record import load_record
+from tools.generativeqc_validation.record import load_record
 
 
 def summarize(report: typing.Any) -> typing.Any:

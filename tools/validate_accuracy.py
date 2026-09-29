@@ -27,23 +27,32 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
-from vibeqc import Calculator, ObservableTarget, TargetAccuracy, compare_observables
-from vibeqc.accuracy_estimator import (
+from generativeqc import (
+    Calculator,
+    ObservableTarget,
+    TargetAccuracy,
+    compare_observables,
+)
+from generativeqc.accuracy_estimator import (
     EmpiricalHFEstimator,
     HFCalibrationDomain,
     HFCalibrationSample,
 )
-from vibeqc.profiles import canonical_hash, file_hash
+from generativeqc.profiles import canonical_hash, file_hash
 
-from tools.vibeqc_numerics.audit import (
+from tools.generativeqc_numerics.audit import (
     ProbeControls,
     StrictHFAudit,
     error_features,
     probe_hf,
 )
-from tools.vibeqc_numerics.fixtures import FAMILIES, TRAINING_FAMILIES, accuracy_suite
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.fixtures import calculator_inputs
+from tools.generativeqc_numerics.fixtures import (
+    FAMILIES,
+    TRAINING_FAMILIES,
+    accuracy_suite,
+)
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.fixtures import calculator_inputs
 
 TARGET = TargetAccuracy(
     (
@@ -315,9 +324,9 @@ def run(
     archive = output / "states.npz"
     np.savez_compressed(archive, **arrays)
     library = Calculator()._library
-    library.vibeqc_get_source_identity.restype = ct.c_char_p
+    library.generativeqc_get_source_identity.restype = ct.c_char_p
     result = {
-        "schema": "vibeqc.accuracy_experiment",
+        "schema": "generativeqc.accuracy_experiment",
         "schema_version": 1,
         "backend": backend,
         "target": TARGET.to_dict(),
@@ -329,7 +338,7 @@ def run(
         },
         "calibration": calibration,
         "holdout": holdout,
-        "source_identity": library.vibeqc_get_source_identity().decode(),
+        "source_identity": library.generativeqc_get_source_identity().decode(),
         "runner_sha256": file_hash(Path(__file__)),
         "python": platform.python_version(),
         "numpy": np.__version__,

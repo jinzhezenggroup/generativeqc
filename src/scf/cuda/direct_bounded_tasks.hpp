@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Materialize the bounded queue with unchanged geometry, stream and buffers.
  * This launch exposes only the materializing specializations used by the
@@ -25,4 +25,4 @@ void launch_compact_bounded_generated_tasks_kernel(
     const std::uint32_t* selected_any, unsigned long long* global_cursor, GeneratedShellTask* tasks,
     std::uint32_t* task_counts, const std::uint32_t* task_offsets, std::uint32_t* overflow);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

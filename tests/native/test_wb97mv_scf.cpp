@@ -17,7 +17,7 @@
 #include "molecule/basis.hpp"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 
 void require(bool value, const std::string& message) {
   if (!value) throw std::runtime_error(message);
@@ -44,21 +44,21 @@ core::System input_system(unsigned kind) {
   return system;
 }
 
-vibeqc_ks_options options(bool unrestricted) {
-  static const std::array<vibeqc_ks_semilocal_component, 2> components{
+generativeqc_ks_options options(bool unrestricted) {
+  static const std::array<generativeqc_ks_semilocal_component, 2> components{
       {{"MGGA_X_WB97M_V", 1.0}, {"MGGA_C_WB97M_V", 1.0}}};
-  static const std::array<vibeqc_ks_exchange_term, 2> restricted_exchange{{
-      {VIBEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.075},
-      {VIBEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -0.5},
+  static const std::array<generativeqc_ks_exchange_term, 2> restricted_exchange{{
+      {GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.075},
+      {GENERATIVEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -0.5},
   }};
-  static const std::array<vibeqc_ks_exchange_term, 2> unrestricted_exchange{{
-      {VIBEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.15},
-      {VIBEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -1.0},
+  static const std::array<generativeqc_ks_exchange_term, 2> unrestricted_exchange{{
+      {GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE, 0.15, 0.3, -0.15},
+      {GENERATIVEQC_KS_EXCHANGE_LONG_RANGE, 1.0, 0.3, -1.0},
   }};
   const auto& exchange = unrestricted ? unrestricted_exchange : restricted_exchange;
-  vibeqc_ks_options ks{};
+  generativeqc_ks_options ks{};
   ks.struct_size = sizeof(ks);
-  ks.abi_version = VIBEQC_ABI_VERSION;
+  ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.scf_domain = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16";
   ks.grid_version = 1;
   ks.radial_points = 12;
@@ -67,7 +67,7 @@ vibeqc_ks_options options(bool unrestricted) {
   ks.partition_iterations = 3;
   ks.coincident_tolerance = 1e-12;
   ks.tile_points = 64;
-  ks.xc_execution_schedule = VIBEQC_XC_EXECUTION_DEVICE_FUSED;
+  ks.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
   ks.spin_channels = unrestricted ? 2 : 1;
   ks.semilocal_components = components.data();
   ks.semilocal_component_count = components.size();
@@ -75,7 +75,7 @@ vibeqc_ks_options options(bool unrestricted) {
   ks.exchange_terms = exchange.data();
   ks.exchange_term_count = exchange.size();
   ks.has_nonlocal_correlation = 1;
-  ks.nonlocal_variant = VIBEQC_NONLOCAL_VV10;
+  ks.nonlocal_variant = GENERATIVEQC_NONLOCAL_VV10;
   ks.nonlocal_b = 6.0;
   ks.nonlocal_c = 0.01;
   ks.nonlocal_coefficient = 1.0;
@@ -83,11 +83,11 @@ vibeqc_ks_options options(bool unrestricted) {
   return ks;
 }
 
-vibeqc_method_descriptor descriptor(const vibeqc_ks_options& ks) {
-  vibeqc_method_descriptor method{};
+generativeqc_method_descriptor descriptor(const generativeqc_ks_options& ks) {
+  generativeqc_method_descriptor method{};
   method.struct_size = sizeof(method);
-  method.abi_version = VIBEQC_ABI_VERSION;
-  method.method = ks.spin_channels == 2 ? VIBEQC_METHOD_PBE_UKS : VIBEQC_METHOD_PBE_RKS;
+  method.abi_version = GENERATIVEQC_ABI_VERSION;
+  method.method = ks.spin_channels == 2 ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
   method.max_iterations = 180;
   method.diis_history = 8;
   method.energy_tolerance = 1e-12;
@@ -97,9 +97,9 @@ vibeqc_method_descriptor descriptor(const vibeqc_ks_options& ks) {
   return method;
 }
 
-const methods::Capabilities capabilities{VIBEQC_METHOD_PBE_RKS,
-                                         VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL,
-                                         VIBEQC_PROPERTY_ENERGY, false, true};
+const methods::Capabilities capabilities{GENERATIVEQC_METHOD_PBE_RKS,
+                                         GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL,
+                                         GENERATIVEQC_PROPERTY_ENERGY, false, true};
 
 template <class Values>
 void array(std::ostream& out, const Values& values) {
@@ -159,16 +159,16 @@ void nonlocal_density_domain() {
   using namespace dft::nlc;
   auto system = input_system(2);
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   const dft::AoBasis basis(system);
   const dft::MolecularGrid grid(system, {1, 12, 4, 8, 3, 1e-12});
   const std::size_t n = basis.nao, points = grid.point_count();
-  vibeqc_status status;
+  generativeqc_status status;
   const Vv10Parameters parameters{Vv10Variant::vv10, 6.0, 0.01, 1.0};
   auto plan =
-      Vv10Plan::prepare(VIBEQC_BACKEND_CPU_REFERENCE, -1, static_cast<std::uint32_t>(points), 64,
-                        parameters, 1 << 24, detail, status);
-  require(plan && status == VIBEQC_STATUS_SUCCESS, detail);
+      Vv10Plan::prepare(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1, static_cast<std::uint32_t>(points),
+                        64, parameters, 1 << 24, detail, status);
+  require(plan && status == GENERATIVEQC_STATUS_SUCCESS, detail);
   const std::vector<double> density{1.2, 0.05, 0.05, 0.5};
   const auto screened =
       integrate_vv10_rks(basis, grid, density, *plan, 64, {}, Vv10DensityDomain::MolecularV1);
@@ -197,14 +197,14 @@ void nonlocal_density_domain() {
   }
   require(!active.empty() && active.size() < points,
           "molecular VV10 fixture lacks an active/tail split");
-  auto compact =
-      Vv10Plan::prepare(VIBEQC_BACKEND_CPU_REFERENCE, -1, static_cast<std::uint32_t>(active.size()),
-                        64, parameters, 1 << 24, detail, status);
-  require(compact && status == VIBEQC_STATUS_SUCCESS, detail);
+  auto compact = Vv10Plan::prepare(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
+                                   static_cast<std::uint32_t>(active.size()), 64, parameters,
+                                   1 << 24, detail, status);
+  require(compact && status == GENERATIVEQC_STATUS_SUCCESS, detail);
   std::vector<double> vrho(active.size()), vsigma(active.size()), potential(n * n);
   double energy = 0.0;
   require(compact->execute(xyz, weights, rho, gradients, energy, vrho, vsigma, {}, {}, detail) ==
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
   for (std::size_t a = 0; a < active.size(); ++a) {
     const auto p = active[a];
@@ -246,7 +246,7 @@ void nonlocal_density_domain() {
   }
   const std::vector<double> zero_rho(points), zero_gradient(3 * points);
   require(plan->execute(grid.points(), grid.weights(), zero_rho, zero_gradient, energy, {}, {}, {},
-                        {}, detail) == VIBEQC_STATUS_INVALID_ARGUMENT,
+                        {}, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "molecular screening weakened the strict raw-pair density contract");
 }
 
@@ -254,15 +254,16 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
   const auto input = input_system(kind);
   auto system = input;
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS, detail);
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   auto ks = options(unrestricted);
   auto method = descriptor(ks);
   core::ContextState context;
   context.device_id = -1;
   auto plan = methods::detail::prepare_dft_calculation(capabilities, context, system, method);
   dft::CudaKsFinalStateToken token;
-  require(methods::detail::dft_final_state_token(*plan, token, detail) != VIBEQC_STATUS_SUCCESS,
-          "unexecuted WB97M-V owner published a state");
+  require(
+      methods::detail::dft_final_state_token(*plan, token, detail) != GENERATIVEQC_STATUS_SUCCESS,
+      "unexecuted WB97M-V owner published a state");
   auto result = plan->execute(false);
   require(result.convergence.converged && result.ks_diagnostic && result.physical_residual_rms &&
               *result.physical_residual_rms < 1e-9,
@@ -278,11 +279,12 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
           "WB97M-V lost its production point-domain or AO-jet identity");
   require(std::abs(result.ks_diagnostic->components.total() - result.energy) < 1e-12,
           "WB97M-V energy components do not describe its final density");
-  require(methods::detail::dft_final_state_token(*plan, token, detail) == VIBEQC_STATUS_SUCCESS,
-          detail);
+  require(
+      methods::detail::dft_final_state_token(*plan, token, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail);
   dft::VerifiedKsFinalState state;
   auto status = methods::detail::read_dft_final_state(*plan, token, false, state, detail);
-  require(status == VIBEQC_STATUS_SUCCESS, detail);
+  require(status == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(state.identity.model.range_correction && state.identity.model.nonlocal_correlation,
           "WB97M-V final-state identity omitted the LR-K/VV10 owners");
   require(state.identity.model.nonlocal_density_domain == dft::nlc::Vv10DensityDomain::MolecularV1,
@@ -291,13 +293,13 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
   forged.identity.model.nonlocal_correlation->b += 0.1;
   dft::VerifiedKsFinalState rejected;
   require(methods::detail::read_dft_final_state(*plan, forged, false, rejected, detail) !=
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           "changed VV10 identity authorized an old state");
 
   forged = token;
   forged.identity.model.nonlocal_density_domain = dft::nlc::Vv10DensityDomain::StrictPositive;
   require(methods::detail::read_dft_final_state(*plan, forged, false, rejected, detail) !=
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           "changed VV10 density policy authorized an old state");
 
   const std::string name = std::string(kind == 0   ? "h2"
@@ -318,13 +320,13 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
               std::abs(warm.energy - result.energy) < 1e-9,
           "WB97M-V warm replay changed the immutable model/energy");
   require(methods::detail::read_dft_final_state(*plan, token, false, rejected, detail) !=
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           "WB97M-V replay did not revoke the previous token");
   bool force_rejected = false;
   try {
     (void)plan->execute(true);
   } catch (const methods::MethodError& error) {
-    force_rejected = error.status() == VIBEQC_STATUS_NOT_IMPLEMENTED;
+    force_rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   require(force_rejected, "energy-only WB97M-V implementation accepted analytic forces");
   std::cout << name << " E=" << std::setprecision(16) << result.energy
@@ -333,9 +335,10 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
   // Invalid or incomplete compositions must never execute a partial method.
   for (unsigned failure = 0; failure < 9; ++failure) {
     ks = options(unrestricted);
-    std::array<vibeqc_ks_exchange_term, 2> exchange{ks.exchange_terms[0], ks.exchange_terms[1]};
-    std::array<vibeqc_ks_semilocal_component, 2> components{ks.semilocal_components[0],
-                                                            ks.semilocal_components[1]};
+    std::array<generativeqc_ks_exchange_term, 2> exchange{ks.exchange_terms[0],
+                                                          ks.exchange_terms[1]};
+    std::array<generativeqc_ks_semilocal_component, 2> components{ks.semilocal_components[0],
+                                                                  ks.semilocal_components[1]};
     ks.exchange_terms = exchange.data();
     ks.semilocal_components = components.data();
     switch (failure) {
@@ -353,7 +356,7 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
         ks.nonlocal_b = 5.9;
         break;
       case 4:
-        ks.nonlocal_variant = VIBEQC_NONLOCAL_RVV10;
+        ks.nonlocal_variant = GENERATIVEQC_NONLOCAL_RVV10;
         break;
       case 5:
         exchange[1].coefficient = 0.8;
@@ -384,7 +387,8 @@ void run_case(unsigned kind, bool unrestricted, std::ostream* output) {
     auto failed = methods::detail::prepare_dft_calculation(capabilities, context, system, method);
     require(!failed->execute(false).convergence.converged,
             "single-iteration WB97M-V falsely converged");
-    require(methods::detail::dft_final_state_token(*failed, token, detail) != VIBEQC_STATUS_SUCCESS,
+    require(methods::detail::dft_final_state_token(*failed, token, detail) !=
+                GENERATIVEQC_STATUS_SUCCESS,
             "unconverged WB97M-V solve published a successful state");
   }
 }
@@ -397,9 +401,10 @@ int main(int argc, char** argv) {
       output.open(argv[1]);
       require(static_cast<bool>(output), "unable to write WB97M-V independent-oracle input");
     } else
-      require(argc == 1, "usage: vibeqc_wb97mv_scf_tests [oracle-input.jsonl]");
+      require(argc == 1, "usage: generativeqc_wb97mv_scf_tests [oracle-input.jsonl]");
     int32_t available = 1;
-    require(vibeqc_method_available(VIBEQC_METHOD_PBE_RKS, &available) == VIBEQC_STATUS_SUCCESS &&
+    require(generativeqc_method_available(GENERATIVEQC_METHOD_PBE_RKS, &available) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
                 available,
             "generic RKS DFT carrier is missing its energy admission");
     nonlocal_density_domain();

@@ -8,15 +8,20 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_hessian import NativeRHFState, rhf_hessian, rhf_hvp, rhf_hvp_many
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_hessian import (
+    NativeRHFState,
+    rhf_hessian,
+    rhf_hvp,
+    rhf_hvp_many,
+)
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="explicit real-GPU qualification",
 )
 
@@ -28,7 +33,7 @@ def compiler() -> CudaCompilerAdapter:
     assert nvcc, "selected CUDA qualification needs nvcc on PATH"
     return CudaCompilerAdapter(
         Path(nvcc),
-        cuda_target_info(os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120")),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120")),
     )
 
 
@@ -64,8 +69,10 @@ def test_scalar_hvp_final_assembly_publishes_only_final_vector(
     def forbidden(*args: object, **kwargs: object) -> object:
         raise AssertionError("CUDA final assembly substituted a host HVP component")
 
-    monkeypatch.setattr("tools.vibeqc_hessian.hvp.nuclear_hvp", forbidden)
-    monkeypatch.setattr("tools.vibeqc_hessian.hvp.provider_hvp_components", forbidden)
+    monkeypatch.setattr("tools.generativeqc_hessian.hvp.nuclear_hvp", forbidden)
+    monkeypatch.setattr(
+        "tools.generativeqc_hessian.hvp.provider_hvp_components", forbidden
+    )
 
     actual = rhf_hvp(state, vector, **_cuda_kwargs(compiler))
     np.testing.assert_allclose(actual.value, expected.value, atol=1e-9, rtol=4e-10)

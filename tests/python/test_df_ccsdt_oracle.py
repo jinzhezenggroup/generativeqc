@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture
-from tools.vibeqc_cc.ccsd_t_api import rccsd_t_energy
-from tools.vibeqc_cc.df_ccsdt_oracle import (
+from tools.generativeqc_cc.ccsd_t_api import rccsd_t_energy
+from tools.generativeqc_cc.df_ccsdt_oracle import (
     DenseDFOracleProvider,
     correlation_df_reference,
     dense_df_oracle_from_three_index,
@@ -18,8 +18,8 @@ from tools.vibeqc_cc.df_ccsdt_oracle import (
     prepare_same_hamiltonian_dense_oracle,
     run_dense_df_ccsdt_oracle,
 )
-from tools.vibeqc_posthf.df import MetricFactor
-from tools.vibeqc_posthf.providers import BlockResult, ConventionalProvider
+from tools.generativeqc_posthf.df import MetricFactor
+from tools.generativeqc_posthf.providers import BlockResult, ConventionalProvider
 
 
 class FixtureProvider(ConventionalProvider):
@@ -99,7 +99,7 @@ def test_contract_preserves_conventional_rhf_state_and_separates_df_identity():
     assert contract.fock_policy == "preserve-conventional-rhf"
     assert contract.triples_variant == "standard-canonical"
     assert contract.metric_rank == contract.metric_dimension == source.naux
-    assert contract.record()["schema"] == "vibeqc.df-ccsd-t.method/1"
+    assert contract.record()["schema"] == "generativeqc.df-ccsd-t.method/1"
     np.testing.assert_array_equal(correlated.fock, reference.fock)
     np.testing.assert_array_equal(correlated.coefficients, reference.coefficients)
     np.testing.assert_array_equal(
@@ -191,7 +191,7 @@ def test_prepare_oracle_extracts_b_from_df_provider_without_changing_reference(
             assert tuple(q) == tuple(range(reference.nmo))
             return b
 
-    from tools.vibeqc_cc import df_ccsdt_oracle as module
+    from tools.generativeqc_cc import df_ccsdt_oracle as module
 
     monkeypatch.setattr(module, "DFProvider", FakeDFProvider)
     prepared = prepare_same_hamiltonian_dense_oracle(reference, source, metric)
@@ -213,6 +213,6 @@ def test_dense_oracle_provider_rejects_stale_identity_and_closed_access():
     with pytest.raises(RuntimeError, match="closed"):
         prepared.provider.get(
             __import__(
-                "tools.vibeqc_posthf.conventions", fromlist=["MOBlock"]
+                "tools.generativeqc_posthf.conventions", fromlist=["MOBlock"]
             ).MOBlock.from_spaces(correlated, "ovov")
         )

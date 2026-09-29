@@ -10,7 +10,7 @@
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 std::size_t checked_product(std::size_t a, std::size_t b) {
@@ -310,4 +310,4 @@ CosxMolecularDerivativeResult build_cosx_molecular_derivative_reference(
   return result;
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

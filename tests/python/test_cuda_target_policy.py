@@ -7,7 +7,7 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     CUDA_TARGETS,
     PSSS_SPEC,
     CudaKernelIR,
@@ -16,11 +16,11 @@ from vibeqc_compiler.integral import (
     cuda_target_info,
     schedule_candidates,
 )
-from vibeqc_compiler.integral.autotune import (
+from generativeqc_compiler.integral.autotune import (
     emit_schedule_driver,
     supported_schedule_trials,
 )
-from vibeqc_compiler.integral.capabilities import build_capability_report
+from generativeqc_compiler.integral.capabilities import build_capability_report
 
 
 @pytest.mark.parametrize("architecture", sorted(CUDA_TARGETS))

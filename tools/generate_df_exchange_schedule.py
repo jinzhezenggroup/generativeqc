@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from vibeqc_compiler.method.df_exchange_schedule import native_header
+from generativeqc_compiler.method.df_exchange_schedule import native_header
 
 
 def main() -> None:

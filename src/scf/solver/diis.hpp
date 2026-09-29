@@ -1,9 +1,9 @@
-#ifndef VIBEQC_SCF_SOLVER_DIIS_HPP
-#define VIBEQC_SCF_SOLVER_DIIS_HPP
+#ifndef GENERATIVEQC_SCF_SOLVER_DIIS_HPP
+#define GENERATIVEQC_SCF_SOLVER_DIIS_HPP
 #include "scf/reference/linalg.hpp"
 #include "solver/diis_history.hpp"
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 using reference::Matrix;
 /** Bounded conventional DIIS history for one trajectory, shared by both spins.
  * Singular augmented solves return the unextrapolated Fock. A proposal/reset
@@ -21,8 +21,8 @@ class Diis {
   Matrix update(const Matrix& fock, const Matrix& residual);
 
  private:
-  ::vibeqc::solver::detail::DiisHistory history_;
+  ::generativeqc::solver::detail::DiisHistory history_;
   bool normalize_metric_{};
 };
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver
 #endif

@@ -19,7 +19,7 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 namespace order3_detail {
 
@@ -258,4 +258,4 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_task(
       generated_shell_class_mask, 1.0, exchange_coefficient);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

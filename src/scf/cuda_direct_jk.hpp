@@ -7,7 +7,7 @@
 #include "core/types.hpp"
 #include "scf/fock_build.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 struct CudaDirectJkPlan;
 
 /** Persistent source/scratch sizes for the generic direct provider. No molecular
@@ -44,10 +44,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
  * requires a new plan. A positive budget bounds explicit device allocations;
  * no host integrals are evaluated or uploaded by this preparation.
  */
-vibeqc_status create_cuda_direct_jk_plan(int device_id, const std::vector<core::System>& systems,
-                                         unsigned derivative_order, double screening_tolerance,
-                                         std::size_t device_budget_bytes, CudaDirectJkPlan** output,
-                                         CudaDirectJkDiagnostic& diagnostic, std::string& detail);
+generativeqc_status create_cuda_direct_jk_plan(
+    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
+    double screening_tolerance, std::size_t device_budget_bytes, CudaDirectJkPlan** output,
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail);
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept;
 /** Null handles return an empty diagnostic. */
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept;
@@ -56,43 +56,41 @@ CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* pl
  * same layout; beta is empty for restricted spin. Absent outputs are empty.
  * Only density and requested raw matrices cross the host/device boundary.
  */
-vibeqc_status execute_cuda_direct_jk(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                     const std::vector<double>& density,
-                                     const std::vector<double>& beta, std::vector<double>& coulomb,
-                                     std::vector<double>& alpha_exchange,
-                                     std::vector<double>& beta_exchange, std::string& detail);
+generativeqc_status execute_cuda_direct_jk(CudaDirectJkPlan* plan, FockBuildSpec spec,
+                                           const std::vector<double>& density,
+                                           const std::vector<double>& beta,
+                                           std::vector<double>& coulomb,
+                                           std::vector<double>& alpha_exchange,
+                                           std::vector<double>& beta_exchange, std::string& detail);
 
 /** Fixed-density two-electron gradient [item,coordinate], using the same
  * operators, coefficients and screened quartet set as the raw value provider.
  * Derivatives reuse the existing contracted-ERI Dual evaluator; nuclear,
  * one-electron and Pulay terms belong to the surrounding method.
  */
-vibeqc_status execute_cuda_direct_energy_derivative(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                                    const std::vector<double>& density,
-                                                    const std::vector<double>& beta,
-                                                    std::vector<double>& derivative,
-                                                    std::string& detail);
+generativeqc_status execute_cuda_direct_energy_derivative(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector<double>& density,
+    const std::vector<double>& beta, std::vector<double>& derivative, std::string& detail);
 
 /** Item-level counterparts preserve neighboring batch scratch and upload only
  * this item's densities. Returned arrays have no batch dimension. */
-vibeqc_status execute_cuda_direct_jk_item(CudaDirectJkPlan* plan, std::size_t item,
-                                          FockBuildSpec spec, const std::vector<double>& density,
-                                          const std::vector<double>& beta,
-                                          std::vector<double>& coulomb,
-                                          std::vector<double>& alpha_exchange,
-                                          std::vector<double>& beta_exchange, std::string& detail);
-vibeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan* plan, std::size_t item,
-                                                         FockBuildSpec spec,
-                                                         const std::vector<double>& density,
-                                                         const std::vector<double>& beta,
-                                                         std::vector<double>& derivative,
-                                                         std::string& detail);
+generativeqc_status execute_cuda_direct_jk_item(
+    CudaDirectJkPlan* plan, std::size_t item, FockBuildSpec spec,
+    const std::vector<double>& density, const std::vector<double>& beta,
+    std::vector<double>& coulomb, std::vector<double>& alpha_exchange,
+    std::vector<double>& beta_exchange, std::string& detail);
+generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan* plan,
+                                                               std::size_t item, FockBuildSpec spec,
+                                                               const std::vector<double>& density,
+                                                               const std::vector<double>& beta,
+                                                               std::vector<double>& derivative,
+                                                               std::string& detail);
 
 /** Fused RSH fixed-density derivative for one item. Output is source-major:
  * [J, short-range K, long-range K], each with coordinates_per_item values.
  * Short-range derivatives are formed from Full - Long inside one quartet pass.
  */
-vibeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
+generativeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
     CudaDirectJkPlan* plan, std::size_t item, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const std::vector<double>& density, const std::vector<double>& beta,
@@ -102,9 +100,9 @@ vibeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
  * densities on the Direct owner's device. The caller owns both pointers and
  * must keep them live through completion. Qualified native KS final-state
  * publication establishes the physical symmetric-density precondition. */
-vibeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
+generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

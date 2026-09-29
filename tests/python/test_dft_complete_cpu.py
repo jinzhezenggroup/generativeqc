@@ -13,7 +13,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     BasisProvenance,
     BasisSet,
     BasisShell,
@@ -24,10 +24,10 @@ from vibeqc import (
     KsOptions,
     method_capabilities,
 )
-from vibeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.method import MethodSpec, resolve_method
+from generativeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import MethodSpec, resolve_method
 
 ATOMS = [("O", (0.1, -0.1, 0.0)), ("H", (0.1, 0.2, 1.7)), ("H", (1.6, -0.2, -0.5))]
 GRID = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
@@ -42,7 +42,7 @@ TRANSITION_METAL_GRID_BASIS_PAYLOAD = {
 
 def transition_metal_grid_basis() -> BasisSet:
     """Synthetic Fe/H s-p fixture kept inside the qualified CPU gradient domain."""
-    from vibeqc.profiles import canonical_hash
+    from generativeqc.profiles import canonical_hash
 
     elements = tuple(
         ElementBasis(
@@ -237,7 +237,7 @@ def independent_converged_grid_reference(
     )
     mf = dft.UKS(mol) if method.endswith("-uks") else dft.RKS(mol)
     mf.xc = "PBE" if method.startswith("pbe-") else "LDA_X,LDA_C_PW"
-    # This deliberately does not consume VibeQC GridSpec/points/weights.  The
+    # This deliberately does not consume GenerativeQC GridSpec/points/weights.  The
     # independent oracle uses PySCF's Treutler radial mapping, Lebedev angular
     # rule and Becke partition at a substantially denser unpruned resolution.
     mf.grids.atom_grid = (120, 974)
@@ -1056,10 +1056,10 @@ def test_failure_isolation_native_malformed_geometry_and_detached_state() -> Non
         # Bypass Python shape checks: malformed native invocation revokes all
         # prior results before descriptor validation, including the good neighbor.
         lib = batch._library
-        from vibeqc import _native
+        from generativeqc import _native
 
         bad = _native.BatchInputDescriptor()
-        status = lib.vibeqc_batch_execute(batch._batch, ct.byref(bad), 1, None, 0)
+        status = lib.generativeqc_batch_execute(batch._batch, ct.byref(bad), 1, None, 0)
         assert status != 0
         with pytest.raises(ValueError, match="stale"):
             StationaryDerivativeContract(live.identity).validate(live)
@@ -1084,7 +1084,7 @@ def test_failure_isolation_native_malformed_geometry_and_detached_state() -> Non
 def test_compiler_source_publication_is_atomic(
     tmp_path: typing.Any, monkeypatch: typing.Any, fail_publication: typing.Any
 ) -> None:
-    from vibeqc import _stationary_cpu as module
+    from generativeqc import _stationary_cpu as module
 
     path = tmp_path / "source.cpp"
     path.write_text("old complete source")
@@ -1114,8 +1114,8 @@ def test_cpu_diagnostic_bounds_and_late_provider_failure(
 ) -> None:
     from pathlib import Path
 
-    from vibeqc import _stationary_cpu as module
-    from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+    from generativeqc import _stationary_cpu as module
+    from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 
     atoms = [("H", (0.1, 0.2, -0.6)), ("H", (0.2, -0.1, 0.8))]
     calc = calculator("pbe-rks")
@@ -1140,7 +1140,7 @@ def test_cpu_diagnostic_bounds_and_late_provider_failure(
         calls = 0
         with monkeypatch.context() as patch:
             if execution == "native":
-                from vibeqc import _stationary_cpu_streaming as streaming
+                from generativeqc import _stationary_cpu_streaming as streaming
 
                 original_integral = streaming.CompiledComponentExecutor.integral
 
@@ -1206,11 +1206,11 @@ class BlockOracle(importlib.abc.MetaPathFinder):
         if fullname.split('.')[0] in {'pyscf', 'gpu4pyscf', 'cupy'}:
             raise AssertionError('unexpected external oracle: ' + fullname)
 sys.meta_path.insert(0, BlockOracle())
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.method import MethodSpec, resolve_method
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import MethodSpec, resolve_method
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
 atoms = [('H', (.1, .2, -.6)), ('H', (.2, -.1, .8))]
 calc = Calculator(method=sys.argv[2], device='cpu',
     ks_options=KsOptions(grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)),
@@ -1220,16 +1220,16 @@ with calc.prepare_batch([atoms]) as batch, NativeAO(atoms) as basis:
     state = StationaryKsState.from_native(batch, basis)
     def blocked(*args, **kwargs):
         raise AssertionError("native path invoked an interpreter")
-    from vibeqc_compiler.xc.grid_response import GridResponseProgram
-    from vibeqc_compiler.xc.coefficients import AOJetPullbackProgram
+    from generativeqc_compiler.xc.grid_response import GridResponseProgram
+    from generativeqc_compiler.xc.coefficients import AOJetPullbackProgram
     GridResponseProgram.evaluate = blocked
     AOJetPullbackProgram.evaluate = blocked
     for module in tuple(sys.modules.values()):
-        if module is not None and getattr(module, '__name__', '').startswith(('vibeqc.', 'vibeqc_compiler.')):
+        if module is not None and getattr(module, '__name__', '').startswith(('generativeqc.', 'generativeqc_compiler.')):
             for name in ('evaluate_array_graph',):
                 if hasattr(module, name):
                     setattr(module, name, blocked)
-            if getattr(module, '__name__', '') in {'vibeqc_compiler.tensor', 'vibeqc_compiler.tensor.interpreter', 'vibeqc_compiler.method.stationary_gradient', 'vibeqc._stationary_cpu'}:
+            if getattr(module, '__name__', '') in {'generativeqc_compiler.tensor', 'generativeqc_compiler.tensor.interpreter', 'generativeqc_compiler.method.stationary_gradient', 'generativeqc._stationary_cpu'}:
                 module.execute = blocked
     result = complete_rks_gradient_diagnostic(state, basis, cache=sys.argv[1], execution="native")
     assert np.isfinite(result.gradient).all()
@@ -1248,7 +1248,7 @@ assert not any(name.split('.')[0] in {'pyscf', 'gpu4pyscf', 'cupy'} for name in 
 def test_native_late_grid_failure_stale_lease_and_changed_geometry(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from vibeqc import _stationary_cpu as module
+    from generativeqc import _stationary_cpu as module
 
     atoms = [("H", (0.1, 0.2, -0.6)), ("H", (0.2, -0.1, 0.8))]
     calc = calculator("pbe-rks")

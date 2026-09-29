@@ -3,13 +3,13 @@
 
 import pytest
 
-from tools.vibeqc_cc.df_api import (
+from tools.generativeqc_cc.df_api import (
     df_rccsd_t_energy,
     df_rccsd_t_method_capabilities,
 )
-from tools.vibeqc_cc.solver import SolverOptions
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_cc.solver import SolverOptions
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def test_df_rccsdt_capability_is_explicitly_energy_only():

@@ -8,22 +8,22 @@ from itertools import product
 
 import numpy as np
 import pytest
-from vibeqc import assemble_fixed_density_exchange
-from vibeqc.ks import KsOptions, native_ks_options, resolve_ks_options
-from vibeqc.mean_field import compile_fixed_density_method
-from vibeqc_compiler.dft.grid import GridSpec
-from vibeqc_compiler.method import (
+from generativeqc import assemble_fixed_density_exchange
+from generativeqc.ks import KsOptions, native_ks_options, resolve_ks_options
+from generativeqc.mean_field import compile_fixed_density_method
+from generativeqc_compiler.dft.grid import GridSpec
+from generativeqc_compiler.method import (
     MethodIR,
     MethodSpec,
     compile_ks_execution_plan,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 
 def _assert_full_range_exchange_contract(

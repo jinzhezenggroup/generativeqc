@@ -8,9 +8,9 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
-from vibeqc_compiler.integral.df_rys import emit_df_rys_cuda
-from vibeqc_compiler.integral.df_rys_shell import (
+from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+from generativeqc_compiler.integral.df_rys import emit_df_rys_cuda
+from generativeqc_compiler.integral.df_rys_shell import (
     AUXILIARY_F_RYS_SHELL_CLASSES,
     COMPONENT_RYS_SHELL_CLASSES,
     RYS_SHELL_CLASSES,
@@ -18,9 +18,11 @@ from vibeqc_compiler.integral.df_rys_shell import (
     emit_df_rys_shell_cuda,
     shell_rys_roots,
 )
-from vibeqc_compiler.integral.df_shell_derivatives import emit_df_shell_derivatives_cuda
+from generativeqc_compiler.integral.df_shell_derivatives import (
+    emit_df_shell_derivatives_cuda,
+)
 
-from tools.vibeqc_validation.df_derivatives import make_df_derivative_fixture
+from tools.generativeqc_validation.df_derivatives import make_df_derivative_fixture
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +48,7 @@ def shell_evaluator(tmp_path_factory: typing.Any) -> typing.Any:
 #define __forceinline__ inline
 #define __noinline__ __attribute__((noinline))
 #include "generated_df_rys_shell.cuh"
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 template<unsigned A,unsigned B,unsigned C>
 void evaluate(bool rys,unsigned item,const double* e,const double* r,double* out) {
   generated_df_derivatives::Geometry g;

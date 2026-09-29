@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_accumulate_fock_precision_work_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -43,4 +43,4 @@ void launch_profile_bounded_generated_tasks_kernel(dim3 grid, dim3 block, std::s
                                                    const std::uint32_t* task_count,
                                                    DeviceShellClassProfileEntry* profile);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -44,7 +44,7 @@ def test_current_cross_method_boundaries_are_valid() -> None:
     assert {
         "runtime/nvidia_host_api/cublas_v2.h",
         "runtime/nvidia_host_api/cusolverDn.h",
-        "runtime/nvidia_host_api/vibeqc_nvidia_host_api.h",
+        "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h",
     } <= {module["path"] for module in report["modules"]}
     assert report["posthf_scf_edges"]
     assert all(edge["known_debt"] for edge in report["posthf_scf_edges"])

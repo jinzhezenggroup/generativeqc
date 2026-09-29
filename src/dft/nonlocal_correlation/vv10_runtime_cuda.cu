@@ -13,7 +13,7 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_resources.cuh"
 
-namespace vibeqc::dft::nlc {
+namespace generativeqc::dft::nlc {
 namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
@@ -274,9 +274,9 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
   }
 }
 
-__global__ void collect_total_features_kernel(vibeqc::dft::GridTaskView view, std::size_t offset,
-                                              std::size_t total_points, double* density,
-                                              double* gradient, int* failed) {
+__global__ void collect_total_features_kernel(generativeqc::dft::GridTaskView view,
+                                              std::size_t offset, std::size_t total_points,
+                                              double* density, double* gradient, int* failed) {
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= view.npoint) return;
   if (offset > total_points || view.npoint > total_points - offset || !view.features) {
@@ -357,7 +357,7 @@ void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_c
 }
 
 void enqueue_vv10_collect_total_features_cuda(cudaStream_t stream,
-                                              const vibeqc::dft::GridTaskView& view,
+                                              const generativeqc::dft::GridTaskView& view,
                                               std::size_t offset, std::size_t total_points,
                                               double* density, double* density_gradient,
                                               int* numerical_error) {
@@ -621,4 +621,4 @@ void execute_vv10_cuda(const double* points_xyz, const double* weights, const do
   if (!std::isfinite(energy)) throw std::overflow_error("nonfinite nonlocal CUDA energy");
 }
 
-}  // namespace vibeqc::dft::nlc
+}  // namespace generativeqc::dft::nlc

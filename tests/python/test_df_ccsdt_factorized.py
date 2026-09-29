@@ -5,16 +5,16 @@ import numpy as np
 import pytest
 from test_df_ccsd_factorized import FixtureDFProvider, _method_problem
 
-from tools.vibeqc_cc.df_ccsdt_oracle import (
+from tools.generativeqc_cc.df_ccsdt_oracle import (
     dense_df_oracle_from_three_index,
     run_dense_df_ccsdt_oracle,
 )
-from tools.vibeqc_cc.df_triples import (
+from tools.generativeqc_cc.df_triples import (
     factorized_triples_energy,
     solve_df_ccsdt,
 )
-from tools.vibeqc_cc.solver import SolverOptions
-from tools.vibeqc_cc.triples import triples_energy
+from tools.generativeqc_cc.solver import SolverOptions
+from tools.generativeqc_cc.triples import triples_energy
 
 
 def _block(eri, nocc, name) -> np.ndarray:

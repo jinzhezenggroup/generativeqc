@@ -1,9 +1,9 @@
 # RCCSD(T) energy and internal analytic-gradient validation
 
-`tools.vibeqc_cc/triples.py` provides the auditable standard closed-shell
+`tools.generativeqc_cc/triples.py` provides the auditable standard closed-shell
 non-iterative (T) energy definition used by RCCSD(T). Bounded CUDA triples, the
 generated native CPU energy evaluator, and generated response paths share that
-definition. `VIBEQC_METHOD_RCCSD_T` has native/public CPU and CUDA energy
+definition. `GENERATIVEQC_METHOD_RCCSD_T` has native/public CPU and CUDA energy
 ownership and qualified analytic forces for the conventional closed-shell
 small-system domain, with homogeneous prepared-batch support. The CUDA force path executes the generated corrected-Lambda RHS/J^T actions and
 fixed-orbital parameter VJPs on CUDA, then reuses one native CUDA owner for the
@@ -84,7 +84,7 @@ DOI:10.1063/1.460359 (the upstream code comments the same reference).
 
 ## Pinned upstream and provenance
 
-`tools/vibeqc_cc/source_manifest.json` records PySCF 2.14.0 raw-file SHA-256:
+`tools/generativeqc_cc/source_manifest.json` records PySCF 2.14.0 raw-file SHA-256:
 
 | path | sha256 |
 | --- | --- |
@@ -146,7 +146,7 @@ dimensions, so a wrong subscript cannot silently change the inventory hash.
 
 ## Bounded CUDA tiles (slice B)
 
-`tools/vibeqc_cc/triples_tiles.py` decomposes the triangular `a>=b>=c`
+`tools/generativeqc_cc/triples_tiles.py` decomposes the triangular `a>=b>=c`
 virtual sum into a-chunked tiles (`TriplesTileEnumerator`); occupied space
 is never chunked. `tile_triples_energy` / `tile_triples_energy_masked` are
 the per-tile CPU reference and the masked-domain oracle;
@@ -156,7 +156,7 @@ prefix-bounded label axes (`a,b,c`) and the full W1 summation axis `f`,
 so partial-tile resident feeds have exact TensorSpec shapes without truncating
 the canonical contraction.
 
-`tools/vibeqc_cc/triples_cuda.py` `CudaTriplesTiles` evaluates each tile on
+`tools/generativeqc_cc/triples_cuda.py` `CudaTriplesTiles` evaluates each tile on
 CUDA through the #420 resident TensorIR owner: one exact-shape plan and one
 `PreparedResident` per tile (compile-cached to disk). Label axes are sliced
 to `a_end`, while `ovvv` axis 2 and `t2` axis 3 retain full `nvir` for
@@ -183,7 +183,7 @@ python -m pytest tests/python/test_cc_triples_tiles.py -q
 
 ## Complete analytic-gradient validation boundary
 
-`tools.vibeqc_cc/triples_complete_gradient.py` provides the internal conventional
+`tools.generativeqc_cc/triples_complete_gradient.py` provides the internal conventional
 RCCSD(T) complete-gradient endpoint for #155 B. It composes the existing pieces
 in one state-bound chain:
 
@@ -248,5 +248,5 @@ Its bounded workspace is charged against the remaining correlation budget and
 reported through the execution-resource telemetry.
 
 Exact-head public CUDA qualification is enabled with
-`VIBEQC_RCCSDT_CUDA_TEST=1` and exercises both single-point and prepared-batch
+`GENERATIVEQC_RCCSDT_CUDA_TEST=1` and exercises both single-point and prepared-batch
 energy paths together with the independent generated-evaluator oracle.

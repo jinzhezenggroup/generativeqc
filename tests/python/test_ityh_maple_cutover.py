@@ -4,12 +4,12 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.expr import Expr, Graph
-from vibeqc_compiler.xc import ityh_maple
-from vibeqc_compiler.xc.ityh_maple import ityh_exchange, ityh_maple_provenance
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.expr import Expr, Graph
+from generativeqc_compiler.xc import ityh_maple
+from generativeqc_compiler.xc.ityh_maple import ityh_exchange, ityh_maple_provenance
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 POLARIZED = ("rho_a", "rho_b", "sigma_aa", "sigma_ab", "sigma_bb", "tau_a", "tau_b")
 UNPOLARIZED = ("rho", "sigma", "tau")
@@ -97,7 +97,7 @@ def test_cutover_adapter_is_pinned_in_scientific_source_registry() -> None:
     root = Path(__file__).resolve().parents[2]
     registry = json.loads((root / "upstream/manifest.json").read_text())
     inputs = registry["products"]["libxc-xc-admission"]["canonical_inputs"]
-    relative = "python/vibeqc_compiler/xc/ityh_maple.py"
+    relative = "python/generativeqc_compiler/xc/ityh_maple.py"
     assert (
         inputs[relative] == hashlib.sha256((root / relative).read_bytes()).hexdigest()
     )

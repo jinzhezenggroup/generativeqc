@@ -1,8 +1,8 @@
 """Subscript syntax must preserve static integer slice admission."""
 
 import pytest
-from vibeqc_compiler.array_api import trace
-from vibeqc_compiler.tensor import Index, IndexSpace, TensorSpec
+from generativeqc_compiler.array_api import trace
+from generativeqc_compiler.tensor import Index, IndexSpace, TensorSpec
 
 
 @pytest.mark.parametrize("step", [True, False, 1.0, 2.0])

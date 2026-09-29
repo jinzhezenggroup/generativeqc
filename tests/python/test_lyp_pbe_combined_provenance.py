@@ -4,8 +4,8 @@ from copy import deepcopy
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.xc import spec as module
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.xc import spec as module
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 
 def mixed() -> FunctionalSpec:

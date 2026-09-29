@@ -100,8 +100,8 @@ CPU contract tests and an ordinary CPU build need no OpenCL installation:
 ```bash
 PYTHONPATH=python:. python -m pytest \
   tests/python/test_runtime_backend.py tests/python/test_opencl_lowering.py -q
-cmake -S . -B build-cpu -DVIBEQC_ENABLE_CUDA=OFF \
-  -DVIBEQC_ENABLE_AOT_SHELLS=OFF -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-cpu -DGENERATIVEQC_ENABLE_CUDA=OFF \
+  -DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cpu --parallel 4
 ctest --test-dir build-cpu --output-on-failure
 ```
@@ -112,7 +112,7 @@ All actual GPU execution, including the OpenCL ICD, uses a finite Slurm job:
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:05:00 bash -lc 'set -e
   export PYTHONPATH=python:.
-  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VIBEQC_OPENCL_TEST=1
+  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 GENERATIVEQC_OPENCL_TEST=1
   python -m pytest tests/python/test_opencl_runtime_gpu.py -q
   python tools/validate_opencl_backend.py --directory /tmp/opencl-gate'
 ```

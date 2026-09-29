@@ -17,16 +17,16 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.integral.first_derivatives_execute import (
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.integral.first_derivatives_execute import (
     FirstDerivativeShellEvaluator,
     compile_first_derivative_shell,
 )
-from vibeqc_compiler.integral.weight_pullback import normalized_radial_primitives
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weight_pullback import normalized_radial_primitives
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def _fixture() -> typing.Any:
@@ -82,7 +82,7 @@ def main() -> None:
     executable = shutil.which("c++")
     if executable is None:
         raise RuntimeError("a C++ compiler is required")
-    cache = args.cache or Path(tempfile.mkdtemp(prefix="vibeqc351-"))
+    cache = args.cache or Path(tempfile.mkdtemp(prefix="generativeqc351-"))
     cache = cache.resolve()
     if args.cache is not None and cache.exists() and any(cache.iterdir()):
         raise ValueError("--cache must be empty for a cold-compile measurement")

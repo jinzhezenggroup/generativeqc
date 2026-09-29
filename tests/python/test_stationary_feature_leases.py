@@ -2,21 +2,23 @@
 
 from fractions import Fraction
 
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     MethodSpec,
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_feature_lease import (
+from generativeqc_compiler.method.stationary_feature_lease import (
     StationaryFeatureLeasePlan,
     plan_stationary_feature_leases,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.method.stationary_prepared import compile_stationary_prepared_plan
+from generativeqc_compiler.method.stationary_prepared import (
+    compile_stationary_prepared_plan,
+)
 
 
 def _features(method: str | MethodSpec) -> StationaryFeatureLeasePlan:

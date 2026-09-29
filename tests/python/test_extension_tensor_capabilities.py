@@ -5,11 +5,11 @@ from __future__ import annotations
 import shutil
 import subprocess
 
+import generativeqc_compiler.tensor.cpu as tensor_cpu
 import pytest
-import vibeqc_compiler.tensor.cpu as tensor_cpu
-from vibeqc.extensions import tensor
-from vibeqc_compiler.common import cpp_adapter
-from vibeqc_compiler.common.provenance import canonical_hash
+from generativeqc.extensions import tensor
+from generativeqc_compiler.common import cpp_adapter
+from generativeqc_compiler.common.provenance import canonical_hash
 
 
 def _program() -> tensor.Program:

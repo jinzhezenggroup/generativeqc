@@ -5,10 +5,13 @@ from __future__ import annotations
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.method.spec import SemilocalXCPrimitive, resolve_method
-from vibeqc_compiler.xc.semilocal_codegen import build_roots, emit_polarized_semilocal
-from vibeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC, functional
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.method.spec import SemilocalXCPrimitive, resolve_method
+from generativeqc_compiler.xc.semilocal_codegen import (
+    build_roots,
+    emit_polarized_semilocal,
+)
+from generativeqc_compiler.xc.spec import FunctionalSpec, UnsupportedXC, functional
 
 
 @pytest.mark.parametrize("name", ("LDA_XC_PW", "PBE", "B3LYP", "R2SCAN"))

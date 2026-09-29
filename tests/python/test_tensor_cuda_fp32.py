@@ -7,9 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     PrecisionDirective,
@@ -33,18 +33,25 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.cuda_dtype import compile_options, scalar_type
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from vibeqc_compiler.tensor.cuda_gemm import gemm_contract
-from vibeqc_compiler.tensor.cuda_plan import VALIDATION_BYTES, TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_resident import PreparedResident, compile_resident
-from vibeqc_compiler.tensor.cuda_resident_emit import resident_source
-from vibeqc_compiler.tensor.resources import tensor_resource_choices
+from generativeqc_compiler.tensor.cuda_dtype import compile_options, scalar_type
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
+from generativeqc_compiler.tensor.cuda_plan import (
+    VALIDATION_BYTES,
+    TensorSchedule,
+    plan_cuda,
+)
+from generativeqc_compiler.tensor.cuda_resident import (
+    PreparedResident,
+    compile_resident,
+)
+from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
+from generativeqc_compiler.tensor.resources import tensor_resource_choices
 
 TARGET = cuda_target_info("sm_120")
 DEVICE = pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires an explicitly allocated CUDA device",
 )
 
@@ -162,12 +169,14 @@ def test_gemm_panels_and_precision_admission(dtype: typing.Any) -> None:
 
 @pytest.fixture(scope="module")
 def gpu(tmp_path_factory: typing.Any) -> typing.Any:
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     nvcc = find_nvcc()
     assert nvcc is not None, "explicit CUDA tests require an NVCC compiler"
     return CudaCompilerAdapter(nvcc, TARGET), Path(
-        os.environ.get("VIBEQC_TENSOR_CACHE", str(tmp_path_factory.mktemp("fp32-cuda")))
+        os.environ.get(
+            "GENERATIVEQC_TENSOR_CACHE", str(tmp_path_factory.mktemp("fp32-cuda"))
+        )
     )
 
 
@@ -457,7 +466,7 @@ def test_strict_fp32_rejects_arithmetic_environment_overrides(
 
 
 def test_fp32_tuning_requires_independent_promotion_gates() -> None:
-    from vibeqc_compiler.tensor.cuda_tune import tune_cuda
+    from generativeqc_compiler.tensor.cuda_tune import tune_cuda
 
     plan = plan_cuda(Program({"x": tensor("x")}), TARGET)
     with pytest.raises(ValueError, match="qualified only for FP64"):

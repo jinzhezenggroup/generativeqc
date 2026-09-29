@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 import numpy as np
-from vibeqc.profiles import canonical_hash, file_hash
-from vibeqc_compiler.dft.fixtures import load_fixture
+from generativeqc.profiles import canonical_hash, file_hash
+from generativeqc_compiler.dft.fixtures import load_fixture
 
 from tools.generate_validation_references import pyscf_molecule
 
@@ -68,7 +68,7 @@ def generate(directory: Path) -> None:
             k: np.asarray(v, dtype=np.float64, order="C") for k, v in arrays.items()
         }
         metadata = {
-            "schema": "vibeqc.xc-integration-reference",
+            "schema": "generativeqc.xc-integration-reference",
             "version": 1,
             "inputs": source["inputs"],
             "inputs_hash": source["inputs_hash"],

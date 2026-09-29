@@ -1,7 +1,7 @@
 # Native CLI without Python
 
-VibeQC's computational runtime is a native C/C++ shared library. A native SDK
-install also provides a `vibeqc` executable, so the target machine does not need
+GenerativeQC's computational runtime is a native C/C++ shared library. A native SDK
+install also provides a `generativeqc` executable, so the target machine does not need
 a Python interpreter to discover methods or run the native CLI endpoints.
 
 Python is still a **build-time** dependency for source builds because repository
@@ -13,21 +13,21 @@ installed runtime dependency.
 For a CPU build:
 
 ```bash
-cmake -S . -B build -G Ninja -DVIBEQC_ENABLE_CUDA=OFF
+cmake -S . -B build -G Ninja -DGENERATIVEQC_ENABLE_CUDA=OFF
 cmake --build build
-cmake --install build --prefix /opt/vibeqc
+cmake --install build --prefix /opt/generativeqc
 ```
 
 The installed executable uses a relocatable RPATH to find the adjacent
-`libvibeqc`, so an ordinary prefix install does not require Python or a
+`libgenerativeqc`, so an ordinary prefix install does not require Python or a
 package-specific `LD_LIBRARY_PATH`.
 
 ## Discover native methods
 
 ```bash
-/opt/vibeqc/bin/vibeqc methods
-/opt/vibeqc/bin/vibeqc methods --json
-/opt/vibeqc/bin/vibeqc --version
+/opt/generativeqc/bin/generativeqc methods
+/opt/generativeqc/bin/generativeqc methods --json
+/opt/generativeqc/bin/generativeqc --version
 ```
 
 Method discovery comes from the same generated native method registry used by
@@ -40,7 +40,7 @@ Python-free product boundary because GFN2-xTB owns its intrinsic minimal basis
 and therefore does not need the Python named-Gaussian-basis resolver.
 
 ```bash
-/opt/vibeqc/bin/vibeqc run molecule.xyz \
+/opt/generativeqc/bin/generativeqc run molecule.xyz \
   --method gfn2-xtb \
   --backend cpu \
   --charge 0 \

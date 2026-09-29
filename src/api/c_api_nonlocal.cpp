@@ -9,22 +9,22 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
-#include "vibeqc/vibeqc.h"
-#if VIBEQC_HAS_CUDA
+#include "generativeqc/generativeqc.h"
+#if GENERATIVEQC_HAS_CUDA
 #include "dft/grid_task_view.cuh"
 #include "runtime/cuda_resources.cuh"
 #endif
 
-struct vibeqc_nonlocal_plan {
-  vibeqc_context* context{};
-  std::unique_ptr<vibeqc::dft::nlc::Vv10Plan> plan;
+struct generativeqc_nonlocal_plan {
+  generativeqc_context* context{};
+  std::unique_ptr<generativeqc::dft::nlc::Vv10Plan> plan;
 };
 
-#if VIBEQC_HAS_CUDA
-struct vibeqc_nonlocal_cuda_force {
-  vibeqc_context* context{};
-  vibeqc::dft::nlc::Vv10Parameters parameters{};
-  vibeqc::dft::nlc::Vv10CudaDeviceLayout layout{};
+#if GENERATIVEQC_HAS_CUDA
+struct generativeqc_nonlocal_cuda_force {
+  generativeqc_context* context{};
+  generativeqc::dft::nlc::Vv10Parameters parameters{};
+  generativeqc::dft::nlc::Vv10CudaDeviceLayout layout{};
   int device{-1};
   std::size_t point_count{}, next_offset{}, device_bytes{};
   double density_threshold{};
@@ -32,12 +32,12 @@ struct vibeqc_nonlocal_cuda_force {
   cudaStream_t stream{};
   bool executed{};
 
-  vibeqc::runtime::OwnedCudaBuffer<double> arena;
-  vibeqc::runtime::OwnedCudaBuffer<int> errors;
+  generativeqc::runtime::OwnedCudaBuffer<double> arena;
+  generativeqc::runtime::OwnedCudaBuffer<int> errors;
   double *coordinates{}, *weights{}, *raw_density{}, *raw_gradient{}, *effective_weights{},
       *effective_density{}, *effective_gradient{}, *seeds{}, *point_derivative{}, *workspace{};
 
-  ~vibeqc_nonlocal_cuda_force() {
+  ~generativeqc_nonlocal_cuda_force() {
     if (!stream || device < 0) return;
     int previous = 0;
     (void)cudaGetDevice(&previous);
@@ -50,10 +50,10 @@ struct vibeqc_nonlocal_cuda_force {
 
 namespace {
 
-vibeqc::dft::nlc::Vv10Variant variant(vibeqc_nonlocal_variant value) {
-  using vibeqc::dft::nlc::Vv10Variant;
-  if (value == VIBEQC_NONLOCAL_VV10) return Vv10Variant::vv10;
-  if (value == VIBEQC_NONLOCAL_RVV10) return Vv10Variant::rvv10;
+generativeqc::dft::nlc::Vv10Variant variant(generativeqc_nonlocal_variant value) {
+  using generativeqc::dft::nlc::Vv10Variant;
+  if (value == GENERATIVEQC_NONLOCAL_VV10) return Vv10Variant::vv10;
+  if (value == GENERATIVEQC_NONLOCAL_RVV10) return Vv10Variant::rvv10;
   throw std::invalid_argument("unsupported VV10/rVV10 kernel variant");
 }
 
@@ -68,37 +68,37 @@ std::span<T> optional_span(T* pointer, std::uint32_t count, const char* label) {
 
 extern "C" {
 
-vibeqc_status vibeqc_nonlocal_plan_prepare(vibeqc_context* context,
-                                           const vibeqc_nonlocal_descriptor* model,
-                                           vibeqc_nonlocal_plan** plan) {
-  if (!context || !model || !plan) return VIBEQC_STATUS_INVALID_ARGUMENT;
+generativeqc_status generativeqc_nonlocal_plan_prepare(
+    generativeqc_context* context, const generativeqc_nonlocal_descriptor* model,
+    generativeqc_nonlocal_plan** plan) {
+  if (!context || !model || !plan) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   *plan = nullptr;
-  if (!vibeqc::api::valid_descriptor(model)) return VIBEQC_STATUS_ABI_MISMATCH;
+  if (!generativeqc::api::valid_descriptor(model)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(context->mutex);
   try {
-    vibeqc_status status = VIBEQC_STATUS_INTERNAL_ERROR;
-    const vibeqc::dft::nlc::Vv10Parameters parameters{variant(model->variant), model->b, model->c,
-                                                      model->coefficient};
-    auto native = vibeqc::dft::nlc::Vv10Plan::prepare(
+    generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    const generativeqc::dft::nlc::Vv10Parameters parameters{variant(model->variant), model->b,
+                                                            model->c, model->coefficient};
+    auto native = generativeqc::dft::nlc::Vv10Plan::prepare(
         context->state.executed_backend, context->state.device_id, model->point_count,
         model->tile_points, parameters, model->maximum_bytes, context->last_detail, status);
     if (!native) return status;
-    auto owner = std::make_unique<vibeqc_nonlocal_plan>();
+    auto owner = std::make_unique<generativeqc_nonlocal_plan>();
     owner->context = context;
     owner->plan = std::move(native);
     *plan = owner.release();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&context->last_detail);
+    return generativeqc::api::map_exception(&context->last_detail);
   }
 }
 
-void vibeqc_nonlocal_plan_destroy(vibeqc_nonlocal_plan* plan) { delete plan; }
+void generativeqc_nonlocal_plan_destroy(generativeqc_nonlocal_plan* plan) { delete plan; }
 
-vibeqc_status vibeqc_nonlocal_plan_get_diagnostic(const vibeqc_nonlocal_plan* plan,
-                                                  vibeqc_nonlocal_runtime_diagnostic* diagnostic) {
-  if (!plan || !diagnostic) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(diagnostic)) return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_nonlocal_plan_get_diagnostic(
+    const generativeqc_nonlocal_plan* plan, generativeqc_nonlocal_runtime_diagnostic* diagnostic) {
+  if (!plan || !diagnostic) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(diagnostic)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(plan->context->mutex);
   const auto& resources = plan->plan->resources();
   diagnostic->backend = plan->plan->backend();
@@ -110,15 +110,15 @@ vibeqc_status vibeqc_nonlocal_plan_get_diagnostic(const vibeqc_nonlocal_plan* pl
   diagnostic->tiles = resources.tiles;
   diagnostic->point_count = resources.point_count;
   diagnostic->tile_points = resources.tile_points;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status vibeqc_nonlocal_plan_execute(vibeqc_nonlocal_plan* plan,
-                                           const vibeqc_nonlocal_input_descriptor* input,
-                                           vibeqc_nonlocal_result_descriptor* result) {
-  if (!plan || !input || !result) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(input) || !vibeqc::api::valid_descriptor(result))
-    return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_nonlocal_plan_execute(
+    generativeqc_nonlocal_plan* plan, const generativeqc_nonlocal_input_descriptor* input,
+    generativeqc_nonlocal_result_descriptor* result) {
+  if (!plan || !input || !result) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(input) || !generativeqc::api::valid_descriptor(result))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(plan->context->mutex);
   try {
     const auto points = plan->plan->resources().point_count;
@@ -126,7 +126,7 @@ vibeqc_status vibeqc_nonlocal_plan_execute(vibeqc_nonlocal_plan* plan,
         input->coordinate_count != 3u * points || input->weight_count != points ||
         input->density_count != points || input->density_gradient_count != 3u * points) {
       plan->context->last_detail = "VV10 input arrays do not match the prepared point count";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     auto vrho = optional_span(result->vrho, result->vrho_count, "vrho");
     auto vsigma = optional_span(result->vsigma, result->vsigma_count, "vsigma");
@@ -137,12 +137,12 @@ vibeqc_status vibeqc_nonlocal_plan_execute(vibeqc_nonlocal_plan* plan,
     const bool publish_features = !vrho.empty() || !vsigma.empty();
     if (publish_features && (vrho.size() != points || vsigma.size() != points)) {
       plan->context->last_detail = "VV10 feature outputs do not match the prepared point count";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     const bool publish_geometry = !point.empty() || !weight.empty();
     if (publish_geometry && (point.size() != 3u * points || weight.size() != points)) {
       plan->context->last_detail = "VV10 geometry outputs do not match the prepared point count";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     std::vector<double> staged_vrho(publish_features ? points : 0u);
     std::vector<double> staged_vsigma(publish_features ? points : 0u);
@@ -155,7 +155,7 @@ vibeqc_status vibeqc_nonlocal_plan_execute(vibeqc_nonlocal_plan* plan,
         std::span<const double>(input->density, input->density_count),
         std::span<const double>(input->density_gradient, input->density_gradient_count), energy,
         staged_vrho, staged_vsigma, staged_point, staged_weight, plan->context->last_detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (publish_features) {
       std::copy(staged_vrho.begin(), staged_vrho.end(), vrho.begin());
       std::copy(staged_vsigma.begin(), staged_vsigma.end(), vsigma.begin());
@@ -166,25 +166,26 @@ vibeqc_status vibeqc_nonlocal_plan_execute(vibeqc_nonlocal_plan* plan,
     }
     result->energy = energy;
     result->executed_backend = plan->plan->backend();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&plan->context->last_detail);
+    return generativeqc::api::map_exception(&plan->context->last_detail);
   }
 }
 
-#if VIBEQC_HAS_CUDA
-VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
-    vibeqc_context* context, const vibeqc_nonlocal_descriptor* model, const double* coordinates,
-    std::size_t coordinate_count, const double* weights, std::size_t weight_count,
-    double density_threshold, vibeqc_nonlocal_cuda_force** output) {
+#if GENERATIVEQC_HAS_CUDA
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_create_v1(
+    generativeqc_context* context, const generativeqc_nonlocal_descriptor* model,
+    const double* coordinates, std::size_t coordinate_count, const double* weights,
+    std::size_t weight_count, double density_threshold, generativeqc_nonlocal_cuda_force** output) {
   if (output) *output = nullptr;
   if (!context || !model || !output || !coordinates || !weights ||
-      !vibeqc::api::valid_descriptor(model))
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+      !generativeqc::api::valid_descriptor(model))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(context->mutex);
   try {
-    if (context->state.executed_backend != VIBEQC_BACKEND_CUDA || context->state.device_id < 0)
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (context->state.executed_backend != GENERATIVEQC_BACKEND_CUDA ||
+        context->state.device_id < 0)
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const auto n = static_cast<std::size_t>(model->point_count);
     if (!n || !model->tile_points || coordinate_count != 3 * n || weight_count != n ||
         !std::isfinite(density_threshold) || density_threshold <= 0.0)
@@ -196,7 +197,7 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
       if (!std::isfinite(weights[i]))
         throw std::invalid_argument("resident nonlocal CUDA weights must be finite");
 
-    auto result = std::make_unique<vibeqc_nonlocal_cuda_force>();
+    auto result = std::make_unique<generativeqc_nonlocal_cuda_force>();
     result->context = context;
     result->device = context->state.device_id;
     result->point_count = n;
@@ -207,10 +208,10 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
         !std::isfinite(result->parameters.coefficient) || result->parameters.coefficient <= 0.0)
       throw std::invalid_argument("resident nonlocal CUDA parameters must be finite and positive");
     result->layout =
-        vibeqc::dft::nlc::vv10_cuda_device_layout(n, model->tile_points, true, true, true);
+        generativeqc::dft::nlc::vv10_cuda_device_layout(n, model->tile_points, true, true, true);
 
-    using vibeqc::runtime::size_add;
-    using vibeqc::runtime::size_mul;
+    using generativeqc::runtime::size_add;
+    using generativeqc::runtime::size_mul;
     const auto workspace_doubles = result->layout.workspace_bytes / sizeof(double);
     std::size_t doubles = 0;
     for (const auto arrays :
@@ -228,8 +229,8 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
     if (!model->maximum_bytes || result->device_bytes > model->maximum_bytes)
       throw std::bad_alloc();
 
-    vibeqc::runtime::CudaDeviceScope device(result->device);
-    vibeqc::runtime::OwnedCudaStream setup(result->device);
+    generativeqc::runtime::CudaDeviceScope device(result->device);
+    generativeqc::runtime::OwnedCudaStream setup(result->device);
     result->arena.allocate(result->device, doubles);
     result->errors.allocate(result->device, 3);
     auto* cursor = result->arena.get();
@@ -251,29 +252,31 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_create_v1(
     if (cursor != result->arena.get() + doubles)
       throw std::logic_error("resident nonlocal CUDA force arena partition mismatch");
 
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(result->coordinates, coordinates,
-                                                         coordinate_count * sizeof(double),
-                                                         cudaMemcpyHostToDevice, setup.get()));
-    vibeqc::runtime::cuda_resource_check(cudaMemcpyAsync(result->weights, weights,
-                                                         weight_count * sizeof(double),
-                                                         cudaMemcpyHostToDevice, setup.get()));
-    vibeqc::runtime::cuda_resource_check(
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemcpyAsync(result->coordinates, coordinates, coordinate_count * sizeof(double),
+                        cudaMemcpyHostToDevice, setup.get()));
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemcpyAsync(result->weights, weights, weight_count * sizeof(double),
+                        cudaMemcpyHostToDevice, setup.get()));
+    generativeqc::runtime::cuda_resource_check(
         cudaMemsetAsync(result->errors.get(), 0, 3 * sizeof(int), setup.get()));
     setup.synchronize();
     *output = result.release();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&context->last_detail);
+    return generativeqc::api::map_exception(&context->last_detail);
   }
 }
 
-VIBEQC_API void vibeqc_internal_nonlocal_cuda_force_destroy_v1(vibeqc_nonlocal_cuda_force* owner) {
+GENERATIVEQC_API void generativeqc_internal_nonlocal_cuda_force_destroy_v1(
+    generativeqc_nonlocal_cuda_force* owner) {
   delete owner;
 }
 
-VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_collect_v1(
-    vibeqc_nonlocal_cuda_force* owner, const vibeqc::dft::GridTaskView* view, std::size_t offset) {
-  if (!owner || !view) return VIBEQC_STATUS_INVALID_ARGUMENT;
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_collect_v1(
+    generativeqc_nonlocal_cuda_force* owner, const generativeqc::dft::GridTaskView* view,
+    std::size_t offset) {
+  if (!owner || !view) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
   try {
     if (owner->executed || offset != owner->next_offset || !view->stream ||
@@ -283,83 +286,84 @@ VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_collect_v1(
       owner->stream = view->stream;
     else if (owner->stream != view->stream)
       throw std::invalid_argument("resident nonlocal CUDA feature stream changed");
-    vibeqc::runtime::CudaDeviceScope device(owner->device);
+    generativeqc::runtime::CudaDeviceScope device(owner->device);
     if (offset == 0)
-      vibeqc::runtime::cuda_resource_check(
+      generativeqc::runtime::cuda_resource_check(
           cudaMemsetAsync(owner->errors.get(), 0, sizeof(int), owner->stream));
-    vibeqc::dft::nlc::enqueue_vv10_collect_total_features_cuda(
+    generativeqc::dft::nlc::enqueue_vv10_collect_total_features_cuda(
         owner->stream, *view, offset, owner->point_count, owner->raw_density, owner->raw_gradient,
         owner->errors.get());
     owner->next_offset += view->npoint;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&owner->context->last_detail);
+    return generativeqc::api::map_exception(&owner->context->last_detail);
   }
 }
 
-VIBEQC_API vibeqc_status
-vibeqc_internal_nonlocal_cuda_force_execute_v1(vibeqc_nonlocal_cuda_force* owner) {
-  if (!owner) return VIBEQC_STATUS_INVALID_ARGUMENT;
+GENERATIVEQC_API generativeqc_status
+generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_force* owner) {
+  if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
   try {
     if (owner->executed || !owner->stream || owner->next_offset != owner->point_count)
       throw std::invalid_argument("resident nonlocal CUDA force owner is not fully populated");
-    vibeqc::runtime::CudaDeviceScope device(owner->device);
+    generativeqc::runtime::CudaDeviceScope device(owner->device);
     auto* errors = owner->errors.get();
-    vibeqc::dft::nlc::enqueue_vv10_molecular_domain_cuda(
+    generativeqc::dft::nlc::enqueue_vv10_molecular_domain_cuda(
         owner->stream, owner->point_count, owner->density_threshold, owner->weights,
         owner->raw_density, owner->raw_gradient, owner->effective_weights, owner->effective_density,
         owner->effective_gradient, errors + 1);
-    vibeqc::dft::nlc::enqueue_vv10_cuda_device(
+    generativeqc::dft::nlc::enqueue_vv10_cuda_device(
         owner->layout, owner->parameters, owner->device, owner->stream, owner->coordinates,
         owner->effective_weights, owner->effective_density, owner->effective_gradient,
         owner->workspace, owner->layout.workspace_bytes, owner->workspace, owner->seeds,
         owner->seeds + owner->point_count, owner->point_derivative,
         owner->seeds + 5 * owner->point_count, errors + 2);
-    vibeqc::dft::nlc::enqueue_vv10_pack_force_seeds_cuda(
+    generativeqc::dft::nlc::enqueue_vv10_pack_force_seeds_cuda(
         owner->stream, owner->point_count, owner->effective_weights, owner->point_derivative,
         owner->seeds, errors, errors + 1, errors + 2);
     owner->executed = true;
     ++owner->generation;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&owner->context->last_detail);
+    return generativeqc::api::map_exception(&owner->context->last_detail);
   }
 }
 
-VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_seed_view_v1(
-    const vibeqc_nonlocal_cuda_force* owner, void** seeds, std::size_t* stride, void** stream,
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_view_v1(
+    const generativeqc_nonlocal_cuda_force* owner, void** seeds, std::size_t* stride, void** stream,
     std::uint64_t* generation) {
-  if (!owner || !seeds || !stride || !stream || !generation) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (!owner || !seeds || !stride || !stream || !generation)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
-  if (!owner->executed || !owner->stream) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (!owner->executed || !owner->stream) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   *seeds = owner->seeds;
   *stride = owner->point_count;
   *stream = reinterpret_cast<void*>(owner->stream);
   *generation = owner->generation;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-VIBEQC_API vibeqc_status
-vibeqc_internal_nonlocal_cuda_force_reset_v1(vibeqc_nonlocal_cuda_force* owner) {
-  if (!owner) return VIBEQC_STATUS_INVALID_ARGUMENT;
+GENERATIVEQC_API generativeqc_status
+generativeqc_internal_nonlocal_cuda_force_reset_v1(generativeqc_nonlocal_cuda_force* owner) {
+  if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
-  if (!owner->executed) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (!owner->executed) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   owner->next_offset = 0;
   owner->executed = false;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_metrics_v1(
-    const vibeqc_nonlocal_cuda_force* owner, std::uint64_t* values, std::size_t count) {
-  if (!owner || !values || count != 6) return VIBEQC_STATUS_INVALID_ARGUMENT;
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_metrics_v1(
+    const generativeqc_nonlocal_cuda_force* owner, std::uint64_t* values, std::size_t count) {
+  if (!owner || !values || count != 6) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
   const std::array<std::uint64_t, 6> metrics{
       owner->device_bytes, owner->point_count,        owner->next_offset,
       owner->generation,   owner->executed ? 1u : 0u, owner->stream ? 1u : 0u,
   };
   std::copy(metrics.begin(), metrics.end(), values);
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 #endif
 

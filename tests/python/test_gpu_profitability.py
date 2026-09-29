@@ -1,7 +1,7 @@
 """Shared GPU profitability records and ordering contracts."""
 
 import pytest
-from vibeqc_compiler.common.gpu_profitability import (
+from generativeqc_compiler.common.gpu_profitability import (
     GpuProfitability,
     scalar_reduction_promotion_rejection,
 )
@@ -150,7 +150,7 @@ def test_payload_preserves_unknown_evidence_instead_of_guessing() -> None:
     )
     payload = cost.to_payload()
 
-    assert payload["schema"] == "vibeqc.compiler.gpu-profitability.v1"
+    assert payload["schema"] == "generativeqc.compiler.gpu-profitability.v1"
     assert payload["static"]["peak_live_values"] == 5
     assert payload["static"]["precision_cast_read_bytes"] is None
     assert payload["static"]["precision_widened_accumulation_terms"] is None

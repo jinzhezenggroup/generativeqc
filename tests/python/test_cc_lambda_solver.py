@@ -6,24 +6,24 @@ from dataclasses import FrozenInstanceError, replace
 
 import numpy as np
 import pytest
+from generativeqc_compiler.tensor import execute
 from test_cc_solver import fixture_problem
-from vibeqc_compiler.tensor import execute
 
 from tools.cc_endpoint_fixtures import load, source_arguments
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     BoundCCSDLambda,
     LambdaOptions,
     SolverOptions,
     solve,
 )
-from tools.vibeqc_cc import lambda_solver as consumer
-from tools.vibeqc_cc.oracle import DeterminantOracle
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response.implicit import ImplicitSolveError, ResponseGMRES
-from tools.vibeqc_response.krylov import GMRESOptions
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_cc import lambda_solver as consumer
+from tools.generativeqc_cc.oracle import DeterminantOracle
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response.implicit import ImplicitSolveError, ResponseGMRES
+from tools.generativeqc_response.krylov import GMRESOptions
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 @pytest.fixture(scope="module", params=("h2", "h2o", "nh3"))
@@ -76,7 +76,7 @@ def test_native_cpu_lambda_does_not_fall_back_to_interpreter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     snapshot, cc, _arrays = small_state
-    monkeypatch.setenv("VIBEQC_TENSOR_CACHE", str(tmp_path))
+    monkeypatch.setenv("GENERATIVEQC_TENSOR_CACHE", str(tmp_path))
 
     def forbidden(*_args: typing.Any, **_kwargs: typing.Any) -> typing.NoReturn:
         raise AssertionError("native Lambda path called the NumPy TensorIR interpreter")
@@ -558,7 +558,7 @@ def test_native_hf_cc_lambda_complete_small_endpoint(
                 # Fresh native AO/MO inputs, but an independent determinant
                 # representation for the final response equation check.
 
-                from tools.vibeqc_posthf import MOBlock
+                from tools.generativeqc_posthf import MOBlock
 
                 # Full tiny MO tensor is a test-only oracle input.
                 block = MOBlock(tuple(tuple(range(snapshot.nmo)) for _ in range(4)))

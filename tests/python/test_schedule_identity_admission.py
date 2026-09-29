@@ -3,14 +3,14 @@
 from dataclasses import replace
 
 import pytest
-from test_schedule_contract import _tensor_contract
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     GridXcCandidateLimits,
     GridXcCandidateShape,
     GridXcScientificIdentity,
     assess_grid_xc_schedule,
 )
+from test_schedule_contract import _tensor_contract
 
 
 @pytest.mark.parametrize(

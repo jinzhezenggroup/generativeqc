@@ -5,7 +5,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda_batch.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Owned host topology used to prepare a borrowed device basis view. Packing preserves
  * Cartesian/public AO ordering. */
@@ -70,4 +70,4 @@ CudaPppsQueueProfile build_ppps_queue_profile(const HostBatch& host,
                                               const std::vector<std::uint32_t>& ordered_signatures,
                                               unsigned multiprocessor_count);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

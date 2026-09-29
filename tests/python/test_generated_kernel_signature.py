@@ -3,15 +3,15 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral import production
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral import production
+from generativeqc_compiler.integral.production import (
     _streaming_fock_internal_signature,
     _streaming_fock_launch_parameter_declaration,
     _streaming_fock_launch_wrapper,
     _streaming_fock_source,
     load_production_kernel_selections,
 )
-from vibeqc_compiler.integral.signature import (
+from generativeqc_compiler.integral.signature import (
     GeneratedKernelArgument,
     GeneratedKernelSignature,
 )
@@ -46,7 +46,7 @@ def test_signature_manifest_drives_declaration_and_forwarding_order() -> None:
     pruned = signature.without("input")
     assert pruned.names == ("output",)
     diagnostics = pruned.pruning_diagnostics(signature)
-    assert diagnostics["schema"] == "vibeqc.compiler.signature-pruning.v1"
+    assert diagnostics["schema"] == "generativeqc.compiler.signature-pruning.v1"
     assert diagnostics["parameters_before"] == ["input", "output"]
     assert diagnostics["parameters_after"] == ["output"]
     assert diagnostics["removed_parameters"] == ["input"]

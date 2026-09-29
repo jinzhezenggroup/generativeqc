@@ -11,13 +11,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.integral.derivative_aot_registry import (
+from generativeqc_compiler.integral.derivative_aot_registry import (
     AOT_ANGULAR_DOMAIN,
     component_groups,
     radial_inventory_from_payload,
 )
-from vibeqc_compiler.integral.range_separation import CoulombKernelFamily
-from vibeqc_compiler.integral.rsh_cpu_aot import program_source
+from generativeqc_compiler.integral.range_separation import CoulombKernelFamily
+from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
 
 def _write_if_changed(path: Path, content: str) -> None:
@@ -76,7 +76,7 @@ def main() -> None:
                 source, _, _ = program_source(radial, angular, group_index)
                 _write_if_changed(
                     args.output_directory
-                    / f"vibeqc_derivative_range_{tag}_{shell}_{group_index}.cpp",
+                    / f"generativeqc_derivative_range_{tag}_{shell}_{group_index}.cpp",
                     source,
                 )
                 written += 1

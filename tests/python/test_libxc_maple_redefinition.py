@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.xc.libxc_maple import MapleImportError, import_maple_file
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.xc.libxc_maple import MapleImportError, import_maple_file
 
 
 @pytest.mark.parametrize(

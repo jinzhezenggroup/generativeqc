@@ -5,8 +5,8 @@ import shutil
 import subprocess
 
 import pytest
-from vibeqc_compiler.integral.one_electron_cuda import _emit_component_index
-from vibeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.one_electron_cuda import _emit_component_index
+from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 
 @pytest.fixture(scope="module", params=range(5))

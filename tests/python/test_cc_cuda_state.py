@@ -7,11 +7,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_CC_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_CC_CUDA_TEST") != "1",
     reason="requires explicitly allocated GPU validation window",
 )
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,10 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module")
 def state_library(tmp_path_factory: typing.Any) -> typing.Any:
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     compiler = CudaCompilerAdapter(
-        find_nvcc(), cuda_target_info(os.environ["VIBEQC_TENSOR_ARCH"])
+        find_nvcc(), cuda_target_info(os.environ["GENERATIVEQC_TENSOR_ARCH"])
     )
     directory = tmp_path_factory.mktemp("cc-state")
     library = directory / "state.so"

@@ -1,12 +1,12 @@
-#ifndef VIBEQC_RUNTIME_CUDA_AO_PAIRS_CUH
-#define VIBEQC_RUNTIME_CUDA_AO_PAIRS_CUH
+#ifndef GENERATIVEQC_RUNTIME_CUDA_AO_PAIRS_CUH
+#define GENERATIVEQC_RUNTIME_CUDA_AO_PAIRS_CUH
 
 #include <cuda_runtime.h>
 
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::runtime::cuda_ao_pairs {
+namespace generativeqc::runtime::cuda_ao_pairs {
 
 /** Borrowed full symmetric matrices; a null channel suppresses that output.
  * A unique lower-triangular pair owner writes both entries, the diagonal once.
@@ -109,6 +109,6 @@ __global__ void shell_warp_pairs(View batch, Outputs<Policy::channels> outputs) 
   }
 }
 
-}  // namespace vibeqc::runtime::cuda_ao_pairs
+}  // namespace generativeqc::runtime::cuda_ao_pairs
 
 #endif

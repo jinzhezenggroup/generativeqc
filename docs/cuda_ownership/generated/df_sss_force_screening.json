@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_df_screening.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_screening.py"
+  "owner": "python/generativeqc_compiler/integral/df_screening.py"
 }

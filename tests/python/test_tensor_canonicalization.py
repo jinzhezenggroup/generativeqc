@@ -3,7 +3,7 @@
 from fractions import Fraction
 
 import numpy as np
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -22,7 +22,7 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.ir import Node
+from generativeqc_compiler.tensor.ir import Node
 
 
 def _matrix_input() -> Node:

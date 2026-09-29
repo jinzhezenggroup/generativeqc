@@ -9,20 +9,20 @@ from pathlib import Path
 import numpy as np
 import pytest
 import tomllib
-from vibeqc_compiler.integral.first_directional import (
+from generativeqc_compiler.integral.first_directional import (
     DirectionalMatrixTerm,
     directional_identity,
     emit_directional_matrix,
 )
-from vibeqc_compiler.integral.first_directional_execute import (
+from generativeqc_compiler.integral.first_directional_execute import (
     DirectionalFirstAccumulator,
     compile_directional_first,
     directional_storage,
 )
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
 
 @pytest.mark.parametrize(
@@ -84,7 +84,7 @@ def test_generated_sources_declare_device_direction_and_external_weight_contract
     assert "weights[ao[2]*nbf+ao[3]]" in source
     assert "atomicAdd(output" in source
     assert "first_directional_runtime.cuh" in source
-    assert source.count("vibeqc_directional_identity_v1()") == 1
+    assert source.count("generativeqc_directional_identity_v1()") == 1
     assert "RHF" not in source and "PySCF" not in source
 
 
@@ -131,9 +131,9 @@ def test_runtime_is_an_installed_compiler_asset() -> None:
     manifest = tomllib.loads((root / "pyproject.toml").read_text())
     mapping = manifest["tool"]["scikit-build"]["wheel"]["force-include"]
     name = "src/integrals/first_directional_runtime.cuh"
-    assert mapping[name] == "vibeqc_compiler/assets/" + name
+    assert mapping[name] == "generativeqc_compiler/assets/" + name
     source = (root / name).read_text()
-    assert "vibeqc_tensor::Context" in source
+    assert "generativeqc_tensor::Context" in source
     assert "Program::accumulate" in source
     assert "RHF" not in source and "0.5 *" not in source
 
@@ -142,10 +142,10 @@ def test_generation_does_not_load_native_or_probe_cuda() -> None:
     code = r"""
 import ctypes
 ctypes.CDLL=lambda *a,**k: (_ for _ in ()).throw(AssertionError('native library loaded'))
-from vibeqc_compiler.integral.first_directional import DirectionalMatrixTerm, emit_directional_matrix
-from vibeqc_compiler.integral.one_electron_derivatives import build_one_electron_derivative_ir
+from generativeqc_compiler.integral.first_directional import DirectionalMatrixTerm, emit_directional_matrix
+from generativeqc_compiler.integral.one_electron_derivatives import build_one_electron_derivative_ir
 source=emit_directional_matrix(build_one_electron_derivative_ir('overlap',(0,0)),(0,),(DirectionalMatrixTerm(0,(0,1)),),runtime_identity='a'*64)
-assert 'vibeqc_directional_append_v1' in source
+assert 'generativeqc_directional_append_v1' in source
 """
     result = subprocess.run(
         [sys.executable, "-c", code],

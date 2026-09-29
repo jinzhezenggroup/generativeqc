@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     production,
     production_profile,
     production_registry,

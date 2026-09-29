@@ -7,17 +7,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture as fixture
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.integration_fixtures import (
+    load_integration_fixture as fixture,
+)
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
 
 @pytest.fixture(scope="module")
@@ -298,7 +300,7 @@ def test_native_spatial_mask_matches_independent_zeroed_collocation(
 def test_empty_native_spatial_masks_have_zero_native_calls(
     native_factory: typing.Any, monkeypatch: typing.Any, observable: typing.Any
 ) -> None:
-    from vibeqc_compiler.dft.ao import jet_indices
+    from generativeqc_compiler.dft.ao import jet_indices
 
     meta, data, grid = fixture("h2")
     grid = replace(grid, points=grid.points + 100)
@@ -353,7 +355,7 @@ def test_empty_native_spatial_masks_have_zero_native_calls(
 def test_native_full_spin_solver_adapter_and_source_staleness(
     native_factory: typing.Any,
 ) -> None:
-    from tools.vibeqc_response.xc import FixedDensityXCDerivativeKernel
+    from tools.generativeqc_response.xc import FixedDensityXCDerivativeKernel
 
     meta, data, grid = fixture("h2")
     spec = functional("PBE")
@@ -443,8 +445,8 @@ def test_native_energy_rejects_quadrature_overflow(
 def test_nonempty_strict_spatial_subsets_preserve_all_observables(
     native_factory: typing.Any, observable: typing.Any
 ) -> None:
-    from vibeqc_compiler.dft import ExplicitGrid
-    from vibeqc_compiler.dft.ao import jet_indices
+    from generativeqc_compiler.dft import ExplicitGrid
+    from generativeqc_compiler.dft.ao import jet_indices
 
     from tools.benchmark_xc_contractions import diagnostic
 
@@ -498,7 +500,7 @@ def test_concurrent_native_source_publication_and_matching_cache_hits(
 ) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
-    from vibeqc_compiler.common.provenance import canonical_hash
+    from generativeqc_compiler.common.provenance import canonical_hash
 
     compiler = shutil.which("c++")
     if compiler is None:

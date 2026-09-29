@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Owned scientific seed and its source geometry, never runtime/device state.
  * RHF stores the spin-summed density; UHF stores alpha then beta, row-major.
@@ -18,4 +18,4 @@ struct HfWarmState {
   int iterations{};
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

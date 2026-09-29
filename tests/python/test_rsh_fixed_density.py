@@ -7,21 +7,21 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import assemble_fixed_density_exchange
-from vibeqc.mean_field import compile_fixed_density_method
-from vibeqc.profiles import file_hash
-from vibeqc_compiler.integral.range_separation import (
+from generativeqc import assemble_fixed_density_exchange
+from generativeqc.mean_field import compile_fixed_density_method
+from generativeqc.profiles import file_hash
+from generativeqc_compiler.integral.range_separation import (
     CoulombKernel,
     reference_moments,
 )
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     MethodSpec,
     RangeSeparatedExchangePrimitive,
     SemilocalXCPrimitive,
     UnsupportedMethod,
     resolve_method,
 )
-from vibeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.program import build_program
 
 
 def test_cam_manifests_resolve_explicit_sr_lr_primitives_without_new_science() -> None:

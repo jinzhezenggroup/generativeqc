@@ -1,4 +1,4 @@
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 calculator = Calculator(method="rhf", basis="sto-3g", device="cuda")
 result = calculator.singlepoint(

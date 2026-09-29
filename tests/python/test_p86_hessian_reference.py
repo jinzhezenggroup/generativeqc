@@ -9,9 +9,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 FIXTURE = Path(__file__).parents[1] / "data/xc/p86-hessian.json"
 DATA = json.loads(FIXTURE.read_text())
@@ -21,7 +21,7 @@ DATA = json.loads(FIXTURE.read_text())
     "case", DATA["cases"], ids=lambda case: case["name"] + "-" + case["spin"]
 )
 def test_default_feature_hessian_matches_independent_libxc(case: typing.Any) -> None:
-    assert DATA["schema"] == "vibeqc.independent-semilocal-hessian.v1"
+    assert DATA["schema"] == "generativeqc.independent-semilocal-hessian.v1"
     assert DATA["libxc"] == "7.0.0"
     name, spin = case["name"], case["spin"]
     if name.startswith(("LDA_", "GGA_")):

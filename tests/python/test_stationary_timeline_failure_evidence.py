@@ -13,11 +13,11 @@ def test_main_persists_completed_rows_when_later_case_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "evidence.json"
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"host-only provenance fixture; never loaded")
     monkeypatch.setenv("SLURM_JOB_ID", "host-control-flow-test")
     monkeypatch.delenv("CUDACXX", raising=False)
-    monkeypatch.setenv("VIBEQC_LIBRARY", str(library))
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(library))
     monkeypatch.setattr(benchmark, "_git", lambda command: None)
     monkeypatch.setattr(benchmark, "_gpu_identity", lambda: None)
     monkeypatch.setattr(
@@ -98,7 +98,7 @@ def test_partial_case_retains_completed_scenarios(
         if prepared_aot:
             assert kwargs["prepared"] is owner
             assert kwargs["target"] is target
-            assert kwargs["library"] == tmp_path / "libvibeqc.so"
+            assert kwargs["library"] == tmp_path / "libgenerativeqc.so"
         else:
             assert not kwargs
         return None, 0.03
@@ -121,7 +121,7 @@ def test_partial_case_retains_completed_scenarios(
             same_state_repeats=1,
             records=records,
             target=target if prepared_aot else None,
-            library=tmp_path / "libvibeqc.so" if prepared_aot else None,
+            library=tmp_path / "libgenerativeqc.so" if prepared_aot else None,
         )
     assert [r["scenario"] for r in records] == [
         "cold",

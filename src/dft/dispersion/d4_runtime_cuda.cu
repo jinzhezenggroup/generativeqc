@@ -14,7 +14,7 @@
 #include "dft/dispersion/d4_runtime.hpp"
 #include "generated_d4_derivative.hpp"
 
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
 namespace {
 thread_local bool fail_next_d4_after_coordinate_upload = false;
 }
@@ -23,7 +23,7 @@ extern "C" void d4_cuda_fail_after_coordinate_upload_for_test_v1() {
 }
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 struct D4CudaOwner {
   int device_id{-1};
@@ -79,10 +79,10 @@ class DeviceScope {
   cudaError_t error_{cudaSuccess};
 };
 
-vibeqc_status cuda_failure(cudaError_t error, const char* action, std::string& detail) {
+generativeqc_status cuda_failure(cudaError_t error, const char* action, std::string& detail) {
   detail = std::string(action) + ": " + cudaGetErrorString(error);
-  return error == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                            : VIBEQC_STATUS_CUDA_ERROR;
+  return error == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                            : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
 template <typename T>
@@ -194,7 +194,7 @@ __global__ void eeq_compose_kernel(std::uint32_t systems, const std::uint32_t* o
         n, atomic_numbers + begin, coordinates + 3 * begin, total_charges[system], eeq_tables,
         workspace, eeq2019_workspace_elements(n), charges + begin, dqdr);
     if (status == D4Status::success)
-      status = ::vibeqc::generated::d4::compose_eeq_gradient(
+      status = ::generativeqc::generated::d4::compose_eeq_gradient(
           n, dqdr, dedq + begin, gradients + 3 * begin, gradients + 3 * begin);
     statuses[system] = status;
     if (status != D4Status::success) zero_item(system, offsets, energies, gradients, charges);
@@ -208,8 +208,8 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
                                   std::span<const double> total_charges,
                                   std::span<const double> default_coordinates, D4EEQProfile profile,
                                   const D4ResourceUsage& resources, std::string& detail,
-                                  vibeqc_status& status) {
-  status = VIBEQC_STATUS_CUDA_ERROR;
+                                  generativeqc_status& status) {
+  status = GENERATIVEQC_STATUS_CUDA_ERROR;
   DeviceScope scope(device_id);
   if (scope.error() != cudaSuccess) {
     status = cuda_failure(scope.error(), "select D4 CUDA device", detail);
@@ -226,7 +226,7 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
   owner->dqdr_stride = 3u * resources.maximum_atoms * resources.maximum_atoms;
   if (!owner->workers || !owner->eeq_workspace_stride || !owner->dqdr_stride) {
     detail = "invalid D4 CUDA EEQ worker/workspace schedule";
-    status = VIBEQC_STATUS_INTERNAL_ERROR;
+    status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     return nullptr;
   }
 
@@ -260,7 +260,7 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
       !allocate(owner->references, eeq_data::kReferenceCount, detail) ||
       !allocate(owner->reference_c6, c6_count, detail) ||
       !allocate(owner->charge_elements, eeq_data::kElementCount, detail)) {
-    status = VIBEQC_STATUS_OUT_OF_MEMORY;
+    status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
@@ -287,7 +287,7 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
     destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
-  status = VIBEQC_STATUS_SUCCESS;
+  status = GENERATIVEQC_STATUS_SUCCESS;
   detail.clear();
   return owner.release();
 }
@@ -323,20 +323,20 @@ void destroy_d4_cuda_owner(D4CudaOwner* owner) noexcept {
   delete owner;
 }
 
-vibeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& parameters,
-                              D4EEQProfile profile, std::span<const double> coordinates,
-                              bool coordinates_changed, std::span<const std::uint8_t> active,
-                              std::span<const std::uint8_t> want_gradient,
-                              std::vector<D4Status>& statuses,
-                              std::vector<double>& energy_components,
-                              std::vector<double>& gradients, std::vector<double>& charges,
-                              D4RuntimeCounters& counters, std::string& detail) {
+generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& parameters,
+                                    D4EEQProfile profile, std::span<const double> coordinates,
+                                    bool coordinates_changed, std::span<const std::uint8_t> active,
+                                    std::span<const std::uint8_t> want_gradient,
+                                    std::vector<D4Status>& statuses,
+                                    std::vector<double>& energy_components,
+                                    std::vector<double>& gradients, std::vector<double>& charges,
+                                    D4RuntimeCounters& counters, std::string& detail) {
   if (!owner || coordinates.size() != 3 * owner->atoms || active.size() != owner->systems ||
       want_gradient.size() != owner->systems || statuses.size() != owner->systems ||
       energy_components.size() != 2 * owner->systems || gradients.size() != 3 * owner->atoms ||
       charges.size() != owner->atoms) {
     detail = "invalid D4 CUDA replay shape";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   DeviceScope scope(owner->device_id);
   if (scope.error() != cudaSuccess)
@@ -352,31 +352,31 @@ vibeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& parameters
   } failure_drain{owner->stream};
 
   auto copy_h2d = [&](void* destination, const void* source, std::size_t bytes,
-                      const char* action) -> vibeqc_status {
-    if (!bytes) return VIBEQC_STATUS_SUCCESS;
+                      const char* action) -> generativeqc_status {
+    if (!bytes) return GENERATIVEQC_STATUS_SUCCESS;
     const auto error =
         cudaMemcpyAsync(destination, source, bytes, cudaMemcpyHostToDevice, owner->stream);
-    return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS : cuda_failure(error, action, detail);
+    return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS : cuda_failure(error, action, detail);
   };
-  vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   if (coordinates_changed) {
     status = copy_h2d(owner->coordinates, coordinates.data(), coordinates.size_bytes(),
                       "upload D4 changed coordinates");
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     counters.coordinate_h2d_bytes += coordinates.size_bytes();
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
     if (fail_next_d4_after_coordinate_upload) {
       fail_next_d4_after_coordinate_upload = false;
       detail = "injected D4 CUDA failure after coordinate upload";
-      return VIBEQC_STATUS_CUDA_ERROR;
+      return GENERATIVEQC_STATUS_CUDA_ERROR;
     }
 #endif
   }
   status = copy_h2d(owner->active, active.data(), active.size_bytes(), "upload D4 active mask");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = copy_h2d(owner->want_gradient, want_gradient.data(), want_gradient.size_bytes(),
                     "upload D4 gradient mask");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
 
   for (const auto& clear :
        {std::pair<void*, std::size_t>{owner->energies, energy_components.size() * sizeof(double)},
@@ -436,32 +436,32 @@ vibeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& parameters
   (void)gradients_requested;
 
   auto copy_d2h = [&](void* destination, const void* source, std::size_t bytes,
-                      const char* action) -> vibeqc_status {
-    if (!bytes) return VIBEQC_STATUS_SUCCESS;
+                      const char* action) -> generativeqc_status {
+    if (!bytes) return GENERATIVEQC_STATUS_SUCCESS;
     const auto copy_error =
         cudaMemcpyAsync(destination, source, bytes, cudaMemcpyDeviceToHost, owner->stream);
-    return copy_error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+    return copy_error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                                      : cuda_failure(copy_error, action, detail);
   };
   status = copy_d2h(statuses.data(), owner->statuses, statuses.size() * sizeof(D4Status),
                     "download D4 statuses");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = copy_d2h(energy_components.data(), owner->energies,
                     energy_components.size() * sizeof(double), "download D4 energy components");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = copy_d2h(charges.data(), owner->charges, charges.size() * sizeof(double),
                     "download D4 EEQ charges");
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (gradients_requested) {
     status = copy_d2h(gradients.data(), owner->gradients, gradients.size() * sizeof(double),
                       "download D4 gradients");
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   }
   error = cudaStreamSynchronize(owner->stream);
   if (error != cudaSuccess) return cuda_failure(error, "synchronize D4 CUDA replay", detail);
   failure_drain.armed = false;
   detail.clear();
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

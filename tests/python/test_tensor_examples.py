@@ -8,8 +8,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import validate_evidence
-from vibeqc_compiler.integral.blocks import (
+from generativeqc_compiler.common.evidence import validate_evidence
+from generativeqc_compiler.integral.blocks import (
     BlockRequest,
     RawBlock,
     ShellTile,
@@ -20,13 +20,17 @@ from vibeqc_compiler.integral.blocks import (
     assemble_raw_block,
     contract_weighted_derivative,
 )
-from vibeqc_compiler.integral.ir import IntegralIR, OperatorSpec, TranslationInvariant
-from vibeqc_compiler.integral.shell_signature import (
+from generativeqc_compiler.integral.ir import (
+    IntegralIR,
+    OperatorSpec,
+    TranslationInvariant,
+)
+from generativeqc_compiler.integral.shell_signature import (
     BasisShell,
     CenterBinding,
     ShellSignature,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,

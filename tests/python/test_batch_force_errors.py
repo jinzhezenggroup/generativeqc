@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions, _native
+from generativeqc import Calculator, GridSpec, KsOptions, _native
 
 
 @pytest.mark.parametrize(

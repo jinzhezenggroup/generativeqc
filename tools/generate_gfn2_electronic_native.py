@@ -13,17 +13,19 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 # Build-time generation must not acquire the NumPy interpreter dependency.
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
-from vibeqc_compiler.method.gfn2_electronic_runtime import (
+        setattr(generativeqc_compiler, package_name, package)
+from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_RUNTIME_VERSION,
     build_gfn2_core_energy_update_program,
     build_gfn2_multipole_hamiltonian_update_program,
@@ -32,7 +34,7 @@ from vibeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_scalar_hamiltonian_update_program,
     build_gfn2_scalar_integral_vjp_program,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 POPULATION_INPUTS = ("density", "integral", "accumulator")
 CORE_ENERGY_INPUTS = ("density", "h0", "accumulator")
@@ -112,7 +114,7 @@ def native_header() -> str:
 
 #include <cmath>
 
-namespace vibeqc::xtb::generated {{
+namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_electronic_runtime_version =
     "{GFN2_ELECTRONIC_RUNTIME_VERSION}";
@@ -130,7 +132,7 @@ inline constexpr const char* gfn2_multipole_integral_vjp_hash =
     "{multipole_vjp.derivative_hash}";
 
 {"".join(bodies)}
-}}  // namespace vibeqc::xtb::generated
+}}  // namespace generativeqc::xtb::generated
 """
 
 

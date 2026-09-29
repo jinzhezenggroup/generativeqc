@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 from test_df_ccsd_factorized import FixtureDFProvider, _method_problem
 
-from tools.vibeqc_cc import df_factorized
+from tools.generativeqc_cc import df_factorized
 
 
 @pytest.mark.parametrize(

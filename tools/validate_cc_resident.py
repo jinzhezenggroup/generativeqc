@@ -1,5 +1,5 @@
 """GPU resident-vs-ordinary parity validator for #149 B.
-Run with: export VIBEQC_TENSOR_CUDA_TEST=1 VIBEQC_TENSOR_ARCH=sm_90 VIBEQC_NVCC=/usr/local/cuda/bin/nvcc SCRATCH=/path/to/scratch/issue-0149-b && source $SCRATCH/venv/bin/activate && export PYTHONPATH=$SCRATCH/repo/python:$SCRATCH/repo && python tools/validate_cc_resident.py --output $SCRATCH/parity-results --cache $SCRATCH/cache --nvcc /usr/local/cuda/bin/nvcc --architecture sm_90 --compile-only
+Run with: export GENERATIVEQC_TENSOR_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_90 GENERATIVEQC_NVCC=/usr/local/cuda/bin/nvcc SCRATCH=/path/to/scratch/issue-0149-b && source $SCRATCH/venv/bin/activate && export PYTHONPATH=$SCRATCH/repo/python:$SCRATCH/repo && python tools/validate_cc_resident.py --output $SCRATCH/parity-results --cache $SCRATCH/cache --nvcc /usr/local/cuda/bin/nvcc --architecture sm_90 --compile-only
 """
 
 import argparse
@@ -13,23 +13,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # In installed/repo mode, find the source tree
 for candidate in (ROOT, Path(os.environ.get("SCRATCH", "")) / "repo"):
-    if (candidate / "tools/vibeqc_cc").is_dir():
+    if (candidate / "tools/generativeqc_cc").is_dir():
         ROOT = candidate.resolve()
         break
 
 _compiler_sys.path.insert(0, str(ROOT / "python"))
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import block_error, file_hash
-from vibeqc_compiler.tensor.cuda_execute import tensor_source_identity
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_resident import PreparedResident, compile_resident
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import block_error, file_hash
+from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_resident import (
+    PreparedResident,
+    compile_resident,
+)
 
+from tools.generativeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
+from tools.generativeqc_cc.oracle import dense_feeds
 from tools.validate_cc import load_references
-from tools.vibeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
-from tools.vibeqc_cc.oracle import dense_feeds
 
 
 def run(

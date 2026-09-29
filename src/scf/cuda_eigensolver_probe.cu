@@ -12,7 +12,7 @@
 
 #include "scf/cuda_eigensolver_policy.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 
 constexpr unsigned kProbeThreads = 256;
@@ -338,7 +338,7 @@ XsyevBatchedGraphProbeResult probe_xsyev_batched_device_launch_graph(
     // Isolated shell-class timing needs the real provider workspace contract
     // but not three full-size eigensolver executions before the measured Fock
     // work. Production runs never set this diagnostic environment variable.
-    const char* skip_validation = std::getenv("VIBEQC_XSYEV_PROBE_SKIP_DIAGNOSTIC");
+    const char* skip_validation = std::getenv("GENERATIVEQC_XSYEV_PROBE_SKIP_DIAGNOSTIC");
     if (skip_validation != nullptr &&
         (std::strcmp(skip_validation, "1") == 0 || std::strcmp(skip_validation, "skip") == 0)) {
       result.ordinary_execution_passed = true;
@@ -461,4 +461,4 @@ XsyevBatchedGraphProbeResult probe_xsyev_batched_device_launch_graph(
   }
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

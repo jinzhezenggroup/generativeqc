@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from vibeqc_compiler.method.stationary_cuda import (
+from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_COMPONENTS,
     QUALIFIED_STATIONARY_AOT_PROFILES,
     _profile_stem,
@@ -110,7 +110,7 @@ def audit_stationary_aot_directory(
             component_domain=component_domain,
         )
         metadata = artifact.metadata
-        manifest = directory / f"vibeqc_stationary_{name}.json"
+        manifest = directory / f"generativeqc_stationary_{name}.json"
         manifest_bytes += manifest.stat().st_size
         code_kinds = tuple(metadata["identity"]["target"]["code_kinds"])
         records.append(
@@ -139,7 +139,7 @@ def audit_stationary_aot_directory(
         native_library = Path(native_library).resolve()
         if not native_library.is_file():
             raise FileNotFoundError(
-                f"native VibeQC library does not exist: {native_library}"
+                f"native GenerativeQC library does not exist: {native_library}"
             )
         native_bytes = native_library.stat().st_size
         ratio = aot_binary_bytes / native_bytes if native_bytes else None

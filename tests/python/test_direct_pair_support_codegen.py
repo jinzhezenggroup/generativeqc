@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.integral.direct_pair_support_cuda import (
+from generativeqc_compiler.integral.direct_pair_support_cuda import (
     emit_direct_pair_support_headers,
 )
-from vibeqc_compiler.integral.direct_recurrence_cuda import (
+from generativeqc_compiler.integral.direct_recurrence_cuda import (
     emit_direct_recurrence_headers,
 )
 
@@ -56,10 +56,10 @@ def test_generated_recurrence_consumes_generated_pair_support() -> None:
 
 
 def test_direct_pair_support_generation_is_registered() -> None:
-    generated = (ROOT / "cmake/VibeQCGeneratedSources.cmake").read_text(
+    generated = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text(
         encoding="utf-8"
     )
-    cuda = (ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
-    assert "VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS" in generated
+    cuda = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
+    assert "GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS" in generated
     assert "generate_direct_pair_support.py" in generated
-    assert cuda.count("VIBEQC_DIRECT_PAIR_SUPPORT_HEADERS") == 2
+    assert cuda.count("GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS") == 2

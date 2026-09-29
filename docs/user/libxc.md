@@ -1,6 +1,6 @@
 # Automatic Libxc semilocal functionals
 
-VibeQC exposes structurally supported imported Libxc semilocal registrations
+GenerativeQC exposes structurally supported imported Libxc semilocal registrations
 without a positive method allow-list.
 
 ## Select a functional
@@ -8,7 +8,7 @@ without a positive method allow-list.
 Use the exact Libxc registration name:
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 calculator = Calculator(
     method="libxc:GGA_X_APBE",
@@ -29,7 +29,7 @@ result = calculator.singlepoint(
 List the currently admitted automatic selectors with:
 
 ```console
-vibeqc methods --libxc
+generativeqc methods --libxc
 ```
 
 Add `--json` for machine-readable output.
@@ -40,7 +40,7 @@ Automatic semilocal admission is structural and default-allow. An imported
 registration is available when its Graph can be represented with the currently
 supported `rho`, `sigma`, and `tau` ingredients. Registrations that require
 another ingredient are rejected structurally. Adding another representable
-Libxc registration does not require adding it to a positive VibeQC method table.
+Libxc registration does not require adding it to a positive GenerativeQC method table.
 
 Zero-spin channels, zero gradients, density tails, and zero tau are not encoded
 as functional-name exclusions. The compiler applies the pinned Libxc work-domain
@@ -66,5 +66,5 @@ and the energy uses the original physical total density.
 A Libxc registration can represent only one component. For example,
 `GGA_X_APBE` is an exchange component; selecting it does not silently add a
 correlation functional. Use the intended Libxc XC registration when one exists,
-or an explicit composed MethodIR when composition support is available. VibeQC
+or an explicit composed MethodIR when composition support is available. GenerativeQC
 does not infer missing X/C partners from a name.

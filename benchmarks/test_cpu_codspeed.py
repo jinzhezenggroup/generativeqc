@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions
+from generativeqc import Calculator, GridSpec, KsOptions
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -63,13 +63,15 @@ _CASES = (
 
 
 def _active_cases() -> tuple[_Case, ...]:
-    tier = os.environ.get("VIBEQC_CODSPEED_TIER", "full")
+    tier = os.environ.get("GENERATIVEQC_CODSPEED_TIER", "full")
     if tier == "full":
         return _CASES
     if tier == "pr":
         extras = frozenset(
             item.strip()
-            for item in os.environ.get("VIBEQC_CODSPEED_EXTRA_CASES", "").split(",")
+            for item in os.environ.get("GENERATIVEQC_CODSPEED_EXTRA_CASES", "").split(
+                ","
+            )
             if item.strip()
         )
         supported = frozenset(
@@ -78,10 +80,10 @@ def _active_cases() -> tuple[_Case, ...]:
         unknown = extras - supported
         if unknown:
             raise RuntimeError(
-                "unknown VIBEQC_CODSPEED_EXTRA_CASES=" + ",".join(sorted(unknown))
+                "unknown GENERATIVEQC_CODSPEED_EXTRA_CASES=" + ",".join(sorted(unknown))
             )
         return tuple(case for case in _CASES if case.pr_fast or case.pr_extra in extras)
-    raise RuntimeError(f"unknown VIBEQC_CODSPEED_TIER={tier!r}")
+    raise RuntimeError(f"unknown GENERATIVEQC_CODSPEED_TIER={tier!r}")
 
 
 def _calculator(case: _Case) -> Calculator:

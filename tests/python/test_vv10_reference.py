@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.dft import (
+from generativeqc_compiler.dft import (
     assemble_nonlocal_potential_reference,
     nonlocal_energy_density_reference,
     nonlocal_energy_reference,
@@ -12,7 +12,7 @@ from vibeqc_compiler.dft import (
     nonlocal_feature_derivatives_reference,
     nonlocal_kernel_matrix_reference,
 )
-from vibeqc_compiler.method import original_nonlocal_correlation
+from generativeqc_compiler.method import original_nonlocal_correlation
 
 
 @pytest.fixture
@@ -285,7 +285,7 @@ def test_ao_potential_is_derivative_of_same_nonlocal_energy(
 def test_reference_rejects_complex_input_before_casting(
     variant: typing.Any, field: typing.Any
 ) -> None:
-    from vibeqc_compiler.dft.nonlocal_reference import nonlocal_energy_reference
+    from generativeqc_compiler.dft.nonlocal_reference import nonlocal_energy_reference
 
     args = [np.zeros((2, 3)), np.ones(2), np.array([0.1, 0.7]), np.zeros((2, 3))]
     args[field] = args[field].astype(complex) + 0.01j

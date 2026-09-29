@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.xc.boundary import (
+from generativeqc_compiler.xc.boundary import (
     BOUNDARY_SEMANTICS,
     bulk_feature_names,
     semilocal_boundary_probes,
@@ -90,7 +90,7 @@ def _r2scan_production_values(features: np.ndarray, tmp_path: Path) -> np.ndarra
         + rows
         + "};\n"
         + "for (const auto& p : points) {\n"
-        + "const auto v = vibeqc::dft::generated::r2scan_polarized("
+        + "const auto v = generativeqc::dft::generated::r2scan_polarized("
         + "p[0], p[1], p[2], p[3], p[4], p[5], p[6]);\n"
         + 'std::printf("%.17g", v.energy_density);\n'
         + 'for (double d : v.feature_derivative) std::printf(" %.17g", d);\n'
@@ -120,7 +120,7 @@ def test_r2scan_zero_minority_boundary_status_is_machine_readable(
     tmp_path: Path,
 ) -> None:
     reference = json.loads(R2SCAN_REFERENCE.read_text(encoding="utf-8"))
-    assert reference["schema"] == "vibeqc.r2scan-tail-reference/v1"
+    assert reference["schema"] == "generativeqc.r2scan-tail-reference/v1"
     assert reference["boundary_semantics"] == BOUNDARY_SEMANTICS
     assert reference["functional"] == "R2SCAN"
     assert reference["spin"] == "polarized"
@@ -188,8 +188,8 @@ def test_boundary_qualification_does_not_replace_compiler_packages() -> None:
     # Import the test module as pytest collection does, in a clean interpreter.
     # Loading the generator module here used to replace package exports with stubs.
     code = (
-        "import runpy, sys; import vibeqc_compiler.xc as before; "
-        "runpy.run_path(sys.argv[1]); import vibeqc_compiler.xc as after; "
+        "import runpy, sys; import generativeqc_compiler.xc as before; "
+        "runpy.run_path(sys.argv[1]); import generativeqc_compiler.xc as after; "
         "assert before is after; assert callable(after.functional)"
     )
     subprocess.run(

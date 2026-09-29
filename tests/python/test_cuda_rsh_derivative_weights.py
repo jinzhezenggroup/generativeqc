@@ -31,7 +31,7 @@ def weights_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     cpp, library = directory / "probe.cpp", directory / "probe.so"
     cpp.write_text(
         '#include "scf/cuda/direct_eri_symmetry.cuh"\n'
-        "using namespace vibeqc::scf::cuda_execution;\n"
+        "using namespace generativeqc::scf::cuda_execution;\n"
         'extern "C" void weights(std::size_t n, std::size_t offset,\n'
         "    std::size_t i, std::size_t j, std::size_t k, std::size_t l,\n"
         "    bool unrestricted, double cj, double short_ck, double long_ck,\n"

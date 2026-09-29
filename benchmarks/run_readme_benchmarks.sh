@@ -2,7 +2,7 @@
 # Execute inside one finite Slurm allocation; preserve its device visibility.
 set -euo pipefail
 : "${SLURM_JOB_ID:?Run with srun --partition=main --gres=gpu:5090:1 --time=01:00:00}"
-: "${VIBEQC_LIBRARY:?Select a Release native library built from the recorded source}"
+: "${GENERATIVEQC_LIBRARY:?Select a Release native library built from the recorded source}"
 readme_python="${README_BENCHMARK_PYTHON:-python}"
 readme_output="${README_BENCHMARK_OUTPUT:-.artifacts/readme-benchmarks-20260922}"
 readme_timeout="${README_BENCHMARK_POINT_TIMEOUT:-900}"

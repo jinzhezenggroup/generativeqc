@@ -5,10 +5,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_EXTENDED_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_EXTENDED_TEST") != "1",
     reason="opt-in independent molecular gate with pinned PySCF 2.14.0",
 )
 
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.skipif(
 def test_fourteen_ao_all_electron_public_reference_and_tail(
     device: typing.Any,
 ) -> None:
-    if device == "cuda" and os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1":
         pytest.skip("requires allocated CUDA device")
     pyscf = pytest.importorskip("pyscf")
     assert pyscf.__version__ == "2.14.0"
@@ -69,10 +69,10 @@ def test_fourteen_ao_all_electron_public_reference_and_tail(
     from pyscf import ao2mo
     from test_mp2_fixed_native import check_native
 
-    from tools.vibeqc_posthf.sources import NativeSource
+    from tools.generativeqc_posthf.sources import NativeSource
 
     # The exact same PySCF orbitals/integrals feed the newly added native
-    # provider/energy adapters, independently of the new VibeQC SCF result.
+    # provider/energy adapters, independently of the new GenerativeQC SCF result.
     d = hf.make_rdm1()
     arrays = {
         "S": hf.get_ovlp(),

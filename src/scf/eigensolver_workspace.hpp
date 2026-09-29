@@ -4,7 +4,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Shape-only bound for one serialized ordinary FP64 Xsyevd workspace.
  * Both host and device provider queries must fit before allocation. The fixed
@@ -19,4 +19,4 @@ inline std::size_t ordinary_eigensolver_workspace_allowance(std::size_t n) {
   return fixed + 16U * n * n * sizeof(double);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

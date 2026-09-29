@@ -4,7 +4,7 @@
 extern "C" int test_cc_state(int elements, int history, const double* errors, const double* vectors,
                              double* result, double* norm, int* diis_status, char* error,
                              size_t error_size) {
-  using namespace vibeqc_tensor;
+  using namespace generativeqc_tensor;
   try {
     if (elements < 1 || history < 2 || history > 20) throw std::invalid_argument("test shape");
     const size_t h = history, n = elements, partials = blocks(elements, 256);
@@ -28,14 +28,14 @@ extern "C" int test_cc_state(int elements, int history, const double* errors, co
     cuda_check(cudaMemcpyAsync(v, vectors, n * h * 8, cudaMemcpyHostToDevice, ctx.stream));
     cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
     cuda_check(cudaMemsetAsync(out, 0, n * 8, ctx.stream));
-    vibeqc::cc::diis_gram(ctx, e, elements, history, gram);
-    vibeqc::cc::diis_coefficients<<<1, 1, 0, ctx.stream>>>(gram, history, system, coefficients,
-                                                           state);
-    vibeqc::cc::diis_combine<<<blocks(elements, 256), 256, 0, ctx.stream>>>(
+    generativeqc::cc::diis_gram(ctx, e, elements, history, gram);
+    generativeqc::cc::diis_coefficients<<<1, 1, 0, ctx.stream>>>(gram, history, system,
+                                                                 coefficients, state);
+    generativeqc::cc::diis_combine<<<blocks(elements, 256), 256, 0, ctx.stream>>>(
         v, coefficients, elements, history, state, out, ctx.error);
-    vibeqc::cc::residual_partials<<<partials, 256, 0, ctx.stream>>>(e, elements, scratch,
-                                                                    ctx.error);
-    vibeqc::cc::residual_finish<<<1, 1, 0, ctx.stream>>>(scratch, partials, max_norm);
+    generativeqc::cc::residual_partials<<<partials, 256, 0, ctx.stream>>>(e, elements, scratch,
+                                                                          ctx.error);
+    generativeqc::cc::residual_finish<<<1, 1, 0, ctx.stream>>>(scratch, partials, max_norm);
     cuda_check(cudaGetLastError());
     cuda_check(cudaMemcpyAsync(result, out, n * 8, cudaMemcpyDeviceToHost, ctx.stream));
     cuda_check(cudaMemcpyAsync(norm, max_norm, 8, cudaMemcpyDeviceToHost, ctx.stream));

@@ -5,12 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from vibeqc_compiler.xc.capability_catalog import (
+from generativeqc_compiler.xc.capability_catalog import (
     SUMMARY_SCHEMA,
     render_capability_changes,
     render_capability_summary,
 )
-from vibeqc_compiler.xc.libxc_bulk_capabilities import CAPABILITY_STAGES
+from generativeqc_compiler.xc.libxc_bulk_capabilities import CAPABILITY_STAGES
 
 
 def snapshot(qualified: tuple[str, ...] = (), ready: tuple[str, ...] = ()) -> dict:

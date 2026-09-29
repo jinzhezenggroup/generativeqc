@@ -1,6 +1,6 @@
 # Stationary CUDA RKS gradient diagnostic
 
-`vibeqc._stationary_cuda.complete_rks_cuda_gradient_diagnostic` executes all
+`generativeqc._stationary_cuda.complete_rks_cuda_gradient_diagnostic` executes all
 `StationaryGradientPlan` sources on CUDA: one-electron, Coulomb, XC AO motion,
 XC point motion, XC partition response, overlap/Pulay, and nuclear repulsion.
 Full-range global hybrids add an exact-exchange contribution from the same
@@ -161,12 +161,12 @@ device; for example H100 uses `sm_90`, while RTX 4090 uses `sm_89`.
 
 ```python
 from pathlib import Path
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.dft import NativeAO
 
 atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
 compiler = CudaCompilerAdapter(
@@ -273,9 +273,9 @@ The provider re-reads and validates the native final state, causing an additiona
 explicit final-state export; this is not an entirely resident force path or a
 performance promotion. The public wrapper applies the same work/byte limits.
 
-Run the opt-in numerical gate on an allocated device with `VIBEQC_ECP_CUDA_TEST=1`,
-`VIBEQC_ECP_CUDA_TARGET` matching that device (for example `sm_89`), an explicit
-`CUDACXX` and current `VIBEQC_LIBRARY`:
+Run the opt-in numerical gate on an allocated device with `GENERATIVEQC_ECP_CUDA_TEST=1`,
+`GENERATIVEQC_ECP_CUDA_TARGET` matching that device (for example `sm_89`), an explicit
+`CUDACXX` and current `GENERATIVEQC_LIBRARY`:
 
 ```sh
 python -m pytest tests/python/test_ecp_stationary_cuda.py -q

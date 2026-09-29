@@ -4,7 +4,7 @@ import typing
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     BackendCapability,
     FeatureType,
     MethodSpec,

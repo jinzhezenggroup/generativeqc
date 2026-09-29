@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import pytest
-from vibeqc_compiler.periodic import CELL_SCHEMA, PeriodicCell
+from generativeqc_compiler.periodic import CELL_SCHEMA, PeriodicCell
 
 
 def test_periodic_cell_uses_row_vector_lattice_convention() -> None:

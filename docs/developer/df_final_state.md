@@ -153,8 +153,8 @@ completed-reference validation; no extra export eigensolve is needed. The
 analytic contract tests separately exercise amplification by an ill-conditioned
 metric and a maximum-D error hidden by RMS.
 
-`VIBEQC_DF_FORCE_FINAL_REBUILD=1` forces actual solve/project/evaluate work even
-when a candidate qualifies. `VIBEQC_DF_REFERENCE_FINAL_EIGEN=1` additionally
+`GENERATIVEQC_DF_FORCE_FINAL_REBUILD=1` forces actual solve/project/evaluate work even
+when a candidate qualifies. `GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN=1` additionally
 selects the independent reference provider and also forces that work. Existing
 setup/final provider ablations explicitly force final rebuilding on both sides
 so their execution remains provider substitution. Normal preparation ablations

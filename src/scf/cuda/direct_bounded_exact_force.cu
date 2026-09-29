@@ -16,7 +16,7 @@
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Consume one paged exact class through the qualified low-order force scheduler.
@@ -203,4 +203,4 @@ void launch_contract_bounded_exact_low_order_force_page_kernel(
       bra_head, profile, 1.0, exchange_coefficient);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

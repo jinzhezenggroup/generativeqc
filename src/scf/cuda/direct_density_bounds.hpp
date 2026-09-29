@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_reduce_shell_pair_density_bounds_kernel(
@@ -30,4 +30,4 @@ void launch_reduce_bounded_system_density_bounds_kernel(
     const ShellPairDensityBounds* shell_pair_density_bounds, double* system_density_bounds,
     double* system_pair_density_bounds);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

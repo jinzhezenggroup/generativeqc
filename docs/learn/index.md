@@ -1,6 +1,6 @@
-# Learn quantum chemistry with VibeQC
+# Learn quantum chemistry with GenerativeQC
 
-This path teaches the **minimum quantum chemistry needed to use VibeQC correctly**. It is not intended to replace a quantum-chemistry textbook.
+This path teaches the **minimum quantum chemistry needed to use GenerativeQC correctly**. It is not intended to replace a quantum-chemistry textbook.
 
 Read in order:
 

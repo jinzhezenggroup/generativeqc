@@ -7,19 +7,19 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc.autotune import dft_density_candidates
+from generativeqc_compiler.common.resources import ResourceBudget, plan_resources
+from generativeqc_compiler.dft import DensitySource, NativeAO
+from generativeqc_compiler.dft.cuda import CudaGrid
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.dft.xc_schedule import DEVICE_FUSED, HOST_UNFUSED
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 from test_density_cuda import artifact, factors  # noqa: F401
 from test_spatial_execution import local_case  # noqa: F401
 from test_xc_contractions_native import compare, native_factory  # noqa: F401
-from vibeqc.autotune import dft_density_candidates
-from vibeqc_compiler.common.resources import ResourceBudget, plan_resources
-from vibeqc_compiler.dft import DensitySource, NativeAO
-from vibeqc_compiler.dft.cuda import CudaGrid
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
-from vibeqc_compiler.dft.xc_schedule import DEVICE_FUSED, HOST_UNFUSED
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
 
 
 def source_for(basis: typing.Any, data: typing.Any) -> typing.Any:
@@ -147,7 +147,7 @@ def test_registration_rejects_changed_resources_and_wrong_basis(
 
 
 GPU = pytest.mark.skipif(
-    os.environ.get("VIBEQC_GRID_CUDA_TEST") != "1", reason="finite Slurm GPU gate"
+    os.environ.get("GENERATIVEQC_GRID_CUDA_TEST") != "1", reason="finite Slurm GPU gate"
 )
 
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -17,7 +17,7 @@ from vibeqc_compiler.tensor import (
 )
 
 if TYPE_CHECKING:
-    from vibeqc_compiler.tensor.ir import Node
+    from generativeqc_compiler.tensor.ir import Node
 
 
 def scatter(source_count: int, target_count: int, dtype: str = "float64") -> Node:

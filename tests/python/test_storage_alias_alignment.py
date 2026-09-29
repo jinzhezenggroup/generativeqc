@@ -1,8 +1,8 @@
 """A physical owner must satisfy the base alignment of every declared view."""
 
 import pytest
-from vibeqc_compiler.common.layout import DenseLayout
-from vibeqc_compiler.common.storage import (
+from generativeqc_compiler.common.layout import DenseLayout
+from generativeqc_compiler.common.storage import (
     AliasKind,
     BufferOp,
     BufferValue,

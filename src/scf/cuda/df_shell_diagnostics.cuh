@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <span>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 /** Source-level operation counts, never hardware instruction/traffic counters.
  * The small-argument count is a subset of the positive-series branch. Stage
  * durations come from the separate class/signature CUDA/Nsight intervals.
@@ -95,4 +95,4 @@ struct DfShellDiagnostics {
   void* observer_context{};
   std::size_t readback_bytes{}, stream_drains{};
 };
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

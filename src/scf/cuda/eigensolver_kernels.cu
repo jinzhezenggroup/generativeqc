@@ -7,7 +7,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda_batch.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Native Jacobi kernels and inactive-provider instrumentation; shared CUDA runtime, with no
  * molecular/provider dependency. */
@@ -43,7 +43,7 @@ __global__ void begin_inactive_eigensolver_profile_kernel(
   entry.inactive_submission_nonfinite_count = 0U;
   entry.inactive_info_nonzero_count = 0U;
   entry.inactive_touch_flags = has_inactive && cublas_transformed_inactive
-                                   ? VIBEQC_EIGENSOLVER_INACTIVE_TOUCH_CUBLAS_TRANSFORM
+                                   ? GENERATIVEQC_EIGENSOLVER_INACTIVE_TOUCH_CUBLAS_TRANSFORM
                                    : 0U;
   entry.provider_invoked = provider_invoked ? 1U : 0U;
 }
@@ -76,7 +76,8 @@ __global__ void sanitize_inactive_solver_input_kernel(
       *profile_count <= profile_capacity) {
     profile = profile_entries + (*profile_count - 1U);
     if (threadIdx.x == 0) {
-      atomicOr(&profile->inactive_touch_flags, VIBEQC_EIGENSOLVER_INACTIVE_TOUCH_IDENTITY_SANITIZE);
+      atomicOr(&profile->inactive_touch_flags,
+               GENERATIVEQC_EIGENSOLVER_INACTIVE_TOUCH_IDENTITY_SANITIZE);
     }
   }
   const std::size_t n = static_cast<std::size_t>(nbf);
@@ -455,4 +456,4 @@ void launch_symmetric_eigen_small_kernel(dim3 grid, dim3 block, std::size_t shar
                                                                       eigenvalues, info, active);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -15,13 +15,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.common.compiler_process import run_compiler
-from vibeqc_compiler.integral.second_derivatives import (
+from generativeqc_compiler.common.compiler_process import run_compiler
+from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
     build_second_derivative_kernel,
 )
-from vibeqc_compiler.integral.second_derivatives_native import (
+from generativeqc_compiler.integral.second_derivatives_native import (
     SECOND_RECORD_TAG,
     emit_second_derivative_runtime,
 )
@@ -47,28 +47,28 @@ int main() {
   auto check = [&](bool condition) {
     if (!condition) { std::fprintf(stderr, "ownership failure: %s\n", detail); std::exit(2); }
   };
-  check(vibeqc_second_create_v1(0, @MAJOR@, 0, 2, 1, 4096, &handle, detail, sizeof(detail)) == VIBEQC_STATUS_SUCCESS);
+  check(generativeqc_second_create_v1(0, @MAJOR@, 0, 2, 1, 4096, &handle, detail, sizeof(detail)) == GENERATIVEQC_STATUS_SUCCESS);
   double output[@OUTPUTS@]{};
   auto run = [&](std::size_t count, std::size_t stride = sizeof(SecondRecord)) {
-    return vibeqc_second_run_v1(handle, count ? records : nullptr, count, stride, 1, output, 0, detail, sizeof(detail));
+    return generativeqc_second_run_v1(handle, count ? records : nullptr, count, stride, 1, output, 0, detail, sizeof(detail));
   };
-  check(run(2) == VIBEQC_STATUS_SUCCESS);
+  check(run(2) == GENERATIVEQC_STATUS_SUCCESS);
   for (double value : output) check(std::isfinite(value));
   for (double& value : output) value = 173;
   records[1].primitive.exponents[0] = records[1].primitive.exponents[1] = 1.7e308;
-  check(run(2) == VIBEQC_STATUS_NUMERICAL_FAILURE);
+  check(run(2) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE);
   for (double value : output) check(value == 173);
   records[1] = records[0];
-  check(run(2, sizeof(SecondRecord) - 8) == VIBEQC_STATUS_INVALID_ARGUMENT);
+  check(run(2, sizeof(SecondRecord) - 8) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   for (double value : output) check(value == 173);
   records[1].primitive.kind = 0;
-  check(run(2) == VIBEQC_STATUS_INVALID_ARGUMENT);
+  check(run(2) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   for (double value : output) check(value == 173);
   records[1] = records[0];
-  check(run(1) == VIBEQC_STATUS_SUCCESS);
-  check(run(0) == VIBEQC_STATUS_SUCCESS);
+  check(run(1) == GENERATIVEQC_STATUS_SUCCESS);
+  check(run(0) == GENERATIVEQC_STATUS_SUCCESS);
   for (double value : output) check(value == 0);
-  vibeqc_second_destroy_v1(handle);
+  generativeqc_second_destroy_v1(handle);
   std::puts("native ownership/replay passed");
 }
 """

@@ -1,14 +1,14 @@
-#ifndef VIBEQC_SCF_CUDA_WEIGHTED_ERI_HPP
-#define VIBEQC_SCF_CUDA_WEIGHTED_ERI_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_WEIGHTED_ERI_HPP
+#define GENERATIVEQC_SCF_CUDA_WEIGHTED_ERI_HPP
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** One bounded primitive contribution, independent of SCF density/state.
  *
@@ -73,11 +73,11 @@ struct CudaWeightedEriDiagnostic {
  * zero output tiles. generated=false evaluates every record through the
  * retained Hermite/Dual3 primitive oracle, preserving the same weight semantics.
  */
-vibeqc_status contract_cuda_weighted_eri_primitives(
+generativeqc_status contract_cuda_weighted_eri_primitives(
     int device_id, const CudaWeightedEriPrimitive* records, std::size_t record_count,
     std::size_t tile_count, std::size_t memory_budget_bytes, bool generated,
     std::vector<CudaWeightedEriResult>& output, CudaWeightedEriDiagnostic& diagnostic,
     std::string& detail);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

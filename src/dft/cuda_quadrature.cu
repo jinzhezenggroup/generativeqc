@@ -7,7 +7,7 @@
 #include "generated_quadrature.cuh"
 #include "runtime/cuda_resources.cuh"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace q = generated::quadrature;
 
 std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points) {
@@ -90,4 +90,4 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   if (bad) throw std::runtime_error("invalid CUDA Becke partition normalization");
   return result;
 }
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

@@ -478,8 +478,8 @@
           "last_line": 1074,
           "reason": "Explicit RI J/K equation composition using cuBLAS; conservative region includes staging.",
           "role": "scientific",
-          "start": "vibeqc_status build_coulomb(",
-          "stop": "vibeqc_status prepare_outputs("
+          "start": "generativeqc_status build_coulomb(",
+          "stop": "generativeqc_status prepare_outputs("
         },
         {
           "code_lines": 371,
@@ -487,8 +487,8 @@
           "last_line": 1498,
           "reason": "Source and generated derivative force-response equation assembly.",
           "role": "scientific",
-          "start": "vibeqc_status source_force_response_impl(",
-          "stop": "vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl("
+          "start": "generativeqc_status source_force_response_impl(",
+          "stop": "generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl("
         }
       ],
       "role": "runtime",
@@ -761,7 +761,7 @@
       "outputs": [
         "generated/generated_one_electron_values.cuh"
       ],
-      "owner": "python/vibeqc_compiler/integral/one_electron_cuda.py"
+      "owner": "python/generativeqc_compiler/integral/one_electron_cuda.py"
     },
     {
       "files": [],
@@ -770,7 +770,7 @@
       "outputs": [
         "generated/generated_one_electron_derivatives.cuh"
       ],
-      "owner": "python/vibeqc_compiler/integral/one_electron_derivatives_cuda.py"
+      "owner": "python/generativeqc_compiler/integral/one_electron_derivatives_cuda.py"
     },
     {
       "files": [],
@@ -779,7 +779,7 @@
       "outputs": [
         "generated/df_values.cuh"
       ],
-      "owner": "python/vibeqc_compiler/integral/df_cuda.py"
+      "owner": "python/generativeqc_compiler/integral/df_cuda.py"
     },
     {
       "files": [],
@@ -788,7 +788,7 @@
       "outputs": [
         "generated/generated_df_derivatives.cuh"
       ],
-      "owner": "python/vibeqc_compiler/integral/df_derivatives_cuda.py"
+      "owner": "python/generativeqc_compiler/integral/df_derivatives_cuda.py"
     },
     {
       "files": [],
@@ -797,7 +797,7 @@
       "outputs": [
         "generated/weighted_eri.cuh"
       ],
-      "owner": "python/vibeqc_compiler/integral/weighted_eri_cuda.py"
+      "owner": "python/generativeqc_compiler/integral/weighted_eri_cuda.py"
     },
     {
       "files": [],
@@ -808,14 +808,14 @@
         "generated/production_shell_kernels/**/*.cuh",
         "generated/production_shell_kernels/**/*.hpp"
       ],
-      "owner": "python/vibeqc_compiler/integral/cuda_lowering.py"
+      "owner": "python/generativeqc_compiler/integral/cuda_lowering.py"
     },
     {
       "files": [],
       "measurement": "not materialized",
       "name": "jit_tensor_xc_ao_response",
       "outputs": [],
-      "owner": "python/vibeqc_compiler/{tensor,xc,dft,integral}",
+      "owner": "python/generativeqc_compiler/{tensor,xc,dft,integral}",
       "scope": "JIT families are catalogued here but not counted by the CMake-build report. Their per-artifact provenance distinguishes generated source from copies of native runtime; report those through the existing artifact tools."
     }
   ],
@@ -868,7 +868,7 @@
         "docs/shell_codegen.md",
         "docs/weighted_eri.md",
         "docs/second_integral_derivatives.md",
-        "python/vibeqc_compiler/integral/production_shell_classes.json"
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
       ],
       "generated_capability": "IntegralIR values/first derivatives, weighted ERI and second-order providers through f",
       "missing_capability": "complete replacement is class/schedule-specific; retain unpromoted fallback classes",
@@ -899,7 +899,7 @@
       "status": "performance_exception"
     },
     "one_electron_values": {
-      "current_default": "handwritten reference values; generated thread/shell-warp opt-in via VIBEQC_ONE_ELECTRON_VALUES",
+      "current_default": "handwritten reference values; generated thread/shell-warp opt-in via GENERATIVEQC_ONE_ELECTRON_VALUES",
       "evidence": [
         "benchmarks/results/one-electron-values-rtx5090/raw-summary.json",
         "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json"
@@ -1009,5 +1009,5 @@
       "scientific": 0
     }
   },
-  "schema": "vibeqc.cuda-ownership-report.v1"
+  "schema": "generativeqc.cuda-ownership-report.v1"
 }

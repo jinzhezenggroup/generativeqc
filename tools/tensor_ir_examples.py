@@ -23,7 +23,7 @@ import numpy as np
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     GATES,
     block_error,
     canonical_hash,
@@ -32,8 +32,8 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.tensor import PASSES, Program, execute, optimize, rewrite
-from vibeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.tensor import PASSES, Program, execute, optimize, rewrite
+from generativeqc_compiler.tensor.examples import example_cases
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,7 +57,7 @@ def run_examples(*, seed: int = 145, equations_dir: Path | None = None) -> list[
     """
     source_files = {
         str(path.relative_to(ROOT)): file_hash(path)
-        for path in sorted((ROOT / "python/vibeqc_compiler/tensor").glob("*.py"))
+        for path in sorted((ROOT / "python/generativeqc_compiler/tensor").glob("*.py"))
     }
     source_files[str(Path(__file__).resolve().relative_to(ROOT))] = file_hash(__file__)
     revision = subprocess.check_output(
@@ -136,7 +136,7 @@ def run_examples(*, seed: int = 145, equations_dir: Path | None = None) -> list[
             )
         if equations_dir is not None:
             payload = {
-                "schema": "vibeqc.tensor.example",
+                "schema": "generativeqc.tensor.example",
                 "schema_version": 1,
                 "program": program.to_payload(),
                 "inputs": arrays,

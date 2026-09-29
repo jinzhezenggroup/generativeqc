@@ -6,10 +6,10 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -35,12 +35,12 @@ def test_bounded_psss_registry_gap_matches_libcint(
         Shell(0, angular, (Primitive(exponent, 1.0),))
         for angular, exponent in ((0, 1.5), (1, 0.9), (2, 0.8), (3, 0.6))
     ) + (Shell(1, 0, (Primitive(1.2, 1.0),)),)
-    monkeypatch.delenv("VIBEQC_DIRECT_TILE_VALIDATION", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DIRECT_TILE_VALIDATION", raising=False)
     results = []
     ledgers = []
     for bounded, fock_classes in (("none", "all"), ("force", "ssss")):
-        monkeypatch.setenv("VIBEQC_BOUNDED_DIRECT_STREAMING", bounded)
-        monkeypatch.setenv("VIBEQC_AOT_FOCK_SHELL_CLASSES", fock_classes)
+        monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", bounded)
+        monkeypatch.setenv("GENERATIVEQC_AOT_FOCK_SHELL_CLASSES", fock_classes)
         with Calculator(
             method=method,
             basis=basis,

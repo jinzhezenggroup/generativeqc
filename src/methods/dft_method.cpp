@@ -18,6 +18,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_method_parameters.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_usage.hpp"
@@ -26,9 +27,8 @@
 #include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/types.hpp"
-#include "vibeqc/vibeqc.hpp"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "scf/cuda_direct_jk.hpp"
@@ -36,7 +36,7 @@
 #include "scf/cuda_one_electron_gradient.hpp"
 #endif
 
-namespace vibeqc::methods::detail {
+namespace generativeqc::methods::detail {
 namespace {
 
 std::uint64_t next_cpu_ks_owner() {
@@ -66,21 +66,21 @@ struct NativeKsExecutionPlan {
   const dft::SemilocalPointProgram* automatic_program{};
 };
 
-std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(vibeqc_method method) noexcept {
+std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_method method) noexcept {
   switch (method) {
-    case VIBEQC_METHOD_LDA_RKS:
+    case GENERATIVEQC_METHOD_LDA_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::Lda, false};
-    case VIBEQC_METHOD_LDA_UKS:
+    case GENERATIVEQC_METHOD_LDA_UKS:
       return NativeKsExecutionPlan{2, dft::SemilocalFamily::Lda, false};
-    case VIBEQC_METHOD_PBE_D4_RKS:
+    case GENERATIVEQC_METHOD_PBE_D4_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::Pbe, false, true};
-    case VIBEQC_METHOD_PBE_RKS:
+    case GENERATIVEQC_METHOD_PBE_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::Pbe, false};
-    case VIBEQC_METHOD_PBE_UKS:
+    case GENERATIVEQC_METHOD_PBE_UKS:
       return NativeKsExecutionPlan{2, dft::SemilocalFamily::Pbe, false};
-    case VIBEQC_METHOD_R2SCAN_RKS:
+    case GENERATIVEQC_METHOD_R2SCAN_RKS:
       return NativeKsExecutionPlan{1, dft::SemilocalFamily::R2scan, false};
-    case VIBEQC_METHOD_R2SCAN_UKS:
+    case GENERATIVEQC_METHOD_R2SCAN_UKS:
       return NativeKsExecutionPlan{2, dft::SemilocalFamily::R2scan, false};
     default:
       return std::nullopt;
@@ -105,17 +105,17 @@ const char* semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept {
                                      : dft::semilocal_family_name(plan.semilocal_family);
 }
 
-std::optional<double> semilocal_component(const vibeqc_ks_options& input,
+std::optional<double> semilocal_component(const generativeqc_ks_options& input,
                                           std::string_view component_id) {
   std::optional<double> value;
   for (std::uint32_t i = 0; i < input.semilocal_component_count; ++i) {
     const auto& term = input.semilocal_components[i];
     if (!term.component_id || !*term.component_id || !std::isfinite(term.coefficient) ||
         term.coefficient < 0.0)
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid KS semilocal component");
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid KS semilocal component");
     if (std::string_view(term.component_id) == component_id) {
       if (value)
-        throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "duplicate KS semilocal component");
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "duplicate KS semilocal component");
       value = term.coefficient;
     }
   }
@@ -131,7 +131,7 @@ struct SemilocalAdmission {
   const dft::SemilocalPointProgram* automatic_program{};
 };
 
-std::optional<SemilocalAdmission> admit_curated_semilocal(const vibeqc_ks_options& input) {
+std::optional<SemilocalAdmission> admit_curated_semilocal(const generativeqc_ks_options& input) {
   for (const auto& metadata : dft::kSemilocalFamilyMetadata) {
     if (input.semilocal_component_count != metadata.component_count ||
         input.semilocal_range_omega != metadata.range_omega)
@@ -160,12 +160,12 @@ std::optional<SemilocalAdmission> admit_curated_semilocal(const vibeqc_ks_option
   return std::nullopt;
 }
 
-SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
+SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
   if (!input.semilocal_components || !input.semilocal_component_count)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "KS execution plan requires semilocal components");
   if (!std::isfinite(input.semilocal_range_omega) || input.semilocal_range_omega < 0.0)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid semilocal range parameter");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid semilocal range parameter");
 
   if (auto curated = admit_curated_semilocal(input)) return *curated;
 
@@ -173,7 +173,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
     const auto& component = input.semilocal_components[0];
     if (!component.component_id || !*component.component_id ||
         !std::isfinite(component.coefficient) || component.coefficient < 0.0)
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid KS semilocal component");
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid KS semilocal component");
     if (component.coefficient == 1.0) {
       const auto automatic =
           dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
@@ -183,7 +183,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
     }
   }
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (input.semilocal_component_count == 2 && input.semilocal_range_omega == 0.0) {
     const auto& first = input.semilocal_components[0];
     const auto& second = input.semilocal_components[1];
@@ -196,7 +196,7 @@ SemilocalAdmission admit_semilocal(const vibeqc_ks_options& input) {
   }
 #endif
 
-  throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                     "KS semilocal primitive graph has no qualified native lowerer");
 }
 
@@ -206,11 +206,11 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
 
-scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_backend backend,
-                            NativeKsExecutionPlan& execution_plan) {
+scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
+                            generativeqc_backend backend, NativeKsExecutionPlan& execution_plan) {
   if (!std::isfinite(descriptor.energy_tolerance) || !std::isfinite(descriptor.density_tolerance) ||
       !std::isfinite(descriptor.screening_tolerance))
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "DFT tolerances must be finite");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "DFT tolerances must be finite");
   scf::ScfOptions options;
   options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
   options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
@@ -222,65 +222,71 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
       descriptor.screening_tolerance > 0.0 ? descriptor.screening_tolerance : 1.0e-12;
 
   const auto legacy_plan = legacy_ks_execution_plan(descriptor.method);
-  const vibeqc_ks_options* ks_input = nullptr;
+  const generativeqc_ks_options* ks_input = nullptr;
   SemilocalAdmission semilocal;
   if (descriptor.ks_options) {
     ks_input = descriptor.ks_options;
-    if (ks_input->struct_size < sizeof(vibeqc_ks_options) ||
-        ks_input->abi_version != VIBEQC_ABI_VERSION)
-      throw MethodError(VIBEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
+    if (ks_input->struct_size < sizeof(generativeqc_ks_options) ||
+        ks_input->abi_version != GENERATIVEQC_ABI_VERSION)
+      throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
     if ((ks_input->spin_channels != 1 && ks_input->spin_channels != 2) ||
         (ks_input->exchange_terms == nullptr) != (ks_input->exchange_term_count == 0))
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid compiler KS execution plan");
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid compiler KS execution plan");
     semilocal = admit_semilocal(*ks_input);
     execution_plan = {ks_input->spin_channels, semilocal.family, true,
-                      descriptor.method == VIBEQC_METHOD_PBE_D4_RKS};
+                      descriptor.method == GENERATIVEQC_METHOD_PBE_D4_RKS};
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
     execution_plan.automatic_program = semilocal.automatic_program;
     if (execution_plan.automatic_program &&
-        (backend != VIBEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
+        (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
          ks_input->has_nonlocal_correlation != 0))
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "automatic Libxc semilocal KS currently requires pure CPU execution");
-    if (execution_plan.generated_split_hybrid && backend != VIBEQC_BACKEND_CUDA)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    if (execution_plan.generated_split_hybrid && backend != GENERATIVEQC_BACKEND_CUDA)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
   } else {
     if (!legacy_plan)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT execution requires a compiler-resolved KS plan");
     execution_plan = *legacy_plan;
     semilocal = {execution_plan.semilocal_family, 1.0, 1.0};
   }
 
   const auto mode = descriptor.density_fitting_mode;
-  if (mode != VIBEQC_DENSITY_FITTING_NONE && mode != VIBEQC_DENSITY_FITTING_CPU_REFERENCE &&
-      mode != VIBEQC_DENSITY_FITTING_CUDA && mode != VIBEQC_DENSITY_FITTING_AUTO)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown density-fitting execution mode");
+  if (mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+      mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+      mode != GENERATIVEQC_DENSITY_FITTING_CUDA && mode != GENERATIVEQC_DENSITY_FITTING_AUTO)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "unknown density-fitting execution mode");
   options.density_fitting_mode = mode;
-  if ((mode == VIBEQC_DENSITY_FITTING_CPU_REFERENCE && backend != VIBEQC_BACKEND_CPU_REFERENCE) ||
-      (mode == VIBEQC_DENSITY_FITTING_CUDA && backend != VIBEQC_BACKEND_CUDA))
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+  if ((mode == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+       backend != GENERATIVEQC_BACKEND_CPU_REFERENCE) ||
+      (mode == GENERATIVEQC_DENSITY_FITTING_CUDA && backend != GENERATIVEQC_BACKEND_CUDA))
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "DFT density-fitting backend must match the calculation backend");
   if (descriptor.density_fitting_auxiliary_basis != nullptr &&
-      options.density_fitting_mode == VIBEQC_DENSITY_FITTING_NONE)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "DFT auxiliary basis requires density fitting");
   if (descriptor.density_fitting_relative_threshold != 0.0)
     options.density_fitting_relative_threshold = descriptor.density_fitting_relative_threshold;
   options.density_fitting_memory_budget_bytes = descriptor.density_fitting_memory_budget_bytes;
-  if (descriptor.precision_mode != VIBEQC_PRECISION_FP64 &&
-      descriptor.precision_mode != VIBEQC_PRECISION_AUTO)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown floating-point precision mode");
-  if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO && backend != VIBEQC_BACKEND_CUDA)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  if (descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
+      descriptor.precision_mode != GENERATIVEQC_PRECISION_AUTO)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "unknown floating-point precision mode");
+  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+      backend != GENERATIVEQC_BACKEND_CUDA)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DFT automatic precision currently requires CUDA");
-  if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO && execution_plan.d4_correction)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
-  if (descriptor.precision_mode == VIBEQC_PRECISION_AUTO &&
+  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
+  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
       dft::semilocal_family_requires_tau(execution_plan.semilocal_family))
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "meta-GGA DFT currently requires strict FP64");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "meta-GGA DFT currently requires strict FP64");
   options.precision_mode = descriptor.precision_mode;
 
   scf::FockBuildSpec fock;
@@ -291,9 +297,9 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
   options.semilocal_exchange_scale = semilocal.exchange_scale;
   options.semilocal_correlation_scale = semilocal.correlation_scale;
 
-  const vibeqc_ks_exchange_term* full_range = nullptr;
-  const vibeqc_ks_exchange_term* short_range = nullptr;
-  const vibeqc_ks_exchange_term* long_range = nullptr;
+  const generativeqc_ks_exchange_term* full_range = nullptr;
+  const generativeqc_ks_exchange_term* short_range = nullptr;
+  const generativeqc_ks_exchange_term* long_range = nullptr;
   if (ks_input) {
     const double divisor = unrestricted(execution_plan) ? 1.0 : 2.0;
     for (std::uint32_t i = 0; i < ks_input->exchange_term_count; ++i) {
@@ -301,39 +307,43 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
       if (!std::isfinite(term.coefficient) || term.coefficient < 0.0 ||
           !std::isfinite(term.omega) || term.omega < 0.0 || !std::isfinite(term.fock_coefficient) ||
           term.fock_coefficient != -term.coefficient / divisor)
-        throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid KS exact-exchange contribution");
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "invalid KS exact-exchange contribution");
       switch (term.operator_kind) {
-        case VIBEQC_KS_EXCHANGE_FULL_RANGE:
+        case GENERATIVEQC_KS_EXCHANGE_FULL_RANGE:
           if (full_range || term.omega != 0.0)
-            throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid full-range exchange plan");
+            throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                              "invalid full-range exchange plan");
           full_range = &term;
           break;
-        case VIBEQC_KS_EXCHANGE_SHORT_RANGE:
+        case GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE:
           if (short_range || term.omega <= 0.0)
-            throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid short-range exchange plan");
+            throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                              "invalid short-range exchange plan");
           short_range = &term;
           break;
-        case VIBEQC_KS_EXCHANGE_LONG_RANGE:
+        case GENERATIVEQC_KS_EXCHANGE_LONG_RANGE:
           if (long_range || term.omega <= 0.0)
-            throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "invalid long-range exchange plan");
+            throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                              "invalid long-range exchange plan");
           long_range = &term;
           break;
         default:
-          throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown KS exchange operator");
+          throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "unknown KS exchange operator");
       }
     }
     if (full_range && (short_range || long_range))
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "KS execution cannot mix full- and range-separated exchange");
     if ((short_range == nullptr) != (long_range == nullptr))
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "range-separated exchange requires short- and long-range terms");
     if (short_range &&
         (ks_input->exchange_term_count != 2 || short_range->omega != long_range->omega))
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "range-separated exchange requires one shared omega");
     if (full_range && ks_input->exchange_term_count != 1)
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "full-range exchange requires one contribution");
     if (full_range) {
       fock.exchange.present = full_range->coefficient != 0.0;
@@ -348,22 +358,22 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
     }
 
     if (ks_input->has_nonlocal_correlation > 1)
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "invalid nonlocal-correlation presence flag");
     if (ks_input->has_nonlocal_correlation) {
       dft::nlc::Vv10Variant variant;
-      if (ks_input->nonlocal_variant == VIBEQC_NONLOCAL_VV10)
+      if (ks_input->nonlocal_variant == GENERATIVEQC_NONLOCAL_VV10)
         variant = dft::nlc::Vv10Variant::vv10;
-      else if (ks_input->nonlocal_variant == VIBEQC_NONLOCAL_RVV10)
+      else if (ks_input->nonlocal_variant == GENERATIVEQC_NONLOCAL_RVV10)
         variant = dft::nlc::Vv10Variant::rvv10;
       else
-        throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                           "invalid KS nonlocal-correlation variant");
       if (!std::isfinite(ks_input->nonlocal_b) || ks_input->nonlocal_b <= 0.0 ||
           !std::isfinite(ks_input->nonlocal_c) || ks_input->nonlocal_c <= 0.0 ||
           !std::isfinite(ks_input->nonlocal_coefficient) || ks_input->nonlocal_coefficient <= 0.0 ||
           !ks_input->nonlocal_maximum_bytes)
-        throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                           "invalid KS nonlocal-correlation parameters or budget");
       execution_plan.nonlocal_correlation = true;
       execution_plan.nonlocal_parameters = {variant, ks_input->nonlocal_b, ks_input->nonlocal_c,
@@ -374,16 +384,16 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
 
   const bool complete_wb97mv = execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv &&
                                execution_plan.range_exchange && execution_plan.nonlocal_correlation;
-  const bool cuda_wb97mv = backend == VIBEQC_BACKEND_CUDA && complete_wb97mv;
+  const bool cuda_wb97mv = backend == GENERATIVEQC_BACKEND_CUDA && complete_wb97mv;
   const bool scaled_or_hybrid = options.semilocal_exchange_scale != 1.0 ||
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
   const double pbe0_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.125 : -0.25;
   const double b3lyp_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.1 : -0.2;
   const bool strict_cuda_global_hybrid =
-      backend == VIBEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
+      backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
       !execution_plan.nonlocal_correlation &&
-      options.density_fitting_mode == VIBEQC_DENSITY_FITTING_NONE &&
-      options.precision_mode != VIBEQC_PRECISION_AUTO && fock.exchange.present;
+      options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+      options.precision_mode != GENERATIVEQC_PRECISION_AUTO && fock.exchange.present;
   const bool cuda_pbe0 =
       strict_cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
       options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
@@ -393,7 +403,7 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
       options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
       fock.exchange.coefficient == b3lyp_fock_coefficient;
   bool cuda_split_hybrid = false;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (strict_cuda_global_hybrid && execution_plan.generated_split_hybrid &&
       options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0) {
     const auto composition =
@@ -406,49 +416,50 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
     }
   }
 #endif
-  if (scaled_or_hybrid && backend == VIBEQC_BACKEND_CUDA && !cuda_pbe0 && !cuda_b3lyp &&
+  if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !cuda_pbe0 && !cuda_b3lyp &&
       !cuda_split_hybrid && !cuda_wb97mv)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA scaled/global-hybrid KS composition is not qualified");
   if (execution_plan.nonlocal_correlation &&
       execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
       execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
     throw MethodError(
-        VIBEQC_STATUS_NOT_IMPLEMENTED,
+        GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
         "self-consistent nonlocal correlation has no lowerer for this semilocal graph");
-  if (execution_plan.nonlocal_correlation && backend != VIBEQC_BACKEND_CPU_REFERENCE &&
+  if (execution_plan.nonlocal_correlation && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
       !cuda_wb97mv)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA self-consistent nonlocal correlation is qualified only for WB97M-V");
-  if (options.precision_mode == VIBEQC_PRECISION_AUTO && execution_plan.nonlocal_correlation)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.nonlocal_correlation)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "self-consistent nonlocal correlation currently requires strict FP64");
-  if (execution_plan.range_exchange && backend != VIBEQC_BACKEND_CPU_REFERENCE && !cuda_wb97mv)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+  if (execution_plan.range_exchange && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+      !cuda_wb97mv)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA range-separated KS is qualified only for complete WB97M-V");
   if (execution_plan.range_exchange &&
       execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
       execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
-  if (options.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == VIBEQC_PRECISION_AUTO || execution_plan.range_exchange ||
+  if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO || execution_plan.range_exchange ||
         execution_plan.nonlocal_correlation)
       throw MethodError(
-          VIBEQC_STATUS_NOT_IMPLEMENTED,
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "DFT density fitting requires FP64 full-range local/semilocal or global-hybrid KS");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
     if (fock.exchange.present) fock.exchange.approximation = scf::FockApproximation::DensityFitted;
   }
   options.resolved_fock_build = scf::resolve_fock_build(
-      fock, backend == VIBEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
+      fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
       options.screening_tolerance, options.density_fitting_relative_threshold);
   if (execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
     const auto correction_backend =
-        backend == VIBEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+        backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     const auto correction =
         scf::resolve_fock_build(scf::make_rsh_correction_fock_spec(
                                     fock.spin, execution_plan.short_range_exchange,
@@ -465,28 +476,31 @@ scf::ScfOptions dft_options(const vibeqc_method_descriptor& descriptor, vibeqc_b
  * has already admitted a complete current descriptor. A null KS-options pointer
  * retains the existing default GridSpec and tile values; production callers pass
  * the compiler-resolved grid, not a second native production profile. */
-dft::GridSpec ks_grid_options(const vibeqc_method_descriptor& descriptor, scf::ScfOptions& options,
+dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
+                              scf::ScfOptions& options,
                               const NativeKsExecutionPlan& execution_plan) {
   dft::GridSpec grid;
   if (!descriptor.ks_options) return grid;
   const auto& input = *descriptor.ks_options;
-  if (input.struct_size < sizeof(vibeqc_ks_options) || input.abi_version != VIBEQC_ABI_VERSION)
-    throw MethodError(VIBEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
+  if (input.struct_size < sizeof(generativeqc_ks_options) ||
+      input.abi_version != GENERATIVEQC_ABI_VERSION)
+    throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
   if (!input.scf_domain ||
       std::string_view(input.scf_domain) != expected_scf_domain(execution_plan))
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "unsupported KS tail/spin domain policy");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "unsupported KS tail/spin domain policy");
   if (!input.tile_points || input.tile_points > static_cast<std::uint64_t>(INT_MAX))
     throw std::invalid_argument("invalid KS XC tile points");
   options.xc_tile_points = input.tile_points;
   switch (input.xc_execution_schedule) {
-    case VIBEQC_XC_EXECUTION_DEVICE_FUSED:
+    case GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED:
       options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
       break;
-    case VIBEQC_XC_EXECUTION_HOST_UNFUSED:
+    case GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED:
       options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::HostUnfused;
       break;
     default:
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown KS XC execution schedule");
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "unknown KS XC execution schedule");
   }
   grid.version = input.grid_version;
   grid.radial_points = input.radial_points;
@@ -509,7 +523,7 @@ dft::GridSpec ks_grid_options(const vibeqc_method_descriptor& descriptor, scf::S
   return grid;
 }
 
-Result adapt_result(scf::ScfResult native, vibeqc_backend backend) {
+Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   Result result;
   result.energy = native.energy;
   result.convergence.iterations = native.iterations;
@@ -530,9 +544,9 @@ Result adapt_result(scf::ScfResult native, vibeqc_backend backend) {
 /** The method's global ledger supplies the budget. Size the common direct
  * source explicitly so its standalone default cap is not a second KS limit. */
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
-                                    vibeqc_backend backend) noexcept {
-#if VIBEQC_HAS_CUDA
-  if (backend == VIBEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda) {
+                                    generativeqc_backend backend) noexcept {
+#if GENERATIVEQC_HAS_CUDA
+  if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda) {
     const auto exact = [](const scf::FockTermSpec& term) {
       return term.present && term.approximation == scf::FockApproximation::Exact;
     };
@@ -545,10 +559,10 @@ unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
-std::size_t ks_provider_bytes(const core::System& system, vibeqc_backend backend,
+std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend backend,
                               unsigned direct_derivative_order = 0) {
-#if VIBEQC_HAS_CUDA
-  if (backend == VIBEQC_BACKEND_CUDA) {
+#if GENERATIVEQC_HAS_CUDA
+  if (backend == GENERATIVEQC_BACKEND_CUDA) {
     std::size_t primitives = 0;
     for (const auto& shell : system.shells)
       primitives = runtime::add_capacity(primitives, shell.primitives.size());
@@ -562,7 +576,7 @@ std::size_t ks_provider_bytes(const core::System& system, vibeqc_backend backend
   return 0;
 }
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 KsTransportDiagnostic adapt_transfers(const dft::CudaKsTransfers& value) {
   return {value.setup_h2d_bytes,
           value.density_h2d_bytes,
@@ -596,7 +610,8 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
 /** Own auxiliary shells and rebind centers when a batch item moves. The source
  * owner copies the result, so descriptor/temporary system lifetimes never leak
  * into a prepared calculation. An omitted auxiliary basis means the orbital basis. */
-std::optional<core::System> ks_auxiliary_template(const vibeqc_method_descriptor& descriptor) {
+std::optional<core::System> ks_auxiliary_template(
+    const generativeqc_method_descriptor& descriptor) {
   if (!descriptor.density_fitting_auxiliary_basis) return std::nullopt;
   return descriptor.density_fitting_auxiliary_basis->data;
 }
@@ -605,11 +620,12 @@ void validate_ks_auxiliary_geometry(const core::System& system,
                                     const std::optional<core::System>& auxiliary) {
   if (!auxiliary) return;
   if (auxiliary->atoms.size() != system.atoms.size())
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "DFT auxiliary basis atom count differs");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "DFT auxiliary basis atom count differs");
   for (std::size_t i = 0; i < system.atoms.size(); ++i)
     if (auxiliary->atoms[i].atomic_number != system.atoms[i].atomic_number ||
         auxiliary->atoms[i].position != system.atoms[i].position)
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "DFT auxiliary basis must share the initial system geometry");
 }
 
@@ -617,10 +633,11 @@ std::optional<core::System> ks_auxiliary_for_system(const core::System& system,
                                                     std::optional<core::System> auxiliary) {
   if (!auxiliary) return auxiliary;
   if (auxiliary->atoms.size() != system.atoms.size())
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "DFT auxiliary basis atom count differs");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "DFT auxiliary basis atom count differs");
   for (std::size_t i = 0; i < system.atoms.size(); ++i) {
     if (auxiliary->atoms[i].atomic_number != system.atoms[i].atomic_number)
-      throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT,
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "DFT auxiliary basis atom ordering differs");
     auxiliary->atoms[i].position = system.atoms[i].position;
   }
@@ -630,9 +647,9 @@ std::optional<core::System> ks_auxiliary_for_system(const core::System& system,
 /** Backend selection must precede materialization: constructing the reference
  * grid and then uploading it hides cubic host work in CUDA preparation. */
 dft::MolecularGrid ks_molecular_grid(const core::System& system, dft::GridSpec spec,
-                                     vibeqc_backend backend, int device) {
-  if (backend == VIBEQC_BACKEND_CUDA) {
-#if VIBEQC_HAS_CUDA
+                                     generativeqc_backend backend, int device) {
+  if (backend == GENERATIVEQC_BACKEND_CUDA) {
+#if GENERATIVEQC_HAS_CUDA
     return dft::MolecularGrid::from_cuda(system, spec, device);
 #else
     throw std::runtime_error("CUDA quadrature is unavailable in this build");
@@ -645,7 +662,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
  public:
   KsPreparedCalculation(Capabilities capabilities, core::System system,
                         NativeKsExecutionPlan execution_plan, scf::ScfOptions options,
-                        dft::GridSpec grid, vibeqc_backend backend, int device,
+                        dft::GridSpec grid, generativeqc_backend backend, int device,
                         const std::optional<core::System>& auxiliary)
       : capabilities_(capabilities),
         system_(std::move(system)),
@@ -653,24 +670,24 @@ class KsPreparedCalculation final : public PreparedCalculation {
         options_(std::move(options)),
         backend_(backend),
         fock_(system_, auxiliary ? &*auxiliary : nullptr, *options_.resolved_fock_build, device,
-              options_.density_fitting_mode == VIBEQC_DENSITY_FITTING_NONE
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_provider_bytes(
                         system_, backend,
                         ks_direct_derivative_order(*options_.resolved_fock_build, backend))
                   : options_.density_fitting_memory_budget_bytes,
-              options_.density_fitting_mode == VIBEQC_DENSITY_FITTING_NONE
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U),
         basis_(system_),
         grid_(ks_molecular_grid(system_, grid, backend_, device)) {
-    options_.retain_ks_state = backend_ != VIBEQC_BACKEND_CUDA;
+    options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
-#if VIBEQC_HAS_CUDA
-    if (backend_ == VIBEQC_BACKEND_CUDA) {
+#if GENERATIVEQC_HAS_CUDA
+    if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
       if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv &&
           options_.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused)
-        throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                           "public CUDA WB97M-V requires device-fused XC/nonlocal execution");
       const auto* range = range_strategy_ ? &*range_strategy_ : nullptr;
       const auto domain = execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv
@@ -705,7 +722,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       for (const auto* matrices : {&cpu_physical_->density, &cpu_physical_->fock})
         for (const auto& matrix : *matrices)
           bytes = runtime::add_capacity(bytes, runtime::vector_bytes(matrix));
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) bytes = runtime::add_capacity(bytes, cuda_->resources().retained_host_numeric_bytes);
 #endif
     if (d4_) {
@@ -724,7 +741,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   /** Explicit output/rebuild export. Ordinary CUDA replays keep this on device. */
   std::vector<double> warm_density() {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->warm_density();
 #endif
     return warm_;
@@ -732,7 +749,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   void clear_warm_start() noexcept {
     warm_.clear();
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) cuda_->clear_warm_start();
 #endif
   }
@@ -741,49 +758,50 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   void invalidate_final_state() noexcept {
     cpu_physical_.reset();
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) cuda_->invalidate_final_state();
 #endif
   }
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   dft::CudaKsPlan* cuda_plan() noexcept { return cuda_.get(); }
 #endif
 
   std::optional<KsTransportDiagnostic> ks_transport_diagnostic() const override {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) return adapt_transfers(cuda_->transfers());
 #endif
     return std::nullopt;
   }
 
-  vibeqc_status final_state_token(dft::CudaKsFinalStateToken& token, std::string& detail) const {
-#if VIBEQC_HAS_CUDA
+  generativeqc_status final_state_token(dft::CudaKsFinalStateToken& token,
+                                        std::string& detail) const {
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->final_state_token(token, detail);
 #endif
     token = {};
     if (!cpu_physical_) {
       detail = "CPU KS owner has no successful current final state";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     token = {1, cpu_physical_->identity};
     detail.clear();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  vibeqc_status read_final_state(const dft::CudaKsFinalStateToken& expected,
-                                 bool compute_weighted_density, dft::VerifiedKsFinalState& state,
-                                 std::string& detail) {
-#if VIBEQC_HAS_CUDA
+  generativeqc_status read_final_state(const dft::CudaKsFinalStateToken& expected,
+                                       bool compute_weighted_density,
+                                       dft::VerifiedKsFinalState& state, std::string& detail) {
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->read_final_state(expected, compute_weighted_density, state, detail);
 #endif
     state = {};
     dft::CudaKsFinalStateToken current;
     const auto status = final_state_token(current, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (expected != current) {
       detail = "CPU KS final-state token is stale";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     // The SCF frame predates the last F[D] rebuild. Diagonalize that actual
     // retained physical F here; do not relabel the lagged orbital energies.
@@ -802,24 +820,24 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (!dft::validate_ks_final_state(current.identity, ints.overlap, ints.hcore, *cpu_physical_,
                                       candidate, limits, compute_weighted_density, state, detail)) {
       invalidate_final_state();
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  vibeqc_status read_derivative_state(const dft::CudaKsFinalStateToken& expected,
-                                      KsDerivativeSnapshot& output, std::string& detail) {
+  generativeqc_status read_derivative_state(const dft::CudaKsFinalStateToken& expected,
+                                            KsDerivativeSnapshot& output, std::string& detail) {
     output = {};
-    if (options_.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE) {
+    if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
       detail = "DFT density-fitted derivative snapshots require auxiliary and metric response";
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     dft::VerifiedKsFinalState state;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     const auto before = cuda_ ? cuda_->transfers() : dft::CudaKsTransfers{};
 #endif
     const auto status = read_final_state(expected, true, state, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     // These are the provider's actual metric and the collocation/grid sources
     // used by this immutable KS owner, not caller-supplied identity labels.
     output = {std::move(state), system_,        fock_.one_electron().overlap,
@@ -828,7 +846,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // Both backends collocate this owner's exact host-built quadrature. Export
     // its raw measures directly; dividing partitioned weights loses tail data.
     output.atomic_weights = grid_.atomic_weights();
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
       const auto after = cuda_->transfers();
       output.export_d2h_bytes = after.final_state_d2h_bytes - before.final_state_d2h_bytes;
@@ -836,28 +854,28 @@ class KsPreparedCalculation final : public PreparedCalculation {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  vibeqc_status cuda_integral_gradient(
+  generativeqc_status cuda_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || execution_plan_.semilocal_family != dft::SemilocalFamily::Wb97mv ||
         !system_.ecp_terms.empty())
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
       detail = "cached CUDA stationary D/W must be supplied together";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     const auto transfers_before = cuda_->transfers();
     dft::VerifiedKsFinalState exported_state;
-    vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+    generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
     if (!cached_density) {
       status = read_final_state(expected, true, exported_state, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       cached_density = &exported_state.density;
       cached_weighted_density = &exported_state.weighted_density;
     }
@@ -867,7 +885,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
     if (!derivative_source) {
       detail = "CUDA integral gradient requires a retained prepared Direct derivative source";
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const auto spins = model.spins;
     const auto matrix_elements = derivative_source.nbf * derivative_source.nbf;
@@ -878,15 +896,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
     };
     if (!valid_cached(*cached_density) || !valid_cached(*cached_weighted_density)) {
       detail = "cached CUDA stationary D/W has an incompatible spin or AO shape";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     dft::CudaKsResidentDensityBinding resident_density;
     status = cuda_->resident_final_density(expected, resident_density, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (!resident_density || resident_density.device_id != derivative_source.device_id ||
         resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
       detail = "CUDA stationary derivative density is incompatible with the prepared Direct owner";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     const auto transfers_after = cuda_->transfers();
     // The Direct source belongs to the already-budgeted SCF owner. Report its
@@ -916,7 +934,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     std::vector<double> hcore, pulay, value;
     status = scf::execute_cuda_stationary_one_electron_pair(device, system_, density, weighted, 0,
                                                             bytes, hcore, pulay, detail, &one);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
     work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
     work[4] += one.host_to_device_bytes;
@@ -925,17 +943,17 @@ class KsPreparedCalculation final : public PreparedCalculation {
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
     if (!range_strategy_) {
       detail = "CUDA RSH integral gradient is missing its resolved range correction";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
         fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
         resident_density.matrix_elements, value, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     candidate.insert(candidate.end(), value.begin(), value.end());
     output = std::move(candidate);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
 #else
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
   }
 
@@ -948,7 +966,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
               ? "#1122"
               : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
                                                                                   : "#163");
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
     }
@@ -971,10 +989,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto status =
         d4_->execute(coordinates, std::span(&active, 1), std::span(&want_gradient, 1), statuses,
                      components, gradients, charges, detail);
-    if (status != VIBEQC_STATUS_SUCCESS || statuses.size() != 1 ||
+    if (status != GENERATIVEQC_STATUS_SUCCESS || statuses.size() != 1 ||
         statuses[0] != dft::dispersion::D4Status::success || components.size() != 2)
-      throw MethodError(status == VIBEQC_STATUS_SUCCESS ? VIBEQC_STATUS_NUMERICAL_FAILURE : status,
-                        detail.empty() ? "PBE-D4 correction failed" : detail);
+      throw MethodError(
+          status == GENERATIVEQC_STATUS_SUCCESS ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : status,
+          detail.empty() ? "PBE-D4 correction failed" : detail);
     result.energy += components[0] + components[1];
   }
 
@@ -982,14 +1001,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
   scf::ScfResult run(const std::vector<double>* initial_density, bool reuse_warm,
                      bool update_warm) {
     invalidate_final_state();
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
       // Native iterations read only scalar diagnostics. The public energy
       // result does not require a final AO matrix download; warm D stays resident.
       cuda_->set_warm_start_updates(update_warm);
       auto native = cuda_->run(initial_density, reuse_warm, false);
       if (cuda_->failed())
-        throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE, "CUDA KS physical evaluation failed");
+        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                          "CUDA KS physical evaluation failed");
       return native;
     }
 #endif
@@ -1009,7 +1029,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                    : scf::run_semilocal_rks(fock_, basis_, grid_, options_,
                                             *execution_plan_.automatic_program, seed);
     } else if (execution_plan_.generated_split_hybrid)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
     else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
       if (!range_correction_ || !nonlocal_)
@@ -1098,7 +1118,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
         dft::VerifiedKsFinalState verified;
         std::string detail;
         const dft::CudaKsFinalStateToken token{1, cpu_physical_->identity};
-        if (read_final_state(token, false, verified, detail) != VIBEQC_STATUS_SUCCESS) {
+        if (read_final_state(token, false, verified, detail) != GENERATIVEQC_STATUS_SUCCESS) {
           native.converged = false;
           native.ks_physical_fock.clear();
         }
@@ -1114,7 +1134,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto spin =
         unrestricted(execution_plan_) ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
     const auto fock_backend =
-        backend_ == VIBEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+        backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     range_strategy_ = scf::resolve_fock_build(
         scf::make_rsh_correction_fock_spec(spin, execution_plan_.short_range_exchange,
                                            execution_plan_.long_range_exchange,
@@ -1127,9 +1147,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   void prepare_nonlocal(int device) {
     if (grid_.point_count() > std::numeric_limits<std::uint32_t>::max())
-      throw MethodError(VIBEQC_STATUS_OUT_OF_MEMORY,
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                         "KS grid exceeds the VV10 public point-count domain");
-    vibeqc_status status = VIBEQC_STATUS_INTERNAL_ERROR;
+    generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     std::string detail;
     nonlocal_ = dft::nlc::Vv10Plan::prepare(
         backend_, device, static_cast<std::uint32_t>(grid_.point_count()),
@@ -1141,7 +1161,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
   }
 
   void prepare_d4(int device) {
-    const auto source = ::vibeqc::generated::method_parameters::pbeD4();
+    const auto source = ::generativeqc::generated::method_parameters::pbeD4();
     dft::dispersion::D4Parameters parameters{dft::dispersion::D4ReferenceModel::eeq,
                                              source.s6,
                                              source.s8,
@@ -1162,7 +1182,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       atomic_numbers.push_back(atom.atomic_number);
       coordinates.insert(coordinates.end(), atom.position.begin(), atom.position.end());
     }
-    vibeqc_status status = VIBEQC_STATUS_INTERNAL_ERROR;
+    generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     std::string detail;
     d4_ = dft::dispersion::D4Plan::prepare(
         backend_, device, std::move(offsets), std::move(atomic_numbers),
@@ -1178,7 +1198,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
   core::System system_;
   NativeKsExecutionPlan execution_plan_;
   scf::ScfOptions options_;
-  vibeqc_backend backend_;
+  generativeqc_backend backend_;
   scf::PreparedFockPlan fock_;
   std::optional<scf::ResolvedFockBuild> range_strategy_;
   std::unique_ptr<scf::PreparedFockPlan> range_correction_;
@@ -1190,7 +1210,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
   std::optional<dft::KsPhysicalState> cpu_physical_;
   std::unique_ptr<dft::dispersion::D4Plan> d4_;
   std::unique_ptr<dft::nlc::Vv10Plan> nonlocal_;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<dft::CudaKsPlan> cuda_;
 #endif
 };
@@ -1214,21 +1234,21 @@ void set_positions(core::System& system, const std::vector<double>& coordinates)
     std::copy_n(coordinates.begin() + 3 * i, 3, system.atoms[i].position.begin());
 }
 
-vibeqc_status item_exception_status() {
+generativeqc_status item_exception_status() {
   try {
     throw;
   } catch (const MethodError& error) {
     return error.status();
-  } catch (const vibeqc::Error& error) {
+  } catch (const generativeqc::Error& error) {
     return error.status();
   } catch (const std::bad_alloc&) {
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument&) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception&) {
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (...) {
-    return VIBEQC_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
 }
 
@@ -1239,7 +1259,7 @@ class KsPreparedBatch final : public PreparedBatch {
  public:
   KsPreparedBatch(Capabilities capabilities, std::vector<core::System> systems,
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
-                  vibeqc_backend backend, int device, bool warm_enabled,
+                  generativeqc_backend backend, int device, bool warm_enabled,
                   std::optional<core::System> auxiliary)
       : capabilities_(capabilities),
         systems_(std::move(systems)),
@@ -1268,7 +1288,7 @@ class KsPreparedBatch final : public PreparedBatch {
                                        bool compute_forces) override {
     invalidate_result();
     if (compute_forces)
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "KS nuclear gradients are tracked separately in issue #163");
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("KS batch coordinates do not match system count");
@@ -1295,7 +1315,7 @@ class KsPreparedBatch final : public PreparedBatch {
           // Preserve the last GOOD seed before freeing its device owner. This
           // explicit rebuild download is never part of routine SCF iterations.
           materialize_warm(i);
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan ? item.plan->cuda_plan() : nullptr)
             add_transfers(item.retired_transfers, cuda->transfers());
 #endif
@@ -1315,8 +1335,8 @@ class KsPreparedBatch final : public PreparedBatch {
       result.calculation = adapt_result(std::move(native), backend_);
       items_[i].plan->apply_d4(result.calculation);
       const auto& calculation = result.calculation;
-      result.status =
-          calculation.convergence.converged ? VIBEQC_STATUS_SUCCESS : VIBEQC_STATUS_NOT_CONVERGED;
+      result.status = calculation.convergence.converged ? GENERATIVEQC_STATUS_SUCCESS
+                                                        : GENERATIVEQC_STATUS_NOT_CONVERGED;
       if (calculation.convergence.converged && warm_enabled_ && warm_updates_) {
         auto& state = candidates[i];
         state.energy = calculation.energy;
@@ -1336,9 +1356,9 @@ class KsPreparedBatch final : public PreparedBatch {
         auto& result = results[i];
         // Retry only seed-related failures. Resource/driver failures preserve
         // their first status and leave the last-good seed for explicit replay.
-        const bool seed_failure = result.status == VIBEQC_STATUS_NOT_CONVERGED ||
-                                  result.status == VIBEQC_STATUS_NUMERICAL_FAILURE ||
-                                  result.status == VIBEQC_STATUS_INVALID_ARGUMENT;
+        const bool seed_failure = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
+                                  result.status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE ||
+                                  result.status == GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         if (!ready[i] || (attempt && (!result.warm_start_used || !seed_failure))) continue;
         if (attempt) {
           result.warm_start_fallback = true;
@@ -1350,7 +1370,7 @@ class KsPreparedBatch final : public PreparedBatch {
         const bool reuse = !attempt && result.warm_start_used;
         const auto* seed = reuse && !item.resident_warm ? &item.warm->density : nullptr;
         try {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
             cuda->begin(seed, reuse && item.resident_warm);
@@ -1365,7 +1385,7 @@ class KsPreparedBatch final : public PreparedBatch {
           result.status = item_exception_status();
         }
       }
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
       while (std::any_of(running.begin(), running.end(), [](bool value) { return value; })) {
         // Submit ALL active streams before synchronizing any scalar record.
         for (std::size_t i = 0; i < size(); ++i) {
@@ -1384,7 +1404,7 @@ class KsPreparedBatch final : public PreparedBatch {
             if (cuda->finish_iteration()) continue;
             running[i] = false;
             if (cuda->failed())
-              throw MethodError(VIBEQC_STATUS_NUMERICAL_FAILURE,
+              throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                                 "CUDA KS physical evaluation failed");
             finish(i, cuda->result(false));
           } catch (...) {
@@ -1436,7 +1456,7 @@ class KsPreparedBatch final : public PreparedBatch {
       // This common validation reads only source S and checks the shared
       // spin-density convention. It performs no HF Fock/energy evaluation.
       scf::validate_hf_warm_density(
-          source, unrestricted(execution_plan_) ? VIBEQC_METHOD_UHF : VIBEQC_METHOD_RHF,
+          source, unrestricted(execution_plan_) ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF,
           state.density);
     }
     // All source-metric validation precedes the no-throw commit. Missing
@@ -1454,7 +1474,7 @@ class KsPreparedBatch final : public PreparedBatch {
 
   std::optional<KsTransportDiagnostic> ks_transport_diagnostic(std::size_t index) const override {
     const auto& item = items_.at(index);
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     if (auto* cuda = item.plan ? item.plan->cuda_plan() : nullptr) {
       auto cumulative = item.retired_transfers;
       add_transfers(cumulative, cuda->transfers());
@@ -1464,36 +1484,38 @@ class KsPreparedBatch final : public PreparedBatch {
     return std::nullopt;
   }
 
-  vibeqc_status final_state_token(std::size_t index, dft::CudaKsFinalStateToken& token,
-                                  std::string& detail) const {
+  generativeqc_status final_state_token(std::size_t index, dft::CudaKsFinalStateToken& token,
+                                        std::string& detail) const {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->final_state_token(token, detail);
     token = {};
     detail = "KS batch item has no prepared final-state owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  vibeqc_status read_final_state(std::size_t index, const dft::CudaKsFinalStateToken& expected,
-                                 bool compute_weighted_density, dft::VerifiedKsFinalState& state,
-                                 std::string& detail) {
+  generativeqc_status read_final_state(std::size_t index,
+                                       const dft::CudaKsFinalStateToken& expected,
+                                       bool compute_weighted_density,
+                                       dft::VerifiedKsFinalState& state, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_final_state(expected, compute_weighted_density, state,
                                                   detail);
     state = {};
     detail = "KS batch item has no prepared final-state owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  vibeqc_status read_derivative_state(std::size_t index, const dft::CudaKsFinalStateToken& expected,
-                                      KsDerivativeSnapshot& output, std::string& detail) {
+  generativeqc_status read_derivative_state(std::size_t index,
+                                            const dft::CudaKsFinalStateToken& expected,
+                                            KsDerivativeSnapshot& output, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_derivative_state(expected, output, detail);
     output = {};
     detail = "KS batch item has no prepared final-state owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  vibeqc_status cuda_integral_gradient(
+  generativeqc_status cuda_integral_gradient(
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
@@ -1502,7 +1524,7 @@ class KsPreparedBatch final : public PreparedBatch {
       return items_[index].plan->cuda_integral_gradient(
           expected, output, maximum_bytes, work, detail, cached_density, cached_weighted_density);
     detail = "KS batch item has no prepared final-state owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   // These profiles describe HF graph/provider layouts, not this method's
@@ -1554,7 +1576,7 @@ class KsPreparedBatch final : public PreparedBatch {
     // an owner. Empty density with resident_warm=true is a valid lazy snapshot.
     mutable std::optional<scf::HfWarmState> warm;
     bool resident_warm{};
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     dft::CudaKsTransfers retired_transfers;
 #endif
   };
@@ -1574,7 +1596,7 @@ class KsPreparedBatch final : public PreparedBatch {
   NativeKsExecutionPlan execution_plan_;
   scf::ScfOptions options_;
   dft::GridSpec grid_spec_;
-  vibeqc_backend backend_;
+  generativeqc_backend backend_;
   int device_;
   bool warm_enabled_, warm_updates_{true};
   std::optional<core::System> auxiliary_;
@@ -1583,57 +1605,59 @@ class KsPreparedBatch final : public PreparedBatch {
 
 }  // namespace
 
-vibeqc_status dft_final_state_token(const PreparedCalculation& calculation,
-                                    dft::CudaKsFinalStateToken& token, std::string& detail) {
+generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
+                                          dft::CudaKsFinalStateToken& token, std::string& detail) {
   const auto* ks = dynamic_cast<const KsPreparedCalculation*>(&calculation);
   if (ks) return ks->final_state_token(token, detail);
   token = {};
   detail = "prepared calculation is not a KS final-state owner";
-  return VIBEQC_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
-vibeqc_status read_dft_final_state(PreparedCalculation& calculation,
-                                   const dft::CudaKsFinalStateToken& expected,
-                                   bool compute_weighted_density, dft::VerifiedKsFinalState& state,
-                                   std::string& detail) {
+generativeqc_status read_dft_final_state(PreparedCalculation& calculation,
+                                         const dft::CudaKsFinalStateToken& expected,
+                                         bool compute_weighted_density,
+                                         dft::VerifiedKsFinalState& state, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedCalculation*>(&calculation);
   if (ks) return ks->read_final_state(expected, compute_weighted_density, state, detail);
   state = {};
   detail = "prepared calculation is not a KS final-state owner";
-  return VIBEQC_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
-vibeqc_status dft_final_state_token(const PreparedBatch& batch, std::size_t index,
-                                    dft::CudaKsFinalStateToken& token, std::string& detail) {
+generativeqc_status dft_final_state_token(const PreparedBatch& batch, std::size_t index,
+                                          dft::CudaKsFinalStateToken& token, std::string& detail) {
   const auto* ks = dynamic_cast<const KsPreparedBatch*>(&batch);
   if (ks) return ks->final_state_token(index, token, detail);
   token = {};
   detail = "prepared batch is not a KS final-state owner";
-  return VIBEQC_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
-vibeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index,
-                                   const dft::CudaKsFinalStateToken& expected,
-                                   bool compute_weighted_density, dft::VerifiedKsFinalState& state,
-                                   std::string& detail) {
+generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index,
+                                         const dft::CudaKsFinalStateToken& expected,
+                                         bool compute_weighted_density,
+                                         dft::VerifiedKsFinalState& state, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->read_final_state(index, expected, compute_weighted_density, state, detail);
   state = {};
   detail = "prepared batch is not a KS final-state owner";
-  return VIBEQC_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
-vibeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
-                                         const dft::CudaKsFinalStateToken& expected,
-                                         std::vector<double>& output, std::size_t maximum_bytes,
-                                         std::array<std::uint64_t, 9>& work, std::string& detail) {
+generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
+                                               const dft::CudaKsFinalStateToken& expected,
+                                               std::vector<double>& output,
+                                               std::size_t maximum_bytes,
+                                               std::array<std::uint64_t, 9>& work,
+                                               std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail);
   detail = "CUDA integral gradient requires a native KS batch";
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-vibeqc_status dft_cuda_integral_gradient_cached(
+generativeqc_status dft_cuda_integral_gradient_cached(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     const std::vector<scf::reference::Matrix>& density,
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
@@ -1643,23 +1667,24 @@ vibeqc_status dft_cuda_integral_gradient_cached(
     return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
                                       &density, &weighted_density);
   detail = "CUDA integral gradient requires a native KS batch";
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-vibeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t index,
-                                        const dft::CudaKsFinalStateToken& expected,
-                                        KsDerivativeSnapshot& output, std::string& detail) {
+generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              KsDerivativeSnapshot& output, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->read_derivative_state(index, expected, output, detail);
   output = {};
   detail = "prepared batch is not a KS final-state owner";
-  return VIBEQC_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
 void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
                             const core::System& system) {
   if (execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv && !system.ecp_terms.empty())
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "WB97M-V ECP execution is not qualified");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "WB97M-V ECP execution is not qualified");
   if (!unrestricted(execution_plan)) {
     if (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1)
       throw std::invalid_argument(
@@ -1674,35 +1699,37 @@ void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
         "nonnegative spin occupations");
 }
 
-vibeqc_status validate_dft_system(vibeqc_method, const core::System& system, std::string& detail) {
+generativeqc_status validate_dft_system(generativeqc_method, const core::System& system,
+                                        std::string& detail) {
   if (system.shells.empty()) {
     detail = "DFT requires an explicit Gaussian orbital basis";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const int spin_excess = static_cast<int>(system.multiplicity) - 1;
   if (system.electron_count > 0 && spin_excess >= 0 && spin_excess <= system.electron_count &&
       (system.electron_count - spin_excess) % 2 == 0)
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   detail =
       "DFT requires electron count and multiplicity to define integer nonnegative spin occupations";
-  return VIBEQC_STATUS_INVALID_ARGUMENT;
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
 std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const vibeqc_method_descriptor& descriptor) {
-#if !VIBEQC_HAS_CUDA
-  if (context.requested_backend == VIBEQC_BACKEND_CUDA)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "DFT CUDA backend is not built");
+    const generativeqc_method_descriptor& descriptor) {
+#if !GENERATIVEQC_HAS_CUDA
+  if (context.requested_backend == GENERATIVEQC_BACKEND_CUDA)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "DFT CUDA backend is not built");
 #endif
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
   validate_ks_spin_state(execution_plan, system);
-  if (options.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE &&
+  if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       (!system.ecp_terms.empty() ||
        std::any_of(system.atoms.begin(), system.atoms.end(),
                    [](const auto& atom) { return atom.ecp_core != 0; })))
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "DFT ECP density fitting is not qualified");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "DFT ECP density fitting is not qualified");
   validate_ks_auxiliary_geometry(system, ks_auxiliary_template(descriptor));
   auto grid = ks_grid_options(descriptor, options, execution_plan);
   return std::make_unique<KsPreparedCalculation>(
@@ -1714,32 +1741,33 @@ std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
 std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
-                                                 const vibeqc_method_descriptor& descriptor,
-                                                 vibeqc_batch_flags flags) {
-  if ((flags & ~VIBEQC_BATCH_ENABLE_WARM_STARTS) != 0)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+                                                 const generativeqc_method_descriptor& descriptor,
+                                                 generativeqc_batch_flags flags) {
+  if ((flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "KS batches support warm starts but not HF-specific profiling flags");
-#if !VIBEQC_HAS_CUDA
-  if (context.requested_backend == VIBEQC_BACKEND_CUDA)
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "DFT CUDA backend is not built");
+#if !GENERATIVEQC_HAS_CUDA
+  if (context.requested_backend == GENERATIVEQC_BACKEND_CUDA)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "DFT CUDA backend is not built");
 #endif
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
   for (const auto& system : systems) {
     validate_ks_spin_state(execution_plan, system);
-    if (options.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE &&
+    if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
         (!system.ecp_terms.empty() ||
          std::any_of(system.atoms.begin(), system.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; })))
-      throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED, "DFT ECP density fitting is not qualified");
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "DFT ECP density fitting is not qualified");
   }
   if (!systems.empty())
     validate_ks_auxiliary_geometry(systems.front(), ks_auxiliary_template(descriptor));
   auto grid = ks_grid_options(descriptor, options, execution_plan);
   return std::make_unique<KsPreparedBatch>(
       capabilities, std::move(systems), execution_plan, std::move(options), std::move(grid),
-      context.requested_backend, context.device_id, (flags & VIBEQC_BATCH_ENABLE_WARM_STARTS) != 0,
-      ks_auxiliary_template(descriptor));
+      context.requested_backend, context.device_id,
+      (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0, ks_auxiliary_template(descriptor));
 }
 
-}  // namespace vibeqc::methods::detail
+}  // namespace generativeqc::methods::detail

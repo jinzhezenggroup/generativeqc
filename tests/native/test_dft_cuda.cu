@@ -15,15 +15,15 @@
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_resources.cuh"
-#include "vibeqc/vibeqc.hpp"
 
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 
 namespace {
-using namespace vibeqc::dft;
+using namespace generativeqc::dft;
 void require(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -38,8 +38,8 @@ void close(double actual, double expected, const char* message, double tolerance
   }
 }
 
-vibeqc::core::System system(unsigned l = 0, bool spherical = false) {
-  vibeqc::core::System out;
+generativeqc::core::System system(unsigned l = 0, bool spherical = false) {
+  generativeqc::core::System out;
   out.atoms = {{1, {0, 0, 0}}, {1, {0.1, 0.2, 1.4}}};
   out.shells = {
       {0,
@@ -49,9 +49,9 @@ vibeqc::core::System system(unsigned l = 0, bool spherical = false) {
        0,
        {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}}};
   if (l) out.shells.push_back({1, l, {{0.7, 1.0}}});
-  if (spherical) out.basis_representation = VIBEQC_BASIS_SPHERICAL;
+  if (spherical) out.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   std::string detail;
-  if (vibeqc::molecule::validate_and_normalize(out, detail) != VIBEQC_STATUS_SUCCESS)
+  if (generativeqc::molecule::validate_and_normalize(out, detail) != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error(detail);
   return out;
 }
@@ -328,9 +328,9 @@ void nonlocal_potential_case(const AoBasis& basis, const MolecularGrid& grid, bo
               "CUDA nonlocal AO potential composition", 3e-12 + 2e-12 * std::abs(expected[i]));
 
     using fail_function = void (*)();
-    const std::array<std::pair<fail_function, vibeqc_status>, 2> failures{{
-        {&xc_cuda_fail_next_nonlocal_runtime_for_test_v1, VIBEQC_STATUS_CUDA_ERROR},
-        {&xc_cuda_fail_next_nonlocal_allocation_for_test_v1, VIBEQC_STATUS_OUT_OF_MEMORY},
+    const std::array<std::pair<fail_function, generativeqc_status>, 2> failures{{
+        {&xc_cuda_fail_next_nonlocal_runtime_for_test_v1, GENERATIVEQC_STATUS_CUDA_ERROR},
+        {&xc_cuda_fail_next_nonlocal_allocation_for_test_v1, GENERATIVEQC_STATUS_OUT_OF_MEMORY},
     }};
     for (const auto& [fail, expected_status] : failures) {
       // Establish a fresh published semilocal generation, then fail the
@@ -343,8 +343,8 @@ void nonlocal_potential_case(const AoBasis& basis, const MolecularGrid& grid, bo
         fixture.plan->enqueue_nonlocal_potential(fixture.generation, d_weights, d_gradient, d_vrho,
                                                  d_vsigma, d_energy);
       } catch (const std::bad_alloc&) {
-        mapped = expected_status == VIBEQC_STATUS_OUT_OF_MEMORY;
-      } catch (const vibeqc::Error& error) {
+        mapped = expected_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      } catch (const generativeqc::Error& error) {
         mapped = error.status() == expected_status;
       }
       require(mapped, "CUDA nonlocal AO failure lost its typed status");
@@ -397,8 +397,8 @@ std::vector<double> empty_spin_reference(const AoBasis& basis, const MolecularGr
   if (functional == 4U)
     check(cudaMemcpy(coefficients.data(), device + features.size(),
                      coefficients.size() * sizeof(double), cudaMemcpyDeviceToHost));
-  if (functional == 4U && std::getenv("VIBEQC_WB97MV_DIAGNOSTIC_FILE")) {
-    std::ofstream output(std::getenv("VIBEQC_WB97MV_DIAGNOSTIC_FILE"), std::ios::binary);
+  if (functional == 4U && std::getenv("GENERATIVEQC_WB97MV_DIAGNOSTIC_FILE")) {
+    std::ofstream output(std::getenv("GENERATIVEQC_WB97MV_DIAGNOSTIC_FILE"), std::ios::binary);
     const std::uint64_t header[]{count, n};
     output.write(reinterpret_cast<const char*>(header), sizeof(header));
     for (const auto& values : {ao, features, coefficients, grid.weights()})
@@ -661,7 +661,7 @@ void matrix_response_case(const AoBasis& basis, const MolecularGrid& grid, unsig
     direction[spin * matrix] = -0.013 * (spin + 1);
     direction[spin * matrix + 1] = direction[spin * matrix + n] = 0.007 * (spin + 1);
   }
-  vibeqc::runtime::OwnedCudaBuffer<double> device_direction(0, d.size(), response.stream);
+  generativeqc::runtime::OwnedCudaBuffer<double> device_direction(0, d.size(), response.stream);
   check(cudaMemcpy(response.density, d.data(), d.size() * sizeof(double), cudaMemcpyHostToDevice));
   const auto independent = [&](double step) {
     auto perturbed = d;

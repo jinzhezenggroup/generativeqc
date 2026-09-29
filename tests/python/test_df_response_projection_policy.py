@@ -29,7 +29,7 @@ template<class Error, class F> void rejects(F operation) {
 }
 
 int main() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   const auto five = df_fitted_panel_work(3712, 771, 295296);
   if (five.panels != 5 || five.reader_calls != 25 ||
       five.projected_columns != 18560 || five.staging_elements != 5480693760ULL) return 1;

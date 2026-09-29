@@ -7,7 +7,7 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method.df_exchange_schedule import (
+from generativeqc_compiler.method.df_exchange_schedule import (
     native_header,
     projected_exchange_schedule,
 )
@@ -31,12 +31,12 @@ int main() {
   std::size_t n, a, rank, capacity;
   bool triangular;
   while (std::cin >> n >> a >> rank >> capacity >> triangular) {
-    const auto dense = vibeqc::scf::df_streamed_k_panel(n, a, capacity);
-    const auto p = vibeqc::scf::df_projected_exchange_schedule(n, a, rank, capacity, triangular);
+    const auto dense = generativeqc::scf::df_streamed_k_panel(n, a, capacity);
+    const auto p = generativeqc::scf::df_projected_exchange_schedule(n, a, rank, capacity, triangular);
     const auto auto_shared =
-        vibeqc::scf::df_shared_projected_exchange_schedule_admitted(p, false);
+        generativeqc::scf::df_shared_projected_exchange_schedule_admitted(p, false);
     const auto explicit_shared =
-        vibeqc::scf::df_shared_projected_exchange_schedule_admitted(p, true);
+        generativeqc::scf::df_shared_projected_exchange_schedule_admitted(p, true);
     std::size_t loaded = 0;
     std::size_t charged = 0;
     if (p.rows) {
@@ -45,7 +45,7 @@ int main() {
       // exactly once. This catches an invalid lifetime even if census matches.
       std::size_t begins[2] = {n, n}, counts[2] = {0, 0};
       std::vector<int> coverage(n * n, 0);
-      const bool ok = vibeqc::scf::generated::visit_projected_exchange(
+      const bool ok = generativeqc::scf::generated::visit_projected_exchange(
           n, p.rows, triangular,
           [&](std::size_t begin, std::size_t count, std::size_t slot) {
             if (slot >= 2 || !count || begin + count > n ||
@@ -70,7 +70,7 @@ int main() {
         return 2;
       if (triangular) {
         std::vector<int> charge_coverage(n, 0);
-        const auto shared = vibeqc::scf::generated::visit_shared_projected_exchange(
+        const auto shared = generativeqc::scf::generated::visit_shared_projected_exchange(
             n, p.rows, triangular,
             [&](std::size_t begin, std::size_t count, std::size_t, bool charge) {
               if (charge) {
@@ -86,7 +86,7 @@ int main() {
           return 4;
         for (bool fail_projection : {false, true}) {
           int calls = 0;
-          const auto aborted = vibeqc::scf::generated::visit_shared_projected_exchange(
+          const auto aborted = generativeqc::scf::generated::visit_shared_projected_exchange(
               n, p.rows, triangular,
               [&](auto...) { ++calls; return !fail_projection; },
               [&](auto...) { ++calls; return false; });
@@ -94,7 +94,7 @@ int main() {
         }
       } else {
         int calls = 0;
-        const auto rejected = vibeqc::scf::generated::visit_shared_projected_exchange(
+        const auto rejected = generativeqc::scf::generated::visit_shared_projected_exchange(
             n, p.rows, triangular,
             [&](auto...) { ++calls; return true; },
             [&](auto...) { ++calls; return true; });
@@ -103,7 +103,7 @@ int main() {
       // Both callback failures must stop immediately, before subsequent work.
       for (bool fail_projection : {false, true}) {
         int calls = 0;
-        const auto aborted = vibeqc::scf::generated::visit_projected_exchange(
+        const auto aborted = generativeqc::scf::generated::visit_projected_exchange(
             n, p.rows, triangular,
             [&](auto...) { ++calls; return !fail_projection; },
             [&](auto...) { ++calls; return false; });

@@ -8,14 +8,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -45,7 +45,7 @@ def production_profile() -> typing.Any:
     manifest = json.loads(
         (
             Path(__file__).resolve().parents[2]
-            / "python/vibeqc_compiler/integral/production_df_derivatives.json"
+            / "python/generativeqc_compiler/integral/production_df_derivatives.json"
         ).read_text()
     )
     major, minor = capability
@@ -118,7 +118,7 @@ def test_qualified_lowering_without_ao_shape_admission(
         "DERIVATIVE_PAIRS": "symmetric",
         "FORCE_SCREEN_ABS": "off",
     }.items():
-        monkeypatch.setenv("VIBEQC_DF_" + name, value)
+        monkeypatch.setenv("GENERATIVEQC_DF_" + name, value)
     calc = Calculator(
         method=case.method,
         basis=orbital,
@@ -135,8 +135,8 @@ def test_qualified_lowering_without_ao_shape_admission(
     ) as batch:
         for index, policy in enumerate(("auto", "legacy", "auto")):
             trace = tmp_path / f"{index}-{policy}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_SHELL_POLICY", policy)
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_SHELL_POLICY", policy)
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             actual = batch.execute(strict=True).items[0]
             assert abs(actual.energy - reference.e_tot) < 1e-9
             np.testing.assert_allclose(actual.forces, expected, atol=1e-8, rtol=0)

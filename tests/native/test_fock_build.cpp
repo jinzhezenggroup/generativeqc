@@ -14,7 +14,7 @@
 #include "scf/mean_field.hpp"
 
 namespace {
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 
 void require(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
@@ -234,11 +234,12 @@ void verify_unrestricted_coefficients_and_capabilities() {
               cpu.maximum_angular_momentum == 3 && cpu.cartesian && cpu.spherical &&
               cpu.independent_terms && cpu.arbitrary_coefficients && !cpu.legacy_adapter_only &&
               cpu.provider_version == cpu_registration.identity.version &&
-              vibeqc::runtime::provider_executable(cpu_registration) &&
-              vibeqc::runtime::has_requirement(cpu_registration.requirements,
-                                               vibeqc::runtime::ProviderRequirement::PreparedState),
+              generativeqc::runtime::provider_executable(cpu_registration) &&
+              generativeqc::runtime::has_requirement(
+                  cpu_registration.requirements,
+                  generativeqc::runtime::ProviderRequirement::PreparedState),
           "CPU exact capabilities misrepresent the executable registration");
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   require(cuda.available && cuda.independent_terms && cuda.arbitrary_coefficients &&
               !cuda.legacy_adapter_only && fitted.available && fitted.independent_terms &&
               fitted.arbitrary_coefficients,
@@ -249,8 +250,8 @@ void verify_unrestricted_coefficients_and_capabilities() {
           "CPU-only capability query claimed an unregistered CUDA provider");
   const auto& cuda_registration =
       fock_provider_registration(FockApproximation::Exact, FockBackend::Cuda);
-  require(cuda_registration.availability == vibeqc::runtime::ProviderAvailability::NotBuilt &&
-              !vibeqc::runtime::provider_executable(cuda_registration),
+  require(cuda_registration.availability == generativeqc::runtime::ProviderAvailability::NotBuilt &&
+              !generativeqc::runtime::provider_executable(cuda_registration),
           "CPU-only CUDA registration lost its not-built state");
   std::string unavailable_detail;
   try {
@@ -369,16 +370,17 @@ void verify_preflight_and_approximation_identity() {
       "absent CUDA K did not select independent execution");
 }
 
-vibeqc::core::System hydrogen_molecule() {
-  vibeqc::core::System system;
+generativeqc::core::System hydrogen_molecule() {
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {
       {0, 0, {{3.42525091, 0.15432897}, {0.62391373, 0.53532814}, {0.16885540, 0.44463454}}},
       {1, 0, {{3.42525091, 0.15432897}, {0.62391373, 0.53532814}, {0.16885540, 0.44463454}}},
   };
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "SCF preflight H2 fixture normalization failed: " + detail);
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "SCF preflight H2 fixture normalization failed: " + detail);
   return system;
 }
 
@@ -413,7 +415,7 @@ void verify_scf_entry_preflight() {
       FockSpin::Unrestricted, FockBackend::Cpu,
       [&](const ScfOptions& options) { (void)run_uhf(system, options); }, "CPU UHF");
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   // Strategy preflight must reject before CUDA initialization. These cases run
   // even on a CUDA-enabled build without a usable GPU, and must not be skipped.
   verify_entry_rejects_mismatched_strategies(
@@ -427,7 +429,7 @@ void verify_scf_entry_preflight() {
   verify_entry_rejects_mismatched_strategies(
       FockSpin::Restricted, FockBackend::Cpu,
       [&](const ScfOptions& options) {
-        FleetPlan plan({system}, VIBEQC_METHOD_RHF, options, false, false, false, false, 0);
+        FleetPlan plan({system}, GENERATIVEQC_METHOD_RHF, options, false, false, false, false, 0);
       },
       "CPU RHF fleet");
 }
@@ -454,8 +456,8 @@ void verify_cosx_provider_semantics() {
               capability.exchange && capability.independent_terms &&
               capability.arbitrary_coefficients,
           "COSX registration overclaims or loses its exchange-only domain");
-#if VIBEQC_HAS_CUDA
-  require(vibeqc::runtime::provider_executable(registration),
+#if GENERATIVEQC_HAS_CUDA
+  require(generativeqc::runtime::provider_executable(registration),
           "prepared CUDA COSX registration was not promoted");
   require_fock_provider_executable(FockApproximation::SeminumericalCosx, FockBackend::Cuda);
   const auto executable =
@@ -464,7 +466,7 @@ void verify_cosx_provider_semantics() {
               executable.maximum_derivative_order == 1,
           "executable COSX capability query differs from its registration");
 #else
-  require(!vibeqc::runtime::provider_executable(registration),
+  require(!generativeqc::runtime::provider_executable(registration),
           "CPU-only build advertised CUDA COSX execution");
   std::string unavailable;
   try {

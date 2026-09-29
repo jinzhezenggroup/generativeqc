@@ -1,8 +1,8 @@
 """Batch schedules count topology storage without materializing it in admission."""
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,

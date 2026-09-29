@@ -7,7 +7,7 @@ import typing
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     METHOD_CATALOG,
     ExactExchangePrimitive,
     MethodIR,
@@ -19,7 +19,7 @@ from vibeqc_compiler.method import (
     original_nonlocal_correlation,
     resolve_method,
 )
-from vibeqc_compiler.xc.spec import FunctionalSpec, functional
+from generativeqc_compiler.xc.spec import FunctionalSpec, functional
 
 
 def test_pbe_and_pbe0_resolve_to_typed_primitive_graphs() -> None:

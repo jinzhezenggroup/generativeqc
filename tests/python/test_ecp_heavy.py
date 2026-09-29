@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Atom,
     BasisProvenance,
     BasisSet,
@@ -20,8 +20,8 @@ from vibeqc import (
     ElementBasis,
     ResourceBudget,
 )
-from vibeqc.ecp import ecp_integrals, resolve_ecp
-from vibeqc.profiles import canonical_hash
+from generativeqc.ecp import ecp_integrals, resolve_ecp
+from generativeqc.profiles import canonical_hash
 
 # Atomic number, removed core, and an off-axis molecular geometry in bohr.
 CASES = {
@@ -151,7 +151,7 @@ def heavy_fixture(
 
 
 def reference_components(mol: typing.Any) -> typing.Any:
-    """Libcint local/nonlocal blocks selected independently of VibeQC terms."""
+    """Libcint local/nonlocal blocks selected independently of GenerativeQC terms."""
     gto = pytest.importorskip("pyscf.gto")
     norms = np.sqrt(mol.intor("int1e_ovlp").diagonal())
     blocks = []
@@ -163,7 +163,7 @@ def reference_components(mol: typing.Any) -> typing.Any:
 
 
 def require_device(device: typing.Any) -> None:
-    if device == "cuda" and os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1":
         pytest.skip("requires an allocated CUDA device")
 
 

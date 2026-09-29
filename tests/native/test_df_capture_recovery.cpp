@@ -22,7 +22,7 @@ struct Resources {
 
 int main() {
   try {
-    using vibeqc::scf::cuda_df::recover_scf_capture;
+    using generativeqc::scf::cuda_df::recover_scf_capture;
     Resources resources;
     require(cudaStreamCreateWithFlags(&resources.stream, cudaStreamNonBlocking) == cudaSuccess,
             "create capture recovery stream");
@@ -40,8 +40,8 @@ int main() {
     require(static_cast<int>(ended) == 901, "capture did not invalidate");
     bool rejected = false;
     std::string detail;
-    require(recover_scf_capture(resources.stream, ended, VIBEQC_STATUS_CUDA_ERROR, rejected,
-                                detail) == VIBEQC_STATUS_SUCCESS &&
+    require(recover_scf_capture(resources.stream, ended, GENERATIVEQC_STATUS_CUDA_ERROR, rejected,
+                                detail) == GENERATIVEQC_STATUS_SUCCESS &&
                 rejected && detail.empty() && cudaPeekAtLastError() == cudaSuccess,
             "expected capture error poisoned ordinary execution");
     require(cudaMemsetAsync(resources.byte, 0, 1, resources.stream) == cudaSuccess &&
@@ -49,14 +49,14 @@ int main() {
             "ordinary work failed after capture rejection");
     for (auto error : {cudaErrorInvalidValue, cudaErrorIllegalAddress, cudaErrorMemoryAllocation}) {
       rejected = false;
-      const auto expected = error == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                               : VIBEQC_STATUS_CUDA_ERROR;
-      require(recover_scf_capture(resources.stream, error, VIBEQC_STATUS_SUCCESS, rejected,
+      const auto expected = error == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                               : GENERATIVEQC_STATUS_CUDA_ERROR;
+      require(recover_scf_capture(resources.stream, error, GENERATIVEQC_STATUS_SUCCESS, rejected,
                                   detail) == expected &&
                   !rejected && !detail.empty(),
               "capture recovery suppressed an unrelated error");
     }
-    for (auto failure : {VIBEQC_STATUS_CUDA_ERROR, VIBEQC_STATUS_OUT_OF_MEMORY}) {
+    for (auto failure : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY}) {
       rejected = false;
       detail = "library failure without a CUDA runtime error";
       require(recover_scf_capture(resources.stream, cudaSuccess, failure, rejected, detail) ==
@@ -64,15 +64,15 @@ int main() {
                   !rejected && detail == "library failure without a CUDA runtime error",
               "capture recovery suppressed an unexplained library failure");
     }
-    require(recover_scf_capture(resources.stream, ended, VIBEQC_STATUS_OUT_OF_MEMORY, rejected,
-                                detail) == VIBEQC_STATUS_OUT_OF_MEMORY &&
+    require(recover_scf_capture(resources.stream, ended, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                                rejected, detail) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
                 !rejected,
             "capture invalidation suppressed a library allocation failure");
     require(
         cudaStreamBeginCapture(resources.stream, cudaStreamCaptureModeThreadLocal) == cudaSuccess,
         "begin active capture guard");
-    require(recover_scf_capture(resources.stream, cudaSuccess, VIBEQC_STATUS_SUCCESS, rejected,
-                                detail) == VIBEQC_STATUS_CUDA_ERROR &&
+    require(recover_scf_capture(resources.stream, cudaSuccess, GENERATIVEQC_STATUS_SUCCESS,
+                                rejected, detail) == GENERATIVEQC_STATUS_CUDA_ERROR &&
                 !rejected,
             "ordinary recovery accepted an active capture");
     graph = nullptr;

@@ -19,7 +19,7 @@ def test_generated_task_keeps_consumer_identity_in_existing_flag_word() -> None:
     assert "static_assert(sizeof(GeneratedShellTask) == 192U)" in header
 
     dispatch = (
-        REPOSITORY_ROOT / "python/vibeqc_compiler/integral/lowering/dispatch.py"
+        REPOSITORY_ROOT / "python/generativeqc_compiler/integral/lowering/dispatch.py"
     ).read_text()
     generated_task = dispatch.split("struct GeneratedDpppShellTask", maxsplit=1)[
         1
@@ -29,7 +29,7 @@ def test_generated_task_keeps_consumer_identity_in_existing_flag_word() -> None:
 
     accumulation = (
         REPOSITORY_ROOT
-        / "python/vibeqc_compiler/integral/lowering/fock_accumulation.py"
+        / "python/generativeqc_compiler/integral/lowering/fock_accumulation.py"
     ).read_text()
     assert (
         "(task.reversed_shell_pair_mask & kGeneratedDpppCoulombConsumerBit) != 0U"
@@ -37,7 +37,7 @@ def test_generated_task_keeps_consumer_identity_in_existing_flag_word() -> None:
     )
 
     emission = (
-        REPOSITORY_ROOT / "python/vibeqc_compiler/integral/production_emission.py"
+        REPOSITORY_ROOT / "python/generativeqc_compiler/integral/production_emission.py"
     ).read_text()
     assert "GeneratedFockConsumer::Coulomb" in emission
     assert "kGenerated{class_name}CoulombConsumerBit" in emission

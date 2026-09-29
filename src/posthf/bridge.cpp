@@ -14,6 +14,7 @@
 #include <stdexcept>
 
 #include "api/handles.hpp"
+#include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -27,9 +28,8 @@
 #include "scf/mean_field.hpp"
 #include "scf/proposal_bridge.hpp"
 #include "scf/proposals.hpp"
-#include "vibeqc/vibeqc.h"
 
-using vibeqc::posthf::RawSource;
+using generativeqc::posthf::RawSource;
 namespace {
 /**
  * Own one bounded CUDA DF source and its streamed RHF J/K plan.
@@ -41,16 +41,16 @@ namespace {
 struct PostHfRhfJkPlan {
   std::size_t nbf{};
   std::size_t naux{};
-  vibeqc::scf::CudaDensityFittingIntegralSource* source{};
-  vibeqc::scf::CudaDensityFittingJkPlan* plan{};
+  generativeqc::scf::CudaDensityFittingIntegralSource* source{};
+  generativeqc::scf::CudaDensityFittingJkPlan* plan{};
   std::uint64_t density_h2d_bytes{};
   std::uint64_t result_d2h_bytes{};
   std::uint64_t executions{};
   double endpoint_ms{};
 
   ~PostHfRhfJkPlan() {
-    if (plan) vibeqc::scf::destroy_cuda_density_fitting_jk_plan(plan);
-    if (source) vibeqc::scf::destroy_cuda_density_fitting_integral_source(source);
+    if (plan) generativeqc::scf::destroy_cuda_density_fitting_jk_plan(plan);
+    if (source) generativeqc::scf::destroy_cuda_density_fitting_integral_source(source);
   }
 };
 
@@ -67,15 +67,16 @@ int guarded(char* error, std::size_t size, F&& fn) noexcept {
     return 1;
   }
 }
-vibeqc::hf::PhysicalReference supplied_reference(const RawSource& source, const double* arrays,
-                                                 std::size_t elements, double energy) {
+generativeqc::hf::PhysicalReference supplied_reference(const RawSource& source,
+                                                       const double* arrays, std::size_t elements,
+                                                       double energy) {
   const auto n = source.nbf();
-  const auto count = vibeqc::posthf::checked_add(
-      vibeqc::posthf::checked_mul(5, vibeqc::posthf::checked_mul(n, n)), n);
+  const auto count = generativeqc::posthf::checked_add(
+      generativeqc::posthf::checked_mul(5, generativeqc::posthf::checked_mul(n, n)), n);
   if (!arrays || count != elements || !std::isfinite(energy) ||
       source.orbital().multiplicity != 1 || source.orbital().electron_count % 2)
     throw std::invalid_argument("invalid supplied reference");
-  vibeqc::hf::PhysicalReference ref;
+  generativeqc::hf::PhysicalReference ref;
   ref.nbf = n;
   ref.nocc = source.orbital().electron_count / 2;
   ref.energy = energy;
@@ -85,19 +86,20 @@ vibeqc::hf::PhysicalReference supplied_reference(const RawSource& source, const 
     cursor += n * n;
   }
   ref.orbital_energies.assign(cursor, cursor + n);
-  vibeqc::scf::validate_physical_reference(ref);
+  generativeqc::scf::validate_physical_reference(ref);
   return ref;
 }
 }  // namespace
 extern "C" {
 /** Reuse the SCF metric threshold and square symmetric inverse convention. */
-VIBEQC_API int vibeqc_posthf_metric_v1(const double* metric, std::size_t n, double threshold,
-                                       double* inverse_root, double* diagnostics, char* error,
-                                       std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_metric_v1(const double* metric, std::size_t n,
+                                                   double threshold, double* inverse_root,
+                                                   double* diagnostics, char* error,
+                                                   std::size_t size) {
   return guarded(error, size, [&] {
     if (!metric || !inverse_root || !diagnostics || !n || n > SIZE_MAX / n)
       throw std::invalid_argument("invalid post-HF metric");
-    const auto factor = vibeqc::scf::factor_density_fitting_metric(
+    const auto factor = generativeqc::scf::factor_density_fitting_metric(
         std::vector<double>(metric, metric + n * n), n, threshold);
     std::copy(factor.inverse_square_root.begin(), factor.inverse_square_root.end(), inverse_root);
     diagnostics[0] = factor.effective_rank;
@@ -105,9 +107,10 @@ VIBEQC_API int vibeqc_posthf_metric_v1(const double* metric, std::size_t n, doub
     diagnostics[2] = factor.condition_number;
   });
 }
-VIBEQC_API int vibeqc_posthf_source_create_v1(const vibeqc_system* orbital,
-                                              const vibeqc_system* auxiliary, void** out,
-                                              char* error, std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_source_create_v1(const generativeqc_system* orbital,
+                                                          const generativeqc_system* auxiliary,
+                                                          void** out, char* error,
+                                                          std::size_t size) {
   return guarded(error, size, [&] {
     if (!out) throw std::invalid_argument("null source output");
     *out = nullptr;
@@ -115,12 +118,14 @@ VIBEQC_API int vibeqc_posthf_source_create_v1(const vibeqc_system* orbital,
     *out = new RawSource(orbital->data, auxiliary ? &auxiliary->data : nullptr);
   });
 }
-VIBEQC_API void vibeqc_posthf_source_destroy_v1(void* source) {
+GENERATIVEQC_API void generativeqc_posthf_source_destroy_v1(void* source) {
   delete static_cast<RawSource*>(source);
 }
-VIBEQC_API int vibeqc_posthf_source_read_v1(void* source, int op, const std::size_t* begin,
-                                            const std::size_t* count, double* out,
-                                            std::size_t elements, char* error, std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_source_read_v1(void* source, int op,
+                                                        const std::size_t* begin,
+                                                        const std::size_t* count, double* out,
+                                                        std::size_t elements, char* error,
+                                                        std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !begin || !count) throw std::invalid_argument("null raw source request");
     std::array<std::size_t, 4> b{}, c{};
@@ -134,11 +139,12 @@ VIBEQC_API int vibeqc_posthf_source_read_v1(void* source, int op, const std::siz
  * density and scalar diagnostics. Snapshot canonicalization is a separate
  * checked operation; an SCF failure never returns a usable density.
  */
-VIBEQC_API int vibeqc_posthf_rhf_density_v1(void* source, int backend, int device,
-                                            unsigned max_iterations, double tolerance, int df,
-                                            double metric_threshold, double* density,
-                                            std::size_t elements, double* scalars, char* error,
-                                            std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_rhf_density_v1(void* source, int backend, int device,
+                                                        unsigned max_iterations, double tolerance,
+                                                        int df, double metric_threshold,
+                                                        double* density, std::size_t elements,
+                                                        double* scalars, char* error,
+                                                        std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !density || !scalars || (backend != 0 && backend != 1) || (df != 0 && df != 1))
       throw std::invalid_argument("invalid RHF export request");
@@ -147,21 +153,21 @@ VIBEQC_API int vibeqc_posthf_rhf_density_v1(void* source, int backend, int devic
       throw std::invalid_argument("snapshot export supports closed-shell RHF only");
     if (elements != raw.nbf() * raw.nbf())
       throw std::invalid_argument("density output size mismatch");
-    vibeqc::scf::ScfOptions options;
+    generativeqc::scf::ScfOptions options;
     options.max_iterations = max_iterations;
     options.energy_tolerance = tolerance;
     options.density_tolerance = tolerance;
     options.screening_tolerance = 0;
     options.density_fitting_relative_threshold = metric_threshold;
-    vibeqc::scf::ScfResult result;
+    generativeqc::scf::ScfResult result;
     if (df) {
-      result = backend
-                   ? vibeqc::scf::run_rhf_density_fitting_cuda(raw.orbital(), raw.auxiliary(),
-                                                               options, device)
-                   : vibeqc::scf::run_rhf_density_fitting(raw.orbital(), raw.auxiliary(), options);
+      result = backend ? generativeqc::scf::run_rhf_density_fitting_cuda(
+                             raw.orbital(), raw.auxiliary(), options, device)
+                       : generativeqc::scf::run_rhf_density_fitting(raw.orbital(), raw.auxiliary(),
+                                                                    options);
     } else {
-      result = backend ? vibeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
-                       : vibeqc::scf::run_rhf(raw.orbital(), options);
+      result = backend ? generativeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
+                       : generativeqc::scf::run_rhf(raw.orbital(), options);
     }
     if (!result.converged || result.density.size() != elements)
       throw std::runtime_error("HF failed or did not converge; no reference exported");
@@ -176,32 +182,33 @@ VIBEQC_API int vibeqc_posthf_rhf_density_v1(void* source, int backend, int devic
  * As with the RHF bridge, snapshot canonicalization remains a separately
  * checked host operation and a failed SCF cannot yield reusable state.
  */
-VIBEQC_API int vibeqc_posthf_uhf_density_v1(void* source, int backend, int device,
-                                            unsigned max_iterations, double tolerance, int df,
-                                            double metric_threshold, double* density,
-                                            std::size_t elements, double* scalars, char* error,
-                                            std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_uhf_density_v1(void* source, int backend, int device,
+                                                        unsigned max_iterations, double tolerance,
+                                                        int df, double metric_threshold,
+                                                        double* density, std::size_t elements,
+                                                        double* scalars, char* error,
+                                                        std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !density || !scalars || (backend != 0 && backend != 1) || (df != 0 && df != 1))
       throw std::invalid_argument("invalid UHF export request");
     const auto& raw = *static_cast<RawSource*>(source);
     if (elements != 2 * raw.nbf() * raw.nbf())
       throw std::invalid_argument("UHF alpha/beta density output size mismatch");
-    vibeqc::scf::ScfOptions options;
+    generativeqc::scf::ScfOptions options;
     options.max_iterations = max_iterations;
     options.energy_tolerance = tolerance;
     options.density_tolerance = tolerance;
     options.screening_tolerance = 0;
     options.density_fitting_relative_threshold = metric_threshold;
-    vibeqc::scf::ScfResult result;
+    generativeqc::scf::ScfResult result;
     if (df) {
-      result = backend
-                   ? vibeqc::scf::run_uhf_density_fitting_cuda(raw.orbital(), raw.auxiliary(),
-                                                               options, device)
-                   : vibeqc::scf::run_uhf_density_fitting(raw.orbital(), raw.auxiliary(), options);
+      result = backend ? generativeqc::scf::run_uhf_density_fitting_cuda(
+                             raw.orbital(), raw.auxiliary(), options, device)
+                       : generativeqc::scf::run_uhf_density_fitting(raw.orbital(), raw.auxiliary(),
+                                                                    options);
     } else {
-      result = backend ? vibeqc::scf::run_uhf_cuda(raw.orbital(), options, device)
-                       : vibeqc::scf::run_uhf(raw.orbital(), options);
+      result = backend ? generativeqc::scf::run_uhf_cuda(raw.orbital(), options, device)
+                       : generativeqc::scf::run_uhf(raw.orbital(), options);
     }
     if (!result.converged || result.density.size() != elements)
       throw std::runtime_error("UHF failed or did not converge; no reference exported");
@@ -218,16 +225,16 @@ VIBEQC_API int vibeqc_posthf_uhf_density_v1(void* source, int backend, int devic
  * registers a method nor changes production defaults. Host arrays and the
  * N<=12 audit boundary are explicit; CUDA callers must own a GPU allocation.
  */
-int vibeqc_accuracy_hf_probe_v1(void* source, int method, int backend, int device,
-                                unsigned max_iterations, unsigned diis_history,
-                                double energy_tolerance, double density_tolerance,
-                                double screening_tolerance, int df, double metric_threshold,
-                                double* density, std::size_t density_elements, double* forces,
-                                std::size_t force_elements, double* scalars,
-                                std::size_t scalar_elements, char* error, std::size_t size) {
+int generativeqc_accuracy_hf_probe_v1(void* source, int method, int backend, int device,
+                                      unsigned max_iterations, unsigned diis_history,
+                                      double energy_tolerance, double density_tolerance,
+                                      double screening_tolerance, int df, double metric_threshold,
+                                      double* density, std::size_t density_elements, double* forces,
+                                      std::size_t force_elements, double* scalars,
+                                      std::size_t scalar_elements, char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !density || !forces || !scalars || scalar_elements != 5 ||
-        (method != VIBEQC_METHOD_RHF && method != VIBEQC_METHOD_UHF) ||
+        (method != GENERATIVEQC_METHOD_RHF && method != GENERATIVEQC_METHOD_UHF) ||
         (backend != 0 && backend != 1) || (df != 0 && df != 1) || !max_iterations ||
         !std::isfinite(energy_tolerance) || energy_tolerance <= 0 ||
         !std::isfinite(density_tolerance) || density_tolerance <= 0 ||
@@ -235,43 +242,43 @@ int vibeqc_accuracy_hf_probe_v1(void* source, int method, int backend, int devic
         !std::isfinite(metric_threshold) || metric_threshold <= 0 || metric_threshold >= 1)
       throw std::invalid_argument("invalid HF accuracy probe controls");
     const auto& raw = *static_cast<RawSource*>(source);
-    const std::size_t spins = method == VIBEQC_METHOD_RHF ? 1 : 2;
+    const std::size_t spins = method == GENERATIVEQC_METHOD_RHF ? 1 : 2;
     if (!raw.nbf() || raw.nbf() > 12 || raw.naux() > 24 ||
         density_elements != spins * raw.nbf() * raw.nbf() ||
         force_elements != 3 * raw.orbital().atoms.size())
       throw std::invalid_argument("HF accuracy probe supports at most 12 orbital/24 auxiliary AOs");
-    if (method == VIBEQC_METHOD_RHF &&
+    if (method == GENERATIVEQC_METHOD_RHF &&
         (raw.orbital().multiplicity != 1 || raw.orbital().electron_count % 2))
       throw std::invalid_argument("RHF accuracy probe requires a closed-shell source");
     std::fill_n(density, density_elements, std::numeric_limits<double>::quiet_NaN());
     std::fill_n(forces, force_elements, std::numeric_limits<double>::quiet_NaN());
-    vibeqc::scf::ScfOptions options;
+    generativeqc::scf::ScfOptions options;
     options.max_iterations = max_iterations;
     options.diis_history = diis_history;
     options.energy_tolerance = energy_tolerance;
     options.density_tolerance = density_tolerance;
     options.screening_tolerance = screening_tolerance;
     options.density_fitting_relative_threshold = metric_threshold;
-    vibeqc::scf::ScfResult result;
-    if (method == VIBEQC_METHOD_RHF) {
+    generativeqc::scf::ScfResult result;
+    if (method == GENERATIVEQC_METHOD_RHF) {
       if (df) {
-        result =
-            backend ? vibeqc::scf::run_rhf_density_fitting_cuda(raw.orbital(), raw.auxiliary(),
-                                                                options, device)
-                    : vibeqc::scf::run_rhf_density_fitting(raw.orbital(), raw.auxiliary(), options);
+        result = backend ? generativeqc::scf::run_rhf_density_fitting_cuda(
+                               raw.orbital(), raw.auxiliary(), options, device)
+                         : generativeqc::scf::run_rhf_density_fitting(raw.orbital(),
+                                                                      raw.auxiliary(), options);
       } else {
-        result = backend ? vibeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
-                         : vibeqc::scf::run_rhf(raw.orbital(), options);
+        result = backend ? generativeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
+                         : generativeqc::scf::run_rhf(raw.orbital(), options);
       }
     } else {
       if (df) {
-        result =
-            backend ? vibeqc::scf::run_uhf_density_fitting_cuda(raw.orbital(), raw.auxiliary(),
-                                                                options, device)
-                    : vibeqc::scf::run_uhf_density_fitting(raw.orbital(), raw.auxiliary(), options);
+        result = backend ? generativeqc::scf::run_uhf_density_fitting_cuda(
+                               raw.orbital(), raw.auxiliary(), options, device)
+                         : generativeqc::scf::run_uhf_density_fitting(raw.orbital(),
+                                                                      raw.auxiliary(), options);
       } else {
-        result = backend ? vibeqc::scf::run_uhf_cuda(raw.orbital(), options, device)
-                         : vibeqc::scf::run_uhf(raw.orbital(), options);
+        result = backend ? generativeqc::scf::run_uhf_cuda(raw.orbital(), options, device)
+                         : generativeqc::scf::run_uhf(raw.orbital(), options);
       }
     }
     scalars[0] = result.energy;
@@ -293,18 +300,19 @@ int vibeqc_accuracy_hf_probe_v1(void* source, int method, int backend, int devic
  * final densities are reusable only after the caller checks convergence and
  * re-evaluates the target operator at the destination state.
  */
-int vibeqc_scf_solve_v1(void* source, int method, int multiplicity, int df, unsigned max_iterations,
-                        unsigned diis_history, double energy_tolerance, double density_tolerance,
-                        double metric_threshold, const double* initial_density,
-                        ScfProposeV1 propose, ScfObserveV1 observe, double* density,
-                        std::size_t elements, double* forces, std::size_t force_elements,
-                        double* scalars, std::size_t scalar_elements, char* error,
-                        std::size_t size) {
+int generativeqc_scf_solve_v1(void* source, int method, int multiplicity, int df,
+                              unsigned max_iterations, unsigned diis_history,
+                              double energy_tolerance, double density_tolerance,
+                              double metric_threshold, const double* initial_density,
+                              ScfProposeV1 propose, ScfObserveV1 observe, double* density,
+                              std::size_t elements, double* forces, std::size_t force_elements,
+                              double* scalars, std::size_t scalar_elements, char* error,
+                              std::size_t size) {
   return guarded(error, size, [&] {
-    using namespace vibeqc::scf;
+    using namespace generativeqc::scf;
     if (!source || !density || !forces || !scalars || scalar_elements != 6 ||
-        (method != VIBEQC_METHOD_RHF && method != VIBEQC_METHOD_UHF) || (df != 0 && df != 1) ||
-        !max_iterations || max_iterations > 10000 || diis_history > 100 ||
+        (method != GENERATIVEQC_METHOD_RHF && method != GENERATIVEQC_METHOD_UHF) ||
+        (df != 0 && df != 1) || !max_iterations || max_iterations > 10000 || diis_history > 100 ||
         !std::isfinite(energy_tolerance) || energy_tolerance <= 0 ||
         !std::isfinite(density_tolerance) || density_tolerance <= 0 ||
         !std::isfinite(metric_threshold) || metric_threshold <= 0 || metric_threshold >= 1)
@@ -313,10 +321,10 @@ int vibeqc_scf_solve_v1(void* source, int method, int multiplicity, int df, unsi
     auto system = raw.orbital();
     if (multiplicity < 1 || multiplicity - 1 > system.electron_count ||
         (system.electron_count - (multiplicity - 1)) % 2 ||
-        (method == VIBEQC_METHOD_RHF && multiplicity != 1))
+        (method == GENERATIVEQC_METHOD_RHF && multiplicity != 1))
       throw std::invalid_argument("inconsistent SCF spin populations");
     system.multiplicity = multiplicity;
-    const std::size_t spins = method == VIBEQC_METHOD_RHF ? 1 : 2;
+    const std::size_t spins = method == GENERATIVEQC_METHOD_RHF ? 1 : 2;
     if (!raw.nbf() || raw.nbf() > 12 || raw.naux() > 24 ||
         elements != spins * raw.nbf() * raw.nbf() || force_elements != 3 * system.atoms.size())
       throw std::invalid_argument(
@@ -367,7 +375,7 @@ int vibeqc_scf_solve_v1(void* source, int method, int multiplicity, int df, unsi
     options.strict_initial_density = true;
     const auto* seed = initial_density ? &initial : nullptr;
     ScfResult result;
-    if (method == VIBEQC_METHOD_RHF)
+    if (method == GENERATIVEQC_METHOD_RHF)
       result = df ? run_rhf_density_fitting(system, raw.auxiliary(), options, seed)
                   : run_rhf(system, options, seed);
     else
@@ -392,8 +400,9 @@ int vibeqc_scf_solve_v1(void* source, int method, int multiplicity, int df, unsi
  * an auxiliary basis; a missing auxiliary basis fails closed instead of
  * silently switching to a different Hamiltonian.
  */
-int vibeqc_posthf_rhf_jk_plan_create_v1(void* source, int device, double threshold, void** out,
-                                        double* diagnostics, char* error, std::size_t size) {
+int generativeqc_posthf_rhf_jk_plan_create_v1(void* source, int device, double threshold,
+                                              void** out, double* diagnostics, char* error,
+                                              std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !out || !diagnostics)
       throw std::invalid_argument("invalid RHF J/K plan request");
@@ -403,21 +412,21 @@ int vibeqc_posthf_rhf_jk_plan_create_v1(void* source, int device, double thresho
     const auto& raw = *static_cast<RawSource*>(source);
     if (raw.naux() == 0U) throw std::runtime_error("CUDA DF response requires an auxiliary basis");
     auto prepared = std::make_unique<PostHfRhfJkPlan>();
-    std::vector<vibeqc::core::System> orbital_systems{raw.orbital()};
-    std::vector<vibeqc::core::System> auxiliary_systems{raw.auxiliary()};
+    std::vector<generativeqc::core::System> orbital_systems{raw.orbital()};
+    std::vector<generativeqc::core::System> auxiliary_systems{raw.auxiliary()};
     std::vector<double> metrics;
     std::size_t nbf = 0U;
     std::size_t naux = 0U;
     std::string detail;
-    vibeqc_status status = vibeqc::scf::create_cuda_density_fitting_integral_source(
+    generativeqc_status status = generativeqc::scf::create_cuda_density_fitting_integral_source(
         device, orbital_systems, auxiliary_systems, &prepared->source, metrics, nbf, naux, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "CUDA DF source preparation failed" : detail);
-    std::vector<vibeqc::scf::CudaDensityFittingMetricDiagnostic> plan_diagnostics;
-    status = vibeqc::scf::create_cuda_density_fitting_jk_plan_from_source(
+    std::vector<generativeqc::scf::CudaDensityFittingMetricDiagnostic> plan_diagnostics;
+    status = generativeqc::scf::create_cuda_density_fitting_jk_plan_from_source(
         device, &prepared->source, 1U, nbf, naux, metrics, threshold, 0U, 0U, &prepared->plan,
         plan_diagnostics, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "CUDA DF J/K plan preparation failed" : detail);
     prepared->nbf = nbf;
     prepared->naux = naux;
@@ -437,9 +446,9 @@ int vibeqc_posthf_rhf_jk_plan_create_v1(void* source, int device, double thresho
   });
 }
 
-int vibeqc_posthf_rhf_jk_plan_execute_v1(void* plan, const double* density, std::size_t elements,
-                                         double* coulomb, double* exchange, char* error,
-                                         std::size_t size) {
+int generativeqc_posthf_rhf_jk_plan_execute_v1(void* plan, const double* density,
+                                               std::size_t elements, double* coulomb,
+                                               double* exchange, char* error, std::size_t size) {
   return guarded(error, size, [&] {
     auto* prepared = static_cast<PostHfRhfJkPlan*>(plan);
     if (!prepared || !prepared->plan || !density || !coulomb || !exchange ||
@@ -450,9 +459,9 @@ int vibeqc_posthf_rhf_jk_plan_execute_v1(void* plan, const double* density, std:
     std::vector<double> coulomb_vector;
     std::vector<double> exchange_vector;
     std::string detail;
-    const vibeqc_status status = vibeqc::scf::execute_cuda_density_fitting_rhf_jk(
+    const generativeqc_status status = generativeqc::scf::execute_cuda_density_fitting_rhf_jk(
         prepared->plan, density_vector, coulomb_vector, exchange_vector, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "CUDA DF J/K execution failed" : detail);
     if (coulomb_vector.size() != elements || exchange_vector.size() != elements)
       throw std::runtime_error("CUDA DF J/K output size mismatch");
@@ -467,16 +476,17 @@ int vibeqc_posthf_rhf_jk_plan_execute_v1(void* plan, const double* density, std:
   });
 }
 
-int vibeqc_posthf_rhf_jk_plan_metrics_v1(void* plan, std::uint64_t* counters,
-                                         std::size_t counter_count, double* values,
-                                         std::size_t value_count, char* error, std::size_t size) {
+int generativeqc_posthf_rhf_jk_plan_metrics_v1(void* plan, std::uint64_t* counters,
+                                               std::size_t counter_count, double* values,
+                                               std::size_t value_count, char* error,
+                                               std::size_t size) {
   return guarded(error, size, [&] {
     auto* prepared = static_cast<PostHfRhfJkPlan*>(plan);
     if (!prepared || !prepared->plan || !counters || counter_count < 7 || !values ||
         value_count < 1)
       throw std::invalid_argument("invalid RHF J/K plan metrics request");
     const auto generated =
-        vibeqc::scf::cuda_density_fitting_jk_plan_source_counters(prepared->plan);
+        generativeqc::scf::cuda_density_fitting_jk_plan_source_counters(prepared->plan);
     counters[0] = generated.generated_value_bytes;
     counters[1] = generated.generated_value_tiles;
     counters[2] = 0U;  // raw DF D2H
@@ -488,7 +498,7 @@ int vibeqc_posthf_rhf_jk_plan_metrics_v1(void* plan, std::uint64_t* counters,
   });
 }
 
-void vibeqc_posthf_rhf_jk_plan_destroy_v1(void* plan) {
+void generativeqc_posthf_rhf_jk_plan_destroy_v1(void* plan) {
   delete static_cast<PostHfRhfJkPlan*>(plan);
 }
 
@@ -497,28 +507,29 @@ void vibeqc_posthf_rhf_jk_plan_destroy_v1(void* plan) {
  * (each row-major n*n), then epsilon[n]. It uses the same
  * reference-only HF driver as the method
  * adapter, never the 12-AO exporter. */
-VIBEQC_API int vibeqc_posthf_reference_v1(void* source, int backend, int device,
-                                          unsigned iterations, double tolerance, std::size_t budget,
-                                          double* arrays, std::size_t elements, double* scalars,
-                                          char* error, std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_reference_v1(void* source, int backend, int device,
+                                                      unsigned iterations, double tolerance,
+                                                      std::size_t budget, double* arrays,
+                                                      std::size_t elements, double* scalars,
+                                                      char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !arrays || !scalars || (backend != 0 && backend != 1) || !iterations ||
         !std::isfinite(tolerance) || tolerance <= 0)
       throw std::invalid_argument("invalid bounded reference request");
     const auto& raw = *static_cast<RawSource*>(source);
     const auto n = raw.nbf();
-    const auto expected = vibeqc::posthf::checked_add(
-        vibeqc::posthf::checked_mul(5, vibeqc::posthf::checked_mul(n, n)), n);
+    const auto expected = generativeqc::posthf::checked_add(
+        generativeqc::posthf::checked_mul(5, generativeqc::posthf::checked_mul(n, n)), n);
     if (elements != expected) throw std::invalid_argument("reference export size mismatch");
-    vibeqc::scf::ScfOptions options;
+    generativeqc::scf::ScfOptions options;
     options.max_iterations = iterations;
     options.energy_tolerance = tolerance;
     options.density_tolerance = tolerance;
     options.screening_tolerance = 0;
     options.export_physical_reference = true;
     options.reference_memory_budget_bytes = budget;
-    const auto result = backend ? vibeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
-                                : vibeqc::scf::run_rhf(raw.orbital(), options);
+    const auto result = backend ? generativeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
+                                : generativeqc::scf::run_rhf(raw.orbital(), options);
     if (!result.converged || !result.reference)
       throw std::runtime_error("HF failed or bounded reference export is unsupported by backend");
     const auto& r = *result.reference;
@@ -538,18 +549,18 @@ VIBEQC_API int vibeqc_posthf_reference_v1(void* source, int backend, int device,
 /** Private identical-orbital validation entry to the production native consumer.
  * It is not a
  * public MP2 method or a substitute for the HF-to-MP2 route. */
-VIBEQC_API int vibeqc_posthf_mp2_energy_v1(void* source, int backend, int device,
-                                           const double* arrays, std::size_t elements,
-                                           double hf_energy, std::size_t budget, double threshold,
-                                           unsigned tile, double* out, char* error,
-                                           std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_mp2_energy_v1(void* source, int backend, int device,
+                                                       const double* arrays, std::size_t elements,
+                                                       double hf_energy, std::size_t budget,
+                                                       double threshold, unsigned tile, double* out,
+                                                       char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !out || (backend != 0 && backend != 1))
       throw std::invalid_argument("invalid MP2 validation request");
     const auto& raw = *static_cast<RawSource*>(source);
     const auto ref = supplied_reference(raw, arrays, elements, hf_energy);
-    const auto result =
-        vibeqc::mp2::conventional_energy(ref, raw, budget, threshold, tile, backend == 1, device);
+    const auto result = generativeqc::mp2::conventional_energy(ref, raw, budget, threshold, tile,
+                                                               backend == 1, device);
     out[0] = result.opposite_spin;
     out[1] = result.same_spin;
     out[2] = result.minimum_denominator;
@@ -561,24 +572,26 @@ VIBEQC_API int vibeqc_posthf_mp2_energy_v1(void* source, int backend, int device
 // Returns coordinate-major dS, dh, dg, and nuclear-repulsion derivatives.
 // The output-size guard does not bound dense evaluator scratch. Production
 // method execution must use the bounded derivative consumers.
-VIBEQC_API int vibeqc_posthf_integral_derivatives_v1(void* source, std::size_t output_budget,
-                                                     double* output, std::size_t elements,
-                                                     char* error, std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_integral_derivatives_v1(void* source,
+                                                                 std::size_t output_budget,
+                                                                 double* output,
+                                                                 std::size_t elements, char* error,
+                                                                 std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !output) throw std::invalid_argument("invalid derivative oracle request");
     const auto& raw = *static_cast<RawSource*>(source);
     const auto n = raw.nbf();
     const auto nc = raw.orbital().atoms.size() * 3;
     if (!n || n > 12) throw std::invalid_argument("derivative oracle supports at most 12 AOs");
-    const auto n2 = vibeqc::posthf::checked_mul(n, n);
-    const auto n4 = vibeqc::posthf::checked_mul(n2, n2);
-    const auto per_coordinate = vibeqc::posthf::checked_add(
-        vibeqc::posthf::checked_add(vibeqc::posthf::checked_mul(2, n2), n4), 1);
-    const auto expected = vibeqc::posthf::checked_mul(nc, per_coordinate);
+    const auto n2 = generativeqc::posthf::checked_mul(n, n);
+    const auto n4 = generativeqc::posthf::checked_mul(n2, n2);
+    const auto per_coordinate = generativeqc::posthf::checked_add(
+        generativeqc::posthf::checked_add(generativeqc::posthf::checked_mul(2, n2), n4), 1);
+    const auto expected = generativeqc::posthf::checked_mul(nc, per_coordinate);
     if (elements != expected ||
-        vibeqc::posthf::checked_mul(expected, sizeof(double)) > output_budget)
+        generativeqc::posthf::checked_mul(expected, sizeof(double)) > output_budget)
       throw std::length_error("derivative oracle output exceeds its output budget");
-    const auto integrals = vibeqc::integrals::build_integrals(raw.orbital(), true, true);
+    const auto integrals = generativeqc::integrals::build_integrals(raw.orbital(), true, true);
     auto* cursor = output;
     for (const auto* values : {&integrals.overlap_derivative, &integrals.hcore_derivative,
                                &integrals.eri_derivative, &integrals.nuclear_repulsion_derivative})
@@ -590,9 +603,11 @@ VIBEQC_API int vibeqc_posthf_integral_derivatives_v1(void* source, std::size_t o
 // Dense DF derivative oracle for small complete-gradient validation only.
 // Returns coordinate-major dS, dh, dA, dM, and nuclear derivatives.
 // The output-size guard does not bound dense evaluator scratch.
-VIBEQC_API int vibeqc_posthf_df_integral_derivatives_v1(void* source, std::size_t output_budget,
-                                                        double* output, std::size_t elements,
-                                                        char* error, std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_df_integral_derivatives_v1(void* source,
+                                                                    std::size_t output_budget,
+                                                                    double* output,
+                                                                    std::size_t elements,
+                                                                    char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !output) throw std::invalid_argument("invalid DF derivative oracle request");
     const auto& raw = *static_cast<RawSource*>(source);
@@ -602,19 +617,19 @@ VIBEQC_API int vibeqc_posthf_df_integral_derivatives_v1(void* source, std::size_
     if (!n || n > 12 || !na || na > 32)
       throw std::invalid_argument(
           "DF derivative oracle supports at most 12 AOs and 32 auxiliaries");
-    const auto n2 = vibeqc::posthf::checked_mul(n, n);
-    const auto na2 = vibeqc::posthf::checked_mul(na, na);
-    const auto n2na = vibeqc::posthf::checked_mul(n2, na);
-    const auto per_coordinate = vibeqc::posthf::checked_add(
-        vibeqc::posthf::checked_add(vibeqc::posthf::checked_mul(2, n2), n2na),
-        vibeqc::posthf::checked_add(na2, 1));
-    const auto expected = vibeqc::posthf::checked_mul(nc, per_coordinate);
+    const auto n2 = generativeqc::posthf::checked_mul(n, n);
+    const auto na2 = generativeqc::posthf::checked_mul(na, na);
+    const auto n2na = generativeqc::posthf::checked_mul(n2, na);
+    const auto per_coordinate = generativeqc::posthf::checked_add(
+        generativeqc::posthf::checked_add(generativeqc::posthf::checked_mul(2, n2), n2na),
+        generativeqc::posthf::checked_add(na2, 1));
+    const auto expected = generativeqc::posthf::checked_mul(nc, per_coordinate);
     if (elements != expected ||
-        vibeqc::posthf::checked_mul(expected, sizeof(double)) > output_budget)
+        generativeqc::posthf::checked_mul(expected, sizeof(double)) > output_budget)
       throw std::length_error("DF derivative oracle output exceeds its output budget");
-    const auto one = vibeqc::integrals::build_integrals(raw.orbital(), true, false);
-    const auto df =
-        vibeqc::integrals::build_density_fitting_integrals(raw.orbital(), raw.auxiliary(), true);
+    const auto one = generativeqc::integrals::build_integrals(raw.orbital(), true, false);
+    const auto df = generativeqc::integrals::build_density_fitting_integrals(raw.orbital(),
+                                                                             raw.auxiliary(), true);
     auto* cursor = output;
     for (const auto* values :
          {&one.overlap_derivative, &one.hcore_derivative, &df.three_center_derivative,
@@ -625,7 +640,7 @@ VIBEQC_API int vibeqc_posthf_df_integral_derivatives_v1(void* source, std::size_
   });
 }
 // One strided A/M cotangent tile through the generic #143 CUDA consumer.
-VIBEQC_API int vibeqc_posthf_df_gradient_tile_cuda_v1(
+GENERATIVEQC_API int generativeqc_posthf_df_gradient_tile_cuda_v1(
     void* source, int device, unsigned kind, const std::size_t* range, const double* weights,
     std::size_t weight_elements, std::size_t stage_budget, double* gradient,
     std::size_t gradient_elements, char* error, std::size_t error_size) {
@@ -635,15 +650,15 @@ VIBEQC_API int vibeqc_posthf_df_gradient_tile_cuda_v1(
     const auto& raw = *static_cast<RawSource*>(source);
     if (!raw.naux() || gradient_elements != raw.orbital().atoms.size() * 3)
       throw std::invalid_argument("DF gradient tile dimensions are inconsistent");
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     std::vector<double> result;
     std::string detail;
-    vibeqc::scf::DfGradientResources resources;
-    const auto status = vibeqc::scf::execute_cuda_df_gradient_tile(
+    generativeqc::scf::DfGradientResources resources;
+    const auto status = generativeqc::scf::execute_cuda_df_gradient_tile(
         device, raw.orbital(), raw.auxiliary(), kind, {range[0], range[1], range[2], range[3]},
         std::span<const double>(weights, weight_elements), 0, stage_budget, result, detail,
         &resources);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "DF gradient tile contraction failed" : detail);
     if (result.size() != gradient_elements)
       throw std::runtime_error("DF gradient tile returned inconsistent dimensions");
@@ -660,7 +675,7 @@ VIBEQC_API int vibeqc_posthf_df_gradient_tile_cuda_v1(
 // CUDA one-electron derivative consumer.  This private post-HF bridge borrows
 // the source's deep-copied system; it does not create a public method result or
 // materialize coordinate-by-AO derivative tensors.
-VIBEQC_API int vibeqc_posthf_one_electron_gradient_cuda_v1(
+GENERATIVEQC_API int generativeqc_posthf_one_electron_gradient_cuda_v1(
     void* source, int device, const double* overlap_weights, const double* kinetic_weights,
     const double* attraction_weights, std::size_t matrix_elements, unsigned schedule,
     std::size_t stage_budget, double* gradient, std::size_t gradient_elements,
@@ -671,23 +686,23 @@ VIBEQC_API int vibeqc_posthf_one_electron_gradient_cuda_v1(
     const auto& raw = *static_cast<RawSource*>(source);
     const auto& system = raw.orbital();
     const auto n = raw.nbf();
-    const auto n2 = vibeqc::posthf::checked_mul(n, n);
+    const auto n2 = generativeqc::posthf::checked_mul(n, n);
     if (matrix_elements != n2 || gradient_elements != system.atoms.size() * 3 ||
         (!overlap_weights && !kinetic_weights && !attraction_weights))
       throw std::invalid_argument("one-electron CUDA gradient dimensions are inconsistent");
     if ((resources && resource_elements != 6) || (!resources && resource_elements))
       throw std::invalid_argument("one-electron CUDA resource output has invalid dimensions");
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
     auto weights = [&](const double* p) {
       return p ? std::span<const double>(p, matrix_elements) : std::span<const double>();
     };
     std::vector<double> result;
     std::string detail;
-    vibeqc::scf::OneElectronGradientResources measured;
-    const auto status = vibeqc::scf::execute_cuda_one_electron_gradient(
+    generativeqc::scf::OneElectronGradientResources measured;
+    const auto status = generativeqc::scf::execute_cuda_one_electron_gradient(
         device, system, weights(overlap_weights), weights(kinetic_weights),
         weights(attraction_weights), schedule, stage_budget, result, detail, &measured);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "one-electron CUDA gradient failed" : detail);
     if (result.size() != gradient_elements)
       throw std::runtime_error("one-electron CUDA gradient returned inconsistent dimensions");
@@ -717,7 +732,7 @@ VIBEQC_API int vibeqc_posthf_one_electron_gradient_cuda_v1(
 // CUDA context and allocator overhead are excluded; numeric candidate/offset/
 // expansion/record/result storage is included. No coordinate-by-AO derivative
 // tensor is formed.
-VIBEQC_API int vibeqc_posthf_weighted_eri_gradient_cuda_v1(
+GENERATIVEQC_API int generativeqc_posthf_weighted_eri_gradient_cuda_v1(
     void* source, int device, const double* weights, std::size_t weight_elements,
     std::size_t stage_budget, double* gradient, std::size_t gradient_elements, char* error,
     std::size_t error_size) {
@@ -727,47 +742,48 @@ VIBEQC_API int vibeqc_posthf_weighted_eri_gradient_cuda_v1(
     const auto& raw = *static_cast<RawSource*>(source);
     const auto& system = raw.orbital();
     const auto n = raw.nbf();
-    const auto n2 = vibeqc::posthf::checked_mul(n, n);
-    const auto n4 = vibeqc::posthf::checked_mul(n2, n2);
+    const auto n2 = generativeqc::posthf::checked_mul(n, n);
+    const auto n4 = generativeqc::posthf::checked_mul(n2, n2);
     if (weight_elements != n4 || gradient_elements != system.atoms.size() * 3)
       throw std::invalid_argument("weighted ERI gradient dimensions are inconsistent");
     std::size_t maximum_expansion_terms = 0;
     for (const auto& shell : system.shells) {
-      const auto cartesian = vibeqc::molecule::cartesian_count(shell.angular_momentum);
-      const auto public_count = system.basis_representation == VIBEQC_BASIS_SPHERICAL
+      const auto cartesian = generativeqc::molecule::cartesian_count(shell.angular_momentum);
+      const auto public_count = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                                     ? 2 * shell.angular_momentum + 1
                                     : cartesian;
-      maximum_expansion_terms =
-          std::max(maximum_expansion_terms, vibeqc::posthf::checked_mul(public_count, cartesian));
+      maximum_expansion_terms = std::max(
+          maximum_expansion_terms, generativeqc::posthf::checked_mul(public_count, cartesian));
     }
-    constexpr std::size_t record_bytes = sizeof(vibeqc::scf::CudaWeightedEriPrimitive);
-    constexpr std::size_t result_bytes = 2 * sizeof(vibeqc::scf::CudaWeightedEriResult);
-    auto fixed_bytes = vibeqc::posthf::checked_mul(gradient_elements, sizeof(double));
-    fixed_bytes = vibeqc::posthf::checked_add(
-        fixed_bytes, vibeqc::posthf::checked_mul(system.shells.size() + 1, sizeof(std::size_t)));
-    fixed_bytes = vibeqc::posthf::checked_add(
+    constexpr std::size_t record_bytes = sizeof(generativeqc::scf::CudaWeightedEriPrimitive);
+    constexpr std::size_t result_bytes = 2 * sizeof(generativeqc::scf::CudaWeightedEriResult);
+    auto fixed_bytes = generativeqc::posthf::checked_mul(gradient_elements, sizeof(double));
+    fixed_bytes = generativeqc::posthf::checked_add(
         fixed_bytes,
-        vibeqc::posthf::checked_mul(vibeqc::posthf::checked_mul(4, maximum_expansion_terms),
-                                    sizeof(vibeqc::molecule::CartesianExpansionTerm)));
-    if (stage_budget <= vibeqc::posthf::checked_add(fixed_bytes, result_bytes))
+        generativeqc::posthf::checked_mul(system.shells.size() + 1, sizeof(std::size_t)));
+    fixed_bytes = generativeqc::posthf::checked_add(
+        fixed_bytes, generativeqc::posthf::checked_mul(
+                         generativeqc::posthf::checked_mul(4, maximum_expansion_terms),
+                         sizeof(generativeqc::molecule::CartesianExpansionTerm)));
+    if (stage_budget <= generativeqc::posthf::checked_add(fixed_bytes, result_bytes))
       throw std::length_error("weighted ERI gradient stage budget is too small");
     const auto capacity = std::min<std::size_t>(
         4096, (stage_budget - fixed_bytes - result_bytes) / (2 * record_bytes));
     if (!capacity) throw std::length_error("weighted ERI gradient cannot hold one record");
-    const auto owned_record_bytes = vibeqc::posthf::checked_mul(capacity, record_bytes);
+    const auto owned_record_bytes = generativeqc::posthf::checked_mul(capacity, record_bytes);
     const auto consumer_budget = stage_budget - fixed_bytes - owned_record_bytes;
-    std::vector<vibeqc::scf::CudaWeightedEriPrimitive> records;
+    std::vector<generativeqc::scf::CudaWeightedEriPrimitive> records;
     records.reserve(capacity);
-    std::vector<vibeqc::scf::CudaWeightedEriResult> output;
+    std::vector<generativeqc::scf::CudaWeightedEriResult> output;
     std::vector<double> candidate(gradient_elements, 0.0);
 
     std::vector<std::size_t> shell_offsets(system.shells.size() + 1, 0);
     for (std::size_t shell = 0; shell < system.shells.size(); ++shell) {
       const auto count =
-          system.basis_representation == VIBEQC_BASIS_SPHERICAL
+          system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
               ? 2 * system.shells[shell].angular_momentum + 1
-              : vibeqc::molecule::cartesian_count(system.shells[shell].angular_momentum);
-      shell_offsets[shell + 1] = vibeqc::posthf::checked_add(shell_offsets[shell], count);
+              : generativeqc::molecule::cartesian_count(system.shells[shell].angular_momentum);
+      shell_offsets[shell + 1] = generativeqc::posthf::checked_add(shell_offsets[shell], count);
     }
     if (shell_offsets.back() != n)
       throw std::runtime_error("weighted ERI shell offsets disagree with the source");
@@ -776,25 +792,25 @@ VIBEQC_API int vibeqc_posthf_weighted_eri_gradient_cuda_v1(
       for (std::size_t sj = 0; sj < system.shells.size(); ++sj)
         for (std::size_t sk = 0; sk < system.shells.size(); ++sk)
           for (std::size_t sl = 0; sl < system.shells.size(); ++sl) {
-            const std::array<const vibeqc::core::Shell*, 4> selected{
+            const std::array<const generativeqc::core::Shell*, 4> selected{
                 &system.shells[si], &system.shells[sj], &system.shells[sk], &system.shells[sl]};
-            const std::array<std::vector<vibeqc::molecule::AoExpansion>, 4> expansions{
-                vibeqc::molecule::ao_expansions(selected[0]->angular_momentum,
-                                                system.basis_representation),
-                vibeqc::molecule::ao_expansions(selected[1]->angular_momentum,
-                                                system.basis_representation),
-                vibeqc::molecule::ao_expansions(selected[2]->angular_momentum,
-                                                system.basis_representation),
-                vibeqc::molecule::ao_expansions(selected[3]->angular_momentum,
-                                                system.basis_representation)};
+            const std::array<std::vector<generativeqc::molecule::AoExpansion>, 4> expansions{
+                generativeqc::molecule::ao_expansions(selected[0]->angular_momentum,
+                                                      system.basis_representation),
+                generativeqc::molecule::ao_expansions(selected[1]->angular_momentum,
+                                                      system.basis_representation),
+                generativeqc::molecule::ao_expansions(selected[2]->angular_momentum,
+                                                      system.basis_representation),
+                generativeqc::molecule::ao_expansions(selected[3]->angular_momentum,
+                                                      system.basis_representation)};
             auto flush = [&] {
               if (records.empty()) return;
-              vibeqc::scf::CudaWeightedEriDiagnostic diagnostic;
+              generativeqc::scf::CudaWeightedEriDiagnostic diagnostic;
               std::string detail;
-              const auto status = vibeqc::scf::contract_cuda_weighted_eri_primitives(
+              const auto status = generativeqc::scf::contract_cuda_weighted_eri_primitives(
                   device, records.data(), records.size(), 1, consumer_budget, false, output,
                   diagnostic, detail);
-              if (status != VIBEQC_STATUS_SUCCESS)
+              if (status != GENERATIVEQC_STATUS_SUCCESS)
                 throw std::runtime_error(detail.empty() ? "weighted ERI CUDA contraction failed"
                                                         : detail);
               if (output.size() != 1)
@@ -821,13 +837,14 @@ VIBEQC_API int vibeqc_posthf_weighted_eri_gradient_cuda_v1(
                       for (const auto& ej : expansions[1][j])
                         for (const auto& ek : expansions[2][k])
                           for (const auto& el : expansions[3][l]) {
-                            const std::array<const vibeqc::molecule::CartesianExpansionTerm*, 4>
+                            const std::array<const generativeqc::molecule::CartesianExpansionTerm*,
+                                             4>
                                 terms{&ei, &ej, &ek, &el};
                             double component_weight = weight;
                             for (const auto* term : terms)
                               component_weight *=
                                   term->coefficient *
-                                  vibeqc::molecule::cartesian_component_normalization(
+                                  generativeqc::molecule::cartesian_component_normalization(
                                       term->component);
                             for (const auto& pi : selected[0]->primitives)
                               for (const auto& pj : selected[1]->primitives)
@@ -836,8 +853,8 @@ VIBEQC_API int vibeqc_posthf_weighted_eri_gradient_cuda_v1(
                                     if (records.size() == capacity) flush();
                                     auto& record = records.emplace_back();
                                     record.kind = 0;
-                                    const std::array<const vibeqc::core::Primitive*, 4> primitives{
-                                        &pi, &pj, &pk, &pl};
+                                    const std::array<const generativeqc::core::Primitive*, 4>
+                                        primitives{&pi, &pj, &pk, &pl};
                                     for (unsigned slot = 0; slot < 4; ++slot) {
                                       for (unsigned axis = 0; axis < 3; ++axis) {
                                         record.angular[slot][axis] = terms[slot]->component[axis];
@@ -864,7 +881,7 @@ VIBEQC_API int vibeqc_posthf_weighted_eri_gradient_cuda_v1(
 // It returns four independent center derivatives; physical-atom scatter stays
 // with the caller so coincident centers are never identified prematurely. Its
 // stage budget/exclusions match the molecular adapter above.
-VIBEQC_API int vibeqc_posthf_weighted_eri_shell_gradient_cuda_v1(
+GENERATIVEQC_API int generativeqc_posthf_weighted_eri_shell_gradient_cuda_v1(
     void* source, int device, const std::size_t* shell_indices, const double* weights,
     std::size_t weight_elements, std::size_t stage_budget, double* center_gradient,
     std::size_t gradient_elements, char* error, std::size_t error_size) {
@@ -877,37 +894,37 @@ VIBEQC_API int vibeqc_posthf_weighted_eri_shell_gradient_cuda_v1(
     std::string detail;
     const std::array<std::size_t, 4> shells{shell_indices[0], shell_indices[1], shell_indices[2],
                                             shell_indices[3]};
-    const auto status = vibeqc::posthf::contract_weighted_eri_shell_derivative_cuda(
+    const auto status = generativeqc::posthf::contract_weighted_eri_shell_derivative_cuda(
         device, system, shells, std::span<const double>(weights, weight_elements), stage_budget,
         candidate, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "weighted ERI shell contraction failed" : detail);
     std::copy(candidate.begin(), candidate.end(), center_gradient);
   });
 }
 /** Explicit CG10 slot order for direct native CUDA/CPU layout verification. */
-VIBEQC_API int vibeqc_posthf_mo_block_v1(void* source, int backend, int device,
-                                         const double* arrays, std::size_t elements,
-                                         double hf_energy, const std::size_t* shape,
-                                         const std::size_t* slots, std::size_t budget, double* out,
-                                         std::size_t output_elements, char* error,
-                                         std::size_t size) {
+GENERATIVEQC_API int generativeqc_posthf_mo_block_v1(void* source, int backend, int device,
+                                                     const double* arrays, std::size_t elements,
+                                                     double hf_energy, const std::size_t* shape,
+                                                     const std::size_t* slots, std::size_t budget,
+                                                     double* out, std::size_t output_elements,
+                                                     char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!source || !out || !shape || !slots || (backend != 0 && backend != 1))
       throw std::invalid_argument("invalid MO validation request");
     const auto& raw = *static_cast<RawSource*>(source);
     const auto ref = supplied_reference(raw, arrays, elements, hf_energy);
-    vibeqc::posthf::MOSlots request;
+    generativeqc::posthf::MOSlots request;
     std::size_t count = 1;
     for (unsigned k = 0; k < 4; ++k) {
       if (!shape[k] || shape[k] > ref.nbf)
         throw std::invalid_argument("invalid MO validation shape");
       request[k].assign(slots, slots + shape[k]);
       slots += shape[k];
-      count = vibeqc::posthf::checked_mul(count, shape[k]);
+      count = generativeqc::posthf::checked_mul(count, shape[k]);
     }
     if (count != output_elements) throw std::invalid_argument("MO validation output size mismatch");
-    const vibeqc::posthf::NativeBlockProvider provider(raw, ref, budget);
+    const generativeqc::posthf::NativeBlockProvider provider(raw, ref, budget);
     const auto values = provider.get(request, backend == 1, device);
     std::copy(values.begin(), values.end(), out);
   });

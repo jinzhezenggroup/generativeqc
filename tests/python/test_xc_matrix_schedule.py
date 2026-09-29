@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.dft.ao_cuda import emit_grid_source
-from vibeqc_compiler.dft.xc_contraction_cuda import (
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+from generativeqc_compiler.dft.xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
     XcMatrixSchedule,
     compact_panel_program,

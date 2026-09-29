@@ -5,7 +5,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_state_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void initialize_state_kernel(std::int32_t batch_size, bool reuse_previous_energy,
                                         const double* energy, std::uint8_t* active,
@@ -99,4 +99,4 @@ void launch_inspect_spin_solver_kernel(dim3 grid, dim3 block, std::size_t shared
                                                                     active, failed, converged);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

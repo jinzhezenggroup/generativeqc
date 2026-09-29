@@ -3,13 +3,13 @@
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.array_api.scf import (
+from generativeqc_compiler.array_api.scf import (
     density_program as array_density_program,
 )
-from vibeqc_compiler.array_api.scf import (
+from generativeqc_compiler.array_api.scf import (
     weighted_density_program as array_weighted_density_program,
 )
-from vibeqc_compiler.tensor.scf_cuda import (
+from generativeqc_compiler.tensor.scf_cuda import (
     density_template_hash,
     emit_density_cuda,
     weighted_density_template_hash,

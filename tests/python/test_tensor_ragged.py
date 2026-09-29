@@ -5,10 +5,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -23,14 +23,18 @@ from vibeqc_compiler.tensor import (
     transpose_program,
     vjp,
 )
-from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-from vibeqc_compiler.tensor.cuda_execute import (
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+from generativeqc_compiler.tensor.cuda_execute import (
     PreparedCuda,
     compile_cuda,
     tensor_static_data,
 )
-from vibeqc_compiler.tensor.cuda_plan import VALIDATION_BYTES, TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.interpreter import execute
+from generativeqc_compiler.tensor.cuda_plan import (
+    VALIDATION_BYTES,
+    TensorSchedule,
+    plan_cuda,
+)
+from generativeqc_compiler.tensor.interpreter import execute
 
 TARGET = cuda_target_info("sm_120")
 
@@ -243,15 +247,15 @@ def test_changed_ragged_topology_changes_program_and_plan_identity() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_ragged_cuda_matches_interpreter(tmp_path: Path) -> None:
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     program = _program()
     plan = plan_cuda(program, compiler.target, schedule=TensorSchedule())
@@ -263,15 +267,15 @@ def test_ragged_cuda_matches_interpreter(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_TENSOR_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_heterogeneous_ragged_batch_cuda_matches_interpreter(tmp_path: Path) -> None:
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_TENSOR_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     program, feeds = _heterogeneous_batch_program()
     plan = plan_cuda(program, compiler.target, schedule=TensorSchedule())

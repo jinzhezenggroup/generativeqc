@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-def test_import_vibeqc_stays_toolchain_lazy(tmp_path: Path) -> None:
+def test_import_generativeqc_stays_toolchain_lazy(tmp_path: Path) -> None:
     """Importing the runtime must neither probe toolchains nor load JIT machinery."""
 
     root = Path(__file__).resolve().parents[2]
@@ -43,7 +43,7 @@ def _guarded_which(command, *args, **kwargs):
     name = Path(os.fsdecode(command)).name.lower()
     if name in _TOOLCHAIN_NAMES:
         raise AssertionError(
-            f"importing vibeqc probed local compiler toolchain executable {name!r}"
+            f"importing generativeqc probed local compiler toolchain executable {name!r}"
         )
     return _real_which(command, *args, **kwargs)
 
@@ -51,7 +51,7 @@ def _guarded_which(command, *args, **kwargs):
 def _forbid_subprocess(*args, **kwargs):
     command = args[0] if args else kwargs.get("args")
     raise AssertionError(
-        f"importing vibeqc attempted to launch a subprocess: {command!r}"
+        f"importing generativeqc attempted to launch a subprocess: {command!r}"
     )
 
 
@@ -69,17 +69,17 @@ subprocess.Popen = _forbid_subprocess
     code = """
 import sys
 
-import vibeqc
+import generativeqc
 
 forbidden_exact = {
-    "vibeqc_compiler.common.cpp_adapter",
-    "vibeqc_compiler.common.cuda_adapter",
-    "vibeqc_compiler.common.native_runtime",
-    "vibeqc_compiler.common.cuda_runtime",
+    "generativeqc_compiler.common.cpp_adapter",
+    "generativeqc_compiler.common.cuda_adapter",
+    "generativeqc_compiler.common.native_runtime",
+    "generativeqc_compiler.common.cuda_runtime",
 }
 forbidden_prefixes = (
-    "vibeqc._stationary_cpu",
-    "vibeqc._stationary_cuda",
+    "generativeqc._stationary_cpu",
+    "generativeqc._stationary_cuda",
 )
 forbidden = sorted(
     name
@@ -93,10 +93,10 @@ assert not forbidden, (
 
 # Explicit prepared execution remains available and forwards to the original
 # classes, rather than a proxy or separately loaded copy of the implementation.
-import vibeqc_compiler.dft as dft
+import generativeqc_compiler.dft as dft
 assert {"PreparedGrid", "PreparedGridBatch"} <= set(dir(dft))
-from vibeqc_compiler.dft import PreparedGrid, PreparedGridBatch
-from vibeqc_compiler.dft import prepared
+from generativeqc_compiler.dft import PreparedGrid, PreparedGridBatch
+from generativeqc_compiler.dft import prepared
 assert PreparedGrid is prepared.PreparedGrid
 assert PreparedGridBatch is prepared.PreparedGridBatch
 """

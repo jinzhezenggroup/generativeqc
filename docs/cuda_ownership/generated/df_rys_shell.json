@@ -4,5 +4,5 @@
     "generated/generated_df_rys_shell.cuh",
     "generated/generated_df_rys_policy.hpp"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_rys_shell.py"
+  "owner": "python/generativeqc_compiler/integral/df_rys_shell.py"
 }

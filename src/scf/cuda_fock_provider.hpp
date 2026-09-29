@@ -1,11 +1,11 @@
-#ifndef VIBEQC_SCF_CUDA_FOCK_PROVIDER_HPP
-#define VIBEQC_SCF_CUDA_FOCK_PROVIDER_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_FOCK_PROVIDER_HPP
+#define GENERATIVEQC_SCF_CUDA_FOCK_PROVIDER_HPP
 
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/fock_provider.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Borrow one item in an existing direct or DF CUDA plan. The enclosing
  * geometry cache owns every handle and immutable DF data object and must
@@ -51,5 +51,5 @@ class CudaFockProviderView {
  * rules. Backend-specific views wrap existing numerical implementations. */
 using CudaFockPlanView = BasicFockPlanView<CudaFockProviderView>;
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

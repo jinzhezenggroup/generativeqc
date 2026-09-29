@@ -10,7 +10,7 @@ occupations. LDA uses `GridSpec v1` and versioned unpolarized/polarized tails;
 PBE uses exact interior expressions plus explicit versioned production-tail
 policies. Small RKS and UKS matched-grid references pass the recorded `1e-8 Eh`
 energy gates. `WB97M_V` and `RCCSD_T` retain stable identifiers for capability
-discovery but return `VIBEQC_STATUS_NOT_IMPLEMENTED`.
+discovery but return `GENERATIVEQC_STATUS_NOT_IMPLEMENTED`.
 
 ## Method execution boundary
 
@@ -42,7 +42,7 @@ executable properties. LDA/PBE RKS and UKS advertise energy only and no
 prepared batch.
 Result publication is method-neutral internally; the
 ABI-0 `density_rms` field retains the density-update convergence measure.
-The additive `vibeqc_calculation_get_scf_diagnostic` query publishes separate
+The additive `generativeqc_calculation_get_scf_diagnostic` query publishes separate
 density-update and physical commutator RMS values after completed LDA/PBE
 RKS/UKS solves, including nonconverged runs. Its versioned descriptor leaves
 existing result layouts unchanged. Unsupported methods and failed backend
@@ -191,7 +191,7 @@ are resident in the fixed plan.
 
 ## Fleet execution
 
-`vibeqc_batch` is a persistent, non-reentrant fleet plan. It copies system
+`generativeqc_batch` is a persistent, non-reentrant fleet plan. It copies system
 topologies during preparation, so caller system handles can be released. Each
 execution optionally supplies new ragged coordinates without rebuilding basis
 metadata. Compatible systems are bucketed by AO count, occupied count, and
@@ -234,14 +234,14 @@ for the captured portion, rather than aborting SCF. CUDA 12.9's documented
 32768
 dimension bound is distinct from the measured RTX 5090 provider transition:
 512 AOs is capture-compatible on that stack, while 513 and 768 AOs remain
-ordinary-cuSOLVER-compatible but reject VibeQC's stronger iteration-Graph
+ordinary-cuSOLVER-compatible but reject GenerativeQC's stronger iteration-Graph
 contract. Their Fock/matrix work stays in reusable Graphs,
 while setup, finalization, and the ordinary-stream iteration gap use the
 standard single-matrix `Xsyevd` provider one matrix at a time, matching
 GPU4PySCF's robust large-matrix strategy.
 
 The diagnostic environment switch
-`VIBEQC_GRAPH_EIGENSOLVER_OVERRIDE=graph_native` is deliberately stronger:
+`GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE=graph_native` is deliberately stronger:
 it bypasses provider probing and routes both iteration and finalization
 eigensolves through the Graph-native implementation, preventing a known
 cuSOLVER capture regression from returning through the ordinary-stream path.
@@ -262,7 +262,7 @@ then recover omitted centers from translational invariance; orders six and
 above retain the general three-component Dual path.
 The production one-electron force uses compiler-owned generated S/T/V
 derivatives and a generated schedule selected by
-`VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING` (nucleus-cooperative by default). It
+`GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING` (nucleus-cooperative by default). It
 contracts stationary density and energy-weighted-density inputs directly into
 atomic gradients without materializing coordinate derivative tensors. The
 previous cooperative native force path and provider selector are retired;
@@ -360,7 +360,7 @@ the previous successful return, its resident final energy becomes the next
 SCF comparison baseline. The original energy and density tolerances still
 apply, but an already converged fixed point may finish after one Graph replay
 instead of an artificial two-replay minimum. The diagnostic
-`VIBEQC_FINAL_FOCK_REBUILD=1` restores the complete rebuild for A/B checks.
+`GENERATIVEQC_FINAL_FOCK_REBUILD=1` restores the complete rebuild for A/B checks.
 Component-unrolled/Rys quartet kernels and finer AO-level task compaction
 remain subsequent scheduler work. Direct quartets
 always operate on normalized Cartesian source AOs. For a public real-spherical

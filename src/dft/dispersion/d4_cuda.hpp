@@ -7,7 +7,7 @@
 
 #include "dft/dispersion/d4_reference.hpp"
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 struct D4CudaBatch {
   std::uint32_t systems{};
@@ -40,4 +40,4 @@ cudaError_t launch_d4_fixed_charge_batched_cuda(const D4CudaBatch& batch,
                                                 const D4CudaResult& result,
                                                 cudaStream_t stream = nullptr);
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

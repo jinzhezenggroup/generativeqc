@@ -15,7 +15,7 @@ def test_generated_response_rejects_stale_geometry_before_work(tmp_path: Path) -
         pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
     start = source.index(
-        "vibeqc_status execute_cuda_density_fitting_generated_force_response("
+        "generativeqc_status execute_cuda_density_fitting_generated_force_response("
     )
     start = source.index("{\n", start) + 2
     end = source.index("  const auto elements =", start)
@@ -24,7 +24,7 @@ def test_generated_response_rejects_stale_geometry_before_work(tmp_path: Path) -
         r"""
 #include <cstddef>
 #include <string>
-constexpr int VIBEQC_STATUS_INVALID_ARGUMENT = 1;
+constexpr int GENERATIVEQC_STATUS_INVALID_ARGUMENT = 1;
 struct System { std::size_t count{2}; int geometry{}; };
 namespace molecule { std::size_t ao_count(const System& s) { return s.count; } }
 struct Source { int orbital{}, auxiliary{}; };
@@ -45,9 +45,9 @@ int execute(Plan* plan, std::size_t system, System orbital, System auxiliary) {
 int main() {
   Source source{}; Plan plan; plan.integral_source = &source;
   if (execute(&plan, 0, {}, {}) != 0) return 10;
-  if (execute(&plan, 0, {2, 1}, {}) != VIBEQC_STATUS_INVALID_ARGUMENT) return 11;
-  if (execute(&plan, 0, {}, {2, 1}) != VIBEQC_STATUS_INVALID_ARGUMENT) return 12;
-  if (execute(&plan, 1, {}, {}) != VIBEQC_STATUS_INVALID_ARGUMENT) return 13;
+  if (execute(&plan, 0, {2, 1}, {}) != GENERATIVEQC_STATUS_INVALID_ARGUMENT) return 11;
+  if (execute(&plan, 0, {}, {2, 1}) != GENERATIVEQC_STATUS_INVALID_ARGUMENT) return 12;
+  if (execute(&plan, 1, {}, {}) != GENERATIVEQC_STATUS_INVALID_ARGUMENT) return 13;
   plan.integral_source = nullptr;
   if (execute(&plan, 0, {}, {}) != 0) return 14;
 }
@@ -87,7 +87,7 @@ def test_exact_source_identity_detects_geometry_and_basis_changes(
 #include <cassert>
 #include <cmath>
 int main() {
-  using namespace vibeqc;
+  using namespace generativeqc;
   core::System original;
   original.atoms = {{1, {0.0, 0.1, 0.2}, 0}, {8, {0.5, -0.4, 1.0}, 0}};
   original.shells = {{0, 0, {{1.0, 0.7}, {0.3, 0.4}}}, {1, 1, {{2.0, 0.9}}}};
@@ -109,7 +109,7 @@ int main() {
       case 6: modified.shells[0].primitives[0].exponent = 1.01; break;
       case 7: modified.shells[0].primitives[0].coefficient = 0.701; break;
       case 8: modified.shells[0].primitives.pop_back(); break;
-      case 9: modified.basis_representation = VIBEQC_BASIS_SPHERICAL; break;
+      case 9: modified.basis_representation = GENERATIVEQC_BASIS_SPHERICAL; break;
       case 10: std::swap(modified.shells[0], modified.shells[1]); break;
     }
     assert(!identity.matches(modified));

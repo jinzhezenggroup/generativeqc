@@ -1,4 +1,4 @@
-! Test-only adapter to independent upstream DFT-D4. No VibeQC mathematics.
+! Test-only adapter to independent upstream DFT-D4. No GenerativeQC mathematics.
 ! SPDX-License-Identifier: GPL-3.0-or-later
 program d4_fixed_charge_oracle
   use mctc_env, only: wp, error_type

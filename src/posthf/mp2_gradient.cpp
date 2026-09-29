@@ -10,7 +10,7 @@
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 namespace {
 constexpr const char* energy_adjoint_hash = "mp2-canonical-energy-adjoint-v1";
 
@@ -611,4 +611,4 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
   return plan;
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

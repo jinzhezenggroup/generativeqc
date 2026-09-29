@@ -8,7 +8,7 @@
 #include "backends/cuda/gfn2_es3.cuh"
 #include "generated_gfn2_es3_native.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -78,7 +78,7 @@ __global__ void es3_potential_kernel(Gfn2ES3DeviceBatch batch, const double* she
   /* Preflight all outputs before publishing any result for this system. */
   for (std::int64_t shell = range.begin + threadIdx.x; shell < range.end; shell += blockDim.x) {
     double potential = 0.0;
-    if (!vibeqc::xtb::generated::evaluate_gfn2_es3_potential(batch.shell_gamma3[shell],
+    if (!generativeqc::xtb::generated::evaluate_gfn2_es3_potential(batch.shell_gamma3[shell],
                                                              shell_charges[shell], &potential)) {
       record_error(device_error, Gfn2ES3DeviceError::kNonfinitePotentialArithmetic);
       atomicExch(&valid, 0);
@@ -91,7 +91,7 @@ __global__ void es3_potential_kernel(Gfn2ES3DeviceBatch batch, const double* she
 
   for (std::int64_t shell = range.begin + threadIdx.x; shell < range.end; shell += blockDim.x) {
     double potential = 0.0;
-    (void)vibeqc::xtb::generated::evaluate_gfn2_es3_potential(batch.shell_gamma3[shell],
+    (void)generativeqc::xtb::generated::evaluate_gfn2_es3_potential(batch.shell_gamma3[shell],
                                                               shell_charges[shell], &potential);
     shell_potentials[shell] = potential;
   }
@@ -125,7 +125,7 @@ __global__ void es3_energy_kernel(Gfn2ES3DeviceBatch batch, const double* shell_
     }
     for (std::int64_t shell = range.begin; shell < range.end; ++shell) {
       double contribution = 0.0;
-      if (!vibeqc::xtb::generated::evaluate_gfn2_es3_energy(batch.shell_gamma3[shell],
+      if (!generativeqc::xtb::generated::evaluate_gfn2_es3_energy(batch.shell_gamma3[shell],
                                                             shell_charges[shell], &contribution)) {
         record_error(device_error, Gfn2ES3DeviceError::kNonfiniteEnergyArithmetic);
         return;
@@ -228,7 +228,7 @@ __global__ void es3_scc_potential_kernel(Gfn2ES3DeviceBatch batch,
     } else if (!isfinite(charge)) {
       record_es3_scc_system_error(system_errors, system, Gfn2ES3DeviceError::kNonfiniteShellCharge);
       atomicExch(&valid, 0);
-    } else if (!vibeqc::xtb::generated::evaluate_gfn2_es3_potential(gamma3, charge, &value)) {
+    } else if (!generativeqc::xtb::generated::evaluate_gfn2_es3_potential(gamma3, charge, &value)) {
       record_es3_scc_system_error(system_errors, system,
                                   Gfn2ES3DeviceError::kNonfinitePotentialArithmetic);
       atomicExch(&valid, 0);
@@ -240,7 +240,7 @@ __global__ void es3_scc_potential_kernel(Gfn2ES3DeviceBatch batch,
   }
   for (std::int64_t shell = begin + threadIdx.x; shell < end; shell += blockDim.x) {
     double value = 0.0;
-    (void)vibeqc::xtb::generated::evaluate_gfn2_es3_potential(batch.shell_gamma3[shell],
+    (void)generativeqc::xtb::generated::evaluate_gfn2_es3_potential(batch.shell_gamma3[shell],
                                                               shell_charges[shell], &value);
     shell_potentials[shell] = value;
   }
@@ -270,7 +270,7 @@ __global__ void es3_scc_energy_kernel(Gfn2ES3DeviceBatch batch,
       record_es3_scc_system_error(system_errors, system, Gfn2ES3DeviceError::kNonfiniteShellCharge);
       return;
     }
-    if (!vibeqc::xtb::generated::evaluate_gfn2_es3_energy(gamma3, charge, &contribution)) {
+    if (!generativeqc::xtb::generated::evaluate_gfn2_es3_energy(gamma3, charge, &contribution)) {
       record_es3_scc_system_error(system_errors, system,
                                   Gfn2ES3DeviceError::kNonfiniteEnergyArithmetic);
       return;
@@ -552,4 +552,4 @@ cudaError_t evaluate_gfn2_es3_scc_energy_cuda(
   return cudaPeekAtLastError();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

@@ -35,7 +35,7 @@ def test_native_lambda_owner_fresh_replay_and_budget(tmp_path: Path) -> None:
             compiler,
             "-std=c++20",
             "-O0",
-            "-DVIBEQC_HAS_CUDA=0",
+            "-DGENERATIVEQC_HAS_CUDA=0",
             "-I" + str(root / "src"),
             "-I" + str(tmp_path),
             str(root / "src/cc/solver.cpp"),
@@ -66,7 +66,7 @@ CPP = r"""
 #include <stdexcept>
 
 int main() {
-  using namespace vibeqc::cc;
+  using namespace generativeqc::cc;
   Problem p;
   p.nocc = 1;
   p.nvir = 2;

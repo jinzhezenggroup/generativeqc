@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, method_capabilities
+from generativeqc import Calculator, method_capabilities
 
 H3_PLUS = [
     ("H", (-0.47073898552969, 0.81534384004086, 0.0)),
@@ -115,8 +115,8 @@ def _cuda_gfn2_singlepoint_or_skip(
     charge: int = 0,
     multiplicity: int = 1,
 ) -> object:
-    if os.environ.get("VIBEQC_TEST_GFN2_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_GFN2_CUDA=1 in a qualified GPU allocation")
+    if os.environ.get("GENERATIVEQC_TEST_GFN2_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_GFN2_CUDA=1 in a qualified GPU allocation")
     if not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("GFN2 CUDA qualification requires a Slurm allocation")
     calculator = Calculator(
@@ -161,7 +161,7 @@ def test_explicit_cuda_qualification_does_not_skip_missing_backend(
         def singlepoint(self, *args: Any, **kwargs: Any) -> Any:
             raise NotImplementedError("library was built without CUDA support")
 
-    monkeypatch.setenv("VIBEQC_TEST_GFN2_CUDA", "1")
+    monkeypatch.setenv("GENERATIVEQC_TEST_GFN2_CUDA", "1")
     monkeypatch.setenv("SLURM_JOB_ID", "host-admission-fixture")
     monkeypatch.setattr(sys.modules[__name__], "Calculator", Unavailable)
     with pytest.raises(NotImplementedError, match="without CUDA support"):

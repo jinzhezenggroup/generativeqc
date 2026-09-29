@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.lowering.fock_accumulation import (
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
 )
 
@@ -30,7 +30,7 @@ def test_generated_scatter_all_canonical_index_coincidences(tmp_path: Path) -> N
 #include <array>
 #include <cmath>
 int main() {
-  using namespace vibeqc::scf::cuda_execution;
+  using namespace generativeqc::scf::cuda_execution;
   constexpr size_t n=4, m=n*n, off=5, spin=40;
   auto index=[](size_t p,size_t q,size_t r,size_t s){return ((p*n+q)*n+r)*n+s;};
 """

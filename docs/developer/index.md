@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide describes how VibeQC is implemented and where new functionality belongs.
+This guide describes how GenerativeQC is implemented and where new functionality belongs.
 
 ## Start here
 
@@ -22,7 +22,7 @@ This guide describes how VibeQC is implemented and where new functionality belon
 - Derivatives and response: [stationary problems](stationary_problem.md), [implicit response](implicit_response.md), [orbital response](response.md), and [Hessians](hessian.md).
 - Execution: [TensorIR CUDA](tensor_cuda.md), [tensor precision](tensor_precision.md), [state transport](state_transport.md), and [experimental OpenCL](opencl_backend.md).
 
-See [Extending VibeQC](extending/index.md). VibeQC does not yet promise a stable third-party extension API; that section intentionally reserves the framework future public contracts should fill.
+See [Extending GenerativeQC](extending/index.md). GenerativeQC does not yet promise a stable third-party extension API; that section intentionally reserves the framework future public contracts should fill.
 
 ```{toctree}
 :hidden:

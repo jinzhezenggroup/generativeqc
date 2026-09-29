@@ -7,11 +7,11 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "generativeqc/fock.h"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
-#include "vibeqc/fock.h"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
 
@@ -19,17 +19,17 @@
 #include "scf/cuda_direct_jk_device.hpp"
 #endif
 
-struct vibeqc_fock_plan {
-  std::unique_ptr<vibeqc::scf::PreparedFockPlan> source;
-  vibeqc::scf::FockBuildSpec requested;
+struct generativeqc_fock_plan {
+  std::unique_ptr<generativeqc::scf::PreparedFockPlan> source;
+  generativeqc::scf::FockBuildSpec requested;
   std::string detail;
 };
 
-struct vibeqc_rhf_response_resident {
-  vibeqc::scf::PreparedFockPlan* parent{};
+struct generativeqc_rhf_response_resident {
+  generativeqc::scf::PreparedFockPlan* parent{};
   std::string detail;
-#if VIBEQC_HAS_CUDA
-  vibeqc::scf::CudaDirectJkPlan* direct{};
+#if GENERATIVEQC_HAS_CUDA
+  generativeqc::scf::CudaDirectJkPlan* direct{};
   int device_id{-1};
   cudaStream_t stream{};
   cublasHandle_t blas{};
@@ -50,11 +50,11 @@ struct vibeqc_rhf_response_resident {
  * Alpha and beta rotation blocks share one lease arena, while the raw
  * unrestricted J/K buffers remain separate so the CUDA provider can preserve
  * spin coupling without a host intermediate. */
-struct vibeqc_uhf_response_resident {
-  vibeqc_fock_plan* parent{};
+struct generativeqc_uhf_response_resident {
+  generativeqc_fock_plan* parent{};
   std::string detail;
-#if VIBEQC_HAS_CUDA
-  vibeqc::scf::CudaDirectJkPlan* direct{};
+#if GENERATIVEQC_HAS_CUDA
+  generativeqc::scf::CudaDirectJkPlan* direct{};
   int device_id{-1};
   cudaStream_t stream{};
   cublasHandle_t blas{};
@@ -73,22 +73,22 @@ struct vibeqc_uhf_response_resident {
 };
 
 namespace {
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 void require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
 }
-FockTermSpec from_c(const vibeqc_fock_term& term) {
+FockTermSpec from_c(const generativeqc_fock_term& term) {
   require(term.present == 0 || term.present == 1, "Fock presence must be zero or one");
   return {term.present != 0, term.coefficient, static_cast<FockOperator>(term.op), term.omega,
           static_cast<FockApproximation>(term.approximation)};
 }
-vibeqc_fock_spec to_c(const FockBuildSpec& spec) {
+generativeqc_fock_spec to_c(const FockBuildSpec& spec) {
   auto term = [](const FockTermSpec& t) {
-    return vibeqc_fock_term{t.present ? 1 : 0, t.coefficient, static_cast<int32_t>(t.op), t.omega,
-                            static_cast<int32_t>(t.approximation)};
+    return generativeqc_fock_term{t.present ? 1 : 0, t.coefficient, static_cast<int32_t>(t.op),
+                                  t.omega, static_cast<int32_t>(t.approximation)};
   };
-  return {sizeof(vibeqc_fock_spec),
-          VIBEQC_ABI_VERSION,
+  return {sizeof(generativeqc_fock_spec),
+          GENERATIVEQC_ABI_VERSION,
           spec.version,
           static_cast<int32_t>(spec.spin),
           spec.derivative_order,
@@ -121,18 +121,19 @@ std::size_t buffer_bytes(uint64_t count) {
 }
 }  // namespace
 
-extern "C" vibeqc_status vibeqc_fock_plan_create(
-    vibeqc_context* context, const vibeqc_system* system, const vibeqc_system* auxiliary,
-    const vibeqc_fock_spec* spec, const vibeqc_fock_controls* controls, vibeqc_fock_plan** output) {
+extern "C" generativeqc_status generativeqc_fock_plan_create(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_system* auxiliary, const generativeqc_fock_spec* spec,
+    const generativeqc_fock_controls* controls, generativeqc_fock_plan** output) {
   if (output) *output = nullptr;
-  if (!context || !system || !spec || !output) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(spec) ||
-      (controls && !vibeqc::api::valid_descriptor(controls)))
-    return VIBEQC_STATUS_ABI_MISMATCH;
+  if (!context || !system || !spec || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(spec) ||
+      (controls && !generativeqc::api::valid_descriptor(controls)))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
   try {
-    require(context->state.executed_backend == VIBEQC_BACKEND_CPU_REFERENCE ||
-                context->state.executed_backend == VIBEQC_BACKEND_CUDA,
+    require(context->state.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+                context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA,
             "Fock plans require an explicit CPU or CUDA context");
     FockBuildSpec request;
     request.version = spec->spec_version;
@@ -140,8 +141,9 @@ extern "C" vibeqc_status vibeqc_fock_plan_create(
     request.derivative_order = spec->derivative_order;
     request.coulomb = from_c(spec->coulomb);
     request.exchange = from_c(spec->exchange);
-    const auto backend = context->state.executed_backend == VIBEQC_BACKEND_CUDA ? FockBackend::Cuda
-                                                                                : FockBackend::Cpu;
+    const auto backend = context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA
+                             ? FockBackend::Cuda
+                             : FockBackend::Cpu;
     const double screening = controls ? controls->screening_tolerance : 1e-12;
     const double requested_threshold = controls ? controls->metric_relative_threshold : 0.0;
     // Validate public controls even when resolution would discard an unused
@@ -154,29 +156,28 @@ extern "C" vibeqc_status vibeqc_fock_plan_create(
     const double threshold = requested_threshold == 0.0 ? 1e-10 : requested_threshold;
     const auto budget = controls ? controls->device_budget_bytes : 0;
     require(budget <= std::numeric_limits<std::size_t>::max(), "Fock budget overflows size_t");
-    auto plan = std::make_unique<vibeqc_fock_plan>();
+    auto plan = std::make_unique<generativeqc_fock_plan>();
     plan->requested = request;
     plan->source = std::make_unique<PreparedFockPlan>(
         system->data, auxiliary ? &auxiliary->data : nullptr,
         resolve_fock_build(request, backend, screening, threshold), context->state.device_id,
         budget);
     *output = plan.release();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&context->last_detail);
+    return generativeqc::api::map_exception(&context->last_detail);
   }
 }
-extern "C" void vibeqc_fock_plan_destroy(vibeqc_fock_plan* plan) { delete plan; }
-extern "C" const char* vibeqc_fock_plan_last_error(const vibeqc_fock_plan* plan) {
+extern "C" void generativeqc_fock_plan_destroy(generativeqc_fock_plan* plan) { delete plan; }
+extern "C" const char* generativeqc_fock_plan_last_error(const generativeqc_fock_plan* plan) {
   return plan ? plan->detail.c_str() : "null Fock plan";
 }
 
-extern "C" vibeqc_status vibeqc_fock_plan_evaluate(vibeqc_fock_plan* plan, const double* density,
-                                                   uint64_t density_count, const double* beta,
-                                                   uint64_t beta_count,
-                                                   vibeqc_fock_result* result) {
-  if (!plan || !density || !result) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(result)) return VIBEQC_STATUS_ABI_MISMATCH;
+extern "C" generativeqc_status generativeqc_fock_plan_evaluate(
+    generativeqc_fock_plan* plan, const double* density, uint64_t density_count, const double* beta,
+    uint64_t beta_count, generativeqc_fock_result* result) {
+  if (!plan || !density || !result) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(result)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   plan->detail.clear();
   try {
     const auto& source = *plan->source;
@@ -228,21 +229,20 @@ extern "C" vibeqc_status vibeqc_fock_plan_evaluate(vibeqc_fock_plan* plan, const
     result->energy_one_electron = e1;
     result->energy_two_electron = e2;
     result->nuclear_repulsion = ints.nuclear_repulsion;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&plan->detail);
+    return generativeqc::api::map_exception(&plan->detail);
   }
 }
 
-extern "C" vibeqc_status vibeqc_fock_plan_solve(vibeqc_fock_plan* plan,
-                                                const vibeqc_fock_scf_controls* controls,
-                                                const double* initial_density,
-                                                uint64_t initial_density_count,
-                                                vibeqc_fock_scf_result* output) {
-  if (!plan || !output) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(output) ||
-      (controls && !vibeqc::api::valid_descriptor(controls)))
-    return VIBEQC_STATUS_ABI_MISMATCH;
+extern "C" generativeqc_status generativeqc_fock_plan_solve(
+    generativeqc_fock_plan* plan, const generativeqc_fock_scf_controls* controls,
+    const double* initial_density, uint64_t initial_density_count,
+    generativeqc_fock_scf_result* output) {
+  if (!plan || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(output) ||
+      (controls && !generativeqc::api::valid_descriptor(controls)))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
   plan->detail.clear();
   try {
     const auto& strategy = plan->source->strategy();
@@ -286,7 +286,7 @@ extern "C" vibeqc_status vibeqc_fock_plan_solve(vibeqc_fock_plan* plan,
     if (!result.converged) {
       plan->detail =
           "Fock SCF did not converge in " + std::to_string(result.iterations) + " iterations";
-      return VIBEQC_STATUS_NOT_CONVERGED;
+      return GENERATIVEQC_STATUS_NOT_CONVERGED;
     }
     if (!std::isfinite(result.energy) || !std::isfinite(result.energy_change) ||
         !std::isfinite(result.density_rms) || result.density.size() != count ||
@@ -302,9 +302,9 @@ extern "C" vibeqc_status vibeqc_fock_plan_solve(vibeqc_fock_plan* plan,
     output->iterations = result.iterations;
     output->initial_density_used = result.initial_density_used;
     output->fock_builds = result.fock_builds;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&plan->detail);
+    return generativeqc::api::map_exception(&plan->detail);
   }
 }
 
@@ -314,29 +314,30 @@ extern "C" vibeqc_status vibeqc_fock_plan_solve(vibeqc_fock_plan* plan,
  * Return 0 for dense, 1 for dual-owner packed, 2 for single-owner packed,
  * and -1 for an invalid handle.
  */
-extern "C" int vibeqc_fock_plan_df_pair_storage_v1(const vibeqc_fock_plan* plan) {
+extern "C" int generativeqc_fock_plan_df_pair_storage_v1(const generativeqc_fock_plan* plan) {
   if (!plan) return -1;
   const auto storage = plan->source->diagnostic().variant.df_pair_storage;
   if (storage == DfPairStorage::SymmetricLowerSingle) return 2;
   return storage == DfPairStorage::SymmetricLower ? 1 : 0;
 }
 
-extern "C" vibeqc_status vibeqc_fock_plan_diagnostic(const vibeqc_fock_plan* plan,
-                                                     vibeqc_fock_diagnostic* output) {
-  if (!plan || !output) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(output)) return VIBEQC_STATUS_ABI_MISMATCH;
+extern "C" generativeqc_status generativeqc_fock_plan_diagnostic(
+    const generativeqc_fock_plan* plan, generativeqc_fock_diagnostic* output) {
+  if (!plan || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   const auto& info = plan->source->diagnostic();
   const bool cuda = info.strategy.backend == FockBackend::Cuda;
-  vibeqc_fock_diagnostic out{};
+  generativeqc_fock_diagnostic out{};
   out.struct_size = sizeof(out);
-  out.abi_version = VIBEQC_ABI_VERSION;
+  out.abi_version = GENERATIVEQC_ABI_VERSION;
   out.requested = to_c(plan->requested);
   out.resolved = to_c(info.strategy.spec);
-  out.backend = cuda ? VIBEQC_BACKEND_CUDA : VIBEQC_BACKEND_CPU_REFERENCE;
+  out.backend = cuda ? GENERATIVEQC_BACKEND_CUDA : GENERATIVEQC_BACKEND_CPU_REFERENCE;
   out.resolved_schedule = static_cast<int32_t>(info.strategy.schedule);
-  out.source_schedule = cuda                                      ? VIBEQC_FOCK_CUDA_INDEPENDENT
-                        : info.strategy.metric_relative_threshold ? VIBEQC_FOCK_CPU_INDEPENDENT
-                                                                  : VIBEQC_FOCK_CPU_REFERENCE;
+  out.source_schedule = cuda ? GENERATIVEQC_FOCK_CUDA_INDEPENDENT
+                        : info.strategy.metric_relative_threshold
+                            ? GENERATIVEQC_FOCK_CPU_INDEPENDENT
+                            : GENERATIVEQC_FOCK_CPU_REFERENCE;
   out.nbf = info.nbf;
   out.coordinate_count = plan->source->system().atoms.size() * 3;
   out.device_bytes = info.device_bytes;
@@ -373,7 +374,7 @@ extern "C" vibeqc_status vibeqc_fock_plan_diagnostic(const vibeqc_fock_plan* pla
                 : info.variant.df_derivative_mapping                        ? "generated-serial"
                                                                             : "generated-atomic");
   if (cuda) {
-    const auto provider = vibeqc::runtime::cuda_provider_name(info.variant.cuda_provider);
+    const auto provider = generativeqc::runtime::cuda_provider_name(info.variant.cuda_provider);
     const char* policy = info.variant.one_electron_value_capability_fallback ? "fallback"
                          : info.variant.one_electron_value_override          ? "override"
                                                                              : "auto";
@@ -395,11 +396,11 @@ extern "C" vibeqc_status vibeqc_fock_plan_diagnostic(const vibeqc_fock_plan* pla
                 : cuda                               ? "dual-pair-thread"
                                                      : "cpu-reference");
   *output = out;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 namespace {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 void resident_cuda(cudaError_t status) {
   if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
 }
@@ -419,55 +420,57 @@ std::size_t resident_sum(std::initializer_list<std::size_t> terms) {
   }
   return value;
 }
-double* resident_slot(vibeqc_rhf_response_resident* owner, std::uint32_t slot) {
+double* resident_slot(generativeqc_rhf_response_resident* owner, std::uint32_t slot) {
   require(owner && slot < owner->vector_slots, "resident RHF response slot out of range");
   return owner->slots + static_cast<std::size_t>(slot) * owner->dimension;
 }
-const double* resident_slot(const vibeqc_rhf_response_resident* owner, std::uint32_t slot) {
+const double* resident_slot(const generativeqc_rhf_response_resident* owner, std::uint32_t slot) {
   require(owner && slot < owner->vector_slots, "resident RHF response slot out of range");
   return owner->slots + static_cast<std::size_t>(slot) * owner->dimension;
 }
 template <class Function>
-vibeqc_status resident_guard(vibeqc_rhf_response_resident* owner, Function function) {
-  if (!owner) return VIBEQC_STATUS_INVALID_ARGUMENT;
+generativeqc_status resident_guard(generativeqc_rhf_response_resident* owner, Function function) {
+  if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   owner->detail.clear();
   try {
     resident_cuda(cudaSetDevice(owner->device_id));
     function();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&owner->detail);
+    return generativeqc::api::map_exception(&owner->detail);
   }
 }
-void resident_sync(vibeqc_rhf_response_resident* owner) {
+void resident_sync(generativeqc_rhf_response_resident* owner) {
   resident_cuda(cudaStreamSynchronize(owner->stream));
   ++owner->synchronizations;
 }
 #endif
 }  // namespace
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_create(
-    vibeqc_fock_plan* plan, const double* coefficients, uint64_t coefficient_count,
+extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
+    generativeqc_fock_plan* plan, const double* coefficients, uint64_t coefficient_count,
     const double* orbital_energies, uint64_t energy_count, uint32_t nocc, uint32_t vector_slots,
-    uint64_t device_budget_bytes, vibeqc_rhf_response_resident** output) {
+    uint64_t device_budget_bytes, generativeqc_rhf_response_resident** output) {
   if (output) *output = nullptr;
-  if (!plan || !coefficients || !orbital_energies || !output) return VIBEQC_STATUS_INVALID_ARGUMENT;
-#if VIBEQC_HAS_CUDA
+  if (!plan || !coefficients || !orbital_energies || !output)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
   plan->detail.clear();
   try {
     const auto& source = *plan->source;
     const auto& strategy = source.strategy();
-    require(strategy.backend == vibeqc::scf::FockBackend::Cuda,
+    require(strategy.backend == generativeqc::scf::FockBackend::Cuda,
             "resident RHF response requires CUDA Fock plan");
-    require(strategy.spec.spin == vibeqc::scf::FockSpin::Restricted &&
-                strategy.spec.coulomb.present && strategy.spec.exchange.present &&
-                strategy.spec.coulomb.approximation == vibeqc::scf::FockApproximation::Exact &&
-                strategy.spec.exchange.approximation == vibeqc::scf::FockApproximation::Exact &&
-                strategy.spec.coulomb.op == vibeqc::scf::FockOperator::FullRange &&
-                strategy.spec.exchange.op == vibeqc::scf::FockOperator::FullRange &&
-                strategy.spec.coulomb.coefficient == 1.0 &&
-                strategy.spec.exchange.coefficient == -0.5 && strategy.screening_tolerance == 0.0,
-            "resident RHF response requires exact unscreened conventional RHF J/K");
+    require(
+        strategy.spec.spin == generativeqc::scf::FockSpin::Restricted &&
+            strategy.spec.coulomb.present && strategy.spec.exchange.present &&
+            strategy.spec.coulomb.approximation == generativeqc::scf::FockApproximation::Exact &&
+            strategy.spec.exchange.approximation == generativeqc::scf::FockApproximation::Exact &&
+            strategy.spec.coulomb.op == generativeqc::scf::FockOperator::FullRange &&
+            strategy.spec.exchange.op == generativeqc::scf::FockOperator::FullRange &&
+            strategy.spec.coulomb.coefficient == 1.0 &&
+            strategy.spec.exchange.coefficient == -0.5 && strategy.screening_tolerance == 0.0,
+        "resident RHF response requires exact unscreened conventional RHF J/K");
     auto* direct = source.cuda_direct_source();
     require(direct != nullptr, "resident RHF response direct CUDA source unavailable");
     const auto n = source.one_electron().nbf;
@@ -498,11 +501,11 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_create(
     require(device_budget_bytes > 0 && bytes <= device_budget_bytes,
             "resident RHF response device budget is insufficient");
 
-    auto owner = std::make_unique<vibeqc_rhf_response_resident>();
+    auto owner = std::make_unique<generativeqc_rhf_response_resident>();
     owner->parent = plan->source.get();
     owner->direct = direct;
-    owner->device_id = vibeqc::scf::cuda_direct_jk_device(direct);
-    owner->stream = vibeqc::scf::cuda_direct_jk_stream(direct);
+    owner->device_id = generativeqc::scf::cuda_direct_jk_device(direct);
+    owner->stream = generativeqc::scf::cuda_direct_jk_stream(direct);
     owner->nbf = n;
     owner->nocc = o;
     owner->nvirt = v;
@@ -516,7 +519,7 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_create(
     try {
       resident_blas(cublasSetStream(owner->blas, owner->stream));
       resident_blas(cublasSetPointerMode(owner->blas, CUBLAS_POINTER_MODE_HOST));
-      resident_cuda(vibeqc::runtime::resource_cuda_malloc(&owner->allocation, bytes));
+      resident_cuda(generativeqc::runtime::resource_cuda_malloc(&owner->allocation, bytes));
       auto* cursor = static_cast<double*>(owner->allocation);
       owner->slots = cursor;
       cursor += slot_values;
@@ -562,7 +565,7 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_create(
     } catch (...) {
       if (owner->allocation) {
         (void)cudaStreamSynchronize(owner->stream);
-        (void)vibeqc::runtime::resource_cuda_free(owner->allocation);
+        (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
         owner->allocation = nullptr;
       }
       if (owner->blas) {
@@ -572,9 +575,9 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_create(
       throw;
     }
     *output = owner.release();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&plan->detail);
+    return generativeqc::api::map_exception(&plan->detail);
   }
 #else
   (void)coefficient_count;
@@ -583,35 +586,36 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_create(
   (void)vector_slots;
   (void)device_budget_bytes;
   plan->detail = "resident RHF response requires a CUDA-enabled library";
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" void vibeqc_rhf_response_resident_destroy(vibeqc_rhf_response_resident* owner) {
+extern "C" void generativeqc_rhf_response_resident_destroy(
+    generativeqc_rhf_response_resident* owner) {
   if (!owner) return;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (owner->device_id >= 0) (void)cudaSetDevice(owner->device_id);
   if (owner->stream) (void)cudaStreamSynchronize(owner->stream);
-  if (owner->allocation) (void)vibeqc::runtime::resource_cuda_free(owner->allocation);
+  if (owner->allocation) (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
   if (owner->blas) (void)cublasDestroy(owner->blas);
 #endif
   delete owner;
 }
 
-extern "C" const char* vibeqc_rhf_response_resident_last_error(
-    const vibeqc_rhf_response_resident* owner) {
+extern "C" const char* generativeqc_rhf_response_resident_last_error(
+    const generativeqc_rhf_response_resident* owner) {
   return owner ? owner->detail.c_str() : "null resident RHF response owner";
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_get_diagnostic(
-    const vibeqc_rhf_response_resident* owner,
-    vibeqc_rhf_response_resident_diagnostic* diagnostic) {
-  if (!owner || !diagnostic) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(diagnostic)) return VIBEQC_STATUS_ABI_MISMATCH;
-#if VIBEQC_HAS_CUDA
-  vibeqc_rhf_response_resident_diagnostic out{};
+extern "C" generativeqc_status generativeqc_rhf_response_resident_get_diagnostic(
+    const generativeqc_rhf_response_resident* owner,
+    generativeqc_rhf_response_resident_diagnostic* diagnostic) {
+  if (!owner || !diagnostic) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(diagnostic)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+#if GENERATIVEQC_HAS_CUDA
+  generativeqc_rhf_response_resident_diagnostic out{};
   out.struct_size = sizeof(out);
-  out.abi_version = VIBEQC_ABI_VERSION;
+  out.abi_version = GENERATIVEQC_ABI_VERSION;
   out.nbf = owner->nbf;
   out.nocc = owner->nocc;
   out.nvirt = owner->nvirt;
@@ -625,16 +629,16 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_get_diagnostic(
   out.blas_calls = owner->blas_calls;
   out.device_id = owner->device_id;
   *diagnostic = out;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 #else
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_upload(vibeqc_rhf_response_resident* owner,
-                                                             uint32_t slot, const double* values,
-                                                             uint64_t count) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_upload(
+    generativeqc_rhf_response_resident* owner, uint32_t slot, const double* values,
+    uint64_t count) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(values && count == owner->dimension, "resident RHF upload shape mismatch");
     for (std::size_t i = 0; i < count; ++i)
@@ -650,14 +654,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_upload(vibeqc_rhf_response
   (void)slot;
   (void)values;
   (void)count;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_download(vibeqc_rhf_response_resident* owner,
-                                                               uint32_t slot, double* values,
-                                                               uint64_t count) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_download(
+    generativeqc_rhf_response_resident* owner, uint32_t slot, double* values, uint64_t count) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(values && count == owner->dimension, "resident RHF download shape mismatch");
     resident_cuda(cudaMemcpyAsync(values, resident_slot(owner, slot),
@@ -673,13 +676,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_download(vibeqc_rhf_respon
   (void)slot;
   (void)values;
   (void)count;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_zero(vibeqc_rhf_response_resident* owner,
-                                                           uint32_t slot) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_zero(
+    generativeqc_rhf_response_resident* owner, uint32_t slot) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     resident_cuda(cudaMemsetAsync(resident_slot(owner, slot), 0, owner->dimension * sizeof(double),
                                   owner->stream));
@@ -687,13 +690,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_zero(vibeqc_rhf_response_r
 #else
   (void)owner;
   (void)slot;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_copy(vibeqc_rhf_response_resident* owner,
-                                                           uint32_t destination, uint32_t source) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_copy(
+    generativeqc_rhf_response_resident* owner, uint32_t destination, uint32_t source) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     resident_blas(cublasDcopy(owner->blas, static_cast<int>(owner->dimension),
                               resident_slot(owner, source), 1, resident_slot(owner, destination),
@@ -704,13 +707,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_copy(vibeqc_rhf_response_r
   (void)owner;
   (void)destination;
   (void)source;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_scale(vibeqc_rhf_response_resident* owner,
-                                                            uint32_t slot, double alpha) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_scale(
+    generativeqc_rhf_response_resident* owner, uint32_t slot, double alpha) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident RHF scale must be finite");
     resident_blas(cublasDscal(owner->blas, static_cast<int>(owner->dimension), &alpha,
@@ -721,14 +724,14 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_scale(vibeqc_rhf_response_
   (void)owner;
   (void)slot;
   (void)alpha;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_axpy(vibeqc_rhf_response_resident* owner,
-                                                           uint32_t destination, double alpha,
-                                                           uint32_t source) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_axpy(
+    generativeqc_rhf_response_resident* owner, uint32_t destination, double alpha,
+    uint32_t source) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident RHF axpy coefficient must be finite");
     resident_blas(cublasDaxpy(owner->blas, static_cast<int>(owner->dimension), &alpha,
@@ -741,14 +744,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_axpy(vibeqc_rhf_response_r
   (void)destination;
   (void)alpha;
   (void)source;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_dot(vibeqc_rhf_response_resident* owner,
-                                                          uint32_t left, uint32_t right,
-                                                          double* value) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_dot(
+    generativeqc_rhf_response_resident* owner, uint32_t left, uint32_t right, double* value) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(value, "resident RHF dot requires output");
     resident_blas(cublasDdot(owner->blas, static_cast<int>(owner->dimension),
@@ -763,13 +765,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_dot(vibeqc_rhf_response_re
   (void)left;
   (void)right;
   (void)value;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_norm(vibeqc_rhf_response_resident* owner,
-                                                           uint32_t slot, double* value) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_norm(
+    generativeqc_rhf_response_resident* owner, uint32_t slot, double* value) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(value, "resident RHF norm requires output");
     resident_blas(cublasDnrm2(owner->blas, static_cast<int>(owner->dimension),
@@ -783,13 +785,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_norm(vibeqc_rhf_response_r
   (void)owner;
   (void)slot;
   (void)value;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_apply(vibeqc_rhf_response_resident* owner,
-                                                            uint32_t destination, uint32_t source) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
+    generativeqc_rhf_response_resident* owner, uint32_t destination, uint32_t source) {
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     require(destination != source, "resident RHF operator source/output must be distinct");
     owner->reconstruction_ready = false;
@@ -816,10 +818,10 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_apply(vibeqc_rhf_response_
     auto spec = owner->parent->strategy().spec;
     spec.derivative_order = 0;
     std::string detail;
-    const auto status = vibeqc::scf::enqueue_cuda_direct_jk_device(
+    const auto status = generativeqc::scf::enqueue_cuda_direct_jk_device(
         owner->direct, spec, owner->density, nullptr, owner->nbf * owner->nbf, owner->coulomb,
         owner->exchange, nullptr, owner->numerical_error, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "resident direct J/K enqueue failed" : detail);
 
     resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density, 1));
@@ -856,14 +858,14 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_apply(vibeqc_rhf_response_
   (void)owner;
   (void)destination;
   (void)source;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_reconstruct_v1(
-    vibeqc_rhf_response_resident* owner, uint32_t solution_slot, const double* frozen_mo,
+extern "C" generativeqc_status generativeqc_rhf_response_resident_reconstruct_v1(
+    generativeqc_rhf_response_resident* owner, uint32_t solution_slot, const double* frozen_mo,
     uint64_t frozen_count, const double* overlap_mo, uint64_t overlap_count) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     owner->reconstruction_ready = false;
     const auto n = owner->nbf, o = owner->nocc, v = owner->nvirt, matrix = n * n;
@@ -909,10 +911,10 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_reconstruct_v1(
     auto spec = owner->parent->strategy().spec;
     spec.derivative_order = 0;
     std::string detail;
-    const auto status = vibeqc::scf::enqueue_cuda_direct_jk_device(
+    const auto status = generativeqc::scf::enqueue_cuda_direct_jk_device(
         owner->direct, spec, owner->density, nullptr, matrix, owner->coulomb, owner->exchange,
         nullptr, owner->numerical_error, detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "resident reconstruction J/K failed" : detail);
 
     resident_blas(cublasDscal(owner->blas, static_cast<int>(matrix), &half, owner->exchange, 1));
@@ -939,7 +941,7 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_reconstruct_v1(
     resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, o, &two,
                               owner->transform_two, n, c_occ, n, &zero, owner->coulomb, n));
     ++owner->blas_calls;
-#if VIBEQC_CUDA_PROVIDER_CUMETAL
+#if GENERATIVEQC_CUDA_PROVIDER_CUMETAL
     // CuMetal does not expose cublasDgeam. Preserve the same column-major A + A^T
     // operation with its supported Level-1 surface, without changing the NVIDIA path.
     resident_blas(
@@ -980,13 +982,13 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_reconstruct_v1(
   (void)frozen_count;
   (void)overlap_mo;
   (void)overlap_count;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" const double* vibeqc_rhf_response_resident_reconstructed_weights_device_v1(
-    const vibeqc_rhf_response_resident* owner) {
-#if VIBEQC_HAS_CUDA
+extern "C" const double* generativeqc_rhf_response_resident_reconstructed_weights_device_v1(
+    const generativeqc_rhf_response_resident* owner) {
+#if GENERATIVEQC_HAS_CUDA
   return owner && owner->reconstruction_ready ? owner->density : nullptr;
 #else
   (void)owner;
@@ -994,10 +996,10 @@ extern "C" const double* vibeqc_rhf_response_resident_reconstructed_weights_devi
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_rhf_response_resident_download_reconstruction_v1(
-    vibeqc_rhf_response_resident* owner, double* density_derivative, uint64_t density_count,
+extern "C" generativeqc_status generativeqc_rhf_response_resident_download_reconstruction_v1(
+    generativeqc_rhf_response_resident* owner, double* density_derivative, uint64_t density_count,
     double* energy_weighted_density_derivative, uint64_t energy_count) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     const auto count = owner->nbf * owner->nbf;
     require(owner->reconstruction_ready, "resident RHF reconstruction is unavailable");
@@ -1017,65 +1019,69 @@ extern "C" vibeqc_status vibeqc_rhf_response_resident_download_reconstruction_v1
   (void)density_count;
   (void)energy_weighted_density_derivative;
   (void)energy_count;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
 namespace {
-#if VIBEQC_HAS_CUDA
-double* uhf_resident_slot(vibeqc_uhf_response_resident* owner, std::uint32_t slot) {
+#if GENERATIVEQC_HAS_CUDA
+double* uhf_resident_slot(generativeqc_uhf_response_resident* owner, std::uint32_t slot) {
   require(owner && slot < owner->vector_slots, "resident UHF response slot out of range");
   return owner->slots + static_cast<std::size_t>(slot) * owner->dimension;
 }
-const double* uhf_resident_slot(const vibeqc_uhf_response_resident* owner, std::uint32_t slot) {
+const double* uhf_resident_slot(const generativeqc_uhf_response_resident* owner,
+                                std::uint32_t slot) {
   require(owner && slot < owner->vector_slots, "resident UHF response slot out of range");
   return owner->slots + static_cast<std::size_t>(slot) * owner->dimension;
 }
 template <class Function>
-vibeqc_status uhf_resident_guard(vibeqc_uhf_response_resident* owner, Function function) {
-  if (!owner) return VIBEQC_STATUS_INVALID_ARGUMENT;
+generativeqc_status uhf_resident_guard(generativeqc_uhf_response_resident* owner,
+                                       Function function) {
+  if (!owner) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   owner->detail.clear();
   try {
     resident_cuda(cudaSetDevice(owner->device_id));
     function();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&owner->detail);
+    return generativeqc::api::map_exception(&owner->detail);
   }
 }
-void uhf_resident_sync(vibeqc_uhf_response_resident* owner) {
+void uhf_resident_sync(generativeqc_uhf_response_resident* owner) {
   resident_cuda(cudaStreamSynchronize(owner->stream));
   ++owner->synchronizations;
 }
 #endif
 }  // namespace
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_create(
-    vibeqc_fock_plan* plan, const double* coefficients_alpha, uint64_t coefficients_alpha_count,
-    const double* orbital_energies_alpha, uint64_t orbital_energies_alpha_count,
-    uint32_t nocc_alpha, const double* coefficients_beta, uint64_t coefficients_beta_count,
-    const double* orbital_energies_beta, uint64_t orbital_energies_beta_count, uint32_t nocc_beta,
-    uint32_t vector_slots, uint64_t device_budget_bytes, vibeqc_uhf_response_resident** output) {
+extern "C" generativeqc_status generativeqc_uhf_response_resident_create(
+    generativeqc_fock_plan* plan, const double* coefficients_alpha,
+    uint64_t coefficients_alpha_count, const double* orbital_energies_alpha,
+    uint64_t orbital_energies_alpha_count, uint32_t nocc_alpha, const double* coefficients_beta,
+    uint64_t coefficients_beta_count, const double* orbital_energies_beta,
+    uint64_t orbital_energies_beta_count, uint32_t nocc_beta, uint32_t vector_slots,
+    uint64_t device_budget_bytes, generativeqc_uhf_response_resident** output) {
   if (output) *output = nullptr;
   if (!plan || !coefficients_alpha || !orbital_energies_alpha || !coefficients_beta ||
       !orbital_energies_beta || !output)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
-#if VIBEQC_HAS_CUDA
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
   plan->detail.clear();
   try {
     const auto& source = *plan->source;
     const auto& strategy = source.strategy();
-    require(strategy.backend == vibeqc::scf::FockBackend::Cuda,
+    require(strategy.backend == generativeqc::scf::FockBackend::Cuda,
             "resident UHF response requires CUDA Fock plan");
-    require(strategy.spec.spin == vibeqc::scf::FockSpin::Unrestricted &&
-                strategy.spec.coulomb.present && strategy.spec.exchange.present &&
-                strategy.spec.coulomb.approximation == vibeqc::scf::FockApproximation::Exact &&
-                strategy.spec.exchange.approximation == vibeqc::scf::FockApproximation::Exact &&
-                strategy.spec.coulomb.op == vibeqc::scf::FockOperator::FullRange &&
-                strategy.spec.exchange.op == vibeqc::scf::FockOperator::FullRange &&
-                strategy.spec.coulomb.coefficient == 1.0 &&
-                strategy.spec.exchange.coefficient == -1.0 && strategy.screening_tolerance == 0.0,
-            "resident UHF response requires exact unscreened conventional UHF J/K");
+    require(
+        strategy.spec.spin == generativeqc::scf::FockSpin::Unrestricted &&
+            strategy.spec.coulomb.present && strategy.spec.exchange.present &&
+            strategy.spec.coulomb.approximation == generativeqc::scf::FockApproximation::Exact &&
+            strategy.spec.exchange.approximation == generativeqc::scf::FockApproximation::Exact &&
+            strategy.spec.coulomb.op == generativeqc::scf::FockOperator::FullRange &&
+            strategy.spec.exchange.op == generativeqc::scf::FockOperator::FullRange &&
+            strategy.spec.coulomb.coefficient == 1.0 &&
+            strategy.spec.exchange.coefficient == -1.0 && strategy.screening_tolerance == 0.0,
+        "resident UHF response requires exact unscreened conventional UHF J/K");
     auto* direct = source.cuda_direct_source();
     require(direct != nullptr, "resident UHF response direct CUDA source unavailable");
     const auto n = source.one_electron().nbf;
@@ -1110,11 +1116,11 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_create(
     require(device_budget_bytes > 0 && bytes <= device_budget_bytes,
             "resident UHF response device budget is insufficient");
 
-    auto owner = std::make_unique<vibeqc_uhf_response_resident>();
+    auto owner = std::make_unique<generativeqc_uhf_response_resident>();
     owner->parent = plan;
     owner->direct = direct;
-    owner->device_id = vibeqc::scf::cuda_direct_jk_device(direct);
-    owner->stream = vibeqc::scf::cuda_direct_jk_stream(direct);
+    owner->device_id = generativeqc::scf::cuda_direct_jk_device(direct);
+    owner->stream = generativeqc::scf::cuda_direct_jk_stream(direct);
     owner->nbf = n;
     owner->nocc_alpha = oa;
     owner->nvirt_alpha = va;
@@ -1134,7 +1140,7 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_create(
     try {
       resident_blas(cublasSetStream(owner->blas, owner->stream));
       resident_blas(cublasSetPointerMode(owner->blas, CUBLAS_POINTER_MODE_HOST));
-      resident_cuda(vibeqc::runtime::resource_cuda_malloc(&owner->allocation, bytes));
+      resident_cuda(generativeqc::runtime::resource_cuda_malloc(&owner->allocation, bytes));
       auto* cursor = static_cast<double*>(owner->allocation);
       owner->slots = cursor;
       cursor += slots;
@@ -1202,7 +1208,7 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_create(
     } catch (...) {
       if (owner->allocation) {
         (void)cudaStreamSynchronize(owner->stream);
-        (void)vibeqc::runtime::resource_cuda_free(owner->allocation);
+        (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
         owner->allocation = nullptr;
       }
       if (owner->blas) {
@@ -1212,9 +1218,9 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_create(
       throw;
     }
     *output = owner.release();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&plan->detail);
+    return generativeqc::api::map_exception(&plan->detail);
   }
 #else
   (void)coefficients_alpha_count;
@@ -1226,37 +1232,38 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_create(
   (void)vector_slots;
   (void)device_budget_bytes;
   plan->detail = "resident UHF response requires a CUDA-enabled library";
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" void vibeqc_uhf_response_resident_destroy(vibeqc_uhf_response_resident* owner) {
+extern "C" void generativeqc_uhf_response_resident_destroy(
+    generativeqc_uhf_response_resident* owner) {
   if (!owner) return;
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (owner->device_id >= 0) (void)cudaSetDevice(owner->device_id);
   if (owner->stream) (void)cudaStreamSynchronize(owner->stream);
-  if (owner->allocation) (void)vibeqc::runtime::resource_cuda_free(owner->allocation);
+  if (owner->allocation) (void)generativeqc::runtime::resource_cuda_free(owner->allocation);
   if (owner->blas) (void)cublasDestroy(owner->blas);
 #endif
   delete owner;
 }
 
-extern "C" const char* vibeqc_uhf_response_resident_last_error(
-    const vibeqc_uhf_response_resident* owner) {
+extern "C" const char* generativeqc_uhf_response_resident_last_error(
+    const generativeqc_uhf_response_resident* owner) {
   return owner ? owner->detail.c_str() : "null resident UHF response owner";
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_get_diagnostic(
-    const vibeqc_uhf_response_resident* owner,
-    vibeqc_uhf_response_resident_diagnostic* diagnostic) {
-  if (!owner || !diagnostic) return VIBEQC_STATUS_INVALID_ARGUMENT;
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_get_diagnostic(
+    const generativeqc_uhf_response_resident* owner,
+    generativeqc_uhf_response_resident_diagnostic* diagnostic) {
+  if (!owner || !diagnostic) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
   if (diagnostic->struct_size < sizeof(*diagnostic) ||
-      diagnostic->abi_version != VIBEQC_ABI_VERSION)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
-  vibeqc_uhf_response_resident_diagnostic out{};
+      diagnostic->abi_version != GENERATIVEQC_ABI_VERSION)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  generativeqc_uhf_response_resident_diagnostic out{};
   out.struct_size = sizeof(out);
-  out.abi_version = VIBEQC_ABI_VERSION;
+  out.abi_version = GENERATIVEQC_ABI_VERSION;
   out.nbf = owner->nbf;
   out.nocc_alpha = owner->nocc_alpha;
   out.nvirt_alpha = owner->nvirt_alpha;
@@ -1272,17 +1279,17 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_get_diagnostic(
   out.blas_calls = owner->blas_calls;
   out.device_id = owner->device_id;
   *diagnostic = out;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 #else
   (void)diagnostic;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_upload(vibeqc_uhf_response_resident* owner,
-                                                             uint32_t slot, const double* values,
-                                                             uint64_t count) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_upload(
+    generativeqc_uhf_response_resident* owner, uint32_t slot, const double* values,
+    uint64_t count) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(values && count == owner->dimension, "resident UHF upload shape mismatch");
     for (std::size_t i = 0; i < owner->dimension; ++i)
@@ -1298,14 +1305,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_upload(vibeqc_uhf_response
   (void)slot;
   (void)values;
   (void)count;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_download(vibeqc_uhf_response_resident* owner,
-                                                               uint32_t slot, double* values,
-                                                               uint64_t count) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_download(
+    generativeqc_uhf_response_resident* owner, uint32_t slot, double* values, uint64_t count) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(values && count == owner->dimension, "resident UHF download shape mismatch");
     resident_cuda(cudaMemcpyAsync(values, uhf_resident_slot(owner, slot),
@@ -1321,13 +1327,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_download(vibeqc_uhf_respon
   (void)slot;
   (void)values;
   (void)count;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_zero(vibeqc_uhf_response_resident* owner,
-                                                           uint32_t slot) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_zero(
+    generativeqc_uhf_response_resident* owner, uint32_t slot) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     resident_cuda(cudaMemsetAsync(uhf_resident_slot(owner, slot), 0,
                                   owner->dimension * sizeof(double), owner->stream));
@@ -1336,13 +1342,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_zero(vibeqc_uhf_response_r
 #else
   (void)owner;
   (void)slot;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_copy(vibeqc_uhf_response_resident* owner,
-                                                           uint32_t destination, uint32_t source) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_copy(
+    generativeqc_uhf_response_resident* owner, uint32_t destination, uint32_t source) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(destination != source, "resident UHF copy source/output must be distinct");
     resident_blas(cublasDcopy(owner->blas, static_cast<int>(owner->dimension),
@@ -1354,13 +1360,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_copy(vibeqc_uhf_response_r
   (void)owner;
   (void)destination;
   (void)source;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_scale(vibeqc_uhf_response_resident* owner,
-                                                            uint32_t slot, double alpha) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_scale(
+    generativeqc_uhf_response_resident* owner, uint32_t slot, double alpha) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident UHF scale must be finite");
     resident_blas(cublasDscal(owner->blas, static_cast<int>(owner->dimension), &alpha,
@@ -1371,14 +1377,14 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_scale(vibeqc_uhf_response_
   (void)owner;
   (void)slot;
   (void)alpha;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_axpy(vibeqc_uhf_response_resident* owner,
-                                                           uint32_t destination, double alpha,
-                                                           uint32_t source) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_axpy(
+    generativeqc_uhf_response_resident* owner, uint32_t destination, double alpha,
+    uint32_t source) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(std::isfinite(alpha), "resident UHF axpy coefficient must be finite");
     resident_blas(cublasDaxpy(owner->blas, static_cast<int>(owner->dimension), &alpha,
@@ -1391,14 +1397,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_axpy(vibeqc_uhf_response_r
   (void)destination;
   (void)alpha;
   (void)source;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_dot(vibeqc_uhf_response_resident* owner,
-                                                          uint32_t left, uint32_t right,
-                                                          double* value) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_dot(
+    generativeqc_uhf_response_resident* owner, uint32_t left, uint32_t right, double* value) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(value, "resident UHF dot requires output");
     resident_blas(cublasDdot(owner->blas, static_cast<int>(owner->dimension),
@@ -1414,13 +1419,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_dot(vibeqc_uhf_response_re
   (void)left;
   (void)right;
   (void)value;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_norm(vibeqc_uhf_response_resident* owner,
-                                                           uint32_t slot, double* value) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_norm(
+    generativeqc_uhf_response_resident* owner, uint32_t slot, double* value) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(value, "resident UHF norm requires output");
     resident_blas(cublasDnrm2(owner->blas, static_cast<int>(owner->dimension),
@@ -1434,13 +1439,13 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_norm(vibeqc_uhf_response_r
   (void)owner;
   (void)slot;
   (void)value;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
-extern "C" vibeqc_status vibeqc_uhf_response_resident_apply(vibeqc_uhf_response_resident* owner,
-                                                            uint32_t destination, uint32_t source) {
-#if VIBEQC_HAS_CUDA
+extern "C" generativeqc_status generativeqc_uhf_response_resident_apply(
+    generativeqc_uhf_response_resident* owner, uint32_t destination, uint32_t source) {
+#if GENERATIVEQC_HAS_CUDA
   return uhf_resident_guard(owner, [&] {
     require(destination != source, "resident UHF operator source/output must be distinct");
     const auto n = static_cast<int>(owner->nbf);
@@ -1485,11 +1490,11 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_apply(vibeqc_uhf_response_
     auto spec = owner->parent->source->strategy().spec;
     spec.derivative_order = 0;
     std::string detail;
-    const auto status = vibeqc::scf::enqueue_cuda_direct_jk_device(
+    const auto status = generativeqc::scf::enqueue_cuda_direct_jk_device(
         owner->direct, spec, owner->density_alpha, owner->density_beta, owner->nbf * owner->nbf,
         owner->coulomb, owner->exchange_alpha, owner->exchange_beta, owner->numerical_error,
         detail);
-    if (status != VIBEQC_STATUS_SUCCESS)
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw std::runtime_error(detail.empty() ? "resident UHF direct J/K enqueue failed" : detail);
     resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density_alpha, 1));
     ++owner->blas_calls;
@@ -1553,6 +1558,6 @@ extern "C" vibeqc_status vibeqc_uhf_response_resident_apply(vibeqc_uhf_response_
   (void)owner;
   (void)destination;
   (void)source;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }

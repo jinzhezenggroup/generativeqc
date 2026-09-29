@@ -6,7 +6,7 @@
 #include "response/linear_problem.hpp"
 #include "runtime/tracked_allocator.hpp"
 
-namespace vibeqc::response {
+namespace generativeqc::response {
 
 enum class GmresStatus {
   initial_residual,
@@ -68,4 +68,4 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                         std::span<const double> rhs, std::span<const double> initial_guess = {},
                         std::span<const double> diagonal_preconditioner = {});
 
-}  // namespace vibeqc::response
+}  // namespace generativeqc::response

@@ -29,9 +29,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -39,10 +39,15 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.dft import GridSpec, MolecularGrid, NativeAO, density_features
-from vibeqc_compiler.dft.cuda import CudaGrid, compile_cuda
-from vibeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
-from vibeqc_compiler.dft.prepared import PreparedGrid, PreparedGridBatch
+from generativeqc_compiler.dft import (
+    GridSpec,
+    MolecularGrid,
+    NativeAO,
+    density_features,
+)
+from generativeqc_compiler.dft.cuda import CudaGrid, compile_cuda
+from generativeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
+from generativeqc_compiler.dft.prepared import PreparedGrid, PreparedGridBatch
 
 
 def error(actual: typing.Any, reference: typing.Any) -> typing.Any:
@@ -191,7 +196,7 @@ def main() -> None:
     source = canonical_hash(
         {
             str(p.relative_to(ROOT)): file_hash(p)
-            for pattern in ("src/dft/*", "python/vibeqc_compiler/dft/*.py")
+            for pattern in ("src/dft/*", "python/generativeqc_compiler/dft/*.py")
             for p in ROOT.glob(pattern)
         }
     )
@@ -247,7 +252,7 @@ def main() -> None:
             if artifact
             else "CPU",
             "screening": "none",
-            "native_library_sha256": file_hash(os.environ["VIBEQC_LIBRARY"]),
+            "native_library_sha256": file_hash(os.environ["GENERATIVEQC_LIBRARY"]),
         }
         record["hashes"] = {
             "equation": canonical_hash(meta["conventions"]),

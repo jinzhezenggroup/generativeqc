@@ -14,17 +14,17 @@ if __package__ in (None, ""):
 
 # Build-time code generation must work with CMake's minimal Python interpreter.
 # Avoid importing tensor.__init__ and its optional validation/interpreter stack.
-if "vibeqc_compiler.tensor" not in sys.modules:
-    import vibeqc_compiler
+if "generativeqc_compiler.tensor" not in sys.modules:
+    import generativeqc_compiler
 
-    tensor_path = ROOT / "python" / "vibeqc_compiler" / "tensor"
-    tensor_package = types.ModuleType("vibeqc_compiler.tensor")
+    tensor_path = ROOT / "python" / "generativeqc_compiler" / "tensor"
+    tensor_package = types.ModuleType("generativeqc_compiler.tensor")
     tensor_package.__path__ = [str(tensor_path)]
-    tensor_package.__package__ = "vibeqc_compiler.tensor"
-    sys.modules["vibeqc_compiler.tensor"] = tensor_package
-    vibeqc_compiler.tensor = tensor_package
+    tensor_package.__package__ = "generativeqc_compiler.tensor"
+    sys.modules["generativeqc_compiler.tensor"] = tensor_package
+    generativeqc_compiler.tensor = tensor_package
 
-from vibeqc_compiler.tensor.scf_cuda import emit_density_cuda
+from generativeqc_compiler.tensor.scf_cuda import emit_density_cuda
 
 
 def main() -> None:

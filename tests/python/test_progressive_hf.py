@@ -6,10 +6,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
-from vibeqc.checkpoint import CheckpointError
-from vibeqc.progressive import projected_singlepoint
-from vibeqc.projection import ProjectionPolicy, ProjectionRejected
+from generativeqc import Calculator
+from generativeqc.checkpoint import CheckpointError
+from generativeqc.progressive import projected_singlepoint
+from generativeqc.projection import ProjectionPolicy, ProjectionRejected
 
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.1, 0.0, 0.7))]
 

@@ -15,7 +15,11 @@ def unpack(
     """Check every byte before writing; never execute historical scripts."""
     directory = Path(directory)
     manifest = json.loads((directory / "raw-evidence.manifest.json").read_text())
-    if manifest["schema"] != "vibeqc.evidence-archive.v1":
+    # Retained archives are checked against their original manifest bytes.
+    if manifest["schema"] not in {
+        "generativeqc.evidence-archive.v1",
+        "vibeqc.evidence-archive.v1",
+    }:
         raise ValueError("unsupported evidence archive schema")
     # Migrated archives can be restored under .artifacts/ while their original
     # member manifest remains in the reviewed result directory.

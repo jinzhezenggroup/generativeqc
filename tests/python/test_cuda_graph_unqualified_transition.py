@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
   assert(argc == 3);
   const bool profile = std::atoi(argv[1]) != 0;
   const bool fail = std::atoi(argv[2]) != 0;
-  using namespace vibeqc::runtime;
+  using namespace generativeqc::runtime;
   CudaGraphRegion graph;
   GraphBinding key{"qualified", 0, nullptr, nullptr, nullptr};
   int calls = 0;

@@ -86,8 +86,8 @@ def _gpu_identity() -> str | None:
 
 
 def _method_configuration(name: str, grid: typing.Any) -> tuple[str, typing.Any]:
-    from vibeqc import KsOptions
-    from vibeqc_compiler.method import resolve_method
+    from generativeqc import KsOptions
+    from generativeqc_compiler.method import resolve_method
 
     if name == "cam-b3lyp-rks":
         return (
@@ -148,13 +148,13 @@ def _force_diagnostic(
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """Execute the existing internal stationary CUDA owner without public-ABI promotion."""
 
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc._stationary_cuda import (
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc._stationary_cuda import (
         PreparedStationaryCudaExecution,
         PreparedStationaryCudaTopologyMismatch,
         complete_rks_cuda_gradient_diagnostic,
     )
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft import NativeAO
 
     calculator = batch._calculator
     if (
@@ -165,7 +165,7 @@ def _force_diagnostic(
             "cross-functional matrix retains generic RSH force as an explicit missing owner"
         )
     if calculator._method_name.startswith("wb97m-v"):
-        from vibeqc._stationary_wb97mv_cuda import PreparedWb97mvCudaGradient
+        from generativeqc._stationary_wb97mv_cuda import PreparedWb97mvCudaGradient
 
         prepared = batch._stationary_cuda_execution
         if not isinstance(prepared, PreparedWb97mvCudaGradient):
@@ -188,7 +188,7 @@ def _force_diagnostic(
                     compiler=batch._stationary_cuda_compiler(),
                     cache=Path(
                         os.environ.get(
-                            "VIBEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
+                            "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
                         )
                     ),
                     library=Path(str(batch._library._name)).resolve(),
@@ -220,7 +220,9 @@ def _force_diagnostic(
                 "compiler": None if packaged else batch._stationary_cuda_compiler(),
                 "target": batch._stationary_cuda_target(),
                 "cache": Path(
-                    os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cuda")
+                    os.environ.get(
+                        "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
+                    )
                 ),
                 "aot_directory": native_library.parent if packaged else None,
                 "native_grid_library": native_library,
@@ -319,8 +321,8 @@ def _scf_trace_profile(
         raise FileExistsError(f"refusing to append prior SCF trace: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.touch()
-    previous = os.environ.get("VIBEQC_DF_TRACE")
-    os.environ["VIBEQC_DF_TRACE"] = str(path.resolve())
+    previous = os.environ.get("GENERATIVEQC_DF_TRACE")
+    os.environ["GENERATIVEQC_DF_TRACE"] = str(path.resolve())
     try:
         cupy_module.cuda.Stream.null.synchronize()
         result = batch.execute(strict=True, properties=("energy",))
@@ -329,14 +331,14 @@ def _scf_trace_profile(
             raise RuntimeError("traced SCF replay did not converge")
     finally:
         if previous is None:
-            os.environ.pop("VIBEQC_DF_TRACE", None)
+            os.environ.pop("GENERATIVEQC_DF_TRACE", None)
         else:
-            os.environ["VIBEQC_DF_TRACE"] = previous
+            os.environ["GENERATIVEQC_DF_TRACE"] = previous
 
     if path.stat().st_size == 0:
         return {
             "status": "unavailable",
-            "reason": "selected SCF provider emitted no VIBEQC_DF_TRACE roots",
+            "reason": "selected SCF provider emitted no GENERATIVEQC_DF_TRACE roots",
             "expected_exchange_operators": list(exchange_operators),
             "expected_components": list(
                 expected_scf_components(
@@ -363,7 +365,7 @@ def _calculator(
     basis: str,
     density_fitting: str,
 ) -> typing.Any:
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     selector, options = _method_configuration(method, grid)
     return Calculator(
@@ -585,13 +587,13 @@ def main() -> None:
         parser.error("--qualification requires at least three repeats")
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("run requires a finite Slurm GPU allocation")
-    if os.environ.get("VIBEQC_DF_TRACE"):
-        parser.error("ambient VIBEQC_DF_TRACE would contaminate clean timing")
+    if os.environ.get("GENERATIVEQC_DF_TRACE"):
+        parser.error("ambient GENERATIVEQC_DF_TRACE would contaminate clean timing")
     if args.trace_directory is not None and args.trace_directory.exists():
         parser.error("--trace-directory must be a fresh path")
 
     import cupy as cp
-    from vibeqc import GridSpec
+    from generativeqc import GridSpec
 
     grid = GridSpec(
         radial_points=args.grid[0],
@@ -633,7 +635,7 @@ def main() -> None:
             )
 
     payload = {
-        "schema": "vibeqc.dft-force-matrix.v1",
+        "schema": "generativeqc.dft-force-matrix.v1",
         "issue": 1480,
         "provenance": {
             "head": _git(["rev-parse", "HEAD"]),
@@ -648,9 +650,9 @@ def main() -> None:
             },
         },
         "measurement_policy": {
-            "clean": "synchronized wall timing with VIBEQC_DF_TRACE disabled",
+            "clean": "synchronized wall timing with GENERATIVEQC_DF_TRACE disabled",
             "profile": (
-                "separate optional VIBEQC_DF_TRACE replay; CUDA-event timings are "
+                "separate optional GENERATIVEQC_DF_TRACE replay; CUDA-event timings are "
                 "diagnostic and never added to clean endpoint seconds"
             ),
             "unsupported": (

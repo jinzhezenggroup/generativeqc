@@ -23,7 +23,7 @@ def test_gfn2_cpu_actual_path_is_explicit() -> None:
     assert row["backend"] == "cpu"
     assert row["domain"] == "gfn2-xtb-restricted-scc"
     assert row["status"] == "production"
-    assert row["public_entry"] == "python/vibeqc/calculator.py"
+    assert row["public_entry"] == "python/generativeqc/calculator.py"
     assert row["selector"] == "src/methods/xtb_method.cpp"
     assert row["scientific_owner"] == "src/xtb/native/src/model/gfn2/scc_driver.cpp"
     assert row["execution_owner"] == "src/xtb/native/src/runtime/gfn2_cpu_execution.cpp"
@@ -58,7 +58,7 @@ def test_gfn2_cuda_actual_path_is_explicit() -> None:
     assert row["backend"] == "cuda"
     assert row["domain"] == "gfn2-xtb-restricted-scc"
     assert row["status"] == "production"
-    assert row["public_entry"] == "python/vibeqc/calculator.py"
+    assert row["public_entry"] == "python/generativeqc/calculator.py"
     assert row["selector"] == "src/methods/xtb_method.cpp"
     assert row["scientific_owner"] == "src/xtb/native/src/model/gfn2/scc_driver.cpp"
     assert row["execution_owner"] == "src/xtb/native/src/runtime/gfn2_cuda_execution.cu"
@@ -81,6 +81,6 @@ def test_gfn2_cuda_evidence_does_not_overclaim_execution_receipts() -> None:
         assert levels[level]["reason"]
 
     evidence = typing.cast("list[str]", row["evidence"])
-    assert "cmake/VibeQCGfn2Runtime.cmake" in evidence
+    assert "cmake/GenerativeQCGfn2Runtime.cmake" in evidence
     assert "src/methods/gfn2_runtime_bridge.cpp" in evidence
     assert "tests/python/test_gfn2_xtb.py" in evidence

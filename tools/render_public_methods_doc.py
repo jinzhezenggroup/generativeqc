@@ -16,7 +16,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = ROOT / "python"
 MANIFEST = ROOT / "manifests/public_methods.json"
-LIBXC_CATALOG = PYTHON / "vibeqc_compiler/xc/libxc_bulk_catalog.json"
+LIBXC_CATALOG = PYTHON / "generativeqc_compiler/xc/libxc_bulk_catalog.json"
 
 
 def _load_manifest() -> dict[str, Any]:
@@ -34,8 +34,8 @@ def _automatic_libxc_rows() -> tuple[list[tuple[str, str]], list[tuple[str, str,
     if str(PYTHON) not in sys.path:
         sys.path.insert(0, str(PYTHON))
 
-    from vibeqc_compiler.xc.libxc_blacklist import LIBXC_SEMILOCAL_BLACKLIST
-    from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+    from generativeqc_compiler.xc.libxc_blacklist import LIBXC_SEMILOCAL_BLACKLIST
+    from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
     catalog = json.loads(LIBXC_CATALOG.read_text(encoding="utf-8"))
     families = {
@@ -69,11 +69,11 @@ def public_method_doc_dependencies() -> tuple[Path, ...]:
         Path(__file__).resolve(),
         MANIFEST,
         LIBXC_CATALOG,
-        PYTHON / "vibeqc/ks.py",
-        PYTHON / "vibeqc/_generated_methods.py",
+        PYTHON / "generativeqc/ks.py",
+        PYTHON / "generativeqc/_generated_methods.py",
     }
     for package in ("method", "xc"):
-        directory = PYTHON / "vibeqc_compiler" / package
+        directory = PYTHON / "generativeqc_compiler" / package
         for pattern in ("*.py", "*.json"):
             paths.update(directory.rglob(pattern))
     return tuple(sorted(paths))
@@ -84,7 +84,7 @@ def _compiler_dft_rows() -> list[tuple[str, str, str]]:
     if str(PYTHON) not in sys.path:
         sys.path.insert(0, str(PYTHON))
 
-    from vibeqc.ks import public_dft_selectors, resolve_ks_method
+    from generativeqc.ks import public_dft_selectors, resolve_ks_method
 
     rows = []
     for selector in public_dft_selectors():

@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from vibeqc_compiler.xc import (
+from generativeqc_compiler.xc import (
     libxc_bulk_capabilities,
     production_domain_catalog,
 )

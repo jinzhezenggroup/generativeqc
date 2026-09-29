@@ -17,12 +17,12 @@
 
 #if __has_include(<nvtx3/nvToolsExt.h>)
 #include <nvtx3/nvToolsExt.h>
-#define VIBEQC_DF_TRACE_NVTX 1
+#define GENERATIVEQC_DF_TRACE_NVTX 1
 #else
-#define VIBEQC_DF_TRACE_NVTX 0
+#define GENERATIVEQC_DF_TRACE_NVTX 0
 #endif
 
-namespace vibeqc::runtime::cuda_trace {
+namespace generativeqc::runtime::cuda_trace {
 namespace {
 using Clock = std::chrono::steady_clock;
 // A complete 768-AO response under the legacy 128-MiB allowance visits more
@@ -51,14 +51,14 @@ void quoted(std::FILE* output, std::string_view value) {
 }
 
 void push_range(const char* name) {
-#if VIBEQC_DF_TRACE_NVTX
+#if GENERATIVEQC_DF_TRACE_NVTX
   nvtxRangePushA(name);
 #else
   (void)name;
 #endif
 }
 void pop_range() {
-#if VIBEQC_DF_TRACE_NVTX
+#if GENERATIVEQC_DF_TRACE_NVTX
   nvtxRangePop();
 #endif
 }
@@ -174,7 +174,8 @@ struct TraceOperation::State {
     std::lock_guard<std::mutex> lock(output_mutex);
     std::FILE* output = std::fopen(path.c_str(), "a");
     if (!output) return;
-    std::fprintf(output, "{\"schema\":\"vibeqc.df_trace\",\"version\":1,\"id\":%llu,\"operation\":",
+    std::fprintf(output,
+                 "{\"schema\":\"generativeqc.df_trace\",\"version\":1,\"id\":%llu,\"operation\":",
                  static_cast<unsigned long long>(id));
     quoted(output, operation);
     std::fprintf(
@@ -185,9 +186,10 @@ struct TraceOperation::State {
         "\"final_synchronization_ms\":%.9g,\"host_completion_ms\":%.9g,"
         "\"profiler_event_count\":%zu,\"dropped_regions\":%zu,\"dropped_tiles\":%zu,\"regions\":[",
         capture ? "graph_capture" : "stream", invalid ? "false" : "true", cuda_error,
-        VIBEQC_DF_TRACE_NVTX ? "true" : "false", shape.systems, shape.system_offset, shape.nbf,
-        shape.naux, shape.source_backed ? "true" : "false", shape.streamed ? "true" : "false",
-        synchronization_ms, milliseconds(regions[0].begin, regions[0].end) + synchronization_ms,
+        GENERATIVEQC_DF_TRACE_NVTX ? "true" : "false", shape.systems, shape.system_offset,
+        shape.nbf, shape.naux, shape.source_backed ? "true" : "false",
+        shape.streamed ? "true" : "false", synchronization_ms,
+        milliseconds(regions[0].begin, regions[0].end) + synchronization_ms,
         capture ? 0U : 2 * regions.size(), dropped_regions, dropped_tiles);
     bool comma = false;
     for (std::size_t i = 0; i < regions.size(); ++i) {
@@ -236,8 +238,8 @@ thread_local TraceOperation::State* TraceOperation::active_ = nullptr;
 
 TraceOperation::TraceOperation(const char* operation, cudaStream_t stream,
                                TraceShape shape) noexcept {
-  const char* path = std::getenv("VIBEQC_DF_TRACE");
-  const char* progress = std::getenv("VIBEQC_DF_PROGRESS_TRACE");
+  const char* path = std::getenv("GENERATIVEQC_DF_TRACE");
+  const char* progress = std::getenv("GENERATIVEQC_DF_PROGRESS_TRACE");
   if ((!path || !*path) && (!progress || !*progress)) return;
   try {
     state_ = std::make_unique<State>();
@@ -376,4 +378,4 @@ void trace_tile(std::size_t system, std::size_t pair_begin, std::size_t pair_cou
     active->invalid = true;
   }
 }
-}  // namespace vibeqc::runtime::cuda_trace
+}  // namespace generativeqc::runtime::cuda_trace

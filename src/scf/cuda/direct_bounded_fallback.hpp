@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Force-output fallback; purpose selects screening semantics, not the scientific output. */
 /** Method-neutral force variant. Coefficients multiply the Coulomb and exchange
@@ -46,4 +46,4 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
     const double* density, const std::uint8_t* active, double* fock,
     unsigned long long* global_cursor);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

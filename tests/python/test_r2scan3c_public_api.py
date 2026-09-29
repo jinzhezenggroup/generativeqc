@@ -2,14 +2,14 @@
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Calculator,
     GridSpec,
     KsOptions,
     load_r2scan3c_basis,
     method_capabilities,
 )
-from vibeqc_compiler.method import resolve_method
+from generativeqc_compiler.method import resolve_method
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 GRID = GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)

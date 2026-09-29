@@ -7,14 +7,14 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.reference import immutable
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import CudaDirectJKBackend, direct_cuda
+from tools.generativeqc_posthf.reference import immutable
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import CudaDirectJKBackend, direct_cuda
 
 
 @pytest.fixture

@@ -13,7 +13,7 @@ to checked-in Bohr coordinates and a fixed changed-geometry input with separate
 LF-normalized text hashes, matching Git blobs across Windows and Linux. Raw
 runtime logs and artifacts retain exact byte hashes. The 8/16/32-water scaling
 cases reuse the exact WATER27-derived
-VibeQC series: 24/48/96 atoms and 192/384/768 real-spherical def2-SVP AOs.
+GenerativeQC series: 24/48/96 atoms and 192/384/768 real-spherical def2-SVP AOs.
 AO counts were expanded from the pinned bundled basis pack; receipts must report
 the same actual count. The 16/32 clusters are translated S4 octamer arrays,
 not independently optimized clusters. The short peptide is neutral
@@ -132,7 +132,7 @@ versioned before measurement.
 
 `--final` additionally requires the #1190 reviewed raw receipt. It resolves
 `refs/heads/master` from the explicit official URL
-`https://github.com/jinzhezenggroup/vibeqc.git`, fetches that immutable OID
+`https://github.com/jinzhezenggroup/generativeqc.git`, fetches that immutable OID
 without updating local remotes or `FETCH_HEAD`, and checks that the exact
 source commit is its ancestor and contains this exact manifest blob. A fork's
 arbitrary `origin/master` cannot satisfy this gate.

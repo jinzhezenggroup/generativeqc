@@ -5,5 +5,5 @@
     "generated/production_shell_kernels/**/*.cuh",
     "generated/production_shell_kernels/**/*.hpp"
   ],
-  "owner": "python/vibeqc_compiler/integral/cuda_lowering.py"
+  "owner": "python/generativeqc_compiler/integral/cuda_lowering.py"
 }

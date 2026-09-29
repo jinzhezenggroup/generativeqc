@@ -8,10 +8,10 @@
 #include <string>
 
 #include "generated_split_hybrid_registry.cuh"
+#include "generativeqc/generativeqc.hpp"
 #include "tensor/cuda_error.hpp"
-#include "vibeqc/vibeqc.hpp"
 
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
 namespace {
 thread_local cudaError_t fail_next_xc_status = cudaSuccess;
 thread_local cudaError_t fail_next_nonlocal_xc_status = cudaSuccess;
@@ -28,14 +28,14 @@ extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1() {
 }
 #endif
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
-using vibeqc::runtime::size_add;
-using vibeqc::runtime::size_mul;
+using generativeqc::runtime::size_add;
+using generativeqc::runtime::size_mul;
 void check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
-    throw vibeqc::Error(VIBEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
 }
 void device_pointer(const void* pointer, int device) {
   if (!pointer) throw std::invalid_argument("null CUDA XC device buffer");
@@ -158,8 +158,8 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   check(cudaGetDevice(&device_));
   device_pointer(arena, device_);
   const auto& l = layout_;
-  vibeqc::runtime::BorrowedWorkspace arena_view(arena, arena_bytes);
-  vibeqc::runtime::WorkspaceLayout workspace;
+  generativeqc::runtime::BorrowedWorkspace arena_view(arena, arena_bytes);
+  generativeqc::runtime::WorkspaceLayout workspace;
   auto take_double = [&](std::size_t count) {
     std::size_t offset = 0;
     if (!workspace.append<double>(count, offset))
@@ -286,7 +286,7 @@ void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
     device_pointer(pointer, device_);
   device_pointer(total_gradient, device_);
   const auto overlaps_arena = [&](const void* pointer, std::size_t bytes) {
-    return vibeqc::runtime::ranges_overlap(pointer, bytes, arena_, layout_.device_bytes);
+    return generativeqc::runtime::ranges_overlap(pointer, bytes, arena_, layout_.device_bytes);
   };
   if (overlaps_arena(effective_weights, scalar_bytes) ||
       overlaps_arena(total_gradient, gradient_bytes) || overlaps_arena(vrho, scalar_bytes) ||
@@ -298,21 +298,21 @@ void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
   // failure can never expose a partially accumulated result.
   generations_.revoke(generation);
   try {
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
     const auto injected = fail_next_nonlocal_xc_status;
     fail_next_nonlocal_xc_status = cudaSuccess;
-    vibeqc_tensor::cuda_check(injected);
+    generativeqc_tensor::cuda_check(injected);
 #endif
     cuda_xc_detail::enqueue_nonlocal_potential(layout_, stream_, basis_, points_, effective_weights,
                                                total_gradient, vrho, vsigma, nonlocal_energy, ao_,
                                                coefficients_, potential_, totals_, error_);
     generations_.commit(generation);
-  } catch (const vibeqc_tensor::DeviceAllocationError&) {
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
     (void)cudaStreamSynchronize(stream_);
     throw std::bad_alloc();
-  } catch (const vibeqc_tensor::DeviceRuntimeError& error) {
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
     (void)cudaStreamSynchronize(stream_);
-    throw vibeqc::Error(VIBEQC_STATUS_CUDA_ERROR, error.what());
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
   } catch (...) {
     (void)cudaStreamSynchronize(stream_);
     throw;
@@ -337,7 +337,7 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     throw std::invalid_argument("CUDA XC density generation is stale");
   device_pointer(density, device_);
   const auto input_bytes = size_mul(count, sizeof(double), "CUDA XC density size overflow");
-  if (vibeqc::runtime::ranges_overlap(density, input_bytes, arena_, layout_.device_bytes))
+  if (generativeqc::runtime::ranges_overlap(density, input_bytes, arena_, layout_.device_bytes))
     throw std::invalid_argument("CUDA XC density aliases its workspace");
   if ((total_density == nullptr) != (total_gradient == nullptr))
     throw std::invalid_argument("CUDA XC density-feature outputs must be provided together");
@@ -351,38 +351,41 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
                  sizeof(double), "CUDA XC feature export size overflow");
     device_pointer(total_density, device_);
     device_pointer(total_gradient, device_);
-    if (vibeqc::runtime::ranges_overlap(total_density, rho_bytes, arena_, layout_.device_bytes) ||
-        vibeqc::runtime::ranges_overlap(total_gradient, gradient_bytes, arena_,
-                                        layout_.device_bytes) ||
-        vibeqc::runtime::ranges_overlap(total_density, rho_bytes, density, input_bytes) ||
-        vibeqc::runtime::ranges_overlap(total_gradient, gradient_bytes, density, input_bytes) ||
-        vibeqc::runtime::ranges_overlap(total_density, rho_bytes, total_gradient, gradient_bytes))
+    if (generativeqc::runtime::ranges_overlap(total_density, rho_bytes, arena_,
+                                              layout_.device_bytes) ||
+        generativeqc::runtime::ranges_overlap(total_gradient, gradient_bytes, arena_,
+                                              layout_.device_bytes) ||
+        generativeqc::runtime::ranges_overlap(total_density, rho_bytes, density, input_bytes) ||
+        generativeqc::runtime::ranges_overlap(total_gradient, gradient_bytes, density,
+                                              input_bytes) ||
+        generativeqc::runtime::ranges_overlap(total_density, rho_bytes, total_gradient,
+                                              gradient_bytes))
       throw std::invalid_argument("CUDA XC density-feature outputs alias live input/workspace");
   }
   if (layout_.response) {
     device_pointer(direction, device_);
-    if (vibeqc::runtime::ranges_overlap(direction, input_bytes, arena_, layout_.device_bytes))
+    if (generativeqc::runtime::ranges_overlap(direction, input_bytes, arena_, layout_.device_bytes))
       throw std::invalid_argument("CUDA XC direction aliases its workspace");
   }
   if (publish_generation) generations_.begin(generation);
   try {
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
     // Exercise the generated executor's real exception types without leaving a
     // failed CUDA context behind; explicit replay must retain the last-good seed.
     const auto injected = fail_next_xc_status;
     fail_next_xc_status = cudaSuccess;
-    vibeqc_tensor::cuda_check(injected);
+    generativeqc_tensor::cuda_check(injected);
 #endif
     cuda_xc_detail::enqueue(layout_, point_launcher_, stream_, basis_, points_, weights_, density,
                             ao_, work_, features_, coefficients_, point_totals_, potential_,
                             totals_, error_, precision, direction, delta_features_, total_density,
                             total_gradient);
-  } catch (const vibeqc_tensor::DeviceAllocationError&) {
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
     // The generated executor has a separate exception vocabulary. Translate at
     // this native owner boundary so both single-point and batch APIs preserve it.
     throw std::bad_alloc();
-  } catch (const vibeqc_tensor::DeviceRuntimeError& error) {
-    throw vibeqc::Error(VIBEQC_STATUS_CUDA_ERROR, error.what());
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
   }
   if (publish_generation) {
     generations_.commit(generation);
@@ -431,4 +434,4 @@ std::vector<double> CudaXcPlan::download_potential(std::uint64_t generation) {
   ++transfers_.synchronizations;
   return output;
 }
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

@@ -13,8 +13,8 @@ from tools import render_public_methods_doc as renderer
 
 
 def _catalog_modules(monkeypatch: pytest.MonkeyPatch) -> None:
-    ks = ModuleType("vibeqc.ks")
-    method = ModuleType("vibeqc_compiler.method")
+    ks = ModuleType("generativeqc.ks")
+    method = ModuleType("generativeqc_compiler.method")
     method.METHOD_CATALOG = {"NEW_HYBRID": object(), "UNSUPPORTED": object()}
     method.METHOD_ALIASES = {"NEW_ALIAS": "NEW_HYBRID"}
 
@@ -34,10 +34,12 @@ def _catalog_modules(monkeypatch: pytest.MonkeyPatch) -> None:
         "unsupported-rks",
         "unsupported-uks",
     )
-    monkeypatch.setitem(sys.modules, "vibeqc", ModuleType("vibeqc"))
-    monkeypatch.setitem(sys.modules, "vibeqc.ks", ks)
-    monkeypatch.setitem(sys.modules, "vibeqc_compiler", ModuleType("vibeqc_compiler"))
-    monkeypatch.setitem(sys.modules, "vibeqc_compiler.method", method)
+    monkeypatch.setitem(sys.modules, "generativeqc", ModuleType("generativeqc"))
+    monkeypatch.setitem(sys.modules, "generativeqc.ks", ks)
+    monkeypatch.setitem(
+        sys.modules, "generativeqc_compiler", ModuleType("generativeqc_compiler")
+    )
+    monkeypatch.setitem(sys.modules, "generativeqc_compiler.method", method)
 
 
 def _manifest() -> dict[str, typing.Any]:
@@ -111,10 +113,10 @@ def test_sphinx_tracks_renderer_manifest_and_recursive_catalog_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     python = tmp_path / "python"
-    owner = python / "vibeqc_compiler/method/nested/spec.py"
+    owner = python / "generativeqc_compiler/method/nested/spec.py"
     owner.parent.mkdir(parents=True)
     owner.write_text("# catalog owner\n")
-    catalog = python / "vibeqc_compiler/xc/libxc_bulk_catalog.json"
+    catalog = python / "generativeqc_compiler/xc/libxc_bulk_catalog.json"
     catalog.parent.mkdir(parents=True)
     catalog.write_text("{}")
     manifest = tmp_path / "manifest.json"
@@ -125,7 +127,7 @@ def test_sphinx_tracks_renderer_manifest_and_recursive_catalog_sources(
     assert owner in dependencies
     assert catalog in dependencies
     assert manifest in dependencies
-    assert python / "vibeqc/ks.py" in dependencies
+    assert python / "generativeqc/ks.py" in dependencies
     assert Path(renderer.__file__).resolve() in dependencies
 
     registered: list[str] = []

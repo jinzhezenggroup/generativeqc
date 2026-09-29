@@ -6,7 +6,7 @@
 #include "scf/cuda/eigensolver_types.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
                  std::size_t shell_count, std::size_t shell_pair_count,
@@ -37,36 +37,39 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
   std::size_t ppps_signature_elements = 0;
   std::size_t nbf_plus_one = 0;
   std::size_t pair_product = 0;
-  if (!vibeqc::runtime::checked_multiply(nbf, nbf, matrix_size) ||
-      !vibeqc::runtime::checked_multiply(matrix_size, matrix_size, eri_size) ||
-      !vibeqc::runtime::checked_multiply(batch_size, matrix_size, matrices) ||
-      !vibeqc::runtime::checked_multiply(matrices, spin_count, spin_matrices) ||
-      !vibeqc::runtime::checked_multiply(batch_size, nbf, aos) ||
-      !vibeqc::runtime::checked_multiply(batch_size, direct_nbf, direct_aos) ||
-      !vibeqc::runtime::checked_multiply(direct_nbf, direct_nbf, direct_matrix_size) ||
-      !vibeqc::runtime::checked_multiply(batch_size, direct_matrix_size, direct_matrices) ||
-      !vibeqc::runtime::checked_multiply(direct_matrices, spin_count, direct_spin_matrices) ||
-      !vibeqc::runtime::checked_multiply(aos, direct_nbf, transform_elements) ||
-      !vibeqc::runtime::checked_multiply(transform_elements, spin_count, transform_temporaries) ||
-      !vibeqc::runtime::checked_multiply(
+  if (!generativeqc::runtime::checked_multiply(nbf, nbf, matrix_size) ||
+      !generativeqc::runtime::checked_multiply(matrix_size, matrix_size, eri_size) ||
+      !generativeqc::runtime::checked_multiply(batch_size, matrix_size, matrices) ||
+      !generativeqc::runtime::checked_multiply(matrices, spin_count, spin_matrices) ||
+      !generativeqc::runtime::checked_multiply(batch_size, nbf, aos) ||
+      !generativeqc::runtime::checked_multiply(batch_size, direct_nbf, direct_aos) ||
+      !generativeqc::runtime::checked_multiply(direct_nbf, direct_nbf, direct_matrix_size) ||
+      !generativeqc::runtime::checked_multiply(batch_size, direct_matrix_size, direct_matrices) ||
+      !generativeqc::runtime::checked_multiply(direct_matrices, spin_count, direct_spin_matrices) ||
+      !generativeqc::runtime::checked_multiply(aos, direct_nbf, transform_elements) ||
+      !generativeqc::runtime::checked_multiply(transform_elements, spin_count,
+                                               transform_temporaries) ||
+      !generativeqc::runtime::checked_multiply(
           ppps_resident_ket_task_capacity == 0 ? 0 : shell_pair_count, kPppsSignatureBucketCount,
           ppps_signature_elements) ||
-      !vibeqc::runtime::checked_add(nbf, 1, nbf_plus_one) ||
-      !vibeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product))
+      !generativeqc::runtime::checked_add(nbf, 1, nbf_plus_one) ||
+      !generativeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product))
     return false;
   const std::size_t pair_count = pair_product / 2;
-  if (persistent_eri && !vibeqc::runtime::checked_multiply(batch_size, eri_size, eris)) {
+  if (persistent_eri && !generativeqc::runtime::checked_multiply(batch_size, eri_size, eris)) {
     return false;
   }
   std::size_t history_matrices = 0;
   std::size_t diis_dimension = 0;
   std::size_t diis_linear_elements = 0;
-  if (!vibeqc::runtime::checked_multiply(spin_matrices, diis_history, history_matrices) ||
-      !vibeqc::runtime::checked_add(diis_history, 1, diis_dimension) ||
-      !vibeqc::runtime::checked_multiply(diis_dimension, diis_dimension, diis_linear_elements) ||
-      !vibeqc::runtime::checked_multiply(diis_linear_elements, batch_size, diis_linear_elements))
+  if (!generativeqc::runtime::checked_multiply(spin_matrices, diis_history, history_matrices) ||
+      !generativeqc::runtime::checked_add(diis_history, 1, diis_dimension) ||
+      !generativeqc::runtime::checked_multiply(diis_dimension, diis_dimension,
+                                               diis_linear_elements) ||
+      !generativeqc::runtime::checked_multiply(diis_linear_elements, batch_size,
+                                               diis_linear_elements))
     return false;
-  vibeqc::runtime::WorkspaceLayout workspace;
+  generativeqc::runtime::WorkspaceLayout workspace;
   ArenaLayout made{};
   if (!workspace.append<std::int64_t>(batch_size + 1, made.atom_offsets) ||
       !workspace.append<std::int32_t>(atoms, made.atom_systems) ||
@@ -316,4 +319,4 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
   return true;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

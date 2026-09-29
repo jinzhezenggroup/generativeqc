@@ -9,14 +9,14 @@
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 
-namespace vibeqc::mp2 {
-#if VIBEQC_HAS_CUDA
+namespace generativeqc::mp2 {
+#if GENERATIVEQC_HAS_CUDA
 namespace {
-void check_cuda_derivative(vibeqc_status status, const std::string& detail) {
-  if (status == VIBEQC_STATUS_SUCCESS) return;
+void check_cuda_derivative(generativeqc_status status, const std::string& detail) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) return;
   const auto message = detail.empty() ? "CUDA conventional derivative failed" : detail;
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::length_error(message);
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(message);
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::length_error(message);
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(message);
   throw std::runtime_error(message);
 }
 
@@ -48,7 +48,7 @@ std::vector<double> conventional_derivative_cuda(const core::System& system,
                                                  const hf::PhysicalReference& reference,
                                                  const LagrangianWeights& weights, int device_id,
                                                  std::size_t stage_budget) {
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
   (void)system;
   (void)reference;
   (void)weights;
@@ -82,4 +82,4 @@ std::vector<double> conventional_derivative_cuda(const core::System& system,
 #endif
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

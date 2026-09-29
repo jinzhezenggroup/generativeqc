@@ -11,8 +11,8 @@
 #include "scf/reference/mean_field.hpp"
 
 namespace {
-using namespace vibeqc::scf;
-using namespace vibeqc::scf::cuda_df;
+using namespace generativeqc::scf;
+using namespace generativeqc::scf::cuda_df;
 using reference::Matrix;
 void require(bool value, const std::string& detail) {
   if (!value) throw std::runtime_error(detail);
@@ -20,9 +20,11 @@ void require(bool value, const std::string& detail) {
 void checked(cudaError_t error) { require(error == cudaSuccess, cudaGetErrorString(error)); }
 void exchange_policy(const char* value) {
 #ifdef _WIN32
-  require(_putenv_s("VIBEQC_DF_EXCHANGE", value ? value : "") == 0, "cannot set exchange policy");
+  require(_putenv_s("GENERATIVEQC_DF_EXCHANGE", value ? value : "") == 0,
+          "cannot set exchange policy");
 #else
-  require((value ? setenv("VIBEQC_DF_EXCHANGE", value, 1) : unsetenv("VIBEQC_DF_EXCHANGE")) == 0,
+  require((value ? setenv("GENERATIVEQC_DF_EXCHANGE", value, 1)
+                 : unsetenv("GENERATIVEQC_DF_EXCHANGE")) == 0,
           "cannot set exchange policy");
 #endif
 }
@@ -33,9 +35,9 @@ void lifecycle(bool uhf, std::size_t batch) {
   CudaDensityFittingJkPlan* raw{};
   std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
   std::string detail;
-  require(create_cuda_density_fitting_jk_plan_tiled(0, batch, 2, 1, Matrix(batch, 1),
-                                                    Matrix(batch * 4, 0), 1e-10, 1, 4, &raw,
-                                                    diagnostics, detail) == VIBEQC_STATUS_SUCCESS,
+  require(create_cuda_density_fitting_jk_plan_tiled(
+              0, batch, 2, 1, Matrix(batch, 1), Matrix(batch * 4, 0), 1e-10, 1, 4, &raw,
+              diagnostics, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail);
   Plan plan(raw, &destroy_cuda_density_fitting_jk_plan);
   const Matrix s{2, 0, 0, 4}, x{1 / std::sqrt(2.0), 0, 0, .5};
@@ -64,7 +66,7 @@ void lifecycle(bool uhf, std::size_t batch) {
         plan.get(), h, xs, initial, std::vector<std::int32_t>(batch, 1), Matrix(batch, .3), maximum,
         1e-10, 1e-10, final, records, detail);
   };
-  require(run(8) == VIBEQC_STATUS_SUCCESS, detail);
+  require(run(8) == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(records.size() == batch && records[0].converged, "analytic SCF failed");
   if (batch > 1)
     require(records[0].iterations < records[1].iterations,
@@ -72,11 +74,11 @@ void lifecycle(bool uhf, std::size_t batch) {
   std::vector<CudaDfFinalStateToken> tokens(batch);
   for (std::size_t item = 0; item < batch; ++item) {
     require(cuda_density_fitting_final_state_token(plan.get(), item, tokens[item], detail) ==
-                VIBEQC_STATUS_SUCCESS,
+                GENERATIVEQC_STATUS_SUCCESS,
             detail);
     CudaDfFinalStateSnapshot snapshot;
     require(read_cuda_density_fitting_final_state(plan.get(), tokens[item], snapshot, detail) ==
-                VIBEQC_STATUS_SUCCESS,
+                GENERATIVEQC_STATUS_SUCCESS,
             detail);
     require(
         snapshot.candidate.identity.factor.density_generation == records[item].iterations + 1ULL &&
@@ -164,16 +166,16 @@ void lifecycle(bool uhf, std::size_t batch) {
   checked(cudaStreamSynchronize(plan->stream));
   CudaDfFinalStateSnapshot snapshot;
   require(read_cuda_density_fitting_final_state(plan.get(), tokens[0], snapshot, detail) ==
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           "inactive launches overwrote retained C/epsilon");
-  const char* original_policy = std::getenv("VIBEQC_DF_EXCHANGE");
+  const char* original_policy = std::getenv("GENERATIVEQC_DF_EXCHANGE");
   const std::string saved_policy = original_policy ? original_policy : "";
   for (const char* changed : {state->occupied_exchange ? "dense" : "occupied", "invalid"}) {
     exchange_policy(changed);
     const auto status =
         read_cuda_density_fitting_final_state(plan.get(), tokens[0], snapshot, detail);
     exchange_policy(original_policy ? saved_policy.c_str() : nullptr);
-    require(status == VIBEQC_STATUS_INVALID_ARGUMENT && snapshot.density.empty(),
+    require(status == GENERATIVEQC_STATUS_INVALID_ARGUMENT && snapshot.density.empty(),
             "changed/invalid exchange policy reused the prior successful solve");
   }
 
@@ -191,7 +193,7 @@ void lifecycle(bool uhf, std::size_t batch) {
     auto stale = tokens[0];
     fault(stale);
     require(read_cuda_density_fitting_final_state(plan.get(), stale, snapshot, detail) ==
-                    VIBEQC_STATUS_INVALID_ARGUMENT &&
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                 snapshot.density.empty() && snapshot.candidate.spins.empty(),
             "stale token published a snapshot");
   }
@@ -202,7 +204,7 @@ void lifecycle(bool uhf, std::size_t batch) {
   Matrix rejected_j, rejected_k;
   bool reused = true;
   require(try_cuda_density_fitting_final_rhf_jk(plan.get(), tokens[0], {}, rejected_j, rejected_k,
-                                                reused, detail) == VIBEQC_STATUS_SUCCESS &&
+                                                reused, detail) == GENERATIVEQC_STATUS_SUCCESS &&
               !reused && !plan->final_projection_token,
           "unsupported final K preserved the old projection lease");
   const auto rejects_device_frame = [&](const CudaDfFinalStateToken& token) {
@@ -230,39 +232,39 @@ void lifecycle(bool uhf, std::size_t batch) {
   checked(cudaMemsetAsync(state->d_final_alpha_generation, 0, sizeof(std::uint64_t), plan->stream));
   require(rejects_device_frame(tokens[0]), "device validation accepted a corrupt generation");
   require(read_cuda_density_fitting_final_state(plan.get(), tokens[0], snapshot, detail) ==
-                  VIBEQC_STATUS_NUMERICAL_FAILURE &&
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
               snapshot.density.empty(),
           "corrupt device generation passed");
   plan->final_projection_token = tokens[0];
-  require(run(8) == VIBEQC_STATUS_SUCCESS, detail);
+  require(run(8) == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(!plan->final_projection_token, "new solve preserved the old projection lease");
   require(read_cuda_density_fitting_final_state(plan.get(), tokens[0], snapshot, detail) ==
-              VIBEQC_STATUS_INVALID_ARGUMENT,
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "warm replay accepted the preceding epoch");
   CudaDfFinalStateToken recovered;
   require(cuda_density_fitting_final_state_token(plan.get(), 0, recovered, detail) ==
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           detail);
   state = static_cast<PersistentScfState*>(plan->persistent_scf_state);
   checked(cudaMemsetAsync(state->d_final_alpha_info, 1, sizeof(int), plan->stream));
   require(rejects_device_frame(recovered), "device validation accepted failed solver info");
   require(read_cuda_density_fitting_final_state(plan.get(), recovered, snapshot, detail) ==
-                  VIBEQC_STATUS_NUMERICAL_FAILURE &&
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
               snapshot.density.empty(),
           "failed active solver info passed");
   plan->final_projection_token = recovered;
-  require(run(0) == VIBEQC_STATUS_INVALID_ARGUMENT, "invalid solve request was accepted");
+  require(run(0) == GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid solve request was accepted");
   require(!plan->final_projection_token, "invalid solve preserved the old projection lease");
   require(read_cuda_density_fitting_final_state(plan.get(), recovered, snapshot, detail) ==
-              VIBEQC_STATUS_INVALID_ARGUMENT,
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "invalid replay preserved previous eligibility");
-  require(run(1) == VIBEQC_STATUS_SUCCESS, detail);
+  require(run(1) == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(cuda_density_fitting_final_state_token(plan.get(), 0, recovered, detail) ==
-              VIBEQC_STATUS_INVALID_ARGUMENT,
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "nonconverged item exported a frame");
-  require(run(8) == VIBEQC_STATUS_SUCCESS, detail);
+  require(run(8) == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(cuda_density_fitting_final_state_token(plan.get(), 0, recovered, detail) ==
-              VIBEQC_STATUS_SUCCESS,
+              GENERATIVEQC_STATUS_SUCCESS,
           "independent replay did not recover");
   if (uhf) {
     // Give alpha and beta deliberately different scratch contents. Saving
@@ -300,9 +302,9 @@ void lifecycle(bool uhf, std::size_t batch) {
   plan->final_state_solve_epoch = std::numeric_limits<std::uint64_t>::max();
   require(cuda_density_fitting_solve_epoch(plan.get()) == 0,
           "saturated epoch authorized a host-recovery final state");
-  require(run(8) == VIBEQC_STATUS_NUMERICAL_FAILURE, "solve epoch wrapped around");
+  require(run(8) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "solve epoch wrapped around");
   require(read_cuda_density_fitting_final_state(plan.get(), recovered, snapshot, detail) ==
-              VIBEQC_STATUS_INVALID_ARGUMENT,
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "epoch exhaustion preserved eligibility");
 }
 /** A closed-form nonidentity-overlap determinant tests one-step admission
@@ -311,17 +313,17 @@ void lifecycle(bool uhf, std::size_t batch) {
 void warm_replay() {
   exchange_policy("occupied");
 #ifdef _WIN32
-  _putenv_s("VIBEQC_DF_FINAL_EXCHANGE", "occupied");
+  _putenv_s("GENERATIVEQC_DF_FINAL_EXCHANGE", "occupied");
 #else
-  setenv("VIBEQC_DF_FINAL_EXCHANGE", "occupied", 1);
+  setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", "occupied", 1);
 #endif
   CudaDensityFittingJkPlan* raw{};
   std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
   std::string detail;
-  require(
-      create_cuda_density_fitting_jk_plan_tiled(0, 1, 2, 1, Matrix{1}, Matrix(4, 0), 1e-10, 1, 4,
-                                                &raw, diagnostics, detail) == VIBEQC_STATUS_SUCCESS,
-      detail);
+  require(create_cuda_density_fitting_jk_plan_tiled(0, 1, 2, 1, Matrix{1}, Matrix(4, 0), 1e-10, 1,
+                                                    4, &raw, diagnostics,
+                                                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
   Plan plan(raw, &destroy_cuda_density_fitting_jk_plan);
   const Matrix h{-2, 0, 0, 12}, s{2, 0, 0, 4}, x{1 / std::sqrt(2.), 0, 0, .5};
   // This unbudgeted analytic tensor fixture explicitly admits the two-slot
@@ -339,13 +341,13 @@ void warm_replay() {
   const auto publish = [&] {
     CudaDfFinalStateToken token;
     require(cuda_density_fitting_final_state_token(plan.get(), 0, token, detail) ==
-                VIBEQC_STATUS_SUCCESS,
+                GENERATIVEQC_STATUS_SUCCESS,
             detail);
     const auto fock =
         evaluate_cuda_density_fitting_final_fock(plan.get(), token.identity, {final}, h);
     CudaDfFinalStateSnapshot snapshot;
     require(read_cuda_density_fitting_final_state(plan.get(), token, snapshot, detail) ==
-                VIBEQC_STATUS_SUCCESS,
+                GENERATIVEQC_STATUS_SUCCESS,
             detail);
     // CPU matrix products and the analytic -1.7 Eh energy are independent
     // checks before the internal caller authorizes retention.
@@ -363,7 +365,7 @@ void warm_replay() {
     commit_cuda_density_fitting_rhf_warm_state(plan.get(), token);
   };
   require(!matches(), "cold plan manufactured a warm baseline");
-  require(run(8) == VIBEQC_STATUS_SUCCESS, detail);
+  require(run(8) == GENERATIVEQC_STATUS_SUCCESS, detail);
   require(records[0].converged && records[0].iterations > 1,
           "cold determinant skipped its missing energy baseline");
   input = final;
@@ -385,20 +387,21 @@ void warm_replay() {
   require(!matches(), "another immutable source reused the warm frame");
   --plan->factor_basis_identity;
   for (int repeat = 0; repeat < 3; ++repeat) {
-    require(run(1) == VIBEQC_STATUS_SUCCESS && records[0].converged && records[0].iterations == 1,
-            "qualified frozen warm replay did not finish in exactly one iteration");
+    require(
+        run(1) == GENERATIVEQC_STATUS_SUCCESS && records[0].converged && records[0].iterations == 1,
+        "qualified frozen warm replay did not finish in exactly one iteration");
     require(!matches(), "unfinalized solve published warm eligibility");
     publish();
     require(matches(), "frozen input was lost when the latest frame advanced");
   }
-  require(run(0) == VIBEQC_STATUS_INVALID_ARGUMENT && !matches(),
+  require(run(0) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !matches(),
           "failed solve preserved a prior warm entry");
-  require(run(1) == VIBEQC_STATUS_SUCCESS && !records[0].converged && !matches(),
+  require(run(1) == GENERATIVEQC_STATUS_SUCCESS && !records[0].converged && !matches(),
           "failed/nonconverged solve manufactured first-step convergence");
 #ifdef _WIN32
-  _putenv_s("VIBEQC_DF_FINAL_EXCHANGE", "");
+  _putenv_s("GENERATIVEQC_DF_FINAL_EXCHANGE", "");
 #else
-  unsetenv("VIBEQC_DF_FINAL_EXCHANGE");
+  unsetenv("GENERATIVEQC_DF_FINAL_EXCHANGE");
 #endif
 }
 }  // namespace

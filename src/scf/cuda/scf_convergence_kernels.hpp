@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_compute_energy_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -84,4 +84,4 @@ void launch_select_final_fock_rebuild_kernel(dim3 grid, dim3 block, std::size_t 
                                              const std::uint8_t* failed, std::uint8_t* reuse_mask,
                                              std::uint8_t* active, std::uint32_t* rebuild_count);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

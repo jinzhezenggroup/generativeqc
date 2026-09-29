@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_compact_bounded_exact_class_force_wave_kernel(
@@ -21,4 +21,4 @@ void launch_compact_bounded_exact_class_force_wave_kernel(
     std::uint32_t* task_count, std::uint32_t* bra_head, const std::uint32_t* overflow,
     bool force_execution, std::uint32_t* signature_counts, const std::uint32_t* signature_offsets);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

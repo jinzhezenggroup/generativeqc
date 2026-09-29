@@ -47,7 +47,7 @@ std::vector<Component> cartesian_components(unsigned degree) {
   return out;
 }
 }
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 struct AoBasis {
   std::size_t natom{}, nprimitive{}, nao{};
   std::vector<double> packed;
@@ -73,8 +73,8 @@ long double axis(unsigned l,unsigned d,long double alpha,long double x) {
   }
   return total;
 }
-vibeqc::dft::AoBasis fixture(bool expanded) {
-  vibeqc::dft::AoBasis b;
+generativeqc::dft::AoBasis fixture(bool expanded) {
+  generativeqc::dft::AoBasis b;
   b.natom=2; b.nprimitive=6;
   b.packed={0,0,0, 0.3,-0.2,0.1, 1.7,0.4, 0.51,-0.17, 0.13,0.8,
                                       1.7,0.4, 0.51,-0.17, 0.13,0.8};

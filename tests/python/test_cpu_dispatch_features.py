@@ -3,8 +3,8 @@
 import typing
 
 import pytest
-from vibeqc_compiler.common import cpu_dispatch
-from vibeqc_compiler.common.cpu_target import CPU_TARGETS
+from generativeqc_compiler.common import cpu_dispatch
+from generativeqc_compiler.common.cpu_target import CPU_TARGETS
 
 
 @pytest.mark.parametrize(
@@ -25,7 +25,7 @@ def test_linux_dispatch_uses_common_processor_features(
     monkeypatch.setattr(cpu_dispatch.sys, "platform", "linux")
     monkeypatch.setattr(cpu_dispatch.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(cpu_dispatch.Path, "read_text", lambda self: records)
-    monkeypatch.delenv("VIBEQC_CPU_TARGET", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_CPU_TARGET", raising=False)
     runtime = cpu_dispatch.detect_cpu_features()
     assert runtime.features == expected
     selected = cpu_dispatch.select_cpu_target(CPU_TARGETS, runtime)

@@ -31,7 +31,7 @@
   "schema_version": 1,
   "source": {
     "atom_index": 0,
-    "attribution": "VibeQC repository",
+    "attribution": "GenerativeQC repository",
     "axis": "x",
     "delta_bohr": 0.01,
     "kind": "fixed_displacement",

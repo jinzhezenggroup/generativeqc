@@ -1,6 +1,6 @@
 # Current-density D/C feature sources (#235)
 
-`vibeqc_compiler.dft.DensitySource` provides a fixed-input CPU contract for
+`generativeqc_compiler.dft.DensitySource` provides a fixed-input CPU contract for
 choosing between the original density matrix D and compatible occupied or
 fractionally occupied orbitals C/f. Slice A (#295) defines source validity;
 slice B (#297) adds bounded native CUDA execution below.
@@ -38,7 +38,7 @@ columns. Unsorted unique maps and empty local supports are supported.
 ## Identity, validation and replay
 
 ```python
-from vibeqc_compiler.dft import DensitySource
+from generativeqc_compiler.dft import DensitySource
 
 # basis.identity includes coordinates, normalized basis, AO representation,
 # atom order, charge and spin policy. D is this producer state's density.
@@ -195,15 +195,15 @@ and output paths for the benchmark. PySCF need not be installed.
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-  VIBEQC_LIBRARY=$PWD/build/cpu/libvibeqc.so VIBEQC_GRID_CUDA_TEST=1 \
-  VIBEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
+  GENERATIVEQC_LIBRARY=$PWD/build/cpu/libgenerativeqc.so GENERATIVEQC_GRID_CUDA_TEST=1 \
+  GENERATIVEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
   .venv/bin/python -m pytest tests/python/test_density_cuda.py tests/python/test_grid_cuda.py -q
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-  VIBEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
+  GENERATIVEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
   .venv/bin/python tools/benchmark_density_sources.py \
-  --library build/cpu/libvibeqc.so --cache .artifacts/density-bench-cache \
+  --library build/cpu/libgenerativeqc.so --cache .artifacts/density-bench-cache \
   --output .artifacts/benchmarks/density-sources --samples 5
 ```
 
@@ -300,9 +300,9 @@ a performance winner or a complete molecular endpoint.
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-  VIBEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
+  GENERATIVEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
   .venv/bin/python tools/benchmark_density_sources.py --spatial \
-  --library build/cpu/libvibeqc.so --cache .artifacts/spatial-density-bench-cache \
+  --library build/cpu/libgenerativeqc.so --cache .artifacts/spatial-density-bench-cache \
   --output .artifacts/benchmarks/spatial-density-sources --samples 5
 ```
 
@@ -372,7 +372,7 @@ This slice makes no performance or complete-force claim.
 
 ## Executable registrations for #168 (#303)
 
-The existing `vibeqc.autotune.dft_density_candidates(prepared, source,
+The existing `generativeqc.autotune.dft_density_candidates(prepared, source,
 stamp=source.stamp)` entry returns explicit D and C candidates bound to the
 same current density, functional/output contract, grid, AO mask and resource
 plan. Registration does not search schedules or install a profile. The HF
@@ -395,7 +395,7 @@ below remain validation/ablation evidence and cannot themselves promote a
 complete-SCF schedule.
 
 ```python
-from vibeqc.autotune import dft_density_candidates
+from generativeqc.autotune import dft_density_candidates
 
 d, c = dft_density_candidates(prepared_xc, current, stamp=current.stamp)
 value, execution = d.execute(stamp=current.stamp)

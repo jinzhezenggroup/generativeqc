@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CONTROL_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CONTROL_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CONTROL_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CONTROL_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -13,7 +13,7 @@
 #include "backends/cuda/gfn2_geometry.cuh"
 #include "backends/cuda/gfn2_scc.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /*
  * Stable internal stage identities for the SCC iteration ledger. Primitive
@@ -75,7 +75,7 @@ enum class Gfn2SccStageId : std::uint32_t {
 /* Object representation of a stage-local per-system diagnostic array. */
 enum class Gfn2SccStageCodeFormat : std::uint32_t {
   kUint32Error = 0u,
-  kVibeqcXtbStatus = 1u,
+  kGenerativeQCXtbStatus = 1u,
 };
 
 /*
@@ -142,7 +142,7 @@ struct Gfn2SccIterationDevicePolicy {
 /* Read-only projection of the driver state fields used by the CPU predicate. */
 struct Gfn2SccIterationDeviceStateInput {
   const std::uint64_t* iterations = nullptr;
-  const vibeqc_xtb_status_t* system_statuses = nullptr;
+  const generativeqc_xtb_status_t* system_statuses = nullptr;
   const std::uint8_t* converged = nullptr;
   std::int64_t batch_elements = 0;
   std::uint64_t plan_token = 0u;
@@ -179,7 +179,7 @@ struct Gfn2SccIterationDeviceProvenance {
  */
 struct Gfn2SccIterationDeviceLedger {
   std::uint8_t* active_mask = nullptr;
-  vibeqc_xtb_status_t* pending_statuses = nullptr;
+  generativeqc_xtb_status_t* pending_statuses = nullptr;
   std::uint64_t* system_failure_records = nullptr;
   std::uint64_t* plan_failure_record = nullptr;
   std::uint32_t* sequence_active = nullptr;
@@ -226,7 +226,7 @@ struct Gfn2SccStageDeviceReport {
   std::int64_t stage_sequence_elements = 0;
 
   std::uint64_t peer_error_mask = 0u;
-  vibeqc_xtb_status_t peer_failure_status = VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+  generativeqc_xtb_status_t peer_failure_status = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   std::uint64_t plan_token = 0u;
 
   // Kept at the tail so legacy aggregate initializers retain the mixed-first-
@@ -299,6 +299,6 @@ cudaError_t normalize_gfn2_scc_stage_cuda(const Gfn2SccStageDeviceReport& report
 cudaError_t open_gfn2_scc_stage_cuda(const Gfn2SccStageDeviceReport& report,
                                      cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CONTROL_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_ITERATION_CONTROL_CUH

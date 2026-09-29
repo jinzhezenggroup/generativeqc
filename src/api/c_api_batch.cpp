@@ -8,38 +8,40 @@
 #include "api/handles.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
+#include "generativeqc/generativeqc.h"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
-#include "vibeqc/vibeqc.h"
 
 extern "C" {
 
-vibeqc_status vibeqc_batch_prepare(vibeqc_context* context, const vibeqc_system* const* systems,
-                                   uint32_t system_count,
-                                   const vibeqc_method_descriptor* descriptor,
-                                   vibeqc_batch_flags flags, vibeqc_batch** batch) {
-  vibeqc::runtime::host_trace::Region trace("batch_prepare");
+generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
+                                               const generativeqc_system* const* systems,
+                                               uint32_t system_count,
+                                               const generativeqc_method_descriptor* descriptor,
+                                               generativeqc_batch_flags flags,
+                                               generativeqc_batch** batch) {
+  generativeqc::runtime::host_trace::Region trace("batch_prepare");
   if (context == nullptr || systems == nullptr || system_count == 0 || descriptor == nullptr ||
       batch == nullptr) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *batch = nullptr;
-  if (!vibeqc::api::valid_descriptor(descriptor)) {
-    return VIBEQC_STATUS_ABI_MISMATCH;
+  if (!generativeqc::api::valid_descriptor(descriptor)) {
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
 
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
   try {
-    std::vector<vibeqc::core::System> native_systems;
+    std::vector<generativeqc::core::System> native_systems;
     native_systems.reserve(system_count);
     std::vector<std::uint32_t> atom_counts;
     atom_counts.reserve(system_count);
     for (std::uint32_t i = 0; i < system_count; ++i) {
-      if (systems[i] == nullptr) return VIBEQC_STATUS_INVALID_ARGUMENT;
+      if (systems[i] == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       native_systems.push_back(systems[i]->data);
       atom_counts.push_back(static_cast<std::uint32_t>(systems[i]->data.atoms.size()));
     }
-    auto candidate = std::make_unique<vibeqc_batch>();
+    auto candidate = std::make_unique<generativeqc_batch>();
     candidate->context = context;
     candidate->flags = flags;
     candidate->atom_counts = std::move(atom_counts);
@@ -48,60 +50,63 @@ vibeqc_status vibeqc_batch_prepare(vibeqc_context* context, const vibeqc_system*
     candidate->precision_work.resize(system_count);
     candidate->scf_diagnostics.resize(system_count);
     candidate->ks_diagnostics.resize(system_count);
-    candidate->plan = vibeqc::methods::prepare_batch(context->state, std::move(native_systems),
-                                                     *descriptor, flags);
+    candidate->plan = generativeqc::methods::prepare_batch(
+        context->state, std::move(native_systems), *descriptor, flags);
     *batch = candidate.release();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&context->last_detail);
+    return generativeqc::api::map_exception(&context->last_detail);
   }
 }
 
-void vibeqc_batch_destroy(vibeqc_batch* batch) {
-  vibeqc::runtime::host_trace::Region trace("batch_destroy");
+void generativeqc_batch_destroy(generativeqc_batch* batch) {
+  generativeqc::runtime::host_trace::Region trace("batch_destroy");
   delete batch;
 }
 
-uint32_t vibeqc_batch_get_system_count(const vibeqc_batch* batch) {
+uint32_t generativeqc_batch_get_system_count(const generativeqc_batch* batch) {
   return batch == nullptr ? 0 : static_cast<std::uint32_t>(batch->plan->size());
 }
 
-vibeqc_status vibeqc_batch_get_scf_diagnostic(const vibeqc_batch* batch, uint32_t index,
-                                              vibeqc_scf_diagnostic* out) {
-  if (!batch || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (out && !vibeqc::api::valid_descriptor(out)) return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_batch_get_scf_diagnostic(const generativeqc_batch* batch,
+                                                          uint32_t index,
+                                                          generativeqc_scf_diagnostic* out) {
+  if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (out && !generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
-  if (!batch->scf_diagnostics[index]) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  if (!batch->scf_diagnostics[index]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   if (out) *out = *batch->scf_diagnostics[index];
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status vibeqc_batch_get_correlation_diagnostic(const vibeqc_batch* batch, uint32_t index,
-                                                      vibeqc_correlation_diagnostic* diagnostic) {
-  if (!batch || !diagnostic || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(diagnostic)) return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_batch_get_correlation_diagnostic(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_correlation_diagnostic* diagnostic) {
+  if (!batch || !diagnostic || index >= batch->plan->size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(diagnostic)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     const auto value = batch->plan->correlation_diagnostic(index);
-    if (!value) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     *diagnostic = *value;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_cc_performance_diagnostic(const vibeqc_batch* batch, uint32_t index,
-                                                         vibeqc_cc_performance_diagnostic* out) {
-  if (!batch || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (out && !vibeqc::api::valid_descriptor(out)) return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_batch_get_cc_performance_diagnostic(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_cc_performance_diagnostic* out) {
+  if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (out && !generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     const auto value = batch->plan->cc_performance_diagnostic(index);
-    if (!value) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (out)
       *out = {sizeof(*out),
-              VIBEQC_ABI_VERSION,
+              GENERATIVEQC_ABI_VERSION,
               value->reference_seconds,
               value->problem_seconds,
               value->provider_seconds,
@@ -127,33 +132,34 @@ vibeqc_status vibeqc_batch_get_cc_performance_diagnostic(const vibeqc_batch* bat
               value->diis_gram_calls,
               value->diis_coefficient_calls,
               value->diis_combine_calls};
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_ks_diagnostic(const vibeqc_batch* batch, uint32_t index,
-                                             vibeqc_ks_diagnostic* out,
-                                             vibeqc_ks_iteration* history,
-                                             uint32_t history_capacity) {
-  if (!batch || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+generativeqc_status generativeqc_batch_get_ks_diagnostic(const generativeqc_batch* batch,
+                                                         uint32_t index,
+                                                         generativeqc_ks_diagnostic* out,
+                                                         generativeqc_ks_iteration* history,
+                                                         uint32_t history_capacity) {
+  if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
-  return vibeqc::api::copy_ks_diagnostic(batch->ks_diagnostics[index], out, history,
-                                         history_capacity);
+  return generativeqc::api::copy_ks_diagnostic(batch->ks_diagnostics[index], out, history,
+                                               history_capacity);
 }
 
-vibeqc_status vibeqc_batch_get_ks_transport_diagnostic(const vibeqc_batch* batch, uint32_t index,
-                                                       vibeqc_ks_transport_diagnostic* out) {
-  if (!batch || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (out && !vibeqc::api::valid_descriptor(out)) return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_batch_get_ks_transport_diagnostic(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_ks_transport_diagnostic* out) {
+  if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (out && !generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     const auto source = batch->plan->ks_transport_diagnostic(index);
-    if (!source) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (!source) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (out)
       *out = {sizeof(*out),
-              VIBEQC_ABI_VERSION,
+              GENERATIVEQC_ABI_VERSION,
               source->setup_h2d_bytes,
               source->density_h2d_bytes,
               source->scalar_d2h_bytes,
@@ -161,43 +167,43 @@ vibeqc_status vibeqc_batch_get_ks_transport_diagnostic(const vibeqc_batch* batch
               source->synchronizations,
               source->iterations,
               source->occupation_stabilized_proposals};
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_last_shell_class_profile(const vibeqc_batch* batch,
-                                                        vibeqc_shell_class_profile_entry* entries,
-                                                        uint32_t entry_count) {
+generativeqc_status generativeqc_batch_get_last_shell_class_profile(
+    const generativeqc_batch* batch, generativeqc_shell_class_profile_entry* entries,
+    uint32_t entry_count) {
   if (batch == nullptr || entries == nullptr) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     const auto profile = batch->plan->last_direct_shell_class_profile();
-    if (!profile.has_value()) return VIBEQC_STATUS_NOT_IMPLEMENTED;
-    if (entry_count < profile->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+    if (!profile.has_value()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    if (entry_count < profile->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     for (std::size_t index = 0; index < profile->size(); ++index) {
-      const vibeqc::methods::DirectShellClassProfileEntry& source = (*profile)[index];
+      const generativeqc::methods::DirectShellClassProfileEntry& source = (*profile)[index];
       entries[index] = {source.shell_quartets, source.tiles, source.ao_quartets,
                         source.primitive_quartets};
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_last_ppps_queue_profile(const vibeqc_batch* batch,
-                                                       vibeqc_ppps_queue_profile* profile) {
+generativeqc_status generativeqc_batch_get_last_ppps_queue_profile(
+    const generativeqc_batch* batch, generativeqc_ppps_queue_profile* profile) {
   if (batch == nullptr || profile == nullptr) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     const auto source = batch->plan->last_direct_ppps_queue_profile();
-    if (!source.has_value()) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (!source.has_value()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     *profile = {};
     profile->descriptor_slots = source->descriptor_slots;
     profile->non_empty_descriptors = source->non_empty_descriptors;
@@ -228,33 +234,32 @@ vibeqc_status vibeqc_batch_get_last_ppps_queue_profile(const vibeqc_batch* batch
               profile->ket_primitive_tasks);
     std::copy(source->ket_primitive_work.begin(), source->ket_primitive_work.end(),
               profile->ket_primitive_work);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_last_eigensolver_diagnostics(const vibeqc_batch* batch,
-                                                            vibeqc_eigensolver_diagnostic* entries,
-                                                            uint32_t entry_count,
-                                                            uint32_t* written_count) {
+generativeqc_status generativeqc_batch_get_last_eigensolver_diagnostics(
+    const generativeqc_batch* batch, generativeqc_eigensolver_diagnostic* entries,
+    uint32_t entry_count, uint32_t* written_count) {
   if (batch == nullptr || written_count == nullptr || (entries == nullptr && entry_count != 0U)) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *written_count = 0U;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     const auto source = batch->plan->last_eigensolver_diagnostics();
-    if (source.empty()) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (source.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (source.size() > std::numeric_limits<std::uint32_t>::max()) {
-      return VIBEQC_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
     }
     *written_count = static_cast<std::uint32_t>(source.size());
-    if (entries == nullptr) return VIBEQC_STATUS_SUCCESS;
-    if (entry_count < source.size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+    if (entries == nullptr) return GENERATIVEQC_STATUS_SUCCESS;
+    if (entry_count < source.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     for (std::size_t index = 0; index < source.size(); ++index) {
-      const vibeqc::methods::EigensolverDiagnostic& input = source[index];
-      vibeqc_eigensolver_diagnostic& output = entries[index];
+      const generativeqc::methods::EigensolverDiagnostic& input = source[index];
+      generativeqc_eigensolver_diagnostic& output = entries[index];
       output = {};
       output.bucket_id = input.bucket_id;
       output.ordinary_family = static_cast<std::int32_t>(input.ordinary_family);
@@ -289,29 +294,29 @@ vibeqc_status vibeqc_batch_get_last_eigensolver_diagnostics(const vibeqc_batch* 
       output.maximum_residual = input.maximum_residual;
       output.maximum_orthogonality_error = input.maximum_orthogonality_error;
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_last_density_fitting_metric_diagnostics(
-    const vibeqc_batch* batch, vibeqc_density_fitting_metric_diagnostic* entries,
+generativeqc_status generativeqc_batch_get_last_density_fitting_metric_diagnostics(
+    const generativeqc_batch* batch, generativeqc_density_fitting_metric_diagnostic* entries,
     uint32_t entry_count, uint32_t* written_count) {
   if (batch == nullptr || written_count == nullptr || (entries == nullptr && entry_count != 0U)) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *written_count = 0U;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     const auto& source = batch->plan->last_density_fitting_metric_diagnostics();
-    if (source.empty()) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (source.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (source.size() > std::numeric_limits<uint32_t>::max()) {
-      return VIBEQC_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
     }
     *written_count = static_cast<uint32_t>(source.size());
-    if (entries == nullptr) return VIBEQC_STATUS_SUCCESS;
-    if (entry_count < source.size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+    if (entries == nullptr) return GENERATIVEQC_STATUS_SUCCESS;
+    if (entry_count < source.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     for (std::size_t index = 0; index < source.size(); ++index) {
       const auto& input = source[index];
       auto& output = entries[index];
@@ -330,32 +335,32 @@ vibeqc_status vibeqc_batch_get_last_density_fitting_metric_diagnostics(
       output.auxiliary_tile = input.auxiliary_tile;
       output.streamed = input.streamed ? 1 : 0;
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_last_inactive_eigensolver_profile(
-    const vibeqc_batch* batch, vibeqc_inactive_eigensolver_profile_entry* entries,
+generativeqc_status generativeqc_batch_get_last_inactive_eigensolver_profile(
+    const generativeqc_batch* batch, generativeqc_inactive_eigensolver_profile_entry* entries,
     uint32_t entry_count, uint32_t* written_count) {
   if (batch == nullptr || written_count == nullptr || (entries == nullptr && entry_count != 0U)) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *written_count = 0U;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     const auto source = batch->plan->last_inactive_eigensolver_profile();
-    if (source.empty()) return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    if (source.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (source.size() > std::numeric_limits<std::uint32_t>::max()) {
-      return VIBEQC_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
     }
     *written_count = static_cast<std::uint32_t>(source.size());
-    if (entries == nullptr) return VIBEQC_STATUS_SUCCESS;
-    if (entry_count < source.size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+    if (entries == nullptr) return GENERATIVEQC_STATUS_SUCCESS;
+    if (entry_count < source.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     for (std::size_t index = 0; index < source.size(); ++index) {
-      const vibeqc::methods::InactiveEigensolverProfileEntry& input = source[index];
-      vibeqc_inactive_eigensolver_profile_entry& output = entries[index];
+      const generativeqc::methods::InactiveEigensolverProfileEntry& input = source[index];
+      generativeqc_inactive_eigensolver_profile_entry& output = entries[index];
       output = {};
       output.bucket_id = input.bucket_id;
       output.iteration = input.iteration;
@@ -371,53 +376,55 @@ vibeqc_status vibeqc_batch_get_last_inactive_eigensolver_profile(
       output.inactive_touch_flags = input.inactive_touch_flags;
       output.provider_invoked = input.provider_invoked ? 1 : 0;
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_clear_warm_starts(vibeqc_batch* batch) {
-  if (batch == nullptr) return VIBEQC_STATUS_INVALID_ARGUMENT;
+generativeqc_status generativeqc_batch_clear_warm_starts(generativeqc_batch* batch) {
+  if (batch == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     batch->plan->clear_warm_starts();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_set_warm_start_updates(vibeqc_batch* batch, int32_t enabled) {
+generativeqc_status generativeqc_batch_set_warm_start_updates(generativeqc_batch* batch,
+                                                              int32_t enabled) {
   if (batch == nullptr || (enabled != 0 && enabled != 1)) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
     batch->plan->set_warm_start_updates(enabled != 0);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_hf_warm_state(const vibeqc_batch* batch, uint32_t index,
-                                             vibeqc_hf_warm_state* state) {
-  if (!batch || !state || index >= batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
-  if (!vibeqc::api::valid_descriptor(state)) return VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_batch_get_hf_warm_state(const generativeqc_batch* batch,
+                                                         uint32_t index,
+                                                         generativeqc_hf_warm_state* state) {
+  if (!batch || !state || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(state)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     const auto& source = batch->plan->warm_state(index);
     if (!source) {
       state->present = 0;
       state->density_count = state->coordinate_count = 0;
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     const bool query = !state->density && !state->coordinates;
     if (!query &&
         (!state->density || !state->coordinates || state->density_count < source->density.size() ||
          state->coordinate_count < source->coordinates.size()))
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     state->present = 1;
     state->density_count = source->density.size();
     state->coordinate_count = source->coordinates.size();
@@ -429,56 +436,57 @@ vibeqc_status vibeqc_batch_get_hf_warm_state(const vibeqc_batch* batch, uint32_t
       std::copy(source->density.begin(), source->density.end(), state->density);
       std::copy(source->coordinates.begin(), source->coordinates.end(), state->coordinates);
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_restore_hf_warm_states(vibeqc_batch* batch,
-                                                  const vibeqc_hf_warm_state* states,
-                                                  uint32_t count) {
-  if (!batch || !states || count != batch->plan->size()) return VIBEQC_STATUS_INVALID_ARGUMENT;
+generativeqc_status generativeqc_batch_restore_hf_warm_states(
+    generativeqc_batch* batch, const generativeqc_hf_warm_state* states, uint32_t count) {
+  if (!batch || !states || count != batch->plan->size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     // Validate dimensions against the trusted prepared topology before any
     // caller-controlled allocation or pointer arithmetic.
     for (uint32_t i = 0; i < count; ++i) {
       const auto& state = states[i];
-      if (!vibeqc::api::valid_descriptor(&state)) return VIBEQC_STATUS_ABI_MISMATCH;
-      if (state.present != 0 && state.present != 1) return VIBEQC_STATUS_INVALID_ARGUMENT;
+      if (!generativeqc::api::valid_descriptor(&state)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+      if (state.present != 0 && state.present != 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       if (!state.present) continue;
       if (!state.density || !state.coordinates ||
           state.density_count != batch->plan->warm_density_size(i) ||
           state.coordinate_count != std::size_t(batch->atom_counts[i]) * 3)
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    std::vector<std::optional<vibeqc::scf::HfWarmState>> candidates(count);
+    std::vector<std::optional<generativeqc::scf::HfWarmState>> candidates(count);
     for (uint32_t i = 0; i < count; ++i) {
       const auto& state = states[i];
       if (!state.present) continue;
-      candidates[i] =
-          vibeqc::scf::HfWarmState{{state.density, state.density + state.density_count},
-                                   {state.coordinates, state.coordinates + state.coordinate_count},
-                                   state.energy,
-                                   state.energy_change,
-                                   state.density_rms,
-                                   state.iterations};
+      candidates[i] = generativeqc::scf::HfWarmState{
+          {state.density, state.density + state.density_count},
+          {state.coordinates, state.coordinates + state.coordinate_count},
+          state.energy,
+          state.energy_change,
+          state.density_rms,
+          state.iterations};
     }
     batch->plan->restore_warm_states(std::move(candidates));
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_execute(vibeqc_batch* batch, const vibeqc_batch_input_descriptor* inputs,
-                                   uint32_t input_count,
-                                   vibeqc_batch_item_result_descriptor* results,
-                                   uint32_t result_count) {
-  vibeqc::runtime::host_trace::Region trace("batch_execute");
+generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
+                                               const generativeqc_batch_input_descriptor* inputs,
+                                               uint32_t input_count,
+                                               generativeqc_batch_item_result_descriptor* results,
+                                               uint32_t result_count) {
+  generativeqc::runtime::host_trace::Region trace("batch_execute");
   if (batch == nullptr) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // Invalidation mutates shared diagnostics even when validation rejects the
   // replay, so it belongs to the same serialized operation as execution.
@@ -489,35 +497,35 @@ vibeqc_status vibeqc_batch_execute(vibeqc_batch* batch, const vibeqc_batch_input
   try {
     batch->plan->invalidate_result();
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
-  if (results == nullptr) return VIBEQC_STATUS_INVALID_ARGUMENT;
+  if (results == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
   // Invalidate before validation/execution so rejected or throwing replays
   // cannot expose a record from the previous run.
   std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
   std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
   std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
-  const std::uint32_t system_count = vibeqc_batch_get_system_count(batch);
+  const std::uint32_t system_count = generativeqc_batch_get_system_count(batch);
   if (result_count != system_count || ((inputs == nullptr) != (input_count == 0)) ||
       (inputs != nullptr && input_count != system_count)) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (std::uint32_t i = 0; i < result_count; ++i) {
-    if (!vibeqc::api::valid_descriptor(&results[i])) {
-      return VIBEQC_STATUS_ABI_MISMATCH;
+    if (!generativeqc::api::valid_descriptor(&results[i])) {
+      return GENERATIVEQC_STATUS_ABI_MISMATCH;
     }
   }
   if (inputs != nullptr) {
     for (std::uint32_t i = 0; i < input_count; ++i) {
-      if (!vibeqc::api::valid_descriptor(&inputs[i])) {
-        return VIBEQC_STATUS_ABI_MISMATCH;
+      if (!generativeqc::api::valid_descriptor(&inputs[i])) {
+        return GENERATIVEQC_STATUS_ABI_MISMATCH;
       }
     }
   }
 
   try {
-    vibeqc::methods::Coordinates coordinates;
+    generativeqc::methods::Coordinates coordinates;
     if (inputs != nullptr) {
       coordinates.resize(system_count);
       for (std::uint32_t i = 0; i < system_count; ++i) {
@@ -541,41 +549,44 @@ vibeqc_status vibeqc_batch_execute(vibeqc_batch* batch, const vibeqc_batch_input
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
-    std::vector<vibeqc::methods::BatchItemResult> native =
+    std::vector<generativeqc::methods::BatchItemResult> native =
         batch->plan->execute(coordinates, compute_forces);
     if (native.size() != system_count) {
-      return VIBEQC_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
     }
     for (std::uint32_t i = 0; i < system_count; ++i) {
-      vibeqc_batch_item_result_descriptor& output = results[i];
-      vibeqc::methods::BatchItemResult& item = native[i];
-      if (item.status == VIBEQC_STATUS_SUCCESS || item.status == VIBEQC_STATUS_NOT_CONVERGED) {
+      generativeqc_batch_item_result_descriptor& output = results[i];
+      generativeqc::methods::BatchItemResult& item = native[i];
+      if (item.status == GENERATIVEQC_STATUS_SUCCESS ||
+          item.status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
         batch->ks_diagnostics[i] = std::move(item.calculation.ks_diagnostic);
         batch->precision[i] = item.calculation.precision;
         if (item.calculation.physical_residual_rms)
-          batch->scf_diagnostics[i] = vibeqc_scf_diagnostic{
-              sizeof(vibeqc_scf_diagnostic), VIBEQC_ABI_VERSION,
+          batch->scf_diagnostics[i] = generativeqc_scf_diagnostic{
+              sizeof(generativeqc_scf_diagnostic), GENERATIVEQC_ABI_VERSION,
               item.calculation.convergence.residual_rms, *item.calculation.physical_residual_rms};
       }
       // A retry may have spent additional builds before throwing, and CUDA
       // does not yet export this counter. Never report a partial count as total.
       if (!item.warm_start_fallback &&
-          item.calculation.executed_backend == VIBEQC_BACKEND_CPU_REFERENCE) {
+          item.calculation.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE) {
         batch->last_fock_builds[i] = item.calculation.fock_builds;
       }
       const std::uint32_t required_forces = batch->atom_counts[i] * 3;
       const bool omit_forces = output.forces == nullptr && output.force_count == 0;
       const bool valid_force_buffer =
           omit_forces || (output.forces != nullptr && output.force_count >= required_forces);
-      output.status = valid_force_buffer ? item.status : VIBEQC_STATUS_INVALID_ARGUMENT;
-      if (output.status == VIBEQC_STATUS_SUCCESS || output.status == VIBEQC_STATUS_NOT_CONVERGED) {
+      output.status = valid_force_buffer ? item.status : GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      if (output.status == GENERATIVEQC_STATUS_SUCCESS ||
+          output.status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
         batch->precision_work[i] = std::move(item.calculation.precision_work);
       }
-      if ((batch->flags & VIBEQC_BATCH_ENABLE_WARM_STARTS) != 0) {
+      if ((batch->flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0) {
         output.warm_start_used = item.warm_start_used ? 1 : 0;
         output.warm_start_fallback = item.warm_start_fallback ? 1 : 0;
       }
-      if (output.status != VIBEQC_STATUS_SUCCESS && output.status != VIBEQC_STATUS_NOT_CONVERGED)
+      if (output.status != GENERATIVEQC_STATUS_SUCCESS &&
+          output.status != GENERATIVEQC_STATUS_NOT_CONVERGED)
         continue;
       output.energy = item.calculation.energy;
       output.iterations = item.calculation.convergence.iterations;
@@ -586,46 +597,48 @@ vibeqc_status vibeqc_batch_execute(vibeqc_batch* batch, const vibeqc_batch_input
       output.bucket_id = static_cast<std::uint32_t>(item.bucket_id);
       output.warm_start_used = item.warm_start_used ? 1 : 0;
       output.warm_start_fallback = item.warm_start_fallback ? 1 : 0;
-      if (!omit_forces && item.status == VIBEQC_STATUS_SUCCESS) {
+      if (!omit_forces && item.status == GENERATIVEQC_STATUS_SUCCESS) {
         std::copy(item.calculation.forces.begin(), item.calculation.forces.end(), output.forces);
       }
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    return vibeqc::api::map_exception(&batch->context->last_detail);
+    return generativeqc::api::map_exception(&batch->context->last_detail);
   }
 }
 
-vibeqc_status vibeqc_batch_get_precision_provenance(const vibeqc_batch* batch, uint32_t index,
-                                                    vibeqc_precision_provenance* out) {
+generativeqc_status generativeqc_batch_get_precision_provenance(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_precision_provenance* out) {
   if (batch == nullptr || index >= batch->precision.size()) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
-  if (!batch->precision[index].has_value()) return VIBEQC_STATUS_PRECISION_UNAVAILABLE;
-  return vibeqc::api::copy_precision_provenance(*batch->precision[index], out);
+  if (!batch->precision[index].has_value()) return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  return generativeqc::api::copy_precision_provenance(*batch->precision[index], out);
 }
 
-vibeqc_status vibeqc_batch_get_precision_work(
-    const vibeqc_batch* batch, uint32_t index, uint32_t detail_version,
-    vibeqc_precision_work_detail* out, vibeqc_precision_work_event* events, uint32_t event_capacity,
-    vibeqc_precision_operator_record* operators, uint32_t operator_capacity) {
+generativeqc_status generativeqc_batch_get_precision_work(
+    const generativeqc_batch* batch, uint32_t index, uint32_t detail_version,
+    generativeqc_precision_work_detail* out, generativeqc_precision_work_event* events,
+    uint32_t event_capacity, generativeqc_precision_operator_record* operators,
+    uint32_t operator_capacity) {
   if (batch == nullptr || index >= batch->precision_work.size()) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
-  if (!batch->precision_work[index].has_value()) return VIBEQC_STATUS_PRECISION_UNAVAILABLE;
-  return vibeqc::api::copy_precision_work(*batch->precision_work[index], detail_version, out,
-                                          events, event_capacity, operators, operator_capacity);
+  if (!batch->precision_work[index].has_value()) return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  return generativeqc::api::copy_precision_work(*batch->precision_work[index], detail_version, out,
+                                                events, event_capacity, operators,
+                                                operator_capacity);
 }
 
-vibeqc_status vibeqc_batch_get_last_fock_builds(const vibeqc_batch* batch, uint32_t index,
-                                                uint64_t* builds) {
+generativeqc_status generativeqc_batch_get_last_fock_builds(const generativeqc_batch* batch,
+                                                            uint32_t index, uint64_t* builds) {
   if (!batch || !builds || index >= batch->last_fock_builds.size())
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   *builds = batch->last_fock_builds[index];
-  return *builds ? VIBEQC_STATUS_SUCCESS : VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return *builds ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
 }  // extern "C"

@@ -53,7 +53,7 @@ def main() -> None:
         parser.error("this real-GPU benchmark must run inside a Slurm allocation")
 
     import cupy as cp
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     records: dict[str, object] = {}
     reference_energy: float | None = None

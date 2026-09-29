@@ -4,8 +4,8 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     PackedLayout,
@@ -31,7 +31,7 @@ from vibeqc_compiler.tensor import (
     transpose_program,
     vjp,
 )
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
 RNG = np.random.default_rng(1151)
 TARGET = cuda_target_info("sm_80")

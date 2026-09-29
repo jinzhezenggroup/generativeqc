@@ -9,7 +9,7 @@ import importlib.abc
 import sys
 
 # Source paths are explicit: isolated mode must not rely on PYTHONPATH or an
-# already installed VibeQC package. NumPy is a documented compiler dependency.
+# already installed GenerativeQC package. NumPy is a documented compiler dependency.
 sys.path[:0] = [sys.argv[1], sys.argv[2]]
 import numpy
 sys.modules.pop("typing_extensions", None)
@@ -21,7 +21,7 @@ class BlockOptionalTyping(importlib.abc.MetaPathFinder):
         return None
 
 sys.meta_path.insert(0, BlockOptionalTyping())
-import vibeqc_compiler.geometry as geometry
+import generativeqc_compiler.geometry as geometry
 assert callable(geometry.compile_d3_bj_batch)
 assert callable(geometry.PreparedD3CudaBatch)
 """

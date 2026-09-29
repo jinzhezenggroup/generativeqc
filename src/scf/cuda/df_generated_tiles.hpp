@@ -9,21 +9,22 @@
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/df_streamed_k_policy.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 /** Transform a bounded raw panel with GEMM instead of repeating recurrences
  * for every output auxiliary direction. Both buffers borrow one existing plan
  * tile and must be disjoint. Raw input blocks are reduced in ascending order;
  * no allocation, host tensor, extra stream or synchronization is introduced.
  */
-inline vibeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan, std::size_t system,
-                                           std::size_t pair_begin, std::size_t pairs,
-                                           std::size_t auxiliary_begin, std::size_t auxiliaries,
-                                           double* output, double* scratch, std::string& detail) {
+inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan, std::size_t system,
+                                                 std::size_t pair_begin, std::size_t pairs,
+                                                 std::size_t auxiliary_begin,
+                                                 std::size_t auxiliaries, double* output,
+                                                 double* scratch, std::string& detail) {
   const auto capacity = plan.row_tile * plan.nbf * plan.auxiliary_tile;
   if (!pairs || !auxiliaries || pairs > capacity / auxiliaries || output == scratch) {
     detail = "generated DF panel exceeds its borrowed tile capacity";
-    return VIBEQC_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
   const auto raw_tile = std::min(plan.naux, capacity / pairs);
   // These private panels feed only streamed K, which sums over its entire
@@ -56,7 +57,7 @@ inline vibeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan, std::
     auto status = generate_cuda_density_fitting_raw_tile(
         plan.integral_source, system, pair_begin, pairs, begin, count, -1,
         reinterpret_cast<void*>(plan.stream), scratch, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     // Accumulate Q^T A before scaling weak eigendirections. Raw splitting
     // changes only the reduction order, never the number of source integrals.
     // The truncated-rank compatibility path retains its symmetric factor.
@@ -89,7 +90,7 @@ inline vibeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan, std::
   }
   runtime::cuda_trace::trace_tile(system, pair_begin, pairs, auxiliary_begin, auxiliaries, -1,
                                   true);
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

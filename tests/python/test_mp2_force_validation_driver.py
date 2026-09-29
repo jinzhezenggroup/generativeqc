@@ -13,7 +13,9 @@ def test_validation_cases_cover_required_public_force_domain() -> None:
 
     cases = validation_cases()
     assert tuple(cases) == ("h2", "lih", "h2o", "f-shell", "water-def2-svp")
-    assert any(shell.angular_momentum == 3 for shell in cases["f-shell"].vibeqc_basis)
+    assert any(
+        shell.angular_momentum == 3 for shell in cases["f-shell"].generativeqc_basis
+    )
     assert cases["water-def2-svp"].minimum_ao_count > 12
 
 
@@ -40,7 +42,7 @@ def test_run_directory_is_fresh_and_manifest_is_machine_readable(
         command=("python", "tools/validate_mp2_public_force.py"),
     )
     manifest = json.loads((destination / "manifest.json").read_text())
-    assert manifest["schema"] == "vibeqc.mp2-public-force-validation.v1"
+    assert manifest["schema"] == "generativeqc.mp2-public-force-validation.v1"
     assert manifest["backend"] == "cpu"
     assert manifest["cases"] == ["h2"]
     assert manifest["fd_steps_bohr"] == [0.004, 0.002, 0.001]
@@ -59,7 +61,7 @@ def test_case_record_requires_complete_scientific_and_resource_gates() -> None:
     from tools.validate_mp2_public_force import validate_case_record
 
     record = {
-        "schema": "vibeqc.mp2-public-force-case.v1",
+        "schema": "generativeqc.mp2-public-force-case.v1",
         "case": "h2",
         "backend": "cpu",
         "status": "pass",
@@ -208,7 +210,7 @@ def test_parallel_fd_preserves_serial_force_order(
     monkeypatch.setattr(driver, "_finite_difference_energy_task", quadratic_energy)
     case = driver.PublicForceCase(
         atoms=(("H", (0.2, -0.1, 0.3)), ("H", (-0.4, 0.5, -0.6))),
-        vibeqc_basis="sto-3g",
+        generativeqc_basis="sto-3g",
         pyscf_basis="sto-3g",
     )
     records = driver.parallel_central_finite_difference_forces(

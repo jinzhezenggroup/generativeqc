@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -27,11 +27,11 @@ from vibeqc_compiler.common.evidence import (
 
 from tools.cc_endpoint_fixtures import ROOT as DATA
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture, source_arguments
-from tools.vibeqc_cc.solver import SolverOptions, solve
-from tools.vibeqc_posthf import MOBlock
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_cc.solver import SolverOptions, solve
+from tools.generativeqc_posthf import MOBlock
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,7 +44,9 @@ def run(output: typing.Any) -> typing.Any:
 
     if pyscf.__version__ != "2.14.0":
         raise ValueError("validation requires pinned PySCF 2.14.0")
-    manifest = json.loads((ROOT / "tools/vibeqc_cc/source_manifest.json").read_text())
+    manifest = json.loads(
+        (ROOT / "tools/generativeqc_cc/source_manifest.json").read_text()
+    )
     if file_hash(rccsd.__file__) != manifest["files"][0]["sha256"]:
         raise ValueError("independent residual source hash mismatch")
     output = Path(output)
@@ -53,9 +55,9 @@ def run(output: typing.Any) -> typing.Any:
     sources = {
         str(p.relative_to(ROOT)).replace("\\", "/"): file_hash(p)
         for folder in (
-            "tools/vibeqc_cc",
-            "python/vibeqc_compiler/tensor",
-            "tools/vibeqc_posthf",
+            "tools/generativeqc_cc",
+            "python/generativeqc_compiler/tensor",
+            "tools/generativeqc_posthf",
         )
         for p in sorted((ROOT / folder).glob("*.py"))
     }

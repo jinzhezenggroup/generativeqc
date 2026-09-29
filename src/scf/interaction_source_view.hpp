@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_INTERACTION_SOURCE_VIEW_HPP
-#define VIBEQC_SCF_INTERACTION_SOURCE_VIEW_HPP
+#ifndef GENERATIVEQC_SCF_INTERACTION_SOURCE_VIEW_HPP
+#define GENERATIVEQC_SCF_INTERACTION_SOURCE_VIEW_HPP
 
 #include <array>
 #include <cstddef>
@@ -10,7 +10,7 @@
 #include "integrals/electron_interaction_source.hpp"
 #include "scf/fock_prepared.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Read-only AO interaction view over one prepared CPU Fock owner.
  *
@@ -156,5 +156,5 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
   const PreparedFockPlan& plan_;
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

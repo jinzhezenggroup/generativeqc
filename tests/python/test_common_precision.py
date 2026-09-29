@@ -1,13 +1,13 @@
 """Cross-IR execution-precision contracts for TensorIR, DFT, and integrals."""
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.precision import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.precision import (
     ExecutionPrecisionSchedule,
     PrecisionDirective,
     uniform_precision_schedule,
 )
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     GridXcCandidateAssessment,
     GridXcCandidateLimits,
@@ -15,11 +15,11 @@ from vibeqc_compiler.dft.xc_schedule import (
     GridXcScientificIdentity,
     assess_grid_xc_schedule,
 )
-from vibeqc_compiler.integral import generated_fock_precision_schedule
-from vibeqc_compiler.integral.one_electron_derivative_policy_cuda import (
+from generativeqc_compiler.integral import generated_fock_precision_schedule
+from generativeqc_compiler.integral.one_electron_derivative_policy_cuda import (
     one_electron_derivative_schedule_contract,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -28,7 +28,7 @@ from vibeqc_compiler.tensor import (
     describe_precision,
     input_tensor,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     PrecisionDirective as TensorPrecisionDirective,
 )
 
@@ -165,7 +165,7 @@ def test_generated_fock_mixed_schedule_records_fp32_eri_fp64_accumulation() -> N
 def test_grid_ranking_preserves_explicit_precision_after_candidate_refactor(
     candidate_local: bool, mixed: bool
 ) -> None:
-    from vibeqc_compiler.dft.xc_schedule import (
+    from generativeqc_compiler.dft.xc_schedule import (
         GridXcScheduleCandidate,
         rank_grid_xc_candidates,
         rank_grid_xc_schedules,

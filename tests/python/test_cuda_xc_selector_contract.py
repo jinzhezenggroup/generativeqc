@@ -7,11 +7,11 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc import ks
-from vibeqc._stationary_cuda import _CudaSources
-from vibeqc_compiler.dft.grid import GridSpec
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc.geometry_cuda import _functional_code
+from generativeqc import ks
+from generativeqc._stationary_cuda import _CudaSources
+from generativeqc_compiler.dft.grid import GridSpec
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc.geometry_cuda import _functional_code
 
 
 class _View(ct.Structure):

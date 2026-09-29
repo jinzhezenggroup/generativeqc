@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from tools.generativeqc_validation.publication import validate_publication
+from tools.generativeqc_validation.record import load_record
 from tools.publish_xc_contractions import summarize, validate_run
-from tools.vibeqc_validation.publication import validate_publication
-from tools.vibeqc_validation.record import load_record
 
 ROOT = Path(__file__).resolve().parents[2] / "benchmarks/results/xc-contractions"
 

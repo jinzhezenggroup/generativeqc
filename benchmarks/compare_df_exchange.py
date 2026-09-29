@@ -22,8 +22,8 @@ from _support import (
     raw_output_path,
     write_result,
 )
-from compare_gpu4pyscf_batch import _vibeqc_sample, scaled_geometries
-from vibeqc import Calculator
+from compare_gpu4pyscf_batch import _generativeqc_sample, scaled_geometries
+from generativeqc import Calculator
 
 
 def main() -> None:
@@ -46,9 +46,9 @@ def main() -> None:
 
     case = cases[args.case]
     forces = not args.energy_only
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     payload = {
-        "schema": "vibeqc.df_exchange_ab.v1",
+        "schema": "generativeqc.df_exchange_ab.v1",
         "case": args.case,
         "batch": args.batch,
         "ao_count": case.expected_ao_count,
@@ -61,14 +61,14 @@ def main() -> None:
         "library": str(library),
         "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
         "warm_policy": "one prepared batch, frozen post-cold dense snapshot; prime after each policy switch",
-        "trace_enabled": bool(os.environ.get("VIBEQC_DF_TRACE")),
+        "trace_enabled": bool(os.environ.get("GENERATIVEQC_DF_TRACE")),
         "policy_plan_diagnostics": {},
         "samples": [],
         "passed": False,
     }
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=100,
@@ -76,10 +76,10 @@ def main() -> None:
         density_tolerance=1e-10,
         screening_tolerance=1e-12,
         density_fitting="cuda",
-        auxiliary_basis=case.vibeqc_basis,
+        auxiliary_basis=case.generativeqc_basis,
         density_fitting_memory_budget_bytes=args.memory_budget_bytes,
     )
-    original_policy = os.environ.get("VIBEQC_DF_EXCHANGE")
+    original_policy = os.environ.get("GENERATIVEQC_DF_EXCHANGE")
     try:
         with calculator.prepare_batch(
             scaled_geometries(case.atoms, args.batch),
@@ -87,8 +87,8 @@ def main() -> None:
             multiplicities=[case.multiplicity] * args.batch,
             warm_start=True,
         ) as batch:
-            os.environ["VIBEQC_DF_EXCHANGE"] = "dense"
-            payload["cold_dense"] = _vibeqc_sample(batch, cp, -1, forces)
+            os.environ["GENERATIVEQC_DF_EXCHANGE"] = "dense"
+            payload["cold_dense"] = _generativeqc_sample(batch, cp, -1, forces)
             batch.set_warm_start_updates(False)
             payload["value_plan_diagnostics"] = [
                 diagnostic.to_dict()
@@ -100,24 +100,26 @@ def main() -> None:
                 if repeat % 2:
                     order = order[::-1]
                 for policy in order:
-                    os.environ["VIBEQC_DF_EXCHANGE"] = policy
-                    prime = _vibeqc_sample(batch, cp, -1, forces)
+                    os.environ["GENERATIVEQC_DF_EXCHANGE"] = policy
+                    prime = _generativeqc_sample(batch, cp, -1, forces)
                     # Each policy owns a separately reserved native plan;
                     # retain both ledgers after the untimed policy transition.
                     payload["policy_plan_diagnostics"][policy] = [
                         diagnostic.to_dict()
                         for diagnostic in batch.last_density_fitting_metric_diagnostics()
                     ]
-                    sample = _vibeqc_sample(batch, cp, len(payload["samples"]), forces)
+                    sample = _generativeqc_sample(
+                        batch, cp, len(payload["samples"]), forces
+                    )
                     payload["samples"].append(
                         {"policy": policy, "repeat": repeat, "prime": prime, **sample}
                     )
                     write_result(args.output, payload)
     finally:
         if original_policy is None:
-            os.environ.pop("VIBEQC_DF_EXCHANGE", None)
+            os.environ.pop("GENERATIVEQC_DF_EXCHANGE", None)
         else:
-            os.environ["VIBEQC_DF_EXCHANGE"] = original_policy
+            os.environ["GENERATIVEQC_DF_EXCHANGE"] = original_policy
 
     errors = {"energies_hartree": 0.0}
     if forces:

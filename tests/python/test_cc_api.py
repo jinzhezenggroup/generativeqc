@@ -12,12 +12,12 @@ import numpy as np
 import pytest
 
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     batch_energy,
     energy,
     method_capabilities,
 )
-from tools.vibeqc_posthf.providers import BlockResult, ConventionalProvider
+from tools.generativeqc_posthf.providers import BlockResult, ConventionalProvider
 
 
 class FixtureProvider(ConventionalProvider):
@@ -93,7 +93,7 @@ def test_energy_rejects_forces_and_unknown_backend() -> None:
 
 def test_nonconvergence_is_a_failed_energy_result_not_an_exception() -> None:
     s, p, _meta, _ = fixture_problem()
-    from tools.vibeqc_cc import SolverOptions
+    from tools.generativeqc_cc import SolverOptions
 
     result = energy(s, p, options=SolverOptions(max_iterations=1))
     assert result.status == "not_converged"

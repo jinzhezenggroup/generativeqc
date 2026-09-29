@@ -8,7 +8,7 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/direct_task_layout.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Bounded direct queue planning depends only on topology, capacity and compiled capabilities; it
  * submits no GPU work. */
@@ -52,4 +52,4 @@ BoundedGeneratedPageRange bounded_generated_page_range(
     unsigned high_pair_class, unsigned low_pair_class, std::uint64_t page_begin,
     std::uint32_t page_capacity);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

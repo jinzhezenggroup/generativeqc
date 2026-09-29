@@ -5,7 +5,7 @@
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_task_encoding.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Materialize every enabled exact class in one hierarchical scan.
@@ -164,4 +164,4 @@ void launch_compact_bounded_generated_tasks_kernel(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

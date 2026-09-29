@@ -9,7 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.integral.gfn2_sdq_cpu import emit_gfn2_sdq_cpu, emit_gfn2_sdq_cuda
+from generativeqc_compiler.integral.gfn2_sdq_cpu import (
+    emit_gfn2_sdq_cpu,
+    emit_gfn2_sdq_cuda,
+)
 
 
 def main() -> None:

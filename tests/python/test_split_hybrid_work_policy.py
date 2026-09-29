@@ -6,9 +6,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc import libxc_bulk
-from vibeqc_compiler.xc.libxc_maple import MapleImportError
-from vibeqc_compiler.xc.split_hybrid_domain import stabilize_m06_2x_stoll
+from generativeqc_compiler.xc import libxc_bulk
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.xc.split_hybrid_domain import stabilize_m06_2x_stoll
 
 from tools.generate_xc_split_hybrid_cuda import (
     SplitHybridWorkPolicy,

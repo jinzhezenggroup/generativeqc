@@ -13,7 +13,7 @@
 #include "dft/dispersion/gcp_r2scan3c_data.hpp"
 #include "generated_method_parameters.hpp"
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 enum class GCPStatus : std::int32_t {
   success = 0,
@@ -24,11 +24,12 @@ enum class GCPStatus : std::int32_t {
 };
 
 struct GCPParameters {
-  double sigma = ::vibeqc::generated::method_parameters::r2scan3cGcp().sigma;
-  double alpha = ::vibeqc::generated::method_parameters::r2scan3cGcp().alpha;
-  double beta = ::vibeqc::generated::method_parameters::r2scan3cGcp().beta;
-  double damping_scale = ::vibeqc::generated::method_parameters::r2scan3cGcp().damping_scale;
-  double damping_exponent = ::vibeqc::generated::method_parameters::r2scan3cGcp().damping_exponent;
+  double sigma = ::generativeqc::generated::method_parameters::r2scan3cGcp().sigma;
+  double alpha = ::generativeqc::generated::method_parameters::r2scan3cGcp().alpha;
+  double beta = ::generativeqc::generated::method_parameters::r2scan3cGcp().beta;
+  double damping_scale = ::generativeqc::generated::method_parameters::r2scan3cGcp().damping_scale;
+  double damping_exponent =
+      ::generativeqc::generated::method_parameters::r2scan3cGcp().damping_exponent;
 };
 
 inline constexpr GCPParameters r2scan3c_gcp_parameters() { return {}; }
@@ -168,7 +169,7 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
   *energy = 0.0;
   for (int k = 0; k < 3 * n; ++k) gradient[k] = 0.0;
   for (int i = 0; i < n; ++i) {
-    if (!::vibeqc::generated::method_parameters::r2scan3cGcpSupportsAtomicNumber(z[i]))
+    if (!::generativeqc::generated::method_parameters::r2scan3cGcpSupportsAtomicNumber(z[i]))
       return GCPStatus::unsupported_element;
     for (int k = 0; k < 3; ++k) {
       if (!std::isfinite(xyz[3 * i + k])) return GCPStatus::invalid_argument;
@@ -220,4 +221,4 @@ inline GCPStatus evaluate_r2scan3c_gcp(int n, const std::int32_t* z, const doubl
   return std::isfinite(*energy) ? GCPStatus::success : GCPStatus::numerical_failure;
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

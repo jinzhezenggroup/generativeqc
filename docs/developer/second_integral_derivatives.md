@@ -98,7 +98,7 @@ does not itself run or claim an independent numerical gate.
 
 ## Scientific validation
 
-The optional `tools/vibeqc_validation/second_derivatives.py` uses Libcint's
+The optional `tools/generativeqc_validation/second_derivatives.py` uses Libcint's
 analytic second-derivative blocks and independent moment quadrature for small
 fixtures. Its imports are outside the installed compiler/runtime dependency
 path. The tests cover asymmetric p/d and f cases, independent ERI diagonal,

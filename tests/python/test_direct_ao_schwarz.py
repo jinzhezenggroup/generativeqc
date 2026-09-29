@@ -28,12 +28,12 @@ def test_ao_schwarz_preserves_ieee_rejection_semantics(tmp_path: Path) -> None:
         "#include <array>\n#include <cmath>\n#include <iostream>\n"
         "#include <limits>\n#define __device__\n#define __forceinline__ inline\n"
         '#include "scf/cuda/matrix_index.cuh"\n'
-        "namespace vibeqc::scf::cuda_execution {\n"
+        "namespace generativeqc::scf::cuda_execution {\n"
         + helper
         + "\n}\n"
         + r"""
 int main() {
-  using namespace vibeqc::scf::cuda_execution;
+  using namespace generativeqc::scf::cuda_execution;
   const double inf = std::numeric_limits<double>::infinity();
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double tiny = std::numeric_limits<double>::denorm_min();

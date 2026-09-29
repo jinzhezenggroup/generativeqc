@@ -11,13 +11,13 @@
 #include "posthf/capacity.hpp"
 #include "scf/cuda_weighted_eri.hpp"
 
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 
-vibeqc_status contract_weighted_eri_shell_derivative_cuda(
+generativeqc_status contract_weighted_eri_shell_derivative_cuda(
     int device_id, const core::System& system, const std::array<std::size_t, 4>& shell_indices,
     std::span<const double> weights, std::size_t stage_budget,
     std::array<double, 12>& center_gradient, std::string& detail) {
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
   (void)device_id;
   (void)system;
   (void)shell_indices;
@@ -25,12 +25,12 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
   (void)stage_budget;
   (void)center_gradient;
   detail = "CUDA weighted ERI shell derivatives are unavailable in this build";
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #else
   detail.clear();
   if (device_id < 0 || !stage_budget) {
     detail = "invalid weighted ERI shell-gradient request";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   try {
     std::array<const core::Shell*, 4> selected{};
@@ -39,15 +39,15 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
     for (std::size_t slot = 0; slot < selected.size(); ++slot) {
       if (shell_indices[slot] >= system.shells.size()) {
         detail = "weighted ERI shell index is out of range";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
       selected[slot] = &system.shells[shell_indices[slot]];
       if (selected[slot]->atom_index >= system.atoms.size()) {
         detail = "weighted ERI shell atom is out of range";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
       const auto cartesian = molecule::cartesian_count(selected[slot]->angular_momentum);
-      const auto public_count = system.basis_representation == VIBEQC_BASIS_SPHERICAL
+      const auto public_count = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                                     ? 2 * selected[slot]->angular_momentum + 1
                                     : cartesian;
       expected = checked_mul(expected, public_count);
@@ -57,7 +57,7 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
         !std::all_of(weights.begin(), weights.end(),
                      [](double value) { return std::isfinite(value); })) {
       detail = "weighted ERI shell weights have the wrong shape or are nonfinite";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
 
     constexpr std::size_t record_bytes = sizeof(scf::CudaWeightedEriPrimitive);
@@ -67,13 +67,13 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
         fixed_bytes, checked_mul(expansion_terms, sizeof(molecule::CartesianExpansionTerm)));
     if (stage_budget <= checked_add(fixed_bytes, result_bytes)) {
       detail = "weighted ERI shell-gradient stage budget is too small";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
     const auto capacity = std::min<std::size_t>(
         4096, (stage_budget - fixed_bytes - result_bytes) / (2 * record_bytes));
     if (!capacity) {
       detail = "weighted ERI shell-gradient cannot hold one record";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
     const auto record_storage = checked_mul(capacity, record_bytes);
     const auto consumer_budget = stage_budget - fixed_bytes - record_storage;
@@ -86,17 +86,17 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
     records.reserve(capacity);
     std::vector<scf::CudaWeightedEriResult> output;
     std::array<double, 12> candidate{};
-    vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+    generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
     auto flush = [&] {
-      if (records.empty() || status != VIBEQC_STATUS_SUCCESS) return;
+      if (records.empty() || status != GENERATIVEQC_STATUS_SUCCESS) return;
       scf::CudaWeightedEriDiagnostic diagnostic;
       status = scf::contract_cuda_weighted_eri_primitives(device_id, records.data(), records.size(),
                                                           1, consumer_budget, false, output,
                                                           diagnostic, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return;
       if (output.size() != 1) {
         detail = "weighted ERI shell contraction returned no result";
-        status = VIBEQC_STATUS_NUMERICAL_FAILURE;
+        status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
         return;
       }
       for (std::size_t slot = 0; slot < 4; ++slot)
@@ -129,7 +129,7 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
                         for (const auto& pk : selected[2]->primitives)
                           for (const auto& pl : selected[3]->primitives) {
                             if (records.size() == capacity) flush();
-                            if (status != VIBEQC_STATUS_SUCCESS) return status;
+                            if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
                             auto& record = records.emplace_back();
                             record.kind = 0;
                             const std::array<const core::Primitive*, 4> primitives{&pi, &pj, &pk,
@@ -148,25 +148,25 @@ vibeqc_status contract_weighted_eri_shell_derivative_cuda(
                   }
           }
     flush();
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (!std::all_of(candidate.begin(), candidate.end(),
                      [](double value) { return std::isfinite(value); })) {
       detail = "weighted ERI shell gradient is nonfinite";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     center_gradient = candidate;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::overflow_error& error) {
     detail = error.what();
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::bad_alloc&) {
     detail = "weighted ERI shell-gradient allocation failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::exception& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 #endif
 }
 
-}  // namespace vibeqc::posthf
+}  // namespace generativeqc::posthf

@@ -5,7 +5,7 @@ density and assembles its AO potential. It reuses DFT01's native AO jets, grid
 tiles and density features, and DFT02's audited expressions. The common
 [contraction generator](xc_contractions.md) owns minimal point coefficients and
 assembly; LDA skips gradient/tau reductions and GGA skips tau. Issue
-[#162](https://github.com/jinzhezenggroup/vibeqc/issues/162) now also contains
+[#162](https://github.com/jinzhezenggroup/generativeqc/issues/162) now also contains
 separate native `LDA_RKS` and `PBE_RKS` vertical slices. The fixed-density
 Python interface below remains the independent, more general LDA/PBE contract;
 it does not itself run SCF, gradients or prepared GPU XC.
@@ -38,7 +38,7 @@ metadata is rejected by this semilocal consumer.
 
 The expression returns energy per volume `e_xc = (rho_a+rho_b)*epsilon_xc`,
 in Hartree/Bohr^3. Libxc returns `epsilon_xc`; its independent PySCF consumer
-multiplies by total rho. VibeQC must **not** multiply its `e_xc` by rho again.
+multiplies by total rho. GenerativeQC must **not** multiply its `e_xc` by rho again.
 Every grid weight already contains the full Bohr^3 measure, including radial,
 angular and partition factors. Energy is `sum_p w_p e_xc(p)`.
 
@@ -90,8 +90,8 @@ contraction of the error curve. No favorable step is selected or hidden.
 ## Interface, identities and resource scope
 
 ```python
-from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-from vibeqc_compiler.xc import FixedDensityXC, functional
+from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+from generativeqc_compiler.xc import FixedDensityXC, functional
 
 xc = FixedDensityXC(functional("PBE", spin="unpolarized"))
 grid = ExplicitGrid.read("my-explicit-grid.json")
@@ -139,9 +139,9 @@ RKS uses closed-shell occupations. UKS uses independent integer populations
 potentials. Both use `F=h+J+V_xc` and the energy equation above. Convergence
 requires energy change, density RMS and the physical commutator residual to
 pass the requested thresholds for every spin; a depleted iteration budget
-returns `VIBEQC_STATUS_NOT_CONVERGED` with diagnostics. The existing ABI
+returns `GENERATIVEQC_STATUS_NOT_CONVERGED` with diagnostics. The existing ABI
 `density_rms` field retains the density-update measure. The additive
-`vibeqc_calculation_get_scf_diagnostic` query exposes both it and the physical
+`generativeqc_calculation_get_scf_diagnostic` query exposes both it and the physical
 commutator RMS, including after a nonconverged solve; Python and C++ name the
 separate physical value `physical_residual_rms`. Public UKS RMS values combine
 both spin matrices while the stricter internal gate uses their maximum.
@@ -217,7 +217,7 @@ small explicit AO cutoff (`1e-30`); ordinary tests load hash-checked data only.
 
 ```bash
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
-export VIBEQC_LIBRARY="$PWD/build/cpu/libvibeqc.so"
+export GENERATIVEQC_LIBRARY="$PWD/build/cpu/libgenerativeqc.so"
 .venv/bin/python tools/generate_xc_integration_references.py /tmp/xc-reference-1
 .venv/bin/python tools/generate_xc_integration_references.py /tmp/xc-reference-2
 .venv/bin/python -m pytest tests/python/test_xc_integration.py -q

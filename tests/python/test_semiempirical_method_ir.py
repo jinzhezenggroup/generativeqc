@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.method.semiempirical import (
+from generativeqc_compiler.method.semiempirical import (
     InvalidSemiempiricalMethod,
     ParameterResource,
     ParameterSetRef,
@@ -13,7 +13,7 @@ from vibeqc_compiler.method.semiempirical import (
     StateField,
     semiempirical_from_xtb,
 )
-from vibeqc_compiler.method.xtb import (
+from generativeqc_compiler.method.xtb import (
     GFN2_PARAMETER_SET,
     XtbMethodSpec,
     resolve_xtb_method,

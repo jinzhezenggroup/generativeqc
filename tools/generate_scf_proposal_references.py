@@ -12,10 +12,10 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
-from vibeqc.profiles import canonical_hash, file_hash
+from generativeqc.profiles import canonical_hash, file_hash
 
 from tools.generate_validation_references import molecular_data, pyscf_molecule
-from tools.vibeqc_numerics.fixtures import FAMILIES, accuracy_suite
+from tools.generativeqc_numerics.fixtures import FAMILIES, accuracy_suite
 
 
 def generate(path: Path) -> dict[str, typing.Any]:
@@ -82,7 +82,7 @@ def generate(path: Path) -> dict[str, typing.Any]:
                     }
                 )
     record = {
-        "schema": "vibeqc.scf_reference_families",
+        "schema": "generativeqc.scf_reference_families",
         "schema_version": 1,
         "cases": rows,
         "provenance": {

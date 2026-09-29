@@ -1,12 +1,12 @@
-#ifndef VIBEQC_INTEGRALS_ELECTRON_INTERACTION_SOURCE_HPP
-#define VIBEQC_INTEGRALS_ELECTRON_INTERACTION_SOURCE_HPP
+#ifndef GENERATIVEQC_INTEGRALS_ELECTRON_INTERACTION_SOURCE_HPP
+#define GENERATIVEQC_INTEGRALS_ELECTRON_INTERACTION_SOURCE_HPP
 
 #include <array>
 #include <cstddef>
 
 #include "core/types.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 
 /** Method-neutral AO interaction operators exposed by a bounded source.
  *
@@ -44,5 +44,5 @@ class ElectronInteractionSource {
                     std::size_t elements) const = 0;
 };
 
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals
 #endif

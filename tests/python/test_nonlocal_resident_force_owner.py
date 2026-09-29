@@ -9,8 +9,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
-from vibeqc.nonlocal_runtime import _ResidentNonlocalForceOwner
-from vibeqc_compiler.method import original_nonlocal_correlation
+from generativeqc.nonlocal_runtime import _ResidentNonlocalForceOwner
+from generativeqc_compiler.method import original_nonlocal_correlation
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -80,15 +80,25 @@ def _fake_library() -> tuple[SimpleNamespace, list[tuple[object, ...]]]:
         calls.append(("destroy",))
 
     library = SimpleNamespace(
-        vibeqc_internal_nonlocal_cuda_force_create_v1=MagicMock(side_effect=create),
-        vibeqc_internal_nonlocal_cuda_force_destroy_v1=MagicMock(side_effect=destroy),
-        vibeqc_internal_nonlocal_cuda_force_collect_v1=MagicMock(side_effect=collect),
-        vibeqc_internal_nonlocal_cuda_force_execute_v1=MagicMock(side_effect=execute),
-        vibeqc_internal_nonlocal_cuda_force_seed_view_v1=MagicMock(
+        generativeqc_internal_nonlocal_cuda_force_create_v1=MagicMock(
+            side_effect=create
+        ),
+        generativeqc_internal_nonlocal_cuda_force_destroy_v1=MagicMock(
+            side_effect=destroy
+        ),
+        generativeqc_internal_nonlocal_cuda_force_collect_v1=MagicMock(
+            side_effect=collect
+        ),
+        generativeqc_internal_nonlocal_cuda_force_execute_v1=MagicMock(
+            side_effect=execute
+        ),
+        generativeqc_internal_nonlocal_cuda_force_seed_view_v1=MagicMock(
             side_effect=seed_view
         ),
-        vibeqc_internal_nonlocal_cuda_force_reset_v1=MagicMock(side_effect=reset),
-        vibeqc_internal_nonlocal_cuda_force_metrics_v1=MagicMock(side_effect=metrics),
+        generativeqc_internal_nonlocal_cuda_force_reset_v1=MagicMock(side_effect=reset),
+        generativeqc_internal_nonlocal_cuda_force_metrics_v1=MagicMock(
+            side_effect=metrics
+        ),
     )
     return library, calls
 
@@ -145,9 +155,10 @@ def test_resident_force_owner_publishes_only_borrowed_device_identity() -> None:
 def test_resident_force_hot_path_has_no_host_transfer_or_fence() -> None:
     source = (ROOT / "src/api/c_api_nonlocal.cpp").read_text()
     hot = source.split(
-        "VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_collect_v1(", 1
+        "GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_collect_v1(",
+        1,
     )[1].split(
-        "VIBEQC_API vibeqc_status vibeqc_internal_nonlocal_cuda_force_seed_view_v1(",
+        "GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_view_v1(",
         1,
     )[0]
     for forbidden in (

@@ -10,8 +10,8 @@ if str(ROOT) not in sys.path:
 
 from tools.render_public_methods_doc import render_public_methods_source
 
-project = "VibeQC"
-author = "VibeQC contributors"
+project = "GenerativeQC"
+author = "GenerativeQC contributors"
 language = "en"
 
 extensions = [
@@ -35,7 +35,7 @@ exclude_patterns = [
 ]
 
 html_theme = "sphinx_book_theme"
-html_title = "VibeQC documentation"
+html_title = "GenerativeQC documentation"
 
 myst_enable_extensions = [
     "amsmath",

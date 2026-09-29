@@ -5,10 +5,10 @@
 #include <limits>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.h"
 #include "scf/solver/final_state.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 struct CudaDensityFittingJkPlan;
 
 /** Versioned, detached eligibility token for one successful device solve item.
@@ -60,20 +60,21 @@ std::uint64_t cuda_density_fitting_solve_epoch(const CudaDensityFittingJkPlan* p
 
 /** Read only host eligibility metadata. Failed/nonconverged items and every
  * new attempted solve invalidate previous tokens before any device submission. */
-vibeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkPlan* plan,
-                                                     std::size_t item, CudaDfFinalStateToken& token,
-                                                     std::string& detail);
+generativeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkPlan* plan,
+                                                           std::size_t item,
+                                                           CudaDfFinalStateToken& token,
+                                                           std::string& detail);
 
 /** Copy only the requested item's active-masked full C/epsilon and actual D.
  * Requires exact current token identity before any transfer. Calls use the
  * plan stream synchronously outside capture and never borrow graph scratch.
  * Failure clears the snapshot. Reference export may omit the already-public
  * density after device validation. No C/Python result record is extended. */
-vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* plan,
-                                                    const CudaDfFinalStateToken& expected,
-                                                    CudaDfFinalStateSnapshot& snapshot,
-                                                    std::string& detail,
-                                                    bool include_density = true);
+generativeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* plan,
+                                                          const CudaDfFinalStateToken& expected,
+                                                          CudaDfFinalStateSnapshot& snapshot,
+                                                          std::string& detail,
+                                                          bool include_density = true);
 
 /** Try physical J/K from an exact current singleton RHF retained density/frame.
  * Token, device generation and every supplied density entry must match.
@@ -85,12 +86,10 @@ vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* pl
  * With download=false the serialized final validator consumes the plan's J/K
  * directly; completion and exact projection-lease publication retain ordering.
  */
-vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* plan,
-                                                    const CudaDfFinalStateToken& expected,
-                                                    const std::vector<double>& density,
-                                                    std::vector<double>& coulomb,
-                                                    std::vector<double>& exchange, bool& used,
-                                                    std::string& detail, bool download = true);
+generativeqc_status try_cuda_density_fitting_final_rhf_jk(
+    CudaDensityFittingJkPlan* plan, const CudaDfFinalStateToken& expected,
+    const std::vector<double>& density, std::vector<double>& coulomb, std::vector<double>& exchange,
+    bool& used, std::string& detail, bool download = true);
 
 /** Device algebra for the shared final-state selector. Matrices absent from
  * a candidate resolve only through its exact current retained-state identity.
@@ -139,4 +138,4 @@ inline std::size_t df_final_snapshot_device_reservation(std::size_t n, std::size
     throw std::overflow_error("DF final snapshot storage size overflows");
   return static_cast<std::size_t>(bytes);
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

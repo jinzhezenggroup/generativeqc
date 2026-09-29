@@ -10,7 +10,7 @@
 #include "allocation_measurement.hpp"
 #include "compiled_execution_region.hpp"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 struct GraphMetrics {
   uint64_t capture_attempts = 0, captures = 0, replays = 0, fallbacks = 0;
   uint64_t invalidations = 0, node_count = 0, retained_device_bytes = 0;
@@ -193,4 +193,4 @@ class CudaGraphRegion {
     metrics.retained_device_bytes = before > after ? before - after : 0;
   }
 };
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

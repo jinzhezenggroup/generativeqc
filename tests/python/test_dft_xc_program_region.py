@@ -6,13 +6,13 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.dft.xc_program import (
+from generativeqc_compiler.dft.xc_program import (
     NativeKsXcSource,
     bind_native_ks_xc_region_candidates,
     native_ks_xc_region,
     select_native_ks_xc_region_program,
 )
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
     GridXcCandidateLimits,
@@ -22,8 +22,8 @@ from vibeqc_compiler.dft.xc_schedule import (
 )
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.common.program import ProgramIR
-    from vibeqc_compiler.dft.xc_schedule import (
+    from generativeqc_compiler.common.program import ProgramIR
+    from generativeqc_compiler.dft.xc_schedule import (
         GridXcCandidateAssessment,
         GridXcExecutionSchedule,
     )

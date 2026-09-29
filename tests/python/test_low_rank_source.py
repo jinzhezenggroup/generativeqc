@@ -5,10 +5,10 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.coulomb_columns import CoulombColumns
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
-from tools.vibeqc_posthf.low_rank import IncrementalCholesky
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.coulomb_columns import CoulombColumns
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.low_rank import IncrementalCholesky
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def source_for(name: typing.Any) -> typing.Any:

@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import numpy as np
-from vibeqc_compiler.common.evidence import block_error, canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import block_error, canonical_hash, file_hash
 
-from tools.vibeqc_validation.fixtures import (
+from tools.generativeqc_validation.fixtures import (
     REFERENCE_VERSION,
     load_fixtures,
     mathematical_hash,
@@ -201,10 +201,12 @@ def _generate(destination: Path, compare: Path | None = None) -> dict:
         "threads": 1,
         "generator_sha256": file_hash(__file__),
         "fixture_definition_sha256": file_hash(
-            ROOT / "tools/vibeqc_validation/fixtures.py"
+            ROOT / "tools/generativeqc_validation/fixtures.py"
         ),
         "libcint_sha256": file_hash(libcint),
-        "basis_pack_sha256": file_hash(ROOT / "python/vibeqc/data/basis_pack.json"),
+        "basis_pack_sha256": file_hash(
+            ROOT / "python/generativeqc/data/basis_pack.json"
+        ),
         "purpose": "independent test/reference generation only",
     }
     destination.mkdir(parents=True, exist_ok=True)
@@ -217,7 +219,7 @@ def _generate(destination: Path, compare: Path | None = None) -> dict:
             else molecular_data(inputs, mol, scale)
         )
         row = {
-            "schema": "vibeqc.reference",
+            "schema": "generativeqc.reference",
             "schema_version": REFERENCE_VERSION,
             "inputs": inputs,
             "inputs_hash": mathematical_hash(inputs),

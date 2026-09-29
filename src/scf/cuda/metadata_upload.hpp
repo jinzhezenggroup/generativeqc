@@ -6,16 +6,16 @@
 #include <new>
 #include <string>
 
+#include "generativeqc/generativeqc.h"
 #include "runtime/resource_cuda.cuh"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve CUDA allocation versus execution failure classification. */
-inline vibeqc_status source_cuda_status(cudaError_t status) {
-  if (status == cudaSuccess) return VIBEQC_STATUS_SUCCESS;
-  return status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                             : VIBEQC_STATUS_CUDA_ERROR;
+inline generativeqc_status source_cuda_status(cudaError_t status) {
+  if (status == cudaSuccess) return GENERATIVEQC_STATUS_SUCCESS;
+  return status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                             : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
 
 /** Upload immutable metadata into a source-owned allocation registry.
@@ -25,15 +25,15 @@ inline vibeqc_status source_cuda_status(cudaError_t status) {
  * mapping; this helper contains no provider equations or launch policy.
  */
 template <class Source>
-vibeqc_status source_upload(Source& source, const void* host, std::size_t bytes, void** device,
-                            std::string& detail) {
+generativeqc_status source_upload(Source& source, const void* host, std::size_t bytes,
+                                  void** device, std::string& detail) {
   if (bytes == 0U) {
     *device = nullptr;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   if (source.device_bytes > std::numeric_limits<std::size_t>::max() - bytes) {
     detail = "bounded DF source metadata bytes overflow size_t";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   cudaError_t error = runtime::resource_cuda_malloc(device, bytes);
   if (error != cudaSuccess) {
@@ -46,7 +46,7 @@ vibeqc_status source_upload(Source& source, const void* host, std::size_t bytes,
     (void)runtime::resource_cuda_free(*device);
     *device = nullptr;
     detail = "host allocation failed for bounded DF source metadata handles";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   source.device_bytes += bytes;
   error = cudaMemcpy(*device, host, bytes, cudaMemcpyHostToDevice);
@@ -54,7 +54,7 @@ vibeqc_status source_upload(Source& source, const void* host, std::size_t bytes,
     detail = "CUDA upload failed for bounded DF source metadata";
     return source_cuda_status(error);
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 if TYPE_CHECKING:
     import pytest

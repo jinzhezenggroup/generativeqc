@@ -126,7 +126,7 @@ def main() -> None:
         print(
             f"\n::group::CUDA pytest {index + 1}/{len(nodeids)}: {nodeid}", flush=True
         )
-        junit = Path(f"/tmp/vibeqc-cuda-test-{index}.xml")
+        junit = Path(f"/tmp/generativeqc-cuda-test-{index}.xml")
         command = [
             sys.executable,
             "-m",

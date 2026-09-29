@@ -1,10 +1,10 @@
-#ifndef VIBEQC_SCF_REFERENCE_LINALG_HPP
-#define VIBEQC_SCF_REFERENCE_LINALG_HPP
+#ifndef GENERATIVEQC_SCF_REFERENCE_LINALG_HPP
+#define GENERATIVEQC_SCF_REFERENCE_LINALG_HPP
 
 #include <cstddef>
 #include <vector>
 
-namespace vibeqc::scf::reference {
+namespace generativeqc::scf::reference {
 
 /** Owned row-major FP64 matrix used by the independent CPU reference.
  * Unless documented otherwise, callers supply finite n-by-n matrices and
@@ -41,5 +41,5 @@ EigenResult generalized_eigen(const Matrix& fock, const Matrix& orthogonalizer, 
 /** Euclidean inner product of equally sized flattened matrices/vectors. */
 double dot(const Matrix& a, const Matrix& b);
 
-}  // namespace vibeqc::scf::reference
+}  // namespace generativeqc::scf::reference
 #endif

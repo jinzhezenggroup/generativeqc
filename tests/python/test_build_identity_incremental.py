@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc.autotune import source_identity
+from generativeqc.autotune import source_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,7 +43,7 @@ def test_source_identity_tracks_incremental_inventory_changes(
         # Count configure passes without relying on generator-specific messages.
         + '\nfile(APPEND "${CMAKE_BINARY_DIR}/configure_runs.txt" "configure\\n")\n'
     )
-    member = source / "python/vibeqc/_identity_incremental_test.py"
+    member = source / "python/generativeqc/_identity_incremental_test.py"
     member.write_text("VALUE = 1\n")
     build = tmp_path / "build"
     header = build / "generated/build_identity.hpp"
@@ -56,9 +56,15 @@ def test_source_identity_tracks_incremental_inventory_changes(
         assert result.returncode == 0, result.stdout + result.stderr
 
     def rebuild() -> str:
-        run("cmake", "--build", str(build), "--target", "vibeqc_build_identity_codegen")
+        run(
+            "cmake",
+            "--build",
+            str(build),
+            "--target",
+            "generativeqc_build_identity_codegen",
+        )
         match = re.search(
-            r'kVibeqcSourceIdentity = "([a-f0-9]{64})"', header.read_text()
+            r'kGenerativeQCSourceIdentity = "([a-f0-9]{64})"', header.read_text()
         )
         assert match is not None
         identity = match.group(1)
@@ -73,10 +79,10 @@ def test_source_identity_tracks_incremental_inventory_changes(
         str(build),
         "-G",
         generator,
-        "-DVIBEQC_ENABLE_CUDA=OFF",
-        "-DVIBEQC_BUILD_TESTS=OFF",
-        "-DVIBEQC_CPU_LINALG_PROVIDER=scalar",
-        "-DVIBEQC_COMPILER_CACHE=off",
+        "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+        "-DGENERATIVEQC_BUILD_TESTS=OFF",
+        "-DGENERATIVEQC_CPU_LINALG_PROVIDER=scalar",
+        "-DGENERATIVEQC_COMPILER_CACHE=off",
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DPython3_EXECUTABLE={sys.executable}",
     )
@@ -123,7 +129,7 @@ def test_source_identity_tracks_incremental_inventory_changes(
     # a newly explicit input must be tracked without another configure pass.
     explicit = source / "tools/identity_incremental_test.txt"
     explicit.write_text("explicit input\n")
-    manifest = source / "cmake/VibeQCSourceIdentity.json"
+    manifest = source / "cmake/GenerativeQCSourceIdentity.json"
     payload = json.loads(manifest.read_text())
     payload["files"].append(explicit.relative_to(source).as_posix())
     manifest.write_text(json.dumps(payload))

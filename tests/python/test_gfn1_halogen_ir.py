@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry import (
+from generativeqc_compiler.geometry import (
     GFN1_HALOGEN_CUTOFF_BOHR,
     GFN1_HALOGEN_PARAMETER_IDENTITY,
     GFN1_HALOGEN_VERSION,
@@ -15,13 +15,13 @@ from vibeqc_compiler.geometry import (
     gfn1_element_parameters,
     gfn1_geometry,
 )
-from vibeqc_compiler.geometry.triplet import TripletTopology
-from vibeqc_compiler.method import (
+from generativeqc_compiler.geometry.triplet import TripletTopology
+from generativeqc_compiler.method import (
     build_gfn1_halogen_program,
     compile_gfn1_halogen,
     resolve_xtb_method,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 TBLITE_CASES = (
     (
@@ -374,9 +374,9 @@ def test_method_binding_rejects_structural_impostors_and_unrequested_vjp() -> No
 
 
 def test_primal_and_generated_vjp_lower_through_shared_cuda_tensorir() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     _name, elements, coordinates, _expected, _count = TBLITE_CASES[2]
     compiled = compile_gfn1_halogen(_gfn1_method(), elements, coordinates)
@@ -387,23 +387,23 @@ def test_primal_and_generated_vjp_lower_through_shared_cuda_tensorir() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_GFN1_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GFN1_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_gfn1_halogen_energy_and_generated_vjp_execute_on_cuda(
     tmp_path: Path,
 ) -> None:
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_GFN1_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_GFN1_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_90"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_90"))
     )
     _name, elements, coordinates, expected, _count = TBLITE_CASES[1]
     compiled = compile_gfn1_halogen(_gfn1_method(), elements, coordinates)

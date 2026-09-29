@@ -10,10 +10,10 @@
 
 namespace {
 
-using vibeqc::solver::run_bounded_iterations;
-using vibeqc::solver::run_self_consistent;
-using vibeqc::solver::SelfConsistentPolicy;
-using vibeqc::solver::SelfConsistentProgress;
+using generativeqc::solver::run_bounded_iterations;
+using generativeqc::solver::run_self_consistent;
+using generativeqc::solver::SelfConsistentPolicy;
+using generativeqc::solver::SelfConsistentProgress;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -130,7 +130,7 @@ void verify_accept_owns_update_policy() {
 }
 
 void verify_diis_shape_rejection_preserves_history() {
-  vibeqc::solver::Diis diis(3, 2);
+  generativeqc::solver::Diis diis(3, 2);
   diis.update({0.0, 0.0}, {1.0, 0.0});
   for (const auto& sizes :
        {std::pair{1U, 2U}, std::pair{3U, 2U}, std::pair{2U, 1U}, std::pair{2U, 3U}}) {
@@ -149,10 +149,10 @@ void verify_diis_shape_rejection_preserves_history() {
 }
 
 void verify_shared_diis_coefficient_policy() {
-  using vibeqc::solver::detail::DiisCoefficientAction;
-  using vibeqc::solver::detail::DiisCoefficientPolicy;
-  using vibeqc::solver::detail::DiisMetricScaling;
-  using vibeqc::solver::detail::solve_diis_coefficients;
+  using generativeqc::solver::detail::DiisCoefficientAction;
+  using generativeqc::solver::detail::DiisCoefficientPolicy;
+  using generativeqc::solver::detail::DiisMetricScaling;
+  using generativeqc::solver::detail::solve_diis_coefficients;
 
   DiisCoefficientPolicy shared;
   shared.metric_scaling = DiisMetricScaling::MaximumAbsoluteEntry;
@@ -192,20 +192,20 @@ void verify_shared_diis_coefficient_policy() {
 }
 
 void verify_method_neutral_diis() {
-  vibeqc::solver::Diis disabled(0, 2);
+  generativeqc::solver::Diis disabled(0, 2);
   const std::vector<double> original{2.0, 4.0};
   require(disabled.update(original, {1.0, 0.0}) == original,
           "disabled shared DIIS changed the input state");
   require(disabled.restarts() == 0, "disabled shared DIIS reported a restart");
 
-  vibeqc::solver::Diis diis(2, 2);
+  generativeqc::solver::Diis diis(2, 2);
   require(diis.update({0.0, 0.0}, {1.0, 0.0}) == std::vector<double>({0.0, 0.0}),
           "first shared DIIS state changed");
   const auto extrapolated = diis.update({2.0, 4.0}, {0.0, 1.0});
   require(std::abs(extrapolated[0] - 1.0) < 1.0e-14 && std::abs(extrapolated[1] - 2.0) < 1.0e-14,
           "shared DIIS Pulay extrapolation changed");
 
-  vibeqc::solver::Diis dependent(2, 2);
+  generativeqc::solver::Diis dependent(2, 2);
   dependent.update({0.0, 0.0}, {1.0, 1.0});
   const auto retained = dependent.update({3.0, 5.0}, {1.0, 1.0});
   require(retained == std::vector<double>({3.0, 5.0}),
@@ -214,7 +214,7 @@ void verify_method_neutral_diis() {
 }
 
 void verify_three_history_diis_gram_symmetry() {
-  vibeqc::solver::Diis diis(3, 3);
+  generativeqc::solver::Diis diis(3, 3);
   require(diis.update({1.0, 2.0, 3.0}, {1.0, 0.0, 0.0}) == std::vector<double>({1.0, 2.0, 3.0}),
           "first three-history DIIS state changed");
   (void)diis.update({3.0, 5.0, 7.0}, {1.0, 1.0, 0.0});

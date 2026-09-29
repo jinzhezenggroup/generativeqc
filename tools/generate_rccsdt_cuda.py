@@ -70,7 +70,7 @@ def source() -> str:
 #include <stdexcept>
 #include <string>
 
-namespace vibeqc::cc::triples {{
+namespace generativeqc::cc::triples {{
 namespace {{
 {_device_arrays()}
 void cuda_check(cudaError_t error, const char* what) {{
@@ -431,7 +431,7 @@ CudaResult evaluate_cuda(std::size_t o, std::size_t v, const double* ovvv,
   }}
 }}
 
-}}  // namespace vibeqc::cc::triples
+}}  // namespace generativeqc::cc::triples
 """
 
 

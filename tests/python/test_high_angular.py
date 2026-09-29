@@ -1,8 +1,8 @@
 """BASIS02: g capabilities, independent raw blocks and complete CPU HF paths.
 
 PySCF is an optional test oracle, never a runtime dependency. Heavy molecular
-checks are opt-in: VIBEQC_HIGH_L_MOLECULAR_TEST=1. CUDA scalar numerical checks
-are separately opt-in: VIBEQC_HIGH_L_CUDA_TEST=1.
+checks are opt-in: GENERATIVEQC_HIGH_L_MOLECULAR_TEST=1. CUDA scalar numerical checks
+are separately opt-in: GENERATIVEQC_HIGH_L_CUDA_TEST=1.
 """
 
 import ctypes
@@ -16,17 +16,26 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Atom, Calculator, Primitive, Shell, basis_capability, import_bse
-from vibeqc_compiler.integral.bounded_component import emit_bounded_component
-from vibeqc_compiler.integral.capabilities import query_integral_capability
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc import (
+    Atom,
+    Calculator,
+    Primitive,
+    Shell,
+    basis_capability,
+    import_bse,
+)
+from generativeqc_compiler.integral.bounded_component import emit_bounded_component
+from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
     build_one_electron_derivative_kernel,
     evaluate_one_electron_derivative_primitive,
 )
-from vibeqc_compiler.integral.one_electron_values import evaluate_one_electron_primitive
+from generativeqc_compiler.integral.one_electron_values import (
+    evaluate_one_electron_primitive,
+)
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def test_capabilities_are_backend_operator_and_derivative_specific() -> None:
@@ -210,7 +219,7 @@ def test_native_gggg_boys_regimes(distance: typing.Any) -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_HIGH_L_MOLECULAR_TEST") != "1",
+    os.environ.get("GENERATIVEQC_HIGH_L_MOLECULAR_TEST") != "1",
     reason="opt-in CPU g molecular endpoint",
 )
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
@@ -316,19 +325,19 @@ def test_g_auxiliary_df_rhf_force_path(representation: typing.Any) -> None:
 def test_bounded_g_component_compiled_arithmetic(
     tmp_path: typing.Any, backend: typing.Any, family: typing.Any
 ) -> None:
-    if backend == "cuda" and os.environ.get("VIBEQC_HIGH_L_CUDA_TEST") != "1":
+    if backend == "cuda" and os.environ.get("GENERATIVEQC_HIGH_L_CUDA_TEST") != "1":
         pytest.skip("opt-in allocated CUDA device")
     compiler = shutil.which("nvcc" if backend == "cuda" else "c++")
     if compiler is None:
         pytest.skip("native compiler unavailable")
     is_df = family in ("coulomb_metric", "three_center_eri")
     if is_df:
-        from vibeqc_compiler.integral.df_derivatives import (
+        from generativeqc_compiler.integral.df_derivatives import (
             build_df_derivative_ir,
             build_df_derivative_kernel,
             evaluate_df_derivative,
         )
-        from vibeqc_compiler.integral.df_values import (
+        from generativeqc_compiler.integral.df_values import (
             build_df_component_kernel,
             build_df_value_ir,
             evaluate_df_primitive,
@@ -371,7 +380,7 @@ extern "C" int launch(const double* x, double* y) {{
     path.write_text(source)
     library = tmp_path / "component.so"
     command = [compiler, "-std=c++17", "-O1", "-shared"]
-    cuda_arch = os.environ.get("VIBEQC_HIGH_L_CUDA_ARCH", "sm_89")
+    cuda_arch = os.environ.get("GENERATIVEQC_HIGH_L_CUDA_ARCH", "sm_89")
     command += (
         ["-Xcompiler", "-fPIC", f"-arch={cuda_arch}", "-Xptxas=-v"]
         if backend == "cuda"
@@ -453,10 +462,13 @@ def test_bounded_four_center_cpu_codegen_compiles_and_executes(
     if compiler is None:
         pytest.skip("native compiler unavailable")
 
-    from vibeqc_compiler.integral.blocks import RawBlock, TensorLayout
-    from vibeqc_compiler.integral.ir import FOUR_CENTER_ERI_OPERATOR, build_integral_ir
-    from vibeqc_compiler.integral.shell_signature import ShellSignature
-    from vibeqc_compiler.integral.shell_spec import PSSS_SPEC
+    from generativeqc_compiler.integral.blocks import RawBlock, TensorLayout
+    from generativeqc_compiler.integral.ir import (
+        FOUR_CENTER_ERI_OPERATOR,
+        build_integral_ir,
+    )
+    from generativeqc_compiler.integral.shell_signature import ShellSignature
+    from generativeqc_compiler.integral.shell_spec import PSSS_SPEC
 
     signature = ShellSignature.from_shell_class(PSSS_SPEC)
     layout = TensorLayout(
@@ -546,9 +558,12 @@ def test_bounded_four_center_cpu_codegen_compiles_and_executes(
 def _raw_four_center_ir(
     angular: tuple[int, int, int, int], *, convention: str = "cartesian"
 ) -> typing.Any:
-    from vibeqc_compiler.integral.blocks import RawBlock, TensorLayout
-    from vibeqc_compiler.integral.ir import FOUR_CENTER_ERI_OPERATOR, build_integral_ir
-    from vibeqc_compiler.integral.shell_signature import (
+    from generativeqc_compiler.integral.blocks import RawBlock, TensorLayout
+    from generativeqc_compiler.integral.ir import (
+        FOUR_CENTER_ERI_OPERATOR,
+        build_integral_ir,
+    )
+    from generativeqc_compiler.integral.shell_signature import (
         BasisShell,
         CenterBinding,
         ShellSignature,
@@ -608,7 +623,7 @@ def _libcint_raw_gsss(
         cart=True,
         verbose=0,
     )
-    from vibeqc_compiler.integral.shell_spec import cartesian_components
+    from generativeqc_compiler.integral.shell_spec import cartesian_components
 
     normalization = []
     for slot, (value, exponent) in enumerate(zip(angular, exponents)):
@@ -639,7 +654,7 @@ def _libcint_raw_gsss(
 def test_bounded_gsss_four_center_matches_libcint(
     tmp_path: typing.Any, backend: str
 ) -> None:
-    if backend == "cuda" and os.environ.get("VIBEQC_HIGH_L_CUDA_TEST") != "1":
+    if backend == "cuda" and os.environ.get("GENERATIVEQC_HIGH_L_CUDA_TEST") != "1":
         pytest.skip("opt-in allocated CUDA device")
     compiler = shutil.which("nvcc" if backend == "cuda" else "c++")
     if compiler is None:
@@ -673,7 +688,7 @@ extern "C" int launch(const double* x, double* y) {{
     path = tmp_path / ("gsss.cu" if backend == "cuda" else "gsss.cpp")
     library = tmp_path / "gsss.so"
     path.write_text(source)
-    cuda_arch = os.environ.get("VIBEQC_HIGH_L_CUDA_ARCH", "sm_89")
+    cuda_arch = os.environ.get("GENERATIVEQC_HIGH_L_CUDA_ARCH", "sm_89")
     command = [compiler, "-std=c++17", "-O1", "-shared"]
     command += (
         ["-Xcompiler", "-fPIC", f"-arch={cuda_arch}", "-Xptxas=-v"]

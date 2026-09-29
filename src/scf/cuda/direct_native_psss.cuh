@@ -20,7 +20,7 @@
 // Retained direct integral arithmetic for psss.
 // Shared definitions use ordinary inline linkage; host plans and queue policy
 // remain outside this numerical owner.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Contract all three psss component gradients in one primitive traversal.
@@ -81,4 +81,4 @@ contracted_eri_cartesian_source_psss_weighted_gradient(
   return result;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

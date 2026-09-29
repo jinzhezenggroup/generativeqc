@@ -13,7 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
-    "resident_nonlocal_join", ROOT / "python/vibeqc/_stationary_nonlocal_cuda.py"
+    "resident_nonlocal_join", ROOT / "python/generativeqc/_stationary_nonlocal_cuda.py"
 )
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -215,7 +215,7 @@ def test_join_replays_complete_grid_after_reset() -> None:
 
 
 def test_production_driver_uses_resident_join_not_host_seed_staging() -> None:
-    driver = (ROOT / "python/vibeqc/_stationary_wb97mv_cuda.py").read_text()
+    driver = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
     assert "resident_nonlocal_geometry(" in driver
     assert "_ResidentNonlocalForceOwner(" in driver
     for retired in (

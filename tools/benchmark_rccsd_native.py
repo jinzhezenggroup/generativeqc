@@ -8,7 +8,7 @@ import json
 import time
 from pathlib import Path
 
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
@@ -144,11 +144,11 @@ def main() -> None:
         run_case(case, args.device, budget) for budget in args.budget for case in cases
     ]
     library = _native.load_library(device=args.device)
-    library.vibeqc_get_source_identity.argtypes = []
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    library.generativeqc_get_source_identity.argtypes = []
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
     record = {
-        "source_identity": library.vibeqc_get_source_identity().decode(),
-        "schema": "vibeqc.rccsd.native-public-qualification/1",
+        "source_identity": library.generativeqc_get_source_identity().decode(),
+        "schema": "generativeqc.rccsd.native-public-qualification/1",
         "issue": 149,
         "device": args.device,
         "cases": list(cases),

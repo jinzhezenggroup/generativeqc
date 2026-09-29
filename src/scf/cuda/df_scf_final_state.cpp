@@ -13,8 +13,9 @@
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 
-namespace vibeqc::scf::cuda_df {
-vibeqc_status begin_scf_final_state_solve(CudaDensityFittingJkPlan& plan, std::string& detail) {
+namespace generativeqc::scf::cuda_df {
+generativeqc_status begin_scf_final_state_solve(CudaDensityFittingJkPlan& plan,
+                                                std::string& detail) {
   plan.final_projection_token.reset();
   if (auto* state = static_cast<PersistentScfState*>(plan.persistent_scf_state)) {
     state->final_frames_available = false;
@@ -27,20 +28,20 @@ vibeqc_status begin_scf_final_state_solve(CudaDensityFittingJkPlan& plan, std::s
   if (!plan.factor_basis_identity ||
       plan.final_state_solve_epoch == std::numeric_limits<std::uint64_t>::max()) {
     detail = "CUDA DF final-state owner or solve epoch exhausted";
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
   ++plan.final_state_solve_epoch;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status allocate_scf_final_frames(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                        std::string& detail) {
+generativeqc_status allocate_scf_final_frames(CudaDensityFittingJkPlan& plan,
+                                              PersistentScfState& state, std::string& detail) {
   try {
     (void)df_final_snapshot_device_reservation(plan.nbf, plan.batch_size);
     const auto allocate = [&](auto** pointer, std::size_t bytes) {
       const auto status = allocate_device(reinterpret_cast<void**>(pointer), bytes,
                                           "allocate CUDA DF final frame", detail);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         try {
           state.allocations.push_back(*pointer);
         } catch (...) {
@@ -55,30 +56,32 @@ vibeqc_status allocate_scf_final_frames(CudaDensityFittingJkPlan& plan, Persiste
       auto status =
           allocate(spin ? &state.d_final_beta_coefficients : &state.d_final_alpha_coefficients,
                    state.expected * sizeof(double));
-      if (status == VIBEQC_STATUS_SUCCESS)
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
         status = allocate(spin ? &state.d_final_beta_values : &state.d_final_alpha_values,
                           plan.batch_size * plan.nbf * sizeof(double));
-      if (status == VIBEQC_STATUS_SUCCESS)
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
         status = allocate(spin ? &state.d_final_beta_generation : &state.d_final_alpha_generation,
                           plan.batch_size * sizeof(std::uint64_t));
-      if (status == VIBEQC_STATUS_SUCCESS)
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
         status = allocate(spin ? &state.d_final_beta_info : &state.d_final_alpha_info,
                           plan.batch_size * sizeof(int));
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "host allocation for CUDA DF final-frame ownership failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::overflow_error& error) {
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 }
 
-vibeqc_status reset_scf_final_frames(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                     const std::vector<std::int32_t>& alpha,
-                                     const std::vector<std::int32_t>& beta, std::string& detail) {
+generativeqc_status reset_scf_final_frames(CudaDensityFittingJkPlan& plan,
+                                           PersistentScfState& state,
+                                           const std::vector<std::int32_t>& alpha,
+                                           const std::vector<std::int32_t>& beta,
+                                           std::string& detail) {
   state.final_frames_available = false;
   state.final_alpha_occupied = alpha;
   state.final_beta_occupied = beta;
@@ -89,7 +92,7 @@ vibeqc_status reset_scf_final_frames(CudaDensityFittingJkPlan& plan, PersistentS
     error = cudaMemsetAsync(state.d_final_beta_generation, 0,
                             plan.batch_size * sizeof(std::uint64_t), plan.stream);
   return error == cudaSuccess
-             ? VIBEQC_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
              : cuda_failure(error, "reset CUDA DF final-frame generations", detail);
 }
 
@@ -114,14 +117,14 @@ void publish_scf_final_frames(PersistentScfState& state,
                               const std::vector<CudaDensityFittingDeviceScfItem>& results) {
   for (std::size_t item = 0; item < results.size(); ++item)
     state.final_iterations[item] =
-        results[item].status == VIBEQC_STATUS_SUCCESS && results[item].converged
+        results[item].status == GENERATIVEQC_STATUS_SUCCESS && results[item].converged
             ? results[item].iterations
             : 0;
   state.final_frames_available = true;
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 using namespace cuda_df;
 std::uint64_t cuda_density_fitting_solve_epoch(const CudaDensityFittingJkPlan* plan) noexcept {
   // Recovery cannot manufacture another valid solve after epoch exhaustion.
@@ -130,9 +133,10 @@ std::uint64_t cuda_density_fitting_solve_epoch(const CudaDensityFittingJkPlan* p
              ? plan->final_state_solve_epoch
              : 0;
 }
-vibeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkPlan* plan,
-                                                     std::size_t item, CudaDfFinalStateToken& token,
-                                                     std::string& detail) {
+generativeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkPlan* plan,
+                                                           std::size_t item,
+                                                           CudaDfFinalStateToken& token,
+                                                           std::string& detail) {
   token = {};
   detail.clear();
   const auto* state =
@@ -141,15 +145,15 @@ vibeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkP
       item >= plan->batch_size || state->final_iterations.size() != plan->batch_size ||
       !state->final_iterations[item]) {
     detail = "CUDA DF item has no successful current final frame";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   bool occupied_exchange = false;
   const auto policy = occupied_scf_policy(*plan, occupied_exchange, detail,
                                           state->final_alpha_occupied, state->final_beta_occupied);
-  if (policy != VIBEQC_STATUS_SUCCESS) return policy;
+  if (policy != GENERATIVEQC_STATUS_SUCCESS) return policy;
   if (occupied_exchange != state->occupied_exchange) {
     detail = "CUDA DF exchange policy changed after the retained solve";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   try {
     const auto generation = static_cast<std::uint64_t>(state->final_iterations[item]) + 1;
@@ -165,11 +169,11 @@ vibeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkP
     token.identity.occupied = {static_cast<std::size_t>(state->final_alpha_occupied[item])};
     if (state->unrestricted)
       token.identity.occupied.push_back(static_cast<std::size_t>(state->final_beta_occupied[item]));
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     token = {};
     detail = "host allocation for CUDA DF final-state token failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 }
 
@@ -192,25 +196,25 @@ bool bounded_corrected_final_rhf_identity(const CudaDfFinalStateToken& retained,
 }
 }  // namespace
 
-vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* plan,
-                                                    const CudaDfFinalStateToken& expected,
-                                                    const std::vector<double>& density,
-                                                    std::vector<double>& coulomb,
-                                                    std::vector<double>& exchange, bool& used,
-                                                    std::string& detail, bool download) {
+generativeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* plan,
+                                                          const CudaDfFinalStateToken& expected,
+                                                          const std::vector<double>& density,
+                                                          std::vector<double>& coulomb,
+                                                          std::vector<double>& exchange, bool& used,
+                                                          std::string& detail, bool download) {
   using namespace runtime::cuda_trace;
   used = false;
   if (plan) plan->final_projection_token.reset();
-  const char* policy = std::getenv("VIBEQC_DF_FINAL_EXCHANGE");
+  const char* policy = std::getenv("GENERATIVEQC_DF_FINAL_EXCHANGE");
   if (policy && std::string(policy) != "auto" && std::string(policy) != "dense" &&
       std::string(policy) != "occupied") {
-    detail = "VIBEQC_DF_FINAL_EXCHANGE must be auto, dense or occupied";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_FINAL_EXCHANGE must be auto, dense or occupied";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   runtime::df_progress::label("final_exchange_policy", policy ? policy : "auto");
   const auto fallback = [](const char* reason) {
     runtime::df_progress::label("final_exchange_fallback", reason);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   };
   // Keep the final-state ablation independent of the seed control.
   // Final J/K consumes fitted B. A raw-A owner is needed only for the later
@@ -255,9 +259,10 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
   }
   CudaDfFinalStateToken current;
   auto status = cuda_density_fitting_final_state_token(plan, 0, current, detail);
-  if (status != VIBEQC_STATUS_SUCCESS && status != VIBEQC_STATUS_INVALID_ARGUMENT) return status;
-  const bool exact_retained = status == VIBEQC_STATUS_SUCCESS && expected == current;
-  const bool corrected_private = status == VIBEQC_STATUS_SUCCESS && !exact_retained &&
+  if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+    return status;
+  const bool exact_retained = status == GENERATIVEQC_STATUS_SUCCESS && expected == current;
+  const bool corrected_private = status == GENERATIVEQC_STATUS_SUCCESS && !exact_retained &&
                                  private_occupied &&
                                  bounded_corrected_final_rhf_identity(current, expected);
   if (!exact_retained && !corrected_private) {
@@ -295,7 +300,7 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
     std::size_t rank = 0;
     status =
         factor_density_for_exchange(*plan, *state, plan->primary_density, accepted, rank, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (!accepted || rank != expected.identity.occupied[0]) {
       trace_counter("factor_rejected", 1);
       detail.clear();
@@ -305,12 +310,12 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
     coulomb.resize(download ? plan->matrix_elements : 0);
     exchange.resize(download ? plan->matrix_elements : 0);
     status = build_coulomb(*plan, plan->primary_density, detail);
-    if (status == VIBEQC_STATUS_SUCCESS)
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
       // factor_density_for_exchange reconstructs D = L L^T, so occupation is
       // already absorbed. Canonical RHF C uses weight two; algebraic L uses one.
       status = build_occupied_exchange(*plan, 0, state->d_alpha_factor, rank, true, 1,
                                        plan->alpha_exchange, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (download) {
       error = cudaMemcpyAsync(coulomb.data(), plan->coulomb, bytes, cudaMemcpyDeviceToHost,
                               plan->stream);
@@ -330,7 +335,7 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
     trace_counter("accepted", 1);
     runtime::df_progress::label("final_exchange_fallback", "none");
     used = true;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
   TraceOperation trace(
@@ -372,11 +377,11 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
   coulomb.resize(download ? plan->matrix_elements : 0);
   exchange.resize(download ? plan->matrix_elements : 0);
   status = build_coulomb(*plan, state->d_density, detail);
-  if (status == VIBEQC_STATUS_SUCCESS)
+  if (status == GENERATIVEQC_STATUS_SUCCESS)
     status = build_occupied_exchange(*plan, 0, state->d_final_alpha_coefficients,
                                      current.identity.occupied[0], true, 2, plan->alpha_exchange,
                                      detail);
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (download) {
     error =
         cudaMemcpyAsync(coulomb.data(), plan->coulomb, bytes, cudaMemcpyDeviceToHost, plan->stream);
@@ -413,22 +418,23 @@ vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* pl
   trace_counter("accepted", 1);
   runtime::df_progress::label("final_exchange_fallback", "none");
   used = true;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* plan,
-                                                    const CudaDfFinalStateToken& expected,
-                                                    CudaDfFinalStateSnapshot& snapshot,
-                                                    std::string& detail, bool include_density) {
+generativeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* plan,
+                                                          const CudaDfFinalStateToken& expected,
+                                                          CudaDfFinalStateSnapshot& snapshot,
+                                                          std::string& detail,
+                                                          bool include_density) {
   snapshot = {};
   try {
     CudaDfFinalStateToken current;
     const auto item = expected.identity.factor.reference - 1;
     const auto status = cuda_density_fitting_final_state_token(plan, item, current, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (expected != current) {
       detail = "CUDA DF final-state token has stale owner, epoch, generation, model or occupations";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     auto error = cudaSetDevice(plan->device_id);
     cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
@@ -437,7 +443,7 @@ vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* pl
       return cuda_failure(error, "inspect CUDA DF final-state stream", detail);
     if (capture != cudaStreamCaptureStatusNone) {
       detail = "CUDA DF final-state read requires an ordinary noncapturing stream";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     const auto& state = *static_cast<const PersistentScfState*>(plan->persistent_scf_state);
     const std::size_t spins = state.unrestricted ? 2 : 1, n = plan->nbf, count = n * n;
@@ -494,7 +500,7 @@ vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* pl
           !finite_values(frame.values) || !finite_values(frame.vectors) ||
           (include_density && !finite_values(local.density[spin]))) {
         detail = "CUDA DF retained frame has stale generation, solver failure or nonfinite data";
-        return VIBEQC_STATUS_NUMERICAL_FAILURE;
+        return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
       }
       for (std::size_t row = 0; row < n; ++row)
         for (std::size_t column = row + 1; column < n; ++column)
@@ -505,10 +511,10 @@ vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* pl
         spins * (((include_density ? 2 : 1) * count + n) * sizeof(double) + sizeof(std::uint64_t) +
                  sizeof(int)));
     snapshot = std::move(local);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "host allocation for detached CUDA DF final frame failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_build_density_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -62,4 +62,4 @@ void launch_sum_uhf_spin_matrices_kernel(dim3 grid, dim3 block, std::size_t shar
                                          std::int32_t nbf, const double* spin_matrices,
                                          const std::uint8_t* active, double* total_matrices);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

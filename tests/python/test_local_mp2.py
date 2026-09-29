@@ -5,25 +5,25 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
+from generativeqc import Primitive, Shell
 
-from tools.vibeqc_local_cc.localization import localize_occupied
-from tools.vibeqc_local_cc.mp2 import (
+from tools.generativeqc_local_cc.localization import localize_occupied
+from tools.generativeqc_local_cc.mp2 import (
     build_local_mp2,
     plan_local_spaces,
     recover_canonical_amplitudes,
 )
-from tools.vibeqc_local_cc.spaces import projected_virtual_space
-from tools.vibeqc_posthf.conventions import MOBlock
-from tools.vibeqc_posthf.df import MetricFactor
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_local_cc.spaces import projected_virtual_space
+from tools.generativeqc_posthf.conventions import MOBlock
+from tools.generativeqc_posthf.df import MetricFactor
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def ao_atoms(source: typing.Any) -> typing.Any:

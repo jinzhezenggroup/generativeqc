@@ -6,11 +6,11 @@
 #include <string>
 #include <vector>
 
+#include "generativeqc/generativeqc.h"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/solver/eigen_frame.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 struct CudaDensityFittingJkPlan;
 
 /** Bounded workspace allowance for the existing ordinary Xsyevd provider.
@@ -69,10 +69,10 @@ inline bool df_eigen_outputs_alias(const std::vector<double>& matrix,
  * outputs must be distinct vectors: alias rejection leaves them unchanged.
  * Other failures clear outputs; no CPU fallback or other item's SCF buffers
  * are used. */
-vibeqc_status solve_cuda_density_fitting_eigen(
+generativeqc_status solve_cuda_density_fitting_eigen(
     CudaDensityFittingJkPlan* plan, const std::vector<double>& matrix,
     const std::vector<double>* overlap, const std::vector<double>* orthogonalizer,
     std::vector<double>& eigenvalues, std::vector<double>& coefficients,
     CudaDfEigenDiagnostic& diagnostic, std::string& detail, std::size_t system_index = 0);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -50,24 +50,29 @@ def branch_histogram(samples: list[dict[str, Any]]) -> dict[str, int]:
 def stability_summary(payload: dict[str, Any]) -> dict[str, Any]:
     """Summarize whether the result supports a stable cross-engine ratio."""
 
-    vibeqc_samples = list(payload["vibeqc"]["warm_samples"])
+    generativeqc_samples = list(payload["generativeqc"]["warm_samples"])
     gpu_samples = list(payload["gpu4pyscf"]["warm_samples"])
-    if not vibeqc_samples or not gpu_samples:
+    if not generativeqc_samples or not gpu_samples:
         raise ValueError("benchmark must contain warm samples for both engines")
 
-    vibeqc_branches = {iteration_branch(sample) for sample in vibeqc_samples}
+    generativeqc_branches = {
+        iteration_branch(sample) for sample in generativeqc_samples
+    }
     gpu_branches = {iteration_branch(sample) for sample in gpu_samples}
-    vibeqc_stable = len(vibeqc_branches) == 1
+    generativeqc_stable = len(generativeqc_branches) == 1
     gpu_stable = len(gpu_branches) == 1
-    shared = vibeqc_branches & gpu_branches
+    shared = generativeqc_branches & gpu_branches
     shared_stable_branch = (
         next(iter(shared))
-        if vibeqc_stable and gpu_stable and len(shared) == 1
+        if generativeqc_stable and gpu_stable and len(shared) == 1
         else None
     )
 
     reasons: list[str] = []
-    for engine, samples in (("VibeQC", vibeqc_samples), ("GPU4PySCF", gpu_samples)):
+    for engine, samples in (
+        ("GenerativeQC", generativeqc_samples),
+        ("GPU4PySCF", gpu_samples),
+    ):
         if len(samples) < 2:
             reasons.append(
                 f"{engine} needs at least two warm repeats to test stability"
@@ -78,8 +83,10 @@ def stability_summary(payload: dict[str, Any]) -> dict[str, Any]:
             for item in sample["convergence"]
         ):
             reasons.append(f"{engine} lacks confirmed convergence for every warm item")
-    if not vibeqc_stable:
-        reasons.append("VibeQC warm replays follow multiple SCF iteration branches")
+    if not generativeqc_stable:
+        reasons.append(
+            "GenerativeQC warm replays follow multiple SCF iteration branches"
+        )
     if not gpu_stable:
         reasons.append("GPU4PySCF warm replays follow multiple SCF iteration branches")
     if not shared:
@@ -98,9 +105,9 @@ def stability_summary(payload: dict[str, Any]) -> dict[str, Any]:
             if headline_valid
             else "inconclusive for a cross-engine SCF performance ratio"
         ),
-        "vibeqc": {
-            "stable": vibeqc_stable,
-            "branch_histogram": branch_histogram(vibeqc_samples),
+        "generativeqc": {
+            "stable": generativeqc_stable,
+            "branch_histogram": branch_histogram(generativeqc_samples),
         },
         "gpu4pyscf": {
             "stable": gpu_stable,

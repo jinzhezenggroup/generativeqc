@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.xc import libxc_bulk, libxc_maple
+from generativeqc_compiler.xc import libxc_bulk, libxc_maple
 
 from tools import source_registry
 from tools.libxc_bulk_metadata import C_BINDING_SEMANTICS, extract_registrations
@@ -201,7 +201,7 @@ def make_catalog(root: Path) -> dict[str, Any]:
         record for record in registrations if record["graph_status"] == "imported"
     ]
     return {
-        "schema": "vibeqc.libxc-bulk",
+        "schema": "generativeqc.libxc-bulk",
         "schema_version": 1,
         "bulk_semantics": libxc_bulk.BULK_SEMANTICS,
         "importer_semantics": libxc_maple.IMPORTER_SEMANTICS,
@@ -257,7 +257,7 @@ def render_report(catalog: dict[str, Any]) -> str:
         "## Use",
         "",
         "```python",
-        "from vibeqc_compiler.xc.libxc_bulk import available_functionals, build_bulk_program",
+        "from generativeqc_compiler.xc.libxc_bulk import available_functionals, build_bulk_program",
         "program = build_bulk_program('GGA_X_PBE_SOL', spin='polarized')",
         "roots = program.roots(2)  # E, vxc, then upper-triangular feature Hessian",
         "c_source = program.emit_source(2)",
@@ -305,7 +305,7 @@ def render_report(catalog: dict[str, Any]) -> str:
         (
             f"Archive SHA-256: `{ARCHIVE_SHA256}`. The compact raw-source projection retains "
             "the complete Maple inventory, C owners, utility/header semantics and license; "
-            "it excludes generated Libxc C kernels and is not compiled into the VibeQC runtime."
+            "it excludes generated Libxc C kernels and is not compiled into the GenerativeQC runtime."
         ),
         "",
         "## Remaining blocker groups",
@@ -327,7 +327,7 @@ def render_report(catalog: dict[str, Any]) -> str:
             "",
             (
                 "The complete per-registration source, default bindings, provenance and "
-                "status are in `python/vibeqc_compiler/xc/libxc_bulk_catalog.json`."
+                "status are in `python/generativeqc_compiler/xc/libxc_bulk_catalog.json`."
             ),
             "",
         ]
@@ -366,8 +366,8 @@ def register_product(catalog: dict[str, Any]) -> None:
             path: digest(ROOT / path)
             for path in (
                 "tools/libxc_bulk_metadata.py",
-                "python/vibeqc_compiler/xc/libxc_bulk.py",
-                "python/vibeqc_compiler/xc/libxc_maple.py",
+                "python/generativeqc_compiler/xc/libxc_bulk.py",
+                "python/generativeqc_compiler/xc/libxc_maple.py",
             )
         },
         "outputs": {

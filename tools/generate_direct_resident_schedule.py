@@ -11,7 +11,7 @@ _compiler_sys.path.insert(
 import argparse
 from pathlib import Path
 
-from vibeqc_compiler.integral.direct_resident_schedule import (
+from generativeqc_compiler.integral.direct_resident_schedule import (
     emit_direct_resident_psss_schedule_header,
 )
 

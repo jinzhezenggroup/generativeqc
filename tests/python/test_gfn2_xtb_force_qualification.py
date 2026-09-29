@@ -7,8 +7,8 @@ and the tighter OH bond finite-difference test in test_gfn2_xtb.py.
 
 import numpy as np
 import pytest
+from generativeqc import Calculator
 from numpy.typing import NDArray
-from vibeqc import Calculator
 
 _CASES: dict[
     str,

@@ -1,8 +1,8 @@
 """Strict container validation for the ProgramIR donation replay boundary."""
 
 import pytest
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.program_storage import (
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.program_storage import (
     CallDonationBinding,
     ProgramStoragePlan,
 )

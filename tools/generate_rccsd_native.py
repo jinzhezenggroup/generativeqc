@@ -18,29 +18,29 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 # Build-time generation must not execute the NumPy-backed TensorIR facade or
-# tools.vibeqc_cc.__init__.  Load only the immutable IR/type/program modules
+# tools.generativeqc_cc.__init__.  Load only the immutable IR/type/program modules
 # needed to build #148's algebra, then expose their small public surface to the
 # equation modules.  The optimized/interpreter/packing paths are never entered
 # by this AOT generator (shared + expanded forms only).
 import types
 from fractions import Fraction
 
-import vibeqc_compiler
+import generativeqc_compiler
 
-_tensor_path = ROOT / "python" / "vibeqc_compiler" / "tensor"
-_tensor_package = types.ModuleType("vibeqc_compiler.tensor")
+_tensor_path = ROOT / "python" / "generativeqc_compiler" / "tensor"
+_tensor_package = types.ModuleType("generativeqc_compiler.tensor")
 _tensor_package.__path__ = [str(_tensor_path)]
-_tensor_package.__package__ = "vibeqc_compiler.tensor"
-sys.modules["vibeqc_compiler.tensor"] = _tensor_package
-vibeqc_compiler.tensor = _tensor_package
+_tensor_package.__package__ = "generativeqc_compiler.tensor"
+sys.modules["generativeqc_compiler.tensor"] = _tensor_package
+generativeqc_compiler.tensor = _tensor_package
 
-from vibeqc_compiler.tensor.ad_program import (
+from generativeqc_compiler.tensor.ad_program import (
     JVPProgram,
     VJPProgram,
     linearize,
     transpose_program,
 )
-from vibeqc_compiler.tensor.ir import (
+from generativeqc_compiler.tensor.ir import (
     add,
     broadcast,
     constant,
@@ -54,8 +54,8 @@ from vibeqc_compiler.tensor.ir import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.program import Program
-from vibeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
+from generativeqc_compiler.tensor.program import Program
+from generativeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
 
 
 class _BuildOnlyPackedLayout:
@@ -100,23 +100,23 @@ for _name, _value in {
 # comparison routines load NumPy only when executed; no module replacement is
 # required for immutable AOT equation construction.
 
-_cc_path = Path(__file__).resolve().parent / "vibeqc_cc"
-_cc_package = types.ModuleType("tools.vibeqc_cc")
+_cc_path = Path(__file__).resolve().parent / "generativeqc_cc"
+_cc_package = types.ModuleType("tools.generativeqc_cc")
 _cc_package.__path__ = [str(_cc_path)]
-_cc_package.__package__ = "tools.vibeqc_cc"
-sys.modules.setdefault("tools.vibeqc_cc", _cc_package)
+_cc_package.__package__ = "tools.generativeqc_cc"
+sys.modules.setdefault("tools.generativeqc_cc", _cc_package)
 
-from tools.vibeqc_cc.doubles import build_ccsd_program
-from tools.vibeqc_cc.gradient_equations import (
+from tools.generativeqc_cc.doubles import build_ccsd_program
+from tools.generativeqc_cc.gradient_equations import (
     build_fock_weight_program,
     build_hamiltonian_programs,
 )
-from tools.vibeqc_cc.lambda_equations import (
+from tools.generativeqc_cc.lambda_equations import (
     PARAMETERS,
     build_lambda_programs,
     build_parameter_vjp,
 )
-from tools.vibeqc_cc.triples_tiles import build_runtime_tile_triples_program
+from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_program
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)
@@ -731,7 +731,7 @@ def cpu_header() -> str:
             "#include <initializer_list>",
             "#include <limits>",
             "#include <stdexcept>",
-            "namespace vibeqc::cc::generated {",
+            "namespace generativeqc::cc::generated {",
             _scaled_bilinear_cpp(),
             'inline std::size_t checked_add(std::size_t a,std::size_t b){if(b>std::numeric_limits<std::size_t>::max()-a)throw std::length_error("RCCSD size overflow");return a+b;}',
             'inline std::size_t checked_product(std::initializer_list<std::size_t> values){std::size_t x=1;for(auto v:values){if(v&&x>std::numeric_limits<std::size_t>::max()/v)throw std::length_error("RCCSD size overflow");x*=v;}return x;}',
@@ -918,11 +918,11 @@ def _cuda_kernel(
         ]
         lines += [
             f"    const double value={' + '.join(terms)};",
-            f"    out[flat]=vibeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     elif node.op == "divide":
         lines += [
-            f"    out[flat]=vibeqc_tensor::quotient(a0[flat],a1[flat],error,{number});"
+            f"    out[flat]=generativeqc_tensor::quotient(a0[flat],a1[flat],error,{number});"
         ]
     elif node.op == "einsum":
         labels = node.attrs["labels"]
@@ -956,7 +956,7 @@ def _cuda_kernel(
         coefficient = _fraction(node.attrs["coefficient"])
         lines += [
             f"    const double value=__dmul_rn({coefficient},sum);",
-            f"    out[flat]=vibeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     elif node.op == "slice":
         source = node.inputs[0]
@@ -977,7 +977,7 @@ def _cuda_kernel(
         source_index = _flat_coords(coords, source.spec)
         lines += [
             f"    const double value=a0[{source_index}];",
-            f"    out[flat]=vibeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     elif node.op == "scatter_add":
         source = node.inputs[0]
@@ -1006,7 +1006,7 @@ def _cuda_kernel(
             "      out[flat]=0.0;",
             "    }else{",
             f"      const double value=a0[{source_index}];",
-            f"      out[flat]=vibeqc_tensor::finite(value,error,{number});",
+            f"      out[flat]=generativeqc_tensor::finite(value,error,{number});",
             "    }",
         ]
     elif node.op == "transpose":
@@ -1033,7 +1033,7 @@ def _cuda_kernel(
             index = f"({index}*{_dim(spec_index)}+{coord})"
         lines += [
             f"    const double value=a0[{index}];",
-            f"    out[flat]=vibeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     else:
         raise ValueError(f"unsupported native RCCSD CUDA op {node.op}")
@@ -1075,7 +1075,7 @@ def _cuda_program(
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
         "  auto allocate=[&](std::size_t count)->double*{double* p=arena+cursor;cursor=checked_add(cursor,count);return p;};",
-        "  vibeqc_tensor::cuda_check(cudaMemsetAsync(s.error,0,sizeof(int),s.stream));",
+        "  generativeqc_tensor::cuda_check(cudaMemsetAsync(s.error,0,sizeof(int),s.stream));",
     ]
     for number, node in enumerate(program.live_nodes):
         if node.op == "input":
@@ -1092,9 +1092,9 @@ def _cuda_program(
         count = _size(node.spec)
         launch_args = ",".join([*sources, names[number], "s.o", "s.v", "s.error"])
         lines += [
-            f"  {prefix}_node_{number}<<<vibeqc_tensor::blocks(static_cast<vibeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
+            f"  {prefix}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
-    lines.append("  vibeqc_tensor::cuda_check(cudaGetLastError());")
+    lines.append("  generativeqc_tensor::cuda_check(cudaGetLastError());")
     outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
     if output_type == "DeviceIterationOutputs":
         returned = [
@@ -1181,7 +1181,7 @@ def cuda_source() -> str:
             "// Generated by tools/generate_rccsd_native.py from #148 TensorIR.",
             '#include "cc/cuda_solver_support.cuh"',
             '#include "generated_rccsd_cpu.hpp"',
-            "namespace vibeqc::cc::generated {",
+            "namespace generativeqc::cc::generated {",
             _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
             _cuda_program(replay, "replay", "DeviceReplayOutputs"),
             _cuda_program(

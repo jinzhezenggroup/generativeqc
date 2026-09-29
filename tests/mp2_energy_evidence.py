@@ -15,7 +15,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -24,7 +24,7 @@ from vibeqc_compiler.common.evidence import (
     validate_evidence,
 )
 
-from tools.vibeqc_mp2 import PreparedMP2Energy
+from tools.generativeqc_mp2 import PreparedMP2Energy
 
 
 def main() -> typing.Any:
@@ -33,7 +33,7 @@ def main() -> typing.Any:
     args = parser.parse_args()
     helpers = runpy.run_path(str(ROOT / "tests/python/test_mp2_energy.py"))
     files = [
-        *sorted((ROOT / "tools/vibeqc_mp2").glob("*.py")),
+        *sorted((ROOT / "tools/generativeqc_mp2").glob("*.py")),
         ROOT / "tests/python/test_mp2_energy.py",
         Path(__file__).resolve(),
     ]

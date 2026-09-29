@@ -12,12 +12,12 @@ from time import perf_counter
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, KsOptions, ResourceBudget, _native
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import MethodSpec, resolve_method
 from test_ecp import fixture
 from test_ecp_stationary_cpu import GRID, reference
-from vibeqc import Calculator, KsOptions, ResourceBudget, _native
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.method import MethodSpec, resolve_method
 
 
 @pytest.fixture(autouse=True)
@@ -256,8 +256,8 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
 def test_public_ecp_force_failure_is_transactional_and_closes_snapshot(
     monkeypatch: typing.Any, representation: typing.Any, budget: typing.Any
 ) -> None:
-    from vibeqc import _stationary_cpu
-    from vibeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc import _stationary_cpu
+    from generativeqc._ks_snapshot import NativeKsSnapshot
 
     atoms, record, _ = fixture(representation=representation)
     fragment = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
@@ -302,7 +302,7 @@ def test_public_ecp_force_failure_is_transactional_and_closes_snapshot(
 def test_cpu_force_budget_rejects_before_snapshot_export(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _cpu_force_resources
+    from generativeqc import _cpu_force_resources
 
     atoms, record, _ = fixture()
     calc = calculator(record)
@@ -321,15 +321,17 @@ def test_cpu_force_budget_rejects_before_snapshot_export(
 def check_spd_arbitrary_ordered_weights_against_libcint_energy_differences(
     representation: str,
 ) -> None:
-    from vibeqc._stationary_cpu_components import ComponentPrimitiveExecutor
-    from vibeqc._stationary_cpu_streaming import CompiledComponentExecutor
-    from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+    from generativeqc._stationary_cpu_components import ComponentPrimitiveExecutor
+    from generativeqc._stationary_cpu_streaming import CompiledComponentExecutor
+    from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 
     atoms, record, mol = fixture(representation=representation, d_shell=True)
     direction = np.array([[0.17, -0.11, 0.29], [-0.23, 0.31, -0.07]])
     with NativeAO(atoms, basis=record, representation=representation) as basis:
         aot_library = _native.load_library()
-        cache = Path(os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cpu"))
+        cache = Path(
+            os.environ.get("GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cpu")
+        )
         compiler = CppCompilerAdapter(Path(os.environ.get("CXX", "c++")))
         executor = ComponentPrimitiveExecutor(
             basis,
@@ -457,7 +459,7 @@ def check_spd_paired_endpoint(
     The shared mathematical source cache is populated by the numerical gates;
     cold here means a fresh prepared SCF batch, not a fresh C++ toolchain cache.
     """
-    from vibeqc import _stationary_cpu
+    from generativeqc import _stationary_cpu
 
     original = _stationary_cpu.complete_rks_gradient_diagnostic
     results = {}

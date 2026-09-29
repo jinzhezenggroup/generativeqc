@@ -17,7 +17,7 @@ The corresponding license texts are redistributed beside this notice in
 data/parameters/licenses. xtbloom keeps the exact source revisions and a digest
 of every parsed source blob in d4_manifest.json.
 
-VibeQC stores the symmetric reference C6 matrix as a lossless lower triangle.
+GenerativeQC stores the symmetric reference C6 matrix as a lossless lower triangle.
 GFN2 reference charges and polarizabilities are not generic EEQ reference data.
 
 The generated EEQ-D4 data in d4_eeq_data.hpp additionally derives from:

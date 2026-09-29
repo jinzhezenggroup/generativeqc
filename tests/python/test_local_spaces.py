@@ -7,16 +7,19 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc.profiles import canonical_hash
+from generativeqc.profiles import canonical_hash
 
-from tools.vibeqc_local_cc.localization import localize_occupied, population_operators
-from tools.vibeqc_local_cc.spaces import (
+from tools.generativeqc_local_cc.localization import (
+    localize_occupied,
+    population_operators,
+)
+from tools.generativeqc_local_cc.spaces import (
     make_pair_space,
     pair_density,
     projected_virtual_space,
     spectral_selection,
 )
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 
 
 def fixture(name: typing.Any = "water") -> typing.Any:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import D3CorrectionBatch, evaluate_d3_correction
+from generativeqc import D3CorrectionBatch, evaluate_d3_correction
 
 _DATA = json.loads(
     (Path(__file__).resolve().parents[1] / "data" / "d3_bj_reference.json").read_text()
@@ -133,7 +133,7 @@ def test_production_cuda_ragged_replay_matches_independent_goldens() -> None:
 def test_atomic_number_cannot_wrap_to_a_supported_element(
     number: typing.Any,
 ) -> None:
-    from vibeqc.dispersion import _normalize_system
+    from generativeqc.dispersion import _normalize_system
 
     dtype = np.uint64 if number >= 2**63 else np.int64
     with pytest.raises(NotImplementedError, match="H through Rn"):
@@ -144,7 +144,7 @@ def test_atomic_number_cannot_wrap_to_a_supported_element(
 def test_prepare_rejects_complex_coordinates_before_narrowing(
     imaginary: typing.Any,
 ) -> None:
-    from vibeqc.dispersion import _normalize_system
+    from generativeqc.dispersion import _normalize_system
 
     xyz = np.ones((1, 3), dtype=complex) * (1 + imaginary * 1j)
     with pytest.raises(TypeError, match="real"):
@@ -155,7 +155,7 @@ def test_prepare_rejects_complex_coordinates_before_narrowing(
 def test_budget_cannot_wrap_at_the_native_abi(
     budget: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from vibeqc import dispersion
+    from generativeqc import dispersion
 
     monkeypatch.setattr(
         dispersion,

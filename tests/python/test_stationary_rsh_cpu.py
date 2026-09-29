@@ -8,20 +8,20 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc._stationary_cpu import _PrimitiveExecutor
-from vibeqc._stationary_rsh_cpu import RangeExchangeExecutor
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc._stationary_cpu import _PrimitiveExecutor
+from generativeqc._stationary_rsh_cpu import RangeExchangeExecutor
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ATOMS = [
     ("H", (0.13, -0.17, -0.71)),
@@ -127,8 +127,8 @@ def test_range_exchange_executor_matches_fixed_density_finite_difference(
     # Compare the CUDA provider directly with independent libcint energy
     # differences; agreement with the generated CPU provider alone is weaker.
     if backend == "cuda":
-        if os.environ.get("VIBEQC_TEST_RANGE_CUDA") != "1":
-            pytest.skip("set VIBEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
+        if os.environ.get("GENERATIVEQC_TEST_RANGE_CUDA") != "1":
+            pytest.skip("set GENERATIVEQC_TEST_RANGE_CUDA=1 inside a Slurm GPU job")
         if not os.environ.get("SLURM_JOB_ID"):
             pytest.fail("native CUDA validation requires a Slurm allocation")
     pytest.importorskip(

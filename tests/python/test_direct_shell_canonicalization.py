@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.weighted_eri_cuda import (
+from generativeqc_compiler.integral.weighted_eri_cuda import (
     emit_direct_shell_canonicalization_helper,
     emit_low_order_weighted_header,
     emit_psss_weighted_header,

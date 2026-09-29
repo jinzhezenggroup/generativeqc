@@ -170,7 +170,7 @@ def main() -> None:
                 }
             )
     report = {
-        "schema": "vibeqc.basis_projection_references",
+        "schema": "generativeqc.basis_projection_references",
         "version": 1,
         "provider": "PySCF/libcint",
         "pyscf_version": pyscf.__version__,

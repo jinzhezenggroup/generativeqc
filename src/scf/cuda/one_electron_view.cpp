@@ -1,6 +1,6 @@
 #include "scf/cuda/one_electron_view.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 OneElectronDeviceView one_electron_view(const DeviceBatch& batch) {
   return {batch.batch_size,
@@ -22,4 +22,4 @@ OneElectronDeviceView one_electron_view(const DeviceBatch& batch) {
           batch.primitive_coefficients};
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

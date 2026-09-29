@@ -1,7 +1,7 @@
 """Compiler-owned MP2 source-reuse and residency scheduling."""
 
 import pytest
-from vibeqc_compiler.method.mp2_schedule import (
+from generativeqc_compiler.method.mp2_schedule import (
     conventional_reuse_plan,
     ri_mp2_residency_plan,
 )

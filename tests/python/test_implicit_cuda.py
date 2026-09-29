@@ -10,18 +10,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
 from implicit_fixtures import rank_one_problem
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
 
-from tools.vibeqc_response import GMRESOptions, ResponseCompatibilityError
-from tools.vibeqc_response.implicit import ImplicitSolveError, ResponseGMRES
-from tools.vibeqc_response.implicit_cuda import PreparedImplicitCuda
+from tools.generativeqc_response import GMRESOptions, ResponseCompatibilityError
+from tools.generativeqc_response.implicit import ImplicitSolveError, ResponseGMRES
+from tools.generativeqc_response.implicit_cuda import PreparedImplicitCuda
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_IMPLICIT_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_IMPLICIT_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 
@@ -30,9 +30,11 @@ pytestmark = pytest.mark.skipif(
 def prepared(tmp_path_factory: typing.Any) -> typing.Any:
     assert os.environ.get("SLURM_JOB_ID"), "implicit CUDA tests require Slurm"
     nvcc = find_nvcc()
-    assert nvcc is not None, "set VIBEQC_NVCC to the supported allocated-GPU compiler"
+    assert nvcc is not None, (
+        "set GENERATIVEQC_NVCC to the supported allocated-GPU compiler"
+    )
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     spec, _ = rank_one_problem()
     solver = ResponseGMRES(
@@ -40,8 +42,8 @@ def prepared(tmp_path_factory: typing.Any) -> typing.Any:
         GMRESOptions(rtol=1e-11, atol=1e-13, restart=17, max_iterations=100),
     )
     cache = (
-        Path(os.environ["VIBEQC_IMPLICIT_CACHE"])
-        if "VIBEQC_IMPLICIT_CACHE" in os.environ
+        Path(os.environ["GENERATIVEQC_IMPLICIT_CACHE"])
+        if "GENERATIVEQC_IMPLICIT_CACHE" in os.environ
         else tmp_path_factory.mktemp("implicit-cuda")
     )
     with PreparedImplicitCuda(
@@ -58,7 +60,7 @@ def prepared(tmp_path_factory: typing.Any) -> typing.Any:
 def test_real_cuda_implicit_vjp_same_graph_true_residual_and_no_cpu_fallback(
     prepared: typing.Any, changed: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    import tools.vibeqc_response.implicit as runtime
+    import tools.generativeqc_response.implicit as runtime
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         raise AssertionError("CPU scientific fallback executed")
@@ -130,7 +132,7 @@ def test_cuda_primal_failure_does_not_poison_next_bound_state(
 def test_cuda_adjoint_nonconvergence_is_not_published(
     prepared: typing.Any,
 ) -> None:
-    from tools.vibeqc_response.implicit import BoundImplicitState
+    from tools.generativeqc_response.implicit import BoundImplicitState
 
     spec, feeds = rank_one_problem()
     solver = ResponseGMRES(

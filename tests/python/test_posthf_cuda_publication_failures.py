@@ -51,11 +51,11 @@ int cublasDgemm(int,int,int,int,int,int,const double*,const double*,int,
 int cublasDaxpy(int,std::size_t n,const double*,const double* in,int,double* out,int) {
   pending.emplace_back([=]{for(std::size_t i=0;i<n;++i)out[i]+=in[i];});return 0;
 }
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 std::size_t size_add(std::size_t a,std::size_t b){return a+b;}
 std::size_t size_mul(std::size_t a,std::size_t b){return a*b;}
 }
-namespace vibeqc_tensor {
+namespace generativeqc_tensor {
 struct DeviceAllocationError:std::bad_alloc {};
 void error_text(char* out,std::size_t n,const char* text){if(out&&n)std::snprintf(out,n,"%s",text);}
 void cuda_check(int status){if(status)throw std::runtime_error("injected CUDA failure");}

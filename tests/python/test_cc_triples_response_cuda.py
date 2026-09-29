@@ -8,30 +8,30 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.tensor import execute as cpu_execute
 from test_cc_lambda_cuda import _cc_state, _fake_cuda_runtime
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.tensor import execute as cpu_execute
 
-import tools.vibeqc_cc.triples_lambda_response as triples_lambda_response_module
-from tools.vibeqc_cc import PreparedCUDALambda
-from tools.vibeqc_cc.lambda_solver import BoundCCSDLambda
-from tools.vibeqc_cc.triples_cuda import TriplesTileConfig
-from tools.vibeqc_cc.triples_lambda_response import (
+import tools.generativeqc_cc.triples_lambda_response as triples_lambda_response_module
+from tools.generativeqc_cc import PreparedCUDALambda
+from tools.generativeqc_cc.lambda_solver import BoundCCSDLambda
+from tools.generativeqc_cc.triples_cuda import TriplesTileConfig
+from tools.generativeqc_cc.triples_lambda_response import (
     BoundCCSDTResponse,
     solve_corrected_lambda,
 )
-from tools.vibeqc_cc.triples_response import (
+from tools.generativeqc_cc.triples_response import (
     TRIPLES_RESPONSE_INPUTS,
     accumulate_tile_triples_vjp,
 )
-from tools.vibeqc_cc.triples_response_cuda import (
+from tools.generativeqc_cc.triples_response_cuda import (
     CudaTriplesResponseTiles,
     solve_corrected_lambda_cuda,
 )
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 if typing.TYPE_CHECKING:
     from typing_extensions import Self
@@ -448,7 +448,7 @@ def test_bound_cuda_response_rejects_missing_source_without_cpu_fallback(
             response.weight("fov", reference_identity=snapshot.identity)
 
 
-_REAL = os.environ.get("VIBEQC_CC_TRIPLES_RESPONSE_CUDA_TEST") == "1"
+_REAL = os.environ.get("GENERATIVEQC_CC_TRIPLES_RESPONSE_CUDA_TEST") == "1"
 
 
 @pytest.mark.skipif(
@@ -468,10 +468,10 @@ def test_real_cuda_water_triples_response_and_corrected_lambda(
     nvcc = find_nvcc()
     assert nvcc is not None
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     cache = Path(
-        os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path / "triples-response-cuda")
+        os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path / "triples-response-cuda")
     )
     response_owner = CudaTriplesResponseTiles(
         TriplesTileConfig(

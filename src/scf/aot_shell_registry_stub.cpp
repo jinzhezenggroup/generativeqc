@@ -1,6 +1,6 @@
 #include "scf/aot_shell_registry.hpp"
 
-namespace vibeqc::scf::generated {
+namespace generativeqc::scf::generated {
 namespace {
 
 constexpr ProfileInfo kGenericProfile{"generic_cuda", "portable_cuda", 0, 0, false, true, false};
@@ -64,4 +64,4 @@ cudaError_t launch_shell_class_streaming_fock(unsigned, cudaStream_t, bool, unsi
   return cudaErrorNotSupported;
 }
 
-}  // namespace vibeqc::scf::generated
+}  // namespace generativeqc::scf::generated

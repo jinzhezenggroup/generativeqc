@@ -5,8 +5,7 @@ import typing
 
 import numpy as np
 import pytest
-from test_ecp_heavy import reference_components, require_device
-from vibeqc import (
+from generativeqc import (
     Atom,
     BasisProvenance,
     BasisSet,
@@ -15,8 +14,9 @@ from vibeqc import (
     ElementBasis,
     ResourceBudget,
 )
-from vibeqc.ecp import ecp_integrals, resolve_ecp
-from vibeqc.profiles import canonical_hash
+from generativeqc.ecp import ecp_integrals, resolve_ecp
+from generativeqc.profiles import canonical_hash
+from test_ecp_heavy import reference_components, require_device
 
 
 def multicenter_fixture(

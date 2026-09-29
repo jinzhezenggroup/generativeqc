@@ -4,7 +4,7 @@
 #include "scf/cuda/nuclear_kernels.hpp"
 #include "scf/cuda/one_electron_export_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <bool Derivative>
 __global__ void build_cuda_nuclear_repulsion_kernel(DeviceBatch batch,
@@ -108,4 +108,4 @@ void launch_build_cuda_nuclear_repulsion_kernel(bool derivative, dim3 grid, dim3
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

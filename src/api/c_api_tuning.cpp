@@ -1,8 +1,8 @@
 #include "api/error.hpp"
 #include "build_identity.hpp"
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 #include <cuda_runtime_api.h>
 
 #include <cstdio>
@@ -13,33 +13,35 @@
 
 extern "C" {
 
-const char* vibeqc_get_source_identity(void) { return kVibeqcSourceIdentity; }
+const char* generativeqc_get_source_identity(void) { return kGenerativeQCSourceIdentity; }
 
-vibeqc_status vibeqc_cuda_tuning_device(int32_t device_id,
-                                        vibeqc_cuda_tuning_device_descriptor* output) {
-  if (!vibeqc::api::valid_descriptor(output)) {
-    return output == nullptr ? VIBEQC_STATUS_INVALID_ARGUMENT : VIBEQC_STATUS_ABI_MISMATCH;
+generativeqc_status generativeqc_cuda_tuning_device(
+    int32_t device_id, generativeqc_cuda_tuning_device_descriptor* output) {
+  if (!generativeqc::api::valid_descriptor(output)) {
+    return output == nullptr ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
+                             : GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   int previous = 0;
   cudaDeviceProp properties{};
   if (cudaGetDevice(&previous) != cudaSuccess ||
       cudaGetDeviceProperties(&properties, device_id) != cudaSuccess ||
       cudaSetDevice(device_id) != cudaSuccess)
-    return VIBEQC_STATUS_CUDA_ERROR;
-  const vibeqc::runtime::CudaTargetInfo target =
-      vibeqc::runtime::cuda_target_info_from_properties(properties);
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
+  const generativeqc::runtime::CudaTargetInfo target =
+      generativeqc::runtime::cuda_target_info_from_properties(properties);
   // Registry selection is device-scoped. Restore the caller's current device,
   // including after a failed probe, before exposing any usable identity.
   const cudaError_t runtime = cudaRuntimeGetVersion(&output->runtime_version);
   const cudaError_t driver = cudaDriverGetVersion(&output->driver_version);
-  vibeqc::scf::generated::select_profile_for_device(device_id, properties.major, properties.minor);
-  const auto& profile = vibeqc::scf::generated::selected_profile();
+  generativeqc::scf::generated::select_profile_for_device(device_id, properties.major,
+                                                          properties.minor);
+  const auto& profile = generativeqc::scf::generated::selected_profile();
   std::snprintf(output->official_profile, sizeof(output->official_profile), "%s", profile.name);
   output->portable = profile.portable ? 1 : 0;
   const cudaError_t restored = cudaSetDevice(previous);
   if (runtime != cudaSuccess || driver != cudaSuccess || restored != cudaSuccess)
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   std::snprintf(output->name, sizeof(output->name), "%s", properties.name);
   output->major = target.compute_capability_major;
   output->minor = target.compute_capability_minor;
@@ -60,12 +62,12 @@ vibeqc_status vibeqc_cuda_tuning_device(int32_t device_id,
   // macro. Preserve a usable provenance value from the runtime they expose.
   output->toolkit_version = output->runtime_version;
 #endif
-  output->release_build = VIBEQC_TUNING_RELEASE_BUILD;
-  output->fast_compile = VIBEQC_CUDA_FAST_COMPILE;
-  return VIBEQC_STATUS_SUCCESS;
+  output->release_build = GENERATIVEQC_TUNING_RELEASE_BUILD;
+  output->fast_compile = GENERATIVEQC_CUDA_FAST_COMPILE;
+  return GENERATIVEQC_STATUS_SUCCESS;
 #else
   (void)device_id;
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 

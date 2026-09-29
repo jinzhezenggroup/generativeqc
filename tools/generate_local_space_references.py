@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from vibeqc.profiles import canonical_hash
+from generativeqc.profiles import canonical_hash
 
 from tools.generate_validation_references import pyscf_molecule
-from tools.vibeqc_posthf.fixtures import load_fixture
+from tools.generativeqc_posthf.fixtures import load_fixture
 
 
 def generate(output: typing.Any) -> None:
@@ -57,7 +57,7 @@ def generate(output: typing.Any) -> None:
                 }
             )
     record = {
-        "schema": "vibeqc.local_space_reference",
+        "schema": "generativeqc.local_space_reference",
         "version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "pyscf": pyscf.__version__,

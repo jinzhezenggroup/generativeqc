@@ -9,7 +9,7 @@
 
 #include "dft/dispersion/d4_element_data.hpp"
 
-namespace vibeqc::dft::dispersion::eeq_data {
+namespace generativeqc::dft::dispersion::eeq_data {
 
 using data::D4ReferenceData;
 using data::kElementCount;
@@ -8999,5 +8999,5 @@ inline constexpr std::array<double, kReferenceCount * (kReferenceCount + 1) / 2>
     414.74873378750385,
 }};
 
-}  // namespace vibeqc::dft::dispersion::eeq_data
+}  // namespace generativeqc::dft::dispersion::eeq_data
 // clang-format on

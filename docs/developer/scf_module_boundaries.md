@@ -107,7 +107,7 @@ host control and finalization for native CUDA execution. Function movement must
 preserve arithmetic order; new scientific behavior belongs in a separate fix.
 
 A local compiler-cost sample used GCC 11.4.0, `-O3 -DNDEBUG`,
-`VIBEQC_HAS_CUDA=0`, and `CCACHE_DISABLE=1`. Each translation unit was compiled
+`GENERATIVEQC_HAS_CUDA=0`, and `CCACHE_DISABLE=1`. Each translation unit was compiled
 once with a warm filesystem cache, using its existing Ninja command and a
 separate object/dependency-file destination. These are compiler-work samples,
 not whole-build or molecular runtime measurements:
@@ -751,13 +751,13 @@ fallback retains only its four existing force instantiations. Allocation,
 launch/error order, screening, spin factors and final-Fock reuse are unchanged.
 
 NVIDIA builds share ten direct owners through the resolved
-`vibeqc_direct_native` archive. `direct_angular_force.cu` compiles separately
+`generativeqc_direct_native` archive. `direct_angular_force.cu` compiles separately
 with relocatable device code disabled: NVCC 12.9 needs whole-program
 compilation to propagate the resident kernels' launch-bound register ceilings
 into their retained callees. A dedicated object target preserves this rule
 even when whole-library separable compilation is requested. Kernel launch
 bounds and no-inline annotations are unchanged. The default-enabled
-`VIBEQC_CUDA_DIRECT_DEVICE_LINK` option can disable the ten-owner archive for
+`GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK` option can disable the ten-owner archive for
 comparison; CuMetal and other compilers keep standalone modules. Real,
 virtual-only and combined architecture requests retain their requested flags.
 Split-compile experiments now apply to the direct owners instead of the

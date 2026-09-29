@@ -7,8 +7,8 @@ from weakref import WeakValueDictionary
 
 import pytest
 
-from tools.vibeqc_response.resident_cuda import CudaResidentRHFResponse
-from tools.vibeqc_response.resident_uhf_cuda import CudaResidentUHFResponse
+from tools.generativeqc_response.resident_cuda import CudaResidentRHFResponse
+from tools.generativeqc_response.resident_uhf_cuda import CudaResidentUHFResponse
 
 
 def _owner(owner_type: typing.Any = CudaResidentRHFResponse) -> typing.Any:
@@ -18,7 +18,7 @@ def _owner(owner_type: typing.Any = CudaResidentRHFResponse) -> typing.Any:
     prefix = "uhf" if owner_type is CudaResidentUHFResponse else "rhf"
     setattr(
         owner._lib,
-        f"vibeqc_{prefix}_response_resident_destroy",
+        f"generativeqc_{prefix}_response_resident_destroy",
         lambda handle: destroyed.append(handle.value),
     )
     owner._handle = ct.c_void_p(123)
@@ -121,7 +121,7 @@ def test_native_access_rejects_closed_borrowed_backend(owner_type: typing.Any) -
 
     owner._backend = SimpleNamespace(_lock=threading.RLock(), _ensure_open=closed)
     prefix = "uhf" if owner_type is CudaResidentUHFResponse else "rhf"
-    setattr(owner._lib, f"vibeqc_{prefix}_response_resident_zero", forbidden)
+    setattr(owner._lib, f"generativeqc_{prefix}_response_resident_zero", forbidden)
     with pytest.raises(RuntimeError, match="backend is closed"):
         owner._call("zero", 0)
 
@@ -137,7 +137,7 @@ def test_solver_releases_temporaries_even_when_a_profiler_retains_them(
 ) -> None:
     import numpy as np
 
-    from tools.vibeqc_response import krylov
+    from tools.generativeqc_response import krylov
 
     owner, _ = _owner(owner_type)
     owner.dimension = 1

@@ -1,4 +1,4 @@
-// Generated from vibeqc_compiler.common.source_reuse; do not edit.
+// Generated from generativeqc_compiler.common.source_reuse; do not edit.
 #pragma once
 #include <algorithm>
 #include <array>
@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "posthf/capacity.hpp"
-namespace vibeqc::posthf::generated {
+namespace generativeqc::posthf::generated {
 struct UniformSourceReusePlan {
   bool shared_scan;
   std::size_t jobs_per_batch;
@@ -149,4 +149,4 @@ inline OrderedPrefixReusePlan ordered_prefix_reuse_plan(
   }
   return result;
 }
-}  // namespace vibeqc::posthf::generated
+}  // namespace generativeqc::posthf::generated

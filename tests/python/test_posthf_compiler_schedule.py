@@ -1,7 +1,7 @@
 """Compiler-owned generic post-HF source-reuse scheduling."""
 
 import pytest
-from vibeqc_compiler.common.source_reuse import (
+from generativeqc_compiler.common.source_reuse import (
     SourceReuseRequest,
     SourceTileCandidate,
     ordered_prefix_reuse_plan,

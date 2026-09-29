@@ -7,7 +7,7 @@
 
 #include "scf/cuda_fock_provider.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 void require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
@@ -250,4 +250,4 @@ std::vector<double> BasicFockPlanView<Provider>::energy_derivative(
 template class BasicFockPlanView<CpuFockProviderView>;
 template class BasicFockPlanView<CudaFockProviderView>;
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

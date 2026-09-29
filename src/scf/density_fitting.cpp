@@ -17,7 +17,7 @@
 #include "tensor/cpu_linalg.hpp"
 #include "tensor/symmetric_matrix_function.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 
 std::size_t index(std::size_t row, std::size_t column, std::size_t n) { return row * n + column; }
@@ -658,7 +658,7 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
 }  // namespace
 
 bool cpu_materialized_df_derivatives_requested() noexcept {
-  const char* value = std::getenv("VIBEQC_CPU_DF_MATERIALIZED_DERIVATIVES");
+  const char* value = std::getenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES");
   return value && value[0] == '1' && value[1] == '\0';
 }
 
@@ -1398,4 +1398,4 @@ std::size_t density_fitting_source_metadata_bytes(std::size_t batch, std::size_t
   return bytes;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

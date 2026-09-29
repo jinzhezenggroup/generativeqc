@@ -9,7 +9,9 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 # Reuse the existing minimal TensorIR build bootstrap. This imports only
 # build-time modules even when CMake's interpreter has no NumPy installation.
-from vibeqc_compiler.method.mean_field_setup_cuda import emit_mean_field_setup_cuda
+from generativeqc_compiler.method.mean_field_setup_cuda import (
+    emit_mean_field_setup_cuda,
+)
 
 from tools import generate_scf_array_native as _scf_build  # noqa: F401
 from tools.generate_df_kernels import write_if_changed

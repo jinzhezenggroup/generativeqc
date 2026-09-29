@@ -556,7 +556,7 @@ def main() -> None:
                 portable_data = json.loads(portable.read_text())
                 if (
                     portable_data["library_sha256"]
-                    != final["sha256"]["build/cuda/libvibeqc.so"]
+                    != final["sha256"]["build/cuda/libgenerativeqc.so"]
                     or portable_data["native_source_identity"]
                     != final["native_identity"]
                 ):

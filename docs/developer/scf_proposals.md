@@ -1,6 +1,6 @@
 # SCF proposals and reproducible traces
 
-`tools.vibeqc_scf` provides an opt-in development interface around the native
+`tools.generativeqc_scf` provides an opt-in development interface around the native
 CPU conventional and density-fitted RHF/UHF loops. Its private bridge supports
 up to 12 orbital and 24 auxiliary AOs. It executes the entire native solve,
 including integral preparation and final analytic forces. CUDA callbacks and
@@ -77,11 +77,11 @@ automatically certify the native solution.
 ## Local capture, replay and lifetime
 
 ```python
-from vibeqc import Calculator
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_scf import ScfItem
-from tools.vibeqc_scf.proposals import diis_density
-from tools.vibeqc_scf.replay import export_trace, load_trace
+from generativeqc import Calculator
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_scf import ScfItem
+from tools.generativeqc_scf.proposals import diis_density
+from tools.generativeqc_scf.replay import export_trace, load_trace
 
 atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
 model = Calculator().resolved_model(atoms)
@@ -146,7 +146,7 @@ its older public result ABI cannot expose it.
 Reproduce the dataset and benchmark with:
 
 ```bash
-PYTHONPATH=python:. VIBEQC_LIBRARY="$PWD/build/libvibeqc.so" \
+PYTHONPATH=python:. GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python -m tools.validate_scf_proposals --output /tmp/scf-baselines --repeats 3
 ```

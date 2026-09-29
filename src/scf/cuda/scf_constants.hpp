@@ -1,6 +1,6 @@
 #pragma once
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 // Matrix reductions use one complete warp per system. Keep this independent
 // from the generic capture-safe launch width so tuning other kernels cannot
@@ -16,4 +16,4 @@ static_assert(kWarmDensityThreads % 32 == 0);
 constexpr double kHfEnergyRoundoffFactor = 16.0;
 constexpr double kDoubleMachineEpsilon = 2.2204460492503131e-16;
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

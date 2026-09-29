@@ -7,7 +7,7 @@
 
 #include "scf/cuda/direct_queue_index.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Bound the density factors for one exact pair-class page.
@@ -81,4 +81,4 @@ __device__ __forceinline__ BoundedPageDensityTails bounded_page_density_tails(
   return {fock_maximum, force_maximum};
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -13,8 +13,8 @@ def test_large_export_tiles_preserve_reference_grid_and_cache(
 ) -> None:
     """Changing export tile size must not change the common discrete energy."""
     import numpy as np
-    from vibeqc import GridSpec
-    from vibeqc_compiler.dft.grid import MolecularGrid
+    from generativeqc import GridSpec
+    from generativeqc_compiler.dft.grid import MolecularGrid
 
     from benchmarks import readme_method_endpoints as runner
     from benchmarks.readme_hf_scaling import scaling_cases

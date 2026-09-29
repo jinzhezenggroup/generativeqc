@@ -1,6 +1,6 @@
 # Generated first-order implicit response
 
-`vibeqc_compiler.method.ImplicitSolveSpec` describes a solved state through one
+`generativeqc_compiler.method.ImplicitSolveSpec` describes a solved state through one
 TensorIR residual `R(x, q) = 0`, in explicitly independent real FP64 coordinates.
 `compile()` produces an `ImplicitVJPPlan`: ordinary TensorIR programs for the
 primal residual, Jacobian action, transpose action, adjoint RHS, physical
@@ -52,7 +52,7 @@ not establish a Hessian or second derivative of the solved state.
 
 ## Explicit execution adapters
 
-`tools.vibeqc_response.implicit.BoundImplicitState` reuses the existing #179
+`tools.generativeqc_response.implicit.BoundImplicitState` reuses the existing #179
 GMRES implementation through `ResponseGMRES`, or an explicit callback with the
 same solution/status/residual/workspace contract. The callback receives an
 already-transposed, matrix-free Euclidean operator; it must not transpose it
@@ -81,9 +81,9 @@ Example from a source checkout (`PYTHONPATH=python:.`):
 
 ```python
 import numpy as np
-from vibeqc_compiler.method import ImplicitSolveSpec
-from vibeqc_compiler.tensor import Program, TensorSpec, add, input_tensor, multiply
-from tools.vibeqc_response.implicit import BoundImplicitState
+from generativeqc_compiler.method import ImplicitSolveSpec
+from generativeqc_compiler.tensor import Program, TensorSpec, add, input_tensor, multiply
+from tools.generativeqc_response.implicit import BoundImplicitState
 
 parameter = TensorSpec((), role="parameter", differentiable=True)
 x = input_tensor("x", parameter)
@@ -99,7 +99,7 @@ result = state.vjp(np.array(1.0), reference_identity="root-at-q4")
 assert result.parameter_cotangents["q"] == 0.25
 ```
 
-`PreparedImplicitCuda` in `tools.vibeqc_response.implicit_cuda` explicitly
+`PreparedImplicitCuda` in `tools.generativeqc_response.implicit_cuda` explicitly
 compiles/prepares the same generated stages through the existing TensorIR CUDA
 backend. All six providers share one resource admission, including normal
 library allowances; host capacity is reserved for the retained state, generated
@@ -134,8 +134,8 @@ PYTHONPATH=python:. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q
 ```
 
 The real-device tier is opt-in: run `tests/python/test_implicit_cuda.py` inside an
-allocated Slurm GPU job with `VIBEQC_IMPLICIT_CUDA_TEST=1`, `VIBEQC_NVCC` pointing
-to the supported compiler and optional `VIBEQC_IMPLICIT_CACHE` for local artifacts.
+allocated Slurm GPU job with `GENERATIVEQC_IMPLICIT_CUDA_TEST=1`, `GENERATIVEQC_NVCC` pointing
+to the supported compiler and optional `GENERATIVEQC_IMPLICIT_CACHE` for local artifacts.
 It disables the CPU interpreter, checks a nonsymmetric matrix-free weighted
 problem, changed-state execution, numerical failure/recovery and retained-provider
 allocation accounting. No new large molecular finite-difference campaign is

@@ -5,7 +5,7 @@
 
 #include "dft/cuda_ks_kernels.hpp"
 
-namespace vibeqc::dft::cuda_ks_detail {
+namespace generativeqc::dft::cuda_ks_detail {
 namespace {
 __global__ void reset_control_kernel(unsigned spins, int occupied_alpha, int occupied_beta,
                                      Control* control, std::uint8_t* enabled,
@@ -202,4 +202,4 @@ void advance(cudaStream_t stream, std::size_t n, unsigned spins, double nuclear_
                                         max_iterations, warm_updates, current, control, proposal,
                                         density, warm, enabled, spin_enabled);
 }
-}  // namespace vibeqc::dft::cuda_ks_detail
+}  // namespace generativeqc::dft::cuda_ks_detail

@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_DIRECT_TASK_LAYOUT_HPP
-#define VIBEQC_SCF_DIRECT_TASK_LAYOUT_HPP
+#ifndef GENERATIVEQC_SCF_DIRECT_TASK_LAYOUT_HPP
+#define GENERATIVEQC_SCF_DIRECT_TASK_LAYOUT_HPP
 
 #include <algorithm>
 #include <array>
@@ -8,7 +8,7 @@
 #include <limits>
 #include <vector>
 
-namespace vibeqc::scf::detail {
+namespace generativeqc::scf::detail {
 
 /**
  * Threads assigned to one symmetry-unique direct-J/K AO-quartet subtile.
@@ -338,6 +338,6 @@ inline bool make_direct_quartet_task_layout(
   return true;
 }
 
-}  // namespace vibeqc::scf::detail
+}  // namespace generativeqc::scf::detail
 
 #endif

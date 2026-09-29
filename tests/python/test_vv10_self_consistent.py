@@ -5,7 +5,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     BasisProvenance,
     BasisSet,
     BasisShell,
@@ -15,12 +15,12 @@ from vibeqc import (
     KsOptions,
     estimate_ks_resources,
 )
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc.fock import FockPlan
-from vibeqc.mean_field import FixedDensityMeanField, compile_fixed_density_method
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.method import (
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc.fock import FockPlan
+from generativeqc.mean_field import FixedDensityMeanField, compile_fixed_density_method
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.method import (
     MethodIR,
     MethodSpec,
     original_nonlocal_correlation,
@@ -286,7 +286,7 @@ def test_stationary_reduction_consumes_all_nonlocal_geometry_sources(
                 tile_points=5,
             )
             point_count = len(state.grid.points)
-            from vibeqc import _stationary_cpu
+            from generativeqc import _stationary_cpu
 
             def forbidden_provider(*args: object, **kwargs: object) -> object:
                 pytest.fail(

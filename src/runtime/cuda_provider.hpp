@@ -1,10 +1,10 @@
-#ifndef VIBEQC_RUNTIME_CUDA_PROVIDER_HPP
-#define VIBEQC_RUNTIME_CUDA_PROVIDER_HPP
+#ifndef GENERATIVEQC_RUNTIME_CUDA_PROVIDER_HPP
+#define GENERATIVEQC_RUNTIME_CUDA_PROVIDER_HPP
 
 #include <cstdint>
 #include <string_view>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 enum class CudaProviderKind : std::uint8_t { None, Nvidia, CuMetal };
 
@@ -34,6 +34,6 @@ constexpr std::string_view cuda_provider_name(CudaProviderKind kind) noexcept {
 /** Provider selected by the configured execution image, never by environment setup. */
 const CudaProviderCapabilities& active_cuda_provider() noexcept;
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 
 #endif

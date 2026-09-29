@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "tools/vibeqc_cc/triples_complete_gradient.py"
+SOURCE = ROOT / "tools/generativeqc_cc/triples_complete_gradient.py"
 
 
 class PublicationError(RuntimeError):

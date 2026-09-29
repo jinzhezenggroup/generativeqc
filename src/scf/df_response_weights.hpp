@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_DF_RESPONSE_WEIGHTS_HPP
-#define VIBEQC_SCF_DF_RESPONSE_WEIGHTS_HPP
+#ifndef GENERATIVEQC_SCF_DF_RESPONSE_WEIGHTS_HPP
+#define GENERATIVEQC_SCF_DF_RESPONSE_WEIGHTS_HPP
 
 #include <cstddef>
 #include <functional>
@@ -8,7 +8,7 @@
 
 #include "runtime/strided_range.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** A symmetric density contribution to .5*cJ*rho^T M+ rho - cK*Q:M+.
  * Coefficients may have either sign. Signed Fock weights map to cJ and
@@ -46,5 +46,5 @@ DensityFittingResponseWeightResources contract_density_fitting_response_weights(
     const std::function<void(std::size_t, std::span<double>)>& read_values,
     const std::function<void(unsigned, runtime::StridedRange, std::span<const double>)>& consume);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

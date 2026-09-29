@@ -24,7 +24,7 @@ def test_current_report_is_generated_deterministically_from_source_and_ledger() 
     second = ownership_report(root, ledger)
     validate_baseline(first)
     assert first == second
-    assert first["schema"] == "vibeqc.cuda-ownership-report.v1"
+    assert first["schema"] == "generativeqc.cuda-ownership-report.v1"
     assert first["files"]
     assert not (root / "docs/cuda_ownership_current.json").exists()
     assert not (root / "docs/cuda_ownership.json").exists()
@@ -37,7 +37,7 @@ def ledger_for(tmp_path: typing.Any) -> typing.Any:
         "// header\nvoid runtime() {}\n// scientific section\nvoid formula() {}\n"
     )
     return {
-        "schema": "vibeqc.cuda-ownership.v1",
+        "schema": "generativeqc.cuda-ownership.v1",
         "subsystems": {
             "sample": {
                 "evidence": ["src/sample.cu"],

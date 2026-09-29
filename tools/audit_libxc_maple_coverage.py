@@ -14,8 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.xc import libxc_maple
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.xc import libxc_maple
 
 LIBXC_ROOT = ROOT / "upstream/libxc/7.0.0"
 

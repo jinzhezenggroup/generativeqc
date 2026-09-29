@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tools import source_registry
-from tools.vibeqc_d3 import reference
+from tools.generativeqc_d3 import reference
 
 _SOURCE_OWNERS = {
     "gfn1_d3.json": "xtbloom-gfn1-d3",

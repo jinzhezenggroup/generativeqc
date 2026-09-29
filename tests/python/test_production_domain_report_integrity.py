@@ -6,7 +6,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.xc import production_domain_catalog as catalog
+from generativeqc_compiler.xc import production_domain_catalog as catalog
 
 
 @pytest.fixture

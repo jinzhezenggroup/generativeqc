@@ -5165,7 +5165,7 @@
   ],
   "provider": "PySCF/libcint",
   "pyscf_version": "2.14.0",
-  "schema": "vibeqc.basis_projection_references",
+  "schema": "generativeqc.basis_projection_references",
   "units": {
     "coordinates": "bohr",
     "energy": "hartree",

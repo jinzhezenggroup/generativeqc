@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_MEAN_FIELD_HPP
-#define VIBEQC_SCF_MEAN_FIELD_HPP
+#ifndef GENERATIVEQC_SCF_MEAN_FIELD_HPP
+#define GENERATIVEQC_SCF_MEAN_FIELD_HPP
 
 #include <memory>
 #include <optional>
@@ -11,7 +11,7 @@
 #include "scf/density_fitting.hpp"
 #include "scf/types.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace initial_guess {
 class OverlapOrthogonalizer;
 }
@@ -24,9 +24,9 @@ struct CudaDensityFittingMetricDiagnostic;
 struct CudaDensityFittingJkPlan;
 class PreparedFockPlan;
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 class AoBasis;
 class MolecularGrid;
 struct SemilocalPointProgram;
@@ -34,9 +34,9 @@ namespace nlc {
 class Vv10Plan;
 struct Vv10Parameters;
 }  // namespace nlc
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Validate controls and derive the requested value/force capability for this
  * execution without changing the immutable prepared method request. */
@@ -184,7 +184,7 @@ ScfResult run_fock_strategy_cached(std::unique_ptr<PreparedFockPlan>& cache,
 /** Rebuild only the source overlap on the CPU and apply the shared SCF
  * ensemble-density guard (Hermiticity, metric occupations, electron/spin trace).
  * This does not assert target compatibility or target convergence. */
-void validate_hf_warm_density(const core::System& source, vibeqc_method method,
+void validate_hf_warm_density(const core::System& source, generativeqc_method method,
                               const std::vector<double>& density);
 
 /** Execute the existing CPU SCF solver with an explicitly resolved independent
@@ -305,6 +305,6 @@ ScfResult run_rhf_cuda(const core::System& system, const ScfOptions& options, in
 ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, int device_id,
                        const std::vector<double>* initial_density = nullptr);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

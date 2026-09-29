@@ -9,11 +9,11 @@
 #include "dft/dispersion/d3_atm.hpp"
 
 namespace {
-using vibeqc::dft::dispersion::d3_atm_workspace_elements;
-using vibeqc::dft::dispersion::d3_host_tables;
-using vibeqc::dft::dispersion::D3ATMParameters;
-using vibeqc::dft::dispersion::D3Status;
-using vibeqc::dft::dispersion::evaluate_d3_bj_atm;
+using generativeqc::dft::dispersion::d3_atm_workspace_elements;
+using generativeqc::dft::dispersion::d3_host_tables;
+using generativeqc::dft::dispersion::D3ATMParameters;
+using generativeqc::dft::dispersion::D3Status;
+using generativeqc::dft::dispersion::evaluate_d3_bj_atm;
 
 constexpr std::array<std::int32_t, 4> kNumbers{6, 8, 7, 1};
 constexpr std::array<double, 12> kCoordinates{0.0, 0.0, 0.0, 2.5,  0.1, 0.0,

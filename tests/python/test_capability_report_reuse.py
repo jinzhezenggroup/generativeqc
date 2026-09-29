@@ -3,8 +3,12 @@
 from collections import Counter
 
 import pytest
-from vibeqc_compiler.integral import capabilities
-from vibeqc_compiler.integral.shell_spec import PSSS_SPEC, SSSS_SPEC, ShellClassSpec
+from generativeqc_compiler.integral import capabilities
+from generativeqc_compiler.integral.shell_spec import (
+    PSSS_SPEC,
+    SSSS_SPEC,
+    ShellClassSpec,
+)
 
 
 @pytest.mark.parametrize("spec", [SSSS_SPEC, PSSS_SPEC])

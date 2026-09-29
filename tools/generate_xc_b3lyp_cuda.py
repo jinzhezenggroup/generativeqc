@@ -7,12 +7,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.method.spec import (
+from generativeqc_compiler.method.spec import (
     ExactExchangePrimitive,
     SemilocalXCPrimitive,
     resolve_method,
 )
-from vibeqc_compiler.xc.semilocal_codegen import emit_polarized_semilocal
+from generativeqc_compiler.xc.semilocal_codegen import emit_polarized_semilocal
 
 
 def emit_b3lyp_device() -> str:
@@ -50,9 +50,9 @@ def emit_b3lyp_device() -> str:
             "// Generated from the canonical B3LYP MethodIR semilocal graph.",
             "#pragma once",
             "#include <cmath>",
-            "namespace vibeqc::dft::generated {",
+            "namespace generativeqc::dft::generated {",
             body.rstrip("\n"),
-            "}  // namespace vibeqc::dft::generated",
+            "}  // namespace generativeqc::dft::generated",
             "",
         ]
     )

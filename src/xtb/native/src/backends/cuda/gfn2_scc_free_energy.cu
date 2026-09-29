@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_scc_free_energy.cuh"
 #include "generated_gfn2_scc_free_energy_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -144,7 +144,7 @@ __global__ void compose_free_energy_kernel(Gfn2SccFreeEnergyDeviceBatch batch,
   }
 
   double internal_energy = 0.0;
-  if (!::vibeqc::xtb::generated::compose_gfn2_scc_internal_energy(
+  if (!::generativeqc::xtb::generated::compose_gfn2_scc_internal_energy(
           values[0], values[2], values[3], values[4], values[5], values[6], values[7], values[8],
           values[9], internal_energy)) {
     record_system_error(system_errors, system, device_error,
@@ -153,7 +153,7 @@ __global__ void compose_free_energy_kernel(Gfn2SccFreeEnergyDeviceBatch batch,
   }
 
   double free_energy = 0.0;
-  if (!::vibeqc::xtb::generated::compose_gfn2_scc_free_energy(
+  if (!::generativeqc::xtb::generated::compose_gfn2_scc_free_energy(
           batch.electronic_temperature, values[1], internal_energy, free_energy)) {
     record_system_error(system_errors, system, device_error,
                         Gfn2SccFreeEnergyDeviceError::kNonfiniteFreeEnergyArithmetic);
@@ -504,4 +504,4 @@ cudaError_t compose_gfn2_scc_free_energy_cuda(const Gfn2SccFreeEnergyDeviceBatch
   return cudaGetLastError();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

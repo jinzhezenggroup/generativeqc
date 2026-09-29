@@ -54,7 +54,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   --sample=none --cpuctxsw=none --capture-range=cudaProfilerApi \
   --capture-range-end=stop --output=.artifacts/response-default \
   /path/to/python benchmarks/issue308_response_timeline.py \
-  --library build/cuda-release-sm120/libvibeqc.so \
+  --library build/cuda-release-sm120/libgenerativeqc.so \
   --output .artifacts/response-default-run --component-trace --nsys
 ```
 
@@ -62,7 +62,7 @@ The component trace supplies NVTX origins and exact mathematical work/byte
 counts. Its CUDA event intervals can include stream idle gaps; Nsight's actual
 kernel and copy activities own device execution durations. The companion host
 trace requires zero actual CPU-reference eigensolve calls in the warm replay.
-`VIBEQC_DF_PROGRESS_TRACE` is prohibited by this runner: that diagnostic fences
+`GENERATIVEQC_DF_PROGRESS_TRACE` is prohibited by this runner: that diagnostic fences
 each region and changes the pageable-copy/stream interactions being measured.
 
 Export and summarize outside the GPU run:
@@ -85,7 +85,7 @@ uploads that share `cudaMemcpyAsync`.
 
 ## Causal controls
 
-`VIBEQC_DF_RESPONSE_UPLOAD_PROBE` has two diagnostic selections. Leave it unset
+`GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE` has two diagnostic selections. Leave it unset
 for production execution. Both controls retain complete response work and
 transfer counts; neither is an automatic optimization or fallback.
 
@@ -112,7 +112,7 @@ duration is not an independently measured atomic or arithmetic duration.
 Hardware counter availability and any additional sink ablation must be stated
 before attributing a fraction of that fused interval.
 
-`VIBEQC_DF_RESPONSE_SCATTER_PROBE=sharded` tests sensitivity to atomic destination
+`GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE=sharded` tests sensitivity to atomic destination
 contention. It maps blocks round-robin onto 128 complete atom-gradient buffers,
 retaining the same generated scalar arithmetic, subgroup reduction and number
 of atomic sums. A final cuBLAS reduction returns the full physical gradient.

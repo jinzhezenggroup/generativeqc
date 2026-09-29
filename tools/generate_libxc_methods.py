@@ -24,7 +24,9 @@ SOURCE_ROOT = ROOT / "upstream" / "libxc" / REVISION
 REGISTRY = ROOT / "upstream" / "manifest.json"
 SOURCE_ID = "libxc-7.0.0"
 COLLECTIONS = ("rsh", "wb97mv")
-OUTPUT = ROOT / "python" / "vibeqc_compiler" / "method" / "_generated_libxc_methods.py"
+OUTPUT = (
+    ROOT / "python" / "generativeqc_compiler" / "method" / "_generated_libxc_methods.py"
+)
 
 
 def _digest(path: Path) -> str:

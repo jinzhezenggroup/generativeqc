@@ -121,7 +121,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("python/vibeqc_compiler/integral/rys_high_accuracy_data.py"),
+        default=Path("python/generativeqc_compiler/integral/rys_high_accuracy_data.py"),
     )
     args = parser.parse_args()
     args.output.write_text(generate())

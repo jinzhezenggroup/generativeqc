@@ -3,7 +3,7 @@
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
 
 from tools.libxc_split_hybrid import (
     available_split_global_hybrids,

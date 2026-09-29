@@ -17,10 +17,12 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(os.environ.get("VIBEQC_SOURCE_DIR", Path(__file__).resolve().parents[1]))
+ROOT = Path(
+    os.environ.get("GENERATIVEQC_SOURCE_DIR", Path(__file__).resolve().parents[1])
+)
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc import Calculator, KsOptions, load_r2scan3c_basis
+from generativeqc import Calculator, KsOptions, load_r2scan3c_basis
 
 H2 = [("H", (0.1, -0.1, -0.7)), ("H", (0.0, 0.1, 0.8))]
 H3_CATION = [*H2, ("H", (1.6, 0.2, 0.0))]
@@ -68,13 +70,17 @@ def _record(batch: typing.Any, *, phase: str, coordinates: typing.Any = None) ->
 
 
 def main() -> int:
-    allocation = os.environ.get("SLURM_JOB_ID") or os.environ.get("VIBEQC_QZ_WORKLOAD")
-    output = os.environ.get("VIBEQC_R2SCAN3C_BENCH_OUT")
+    allocation = os.environ.get("SLURM_JOB_ID") or os.environ.get(
+        "GENERATIVEQC_QZ_WORKLOAD"
+    )
+    output = os.environ.get("GENERATIVEQC_R2SCAN3C_BENCH_OUT")
     if not allocation or not output:
-        raise SystemExit("real GPU allocation and VIBEQC_R2SCAN3C_BENCH_OUT required")
+        raise SystemExit(
+            "real GPU allocation and GENERATIVEQC_R2SCAN3C_BENCH_OUT required"
+        )
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    selected = os.environ.get("VIBEQC_R2SCAN3C_BENCH_CASES")
+    selected = os.environ.get("GENERATIVEQC_R2SCAN3C_BENCH_CASES")
     selected_names = set(selected.split(",")) if selected else None
     cases = tuple(
         case for case in CASES if selected_names is None or case[0] in selected_names
@@ -82,14 +88,14 @@ def main() -> int:
     if not cases or (
         selected_names is not None and selected_names != {case[0] for case in cases}
     ):
-        raise SystemExit("VIBEQC_R2SCAN3C_BENCH_CASES contains an unknown case")
-    library = Path(os.environ["VIBEQC_LIBRARY"])
+        raise SystemExit("GENERATIVEQC_R2SCAN3C_BENCH_CASES contains an unknown case")
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"])
     with library.open("rb") as stream:
         library_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     report = {
-        "schema": "vibeqc.issue172.r2scan3c_complete_endpoint.v1",
+        "schema": "generativeqc.issue172.r2scan3c_complete_endpoint.v1",
         "allocation": allocation,
-        "source_tree": os.environ.get("VIBEQC_SOURCE_TREE"),
+        "source_tree": os.environ.get("GENERATIVEQC_SOURCE_TREE"),
         "library_sha256": library_hash,
         "basis_identity": load_r2scan3c_basis().identity,
         "grid": "production default KsOptions",

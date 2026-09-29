@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.array_api.interop import (
+from generativeqc_compiler.array_api.interop import (
     DLPackDevice,
     DLPackInteropError,
     import_dlpack,

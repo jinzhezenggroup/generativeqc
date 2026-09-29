@@ -1,6 +1,6 @@
 # Generated one-electron derivatives
 
-VibeQC uses the compiler-owned generated CUDA consumer for first nuclear
+GenerativeQC uses the compiler-owned generated CUDA consumer for first nuclear
 derivatives of overlap S, kinetic T and nuclear attraction V as the production
 default. It accepts arbitrary external weights, and the Direct/DF RHF/UHF
 adapters use that same contract. The qualified default schedule is
@@ -15,14 +15,14 @@ records the shared scheduling/profile boundary.
 
 ```bash
 # Generated schedules (nucleus_cooperative is the default).
-VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=thread your-command
-VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=shell_warp your-command
-VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=nucleus_cooperative your-command
-VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=serial your-command
+GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=thread your-command
+GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=shell_warp your-command
+GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=nucleus_cooperative your-command
+GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING=serial your-command
 ```
 
 The compiler-owned generated consumer is now the only CUDA S/T/V first-derivative
-and weighted-force owner. The former `VIBEQC_ONE_ELECTRON_DERIVATIVES`
+and weighted-force owner. The former `GENERATIVEQC_ONE_ELECTRON_DERIVATIVES`
 selector, cooperative native force/reference kernel, and derivative-specific
 Hermite workspace are retired. Independent validation remains through the
 CPU/libcint/PySCF references and raw derivative tests; `serial` is only a
@@ -33,7 +33,7 @@ pair to a warp whose lanes own AO components; `nucleus_cooperative` assigns an
 AO pair to a warp whose lanes own one nuclear center per tile and share the
 primitive-pair geometry; `serial` is a deterministic diagnostic mapping with
 one owner per system. None of these switches changes the value implementation
-selected by `VIBEQC_ONE_ELECTRON_VALUES`.
+selected by `GENERATIVEQC_ONE_ELECTRON_VALUES`.
 
 ## Mathematical and weight contract
 
@@ -84,7 +84,7 @@ responses go directly to the output. Different atoms and derivative axes are
 handled within each primitive/component traversal, without regenerating all
 integrals separately for every global nuclear coordinate.
 
-The public C function `vibeqc_system_one_electron_gradient_cuda` provides a
+The public C function `generativeqc_system_one_electron_gradient_cuda` provides a
 synchronous standalone bridge. Its three weight pointers use row-major full AO
 matrices; a null channel means zero. `matrix_count` must equal `NAO*NAO`, and
 `gradient_count` must equal `3*Natom`. A CUDA context is required. CPU-only
@@ -97,7 +97,7 @@ staging and device arena separately. It checks a conservative capacity bound
 before building metadata/pair vectors and checks every device allocation.
 Caller-owned weights/system data, existing HF plans, allocator bookkeeping and
 opaque driver/library allocations are outside this bound. The optional
-`vibeqc_one_electron_gradient_resources` descriptor reports numeric capacities,
+`generativeqc_one_electron_gradient_resources` descriptor reports numeric capacities,
 H2D/D2H bytes, synchronous upload calls and explicit stream synchronization
 calls. Uploads, zeroing, the gradient kernel and the output copy are ordered
 on the same nonblocking stream. Pageable host staging is not treated as a
@@ -146,8 +146,8 @@ converting them into skips:
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:15:00 bash -lc 'PYTHONPATH=python:. \
-  VIBEQC_LIBRARY=$PWD/build-cuda/libvibeqc.so \
-  VIBEQC_ONE_ELECTRON_DERIVATIVE_CUDA_TEST=1 \
+  GENERATIVEQC_LIBRARY=$PWD/build-cuda/libgenerativeqc.so \
+  GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_CUDA_TEST=1 \
   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python -m pytest tests/python/test_one_electron_derivatives_cuda.py -q'
 ```
@@ -245,7 +245,7 @@ No new GPU timing claim is made by the retirement change itself; promotion uses
 the pinned #141 numerical/resource/endpoint evidence above. Reproduction scripts
 for the removed scalar path require an archived pre-#357 checkout. Set `PYTHON`,
 optional `CUDA_HOME`/`NSYS`, and run GPU measurements through a finite Slurm
-allocation. `VIBEQC_LIBRARY` can select a nondefault build.
+allocation. `GENERATIVEQC_LIBRARY` can select a nondefault build.
 
 Integration with the merged basis-projection implementation and review fixes
 is recorded separately in `integration/validation.json` beside the original

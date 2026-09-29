@@ -267,7 +267,7 @@ def render_header(parameters: dict[str, Any], source_revision: str) -> bytes:
         "#include <cstdint>",
         "#include <type_traits>",
         "",
-        "namespace vibeqc::xtb::parameters::gfn1 {",
+        "namespace generativeqc::xtb::parameters::gfn1 {",
         "",
         "inline constexpr std::uint32_t kSchemaVersion = 2u;",
         f"inline constexpr char kSourceRevision[] = {json.dumps(source_revision)};",
@@ -476,7 +476,7 @@ def render_header(parameters: dict[str, Any], source_revision: str) -> bytes:
             "  return kGlobal.pair_scale_default;",
             "}",
             "",
-            "}  // namespace vibeqc::xtb::parameters::gfn1",
+            "}  // namespace generativeqc::xtb::parameters::gfn1",
             "",
         )
     )
@@ -520,7 +520,7 @@ def load_and_render(source_bytes: bytes, manifest: dict[str, Any]) -> bytes:
     # Reconstruct the audited upstream namespace for its pinned digest gate.
     # Native ownership must not change any parameter, schema or arithmetic byte.
     upstream_image = rendered.replace(
-        b"namespace vibeqc::xtb::parameters::gfn1",
+        b"namespace generativeqc::xtb::parameters::gfn1",
         b"namespace xtbloom::parameters::gfn1",
     )
     if sha256(upstream_image) != expected_header:

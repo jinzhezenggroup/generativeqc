@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_gfn2_h0_native.hpp"
   ],
-  "owner": "python/vibeqc_compiler/method/gfn2_h0_force_runtime.py"
+  "owner": "python/generativeqc_compiler/method/gfn2_h0_force_runtime.py"
 }

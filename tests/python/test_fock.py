@@ -7,8 +7,8 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, FockScfResult
-from vibeqc.fock import (
+from generativeqc import Calculator, FockScfResult
+from generativeqc.fock import (
     FockBuildSpec,
     FockPlan,
     FockTerm,
@@ -18,14 +18,14 @@ from vibeqc.fock import (
     _ScfControls,
     _ScfResult,
 )
-from vibeqc.mean_field import FixedDensityMeanField
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import FixedDensityXC, functional
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc.mean_field import FixedDensityMeanField
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import FixedDensityXC, functional
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
 
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
-DEVICE = os.environ.get("VIBEQC_TEST_FOCK_DEVICE", "cpu")
+DEVICE = os.environ.get("GENERATIVEQC_TEST_FOCK_DEVICE", "cpu")
 
 
 def term(choice: typing.Any, coefficient: typing.Any) -> typing.Any:
@@ -93,13 +93,13 @@ def test_native_failure_publication_and_preflight() -> None:
             exchange_alpha=_pointer(shared),
             energy_one_electron=79.0,
         )
-        status = plan._library.vibeqc_fock_plan_evaluate(
+        status = plan._library.generativeqc_fock_plan_evaluate(
             plan._handle, _pointer(d), 4, None, 0, ct.byref(out)
         )
         assert status == 1
         assert (
             "overlap"
-            in plan._library.vibeqc_fock_plan_last_error(plan._handle).decode()
+            in plan._library.generativeqc_fock_plan_last_error(plan._handle).decode()
         )
         assert np.all(shared == 79) and out.energy_one_electron == 79
         with pytest.raises(ValueError, match=r"shape|finiteness"):
@@ -268,7 +268,7 @@ def test_scf_failures_do_not_publish_or_poison_sources() -> None:
             energy_tolerance=1e-10,
             density_tolerance=1e-8,
         )
-        status = plan._library.vibeqc_fock_plan_solve(
+        status = plan._library.generativeqc_fock_plan_solve(
             plan._handle, ct.byref(controls), None, 0, ct.byref(out)
         )
         assert status == 4 and out.energy == 73.0
@@ -360,14 +360,14 @@ def test_one_electron_execution_variant_identity_is_frozen(
     monkeypatch: typing.Any,
 ) -> None:
     with NativeAO(ATOMS) as basis:
-        monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", "thread")
+        monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "thread")
         with FockPlan(basis, device="cuda") as original:
             before = original.diagnostics
             backend = before["one_electron_value_backend"]
             assert backend.startswith("cuda-generated:")
             assert backend.endswith(":override")
             provider = backend.split(":")[1]
-            monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", "shell_warp")
+            monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "shell_warp")
             with FockPlan(basis, device="cuda") as generated:
                 assert original.identity == generated.identity
                 assert original.execution_identity != generated.execution_identity
@@ -397,13 +397,13 @@ def test_retired_value_controls_cannot_restore_handwritten_dispatch(
     spec = FockBuildSpec(
         coulomb=term("density_fitted", 1.0), exchange=term("density_fitted", -0.5)
     )
-    monkeypatch.delenv("VIBEQC_ONE_ELECTRON_VALUES", raising=False)
-    monkeypatch.delenv("VIBEQC_DF_VALUES", raising=False)
-    monkeypatch.delenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_ONE_ELECTRON_VALUES", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DF_VALUES", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", raising=False)
     with NativeAO(ATOMS) as basis, FockPlan(basis, spec, device="cuda") as original:
         before = original.diagnostics
-        monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUES", "reference")
-        monkeypatch.setenv("VIBEQC_DF_VALUES", "reference")
+        monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUES", "reference")
+        monkeypatch.setenv("GENERATIVEQC_DF_VALUES", "reference")
         with FockPlan(basis, spec, device="cuda") as replay:
             assert replay.execution_identity == original.execution_identity
             backend = replay.diagnostics["one_electron_value_backend"]

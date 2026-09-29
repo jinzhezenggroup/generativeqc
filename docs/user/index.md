@@ -1,6 +1,6 @@
 # User Guide
 
-Use this guide to install VibeQC and run calculations. If the terminology is unfamiliar, start with [Learn quantum chemistry](../learn/index.md).
+Use this guide to install GenerativeQC and run calculations. If the terminology is unfamiliar, start with [Learn quantum chemistry](../learn/index.md).
 
 ## Start
 

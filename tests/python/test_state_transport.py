@@ -8,12 +8,12 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     StateTransport,
     StateTransportRequest,
     TransportCompatibility,
 )
-from tools.vibeqc_posthf.reference import ReferenceSnapshot
+from tools.generativeqc_posthf.reference import ReferenceSnapshot
 
 
 def _snapshot(

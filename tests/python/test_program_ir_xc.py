@@ -7,23 +7,23 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.program import ProgramIR
-from vibeqc_compiler.common.program_storage import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.program import ProgramIR
+from generativeqc_compiler.common.program_storage import (
     CallDonationBinding,
     ProgramStoragePlan,
 )
-from vibeqc_compiler.common.resources import MAX_BYTES
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.features import density_feature_block, density_features
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.coefficients import coefficient_program
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
-from vibeqc_compiler.xc.program_ir import fixed_density_tile_program
+from generativeqc_compiler.common.resources import MAX_BYTES
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.features import density_feature_block, density_features
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.coefficients import coefficient_program
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc_compiler.xc.program_ir import fixed_density_tile_program
 
 
 def describe(

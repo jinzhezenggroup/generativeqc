@@ -7,7 +7,7 @@
 
 // Retained Cartesian Hermite workspace and recurrence. The asymmetric
 // dimensions include kinetic-operator raising and the zero recurrence boundary.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar>
 struct HermiteCoefficients {
@@ -62,4 +62,4 @@ __device__ inline void fill_hermite(unsigned maximum_i, unsigned maximum_j, Scal
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

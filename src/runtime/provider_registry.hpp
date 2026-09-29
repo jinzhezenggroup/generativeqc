@@ -1,13 +1,13 @@
-#ifndef VIBEQC_RUNTIME_PROVIDER_REGISTRY_HPP
-#define VIBEQC_RUNTIME_PROVIDER_REGISTRY_HPP
+#ifndef GENERATIVEQC_RUNTIME_PROVIDER_REGISTRY_HPP
+#define GENERATIVEQC_RUNTIME_PROVIDER_REGISTRY_HPP
 
 #include <cstdint>
 #include <string>
 #include <string_view>
 
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Execution identity shared by provider registries without owning a method's
  * scientific selection. `Any` is for method-level registrations whose concrete
@@ -109,12 +109,12 @@ std::string provider_diagnostic(const ProviderDescriptor<Domain>& provider,
 /** Shared ABI-stable not-built stub result. Entry points retain their explicit
  * signatures; only status/detail formatting is centralized. */
 template <class Domain>
-vibeqc_status provider_not_implemented(const ProviderDescriptor<Domain>& provider,
-                                       std::string& detail, std::string_view operation = {}) {
+generativeqc_status provider_not_implemented(const ProviderDescriptor<Domain>& provider,
+                                             std::string& detail, std::string_view operation = {}) {
   detail = provider_diagnostic(provider, operation);
-  return VIBEQC_STATUS_NOT_IMPLEMENTED;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 
 #endif

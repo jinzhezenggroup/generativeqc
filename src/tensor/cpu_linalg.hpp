@@ -1,12 +1,12 @@
-#ifndef VIBEQC_TENSOR_CPU_LINALG_HPP
-#define VIBEQC_TENSOR_CPU_LINALG_HPP
+#ifndef GENERATIVEQC_TENSOR_CPU_LINALG_HPP
+#define GENERATIVEQC_TENSOR_CPU_LINALG_HPP
 
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <vector>
 
-namespace vibeqc::tensor {
+namespace generativeqc::tensor {
 
 enum class CpuLinalgProvider : std::uint8_t { automatic, scalar, openblas };
 enum class CpuLinalgThreadOwnership : std::uint8_t { task_parallel, provider_parallel };
@@ -25,7 +25,7 @@ struct CpuLinalgDiagnostic {
   bool lapack_available{};
   bool local_thread_control{};
   bool global_thread_control{};
-  // VibeQC host-code build target. External BLAS may dispatch internally.
+  // GenerativeQC host-code build target. External BLAS may dispatch internally.
   std::string_view cpu_target{};
 };
 
@@ -120,6 +120,6 @@ int cpu_cholesky_lower(double* matrix, std::size_t n, const CpuLinalgPlan& plan 
 [[nodiscard]] CpuSymmetricEigenResult cpu_symmetric_eigen(std::vector<double> matrix, std::size_t n,
                                                           const CpuLinalgPlan& plan = {});
 
-}  // namespace vibeqc::tensor
+}  // namespace generativeqc::tensor
 
 #endif

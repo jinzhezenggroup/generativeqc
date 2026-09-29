@@ -1,6 +1,6 @@
 # Occupied-factor CUDA exchange and force response
 
-`VIBEQC_DF_EXCHANGE=auto` (also the unset default) selects occupied RI-K
+`GENERATIVEQC_DF_EXCHANGE=auto` (also the unset default) selects occupied RI-K
 using the shared work policy in `src/scf/df_exchange_policy.hpp`. For `n`
 orbital AOs, `a` auxiliary AOs and occupied rank `r`, dense exchange requires
 `4*a*n^3` FLOPs and occupied projection plus a full Gram requires at most
@@ -20,7 +20,7 @@ The [selection decision](../../.agents/notes/implemented/performance/2026-09-18-
 records the work model, validation and performance limitations.
 
 Generated streamed singleton RHF value execution has a separate compiler-owned
-schedule in `vibeqc_compiler.method.df_exchange_schedule`. When the metric is
+schedule in `generativeqc_compiler.method.df_exchange_schedule`. When the metric is
 full rank and the existing four scratch buffers can reduce source work, project
 raw AO rows into occupied space before metric whitening. Two buffers retain
 projections; raw input and metric projection use the other two. In triangular
@@ -51,7 +51,7 @@ running auxiliary sum continues across panel boundaries in its original order;
 odd auxiliary counts have a bounded tail. The `flat` ablation instead projects
 `B_mu D` and contracts the combined `(nu,Q)` dimension, using one scratch
 tensor. Both identities preserve nonsymmetric diagnostic B and D.
-`VIBEQC_DF_RESIDENT_EXCHANGE=legacy|full|flat|auto` selects original J/K,
+`GENERATIVEQC_DF_RESIDENT_EXCHANGE=legacy|full|flat|auto` selects original J/K,
 resident full-Gram K, resident flattened dense K, or the default panel-dense
 and triangular occupied route. The plan freezes this policy; changing it
 rebuilds captured SCF work.
@@ -101,7 +101,7 @@ FP64 target refinement before publication.
 
 Every device SCF invocation starts with one seed iteration. Imported and unmatched warm
 densities have no trustworthy orbital factor, but a checked algebraic factor
-can replace its dense K. `VIBEQC_DF_SEED_EXCHANGE=dense|factor|auto` controls this
+can replace its dense K. `GENERATIVEQC_DF_SEED_EXCHANGE=dense|factor|auto` controls this
 choice; `factor` enables guarded factorization and `auto` uses the same
 resident capacity and occupied-work policy as SCF.
 
@@ -121,7 +121,7 @@ RMS error at most `1e-13`. No canonical identity is assigned to this factor.
 Numerical rejection returns to dense K; CUDA failures propagate. The ordinary
 path adds two explicit stream synchronizations and downloads the spectrum,
 solver status and two reconstruction scalars. It allocates no new persistent
-device buffer. `VIBEQC_DF_SEED_VERIFY=1` additionally compares candidate and
+device buffer. `GENERATIVEQC_DF_SEED_VERIFY=1` additionally compares candidate and
 dense K for the identical density under max/RMS gates `1e-10`/`1e-11`, restores
 candidate K, and records K/Fock errors in the progress journal. This intrusive
 validation must be disabled for clean endpoint timing.
@@ -144,12 +144,12 @@ readiness before input checks; stale tokens and corrected final frames cannot
 publish an exact retained entry. Host retention and temporary snapshot storage
 are bounded by 64 MiB, add no device allocation, and fall back on allocation
 failure. UHF, batches, no-DIIS, unmatched geometry/data, and unqualified final
-Fock owners retain the existing path. `VIBEQC_DF_WARM_REUSE=0` (or benchmark
+Fock owners retain the existing path. `GENERATIVEQC_DF_WARM_REUSE=0` (or benchmark
 `--disable-warm-reuse`) provides the same-binary control. Work traces distinguish
 warm-factor, algebraic-factor and dense seed iterations and include retention
 transfers and the separate energy reduction.
 
-`VIBEQC_DF_FINAL_EXCHANGE=dense|occupied|auto` independently controls final
+`GENERATIVEQC_DF_FINAL_EXCHANGE=dense|occupied|auto` independently controls final
 physical Fock evaluation. Unset/`auto` selects occupied K whenever the same
 resident, single-fitted-B or streamed work/capacity and provenance gates qualify it; `occupied`
 keeps the explicit comparison override, and `dense` keeps the diagnostic dense
@@ -194,7 +194,7 @@ its previous minimum-budget and residency boundaries. A native plan freezes this
 at creation and rejects occupied SCF before allocation if it reserved only dense
 storage. Ordinary prepared batches rebuild the value/SCF plan on policy changes,
 retaining their geometry response cache. Batches with a global `ResourceBudget`
-freeze `VIBEQC_DF_EXCHANGE` in the resource identity: changing it after preparation
+freeze `GENERATIVEQC_DF_EXCHANGE` in the resource identity: changing it after preparation
 requires preparing a new batch and is rejected before native execution. The
 fixed-density factor API needs no additional allocation and still borrows the
 existing tiles independently of the SCF reservation.
@@ -229,11 +229,11 @@ through the compatibility adapter.
 J/K and response share one stream. Two full buffers become mutable response
 scratch; the retained raw buffer remains read-only until the bridge drains.
 Matching warm resident calls perform zero raw-tensor H2D copies or transposes.
-`VIBEQC_DF_RAW_REUSE=off` retains the upload ablation. An upload revokes raw
+`GENERATIVEQC_DF_RAW_REUSE=off` retains the upload ablation. An upload revokes raw
 validity before submission and restores it only after successful response
 from the matching immutable source, including failure/retry handling.
 
-`VIBEQC_DF_RESPONSE_STORAGE=auto` borrows full J/K capacity for singleton RHF
+`GENERATIVEQC_DF_RESPONSE_STORAGE=auto` borrows full J/K capacity for singleton RHF
 responses with default shell/BLAS controls. Dense response also benefits from
 projecting each auxiliary only once, so unavailable occupied factors do not
 force repeated panel projections. Occupied algebra additionally requires the
@@ -246,7 +246,7 @@ from dimensions or a small component-local budget alone.
 
 ## Exact occupied force response
 
-`VIBEQC_DF_RESPONSE_SPACE=auto` (also unset) shares SCF's rank/work and resident
+`GENERATIVEQC_DF_RESPONSE_SPACE=auto` (also unset) shares SCF's rank/work and resident
 capacity selector. Explicit panel storage and diagnostic schedules preserve
 their original route. `dense` retains the full-AO comparison; `occupied` requests
 factor validation on compatible resident plans, including explicit UHF/batch
@@ -262,7 +262,7 @@ the exact sum of its spin densities and admits both rank-squared projections
 together.
 
 On singleton, full-rank streamed RHF plans only, an explicit
-`VIBEQC_DF_RESPONSE_SPACE=occupied` request may reconstruct a *new* algebraic
+`GENERATIVEQC_DF_RESPONSE_SPACE=occupied` request may reconstruct a *new* algebraic
 factor from a corrected final density. It requires the same source/model/solve
 epoch/occupation, bounded matching density and orbital generation advances,
 and the charged occupied value-plan reservation. A GPU eigensolve and full
@@ -278,7 +278,7 @@ qualified domain it feeds at most 64 auxiliary slices of packed symmetric
 AO-pair weights to the existing generated derivative consumers. It does not
 retain a full response-weight tensor. Projections, transformed projections and raw
 values occupy the three already charged resident J/K tensors; the consumed
-projection buffer becomes panel storage. `VIBEQC_DF_RESPONSE_BATCHING=auto`
+projection buffer becomes panel storage. `GENERATIVEQC_DF_RESPONSE_BATCHING=auto`
 concatenates Q slices for a large `C^T [A_0 ... A_(a-1)]` GEMM and batches the
 second multiplication by C. Previously retained spin factors remain outside
 that staging range. Pseudo-density expansion batches `C U_P` and lower
@@ -290,7 +290,7 @@ Additional response workspace contains
 four auxiliary matrices, three AO matrices, densities and auxiliary charges.
 `DfGradientResources` reports the executed route and borrowed capacity.
 
-`VIBEQC_DF_DERIVATIVE_PAIRS=auto` selects packed weights for the qualified
+`GENERATIVEQC_DF_DERIVATIVE_PAIRS=auto` selects packed weights for the qualified
 768/768-AO, rank-160 RHF occupied response on RTX 5090. The previously promoted
 resident 192--384-AO shell route instead folds the existing dense weights,
 preserving its response producer. Other automatic routes retain their original
@@ -310,12 +310,12 @@ derivatives reduce directly into the atomic gradient, without a derivative
 tensor or a second derivative formula implementation.
 
 The producer expands only lower rectangular AO blocks, with 256 rows by
-default. `VIBEQC_DF_PACKED_AO_BLOCK_ROWS=64|128|256|384` retains diagnostic
+default. `GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS=64|128|256|384` retains diagnostic
 alternatives. Upper off-diagonal blocks are skipped; unused upper entries
 inside diagonal blocks are counted as executed work. Counters distinguish
 shell pairs/triples, public weight loads including zeros, primitive products,
 nonzero Cartesian contractions, rectangular GEMM entries and panel bytes.
-`VIBEQC_DF_SHELL_COUNTERS=1` enables diagnostic device atomics and must be
+`GENERATIVEQC_DF_SHELL_COUNTERS=1` enables diagnostic device atomics and must be
 disabled for clean timings.
 
 Packing halves the weight handoff, not the complete resident plan allocation.
@@ -341,7 +341,7 @@ documents symmetry, diagonal-shell treatment, the block-size tradeoff and
 
 ## Compact SCF DIIS and solver timing
 
-`VIBEQC_DF_DIIS_DOTS=auto` forms deterministic partial residual dots in blocks
+`GENERATIVEQC_DF_DIIS_DOTS=auto` forms deterministic partial residual dots in blocks
 of 4096 elements, then reduces the partials in the existing small DIIS solve.
 The completed residual-product temporary supplies the partial storage. No
 allocation, atomic dot accumulation, or host synchronization is added.
@@ -375,7 +375,7 @@ The explicit `create_cuda_density_fitting_jk_plan_from_source` overload accepts
 `DfValueStorageOptions{DfPairStorage::SymmetricLower, rank_capacity}`. This route
 requires a retained physical integral source and complete AO rows. Physical CUDA
 SCF and composed Fock preparation accept the diagnostic selector
-`VIBEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`. In HF SCF, unset/`auto`
+`GENERATIVEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`. In HF SCF, unset/`auto`
 keeps a fully resident dense owner when it fits; for a generated singleton RHF
 source it promotes to `packed-single` only when dense would stream and the single
 fitted owner fits the same value allowance. UHF, multi-item batches,
@@ -405,11 +405,11 @@ lower-pair order. It generates raw A once in bounded panels during setup, but
 does not retain those panels. J/K, including qualified final physical Fock
 validation, reuses B without claiming a raw-A owner. Validated canonical or
 strictly reconstructed corrected occupied factors can use a separately budgeted
-force response with `VIBEQC_DF_RESPONSE_SPACE=occupied`.
-`VIBEQC_DF_OCCUPIED_RESPONSE_SOURCE=fitted` projects retained B in bounded
+force response with `GENERATIVEQC_DF_RESPONSE_SPACE=occupied`.
+`GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE=fitted` projects retained B in bounded
 auxiliary panels when the source/metric identity matches and the metric is
 full rank. The `raw` control instead regenerates raw A from the matching source;
-`VIBEQC_DF_SOURCE_PROJECTION=batched` batches its occupied projection.
+`GENERATIVEQC_DF_SOURCE_PROJECTION=batched` batches its occupied projection.
 Automatic response keeps its bounded general-density route. A constrained value allowance may
 drop optional automatic occupied K scratch without dropping B; explicit
 occupied requests still require their full reservation. The global small-HF
@@ -418,7 +418,7 @@ The [single-owner qualification note](../../.agents/notes/implemented/performanc
 records the numerical gates and complete-endpoint evidence.
 
 For the qualified full-rank fitted occupied consumer,
-`VIBEQC_DF_OCCUPIED_METRIC=auto|retained-root|spectral` controls the second
+`GENERATIVEQC_DF_OCCUPIED_METRIC=auto|retained-root|spectral` controls the second
 metric transformation. `auto` and `retained-root` apply the plan's immutable
 symmetric inverse root `X` directly to the projected factors `S = C^T B C`:
 `U = S X`. This uses one GEMM into the existing disjoint retained staging
@@ -442,7 +442,7 @@ timings. These controls are same-binary ablations, not historical-build results.
 `density_fitting_tile_plan(..., generated_source=True, pair_storage="packed")`
 queries these capacities without allocating a tensor or creating a CUDA context.
 Its `occupied` argument is the complete-U reservation and may be zero for a
-bounded-only packed plan. The private `vibeqc_resource_df_packed_tiles_v1` ABI
+bounded-only packed plan. The private `generativeqc_resource_df_packed_tiles_v1` ABI
 reports both distinct factor owners and unequal scratch capacities through the
 Python descriptor; existing dense v1/v2 queries retain their original ABI.
 The complete Python HF candidate inventory exposes only `cuda-df-packed` for an
@@ -454,7 +454,7 @@ Force response uses a distinct `CudaDfPackedRawTensorView` with the plan's
 metric/owner identity. Canonical factors may borrow the three actual scratch
 capacities for occupied response. Missing/stale factors or insufficient
 rank-squared storage use the bounded raw loader. Neither route regenerates raw
-integrals or constructs a persistent full raw tensor. `VIBEQC_DF_RAW_REUSE=off`
+integrals or constructs a persistent full raw tensor. `GENERATIVEQC_DF_RAW_REUSE=off`
 instead selects bounded source regeneration for diagnosis. Explicit seed/final
 occupied overrides admit this resident source; automatic selection uses the
 same resident work policy and checks the selected rank against both logical

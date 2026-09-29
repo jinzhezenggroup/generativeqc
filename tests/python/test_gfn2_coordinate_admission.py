@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry import (
+from generativeqc_compiler.geometry import (
     build_gfn2_pair_topology,
     build_gfn2_short_range_program,
     gfn2_geometry,

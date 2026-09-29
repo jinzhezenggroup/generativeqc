@@ -5,14 +5,14 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc import _native
-from vibeqc.nonlocal_runtime import NonlocalFixedGridPlan
-from vibeqc_compiler.dft import (
+from generativeqc import _native
+from generativeqc.nonlocal_runtime import NonlocalFixedGridPlan
+from generativeqc_compiler.dft import (
     nonlocal_energy_reference,
     nonlocal_explicit_geometry_derivatives_reference,
     nonlocal_feature_derivatives_reference,
 )
-from vibeqc_compiler.method import original_nonlocal_correlation
+from generativeqc_compiler.method import original_nonlocal_correlation
 
 
 @pytest.fixture
@@ -235,7 +235,7 @@ def test_native_failure_does_not_partially_publish_caller_buffers(
             weight.size,
             -17,
         )
-        status = library.vibeqc_nonlocal_plan_execute(
+        status = library.generativeqc_nonlocal_plan_execute(
             plan._plan, ctypes.byref(inputs), ctypes.byref(output)
         )
 

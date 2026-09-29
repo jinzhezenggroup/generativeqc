@@ -1,6 +1,6 @@
 # Generated shell-block DF response
 
-`VIBEQC_DF_WEIGHTED_EXECUTION=shell` selects generated weighted three-center
+`GENERATIVEQC_DF_WEIGHTED_EXECUTION=shell` selects generated weighted three-center
 derivatives across all 64 s/p/d/f shell classes. `shell-sp` retains the original
 seven non-SSS s/p classes as a comparison subset. Automatic consumer admission
 uses the centralized [work profile](df_tuning.md#derivative-consumer-admission),
@@ -46,7 +46,7 @@ Metric derivatives, serial mapping, and the host-weight compatibility adapter
 retain the generic generated route. Generic three-center work is excluded only
 after the corresponding shell launches have been submitted successfully.
 
-`VIBEQC_DF_SHELL_SCHEDULE` chooses among three compiler-owned variants:
+`GENERATIVEQC_DF_SHELL_SCHEDULE` chooses among three compiler-owned variants:
 
 | Selector | Component ownership | Shells per block |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ after the corresponding shell launches have been submitted successfully.
 | `packed` | 32 lanes per shell | Up to 4, bounded by shared storage |
 | `compact` | 4, 8, 16 or 32 lanes according to component count | Up to 128 threads, bounded by shared storage |
 
-`VIBEQC_DF_PRIMITIVE_BUCKETS=on` splits each angular list by exact primitive
+`GENERATIVEQC_DF_PRIMITIVE_BUCKETS=on` splits each angular list by exact primitive
 count and launches homogeneous `(la, lb, lc, nprim_a, nprim_b, nprim_c)` products.
 `packet` batches up to 24 signature ranges into each angular-class launch;
 every block still belongs to one homogeneous signature. `off` retains the
@@ -112,7 +112,7 @@ Selecting the sharded
 gradient diagnostic together with shell execution is rejected because that
 diagnostic specifically controls the original AO-element sink layout.
 
-Set `VIBEQC_DF_SHELL_COUNTERS=1` and enable the existing component trace to obtain
+Set `GENERATIVEQC_DF_SHELL_COUNTERS=1` and enable the existing component trace to obtain
 device execution counters. These diagnostic atomics are disabled for clean
 timing:
 
@@ -125,8 +125,8 @@ timing:
 | `shell_cartesian_component_products` | Nonzero Cartesian contributions served by those evaluations |
 | `shell_public_weights_consumed` | Public response-weight loads, including both off-diagonal orientations in symmetric mode |
 
-Set `VIBEQC_DF_SHELL_WORK=1` alongside `VIBEQC_DF_SHELL_COUNTERS=1` and
-`VIBEQC_DF_TRACE` for the detailed mathematical work ledger. It records actual
+Set `GENERATIVEQC_DF_SHELL_WORK=1` alongside `GENERATIVEQC_DF_SHELL_COUNTERS=1` and
+`GENERATIVEQC_DF_TRACE` for the detailed mathematical work ledger. It records actual
 Boys positive-series iterations and aggregates fixed generated loop counts per
 active primitive/component. Counters are named `shell_ABC_work_FIELD` and
 `shell_ABC_pNA_NB_NC_work_FIELD`, preserving both angular class and primitive
@@ -186,7 +186,7 @@ The [work-diagnostic rationale](../../.agents/notes/implemented/performance/2026
 records aggregation choices, counter semantics, measured overhead and the
 conditions for reconsidering the disabled-path implementation.
 
-With `VIBEQC_DF_TRACE` enabled, `shell_ABC_pNA_NB_NC` regions retain per-signature
+With `GENERATIVEQC_DF_TRACE` enabled, `shell_ABC_pNA_NB_NC` regions retain per-signature
 stream-event intervals and their counters retain submitted tasks. Packets retain
 `shell_ABC_packet` intervals; their individual
 signature task counters remain available, but a shared kernel duration cannot
@@ -230,13 +230,13 @@ execution is retained only as an explicit diagnostic/ablation route.
 
 | Control | Production default | Explicit alternative |
 | --- | --- | --- |
-| `VIBEQC_DF_RESPONSE_ALGEBRA` | `blas`: parallel charge GEMV and density GEMM | `scalar`: diagnostic/ablation only |
-| `VIBEQC_DF_RAW_STAGING` | workload-selected (`pageable` outside promoted staging) | `pinned-panels`: two bounded host panels |
+| `GENERATIVEQC_DF_RESPONSE_ALGEBRA` | `blas`: parallel charge GEMV and density GEMM | `scalar`: diagnostic/ablation only |
+| `GENERATIVEQC_DF_RAW_STAGING` | workload-selected (`pageable` outside promoted staging) | `pinned-panels`: two bounded host panels |
 
 All four selectors override their respective defaults independently. To request
-the complete original comparison route, set `VIBEQC_DF_WEIGHTED_EXECUTION=generic`,
-`VIBEQC_DF_SHELL_SCHEDULE=warp`, `VIBEQC_DF_RESPONSE_ALGEBRA=scalar` and
-`VIBEQC_DF_RAW_STAGING=pageable`. Unset selectors are resolved from the native
+the complete original comparison route, set `GENERATIVEQC_DF_WEIGHTED_EXECUTION=generic`,
+`GENERATIVEQC_DF_SHELL_SCHEDULE=warp`, `GENERATIVEQC_DF_RESPONSE_ALGEBRA=scalar` and
+`GENERATIVEQC_DF_RAW_STAGING=pageable`. Unset selectors are resolved from the native
 source, device and response dimensions; prepared provenance retains the explicit
 environment controls and the native source identity.
 
@@ -285,7 +285,7 @@ classes `003/103/113/203/213`. The latter use the existing cooperative shared-ax
 IR and qualified three/four-root evaluators. Missing targets/classes, including
 five-root `223`, retain the polynomial fallback.
 Additional mathematical availability does not promote an unqualified entry.
-`VIBEQC_DF_SHELL_POLICY=legacy` forces the fallback; `candidate` admits candidate
+`GENERATIVEQC_DF_SHELL_POLICY=legacy` forces the fallback; `candidate` admits candidate
 manifest entries for complete endpoint qualification. Consumer, packet and
 weight-layout admission remain separate. See [DF tuning](df_tuning.md) and the
 [admission evidence](../../.agents/notes/implemented/performance/2026-09-19-df-rys-admission.md).

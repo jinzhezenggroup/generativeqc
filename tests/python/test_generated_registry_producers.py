@@ -16,10 +16,10 @@ cmake_minimum_required(VERSION 3.20)
 project(GeneratorDeclarations LANGUAGES NONE)
 set(CMAKE_CURRENT_SOURCE_DIR "${SOURCE_ROOT}")
 set(CMAKE_CUDA_ARCHITECTURES 120)
-set(VIBEQC_ENABLE_CUDA ON)
-set(VIBEQC_ENABLE_STATIONARY_CPU_FORCE_AOT OFF)
+set(GENERATIVEQC_ENABLE_CUDA ON)
+set(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT OFF)
 file(WRITE "${CMAKE_BINARY_DIR}/producers.txt" "")
-function(vibeqc_register_generated_sources)
+function(generativeqc_register_generated_sources)
   cmake_parse_arguments(P "ADD_TO_TARGET" "NAME;TARGET;GENERATOR;COMMENT"
                         "OUTPUTS;DEPENDS;ARGS;COMPILE_OPTIONS" ${ARGN})
   get_filename_component(generator "${P_GENERATOR}" NAME)
@@ -32,9 +32,9 @@ endfunction()
 # Observe declarations only; this probe deliberately has no runtime target.
 function(target_include_directories)
 endfunction()
-include("${SOURCE_ROOT}/cmake/VibeQCGeneratedSources.cmake")
-vibeqc_register_host_generated_sources(vibeqc)
-vibeqc_register_cuda_generated_sources(vibeqc)
+include("${SOURCE_ROOT}/cmake/GenerativeQCGeneratedSources.cmake")
+generativeqc_register_host_generated_sources(generativeqc)
+generativeqc_register_cuda_generated_sources(generativeqc)
 """
 
 REQUIRED = {
@@ -56,7 +56,7 @@ def _assert_producers(rows: list[str]) -> None:
         name, generator, target, attached = row.split("|")
         found[name].append((generator, target, attached))
     for name, generator in REQUIRED.items():
-        assert found[name] == [(generator, "vibeqc", "TRUE")], (name, found[name])
+        assert found[name] == [(generator, "generativeqc", "TRUE")], (name, found[name])
 
 
 def test_libxc_and_direct_headers_keep_one_attached_producer(tmp_path: Path) -> None:
@@ -80,7 +80,9 @@ def test_libxc_and_direct_headers_keep_one_attached_producer(tmp_path: Path) -> 
 def test_producer_guard_rejects_missing_or_duplicate_registration(
     duplicate: bool,
 ) -> None:
-    rows = [f"{name}|{generator}|vibeqc|TRUE" for name, generator in REQUIRED.items()]
+    rows = [
+        f"{name}|{generator}|generativeqc|TRUE" for name, generator in REQUIRED.items()
+    ]
     missing = rows.pop(0)
     if duplicate:
         rows.extend([missing, missing])

@@ -4,8 +4,8 @@
 // kernels in one translation unit per candidate; equations remain generated.
 #include <type_traits>
 
-#ifdef VIBEQC_DF_SHELL_MATH_HEADER
-#include VIBEQC_DF_SHELL_MATH_HEADER
+#ifdef GENERATIVEQC_DF_SHELL_MATH_HEADER
+#include GENERATIVEQC_DF_SHELL_MATH_HEADER
 #else
 #include "generated_df_rys_shell.cuh"
 #endif
@@ -14,7 +14,7 @@
 #include "runtime/homogeneous_task_packet.hpp"
 #include "scf/cuda/df_shell_derivatives.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 namespace generated = generated_df_shell;
 namespace scalar = generated_df_derivatives;
@@ -351,4 +351,4 @@ __global__ void shell_packet(DfShellBasisView orbital, DfShellBasisView auxiliar
 }
 
 }  // namespace
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -1,6 +1,6 @@
 name: Python wheels
 
-# Build with CUDA 12.9 while keeping NVIDIA provider DSOs outside the VibeQC
+# Build with CUDA 12.9 while keeping NVIDIA provider DSOs outside the GenerativeQC
 # wheel. The wheel metadata declares the separately distributed providers as
 # Linux runtime dependencies, and the installed-wheel test proves lazy provider
 # resolution through a CUDA-backed native call.
@@ -39,7 +39,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-wheel-v3-manylinux_x86_64-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'python/vibeqc_compiler/**', 'python/vibeqc/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/vibeqc_compiler/common/d3_data.py') }}
+          key: ccache-wheel-v3-manylinux_x86_64-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-wheel-v3-manylinux_x86_64-
             ccache-wheel-v2-manylinux_x86_64-
@@ -63,9 +63,9 @@ jobs:
           # hashes the CMake/NVCC command line; otherwise generated-source and
           # generated-include paths make identical compilations miss across runs.
           CIBW_ENVIRONMENT: >-
-            VIBEQC_ENABLE_CUDA=ON
-            VIBEQC_ENABLE_AOT_SHELLS=ON
-            VIBEQC_CUDA_ARCHITECTURES=120
+            GENERATIVEQC_ENABLE_CUDA=ON
+            GENERATIVEQC_ENABLE_AOT_SHELLS=ON
+            GENERATIVEQC_CUDA_ARCHITECTURES=120
             CCACHE_DIR=/host${{ runner.temp }}/ccache
             CCACHE_MAXSIZE=3G
             CCACHE_BASEDIR=/tmp
@@ -102,14 +102,14 @@ jobs:
                   installed_notice = f"{metadata_dir}/licenses/{license_file}"
                   assert installed_notice in names, installed_notice
                   assert archive.read(installed_notice) == pathlib.Path(license_file).read_bytes()
-              assert "vibeqc/lib/libvibeqc.so" in names, sorted(
+              assert "generativeqc/lib/libgenerativeqc.so" in names, sorted(
                   name
                   for name in names
-                  if "vibeqc" in name and name.endswith((".so", ".dll", ".dylib"))
+                  if "generativeqc" in name and name.endswith((".so", ".dll", ".dylib"))
               )
-              for header in ("vibeqc.h", "generated_method_ids.h"):
-                  source = pathlib.Path("include/vibeqc") / header
-                  installed = f"vibeqc_compiler/assets/include/vibeqc/{header}"
+              for header in ("generativeqc.h", "generated_method_ids.h"):
+                  source = pathlib.Path("include/generativeqc") / header
+                  installed = f"generativeqc_compiler/assets/include/generativeqc/{header}"
                   assert installed in names, installed
                   assert archive.read(installed) == source.read_bytes()
               cuda_provider_names = (
@@ -128,8 +128,8 @@ jobs:
               ]
               assert not bundled_cuda, bundled_cuda
               with tempfile.TemporaryDirectory() as directory:
-                  native = pathlib.Path(directory) / "libvibeqc.so"
-                  native.write_bytes(archive.read("vibeqc/lib/libvibeqc.so"))
+                  native = pathlib.Path(directory) / "libgenerativeqc.so"
+                  native.write_bytes(archive.read("generativeqc/lib/libgenerativeqc.so"))
                   dynamic = subprocess.check_output(
                       ["readelf", "-d", str(native)], text=True
                   )
@@ -141,7 +141,7 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: vibeqc-wheel-manylinux_x86_64
+          name: generativeqc-wheel-manylinux_x86_64
           path: wheelhouse/*.whl
           if-no-files-found: error
 

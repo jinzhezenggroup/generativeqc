@@ -19,9 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 import numpy as np
-from vibeqc import Atom, Primitive, Shell
-from vibeqc.calculator import _named_basis_shells
-from vibeqc.profiles import canonical_hash
+from generativeqc import Atom, Primitive, Shell
+from generativeqc.calculator import _named_basis_shells
+from generativeqc.profiles import canonical_hash
 
 from tools.generate_validation_references import pyscf_molecule
 
@@ -174,7 +174,7 @@ def generate(directory: typing.Any) -> typing.Any:
         with contextlib.redirect_stdout(configuration):
             np.show_config()
         metadata = {
-            "schema": "vibeqc.posthf_reference",
+            "schema": "generativeqc.posthf_reference",
             "version": 1,
             "inputs": inputs,
             "auxiliary_shells": inputs["shells"],

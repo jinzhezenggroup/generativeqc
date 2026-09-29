@@ -25,8 +25,8 @@ def exchange_policy(tmp_path_factory: typing.Any) -> typing.Any:
 int main() {
   std::size_t n, a, batch, rank;
   while (std::cin >> n >> a >> batch >> rank)
-    std::cout << vibeqc::scf::df_occupied_exchange_preferred(n,a,batch,rank) << " "
-              << vibeqc::scf::df_occupied_exchange_requested(n,a,batch,rank) << "\n";
+    std::cout << generativeqc::scf::df_occupied_exchange_preferred(n,a,batch,rank) << " "
+              << generativeqc::scf::df_occupied_exchange_requested(n,a,batch,rank) << "\n";
 }
 """
     )
@@ -45,9 +45,9 @@ int main() {
 
     def query(shapes: typing.Any, policy: typing.Any = "auto") -> typing.Any:
         env = dict(os.environ)
-        env.pop("VIBEQC_DF_EXCHANGE", None)
+        env.pop("GENERATIVEQC_DF_EXCHANGE", None)
         if policy is not None:
-            env["VIBEQC_DF_EXCHANGE"] = policy
+            env["GENERATIVEQC_DF_EXCHANGE"] = policy
         result = subprocess.run(
             [str(binary)],
             input="".join(" ".join(map(str, shape)) + "\n" for shape in shapes),

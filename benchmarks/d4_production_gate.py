@@ -14,7 +14,7 @@ from _support import (
     raw_output_path,
     write_result,
 )
-from vibeqc import D4CorrectionBatch
+from generativeqc import D4CorrectionBatch
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -136,7 +136,7 @@ def main() -> None:
     if min(args.repeats, args.batch_copies, args.maximum_bytes) < 1:
         parser.error("repeats, batch-copies and maximum-bytes must be positive")
     accelerator = None
-    allocation_id = os.environ.get("VIBEQC_GPU_ALLOCATION_ID")
+    allocation_id = os.environ.get("GENERATIVEQC_GPU_ALLOCATION_ID")
     if args.device == "cuda":
         if not allocation_id:
             slurm_job_id = os.environ.get("SLURM_JOB_ID")
@@ -144,7 +144,7 @@ def main() -> None:
                 allocation_id = f"slurm:{slurm_job_id}"
         if not allocation_id:
             parser.error(
-                "real CUDA performance evidence requires VIBEQC_GPU_ALLOCATION_ID "
+                "real CUDA performance evidence requires GENERATIVEQC_GPU_ALLOCATION_ID "
                 "or a finite Slurm allocation"
             )
         import cupy as cp
@@ -157,7 +157,7 @@ def main() -> None:
         small if index % 2 == 0 else medium for index in range(args.batch_copies)
     )
     payload = {
-        "schema": "vibeqc.d4-production-gate.v1",
+        "schema": "generativeqc.d4-production-gate.v1",
         "environment": environment_metadata(
             distributions={"numpy": ("numpy",), "cupy": ("cupy-cuda12x", "cupy")},
             accelerator=accelerator,

@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 from codegen_fixtures import factored_dppp_variables, sample_variables
-from vibeqc_compiler.common.backend import TargetInfo, TargetScheduleShape
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.common.backend import TargetInfo, TargetScheduleShape
+from generativeqc_compiler.integral import (
     DDDD_SPEC,
     DDPS_SPEC,
     DPDS_SPEC,
@@ -54,7 +54,7 @@ from vibeqc_compiler.integral import (
     evaluate_fused_shell_value,
     schedule_candidates,
 )
-from vibeqc_compiler.integral.autotune import (
+from generativeqc_compiler.integral.autotune import (
     _production_fock_schedule_index,
     _requested_schedule_kinds,
     emit_schedule_driver,
@@ -65,16 +65,18 @@ from vibeqc_compiler.integral.autotune import (
     supported_schedule_trials,
     update_manifest_payload,
 )
-from vibeqc_compiler.integral.benchmark import (
+from generativeqc_compiler.integral.benchmark import (
     emit_dppp_benchmark_cuda,
     emit_shell_class_benchmark_cuda,
 )
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.production import (
     _schedule_from_payload,
     load_production_kernel_selections,
 )
-from vibeqc_compiler.integral.tuning.emission import schedule_execution_source_identity
-from vibeqc_compiler.integral.tuning.policy import (
+from generativeqc_compiler.integral.tuning.emission import (
+    schedule_execution_source_identity,
+)
+from generativeqc_compiler.integral.tuning.policy import (
     deduplicate_execution_equivalent_trials,
 )
 
@@ -449,7 +451,7 @@ def test_packed_schedule_models_low_order_fock_workers(spec: typing.Any) -> None
     manifest = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -757,10 +759,10 @@ def test_schedule_knob_cuda_variants_compile_when_nvcc_is_configured(
 ) -> None:
     """Compile both cooperative sharing policies through the real frontend."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     base = build_fused_shell_plan(DPDS_SPEC, target=TEST_CUDA_TARGET).schedule
     schedule = replace(
         base,
@@ -866,7 +868,7 @@ def test_benchmark_accepts_an_explicit_schedule_or_lowered_plan() -> None:
     assert source.count("generated_dpds_component_gradient<false>") == 2
     assert "#pragma unroll 1" in source
     assert "#pragma unroll\n" in source
-    assert "VIBEQC_PAIR_UNROLL" not in source
+    assert "GENERATIVEQC_PAIR_UNROLL" not in source
     plan = build_fused_shell_plan(DPDS_SPEC, schedule=schedule, target=TEST_CUDA_TARGET)
     assert source == emit_shell_class_benchmark_cuda(
         DPDS_SPEC,
@@ -948,7 +950,7 @@ def test_autotune_emits_unique_schedule_variants_and_manifest_records() -> None:
     )
     oracle_source = emit_schedule_oracle_translation_unit(component_trials[0])
     oracle_kernel = (
-        "vibeqc_oracle_dpds_force_component_lanes_b128_t108_w1_"
+        "generativeqc_oracle_dpds_force_component_lanes_b128_t108_w1_"
         "component_recompute_rhf_kernel"
     )
     assert separate_source.count(oracle_kernel) == 2

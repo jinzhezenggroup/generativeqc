@@ -18,36 +18,36 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 using namespace cuda_execution;
 
 /** Stage explicit host tensors while retaining coordinate/spin and failure semantics. */
-vibeqc_status build_cuda_one_electron_integrals_batch_impl(
+generativeqc_status build_cuda_one_electron_integrals_batch_impl(
     int device_id, const std::vector<core::System>& systems,
     std::vector<integrals::IntegralData>& outputs, std::string& detail, bool include_derivatives,
     bool include_nuclear_derivatives) {
   outputs.clear();
   if (device_id < 0 || systems.empty()) {
     detail = "CUDA one-electron integral batch dimensions are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t batch_size = systems.size();
   if (batch_size > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
     detail = "CUDA one-electron batch exceeds the supported system count";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::vector<core::System> cartesian_systems;
   try {
     cartesian_systems.reserve(batch_size);
     for (const core::System& system : systems) {
       core::System cartesian = system;
-      cartesian.basis_representation = VIBEQC_BASIS_CARTESIAN;
+      cartesian.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
       cartesian_systems.push_back(std::move(cartesian));
     }
   } catch (const std::bad_alloc&) {
     detail = "host allocation failed while staging one-electron batch";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   HostBatch host;
@@ -57,28 +57,28 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
   // and also matches the spin-independent evaluator for open-shell fleets.
   if (!pack_host_batch(cartesian_systems, no_warm, host, true, true) || host.nbf == 0U) {
     detail = "Cartesian one-electron batch cannot be represented by CUDA";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t nbf = host.nbf;
   for (const core::System& system : cartesian_systems) {
     if (molecule::cartesian_ao_count(system) != nbf ||
         system.atoms.size() != systems.front().atoms.size()) {
       detail = "CUDA one-electron batch requires homogeneous AO dimensions";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
 
   if (nbf > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
       nbf > std::numeric_limits<std::size_t>::max() / nbf) {
     detail = "Cartesian one-electron batch dimensions are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t matrix_elements = nbf * nbf;
   const std::size_t pair_count = nbf * (nbf + 1U) / 2U;
   if (batch_size > std::numeric_limits<std::size_t>::max() / pair_count ||
       batch_size > std::numeric_limits<std::size_t>::max() / matrix_elements) {
     detail = "CUDA one-electron batch dimensions overflowed";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t pair_launch_elements = batch_size * pair_count;
   const std::size_t matrix_batch_elements = batch_size * matrix_elements;
@@ -86,7 +86,7 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
           std::numeric_limits<unsigned>::max() * static_cast<std::size_t>(128U) ||
       matrix_batch_elements > std::numeric_limits<std::size_t>::max() / sizeof(double)) {
     detail = "CUDA one-electron batch launch dimensions are too large";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   std::vector<std::int32_t> pair_first;
@@ -102,7 +102,7 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
     }
   } catch (const std::bad_alloc&) {
     detail = "host allocation failed for one-electron batch pair indices";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   cudaError_t cuda_error = cudaSetDevice(device_id);
@@ -212,7 +212,7 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
     if (pointer == nullptr) {
       detail = "CUDA allocation failed while staging one-electron batch metadata";
       release();
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
   }
   const auto* device_pair_first = static_cast<const std::int32_t*>(upload_vector(pair_first));
@@ -226,7 +226,7 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
       device_hcore == nullptr || device_nuclear == nullptr) {
     detail = "CUDA allocation failed for one-electron batch output";
     release();
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   try {
@@ -243,7 +243,7 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
   } catch (const std::bad_alloc&) {
     detail = "host allocation failed for one-electron batch output";
     release();
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   std::vector<double> packed_overlap;
@@ -256,7 +256,7 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
   } catch (const std::bad_alloc&) {
     detail = "host allocation failed for one-electron batch staging";
     release();
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   constexpr unsigned threads = 128U;
@@ -365,23 +365,22 @@ vibeqc_status build_cuda_one_electron_integrals_batch_impl(
     integrals::EcpData ecp;
     const auto status = integrals::ecp_integrals_cuda(device_id, cartesian_systems[i], 160, 32,
                                                       include_derivatives, ecp, detail, true);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     integrals::add_ecp(ecp, outputs[i].hcore, outputs[i].hcore_derivative);
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 }  // namespace
 
-vibeqc_status build_cuda_one_electron_integrals_batch(int device_id,
-                                                      const std::vector<core::System>& systems,
-                                                      std::vector<integrals::IntegralData>& outputs,
-                                                      std::string& detail, bool include_derivatives,
-                                                      bool include_nuclear_derivatives) {
+generativeqc_status build_cuda_one_electron_integrals_batch(
+    int device_id, const std::vector<core::System>& systems,
+    std::vector<integrals::IntegralData>& outputs, std::string& detail, bool include_derivatives,
+    bool include_nuclear_derivatives) {
   runtime::df_progress::Scope progress("one_electron_batch");
   runtime::df_progress::number("include_derivatives", include_derivatives);
   return build_cuda_one_electron_integrals_batch_impl(
       device_id, systems, outputs, detail, include_derivatives, include_nuclear_derivatives);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

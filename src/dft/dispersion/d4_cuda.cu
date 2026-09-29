@@ -4,7 +4,7 @@
 
 #include "dft/dispersion/d4_cuda.hpp"
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -505,4 +505,4 @@ cudaError_t launch_d4_fixed_charge_batched_cuda(const D4CudaBatch& batch,
   return launch_status();
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion

@@ -11,28 +11,30 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
 # Keep build-time codegen independent of NumPy-backed interpreter packages.
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_electronic_contract import (
+from generativeqc_compiler.method.gfn2_electronic_contract import (
     GFN2_DIPOLE_COMPONENTS,
     GFN2_QUADRUPOLE_COMPONENTS,
 )
-from vibeqc_compiler.method.gfn2_electronic_runtime import (
+from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_PAIR_VERSION,
     build_gfn2_runtime_electronic_pair_primal,
     build_gfn2_runtime_electronic_pair_vjp,
     build_gfn2_runtime_overlap_vjp,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
 def _device(source: str, function_name: str) -> str:
@@ -181,7 +183,7 @@ def cuda_header() -> str:
 
 #include <cmath>
 
-namespace vibeqc::xtb::generated {{
+namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_electronic_pair_version = "{GFN2_ELECTRONIC_PAIR_VERSION}";
 inline constexpr const char* gfn2_electronic_pair_primal_hash = "{primal.logical_hash}";
@@ -234,7 +236,7 @@ __device__ inline bool evaluate_gfn2_electronic_overlap_vjp(
       bar_shift, row_scalar, column_scalar, bar_overlap);
 }}
 
-}}  // namespace vibeqc::xtb::generated
+}}  // namespace generativeqc::xtb::generated
 """
 
 

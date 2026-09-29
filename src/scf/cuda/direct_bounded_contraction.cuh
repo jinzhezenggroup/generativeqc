@@ -17,7 +17,7 @@
 // Retained direct bounded contraction contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Runtime angular dispatch used only by the generic large-topology path. */
 template <bool Unrestricted>
@@ -26,30 +26,30 @@ __device__ inline __noinline__ void contract_bounded_direct_fock_subtile(
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* fock, std::size_t subtile,
     unsigned lane) {
-#define VIBEQC_BOUNDED_FOCK_CASE(order)                                                       \
+#define GENERATIVEQC_BOUNDED_FOCK_CASE(order)                                                 \
   case order:                                                                                 \
     contract_fock_direct_quartet_subtile<Unrestricted, order>(                                \
         batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, fock, \
         nullptr, subtile, lane);                                                              \
     break
   switch (angular_order) {
-    VIBEQC_BOUNDED_FOCK_CASE(0);
-    VIBEQC_BOUNDED_FOCK_CASE(1);
-    VIBEQC_BOUNDED_FOCK_CASE(2);
-    VIBEQC_BOUNDED_FOCK_CASE(3);
-    VIBEQC_BOUNDED_FOCK_CASE(4);
-    VIBEQC_BOUNDED_FOCK_CASE(5);
-    VIBEQC_BOUNDED_FOCK_CASE(6);
-    VIBEQC_BOUNDED_FOCK_CASE(7);
-    VIBEQC_BOUNDED_FOCK_CASE(8);
-    VIBEQC_BOUNDED_FOCK_CASE(9);
-    VIBEQC_BOUNDED_FOCK_CASE(10);
-    VIBEQC_BOUNDED_FOCK_CASE(11);
-    VIBEQC_BOUNDED_FOCK_CASE(12);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(0);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(1);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(2);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(3);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(4);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(5);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(6);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(7);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(8);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(9);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(10);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(11);
+    GENERATIVEQC_BOUNDED_FOCK_CASE(12);
     default:
       break;
   }
-#undef VIBEQC_BOUNDED_FOCK_CASE
+#undef GENERATIVEQC_BOUNDED_FOCK_CASE
 }
 
 template <bool Unrestricted>
@@ -58,7 +58,7 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* forces, double coulomb_coefficient,
     double exchange_coefficient, std::size_t subtile, unsigned lane) {
-#define VIBEQC_BOUNDED_FORCE_CASE(order)                                                        \
+#define GENERATIVEQC_BOUNDED_FORCE_CASE(order)                                                  \
   case order:                                                                                   \
     contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order>(                    \
         batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
@@ -67,20 +67,20 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
   // Total order 0/1 is consumed by the generated ssss/psss exact-shell
   // tasks before generic bounded dispatch. Do not reinstantiate retired math.
   switch (angular_order) {
-    VIBEQC_BOUNDED_FORCE_CASE(2);
-    VIBEQC_BOUNDED_FORCE_CASE(4);
-    VIBEQC_BOUNDED_FORCE_CASE(5);
-    VIBEQC_BOUNDED_FORCE_CASE(6);
-    VIBEQC_BOUNDED_FORCE_CASE(7);
-    VIBEQC_BOUNDED_FORCE_CASE(8);
-    VIBEQC_BOUNDED_FORCE_CASE(9);
-    VIBEQC_BOUNDED_FORCE_CASE(10);
-    VIBEQC_BOUNDED_FORCE_CASE(11);
-    VIBEQC_BOUNDED_FORCE_CASE(12);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(2);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(4);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(5);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(6);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(7);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(8);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(9);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(10);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(11);
+    GENERATIVEQC_BOUNDED_FORCE_CASE(12);
     default:
       break;
   }
-#undef VIBEQC_BOUNDED_FORCE_CASE
+#undef GENERATIVEQC_BOUNDED_FORCE_CASE
 }
 
 template <bool Unrestricted>
@@ -95,4 +95,4 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile(
       forces, 1.0, exchange_coefficient, subtile, lane);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

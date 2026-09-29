@@ -9,7 +9,7 @@
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/direct_task_layout.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Shared fixed launch, representation and screening contracts. Policy parsing remains in
  * rhf_policy.cpp. */
@@ -174,4 +174,4 @@ constexpr unsigned kBoundedDirectThreads =
 static_assert(kBoundedDirectThreads % detail::kDirectQuartetThreads == 0);
 static_assert(kBoundedDirectThreads <= 1024);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

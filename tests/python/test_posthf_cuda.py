@@ -7,23 +7,23 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_posthf.conventions import MOBlock
-from tools.vibeqc_posthf.cuda import compile_cuda
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.conventions import MOBlock
+from tools.generativeqc_posthf.cuda import compile_cuda
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.mp2 import restricted_mp2
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import CudaDFSource, NativeSource
+from tools.generativeqc_posthf.mp2 import restricted_mp2
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import CudaDFSource, NativeSource
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_POSTHF_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_POSTHF_CUDA_TEST") != "1",
     reason="requires explicitly allocated real GPU",
 )
 
@@ -32,7 +32,9 @@ pytestmark = pytest.mark.skipif(
 def artifact() -> typing.Any:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm on this host"
     compiler = CudaCompilerAdapter(
-        Path(os.environ.get("VIBEQC_NVCC", "/group/software/cuda-12.9.1/bin/nvcc")),
+        Path(
+            os.environ.get("GENERATIVEQC_NVCC", "/group/software/cuda-12.9.1/bin/nvcc")
+        ),
         cuda_target_info("sm_120"),
     )
     return compile_cuda(compiler, Path("/tmp/posthf147-cuda-cache"))

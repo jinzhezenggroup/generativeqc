@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
-from vibeqc import _cuda_runtime, _native
+from generativeqc import _cuda_runtime, _native
 
 
 def test_implib_sources_match_pinned_manifest() -> None:

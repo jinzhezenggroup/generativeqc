@@ -1,7 +1,7 @@
 """Negative ownership admission gates for the GFN2 population compiler."""
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     Gfn2ElectronicTopology,
     build_gfn2_population_program,
 )

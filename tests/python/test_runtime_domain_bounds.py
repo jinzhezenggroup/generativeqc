@@ -3,7 +3,7 @@
 import tracemalloc
 from dataclasses import replace
 
-from vibeqc_compiler.common.runtime_domain import RuntimeTaskDomain
+from generativeqc_compiler.common.runtime_domain import RuntimeTaskDomain
 
 
 def test_small_first_page_has_axis_independent_memory() -> None:

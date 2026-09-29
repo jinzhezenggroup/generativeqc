@@ -1,13 +1,13 @@
 """Issue #673 Slice D: MethodIR production pruning acceptance gates."""
 
 import pytest
-from vibeqc.mean_field import compile_fixed_density_method
-from vibeqc_compiler.method import (
+from generativeqc.mean_field import compile_fixed_density_method
+from generativeqc_compiler.method import (
     UnsupportedMethod,
     infer_feature_types,
     resolve_method,
 )
-from vibeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.contractions import ContractionProgram
 
 
 def _feature_names(method: object) -> tuple[str, ...]:

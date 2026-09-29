@@ -1,5 +1,5 @@
-#ifndef VIBEQC_INTEGRALS_S_INTEGRALS_HPP
-#define VIBEQC_INTEGRALS_S_INTEGRALS_HPP
+#ifndef GENERATIVEQC_INTEGRALS_S_INTEGRALS_HPP
+#define GENERATIVEQC_INTEGRALS_S_INTEGRALS_HPP
 
 #include <array>
 #include <cstddef>
@@ -9,7 +9,7 @@
 #include "core/types.hpp"
 #include "integrals/range_moments.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 
 struct IntegralData {
   std::size_t nbf{};
@@ -211,6 +211,6 @@ inline IntegralData build_s_integrals(const core::System& system, bool include_d
   return build_integrals(system, include_derivatives);
 }
 
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals
 
 #endif

@@ -48,5 +48,5 @@ def test_primary_streaming_route_partitions_paged_generated_classes() -> None:
     )
 
     policy = (REPOSITORY_ROOT / "src/scf/cuda/rhf_policy.cpp").read_text()
-    assert "VIBEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK" in policy
+    assert "GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK" in policy
     assert "std::strtoull(selection, &end, 0)" in policy

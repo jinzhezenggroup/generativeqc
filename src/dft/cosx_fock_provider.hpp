@@ -1,5 +1,5 @@
-#ifndef VIBEQC_DFT_COSX_FOCK_PROVIDER_HPP
-#define VIBEQC_DFT_COSX_FOCK_PROVIDER_HPP
+#ifndef GENERATIVEQC_DFT_COSX_FOCK_PROVIDER_HPP
+#define GENERATIVEQC_DFT_COSX_FOCK_PROVIDER_HPP
 
 #include <cstddef>
 #include <memory>
@@ -9,7 +9,7 @@
 #include "dft/grid.hpp"
 #include "scf/fock_prepared.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 struct CosxFockPreparationDiagnostic {
   scf::ResolvedFockBuild strategy{};
@@ -53,6 +53,6 @@ class PreparedCosxFockPlan {
   std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft
 
 #endif

@@ -4,5 +4,5 @@
     "generated/generated_direct_cartesian.cuh",
     "generated/generated_direct_contraction.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+  "owner": "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
 }

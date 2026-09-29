@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc import history_transport as history
-from tools.vibeqc_cc.gpu_state import AmplitudeSnapshot
+from tools.generativeqc_cc import history_transport as history
+from tools.generativeqc_cc.gpu_state import AmplitudeSnapshot
 
 
 class _Transport:

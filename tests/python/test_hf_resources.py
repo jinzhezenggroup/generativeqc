@@ -5,7 +5,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, ResourceBudget, estimate_hf_resources
+from generativeqc import Calculator, ResourceBudget, estimate_hf_resources
 
 H2 = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
 
@@ -15,8 +15,8 @@ def test_singlepoint_native_detail_preserves_structured_resource_error(
     monkeypatch: typing.Any, allocation: typing.Any
 ) -> None:
     """Adding context detail must retain the exception's retry/evidence payload."""
-    from vibeqc import resources_native
-    from vibeqc_compiler.common.resources import ResourceAllocationError
+    from generativeqc import resources_native
+    from generativeqc_compiler.common.resources import ResourceAllocationError
 
     calculator = Calculator(resource_budget=ResourceBudget(host_bytes=1 << 30))
     failure = (
@@ -33,7 +33,7 @@ def test_singlepoint_native_detail_preserves_structured_resource_error(
     monkeypatch.setattr(resources_native, "check_resource_status", reject)
     monkeypatch.setattr(
         calculator._library,
-        "vibeqc_context_get_last_detail",
+        "generativeqc_context_get_last_detail",
         lambda context: b"native diagnostic",
     )
     with pytest.raises(type(failure), match="native diagnostic") as caught:
@@ -47,7 +47,7 @@ def test_singlepoint_native_detail_preserves_structured_resource_error(
 def test_large_infeasible_dry_run_never_initializes_native_or_allocates_tensors(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _native
+    from generativeqc import _native
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail(
@@ -136,7 +136,7 @@ def test_prepared_cpu_budget_gates_before_native_context_and_preserves_results(
 
 
 def test_bounded_fleet_samples_every_serial_item_and_restores_thread_scope() -> None:
-    from vibeqc_compiler.common.resources import CpuResourceObservation
+    from generativeqc_compiler.common.resources import CpuResourceObservation
 
     calculator = Calculator(resource_budget=ResourceBudget(host_bytes=10**6))
     with calculator.prepare_batch([H2] * 4) as batch:
@@ -233,7 +233,7 @@ def test_cuda_hf_inventory_marshals_exact_shell_topology_to_v2() -> None:
         output[1] = 256
         return 0
 
-    library = SimpleNamespace(vibeqc_resource_small_hf_cuda_v2=query)
+    library = SimpleNamespace(generativeqc_resource_small_hf_cuda_v2=query)
     plan = estimate_hf_resources([H2], backend="cuda", library=library)
     assert plan.status == "feasible"
     assert seen == {
@@ -255,7 +255,7 @@ def test_cuda_hf_inventory_marshals_exact_shell_topology_to_v2() -> None:
 def test_cuda_hf_inventory_refuses_aggregate_v1_fallback() -> None:
     from types import SimpleNamespace
 
-    legacy = SimpleNamespace(vibeqc_resource_small_hf_cuda_v1=lambda *args: 0)
+    legacy = SimpleNamespace(generativeqc_resource_small_hf_cuda_v1=lambda *args: 0)
     plan = estimate_hf_resources([H2], backend="cuda", library=legacy)
     assert plan.status == "unsupported"
     assert "topology-aware CUDA HF allocation inventory v2" in plan.diagnostic
@@ -267,7 +267,7 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
     """A removed selector cannot invalidate a prepared CUDA schedule."""
     from types import SimpleNamespace
 
-    variable = "VIBEQC_DF_SHELL_MATH_000"
+    variable = "GENERATIVEQC_DF_SHELL_MATH_000"
     # Identity construction precedes the optional native inventory query; no
     # CUDA context or real device is needed to check environment sensitivity.
     library = SimpleNamespace()
@@ -282,8 +282,8 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
 def test_cli_resource_dry_run_reads_real_xyz_and_reports_infeasibility(
     monkeypatch: typing.Any, tmp_path: typing.Any, capsys: typing.Any
 ) -> None:
-    from vibeqc import _native
-    from vibeqc.__main__ import main
+    from generativeqc import _native
+    from generativeqc.__main__ import main
 
     path = tmp_path / "h2.xyz"
     path.write_text("2\nbohr fixture\nH 0 0 -0.7\nH 0 0 0.7\n")
@@ -294,7 +294,15 @@ def test_cli_resource_dry_run_reads_real_xyz_and_reports_infeasibility(
     monkeypatch.setattr(_native, "load_library", forbidden)
     monkeypatch.setattr(
         "sys.argv",
-        ["vibeqc", "resources", str(path), "--units", "bohr", "--host-bytes", "1"],
+        [
+            "generativeqc",
+            "resources",
+            str(path),
+            "--units",
+            "bohr",
+            "--host-bytes",
+            "1",
+        ],
     )
     assert main() == 2
     output = json.loads(capsys.readouterr().out)

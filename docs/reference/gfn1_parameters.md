@@ -1,9 +1,9 @@
 # GFN1-xTB canonical parameter snapshots
 
-VibeQC does not vendor the xTBloom GFN1 source snapshot. The source registry
+GenerativeQC does not vendor the xTBloom GFN1 source snapshot. The source registry
 pins xTBloom commit `2cbdf1db8661ccbd5cb7d3d4bfc868a848cbbff3` as a
 remote-only maintainer input. Normal builds and wheels consume checked-in,
-VibeQC-owned generated products; source regeneration starts with
+GenerativeQC-owned generated products; source regeneration starts with
 `python tools/source_registry.py sync xtbloom-gfn1-parameters`.
 
 The remote source set records the tblite GFN1 parameter export, normalized
@@ -22,11 +22,11 @@ python tools/source_registry.py verify
 ```
 
 The generated `src/xtb/native/data/parameters/gfn1.hpp` and
-`python/vibeqc_compiler/geometry/_gfn1_data.py` remain deterministic products
+`python/generativeqc_compiler/geometry/_gfn1_data.py` remain deterministic products
 of the pinned source bytes. GFN1 D3 tables remain owned separately and are not
 duplicated in this snapshot.
 
-The native header uses `vibeqc::xtb::parameters::gfn1`. Its generator verifies
+The native header uses `generativeqc::xtb::parameters::gfn1`. Its generator verifies
 the original audited header digest after reversing only that namespace change;
 the live source registry records the native product's path and digest. The
 upstream snapshot, parameter bytes and scientific identity remain unchanged.

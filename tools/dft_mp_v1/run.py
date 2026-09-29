@@ -1,6 +1,6 @@
 """Journal bounded production-adapter runs against the frozen DFT-MP-v1 matrix.
 
-The adapter owns public VibeQC and independent-oracle calls. It receives the
+The adapter owns public GenerativeQC and independent-oracle calls. It receives the
 manifest, row ID and immutable input path and writes one result JSON to stdout.
 This runner never fabricates scientific or performance values. The adapter and
 its build/artifact hashes are part of the retained campaign identity.

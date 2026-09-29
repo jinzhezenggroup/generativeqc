@@ -18,34 +18,34 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 
 using WorkloadKey = std::tuple<std::size_t, int, int, std::size_t>;
 
-WorkloadKey workload_key(const core::System& system, vibeqc_method method) {
+WorkloadKey workload_key(const core::System& system, generativeqc_method method) {
   std::size_t primitive_count = 0;
   for (const auto& shell : system.shells) {
     primitive_count += shell.primitives.size();
   }
   const int spin_excess = static_cast<int>(system.multiplicity) - 1;
-  const int alpha = method == VIBEQC_METHOD_UHF ? (system.electron_count + spin_excess) / 2
-                                                : system.electron_count / 2;
-  const int beta = method == VIBEQC_METHOD_UHF ? system.electron_count - alpha : alpha;
+  const int alpha = method == GENERATIVEQC_METHOD_UHF ? (system.electron_count + spin_excess) / 2
+                                                      : system.electron_count / 2;
+  const int beta = method == GENERATIVEQC_METHOD_UHF ? system.electron_count - alpha : alpha;
   return {molecule::ao_count(system), alpha, beta, primitive_count};
 }
 
-vibeqc_status exception_status() {
+generativeqc_status exception_status() {
   try {
     throw;
   } catch (const std::bad_alloc&) {
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument&) {
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception&) {
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (...) {
-    return VIBEQC_STATUS_INTERNAL_ERROR;
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
 }
 
@@ -128,8 +128,8 @@ void merge_ppps_queue_profile(CudaPppsQueueProfile& aggregate, const CudaPppsQue
 
 }  // namespace
 
-FleetPlan::FleetPlan(std::vector<core::System> systems, vibeqc_method method, ScfOptions options,
-                     bool warm_starts_enabled, bool cuda_fock_enabled,
+FleetPlan::FleetPlan(std::vector<core::System> systems, generativeqc_method method,
+                     ScfOptions options, bool warm_starts_enabled, bool cuda_fock_enabled,
                      bool shell_class_profiling_enabled,
                      bool inactive_eigensolver_profiling_enabled, int device_id,
                      std::optional<core::System> auxiliary_template,
@@ -148,12 +148,12 @@ FleetPlan::FleetPlan(std::vector<core::System> systems, vibeqc_method method, Sc
       bucket_ids_(systems_.size()),
       warm_densities_(systems_.size()),
       independent_fock_plans_(systems_.size()) {
-  const bool fitted = options_.density_fitting_mode != VIBEQC_DENSITY_FITTING_NONE;
+  const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
   const FockBackend backend =
       cuda_fock_enabled_ || cuda_density_fitting_enabled_ ? FockBackend::Cuda : FockBackend::Cpu;
   const ResolvedFockBuild expected = resolve_fock_build(
       make_hf_fock_spec(
-          method_ == VIBEQC_METHOD_UHF ? FockSpin::Unrestricted : FockSpin::Restricted,
+          method_ == GENERATIVEQC_METHOD_UHF ? FockSpin::Unrestricted : FockSpin::Restricted,
           fitted ? FockApproximation::DensityFitted : FockApproximation::Exact),
       backend, options_.screening_tolerance, options_.density_fitting_relative_threshold);
   if (!options_.resolved_fock_build) options_.resolved_fock_build = expected;
@@ -229,12 +229,12 @@ std::vector<FleetItemResult> FleetPlan::execute(
     FleetItemResult& item = results[system_index];
     item.bucket_id = bucket_ids_[system_index];
     item.executed_backend = execution_options.resolved_fock_build->backend == FockBackend::Cuda
-                                ? VIBEQC_BACKEND_CUDA
-                                : VIBEQC_BACKEND_CPU_REFERENCE;
+                                ? GENERATIVEQC_BACKEND_CUDA
+                                : GENERATIVEQC_BACKEND_CPU_REFERENCE;
     core::System execution_system = systems_[system_index];
     if (!coordinates.empty() && coordinates[system_index].has_value()) {
       if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
-        item.status = VIBEQC_STATUS_INVALID_ARGUMENT;
+        item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         return;
       }
       apply_coordinates(execution_system, *coordinates[system_index]);
@@ -254,7 +254,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
           has_warm_density ? &warm_densities_[system_index]->density : nullptr;
       item.scf = evaluate(initial_density);
       if (execution_options.resolved_fock_build->backend == FockBackend::Cuda) {
-        item.executed_backend = VIBEQC_BACKEND_CUDA;
+        item.executed_backend = GENERATIVEQC_BACKEND_CUDA;
       }
       if (has_warm_density && !item.scf.converged) {
         // A geometry change can make an otherwise topology-compatible density
@@ -263,14 +263,15 @@ std::vector<FleetItemResult> FleetPlan::execute(
         item.warm_start_fallback = true;
         item.scf = evaluate(nullptr);
       }
-      item.status = item.scf.converged ? VIBEQC_STATUS_SUCCESS : VIBEQC_STATUS_SCF_NOT_CONVERGED;
+      item.status =
+          item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
     } catch (...) {
       if (has_warm_density) {
         try {
           item.warm_start_fallback = true;
           item.scf = evaluate(nullptr);
-          item.status =
-              item.scf.converged ? VIBEQC_STATUS_SUCCESS : VIBEQC_STATUS_SCF_NOT_CONVERGED;
+          item.status = item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS
+                                           : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
         } catch (...) {
           item.status = exception_status();
         }
@@ -279,7 +280,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
       }
     }
 
-    if (item.status == VIBEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
+    if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
         warm_start_updates_enabled_) {
       retain_warm_state(system_index, execution_system, item.scf);
     }
@@ -328,7 +329,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
         core::System execution_system = systems_[system_index];
         if (!coordinates.empty() && coordinates[system_index].has_value()) {
           if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
-            item.status = VIBEQC_STATUS_INVALID_ARGUMENT;
+            item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
             continue;
           }
           apply_coordinates(execution_system, *coordinates[system_index]);
@@ -344,7 +345,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
 
       if (!cuda_systems.empty()) {
         std::vector<RhfBucketItem> cuda_results =
-            method_ == VIBEQC_METHOD_UHF
+            method_ == GENERATIVEQC_METHOD_UHF
                 ? run_uhf_cuda_bucket_cached(&cuda_bucket_plans_[bucket], cuda_systems,
                                              execution_options, initial_densities, device_id_,
                                              shell_class_profiling_enabled_,
@@ -396,23 +397,25 @@ std::vector<FleetItemResult> FleetPlan::execute(
           FleetItemResult& item = results[system_index];
           item.status = cuda_results[slot].status;
           item.scf = std::move(cuda_results[slot].scf);
-          item.executed_backend = VIBEQC_BACKEND_CUDA;
+          item.executed_backend = GENERATIVEQC_BACKEND_CUDA;
 
           if (item.warm_start_used && !cuda_results[slot].fock_only_diagnostic &&
-              item.status != VIBEQC_STATUS_SUCCESS && item.status != VIBEQC_STATUS_CUDA_ERROR &&
-              item.status != VIBEQC_STATUS_OUT_OF_MEMORY) {
+              item.status != GENERATIVEQC_STATUS_SUCCESS &&
+              item.status != GENERATIVEQC_STATUS_CUDA_ERROR &&
+              item.status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
             item.warm_start_fallback = true;
             const std::vector<core::System> cold_system{cuda_systems[slot]};
             const std::vector<const std::vector<double>*> cold_density{nullptr};
             std::vector<RhfBucketItem> cold =
-                method_ == VIBEQC_METHOD_UHF ? run_uhf_cuda_bucket(cold_system, execution_options,
-                                                                   cold_density, device_id_, false)
-                                             : run_rhf_cuda_bucket(cold_system, execution_options,
-                                                                   cold_density, device_id_, false);
+                method_ == GENERATIVEQC_METHOD_UHF
+                    ? run_uhf_cuda_bucket(cold_system, execution_options, cold_density, device_id_,
+                                          false)
+                    : run_rhf_cuda_bucket(cold_system, execution_options, cold_density, device_id_,
+                                          false);
             item.status = cold.front().status;
             item.scf = std::move(cold.front().scf);
           }
-          if (item.status == VIBEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
+          if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
               warm_start_updates_enabled_) {
             retain_warm_state(system_index, cuda_systems[slot], item.scf);
           }
@@ -435,7 +438,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
         core::System execution_system = systems_[system_index];
         if (!coordinates.empty() && coordinates[system_index].has_value()) {
           if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
-            item.status = VIBEQC_STATUS_INVALID_ARGUMENT;
+            item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
             malformed_coordinate = true;
             continue;
           }
@@ -478,7 +481,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
           cuda_density_fitting_data_[bucket].clear();
         }
         std::vector<RhfBucketItem> df_results =
-            method_ == VIBEQC_METHOD_UHF
+            method_ == GENERATIVEQC_METHOD_UHF
                 ? run_uhf_density_fitting_cuda_bucket_cached(
                       &cuda_density_fitting_plans_[bucket], df_systems, auxiliary_template_,
                       execution_options, initial_densities, device_id_, &bucket_metric_diagnostics,
@@ -489,7 +492,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
                       prepared_cache, &overlap_caches);
         if (!malformed_coordinate &&
             std::all_of(df_results.begin(), df_results.end(), [](const RhfBucketItem& result) {
-              return result.status == VIBEQC_STATUS_SUCCESS;
+              return result.status == GENERATIVEQC_STATUS_SUCCESS;
             })) {
           cuda_density_fitting_positions_[bucket] = std::move(bucket_positions);
           cuda_density_fitting_batch_sizes_[bucket] = df_systems.size();
@@ -531,32 +534,32 @@ std::vector<FleetItemResult> FleetPlan::execute(
           FleetItemResult& item = results[system_index];
           item.status = df_results[slot].status;
           item.scf = std::move(df_results[slot].scf);
-          item.executed_backend = VIBEQC_BACKEND_CUDA;
+          item.executed_backend = GENERATIVEQC_BACKEND_CUDA;
 
           // A warm density can be a poor guess after a geometry replay. Keep
           // the batch's failure isolation, but retry that one item cold when
           // the failure is numerical rather than a shared CUDA/OOM failure.
-          if (item.warm_start_used && item.status != VIBEQC_STATUS_SUCCESS &&
-              item.status != VIBEQC_STATUS_CUDA_ERROR &&
-              item.status != VIBEQC_STATUS_OUT_OF_MEMORY) {
+          if (item.warm_start_used && item.status != GENERATIVEQC_STATUS_SUCCESS &&
+              item.status != GENERATIVEQC_STATUS_CUDA_ERROR &&
+              item.status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
             item.warm_start_fallback = true;
             try {
               const core::System auxiliary =
                   auxiliary_for_geometry(auxiliary_template_, df_systems[slot]);
-              item.scf = method_ == VIBEQC_METHOD_UHF
+              item.scf = method_ == GENERATIVEQC_METHOD_UHF
                              ? run_uhf_density_fitting_cuda(df_systems[slot], auxiliary,
                                                             execution_options, device_id_, nullptr,
                                                             &cuda_df_orthogonalizers_[system_index])
                              : run_rhf_density_fitting_cuda(
                                    df_systems[slot], auxiliary, execution_options, device_id_,
                                    nullptr, &cuda_df_orthogonalizers_[system_index]);
-              item.status =
-                  item.scf.converged ? VIBEQC_STATUS_SUCCESS : VIBEQC_STATUS_SCF_NOT_CONVERGED;
+              item.status = item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS
+                                               : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
             } catch (...) {
               item.status = exception_status();
             }
           }
-          if (item.status == VIBEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
+          if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
               warm_start_updates_enabled_) {
             retain_warm_state(system_index, df_systems[slot], item.scf);
           }
@@ -600,7 +603,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
 
 std::size_t FleetPlan::warm_density_size(std::size_t index) const {
   const auto n = molecule::ao_count(systems_.at(index));
-  const std::size_t spins = method_ == VIBEQC_METHOD_UHF ? 2 : 1;
+  const std::size_t spins = method_ == GENERATIVEQC_METHOD_UHF ? 2 : 1;
   if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n / spins / sizeof(double))
     throw std::invalid_argument("warm density dimensions overflow");
   return spins * n * n;
@@ -680,4 +683,4 @@ void FleetPlan::set_warm_start_updates(bool enabled) noexcept {
   warm_start_updates_enabled_ = enabled;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -6,14 +6,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import execute
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
-from tools.vibeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
-from tools.vibeqc_cc.doubles import build_ccsd_program
-from tools.vibeqc_cc.oracle import dense_feeds, random_case
+from tools.generativeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
+from tools.generativeqc_cc.doubles import build_ccsd_program
+from tools.generativeqc_cc.oracle import dense_feeds, random_case
 
 
 @pytest.mark.parametrize("shape", [(1, 3), (2, 3)])
@@ -42,21 +42,21 @@ def test_trace_is_original_equation_and_budget_keeps_every_node(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_CC_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_CC_CUDA_TEST") != "1",
     reason="requires explicitly allocated GPU validation window",
 )
 @pytest.mark.parametrize("shape", [(1, 3), (2, 3)])
 def test_real_device_every_node_repeat_failure_and_two_contexts(
     shape: typing.Any, tmp_path: typing.Any
 ) -> None:
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     nvcc = find_nvcc()
     assert nvcc is not None
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ["VIBEQC_TENSOR_ARCH"])
+        nvcc, cuda_target_info(os.environ["GENERATIVEQC_TENSOR_ARCH"])
     )
-    cache = Path(os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path))
+    cache = Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path))
     feeds = dense_feeds(*random_case(*shape, seed=149))
     expected = execute(rccsd_program(*shape, trace=True), feeds).outputs
     other_feeds = dense_feeds(*random_case(*shape, seed=193))

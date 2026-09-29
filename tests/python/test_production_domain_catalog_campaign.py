@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 
 from tools import qualify_libxc_production_catalog as catalog
 

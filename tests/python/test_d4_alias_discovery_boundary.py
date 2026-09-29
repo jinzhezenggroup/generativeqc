@@ -1,8 +1,8 @@
 """D4 discovery must not promote ordinary aliases into duplicate catalog rows."""
 
 import pytest
-from vibeqc.ks import native_dft_carrier, public_dft_selectors, resolve_ks_method
-from vibeqc_compiler.method import resolve_method
+from generativeqc.ks import native_dft_carrier, public_dft_selectors, resolve_ks_method
+from generativeqc_compiler.method import resolve_method
 
 
 @pytest.mark.parametrize(

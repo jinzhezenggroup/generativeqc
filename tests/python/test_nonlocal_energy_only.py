@@ -2,9 +2,9 @@
 
 import numpy as np
 import pytest
-from vibeqc.nonlocal_runtime import NonlocalFixedGridPlan
-from vibeqc_compiler.dft import nonlocal_energy_reference
-from vibeqc_compiler.method import original_nonlocal_correlation
+from generativeqc.nonlocal_runtime import NonlocalFixedGridPlan
+from generativeqc_compiler.dft import nonlocal_energy_reference
+from generativeqc_compiler.method import original_nonlocal_correlation
 
 
 @pytest.mark.parametrize("variant", ("vv10", "rvv10"))

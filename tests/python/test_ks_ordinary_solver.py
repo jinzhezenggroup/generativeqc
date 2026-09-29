@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Atom, Calculator, ResourceBudget
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.grid import MolecularGrid
+from generativeqc import Atom, Calculator, ResourceBudget
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.grid import MolecularGrid
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1", reason="allocated CUDA KS gate"
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1", reason="allocated CUDA KS gate"
 )
 WATER = [("O", (0, 0, 0)), ("H", (0, -1.43, 1.11)), ("H", (0, 1.43, 1.11))]
 
@@ -73,11 +73,11 @@ def test_large_ks_solver_energy_replay_geometry_and_final_state(
     monkeypatch: typing.Any,
 ) -> None:
     """Exercise both spin slots, bounded submissions and a charged owner."""
-    monkeypatch.setenv("VIBEQC_CUDA_KS_CHUNK", chunk)
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", chunk)
     if chunk == "2":
         # 24 AOs use provider-backed Xsyevd and must stay outside capture even
         # when the small-native replay qualification switch is requested.
-        monkeypatch.setenv("VIBEQC_CUDA_KS_REPLAY", "1")
+        monkeypatch.setenv("GENERATIVEQC_CUDA_KS_REPLAY", "1")
     charge, multiplicity = (1, 2) if unrestricted else (0, 1)
     kwargs = {
         "method": f"{family}-uks" if unrestricted else f"{family}-rks",

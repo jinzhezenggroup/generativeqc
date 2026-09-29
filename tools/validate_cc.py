@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -24,11 +24,11 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.tensor import Program, execute, optimize
+from generativeqc_compiler.tensor import Program, execute, optimize
 
-from tools.vibeqc_cc import amplitude_layouts, build_program
-from tools.vibeqc_cc.inventory import TERMS
-from tools.vibeqc_cc.oracle import dense_feeds, homogeneous_groups, random_case
+from tools.generativeqc_cc import amplitude_layouts, build_program
+from tools.generativeqc_cc.inventory import TERMS
+from tools.generativeqc_cc.oracle import dense_feeds, homogeneous_groups, random_case
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,7 +36,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_references(path: typing.Any) -> typing.Any:
     """Fail closed on changed values, reference version or upstream identity."""
     data = json.loads(Path(path).read_text())
-    manifest = json.loads((ROOT / "tools/vibeqc_cc/source_manifest.json").read_text())
+    manifest = json.loads(
+        (ROOT / "tools/generativeqc_cc/source_manifest.json").read_text()
+    )
     # The RCCSD A/B reference identity covers only the RCCSD upstream files;
     # the (T) entries added for issue #150 are checked by the triples generator.
     upstream = {
@@ -45,7 +47,7 @@ def load_references(path: typing.Any) -> typing.Any:
         "version": manifest["version"],
     }
     if (
-        data["schema"] != "vibeqc.rccsd.fixed-amplitude-reference"
+        data["schema"] != "generativeqc.rccsd.fixed-amplitude-reference"
         or data["version"] != 1
         or data["pyscf"] != "2.14.0"
         or data["upstream"] != upstream
@@ -90,8 +92,8 @@ def run(output: typing.Any, references: typing.Any) -> typing.Any:
             )
         )
     source_paths = [
-        *sorted((ROOT / "tools/vibeqc_cc").glob("*.py")),
-        *sorted((ROOT / "python/vibeqc_compiler/tensor").glob("*.py")),
+        *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
+        *sorted((ROOT / "python/generativeqc_compiler/tensor").glob("*.py")),
         ROOT / "tools/validate_cc.py",
         ROOT / "tools/generate_cc_references.py",
     ]

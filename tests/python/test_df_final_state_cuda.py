@@ -6,12 +6,12 @@ from contextlib import ExitStack
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -82,22 +82,23 @@ def test_selection_rebuild_and_force_transitions(
             outputs = []
             for mode, owner in owners.items():
                 monkeypatch.setenv(
-                    "VIBEQC_DF_FORCE_FINAL_REBUILD", "0" if mode == "reuse" else "1"
+                    "GENERATIVEQC_DF_FORCE_FINAL_REBUILD",
+                    "0" if mode == "reuse" else "1",
                 )
                 monkeypatch.setenv(
-                    "VIBEQC_DF_REFERENCE_FINAL_EIGEN",
+                    "GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN",
                     "1" if mode == "reference_rebuild" else "0",
                 )
                 path = tmp_path / f"{step}-{mode}.jsonl"
-                monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+                monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
                 try:
                     output = owner.execute(
                         positions, properties=properties, strict=True
                     )
                 finally:
-                    monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
-                    monkeypatch.delenv("VIBEQC_DF_FORCE_FINAL_REBUILD")
-                    monkeypatch.delenv("VIBEQC_DF_REFERENCE_FINAL_EIGEN")
+                    monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
+                    monkeypatch.delenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD")
+                    monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN")
                 outputs.append(output)
                 ledger = aggregate_host(read_host_trace(path))
                 phases = ledger["exclusive_phases"]

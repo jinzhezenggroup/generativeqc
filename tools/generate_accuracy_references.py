@@ -13,11 +13,11 @@ from importlib import metadata
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
 
 from tools.generate_validation_references import molecular_data, pyscf_molecule
-from tools.vibeqc_numerics.fixtures import extra_inputs
-from tools.vibeqc_validation.fixtures import mathematical_hash, validate_fixture
+from tools.generativeqc_numerics.fixtures import extra_inputs
+from tools.generativeqc_validation.fixtures import mathematical_hash, validate_fixture
 
 
 def generate(destination: Path) -> dict[str, typing.Any]:
@@ -50,10 +50,12 @@ def generate(destination: Path) -> dict[str, typing.Any]:
                 root / "tools/generate_validation_references.py"
             ),
             "fixture_definition_sha256": file_hash(
-                root / "tools/vibeqc_numerics/fixtures.py"
+                root / "tools/generativeqc_numerics/fixtures.py"
             ),
             "libcint_sha256": file_hash(libcint),
-            "basis_pack_sha256": file_hash(root / "python/vibeqc/data/basis_pack.json"),
+            "basis_pack_sha256": file_hash(
+                root / "python/generativeqc/data/basis_pack.json"
+            ),
             "purpose": "independent held-out HF accuracy references",
         }
         destination.mkdir(parents=True, exist_ok=True)
@@ -62,7 +64,7 @@ def generate(destination: Path) -> dict[str, typing.Any]:
             molecule, scale, angular = pyscf_molecule(inputs)
             data = molecular_data(inputs, molecule, scale)
             record = {
-                "schema": "vibeqc.reference",
+                "schema": "generativeqc.reference",
                 "schema_version": 1,
                 "inputs": inputs,
                 "inputs_hash": mathematical_hash(inputs),

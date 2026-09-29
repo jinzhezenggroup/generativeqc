@@ -18,21 +18,20 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 using namespace cuda_execution;
 
 /** Stage explicit host tensors while retaining coordinate/spin and failure semantics. */
-vibeqc_status build_cuda_one_electron_integrals_impl(int device_id, const core::System& system,
-                                                     integrals::IntegralData& output,
-                                                     std::string& detail, bool include_derivatives,
-                                                     bool include_nuclear_derivatives) {
+generativeqc_status build_cuda_one_electron_integrals_impl(
+    int device_id, const core::System& system, integrals::IntegralData& output, std::string& detail,
+    bool include_derivatives, bool include_nuclear_derivatives) {
   if (device_id < 0) {
     detail = "CUDA one-electron integral generation received an invalid device";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   core::System cartesian_system = system;
-  cartesian_system.basis_representation = VIBEQC_BASIS_CARTESIAN;
+  cartesian_system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
   HostBatch host;
   std::vector<const std::vector<double>*> no_warm(1, nullptr);
   // One-electron integrals are spin independent. General spin packing accepts
@@ -41,18 +40,18 @@ vibeqc_status build_cuda_one_electron_integrals_impl(int device_id, const core::
   // Matrix-only packing omits direct-ERI task tables that this exporter never consumes.
   if (!pack_host_batch({cartesian_system}, no_warm, host, true, true) || host.nbf == 0U) {
     detail = "Cartesian one-electron basis cannot be represented by CUDA";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (host.nbf > std::numeric_limits<std::int32_t>::max() ||
       host.nbf > std::numeric_limits<std::size_t>::max() / host.nbf) {
     detail = "Cartesian one-electron basis dimensions are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t matrix_elements = host.nbf * host.nbf;
   const std::size_t pair_count = host.nbf * (host.nbf + 1U) / 2U;
   if (pair_count > std::numeric_limits<unsigned>::max() * static_cast<std::size_t>(128U)) {
     detail = "CUDA one-electron launch dimensions are too large";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::vector<std::int32_t> pair_first;
   std::vector<std::int32_t> pair_second;
@@ -172,7 +171,7 @@ vibeqc_status build_cuda_one_electron_integrals_impl(int device_id, const core::
     if (pointer == nullptr) {
       detail = "CUDA allocation failed while staging one-electron metadata";
       release();
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
   }
   const auto* device_pair_first = static_cast<const std::int32_t*>(upload_vector(pair_first));
@@ -184,7 +183,7 @@ vibeqc_status build_cuda_one_electron_integrals_impl(int device_id, const core::
       device_hcore == nullptr || device_nuclear == nullptr) {
     detail = "CUDA allocation failed for one-electron integral output";
     release();
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 
   output = {};
@@ -276,22 +275,22 @@ vibeqc_status build_cuda_one_electron_integrals_impl(int device_id, const core::
     integrals::EcpData ecp;
     const auto status = integrals::ecp_integrals_cuda(device_id, cartesian_system, 160, 32,
                                                       include_derivatives, ecp, detail, true);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     integrals::add_ecp(ecp, output.hcore, output.hcore_derivative);
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 }  // namespace
 
-vibeqc_status build_cuda_one_electron_integrals(int device_id, const core::System& system,
-                                                integrals::IntegralData& output,
-                                                std::string& detail, bool include_derivatives,
-                                                bool include_nuclear_derivatives) {
+generativeqc_status build_cuda_one_electron_integrals(int device_id, const core::System& system,
+                                                      integrals::IntegralData& output,
+                                                      std::string& detail, bool include_derivatives,
+                                                      bool include_nuclear_derivatives) {
   runtime::df_progress::Scope progress("one_electron");
   runtime::df_progress::number("include_derivatives", include_derivatives);
   return build_cuda_one_electron_integrals_impl(device_id, system, output, detail,
                                                 include_derivatives, include_nuclear_derivatives);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

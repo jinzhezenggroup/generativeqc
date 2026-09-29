@@ -16,12 +16,12 @@
 #include "generated_method_parameters.hpp"
 
 #if defined(__CUDACC__)
-#define VIBEQC_D4_HD __host__ __device__
+#define GENERATIVEQC_D4_HD __host__ __device__
 #else
-#define VIBEQC_D4_HD
+#define GENERATIVEQC_D4_HD
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 // A deliberately bounded scalar baseline, not a promoted GPU schedule.
 inline constexpr int kD4MaximumAtoms = 256;
@@ -39,8 +39,8 @@ struct D4Parameters {
 };
 
 // No generic/default DFT parameter alias is exposed.
-VIBEQC_D4_HD inline D4Parameters gfn2_d4_parameters() {
-  const auto p = ::vibeqc::generated::method_parameters::gfn2D4();
+GENERATIVEQC_D4_HD inline D4Parameters gfn2_d4_parameters() {
+  const auto p = ::generativeqc::generated::method_parameters::gfn2D4();
   return {D4ReferenceModel::gfn2, p.s6,         p.s8, p.s9, p.a1, p.a2, p.cn_cutoff,
           p.pair_cutoff,          p.atm_cutoff, p.ga, p.gc};
 }
@@ -70,32 +70,32 @@ inline D4Tables gfn2_d4_host_tables() {
           2.0};
 }
 
-VIBEQC_D4_HD inline std::size_t d4_unbounded_workspace_elements(int atoms) {
+GENERATIVEQC_D4_HD inline std::size_t d4_unbounded_workspace_elements(int atoms) {
   if (atoms < 0) return 0u;
   constexpr std::size_t kMaximumSize = static_cast<std::size_t>(-1);
   const std::size_t count = static_cast<std::size_t>(atoms);
   return count <= kMaximumSize / (27u * sizeof(double)) ? 27u * count : 0u;
 }
 
-VIBEQC_D4_HD inline std::size_t d4_workspace_elements(int atoms) {
+GENERATIVEQC_D4_HD inline std::size_t d4_workspace_elements(int atoms) {
   return atoms >= 0 && atoms <= kD4MaximumAtoms ? d4_unbounded_workspace_elements(atoms) : 0u;
 }
 
 namespace d4_detail {
-VIBEQC_D4_HD inline bool finite(double x) { return x == x && x <= DBL_MAX && x >= -DBL_MAX; }
+GENERATIVEQC_D4_HD inline bool finite(double x) { return x == x && x <= DBL_MAX && x >= -DBL_MAX; }
 struct Range {
   std::uintptr_t begin, end;
 };
-VIBEQC_D4_HD inline bool range(const void* p, std::size_t bytes, Range& r) {
+GENERATIVEQC_D4_HD inline bool range(const void* p, std::size_t bytes, Range& r) {
   const auto a = reinterpret_cast<std::uintptr_t>(p);
   if ((bytes && !p) || a > UINTPTR_MAX - bytes) return false;
   r = {a, a + bytes};
   return true;
 }
-VIBEQC_D4_HD inline bool overlaps(Range a, Range b) {
+GENERATIVEQC_D4_HD inline bool overlaps(Range a, Range b) {
   return a.begin < a.end && b.begin < b.end && a.begin < b.end && b.begin < a.end;
 }
-VIBEQC_D4_HD inline bool valid_parameters(const D4Parameters& p) {
+GENERATIVEQC_D4_HD inline bool valid_parameters(const D4Parameters& p) {
   return finite(p.s6) && finite(p.s8) && finite(p.s9) && finite(p.a1) && finite(p.a2) &&
          finite(p.cn_cutoff) && finite(p.pair_cutoff) && finite(p.atm_cutoff) && p.s6 >= 0.0 &&
          p.s9 >= 0.0 && p.a1 >= 0.0 && p.a2 > 0.0 && p.cn_cutoff > 0.0 && p.pair_cutoff > 0.0 &&
@@ -104,16 +104,16 @@ VIBEQC_D4_HD inline bool valid_parameters(const D4Parameters& p) {
 
 // The qmod=0 branch is the continuous saturated limit. The source derivative
 // formed 0/0 here; evaluating the limit also avoids a 0*inf near the boundary.
-VIBEQC_D4_HD inline void charge_scale(double a, double c, double qref, double qmod, double& value,
-                                      double& derivative) {
+GENERATIVEQC_D4_HD inline void charge_scale(double a, double c, double qref, double qmod,
+                                            double& value, double& derivative) {
   const auto result = math::charge_scale(a, c, qref, qmod);
   value = result.value;
   derivative = result.derivative;
 }
 
-VIBEQC_D4_HD inline void weights(int n, const std::int32_t* z, const double* cn, const double* q,
-                                 const D4Parameters& p, D4Tables t, double* w, double* wc,
-                                 double* wq) {
+GENERATIVEQC_D4_HD inline void weights(int n, const std::int32_t* z, const double* cn,
+                                       const double* q, const D4Parameters& p, D4Tables t,
+                                       double* w, double* wc, double* wq) {
   for (int i = 0; i < n; ++i) {
     math::atom_weights(t.elements[z[i] - 1], t.references, cn[i], q ? q[i] : 0.0, q == nullptr,
                        p.ga, p.gc, w + 7 * i, wc + 7 * i, wq + 7 * i);
@@ -123,15 +123,16 @@ VIBEQC_D4_HD inline void weights(int n, const std::int32_t* z, const double* cn,
 struct Coefficient {
   double c6, ci, cj, qi, qj;
 };
-VIBEQC_D4_HD inline Coefficient coefficient(int i, int j, const std::int32_t* z, D4Tables t,
-                                            const double* w, const double* wc, const double* wq) {
+GENERATIVEQC_D4_HD inline Coefficient coefficient(int i, int j, const std::int32_t* z, D4Tables t,
+                                                  const double* w, const double* wc,
+                                                  const double* wq) {
   const auto shared = math::coefficient(t.elements[z[i] - 1], t.elements[z[j] - 1],
                                         math::PackedReferenceC6{t.reference_c6}, w + 7 * i,
                                         wc + 7 * i, wq + 7 * i, w + 7 * j, wc + 7 * j, wq + 7 * j);
   return {shared.c6, shared.first_cn, shared.second_cn, shared.first_charge, shared.second_charge};
 }
 
-VIBEQC_D4_HD inline double distance2(const double* xyz, int i, int j, double* v) {
+GENERATIVEQC_D4_HD inline double distance2(const double* xyz, int i, int j, double* v) {
   double rr = 0.0;
   for (int k = 0; k < 3; ++k) {
     v[k] = xyz[3 * i + k] - xyz[3 * j + k];
@@ -139,25 +140,25 @@ VIBEQC_D4_HD inline double distance2(const double* xyz, int i, int j, double* v)
   }
   return rr;
 }
-VIBEQC_D4_HD inline double radius(int i, int j, const std::int32_t* z, D4Tables t,
-                                  const D4Parameters& p) {
+GENERATIVEQC_D4_HD inline double radius(int i, int j, const std::int32_t* z, D4Tables t,
+                                        const D4Parameters& p) {
   return math::damping_radius(t.elements[z[i] - 1], t.elements[z[j] - 1], p.a1, p.a2);
 }
-VIBEQC_D4_HD inline void cn_pair(int i, int j, const std::int32_t* z, D4Tables t, double r,
-                                 double& cn, double& dcdr) {
+GENERATIVEQC_D4_HD inline void cn_pair(int i, int j, const std::int32_t* z, D4Tables t, double r,
+                                       double& cn, double& dcdr) {
   const auto pair = math::coordination_pair(t.elements[z[i] - 1], t.elements[z[j] - 1], r);
   cn = pair.value;
   dcdr = pair.derivative;
 }
-VIBEQC_D4_HD inline void add_pair_gradient(int i, int j, const double* v, double scale,
-                                           double* grad) {
+GENERATIVEQC_D4_HD inline void add_pair_gradient(int i, int j, const double* v, double scale,
+                                                 double* grad) {
   for (int a = 0; a < 3; ++a) {
     grad[3 * i + a] += scale * v[a];
     grad[3 * j + a] -= scale * v[a];
   }
 }
-VIBEQC_D4_HD inline double atm_radial(double x, double y, double z, double r5, double damp,
-                                      double angle, double ddamp, double c9) {
+GENERATIVEQC_D4_HD inline double atm_radial(double x, double y, double z, double r5, double damp,
+                                            double angle, double ddamp, double c9) {
   return math::atm_radial(x, y, z, r5, damp, angle, ddamp, c9);
 }
 }  // namespace d4_detail
@@ -174,15 +175,15 @@ struct D4CachedPairCoefficient {
   double second_charge = 0.0;
 };
 
-VIBEQC_D4_HD inline void prepare_d4_cached_weights(int n, const std::int32_t* z, const double* cn,
-                                                   const double* q, const D4Parameters& p,
-                                                   D4Tables tables, double* weights,
-                                                   double* cn_derivatives,
-                                                   double* charge_derivatives) {
+GENERATIVEQC_D4_HD inline void prepare_d4_cached_weights(int n, const std::int32_t* z,
+                                                         const double* cn, const double* q,
+                                                         const D4Parameters& p, D4Tables tables,
+                                                         double* weights, double* cn_derivatives,
+                                                         double* charge_derivatives) {
   d4_detail::weights(n, z, cn, q, p, tables, weights, cn_derivatives, charge_derivatives);
 }
 
-VIBEQC_D4_HD inline D4CachedPairCoefficient d4_cached_pair_coefficient(
+GENERATIVEQC_D4_HD inline D4CachedPairCoefficient d4_cached_pair_coefficient(
     int first, int second, const std::int32_t* z, D4Tables tables, const double* weights,
     const double* cn_derivatives, const double* charge_derivatives) {
   const auto coefficient =
@@ -197,7 +198,7 @@ VIBEQC_D4_HD inline D4CachedPairCoefficient d4_cached_pair_coefficient(
 // Every numeric buffer must be disjoint. Tables must be the immutable pinned
 // arrays (or byte-identical device copies). Workspace is disposable; outputs
 // are committed only on success. One CPU worker or CUDA lane owns one call.
-VIBEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
+GENERATIVEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
     int n, const std::int32_t* z, const double* xyz, const double* q, const D4Parameters& p,
     D4Tables t, double* workspace, std::size_t workspace_size, double* energy, double* grad,
     double* dq, bool enforce_atom_bound) {
@@ -345,11 +346,10 @@ VIBEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
   return D4Status::success;
 }
 
-VIBEQC_D4_HD inline D4Status evaluate_d4_fixed_charge(int n, const std::int32_t* z,
-                                                      const double* xyz, const double* q,
-                                                      const D4Parameters& p, D4Tables t,
-                                                      double* workspace, std::size_t workspace_size,
-                                                      double* energy, double* grad, double* dq) {
+GENERATIVEQC_D4_HD inline D4Status evaluate_d4_fixed_charge(
+    int n, const std::int32_t* z, const double* xyz, const double* q, const D4Parameters& p,
+    D4Tables t, double* workspace, std::size_t workspace_size, double* energy, double* grad,
+    double* dq) {
   return evaluate_d4_fixed_charge_impl(n, z, xyz, q, p, t, workspace, workspace_size, energy, grad,
                                        dq, true);
 }
@@ -367,5 +367,5 @@ inline D4Status evaluate_d4_fixed_charge_unbounded_cpu(int n, const std::int32_t
                                        dq, false);
 }
 
-}  // namespace vibeqc::dft::dispersion
-#undef VIBEQC_D4_HD
+}  // namespace generativeqc::dft::dispersion
+#undef GENERATIVEQC_D4_HD

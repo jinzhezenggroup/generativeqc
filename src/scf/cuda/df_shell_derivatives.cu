@@ -5,7 +5,7 @@
 #include "generated_df_shell_dispatch.hpp"
 #include "runtime/cuda_architecture.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 namespace generated = generated_df_shell;
 /** Query a target once per host packet call. The generated manifest owns
@@ -15,7 +15,7 @@ namespace generated = generated_df_shell;
  */
 cudaError_t production_target(unsigned& architecture) {
   architecture = 0;
-  const char* control = std::getenv("VIBEQC_DF_SHELL_POLICY");
+  const char* control = std::getenv("GENERATIVEQC_DF_SHELL_POLICY");
   const std::string_view policy = control ? control : "auto";
   if (policy != "auto" && policy != "legacy" && policy != "candidate") return cudaErrorInvalidValue;
   if (!generated::production_policy_available || policy == "legacy") return cudaSuccess;
@@ -27,11 +27,11 @@ cudaError_t production_target(unsigned& architecture) {
 
 template <unsigned A, unsigned B, unsigned C>
 DfShellLaunch select_launch(unsigned architecture, DfShellLaunch context) {
-  const char* mapping = std::getenv("VIBEQC_DF_SHELL_POLICY");
+  const char* mapping = std::getenv("GENERATIVEQC_DF_SHELL_POLICY");
   const bool candidate = mapping && std::string_view(mapping) == "candidate";
   const auto choice = generated::DfProductionPolicy<A, B, C>::select(architecture, candidate);
   const bool use_choice = choice.available && (choice.qualified || candidate);
-  const char* schedule = std::getenv("VIBEQC_DF_SHELL_SCHEDULE");
+  const char* schedule = std::getenv("GENERATIVEQC_DF_SHELL_SCHEDULE");
   if (use_choice && (!schedule || std::string_view(schedule) == "auto"))
     context.variant = choice.variant;
   context.rys = use_choice && choice.rys;
@@ -101,4 +101,4 @@ cudaError_t launch_df_shell_derivative_packets(
       });
   return status;
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

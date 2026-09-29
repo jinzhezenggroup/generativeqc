@@ -4,9 +4,9 @@ import math
 
 import numpy as np
 import pytest
-from vibeqc_compiler.xc.grid_response import partition_response
+from generativeqc_compiler.xc.grid_response import partition_response
 
-from tools.vibeqc_hessian.rks_directional import _validate_partition_provenance
+from tools.generativeqc_hessian.rks_directional import _validate_partition_provenance
 
 
 @pytest.mark.parametrize("scale", [1.0, 306184.2636279619, 1e100])

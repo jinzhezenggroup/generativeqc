@@ -1,6 +1,6 @@
 """Reduce intrusive shell diagnostics and validate their independent host domain.
 
-Run after a VIBEQC_DF_SHELL_WORK=1 component capture. Counts describe emitted
+Run after a GENERATIVEQC_DF_SHELL_WORK=1 component capture. Counts describe emitted
 source operations, not hardware instructions or elapsed-time percentages.
 Explicit unequal auxiliary bases retain separate orbital/auxiliary shell
 domains; sparse counter correctness is tested by the native shell-pair oracle.
@@ -22,10 +22,10 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Atom
-from vibeqc.calculator import _named_basis_shells
-from vibeqc_compiler.integral.df_rys_shell import shell_rys_work_model
-from vibeqc_compiler.integral.df_shell_derivatives import (
+from generativeqc import Atom
+from generativeqc.calculator import _named_basis_shells
+from generativeqc_compiler.integral.df_rys_shell import shell_rys_work_model
+from generativeqc_compiler.integral.df_shell_derivatives import (
     shell_schedule,
     shell_work_model,
 )
@@ -653,7 +653,7 @@ def main() -> None:
     ) -> typing.Any:
         if path is None:
             metadata = (
-                _named_basis_shells(case.vibeqc_basis, atoms)
+                _named_basis_shells(case.generativeqc_basis, atoms)
                 if default is None
                 else default
             )

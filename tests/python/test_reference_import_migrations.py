@@ -7,13 +7,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from vibeqc_compiler.common.reference_sources import reference_source_matches
+from generativeqc_compiler.common.reference_sources import reference_source_matches
 
 ROOT = Path(__file__).resolve().parents[2]
 RECEIPT = Path("tests/reference_data/reference_source_import_migrations.json")
 
 
 def _shape(node: Any) -> Any:
+    if node is Ellipsis:
+        return "Ellipsis"
     if isinstance(node, ast.AST):
         return [
             type(node).__name__,
@@ -33,7 +35,7 @@ def _shape(node: Any) -> Any:
 def test_import_migration_receipts_bind_exact_current_sources() -> None:
     payload = json.loads((ROOT / RECEIPT).read_text())
     assert "no new reference execution" in payload["scope"]
-    assert len(payload["sources"]) == 6
+    assert len(payload["sources"]) == 7
     for record in payload["sources"]:
         data = (ROOT / record["path"]).read_bytes()
         assert hashlib.sha256(data).hexdigest() == record["current_sha256"]

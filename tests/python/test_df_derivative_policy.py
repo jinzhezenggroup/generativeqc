@@ -28,9 +28,9 @@ int main() {
   std::size_t n, a, op, ap, rank;
   unsigned arch, varied;
   while (std::cin >> n >> a >> op >> ap >> rank >> varied >> arch)
-    std::cout << vibeqc::scf::df_shell_execution_preferred(n,a,arch) << " "
-              << vibeqc::scf::df_signature_packets_preferred(op,ap,varied,arch) << " "
-              << vibeqc::scf::df_packed_response_preferred(n,a,rank,arch) << "\n";
+    std::cout << generativeqc::scf::df_shell_execution_preferred(n,a,arch) << " "
+              << generativeqc::scf::df_signature_packets_preferred(op,ap,varied,arch) << " "
+              << generativeqc::scf::df_packed_response_preferred(n,a,rank,arch) << "\n";
 }
 """)
     executable = directory / "query"
@@ -125,19 +125,19 @@ def test_packed_response_profile_generalizes_beyond_benchmark_tuples(
 def test_controls_restore_absent_and_present_variables_on_failure(
     monkeypatch: typing.Any,
 ) -> None:
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "generic")
-    monkeypatch.delenv("VIBEQC_DF_PRIMITIVE_BUCKETS", raising=False)
-    monkeypatch.setenv("VIBEQC_DF_TRACE", "caller-trace")
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "generic")
+    monkeypatch.delenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", "caller-trace")
     before = {
         k: os.environ.get(k)
-        for k in [*("VIBEQC_DF_" + n for n in CONTROLS), "VIBEQC_DF_TRACE"]
+        for k in [*("GENERATIVEQC_DF_" + n for n in CONTROLS), "GENERATIVEQC_DF_TRACE"]
     }
     with pytest.raises(RuntimeError, match="probe failure"), controls("packet"):
-        assert os.environ["VIBEQC_DF_PRIMITIVE_BUCKETS"] == "packet"
-        assert "VIBEQC_DF_TRACE" not in os.environ
+        assert os.environ["GENERATIVEQC_DF_PRIMITIVE_BUCKETS"] == "packet"
+        assert "GENERATIVEQC_DF_TRACE" not in os.environ
         with controls("auto"):
-            assert all("VIBEQC_DF_" + n not in os.environ for n in CONTROLS)
-        assert os.environ["VIBEQC_DF_PRIMITIVE_BUCKETS"] == "packet"
+            assert all("GENERATIVEQC_DF_" + n not in os.environ for n in CONTROLS)
+        assert os.environ["GENERATIVEQC_DF_PRIMITIVE_BUCKETS"] == "packet"
         raise RuntimeError("probe failure")
     assert {k: os.environ.get(k) for k in before} == before
 
@@ -188,11 +188,11 @@ inline int cudaDeviceGetAttribute(int* value, cudaDeviceAttr attr, int device) {
 #include "runtime/cuda_architecture.hpp"
 int main() {
   unsigned architecture=999;
-  assert(vibeqc::runtime::cuda_architecture(7,architecture)==0);
+  assert(generativeqc::runtime::cuda_architecture(7,architecture)==0);
   assert(architecture==120 && calls==2);
   for (int rejected : {1,2}) {
     calls=0; fail=rejected; architecture=999;
-    assert(vibeqc::runtime::cuda_architecture(7,architecture)==42);
+    assert(generativeqc::runtime::cuda_architecture(7,architecture)==42);
     assert(architecture==0 && calls==rejected);
   }
 }

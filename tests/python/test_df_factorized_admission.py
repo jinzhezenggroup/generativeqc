@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc import df_factorized as owner
+from tools.generativeqc_cc import df_factorized as owner
 
 
 def inputs() -> tuple[np.ndarray, ...]:

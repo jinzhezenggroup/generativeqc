@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 /** Launch on the caller's stream, compacting the logical work domain when legal. */
 void launch_symmetrize_metrics_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -32,4 +32,4 @@ void launch_scale_metric_projection_to(cudaStream_t stream, std::size_t dimensio
                                        std::size_t pairs, const double* eigenvalues,
                                        bool square_root, const double* projected, double* scaled);
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

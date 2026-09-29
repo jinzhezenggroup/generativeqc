@@ -13,27 +13,27 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc import _stationary_rsh_cpu as runtime
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.integral.derivative_aot_registry import (
+from generativeqc import _stationary_rsh_cpu as runtime
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.integral.derivative_aot_registry import (
     radial_inventory_from_payload,
 )
-from vibeqc_compiler.integral.ir import four_center_eri_operator
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.rsh_cpu_aot import (
+from generativeqc_compiler.integral.ir import four_center_eri_operator
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.rsh_cpu_aot import (
     AOT_ANGULAR_DOMAIN,
     component_groups,
     entry_prefix,
     inventory_size,
     program_source,
 )
-from vibeqc_compiler.integral.weighted_eri import (
+from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
-from vibeqc_compiler.integral.weighted_eri_native import emit_weighted_eri_runtime
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
+from generativeqc_compiler.integral.weighted_eri_native import emit_weighted_eri_runtime
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 
 
 def _wb97mv_ranges() -> tuple[RangeSeparatedExchangePrimitive, ...]:
@@ -94,7 +94,7 @@ def test_wb97mv_rsh_aot_inventory_is_bounded_and_complete() -> None:
                 assert selected == group
                 assert f"{prefix}_identity_v2" in source
                 assert f"{prefix}_create_v2" in source
-                assert "VIBEQC_API" in source
+                assert "GENERATIVEQC_API" in source
                 assert prefix not in prefixes
                 prefixes.add(prefix)
                 count += 1
@@ -108,9 +108,9 @@ def test_weighted_runtime_default_symbols_remain_compatible() -> None:
     )
     kernel = build_weighted_eri_kernel(integral, (0,))
     source = emit_weighted_eri_runtime(kernel, backend="cpu")
-    assert "vibeqc_weighted_identity_v2" in source
-    assert "vibeqc_weighted_create_v2" in source
-    assert "VIBEQC_API" not in source
+    assert "generativeqc_weighted_identity_v2" in source
+    assert "generativeqc_weighted_create_v2" in source
+    assert "GENERATIVEQC_API" not in source
 
 
 def test_range_exchange_prefers_packaged_cpu_aot(
@@ -291,9 +291,9 @@ def test_grouped_aot_reuses_one_prepared_plan(
 
 
 def test_native_library_exports_wb97mv_rsh_aot() -> None:
-    path = os.environ.get("VIBEQC_LIBRARY")
+    path = os.environ.get("GENERATIVEQC_LIBRARY")
     if not path:
-        pytest.skip("native VibeQC library not supplied")
+        pytest.skip("native GenerativeQC library not supplied")
     library = ct.CDLL(str(Path(path)))
     count = 0
     for primitive in _wb97mv_ranges():
@@ -321,14 +321,16 @@ def test_range_aot_manifest_covers_current_wb97mv_operator_identity() -> None:
 
 def test_cmake_packages_method_neutral_range_derivative_inventory() -> None:
     root = Path(__file__).resolve().parents[2]
-    cmake = (root / "cmake/VibeQCGeneratedSources.cmake").read_text(encoding="utf-8")
+    cmake = (root / "cmake/GenerativeQCGeneratedSources.cmake").read_text(
+        encoding="utf-8"
+    )
     generator = (root / "tools/generate_derivative_range_aot.py").read_text(
         encoding="utf-8"
     )
-    assert "VIBEQC_RANGE_DERIVATIVE_CPU_AOT_SOURCES" in cmake
+    assert "GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_SOURCES" in cmake
     assert "generate_derivative_range_aot.py" in cmake
     assert "manifests/derivative_aot_radials.json" in cmake
-    assert "vibeqc_derivative_range_" in cmake
+    assert "generativeqc_derivative_range_" in cmake
     assert "WB97M-V" not in generator
     assert "resolve_method" not in generator
-    assert 'if(_vibeqc_range_shell STREQUAL "1111")' in cmake
+    assert 'if(_generativeqc_range_shell STREQUAL "1111")' in cmake

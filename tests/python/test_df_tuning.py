@@ -6,14 +6,14 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.df_tuning.emission import emit_candidate
-from vibeqc_compiler.integral.df_tuning.policy import (
+from generativeqc_compiler.integral.df_tuning.emission import emit_candidate
+from generativeqc_compiler.integral.df_tuning.policy import (
     DfDerivativeTrial,
     enumerate_trials,
     rank_profiles,
     read_profile,
 )
-from vibeqc_compiler.integral.tuning.process import _runtime_environment
+from generativeqc_compiler.integral.tuning.process import _runtime_environment
 
 
 def fixture() -> typing.Any:
@@ -177,8 +177,11 @@ def test_manifests_require_complete_independent_qualification(
     import copy
     import json
 
-    from vibeqc_compiler.integral.df_tuning.manifest import MANIFEST, load_manifest
-    from vibeqc_compiler.integral.df_tuning.value_manifest import (
+    from generativeqc_compiler.integral.df_tuning.manifest import (
+        MANIFEST,
+        load_manifest,
+    )
+    from generativeqc_compiler.integral.df_tuning.value_manifest import (
         VALUE_MANIFEST,
         load_value_manifest,
     )
@@ -203,11 +206,11 @@ def test_value_manifest_is_target_driven_and_unknown_targets_are_generic(
 ) -> None:
     import json
 
-    from vibeqc_compiler.integral.df_tuning.value_manifest import (
+    from generativeqc_compiler.integral.df_tuning.value_manifest import (
         load_value_manifest,
         resolve_value_profile,
     )
-    from vibeqc_compiler.integral.df_value_candidates import VALUE_CLASSES
+    from generativeqc_compiler.integral.df_value_candidates import VALUE_CLASSES
 
     kernels = {"".join(map(str, angular)): "generic" for angular in VALUE_CLASSES}
     payload = {
@@ -273,7 +276,7 @@ def test_compiled_campaign_selection_preserves_qualified_baseline(
     import shutil
     import subprocess
 
-    from vibeqc_compiler.integral.df_tuning.manifest import emit_policy
+    from generativeqc_compiler.integral.df_tuning.manifest import emit_policy
 
     compiler = shutil.which("c++")
     if compiler is None:
@@ -289,7 +292,7 @@ def test_compiled_campaign_selection_preserves_qualified_baseline(
     source.write_text(
         emit_policy(path)
         + """
-using namespace vibeqc::scf::generated_df_shell;
+using namespace generativeqc::scf::generated_df_shell;
 static_assert(DfProductionPolicy<0,0,0>::select(120).rys);
 static_assert(DfProductionPolicy<0,0,0>::select(120,true).rys);
 static_assert(DfProductionPolicy<0,0,1>::select(120).qualified);
@@ -311,7 +314,7 @@ def test_campaign_baseline_requires_qualified_independent_evidence(
 ) -> None:
     import json
 
-    from vibeqc_compiler.integral.df_tuning.manifest import load_manifest
+    from generativeqc_compiler.integral.df_tuning.manifest import load_manifest
 
     payload = campaign_manifest()
     candidate = payload["architectures"]["sm_120"]
@@ -336,7 +339,7 @@ def test_value_identity_and_profile_disagreements() -> None:
     """Class scoring retains both workloads and excludes incomplete/changed work."""
     import copy
 
-    from vibeqc_compiler.integral.df_tuning.values import (
+    from generativeqc_compiler.integral.df_tuning.values import (
         DfValueTrial,
         enumerate_value_trials,
     )
@@ -399,7 +402,7 @@ def test_value_profile_rejects_noninteger_lane_counts(
 ) -> None:
     import json
 
-    from vibeqc_compiler.integral.df_tuning.value_manifest import (
+    from generativeqc_compiler.integral.df_tuning.value_manifest import (
         VALUE_MANIFEST,
         load_value_manifest,
     )

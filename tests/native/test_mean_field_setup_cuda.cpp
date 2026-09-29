@@ -21,8 +21,8 @@ int main() {
   int count = 0;
   if (cudaGetDeviceCount(&count) != cudaSuccess || !count) return 77;
   try {
-    using namespace vibeqc::runtime;
-    using namespace vibeqc::scf::cuda_execution;
+    using namespace generativeqc::runtime;
+    using namespace generativeqc::scf::cuda_execution;
     OwnedCudaStream stream(0);
     OwnedCudaBuffer<double> vectors(0, 32, stream.get()), weights(0, 8, stream.get()),
         output(0, 32, stream.get());

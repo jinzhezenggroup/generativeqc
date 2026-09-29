@@ -3,7 +3,7 @@
 #include "scf/cuda/one_electron_export_kernels.hpp"
 #include "scf/cuda/one_electron_native_contraction.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Evaluate first-coordinate one-electron response using the retained Dual path. */
 __global__ void build_cuda_one_electron_derivatives_kernel(
@@ -44,4 +44,4 @@ void launch_build_cuda_one_electron_derivatives_kernel(
       batch, pair_first, pair_second, pair_count, derivative_coordinate, overlap, hcore);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

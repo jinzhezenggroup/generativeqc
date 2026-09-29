@@ -33,7 +33,7 @@ def test_native_electronic_fma_cancellation_and_publication(tmp_path: Path) -> N
 #include <initializer_list>
 #include "generated_gfn2_electronic_native.hpp"
 int main() {
-  using namespace vibeqc::xtb::generated;
+  using namespace generativeqc::xtb::generated;
   double out=123.;
   if(!gfn2_population_update_tensor(1e308,2.,1e308,out) || out!=std::fma(-1e308,2.,1e308)) return 1;
   if(!gfn2_core_energy_update_tensor(1e308,2.,-1e308,out) || out!=std::fma(1e308,2.,-1e308)) return 2;

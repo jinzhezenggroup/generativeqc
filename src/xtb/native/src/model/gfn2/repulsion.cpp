@@ -12,7 +12,7 @@
 #include "data/parameters/gfn2.hpp"
 #include "generated_gfn2_pair_native.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 namespace {
 
 constexpr double kCutoffBohr = 25.0;
@@ -33,7 +33,7 @@ bool representable_geometry_size(std::int64_t atom_count) {
 
 }  // namespace
 
-vibeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t total_atoms,
+generativeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t total_atoms,
                                         const std::int64_t* atom_offsets,
                                         const std::int32_t* atomic_numbers, RepulsionPlan& plan,
                                         std::string& error) {
@@ -42,20 +42,20 @@ vibeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t to
       static_cast<std::uint64_t>(batch_size) >=
           static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max())) {
     error = "repulsion plan requires positive, representable batch and atom counts";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   if (atom_offsets == nullptr || atomic_numbers == nullptr) {
     error = "repulsion plan offsets and atomic numbers must not be NULL";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   if (atom_offsets[0] != 0 || atom_offsets[batch_size] != total_atoms) {
     error = "repulsion plan offsets must start at zero and end at total_atoms";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   for (std::int64_t batch = 0; batch < batch_size; ++batch) {
     if (atom_offsets[batch] > atom_offsets[batch + 1]) {
       error = "repulsion plan offsets must be monotonically nondecreasing";
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
   }
 
@@ -75,7 +75,7 @@ vibeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t to
       if (element == nullptr || !(element->arep > 0.0) || !(element->zeff > 0.0) ||
           !std::isfinite(element->arep) || !std::isfinite(element->zeff)) {
         error = "repulsion plan contains an unsupported atomic number or invalid parameter";
-        return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
       }
 
       const std::size_t index = static_cast<std::size_t>(atom);
@@ -86,14 +86,14 @@ vibeqc_xtb_status_t make_repulsion_plan(std::int64_t batch_size, std::int64_t to
 
     plan = std::move(created);
     error.clear();
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     error = "failed to allocate the GFN2 repulsion plan";
-    return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
+    return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
   }
 }
 
-vibeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* positions,
+generativeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* positions,
                                       double* energies, double* forces, std::string& error) {
   const auto atom_count = static_cast<std::size_t>(plan.total_atoms);
   if (plan.batch_size <= 0 || plan.total_atoms <= 0 ||
@@ -102,28 +102,28 @@ vibeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* p
       plan.sqrt_alpha.size() != atom_count || plan.effective_charge.size() != atom_count ||
       plan.light_element.size() != atom_count) {
     error = "repulsion plan is incomplete or internally inconsistent";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   if (plan.atom_offsets.front() != 0 || plan.atom_offsets.back() != plan.total_atoms) {
     error = "repulsion plan offsets do not span the stored atoms";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   for (std::int64_t batch = 0; batch < plan.batch_size; ++batch) {
     const std::int64_t begin = plan.atom_offsets[static_cast<std::size_t>(batch)];
     const std::int64_t end = plan.atom_offsets[static_cast<std::size_t>(batch + 1)];
     if (begin < 0 || begin > end || end > plan.total_atoms) {
       error = "repulsion plan offsets are not a valid ragged partition";
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
   }
   if (positions == nullptr || energies == nullptr) {
     error = "repulsion positions and energies must not be NULL";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   for (std::size_t coordinate = 0; coordinate < atom_count * 3; ++coordinate) {
     if (!std::isfinite(positions[coordinate])) {
       error = "repulsion positions contain NaN or infinity";
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
   }
 
@@ -141,7 +141,7 @@ vibeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* p
         const double distance_squared = dx * dx + dy * dy + dz * dz;
         if (distance_squared <= kMinimumDistanceSquared) {
           error = "repulsion is undefined for coincident atoms in one molecule";
-          return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+          return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
         }
         if (distance_squared > cutoff_squared) {
           continue;
@@ -153,11 +153,11 @@ vibeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* p
         const double pair_alpha = plan.sqrt_alpha[first_index] * plan.sqrt_alpha[second_index];
         const double pair_charge =
             plan.effective_charge[first_index] * plan.effective_charge[second_index];
-        vibeqc::xtb::generated::Gfn2RepulsionPairResult pair{};
-        if (!vibeqc::xtb::generated::evaluate_gfn2_repulsion_pair(distance, pair_alpha, pair_charge,
+        generativeqc::xtb::generated::Gfn2RepulsionPairResult pair{};
+        if (!generativeqc::xtb::generated::evaluate_gfn2_repulsion_pair(distance, pair_alpha, pair_charge,
                                                                   light_pair, pair)) {
           error = "compiler-generated GFN2 repulsion pair evaluation failed";
-          return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+          return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
         energies[batch] += pair.energy;
 
@@ -178,7 +178,7 @@ vibeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const double* p
   }
 
   error.clear();
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2

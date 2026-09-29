@@ -16,7 +16,7 @@
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 namespace {
 
 std::size_t checked_product(std::size_t a, std::size_t b) {
@@ -603,7 +603,7 @@ std::vector<GlobalAoExpansion> spherical_expansions(const core::System& system) 
     const std::vector<molecule::CartesianComponent> components =
         molecule::cartesian_components(shell.angular_momentum);
     for (const molecule::AoExpansion& shell_expansion :
-         molecule::ao_expansions(shell.angular_momentum, VIBEQC_BASIS_SPHERICAL)) {
+         molecule::ao_expansions(shell.angular_momentum, GENERATIVEQC_BASIS_SPHERICAL)) {
       GlobalAoExpansion expansion;
       expansion.reserve(shell_expansion.size());
       for (const molecule::CartesianExpansionTerm& term : shell_expansion) {
@@ -623,7 +623,7 @@ std::vector<GlobalAoExpansion> spherical_expansions(const core::System& system) 
 }
 
 std::vector<GlobalAoExpansion> public_ao_expansions(const core::System& system) {
-  if (system.basis_representation == VIBEQC_BASIS_SPHERICAL) {
+  if (system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL) {
     return spherical_expansions(system);
   }
   std::vector<GlobalAoExpansion> expansions;
@@ -1715,10 +1715,10 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   out.nuclear_repulsion_derivative = std::move(nuclear_repulsion.derivative);
   if (!system.ecp_terms.empty()) {
     auto cartesian = system;
-    cartesian.basis_representation = VIBEQC_BASIS_CARTESIAN;
+    cartesian.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
     add_ecp(checked_ecp_integrals(cartesian, include_derivatives), out.hcore, out.hcore_derivative);
   }
-  if (system.basis_representation == VIBEQC_BASIS_SPHERICAL) {
+  if (system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL) {
     const std::vector<GlobalAoExpansion> target_aos = spherical_expansions(system);
     IntegralData spherical;
     spherical.nbf = target_aos.size();
@@ -1816,7 +1816,7 @@ std::vector<double> build_range_eri(const core::System& system, CoulombRange ran
       }
     }
   }
-  if (system.basis_representation != VIBEQC_BASIS_SPHERICAL) return eri;
+  if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL) return eri;
   return transform_eri(eri.data(), cartesian_nbf, spherical_expansions(system));
 }
 
@@ -1978,12 +1978,12 @@ std::vector<double> contract_weighted_one_electron_derivative(
   return contracted.derivative;
 }
 
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals
 
 // Keep this adapter in the evaluator translation unit so it reuses the exact
 // contracted primitive mathematics without exporting recurrence internals.
-namespace vibeqc::posthf {
-using namespace vibeqc::integrals;
+namespace generativeqc::posthf {
+using namespace generativeqc::integrals;
 
 struct RawSource::Impl {
   core::System orbital, auxiliary;
@@ -2150,4 +2150,4 @@ void RawSource::read(Operator op, const std::array<std::size_t, 4>& begin,
   };
   traverse(traverse, 0);
 }
-}  // namespace vibeqc::posthf
+}  // namespace generativeqc::posthf

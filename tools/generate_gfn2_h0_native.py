@@ -12,18 +12,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
 # Build-time generation must remain independent of NumPy-backed interpreter imports.
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_h0_force_runtime import (
+from generativeqc_compiler.method.gfn2_h0_force_runtime import (
     GFN2_H0_FORCE_RUNTIME_VERSION,
     build_gfn2_h0_ao_update_program,
     build_gfn2_h0_distance_program,
@@ -34,10 +36,10 @@ from vibeqc_compiler.method.gfn2_h0_force_runtime import (
     build_gfn2_h0_onsite_vjp_program,
     build_gfn2_h0_pulay_seed_program,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 if typing.TYPE_CHECKING:
-    from vibeqc_compiler.tensor.program import Program
+    from generativeqc_compiler.tensor.program import Program
 
 PAIR_INPUT_ORDER = (
     "first_shell_level",
@@ -61,7 +63,7 @@ PULAY_INPUT_ORDER = ("seed", "weighted")
 
 def _device(source: str, function_name: str) -> str:
     needle = f"inline bool {function_name}("
-    replacement = f"VIBEQC_GFN2_H0_HD inline bool {function_name}("
+    replacement = f"GENERATIVEQC_GFN2_H0_HD inline bool {function_name}("
     if source.count(needle) != 1:
         raise ValueError(f"expected one generated declaration for {function_name}")
     return source.replace(needle, replacement, 1)
@@ -215,12 +217,12 @@ def native_header() -> str:
 #include <cmath>
 
 #if defined(__CUDACC__)
-#define VIBEQC_GFN2_H0_HD __host__ __device__
+#define GENERATIVEQC_GFN2_H0_HD __host__ __device__
 #else
-#define VIBEQC_GFN2_H0_HD
+#define GENERATIVEQC_GFN2_H0_HD
 #endif
 
-namespace vibeqc::xtb::generated {{
+namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_h0_force_runtime_version =
     "{GFN2_H0_FORCE_RUNTIME_VERSION}";
@@ -268,29 +270,29 @@ struct Gfn2H0CartesianAdjoint {{
 {distance_source}
 {distance_vjp_source}
 {pulay_source}
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_onsite_factor(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_onsite_factor(
     const Gfn2H0PairInput& input, double& factor) noexcept {{
   return gfn2_h0_onsite_factor_tensor({onsite_call});
 }}
 
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_offsite_factor(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_offsite_factor(
     const Gfn2H0PairInput& input, double& factor) noexcept {{
   return gfn2_h0_offsite_factor_tensor({offsite_call});
 }}
 
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_onsite_vjp(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_onsite_vjp(
     double bar_factor, const Gfn2H0PairInput& input,
     Gfn2H0PairAdjoint& adjoint) noexcept {{
   return gfn2_h0_onsite_vjp_tensor({onsite_vjp_call});
 }}
 
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_offsite_vjp(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_offsite_vjp(
     double bar_factor, const Gfn2H0PairInput& input,
     Gfn2H0PairAdjoint& adjoint) noexcept {{
   return gfn2_h0_offsite_vjp_tensor({offsite_vjp_call});
 }}
 
-VIBEQC_GFN2_H0_HD inline bool accumulate_gfn2_h0_ao(
+GENERATIVEQC_GFN2_H0_HD inline bool accumulate_gfn2_h0_ao(
     double density, double overlap, double factor,
     double& overlap_adjoint, double& block_weight) noexcept {{
   double overlap_adjoint_updated = 0.0;
@@ -305,26 +307,26 @@ VIBEQC_GFN2_H0_HD inline bool accumulate_gfn2_h0_ao(
   return true;
 }}
 
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_distance(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_distance(
     double dx, double dy, double dz,
     double& distance_squared, double& distance) noexcept {{
   return gfn2_h0_distance_tensor({distance_call});
 }}
 
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_distance_vjp(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_distance_vjp(
     double bar_distance, double dx, double dy, double dz,
     Gfn2H0CartesianAdjoint& adjoint) noexcept {{
   return gfn2_h0_distance_vjp_tensor({distance_vjp_call});
 }}
 
-VIBEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_pulay_seed(
+GENERATIVEQC_GFN2_H0_HD inline bool evaluate_gfn2_h0_pulay_seed(
     double seed, double weighted, double& pulay_seed) noexcept {{
   return gfn2_h0_pulay_seed_tensor(seed, weighted, pulay_seed);
 }}
 
-}}  // namespace vibeqc::xtb::generated
+}}  // namespace generativeqc::xtb::generated
 
-#undef VIBEQC_GFN2_H0_HD
+#undef GENERATIVEQC_GFN2_H0_HD
 """
 
 

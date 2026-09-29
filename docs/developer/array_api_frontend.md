@@ -61,7 +61,7 @@ Elementwise operations currently require identical TensorIR domains.
 | `slice` | Static unit-step half-open ranges; populations are retained |
 | `take` | Static integer gather along one axis; source domain is retained |
 | `matmul` | Rank-2 only |
-| `einsum` | VibeQC extension lowered to existing TensorIR einsum |
+| `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
 | implicit broadcasting | Not yet supported |
 | dtype promotion/casts | Not yet supported |
 | implicit reshape/domain inference | Not supported; target indices must be explicit |
@@ -77,7 +77,7 @@ explicit target `Index` objects, while `broadcast_to` additionally requires
 an explicit source-to-target axis map. TensorIR then validates preserved
 domains on every mapped axis; equal extents cannot authorize relabeling.
 
-Compiler code imports `vibeqc_compiler.array_api.namespace` explicitly.
+Compiler code imports `generativeqc_compiler.array_api.namespace` explicitly.
 `__array_namespace__` and a versioned Array API declaration will only be added
 after a dedicated conformance matrix proves that the advertised namespace meets
 the corresponding standard version.
@@ -85,8 +85,8 @@ the corresponding standard version.
 ## Example
 
 ```python
-from vibeqc_compiler.array_api import namespace as xp
-from vibeqc_compiler.array_api import trace
+from generativeqc_compiler.array_api import namespace as xp
+from generativeqc_compiler.array_api import trace
 
 program = trace(
     lambda coefficients, occupations: {
@@ -104,7 +104,7 @@ program = trace(
 )
 ```
 
-The resulting object is an ordinary `vibeqc_compiler.tensor.Program`; no
+The resulting object is an ordinary `generativeqc_compiler.tensor.Program`; no
 frontend-only node survives lowering and no Python callback is needed for
 prepared native execution.
 
@@ -133,8 +133,8 @@ conformance claim.
 
 ## Ownership
 
-`vibeqc_compiler.array_api` is a separate compiler owner above
-`vibeqc_compiler.tensor`. Its dependency direction is deliberately one-way:
+`generativeqc_compiler.array_api` is a separate compiler owner above
+`generativeqc_compiler.tensor`. Its dependency direction is deliberately one-way:
 the frontend may import TensorIR, while TensorIR cannot import the frontend.
 This keeps TensorIR usable by hand-built/generated equations and avoids making
 array syntax part of mathematical IR identity.

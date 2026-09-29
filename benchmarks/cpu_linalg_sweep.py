@@ -14,8 +14,8 @@ try:
 except ModuleNotFoundError:
     from _retention import raw_output_path
 
-SWEEP_SCHEMA = "vibeqc.cpu-linalg-sweep.v1"
-PROBE_SCHEMA = "vibeqc.cpu-linalg-probe.v1"
+SWEEP_SCHEMA = "generativeqc.cpu-linalg-sweep.v1"
+PROBE_SCHEMA = "generativeqc.cpu-linalg-probe.v1"
 DEFAULT_SIZES = (16, 64, 256)
 DEFAULT_PROVIDERS = ("auto", "scalar")
 

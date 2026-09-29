@@ -1,6 +1,6 @@
 # Compact XC contractions
 
-`vibeqc_compiler.xc` now has one contraction owner between the audited scalar
+`generativeqc_compiler.xc` now has one contraction owner between the audited scalar
 functional and AO potential, response and explicit geometric consumers. This
 implements A–C of #236 for real LDA/GGA on a fixed quadrature and screening
 branch. The native CPU candidate is explicit; method capability registration,
@@ -80,11 +80,11 @@ order requires the independent complete potential and response gates.
 
 ```python
 from pathlib import Path
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
 program = NativeContractionProgram(
     functional("PBE"),

@@ -1,7 +1,7 @@
 """Unavailable timings are unknown; zero-duration measurements are invalid."""
 
 import pytest
-from vibeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
 
 
 @pytest.mark.parametrize("candidate,baseline", ((0.0, 1.0), (1.0, 0.0), (0.0, 0.0)))

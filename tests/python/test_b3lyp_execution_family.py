@@ -3,8 +3,8 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc.ks import _native_semilocal_code, ks_coefficients
-from vibeqc_compiler.method import compile_ks_execution_plan, resolve_method
+from generativeqc.ks import _native_semilocal_code, ks_coefficients
+from generativeqc_compiler.method import compile_ks_execution_plan, resolve_method
 
 
 @pytest.mark.parametrize("spin,exchange", (("unpolarized", -0.1), ("polarized", -0.2)))

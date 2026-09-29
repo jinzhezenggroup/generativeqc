@@ -17,7 +17,7 @@
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Stream only canonical dddd work from class-major shell-pair segments.
@@ -200,4 +200,4 @@ void launch_bounded_direct_dddd_streaming_kernel(
       fp64_work_count, 1.0, unrestricted ? -1.0 : -0.5);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.common.evidence import canonical_hash
 
 from tools.cc_gradient_fixtures import CASES, ROOT, inputs
 from tools.generate_validation_references import pyscf_molecule
@@ -55,7 +55,7 @@ def generate(name: typing.Any) -> typing.Any:
     if not np.isfinite(gradient).all():
         raise RuntimeError("independent gradient is nonfinite")
     record = {
-        "schema": "vibeqc.ccsd.gradient_reference",
+        "schema": "generativeqc.ccsd.gradient_reference",
         "schema_version": 1,
         "pyscf": pyscf.__version__,
         "inputs": value,

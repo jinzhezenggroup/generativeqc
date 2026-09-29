@@ -4,14 +4,14 @@ from dataclasses import replace
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.method import MethodSpec, resolve_method
-from vibeqc_compiler.method.spec import SemilocalXCPrimitive
-from vibeqc_compiler.method.stationary_cuda import emit_stationary_cuda
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method import MethodSpec, resolve_method
+from generativeqc_compiler.method.spec import SemilocalXCPrimitive
+from generativeqc_compiler.method.stationary_cuda import emit_stationary_cuda
+from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
+from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 WB97MV_SCF_DOMAIN = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
 

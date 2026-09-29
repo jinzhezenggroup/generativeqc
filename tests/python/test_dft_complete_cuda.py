@@ -16,14 +16,15 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1", reason="explicit Slurm CUDA gate"
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
+    reason="explicit Slurm CUDA gate",
 )
 
 
 @pytest.fixture(scope="module")
 def compiler() -> typing.Any:
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require a Slurm allocation"
     return CudaCompilerAdapter(
@@ -34,14 +35,14 @@ def compiler() -> typing.Any:
 @contextmanager
 def no_cpu_derivatives() -> typing.Any:
     """Fail on the old scientific consumers while allowing native state proofs."""
-    from vibeqc._ks_snapshot import NativeKsSnapshot
-    from vibeqc._stationary_cpu import _PrimitiveExecutor
-    from vibeqc_compiler.common import array_graph
-    from vibeqc_compiler.dft.ao import NativeAO
-    from vibeqc_compiler.tensor import interpreter
-    from vibeqc_compiler.tensor.cpu import NativeTensorProgram
-    from vibeqc_compiler.xc.contractions import ContractionProgram
-    from vibeqc_compiler.xc.grid_native import NativeGridContraction
+    from generativeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc._stationary_cpu import _PrimitiveExecutor
+    from generativeqc_compiler.common import array_graph
+    from generativeqc_compiler.dft.ao import NativeAO
+    from generativeqc_compiler.tensor import interpreter
+    from generativeqc_compiler.tensor.cpu import NativeTensorProgram
+    from generativeqc_compiler.xc.contractions import ContractionProgram
+    from generativeqc_compiler.xc.grid_native import NativeGridContraction
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         raise AssertionError("CPU scientific fallback entered during CUDA diagnostic")
@@ -63,8 +64,8 @@ def no_cpu_derivatives() -> typing.Any:
 
 
 def _calculator(method: typing.Any) -> typing.Any:
+    from generativeqc import Calculator, KsOptions
     from test_dft_complete_cpu import GRID
-    from vibeqc import Calculator, KsOptions
 
     return Calculator(
         method=method,
@@ -77,7 +78,7 @@ def _calculator(method: typing.Any) -> typing.Any:
 
 
 def _production_calculator(method: typing.Any) -> typing.Any:
-    from vibeqc import Calculator, KsOptions
+    from generativeqc import Calculator, KsOptions
 
     return Calculator(
         method=method,
@@ -92,20 +93,22 @@ def _production_calculator(method: typing.Any) -> typing.Any:
 def _diagnostic(
     state: typing.Any, basis: typing.Any, compiler: typing.Any, **kwargs: typing.Any
 ) -> typing.Any:
-    from vibeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
+    from generativeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
 
     with no_cpu_derivatives():
         return complete_rks_cuda_gradient_diagnostic(
             state,
             basis,
             compiler=compiler,
-            cache=os.environ.get("VIBEQC_STATIONARY_CACHE", ".cache/stationary-cuda"),
+            cache=os.environ.get(
+                "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
+            ),
             **kwargs,
         )
 
 
 def _evidence(name: typing.Any, payload: typing.Any) -> None:
-    directory = os.environ.get("VIBEQC_STATIONARY_EVIDENCE")
+    directory = os.environ.get("GENERATIVEQC_STATIONARY_EVIDENCE")
     if directory:
         path = Path(directory)
         path.mkdir(parents=True, exist_ok=True)
@@ -119,10 +122,10 @@ def _evidence(name: typing.Any, payload: typing.Any) -> None:
 def test_complete_cuda_independent_analytic(
     method: typing.Any, molecule: typing.Any, compiler: typing.Any
 ) -> None:
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS, independent_gradient
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.dft import NativeAO
 
     atoms = (
         ATOMS
@@ -167,8 +170,8 @@ def test_complete_cuda_independent_analytic(
             "source_max_errors": source_error,
             "work": dict(result.work),
             "slurm_job": os.environ["SLURM_JOB_ID"],
-            "native_library": os.environ["VIBEQC_LIBRARY"],
-            "native_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+            "native_library": os.environ["GENERATIVEQC_LIBRARY"],
+            "native_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
             "complete_scf_export_gradient_seconds": endpoint_seconds,
         }
         _evidence(f"{molecule}-{method}", payload)
@@ -213,9 +216,9 @@ def test_production_grid_cuda_energy_and_force(
     method: typing.Any, compiler: typing.Any
 ) -> None:
     """Production v2 default is qualified on the real-device water endpoint."""
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS, independent_gradient
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     calc = _production_calculator(method)
     with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
@@ -242,9 +245,9 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
     method: typing.Any, compiler: typing.Any
 ) -> None:
     """B3 real-device closure: both spin channels share the C1 seven-source plan."""
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS, independent_uks_gradient
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     charge, multiplicity = 1, 2
     calc = _calculator(method)
@@ -318,12 +321,12 @@ def test_complete_cuda_r2scan_independent_analytic(
     compiler: typing.Any,
 ) -> None:
     """Qualify the generated tau geometry path against independent PySCF/libxc."""
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import (
         ATOMS,
         independent_semilocal_total_gradient,
     )
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     pytest.importorskip(
         "pyscf", reason="independent r2SCAN analytic reference requires PySCF"
@@ -371,9 +374,9 @@ def test_cuda_r2scan_reconverged_directional_finite_difference(
     compiler: typing.Any,
 ) -> None:
     """Detect a missing or duplicated vtau/2 contribution after full SCF relaxation."""
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     calc = _calculator("r2scan-rks")
     xyz = np.asarray([position for _, position in ATOMS], dtype=np.float64)
@@ -409,9 +412,9 @@ def test_cuda_r2scan_reconverged_directional_finite_difference(
 def test_cuda_reconverged_finite_differences_and_replay(
     method: typing.Any, compiler: typing.Any
 ) -> None:
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     calc = _calculator(method)
     xyz = np.array([a[1] for a in ATOMS])
@@ -438,7 +441,7 @@ def test_cuda_reconverged_finite_differences_and_replay(
         )
         assert abs(estimates[-1] - actual) < 1e-7
         assert abs(estimates[-1] - estimates[-2]) < 1e-7
-        if os.environ.get("VIBEQC_STATIONARY_FULL_FD") == "1":
+        if os.environ.get("GENERATIVEQC_STATIONARY_FULL_FD") == "1":
             coordinate_estimates = []
             for step in (1e-3, 3e-4, 1e-4):
                 fd = np.empty_like(xyz)
@@ -494,23 +497,23 @@ def test_cuda_reconverged_finite_differences_and_replay(
 def test_cuda_source_failure_zero_tail_and_recovery(compiler: typing.Any) -> None:
     """Exercise actual source kernels, late failure and a fresh transaction."""
 
-    from vibeqc._stationary_cuda import _checked, _CudaSources, _layout, _ptr
-    from vibeqc_compiler.dft import NativeAO
-    from vibeqc_compiler.dft.cuda import CudaGrid
-    from vibeqc_compiler.dft.cuda import compile_cuda as compile_grid
-    from vibeqc_compiler.integral.first_derivative_native import (
+    from generativeqc._stationary_cuda import _checked, _CudaSources, _layout, _ptr
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft.cuda import CudaGrid
+    from generativeqc_compiler.dft.cuda import compile_cuda as compile_grid
+    from generativeqc_compiler.integral.first_derivative_native import (
         emit_first_derivative_cuda,
     )
-    from vibeqc_compiler.method import resolve_method
-    from vibeqc_compiler.method.stationary_cuda import compile_stationary_cuda
-    from vibeqc_compiler.method.stationary_gradient import (
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import compile_stationary_cuda
+    from generativeqc_compiler.method.stationary_gradient import (
         SCF_POINT_MODEL,
         StationaryGradientPlan,
         StationaryMeanField,
     )
 
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (1.0, 0.0, 0.0)), ("H", (2.0, 0.0, 0.0))]
-    cache = Path(os.environ["VIBEQC_STATIONARY_CACHE"])
+    cache = Path(os.environ["GENERATIVEQC_STATIONARY_CACHE"])
     with NativeAO(atoms, multiplicity=2) as basis:
         _, _, _, requests = _layout(basis)
         plan = StationaryGradientPlan(
@@ -624,9 +627,9 @@ def test_cuda_source_failure_zero_tail_and_recovery(compiler: typing.Any) -> Non
 def test_cuda_late_owner_replay_and_geometry_replacement(
     compiler: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc._stationary_cuda import _CudaSources
-    from vibeqc_compiler.dft import NativeAO
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc._stationary_cuda import _CudaSources
+    from generativeqc_compiler.dft import NativeAO
 
     atoms = [("H", (0.1, 0.2, -0.7)), ("H", (-0.2, 0.1, 0.8))]
     calc = _calculator("pbe-rks")
@@ -679,14 +682,14 @@ def test_public_cuda_calculator_forces_match_independent_gradient(
     method: typing.Any, charge: typing.Any, multiplicity: typing.Any
 ) -> None:
     """C2: public Calculator publishes force=-gradient from the shared CUDA plan."""
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import (
         ATOMS,
         independent_gradient,
         independent_semilocal_total_gradient,
         independent_uks_gradient,
     )
-    from vibeqc._dft_gradient import StationaryKsState
-    from vibeqc_compiler.dft import NativeAO
 
     calc = _calculator(method)
     assert calc._capabilities.supported_properties == frozenset(("energy", "forces"))
@@ -721,7 +724,7 @@ def test_public_cuda_prepared_force_replay_retains_execution(
     monkeypatch: typing.Any,
 ) -> None:
     """#663: warm and moved force replays reuse every generated CUDA owner."""
-    import vibeqc._stationary_cuda as stationary
+    import generativeqc._stationary_cuda as stationary
     from test_dft_complete_cpu import ATOMS
 
     calc = _calculator("pbe-rks")
@@ -806,7 +809,7 @@ def test_public_cuda_prepared_force_replay_retains_execution(
 
 def test_public_cuda_grid_xc_schedules_preserve_complete_endpoint() -> None:
     """DFT09: both executable XC schedules preserve the public E+F endpoint."""
-    from vibeqc import Calculator, KsOptions
+    from generativeqc import Calculator, KsOptions
 
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     results = []
@@ -837,8 +840,8 @@ def test_profiled_xc_schedule_reaches_direct_and_resource_aware_batch_paths(
     monkeypatch: typing.Any,
 ) -> None:
     """DFT09: one resolved profile schedule must survive every public KS path."""
-    from vibeqc import Calculator, KsOptions, ResourceBudget
-    from vibeqc.ks import ProfiledKsSelection, resolve_ks_options
+    from generativeqc import Calculator, KsOptions, ResourceBudget
+    from generativeqc.ks import ProfiledKsSelection, resolve_ks_options
 
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     resolved = resolve_ks_options(
@@ -899,8 +902,8 @@ def test_profiled_xc_schedule_revalidates_valid_neighbor_when_peer_is_invalid(
     invalid_kind: str,
 ) -> None:
     """DFT09: one invalid row cannot suppress profile requalification of a valid peer."""
-    from vibeqc import Calculator, KsOptions, ResourceBudget
-    from vibeqc.ks import ProfiledKsSelection, resolve_ks_options
+    from generativeqc import Calculator, KsOptions, ResourceBudget
+    from generativeqc.ks import ProfiledKsSelection, resolve_ks_options
 
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     resolved = resolve_ks_options(

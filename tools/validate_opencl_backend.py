@@ -32,27 +32,27 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import numpy as np
-from vibeqc_compiler.common.evidence import block_error, canonical_hash
-from vibeqc_compiler.integral.artifact_cache import LocalArtifactCache
-from vibeqc_compiler.integral.cache import integral_cache_key
-from vibeqc_compiler.integral.df_values import (
+from generativeqc_compiler.common.evidence import block_error, canonical_hash
+from generativeqc_compiler.integral.artifact_cache import LocalArtifactCache
+from generativeqc_compiler.integral.cache import integral_cache_key
+from generativeqc_compiler.integral.df_values import (
     _reference_boys,
     build_df_component_kernel,
     build_df_value_ir,
 )
-from vibeqc_compiler.integral.expr import Graph
-from vibeqc_compiler.integral.opencl_lowering import (
+from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.integral.opencl_lowering import (
     ScalarKernel,
     emit_opencl,
     source_hash,
 )
-from vibeqc_compiler.integral.opencl_runtime import OpenCLRuntime
-from vibeqc_compiler.integral.runtime_backend import (
+from generativeqc_compiler.integral.opencl_runtime import OpenCLRuntime
+from generativeqc_compiler.integral.runtime_backend import (
     CompiledArtifactIdentity,
     ExecutionShape,
 )
 
-from tools.vibeqc_validation.df_values import make_df_value_fixture
+from tools.generativeqc_validation.df_values import make_df_value_fixture
 
 
 def integral_fixture() -> typing.Any:
@@ -279,7 +279,7 @@ def main() -> None:
             report["contracted_values"] = actual.tolist()
             runs.append(report)
         report = {
-            "schema": "vibeqc.opencl_expression_smoke",
+            "schema": "generativeqc.opencl_expression_smoke",
             "version": 1,
             "device": {k: v for k, v in runtime.device.items() if k != "handle"},
             "capabilities": asdict(runtime.capabilities()),
@@ -308,8 +308,8 @@ def main() -> None:
                     for path in sorted(
                         {
                             Path(__file__).resolve(),
-                            *ROOT.glob("python/vibeqc_compiler/integral/*.py"),
-                            *ROOT.glob("tools/vibeqc_validation/*.py"),
+                            *ROOT.glob("python/generativeqc_compiler/integral/*.py"),
+                            *ROOT.glob("tools/generativeqc_validation/*.py"),
                         }
                     )
                 },

@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_df_rys.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_rys.py"
+  "owner": "python/generativeqc_compiler/integral/df_rys.py"
 }

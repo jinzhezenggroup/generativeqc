@@ -51,7 +51,7 @@ _GPU4PYSCF_RYS_IP1_RE = re.compile(
 
 @dataclass(frozen=True, slots=True)
 class ShellWork:
-    """Topology data needed to reproduce VIBEQC's direct tile counts."""
+    """Topology data needed to reproduce GENERATIVEQC's direct tile counts."""
 
     angular: int
     ao_count: int
@@ -436,7 +436,7 @@ def main() -> None:
     parser.add_argument(
         "--active",
         action="store_true",
-        help="run VIBEQC CUDA and report final-density screened work",
+        help="run GENERATIVEQC CUDA and report final-density screened work",
     )
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--warm-repeats", type=int, default=1)
@@ -447,7 +447,7 @@ def main() -> None:
         "--screening-tolerance",
         type=float,
         default=1.0e-14,
-        help="VIBEQC direct-screening threshold; default matches the formal gate",
+        help="GENERATIVEQC direct-screening threshold; default matches the formal gate",
     )
     parser.add_argument("--output", type=raw_output_path)
     arguments = parser.parse_args()
@@ -455,7 +455,7 @@ def main() -> None:
         raise ValueError("--batch must be positive and --warm-repeats non-negative")
 
     # PySCF is a benchmark-only dependency. Importing it here keeps --help and
-    # the pure topology helpers usable in the normal VIBEQC development venv.
+    # the pure topology helpers usable in the normal GENERATIVEQC development venv.
     from pyscf import gto
 
     case = benchmark_cases()[arguments.case]
@@ -488,12 +488,12 @@ def main() -> None:
     }
     if arguments.active:
         import cupy as cp
-        from vibeqc import Calculator
+        from generativeqc import Calculator
 
         systems = scaled_geometries(case.atoms, arguments.batch)
         calculator = Calculator(
             method=case.method,
-            basis=case.vibeqc_basis,
+            basis=case.generativeqc_basis,
             basis_representation=case.basis_representation,
             device="cuda",
             max_iterations=arguments.max_iterations,
@@ -528,29 +528,31 @@ def main() -> None:
                 "settings": {
                     "ppps_resident_bra": {
                         "enabled": runtime_switch_enabled(
-                            os.environ.get("VIBEQC_PPPS_RESIDENT_BRA")
+                            os.environ.get("GENERATIVEQC_PPPS_RESIDENT_BRA")
                         ),
-                        "environment_value": os.environ.get("VIBEQC_PPPS_RESIDENT_BRA"),
+                        "environment_value": os.environ.get(
+                            "GENERATIVEQC_PPPS_RESIDENT_BRA"
+                        ),
                     },
                     "ppps_signature_bucketing": {
                         "enabled": runtime_switch_enabled(
-                            os.environ.get("VIBEQC_PPPS_SIGNATURE_BUCKETING")
+                            os.environ.get("GENERATIVEQC_PPPS_SIGNATURE_BUCKETING")
                         ),
                         "environment_value": os.environ.get(
-                            "VIBEQC_PPPS_SIGNATURE_BUCKETING"
+                            "GENERATIVEQC_PPPS_SIGNATURE_BUCKETING"
                         ),
                     },
                     "ppps_block_threads": {
                         "effective": ppps_block_threads(
-                            os.environ.get("VIBEQC_PPPS_BLOCK_THREADS")
+                            os.environ.get("GENERATIVEQC_PPPS_BLOCK_THREADS")
                         ),
                         "environment_value": os.environ.get(
-                            "VIBEQC_PPPS_BLOCK_THREADS"
+                            "GENERATIVEQC_PPPS_BLOCK_THREADS"
                         ),
                     },
                 },
                 "methodology": (
-                    "VIBEQC final converged-density direct task compaction after "
+                    "GENERATIVEQC final converged-density direct task compaction after "
                     "Schwarz and density screening; counters aggregate the "
                     "most recent execution across the native batch"
                 ),
@@ -566,7 +568,7 @@ def main() -> None:
         payload.update(
             {
                 "methodology": (
-                    "VIBEQC host-planner topology before Schwarz/density screening; "
+                    "GENERATIVEQC host-planner topology before Schwarz/density screening; "
                     "primitive work weights unique Cartesian AO quartets by the "
                     "four shell primitive counts"
                 ),

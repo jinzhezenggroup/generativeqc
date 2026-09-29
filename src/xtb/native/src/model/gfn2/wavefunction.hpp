@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_WAVEFUNCTION_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_WAVEFUNCTION_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_WAVEFUNCTION_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_WAVEFUNCTION_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +11,7 @@
 #include "model/gfn2/basis.hpp"
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 inline constexpr std::size_t kWavefunctionWorkspaceAlignment = 64u;
 inline constexpr std::int32_t kWavefunctionQuadrupoleComponents = 6;
@@ -37,7 +37,7 @@ struct WavefunctionFieldLayout {
  * avoids accepting a stale state based only on a collision-prone hash.
  */
 struct WavefunctionWarmStartIdentity {
-  vibeqc_xtb_model_t model = VIBEQC_XTB_MODEL_GFN2_XTB;
+  generativeqc_xtb_model_t model = GENERATIVEQC_XTB_MODEL_GFN2_XTB;
   std::uint64_t geometry_cache_generation = 0;
   std::int64_t batch_size = 0;
   std::int64_t total_atoms = 0;
@@ -184,7 +184,7 @@ struct ConstWavefunctionSystemView {
  * tblite: one channel shares orbitals between alpha and beta occupations,
  * while two channels use separate alpha and beta orbitals.
  */
-vibeqc_xtb_status_t make_wavefunction_layout(const BasisPlan& basis,
+generativeqc_xtb_status_t make_wavefunction_layout(const BasisPlan& basis,
                                           const std::int32_t* atomic_numbers,
                                           const double* molecular_charges,
                                           const std::int32_t* unpaired_electrons,
@@ -192,10 +192,10 @@ vibeqc_xtb_status_t make_wavefunction_layout(const BasisPlan& basis,
                                           WavefunctionLayout& layout, std::string& error);
 
 /* Bind an aligned caller allocation without allocating or initializing it. */
-vibeqc_xtb_status_t bind_wavefunction_view(const WavefunctionLayout& layout, void* workspace,
+generativeqc_xtb_status_t bind_wavefunction_view(const WavefunctionLayout& layout, void* workspace,
                                         std::size_t workspace_size, WavefunctionView& view,
                                         std::string& error);
-vibeqc_xtb_status_t bind_wavefunction_view(const WavefunctionLayout& layout, const void* workspace,
+generativeqc_xtb_status_t bind_wavefunction_view(const WavefunctionLayout& layout, const void* workspace,
                                         std::size_t workspace_size, ConstWavefunctionView& view,
                                         std::string& error);
 
@@ -204,12 +204,12 @@ vibeqc_xtb_status_t bind_wavefunction_view(const WavefunctionLayout& layout, con
  * unmodified view returned by bind_wavefunction_view for the same layout.
  * This provenance is validated before any pointer arithmetic.
  */
-vibeqc_xtb_status_t make_wavefunction_system_view(const WavefunctionLayout& layout,
+generativeqc_xtb_status_t make_wavefunction_system_view(const WavefunctionLayout& layout,
                                                const WavefunctionView& batch_view,
                                                std::int64_t system,
                                                WavefunctionSystemView& system_view,
                                                std::string& error);
-vibeqc_xtb_status_t make_wavefunction_system_view(const WavefunctionLayout& layout,
+generativeqc_xtb_status_t make_wavefunction_system_view(const WavefunctionLayout& layout,
                                                const ConstWavefunctionView& batch_view,
                                                std::int64_t system,
                                                ConstWavefunctionSystemView& system_view,
@@ -223,20 +223,20 @@ vibeqc_xtb_status_t make_wavefunction_system_view(const WavefunctionLayout& layo
  * view must be an unmodified result of bind_wavefunction_view for layout; the
  * binding is validated before any caller-owned numerical storage is modified.
  */
-vibeqc_xtb_status_t initialize_sad_multipole_state(const WavefunctionLayout& layout,
+generativeqc_xtb_status_t initialize_sad_multipole_state(const WavefunctionLayout& layout,
                                                 const WavefunctionView& view, std::string& error);
 
 /* Create and compare exact warm-start compatibility metadata. */
-vibeqc_xtb_status_t make_wavefunction_warm_start_identity(const WavefunctionLayout& layout,
+generativeqc_xtb_status_t make_wavefunction_warm_start_identity(const WavefunctionLayout& layout,
                                                        std::uint64_t geometry_cache_generation,
                                                        WavefunctionWarmStartIdentity& identity,
                                                        std::string& error);
 bool wavefunction_warm_start_matches(const WavefunctionWarmStartIdentity& expected,
                                      const WavefunctionWarmStartIdentity& candidate) noexcept;
-vibeqc_xtb_status_t validate_wavefunction_warm_start(const WavefunctionWarmStartIdentity& expected,
+generativeqc_xtb_status_t validate_wavefunction_warm_start(const WavefunctionWarmStartIdentity& expected,
                                                   const WavefunctionWarmStartIdentity& candidate,
                                                   std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_WAVEFUNCTION_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_WAVEFUNCTION_HPP

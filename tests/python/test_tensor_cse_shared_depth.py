@@ -10,8 +10,8 @@ def test_exact_cse_handles_deep_shared_expression_without_tree_expansion() -> No
     root = Path(__file__).resolve().parents[2]
     script = """
 import numpy as np
-from vibeqc_compiler.tensor import Index, IndexSpace, TensorSpec, input_tensor, add, Program, execute
-from vibeqc_compiler.tensor.optimize import rewrite
+from generativeqc_compiler.tensor import Index, IndexSpace, TensorSpec, input_tensor, add, Program, execute
+from generativeqc_compiler.tensor.optimize import rewrite
 index = Index('i', IndexSpace('shared_depth', 'batch', 1))
 x = input_tensor('x', TensorSpec((index,), role='input'))
 left = right = x

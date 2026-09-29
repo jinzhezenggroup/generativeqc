@@ -15,10 +15,12 @@ def test_df_trace_disabled_capture_timing_failure_and_logical_tiles(
     tmp_path: typing.Any, progress: typing.Any
 ) -> None:
     """Capture work cannot masquerade as execution; timing failures invalidate records."""
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     compiler = shutil.which("c++")
     if not nvcc or not compiler:
-        pytest.skip("set VIBEQC_NVCC and provide c++ for the mocked CUDA contract")
+        pytest.skip(
+            "set GENERATIVEQC_NVCC and provide c++ for the mocked CUDA contract"
+        )
     root = Path(__file__).resolve().parents[2]
     include = Path(nvcc).resolve().parent.parent / "include"
     source = tmp_path / "trace.cpp"
@@ -60,20 +62,20 @@ extern "C" cudaError_t CUDARTAPI cudaEventElapsedTime(float* ms, cudaEvent_t fir
 }
 
 int main(int argc, char** argv) {
-  using namespace vibeqc::runtime::cuda_trace;
+  using namespace generativeqc::runtime::cuda_trace;
   if (argc != 3) return 1;
   const bool progress = argv[2][0] != '0';
-  unsetenv("VIBEQC_DF_PROGRESS_TRACE");
+  unsetenv("GENERATIVEQC_DF_PROGRESS_TRACE");
   const auto stream = reinterpret_cast<cudaStream_t>(std::uintptr_t{1});
-  unsetenv("VIBEQC_DF_TRACE");
+  unsetenv("GENERATIVEQC_DF_TRACE");
   {
     TraceOperation disabled("disabled", stream, {1, 3, 5, true, true});
     TraceRegion no_op("ignored", stream);
     trace_tile(0, 0, 3, 0, 2, -1, true);
   }
   if (calls != 0) return 2;
-  setenv("VIBEQC_DF_TRACE", argv[1], 1);
-  if (progress) setenv("VIBEQC_DF_PROGRESS_TRACE", argv[2], 1);
+  setenv("GENERATIVEQC_DF_TRACE", argv[1], 1);
+  if (progress) setenv("GENERATIVEQC_DF_PROGRESS_TRACE", argv[2], 1);
   {
     TraceOperation operation("ri_j", stream, {1, 3, 5, true, true});
     {

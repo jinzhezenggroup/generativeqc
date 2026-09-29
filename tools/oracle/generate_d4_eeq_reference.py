@@ -67,7 +67,7 @@ def fmt(value: float) -> str:
 
 
 def run_case(executable: Path, prefix: Path, case: dict) -> dict:
-    with tempfile.TemporaryDirectory(prefix="vibeqc-d4-eeq-") as td:
+    with tempfile.TemporaryDirectory(prefix="generativeqc-d4-eeq-") as td:
         work = Path(td)
         xyz = work / "input.xyz"
         lines = [str(len(case["z"])), case["name"]]
@@ -162,7 +162,7 @@ def render(records: list[dict]) -> str:
 #include "dft/dispersion/d4_eeq.hpp"
 
 namespace d4_eeq_tests {{
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 inline constexpr int kMaxAtoms = {max_atoms};
 struct EEQOracleFixture {{
   const char* name;
@@ -218,7 +218,7 @@ def main() -> int:
         "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "fixture_sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
         "cases": [r["name"] for r in records],
-        "scope": "EEQ charges plus complete D4 energy/Cartesian gradient; no VibeQC mathematics",
+        "scope": "EEQ charges plus complete D4 energy/Cartesian gradient; no GenerativeQC mathematics",
     }
     manifest_out = ROOT / "tests/data/d4/eeq_oracle_manifest.json"
     manifest_out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

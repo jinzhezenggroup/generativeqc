@@ -11,7 +11,7 @@
 
 // Retained nuclear-attraction primitives for the Dual response path.
 // Keep this operator arithmetic separate from host export and launch policy.
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar>
 __device__ inline Scalar primitive_nuclear_attraction(const DeviceBatch& batch, std::int32_t system,
@@ -83,4 +83,4 @@ __device__ inline Scalar primitive_nuclear_attraction_cartesian(
                                                             coefficients, derivative_coordinate);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

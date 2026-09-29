@@ -6,12 +6,12 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -51,9 +51,9 @@ def test_corrected_streamed_final_exchange_has_strict_provenance(
         "RESPONSE_STORAGE",
         "FINAL_PROJECTION",
     ):
-        monkeypatch.setenv("VIBEQC_DF_" + control, "auto")
-    monkeypatch.setenv("VIBEQC_DF_FINAL_EXCHANGE", final_exchange)
-    monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", "1")
+        monkeypatch.setenv("GENERATIVEQC_DF_" + control, "auto")
+    monkeypatch.setenv("GENERATIVEQC_DF_FINAL_EXCHANGE", final_exchange)
+    monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", "1")
 
     calculator = Calculator(
         method="rhf",
@@ -73,7 +73,7 @@ def test_corrected_streamed_final_exchange_has_strict_provenance(
             ("changed", [np.asarray([xyz for _, xyz in moved])], references[1]),
         ):
             trace = tmp_path / f"{phase}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = batch.execute(geometry, properties=("energy",), strict=True).items[
                 0
             ]

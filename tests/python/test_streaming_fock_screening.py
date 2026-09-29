@@ -7,8 +7,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.integral.production_emission import _streaming_fock_source
-from vibeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_emission import _streaming_fock_source
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
 
 def test_component_worker_continues_after_screened_candidate(tmp_path: Path) -> None:
@@ -24,7 +24,8 @@ def test_component_worker_continues_after_screened_candidate(tmp_path: Path) -> 
         pytest.skip("requires a host C++ compiler")
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
-        root / "python/vibeqc_compiler/integral/production_shell_classes.json", "sm_120"
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_120",
     )
     selection = next(s for s in profile.selections if s.spec.name == "ddpp")
     source = _streaming_fock_source(selection)
@@ -48,9 +49,9 @@ def test_component_worker_continues_after_screened_candidate(tmp_path: Path) -> 
 #define __syncthreads() ((void)0)
 struct { unsigned x = 0; } threadIdx;
 unsigned atomicAdd(unsigned* p, unsigned v) { unsigned old = *p; *p += v; return old; }
-using Topology = vibeqc::scf::detail::GeneratedShellPairStream;
-using GeneratedDdppShellTask = vibeqc::scf::detail::GeneratedShellTask;
-using GeneratedDdppPrimitivePairData = vibeqc::scf::detail::GeneratedPrimitivePairData;
+using Topology = generativeqc::scf::detail::GeneratedShellPairStream;
+using GeneratedDdppShellTask = generativeqc::scf::detail::GeneratedShellTask;
+using GeneratedDdppPrimitivePairData = generativeqc::scf::detail::GeneratedPrimitivePairData;
 struct GeneratedDdppVec3 { double x, y, z; };
 constexpr unsigned kGeneratedDdppFockBlockThreads = 352;
 using Pair = std::pair<unsigned, unsigned>;
@@ -147,7 +148,8 @@ def test_row_streaming_binary_searches_monotonic_coarse_tail(name: str) -> None:
 
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
-        root / "python/vibeqc_compiler/integral/production_shell_classes.json", "sm_120"
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_120",
     )
     selection = next(s for s in profile.selections if s.spec.name == name)
     source = _streaming_fock_source(selection)

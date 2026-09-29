@@ -107,7 +107,7 @@ Linux x86-64 feature detection uses kernel-advertised flags from
 non-x86 architectures conservatively select a generic candidate when present.
 CPU brand/model strings never participate in scientific or cache identity.
 
-Set `VIBEQC_CPU_TARGET=generic` to force the portable fallback for validation
+Set `GENERATIVEQC_CPU_TARGET=generic` to force the portable fallback for validation
 or debugging. Forcing AVX2/AVX-512 on a runtime that does not advertise the
 required features fails before the candidate binary is loaded.
 

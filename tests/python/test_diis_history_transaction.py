@@ -25,7 +25,7 @@ void* operator new(std::size_t bytes) {
 }
 void operator delete(void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
-using vibeqc::solver::detail::DiisHistory;
+using generativeqc::solver::detail::DiisHistory;
 
 int main(int argc, char** argv) {
   if (argc != 3) return 99;

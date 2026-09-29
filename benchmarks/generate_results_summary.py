@@ -93,7 +93,7 @@ def render_parity_section(
         "",
         "This table is generated from the newest clean accepted artifacts with at least five interleaved warm samples per engine. Ordinary and iteration-matched medians are deliberately reported separately.",
         "",
-        "| AO | Batch | Artifact | Source | Samples | Ordinary VibeQC / GPU4PySCF | Iteration-matched branch | Matched speedup | Max dE | Max dF |",
+        "| AO | Batch | Artifact | Source | Samples | Ordinary GenerativeQC / GPU4PySCF | Iteration-matched branch | Matched speedup | Max dE | Max dF |",
         "| ---: | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: |",
     ]
     for key in sorted(selected):
@@ -113,7 +113,7 @@ def render_parity_section(
             "| "
             f"{key[0]} | {key[1]} | [`{path.stem}`]({path.name}) | "
             f"`{commit[:7]}` | {_repeat_count(payload)} | "
-            f"{_milliseconds(ordinary['vibeqc_median_seconds'])} / "
+            f"{_milliseconds(ordinary['generativeqc_median_seconds'])} / "
             f"{_milliseconds(ordinary['gpu4pyscf_median_seconds'])} | "
             f"{branch} | {speedup} | "
             f"{gate_accuracy['maximum_energy_error_hartree']:.2e} Eh | "

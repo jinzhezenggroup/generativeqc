@@ -1,6 +1,6 @@
 # StationaryProblem compiler boundary
 
-`vibeqc_compiler.method.stationary` composes an explicit scalar objective,
+`generativeqc_compiler.method.stationary` composes an explicit scalar objective,
 physical residual equations, independent state coordinates and a parameter-source
 inventory. It implements the first compiler slice of #181, not a new solver or a
 complete molecular-gradient endpoint.
@@ -40,12 +40,12 @@ linear solves in the tests are independent analytic oracles, not production code
 
 ```python
 import numpy as np
-from vibeqc_compiler.method.stationary import (
+from generativeqc_compiler.method.stationary import (
     ParameterSource,
     StationaryProblem,
     StationaryState,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Program,
     TensorSpec,
     add,
