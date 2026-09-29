@@ -1,9 +1,11 @@
 """Symbolic complexity diagnostics and opt-in contraction-tree rewrites."""
 
 import numpy as np
+import pytest
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
+    Node,
     Program,
     TensorSpec,
     analyze_complexity,
@@ -17,7 +19,7 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
 
 
-def _matrix(name: str, space: IndexSpace, left: str, right: str):
+def _matrix(name: str, space: IndexSpace, left: str, right: str) -> Node:
     return input_tensor(
         name,
         TensorSpec(
@@ -122,3 +124,17 @@ def test_optimizer_can_opt_in_to_lower_order_contraction_tree() -> None:
     assert diagnostics["requested"]["max_work_degree"] == 4
     assert diagnostics["reassociated"]["max_work_degree"] == 3
     assert diagnostics["optimized"]["max_work_degree"] == 3
+
+
+def test_reassociation_rejects_explicit_precision_execution() -> None:
+    space = IndexSpace("ao", "ao", 3)
+    a = _matrix("a", space, "i", "k")
+    b = _matrix("b", space, "k", "l")
+    c = _matrix("c", space, "l", "j")
+    program = Program(
+        {"out": einsum("ik,kl,lj->ij", a, b, c)},
+        provenance={"precision_execution": {"schema": "test-placeholder"}},
+    )
+
+    with pytest.raises(ValueError, match="precision execution"):
+        reassociate_einsums(program)

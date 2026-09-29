@@ -15,7 +15,9 @@ from math import prod
 from .ir import Node, _infer
 from .precision import remap_precision_execution
 from .program import Program
-from .types import Index
+
+if typing.TYPE_CHECKING:
+    from .types import Index
 
 _SYMBOL_BY_KIND = {
     "ao": "N",
@@ -385,6 +387,10 @@ def reassociate_einsums(program: Program, *, max_operands: int = 6) -> Program:
 
     if not isinstance(program, Program):
         raise TypeError("contraction reassociation requires a TensorIR Program")
+    if "precision_execution" in program.provenance:
+        raise ValueError(
+            "contraction reassociation does not yet support explicit precision execution"
+        )
     if type(max_operands) is not int or not 3 <= max_operands <= 8:
         raise ValueError("max_operands must lie in [3, 8]")
 

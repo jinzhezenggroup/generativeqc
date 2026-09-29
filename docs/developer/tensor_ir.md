@@ -268,7 +268,9 @@ such as `O(N^4)` without assuming sparsity, density fitting, or low rank.
 n-ary einsums are searched for a binary tree with a strictly lower symbolic
 degree, then existing GEMM recognition can lower eligible binary contractions.
 The opt-in is required because an equivalent contraction tree changes
-floating-point reduction order.
+floating-point reduction order. Programs carrying an explicit
+`precision_execution` contract currently fail closed under reassociation until
+intermediate-node precision propagation is defined.
 
 Constant folding is deliberately limited to scalar rational add/multiply/divide
 subgraphs. The replacement must reproduce the original dtype result bit for
