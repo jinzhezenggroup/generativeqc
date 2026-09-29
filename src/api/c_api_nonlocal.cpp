@@ -65,6 +65,12 @@ std::span<T> optional_span(T* pointer, std::uint32_t count, const char* label) {
   return pointer ? std::span<T>(pointer, count) : std::span<T>{};
 }
 
+#if GENERATIVEQC_HAS_CUDA
+void drain_failed_seed_source(cudaStream_t stream) noexcept {
+  if (stream) (void)cudaStreamSynchronize(stream);
+}
+#endif
+
 }  // namespace
 
 extern "C" {
@@ -327,16 +333,25 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_s
     // consumer uses another stream, bridge the dependency with one device event
     // rather than a host fence; owner teardown synchronizes the consumer stream,
     // which in turn waits for this source-side copy to complete.
-    generativeqc::runtime::cuda_resource_check(
-        cudaMemcpyAsync(owner->raw_density, density, point_count * sizeof(double),
-                        cudaMemcpyDeviceToDevice, source_stream));
-    generativeqc::runtime::cuda_resource_check(
-        cudaMemcpyAsync(owner->raw_gradient, gradient, 3 * point_count * sizeof(double),
-                        cudaMemcpyDeviceToDevice, source_stream));
-    if (source_stream != owner->stream) {
-      owner->source_ready.record(source_stream);
+    try {
       generativeqc::runtime::cuda_resource_check(
-          cudaStreamWaitEvent(owner->stream, owner->source_ready.get(), 0));
+          cudaMemcpyAsync(owner->raw_density, density, point_count * sizeof(double),
+                          cudaMemcpyDeviceToDevice, source_stream));
+      generativeqc::runtime::cuda_resource_check(
+          cudaMemcpyAsync(owner->raw_gradient, gradient, 3 * point_count * sizeof(double),
+                          cudaMemcpyDeviceToDevice, source_stream));
+      if (source_stream != owner->stream) {
+        owner->source_ready.record(source_stream);
+        generativeqc::runtime::cuda_resource_check(
+            cudaStreamWaitEvent(owner->stream, owner->source_ready.get(), 0));
+      }
+    } catch (...) {
+      // A failed cross-stream handoff may already have queued a D2D read into
+      // owner-owned destination storage. Drain only on this exceptional path
+      // so owner teardown cannot free that storage while the source stream is
+      // still writing it. Successful execution remains fence-free on the host.
+      drain_failed_seed_source(source_stream);
+      throw;
     }
     owner->next_offset = owner->point_count;
     return GENERATIVEQC_STATUS_SUCCESS;
