@@ -281,6 +281,14 @@ def _occupancy(
     return min(1.0, resident * threads / target.maximum_threads_per_sm)
 
 
+def _local_peak(values: typing.Iterable[int | None]) -> int | None:
+    """A complete pressure envelope remains unknown if any member is unknown."""
+    materialized = tuple(values)
+    if not materialized or any(value is None for value in materialized):
+        return None
+    return max(typing.cast("tuple[int, ...]", materialized))
+
+
 def _pressure_envelope(
     rows: tuple[KernelResources, ...],
     *,
@@ -288,7 +296,6 @@ def _pressure_envelope(
     target: CudaTargetInfo,
 ) -> GpuProfitability:
     spill_peak = max(rows, key=lambda row: row.spill_store_bytes + row.spill_load_bytes)
-    local = tuple(row.local_bytes for row in rows if row.local_bytes is not None)
     occupancies = tuple(
         _occupancy(
             row,
@@ -301,7 +308,7 @@ def _pressure_envelope(
         compiled_registers_per_thread=max(row.registers for row in rows),
         spill_store_bytes=spill_peak.spill_store_bytes,
         spill_load_bytes=spill_peak.spill_load_bytes,
-        local_bytes=max(local) if local else None,
+        local_bytes=_local_peak(row.local_bytes for row in rows),
         shared_bytes=max(row.shared_bytes for row in rows),
         compiled_occupancy_upper_bound=min(occupancies),
     )
@@ -345,11 +352,6 @@ def native_grid_xc_compiled_region_evidence(
         scope_profitability,
         key=lambda value: -1 if value.spill_bytes is None else value.spill_bytes,
     )
-    local = tuple(
-        value.local_bytes
-        for value in scope_profitability
-        if value.local_bytes is not None
-    )
     profitability = GpuProfitability(
         compiled_registers_per_thread=max(
             typing.cast("int", value.compiled_registers_per_thread)
@@ -357,7 +359,7 @@ def native_grid_xc_compiled_region_evidence(
         ),
         spill_store_bytes=spill_peak.spill_store_bytes,
         spill_load_bytes=spill_peak.spill_load_bytes,
-        local_bytes=max(local) if local else None,
+        local_bytes=_local_peak(value.local_bytes for value in scope_profitability),
         shared_bytes=max(
             typing.cast("int", value.shared_bytes) for value in scope_profitability
         ),
