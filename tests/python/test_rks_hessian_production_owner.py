@@ -77,6 +77,10 @@ def test_tools_rks_alias_files_contain_no_scientific_definitions() -> None:
 
 
 def test_rks_integral_topology_is_native_ao_owned() -> None:
+    assert (
+        production_integrals.RKSIntegralTopology.__module__
+        == "generativeqc.rks_hessian_integrals"
+    )
     source = (ROOT / "python/generativeqc/rks_hessian_integrals.py").read_text(
         encoding="utf-8"
     )
