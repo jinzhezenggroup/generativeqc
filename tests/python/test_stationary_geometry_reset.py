@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import ctypes as ct
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,7 +31,7 @@ def _owner() -> ast.ClassDef:
     )
 
 
-def _reset():
+def _reset() -> Callable[..., None]:
     method = next(
         node
         for node in _owner().body
@@ -38,7 +39,7 @@ def _reset():
     )
     namespace = {"_ptr": lambda value: value}
     module = ast.Module(body=[method], type_ignores=[])
-    exec(compile(module, "<actual reset_geometry>", "exec"), namespace)
+    exec(compile(module, "<actual reset_geometry>", "exec"), namespace)  # noqa: S102
     return namespace["reset_geometry"]
 
 
@@ -47,7 +48,7 @@ def test_geometry_reset_clears_pages_and_passes_only_centers(fail: bool) -> None
     calls = []
     failure = RuntimeError("native reset failed")
 
-    def call(*args):
+    def call(*args: object) -> None:
         calls.append(args)
         if fail:
             raise failure
@@ -114,7 +115,7 @@ def test_geometry_reset_ffi_keeps_pointer_and_tolerance_types() -> None:
         "tail": [ct.c_char_p, ct.c_size_t],
     }
     module = ast.Module(body=[binding], type_ignores=[])
-    exec(compile(module, "<actual ABI>", "exec"), namespace)
+    exec(compile(module, "<actual ABI>", "exec"), namespace)  # noqa: S102
     assert function.argtypes == [
         ct.c_void_p,
         double_pointer,
