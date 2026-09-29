@@ -644,14 +644,16 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
     double exchange_coefficient, const double* density, const double* beta,
     std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
+  if (plan == nullptr || plan->generated_exchange == nullptr ||
+      !plan->generated_exchange->force_capability) {
+    detail = "prepared Direct owner has no retained shell derivative lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   return direct_jk_guard(plan, detail, [&] {
-    direct_jk_require(plan != nullptr && plan->diagnostic.batch_size == 1,
+    direct_jk_require(plan->diagnostic.batch_size == 1,
                       "resident shell derivative requires one prepared item");
     direct_jk_require(plan->diagnostic.derivative_order >= 1,
                       "direct shell first derivatives were not retained");
-    direct_jk_require(plan->generated_exchange != nullptr &&
-                          plan->generated_exchange->force_capability,
-                      "prepared Direct owner has no retained shell derivative lease");
     direct_jk_require(std::isfinite(coulomb_coefficient) && std::isfinite(exchange_coefficient),
                       "nonfinite resident shell derivative coefficient");
     const auto n = plan->diagnostic.nbf;
