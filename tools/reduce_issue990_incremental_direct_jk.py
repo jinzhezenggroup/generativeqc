@@ -61,14 +61,18 @@ def main() -> None:
         for name, record in (("baseline", baseline), ("incremental", incremental)):
             aos = int(record["workload"]["ao_count"])
             if aos != expected_aos:
-                raise ValueError(f"{name} {atoms}-atom record has {aos} AOs, expected {expected_aos}")
+                raise ValueError(
+                    f"{name} {atoms}-atom record has {aos} AOs, expected {expected_aos}"
+                )
             if int(record["workload"]["batch_size"]) != 1:
                 raise ValueError("issue #990 qualification requires batch size one")
             sha = str(record["native_build"]["library_sha256"])
             if library_sha is None:
                 library_sha = sha
             elif sha != library_sha:
-                raise ValueError("baseline/incremental matrix did not use one native library")
+                raise ValueError(
+                    "baseline/incremental matrix did not use one native library"
+                )
 
         baseline_seconds = float(baseline["generativeqc"]["warm_median_seconds"])
         incremental_seconds = float(incremental["generativeqc"]["warm_median_seconds"])
@@ -115,7 +119,9 @@ def main() -> None:
         },
         "rows": rows,
         "all_numerical_gates_passed": all(row["numerical_gate_passed"] for row in rows),
-        "all_iteration_branches_match": all(row["iteration_branches_match"] for row in rows),
+        "all_iteration_branches_match": all(
+            row["iteration_branches_match"] for row in rows
+        ),
         "all_speed_gates_passed": all(row["speed_gate_passed"] for row in rows),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -128,8 +134,8 @@ def main() -> None:
             f"{row['baseline_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['incremental_warm_median_seconds'] * 1e3:>14.3f}  "
             f"{row['speedup']:>7.3f}  "
-            f"{str(row['iteration_branches_match']):>12}  "
-            f"{str(row['numerical_gate_passed']):>14}"
+            f"{row['iteration_branches_match']!s:>12}  "
+            f"{row['numerical_gate_passed']!s:>14}"
         )
 
 
