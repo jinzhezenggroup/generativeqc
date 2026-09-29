@@ -82,7 +82,13 @@ def compiled_xc_profitability(artifact: XCArtifact) -> typing.Any:
         target_payload.get("architecture"), str
     ):
         raise ValueError("XC artifact lacks CUDA target identity")
-    resources = tuple(KernelResources(**row) for row in resource_rows)
+    resources = tuple(
+        KernelResources(**row)
+        for row in resource_rows
+        if isinstance(row, dict) and "xc_group_" in str(row.get("function", ""))
+    )
+    if not resources:
+        raise ValueError("XC artifact has no generated expression PTXAS rows")
     return compiled_gpu_profitability(
         resources,
         cuda_target_info(target_payload["architecture"]),
