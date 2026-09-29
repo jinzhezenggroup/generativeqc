@@ -552,15 +552,39 @@ DensityFittedLagrangianWeights density_fitted_lagrangian_weights(
   };
 
   std::vector<double> bar_whitened(three, 0.0);
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q)
-      for (std::size_t aux = 0; aux < na; ++aux)
+  auto accumulate_pair = [&](std::size_t p, std::size_t q, std::size_t r, std::size_t t,
+                             double weight) {
+    if (weight == 0.0) return;
+    for (std::size_t aux = 0; aux < na; ++aux) {
+      bar_whitened[three_index(p, q, aux)] += weight * whitened[three_index(r, t, aux)];
+      bar_whitened[three_index(r, t, aux)] += weight * whitened[three_index(p, q, aux)];
+    }
+  };
+  if (dense_two) {
+    for (std::size_t p = 0; p < n; ++p)
+      for (std::size_t q = 0; q < n; ++q)
         for (std::size_t r = 0; r < n; ++r)
           for (std::size_t t = 0; t < n; ++t)
-            bar_whitened[three_index(p, q, aux)] +=
-                (two_electron_weight(weights, p, q, r, t) +
-                 two_electron_weight(weights, r, t, p, q)) *
-                whitened[three_index(r, t, aux)];
+            accumulate_pair(p, q, r, t, weights.two_electron[eri_index(n, p, q, r, t)]);
+  } else {
+    const auto& factors = weights.two_electron_factors;
+    const auto virtuals = n - occupied;
+    for (std::size_t p = 0; p < n; ++p)
+      for (std::size_t q = 0; q < n; ++q) {
+        const double weight = factors.fock[p * n + q];
+        if (weight == 0.0) continue;
+        for (std::size_t i = 0; i < occupied; ++i) {
+          accumulate_pair(p, q, i, i, 2.0 * weight);
+          accumulate_pair(p, i, i, q, -weight);
+        }
+      }
+    for (std::size_t i = 0; i < occupied; ++i)
+      for (std::size_t j = 0; j < occupied; ++j)
+        for (std::size_t a = 0; a < virtuals; ++a)
+          for (std::size_t b = 0; b < virtuals; ++b)
+            accumulate_pair(i, occupied + a, j, occupied + b,
+                            factors.correlation_iajb[g_index(occupied, virtuals, i, j, a, b)]);
+  }
 
   std::vector<double> bar_transformed(three, 0.0);
   for (std::size_t p = 0; p < n; ++p)
@@ -669,7 +693,7 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
       response_plan.dimension != posthf::checked_mul(occupied, orbitals - occupied))
     throw std::invalid_argument("invalid RI-MP2 gradient resource dimensions");
   const auto virtuals = orbitals - occupied;
-  const auto n2 = square(orbitals), n4 = fourth_power(orbitals);
+  const auto n2 = square(orbitals);
   const auto a2 = square(auxiliaries);
   const auto three = posthf::checked_mul(n2, auxiliaries);
   const auto rotations = posthf::checked_mul(occupied, virtuals);
