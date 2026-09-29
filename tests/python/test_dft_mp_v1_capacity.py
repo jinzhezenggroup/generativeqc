@@ -366,7 +366,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "state._source.functional.ingredients"
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
-        "__init___sha256": (
+        "init_sha256": (
             "8ca4c03c87157777c7f05de836e9b2d77c88dc7ec2c96df28532713b96bdd68d"
         ),
         "decode_sha256": (
@@ -1221,7 +1221,7 @@ def test_grid_memory_fails_closed_when_functional_lowering_moves(
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "functional = 0", 1))
 
-    with pytest.raises(RuntimeError, match="functional-family lowering"):
+    with pytest.raises(RuntimeError, match="snapshot functional-code lowering"):
         qualify_capacity._source_limits(tmp_path)
 
 
