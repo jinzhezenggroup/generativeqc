@@ -102,7 +102,8 @@ class GridXcCompiledRegionEvidence:
 
 
 def _leaf(function: str) -> str:
-    qualified = function.split("(", 1)[0]
+    normalized = function.replace("(anonymous namespace)::", "")
+    qualified = normalized.split("(", 1)[0]
     return qualified.rsplit("::", 1)[-1].replace(" ", "")
 
 
@@ -124,57 +125,103 @@ def _active_scopes(
     target: CudaTargetInfo,
 ) -> tuple[tuple[str, tuple[KernelResources, ...]], ...]:
     code = _FUNCTIONAL_CODES[functional]
-    count = min(shape.npoint, shape.tile_points)
-    tiled = DEFAULT_XC_MATRIX_SCHEDULE.admitted(
-        shape.nao,
-        count,
-        spins=shape.spins,
-        work_jets=1,
-        maximum_threads_per_block=target.maximum_threads_per_block,
-        maximum_shared_bytes=target.shared_memory_per_block,
-    )
-    feature_token = "density_features<true>" if shape.nao >= 32 else "density_features<false>"
-    density_token = (
-        "tiled_density_product<false>" if tiled else "density_product<false>"
+    counts = {min(shape.npoint, shape.tile_points)}
+    remainder = shape.npoint % shape.tile_points
+    if shape.npoint > shape.tile_points and remainder:
+        counts.add(remainder)
+    tiled_modes = {
+        DEFAULT_XC_MATRIX_SCHEDULE.admitted(
+            shape.nao,
+            count,
+            spins=shape.spins,
+            work_jets=1,
+            maximum_threads_per_block=target.maximum_threads_per_block,
+            maximum_shared_bytes=target.shared_memory_per_block,
+        )
+        for count in counts
+    }
+    feature_token = (
+        "density_features<true>" if shape.nao >= 32 else "density_features<false>"
     )
     point_token = f"evaluate_points<{code}"
 
-    ao = _matching(
+    validation = _matching(
         resources,
-        lambda name: name.startswith("validate_density(")
-        or (name.startswith("ao_kernel(") and "ao_kernel_fp32" not in name),
-        "strict-FP64 AO/validation scope",
+        lambda name: name.startswith("validate_density"),
+        "density validation kernel",
     )
-    density = _matching(
+    ao_kernel = _matching(
         resources,
-        lambda name: name.startswith(density_token),
-        "strict-FP64 density-product scope",
+        lambda name: name.startswith("ao_kernel")
+        and not name.startswith("ao_kernel_fp32"),
+        "strict-FP64 AO kernel",
     )
+    ao = (*validation, *ao_kernel)
+
+    density_parts: list[KernelResources] = []
+    if True in tiled_modes:
+        density_parts.extend(
+            _matching(
+                resources,
+                lambda name: name.startswith("tiled_density_product<false>"),
+                "strict-FP64 tiled density-product kernel",
+            )
+        )
+    if False in tiled_modes:
+        density_parts.extend(
+            _matching(
+                resources,
+                lambda name: name.startswith("density_product<false>")
+                and not name.startswith("tiled_density_product"),
+                "strict-FP64 scalar density-product kernel",
+            )
+        )
+    density = tuple(density_parts)
+
     features = _matching(
         resources,
         lambda name: name.startswith(feature_token),
-        "active density-feature scope",
+        "active density-feature kernel",
     )
     points = _matching(
         resources,
-        lambda name: name.startswith(point_token)
-        and name.endswith(",false>"),
-        "functional-specific XC point scope",
+        lambda name: name.startswith(point_token) and name.endswith(",false>"),
+        "functional-specific XC point kernel",
     )
-    if tiled:
-        potential = _matching(
-            resources,
-            lambda name: name.startswith("compact_potential_panels(")
-            or name.startswith("tiled_potential("),
-            "tiled Vxc contraction scope",
+
+    potential_parts: list[KernelResources] = []
+    if True in tiled_modes:
+        potential_parts.extend(
+            _matching(
+                resources,
+                lambda name: name.startswith("compact_potential_panels"),
+                "compact Vxc panel kernel",
+            )
         )
-    else:
-        potential = _matching(
-            resources,
-            lambda name: name.startswith("assemble_potential(")
-            or name.startswith("accumulate_totals("),
-            "scalar Vxc contraction scope",
+        potential_parts.extend(
+            _matching(
+                resources,
+                lambda name: name.startswith("tiled_potential"),
+                "tiled Vxc contraction kernel",
+            )
         )
+    if False in tiled_modes:
+        potential_parts.extend(
+            _matching(
+                resources,
+                lambda name: name.startswith("assemble_potential"),
+                "scalar Vxc assembly kernel",
+            )
+        )
+        potential_parts.extend(
+            _matching(
+                resources,
+                lambda name: name.startswith("accumulate_totals"),
+                "scalar XC totals kernel",
+            )
+        )
+    potential = tuple(potential_parts)
+
     return (
         ("ao_jets", ao),
         ("density_product", density),
