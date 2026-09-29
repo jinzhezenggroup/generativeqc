@@ -1,0 +1,18 @@
+[
+  {
+    "pr": 1566,
+    "expected_head": "9b3a553414f093c43ec248d28d867a26c06a4383",
+    "patch": "diff --git a/tests/python/test_coulomb_optional_allocation.py b/tests/python/test_coulomb_optional_allocation.py\nindex 9d5491cb..a541f2eb 100644\n--- a/tests/python/test_coulomb_optional_allocation.py\n+++ b/tests/python/test_coulomb_optional_allocation.py\n@@ -76,7 +76,7 @@ constexpr std::uint64_t kGeneratedStreamingFockShellClassMask=1, kNativeStreamin\n constexpr unsigned kSchwarzThreads=32;\n #define METADATA(F) F(system_shell_offsets) F(system_shell_pair_offsets) F(shell_direct_ao_offsets) \\\n  F(shell_pair_systems) F(shell_pair_first) F(shell_pair_second) F(shell_pair_primitive_offsets) \\\n- F(direct_ao_shells) F(direct_ao_angular)\n+ F(direct_ao_shells) F(direct_ao_angular) F(shell_ao_offsets)\n struct HostBatch {\n   std::size_t nbf=1, direct_nbf=1;\n #define V(name) std::vector<std::int64_t> name{0,1};\n",
+    "patch_sha256": "7148c8aaf0b1bd53703113d34319200365d22eb2e57607a3b87d076883939430",
+    "paths": ["tests/python/test_coulomb_optional_allocation.py"],
+    "message": "test(cuda): keep allocation probes aligned with retained shell metadata\n\nAdd shell_ao_offsets to the shared HostBatch/DeviceBatch test stub. Reproduced 12 compilation setup errors before this change; all 12 optional-allocation and stack-reservation failure-isolation tests pass afterward. No production path or assertion is weakened."
+  },
+  {
+    "pr": 1585,
+    "expected_head": "1d00a85e303c4652a813ac005c081573f9ea7354",
+    "patch": "diff --git a/README.md b/README.md\nindex 669e6b0b..9f598375 100644\n--- a/README.md\n+++ b/README.md\n@@ -101,7 +101,7 @@ cmake --build --preset cuda-dev-fast\n An installed native SDK/runtime does not require Python:\n \n ```bash\n-cmake --install build --prefix /opt/generativeqc\n+cmake --install build/cuda-dev-fast --prefix /opt/generativeqc\n /opt/generativeqc/bin/generativeqc methods\n ```\n \n",
+    "patch_sha256": "ac50912c22f7f15308e427af625aa19df5d661c5f16c6b6a51793b8ff932dff8",
+    "paths": ["README.md"],
+    "message": "docs: install from the demonstrated CUDA preset build directory\n\nThe cuda-dev-fast configure/build commands use build/cuda-dev-fast according to CMakePresets.json. Keep the following SDK install command on the same binary directory instead of the unconfigured build root."
+  }
+]
