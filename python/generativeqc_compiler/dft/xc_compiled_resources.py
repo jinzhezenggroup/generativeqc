@@ -55,6 +55,7 @@ class GridXcCompiledRegionEvidence:
     shape: GridXcCompiledResourceShape
     scopes: tuple[tuple[str, tuple[KernelResources, ...]], ...]
     profitability: GpuProfitability
+    binding_identity: str
 
     def __post_init__(self) -> None:
         if not self.architecture.startswith("sm_"):
@@ -68,8 +69,9 @@ class GridXcCompiledRegionEvidence:
         if not isinstance(self.profitability, GpuProfitability):
             raise TypeError("compiled grid/XC evidence requires GpuProfitability")
         payload = self.profitability.to_payload()
+        static = typing.cast("dict[str, typing.Any]", payload["static"])
         if (
-            any(value is not None for value in payload["static"].values())
+            any(value is not None for value in static.values())
             or payload["endpoint_seconds"] is not None
         ):
             raise ValueError(
@@ -87,12 +89,10 @@ class GridXcCompiledRegionEvidence:
                 raise ValueError(
                     f"compiled grid/XC scope {name!r} requires PTXAS resources"
                 )
+        if self.binding_identity != canonical_hash(self._binding_payload()):
+            raise ValueError("compiled grid/XC evidence binding identity is stale")
 
-    @property
-    def identity(self) -> str:
-        return canonical_hash(self.to_payload())
-
-    def to_payload(self) -> dict[str, typing.Any]:
+    def _binding_payload(self) -> dict[str, typing.Any]:
         return {
             "schema": GRID_XC_COMPILED_RESOURCE_SCHEMA,
             "architecture": self.architecture,
@@ -104,6 +104,16 @@ class GridXcCompiledRegionEvidence:
                 for name, resources in self.scopes
             },
             "profitability": self.profitability.to_payload(),
+        }
+
+    @property
+    def identity(self) -> str:
+        return self.binding_identity
+
+    def to_payload(self) -> dict[str, typing.Any]:
+        return {
+            **self._binding_payload(),
+            "binding_identity": self.binding_identity,
         }
 
 
@@ -285,7 +295,7 @@ def _pressure_envelope(
     occupancies = tuple(
         _occupancy(
             row,
-            threads=_kernel_threads(row.function, shape, functional),
+            threads=_kernel_threads(row.function, functional),
             target=target,
         )
         for row in rows
@@ -362,6 +372,17 @@ def native_grid_xc_compiled_region_evidence(
         object_bytes=object_bytes,
         compile_seconds=compile_seconds,
     )
+    binding_payload = {
+        "schema": GRID_XC_COMPILED_RESOURCE_SCHEMA,
+        "architecture": target.architecture,
+        "source_identity": source_identity,
+        "functional": functional,
+        "shape": asdict(shape),
+        "scopes": {
+            name: [asdict(resource) for resource in rows] for name, rows in scopes
+        },
+        "profitability": profitability.to_payload(),
+    }
     return GridXcCompiledRegionEvidence(
         architecture=target.architecture,
         source_identity=source_identity,
@@ -369,4 +390,5 @@ def native_grid_xc_compiled_region_evidence(
         shape=shape,
         scopes=scopes,
         profitability=profitability,
+        binding_identity=canonical_hash(binding_payload),
     )
