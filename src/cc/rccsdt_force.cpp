@@ -480,10 +480,10 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   return plan;
 }
 
-RccsdtForcePlan plan_rccsd_force_cpu(
-    const core::System& system, const integrals::ElectronInteractionSource& source,
-    const hf::PhysicalReference& reference, const Problem& p, const SolverResult& cc,
-    std::size_t max_bytes) {
+RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
+                                     const integrals::ElectronInteractionSource& source,
+                                     const hf::PhysicalReference& reference, const Problem& p,
+                                     const SolverResult& cc, std::size_t max_bytes) {
   if (source.nbf() != reference.nbf ||
       !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD force interaction source/reference mismatch");
@@ -498,10 +498,10 @@ RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
                                       posthf::source_capacity(system));
 }
 
-RccsdtForcePlan plan_rccsdt_force_cpu(
-    const core::System& system, const integrals::ElectronInteractionSource& source,
-    const hf::PhysicalReference& reference, const Problem& p, const SolverResult& cc,
-    std::size_t max_bytes) {
+RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
+                                      const integrals::ElectronInteractionSource& source,
+                                      const hf::PhysicalReference& reference, const Problem& p,
+                                      const SolverResult& cc, std::size_t max_bytes) {
   if (source.nbf() != reference.nbf ||
       !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD(T) force interaction source/reference mismatch");
