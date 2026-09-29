@@ -59,6 +59,7 @@ void launch_bounded_shell_energy_derivative(
     const double* shell_pair_block_bounds, const double* system_density_bounds,
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
-    double coulomb_coefficient, double exchange_coefficient);
+    double coulomb_coefficient, double exchange_coefficient,
+    DirectCoulombRange radial_range = DirectCoulombRange::Full, double radial_omega = 0.0);
 
 }  // namespace generativeqc::scf::cuda_execution
