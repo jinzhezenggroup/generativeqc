@@ -12,6 +12,7 @@
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
+#include "posthf/rank2_transform.hpp"
 #include "response/solve.hpp"
 
 namespace generativeqc::mp2 {
@@ -28,14 +29,7 @@ std::vector<double> hcore_mo(const hf::PhysicalReference& reference) {
   const auto n = reference.nbf;
   if (reference.hcore.size() != square(n) || reference.coefficients.size() != square(n))
     throw std::invalid_argument("MP2 force reference has inconsistent one-electron data");
-  std::vector<double> result(square(n), 0.0);
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q)
-      for (std::size_t mu = 0; mu < n; ++mu)
-        for (std::size_t nu = 0; nu < n; ++nu)
-          result[p * n + q] += reference.coefficients[mu * n + p] * reference.hcore[mu * n + nu] *
-                               reference.coefficients[nu * n + q];
-  return result;
+  return posthf::rank2_ao_to_mo(reference.coefficients, reference.hcore, n);
 }
 
 EnergyAdjoint energy_adjoint(const hf::PhysicalReference& reference,
