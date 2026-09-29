@@ -35,12 +35,15 @@ generativeqc_status execute_cuda_one_electron_gradient(
 
 /** Evaluate the stationary hcore and overlap/Pulay sources under one prepared
  * topology/metadata upload and one stream drain. The two scientific outputs
- * remain separate: hcore uses D for T/V, while Pulay uses -W for S. */
+ * remain separate: hcore uses D for T/V, while Pulay uses -W for S.
+ * Prepared native callers may pass a matched pair of resident device pointers
+ * with empty host spans; those weights are borrowed and never copied H2D. */
 generativeqc_status execute_cuda_stationary_one_electron_pair(
     int device_id, const core::System& system, std::span<const double> density,
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
-    OneElectronGradientResources* resources = nullptr);
+    OneElectronGradientResources* resources = nullptr, const double* resident_density = nullptr,
+    const double* resident_weighted_density = nullptr);
 
 }  // namespace generativeqc::scf
 
