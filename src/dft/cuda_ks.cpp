@@ -1563,6 +1563,39 @@ generativeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateTok
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
+generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
+    const CudaKsFinalStateToken& expected, CudaKsResidentNonlocalFeaturesBinding& binding,
+    std::string& detail) const {
+  binding = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS resident-nonlocal token has stale owner, epoch, generation or model");
+    if (!impl_->device_nonlocal) {
+      detail = "CUDA KS final state has no device-resident nonlocal features";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    // Device-resident nonlocal composition is deliberately excluded from the
+    // speculative chunk/replay route. The raw full-grid features are therefore
+    // the last ordinary stage_xc() generation iff they are the final state.
+    if (impl_->device_chunk_mode || impl_->generation != impl_->final_generation)
+      throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
+    if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
+      throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");
+    binding = {impl_->device,       impl_->nonlocal_raw_density, impl_->nonlocal_raw_gradient,
+               impl_->xc_layout.npoint, impl_->owner,           impl_->solve_epoch,
+               impl_->final_generation};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
 generativeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& expected,
                                                  bool compute_weighted_density,
                                                  VerifiedKsFinalState& state, std::string& detail) {
