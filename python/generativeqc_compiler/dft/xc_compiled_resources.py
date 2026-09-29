@@ -102,7 +102,8 @@ class GridXcCompiledRegionEvidence:
 
 
 def _leaf(function: str) -> str:
-    return function.rsplit("::", 1)[-1].replace(" ", "")
+    qualified = function.split("(", 1)[0]
+    return qualified.rsplit("::", 1)[-1].replace(" ", "")
 
 
 def _matching(
@@ -136,7 +137,7 @@ def _active_scopes(
     density_token = (
         "tiled_density_product<false>" if tiled else "density_product<false>"
     )
-    point_token = f"evaluate_points<{code},false>"
+    point_token = f"evaluate_points<{code}"
 
     ao = _matching(
         resources,
@@ -156,7 +157,8 @@ def _active_scopes(
     )
     points = _matching(
         resources,
-        lambda name: name.startswith(point_token),
+        lambda name: name.startswith(point_token)
+        and name.endswith(",false>"),
         "functional-specific XC point scope",
     )
     if tiled:
