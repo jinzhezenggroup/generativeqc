@@ -9,6 +9,7 @@ from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
+    analyze_complexity,
     TensorSpec,
     add,
     broadcast,
@@ -20,6 +21,7 @@ from generativeqc_compiler.tensor import (
     runtime_indexed_select,
     transpose,
 )
+from generativeqc_compiler.tensor.cuda_emit import emit_cuda
 from generativeqc_compiler.tensor.cuda_plan import (
     ALIGNMENT,
     Reservations,
@@ -50,6 +52,39 @@ def assert_disjoint_live_allocations(plan: typing.Any) -> None:
                 a.offset + aligned(a.node.spec.size * 8) <= b.offset
                 or b.offset + aligned(b.node.spec.size * 8) <= a.offset
             ), (i, j)
+
+
+def test_opt_in_reassociation_lowers_rank2_chain_to_two_cuda_gemms() -> None:
+    ao = IndexSpace("ao", "ao", 7)
+    mo = IndexSpace("mo", "orbital", 7)
+    coefficients = input_tensor(
+        "coefficients",
+        TensorSpec((Index("mu", ao), Index("p", mo)), role="input"),
+    )
+    hcore = input_tensor(
+        "hcore",
+        TensorSpec((Index("mu", ao), Index("nu", ao)), role="input"),
+    )
+    program = Program(
+        {"hcore_mo": einsum("mp,mn,nq->pq", coefficients, hcore, coefficients)}
+    )
+
+    baseline = plan_cuda(program, TARGET)
+    optimized = plan_cuda(program, TARGET, reassociate_contractions=True)
+
+    assert analyze_complexity(baseline.program).max_work_degree == 4
+    assert analyze_complexity(optimized.program).max_work_degree == 3
+
+    baseline_einsums = [step for step in baseline.steps if step.node.op == "einsum"]
+    optimized_einsums = [step for step in optimized.steps if step.node.op == "einsum"]
+    assert len(baseline_einsums) == 1
+    assert baseline_einsums[0].gemm == "none"
+    assert len(optimized_einsums) == 2
+    assert all(step.gemm != "none" for step in optimized_einsums)
+
+    source = emit_cuda(optimized)
+    assert source.count("gemm(ctx,") == 2
+    assert optimized.estimated_flops < baseline.estimated_flops
 
 
 def test_reuse_keeps_inputs_and_outputs_and_releases_dead_work() -> None:
