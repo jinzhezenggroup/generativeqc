@@ -121,6 +121,8 @@ from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_progr
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)
+
+
 def _prepare_production(
     program: Program,
     backend: str,
@@ -716,9 +718,7 @@ def cpu_header() -> str:
     hamiltonian_weights = _prepare_production(hamiltonian.weights, "cpu")
     orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "cpu")
     fock_weights = _prepare_production(
-        build_fock_weight_program(
-            *REPRESENTATIVE, explicit_density_input=True
-        ),
+        build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
         "cpu",
     )
     hamiltonian_input_names = tuple(
@@ -1203,9 +1203,7 @@ def cuda_source() -> str:
     hamiltonian_weights = _prepare_production(hamiltonian.weights, "cuda")
     orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "cuda")
     fock_weights = _prepare_production(
-        build_fock_weight_program(
-            *REPRESENTATIVE, explicit_density_input=True
-        ),
+        build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
         "cuda",
     )
     hamiltonian_input_names = tuple(

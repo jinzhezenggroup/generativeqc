@@ -24,7 +24,7 @@ def test_prepare_for_backend_folds_constants_without_numpy_interpreter() -> None
 def test_prepare_for_backend_is_site_package_independent() -> None:
     script = f"""
 import sys
-sys.path[:0] = [{str(ROOT)!r}, {str(ROOT / 'python')!r}]
+sys.path[:0] = [{str(ROOT)!r}, {str(ROOT / "python")!r}]
 from generativeqc_compiler.tensor import Program, add, constant
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 program = Program({{"value": add(constant(2), constant(3))}})
@@ -47,7 +47,9 @@ def test_cuda_planner_runs_exact_shared_preparation_before_lowering() -> None:
     live = multiply(constant(2), constant(3))
     dead = multiply(constant(4), constant(5))
     program = Program({"value": live}, definitions=(dead,))
-    plan = plan_cuda(program, cuda_target_info("sm_80"), provider_bytes=0, library_bytes=0)
+    plan = plan_cuda(
+        program, cuda_target_info("sm_80"), provider_bytes=0, library_bytes=0
+    )
     assert plan.program.outputs["value"].op == "constant"
     assert len(plan.program.nodes) == 1
 

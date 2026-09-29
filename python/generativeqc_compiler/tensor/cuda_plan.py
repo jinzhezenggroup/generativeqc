@@ -35,11 +35,11 @@ from .batch_schedule import (
     index_table_length,
     index_table_values,
 )
-from .optimize import prepare_for_backend
 from .cuda_dtype import program_precision, scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
 from .ir import TRANSCENDENTALS, Node
+from .optimize import prepare_for_backend
 from .precision import PrecisionSchedule, ValuePrecision, describe_precision
 from .program import Program, _hash
 from .types import checked_size
