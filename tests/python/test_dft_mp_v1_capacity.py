@@ -18,16 +18,16 @@ SPD_CONTRACT_FILES = (
     "src/molecule/basis.cpp",
     "src/dft/ao_grid.cpp",
     "src/dft/bridge.cpp",
-    "python/vibeqc/_stationary_cuda.py",
+    "python/generativeqc/_stationary_cuda.py",
 )
 PUBLIC_ROUTE_FILES = (
-    "python/vibeqc/calculator.py",
-    "python/vibeqc/batch.py",
+    "python/generativeqc/calculator.py",
+    "python/generativeqc/batch.py",
 )
 GRID_CONTRACT_FILES = (
-    "python/vibeqc/ks.py",
-    "python/vibeqc_compiler/dft/grid.py",
-    "python/vibeqc_compiler/xc/quadrature_cuda.py",
+    "python/generativeqc/ks.py",
+    "python/generativeqc_compiler/dft/grid.py",
+    "python/generativeqc_compiler/xc/quadrature_cuda.py",
     "src/dft/cuda_quadrature.cu",
     "src/dft/grid.hpp",
     "src/methods/dft_method.cpp",
@@ -65,10 +65,10 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
         tmp_path,
         (
             "src/dft/stationary_gradient_cuda.cuh",
-            "python/vibeqc/_ks_snapshot.py",
+            "python/generativeqc/_ks_snapshot.py",
         ),
     )
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target = tmp_path / "python/generativeqc/_stationary_cuda.py"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source, encoding="utf-8")
 
@@ -76,15 +76,15 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
 def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     result = report()
 
-    assert result["schema"] == "vibeqc.dft-mp-v1.stationary-capacity.v1"
+    assert result["schema"] == "generativeqc.dft-mp-v1.stationary-capacity.v1"
     assert result["source"]["sha"] == SOURCE_SHA
     assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
         (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
     )
     assert result["source"]["imported_module_sha256"][
-        "vibeqc_compiler.dft.ao"
+        "generativeqc_compiler.dft.ao"
     ] == qualify_capacity._lf_sha256(
-        (ROOT / "python/vibeqc_compiler/dft/ao.py").read_bytes()
+        (ROOT / "python/generativeqc_compiler/dft/ao.py").read_bytes()
     )
     assert result["contract"] == {
         "id": "DFT-MP-v1",
@@ -656,7 +656,7 @@ def test_public_report_cannot_exempt_an_arbitrary_dirty_path() -> None:
     with pytest.raises(TypeError, match="unexpected keyword argument 'output_path'"):
         qualify_capacity.build_report(  # type: ignore[call-arg]
             ROOT,
-            output_path=ROOT / "python/vibeqc/calculator.py",
+            output_path=ROOT / "python/generativeqc/calculator.py",
         )
 
 
@@ -833,7 +833,7 @@ def test_report_rejects_symlinked_aot_directory_ancestor(tmp_path: Path) -> None
 def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     whole_force_gate = (
         "    if records > max_primitive_records:\n"
         '        raise ValueError("primitive work budget exceeded")\n'
@@ -852,7 +852,7 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
 def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "if np.any(primitive_work > self.page_work_budget):"
     assert old in source
     stationary_contract_tree(
@@ -867,7 +867,7 @@ def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
 def test_primitive_budget_scope_fails_closed_when_component_work_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "primitive_work *= int(row[2])"
     assert old in source
     stationary_contract_tree(
@@ -881,7 +881,7 @@ def test_primitive_budget_scope_fails_closed_when_component_work_moves(
 def test_primitive_page_gate_order_fails_closed_when_execution_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     original = (
         "            execution = task_executor.execute_pages(domain, submit_page)"
     )
@@ -902,7 +902,7 @@ def test_primitive_page_gate_order_fails_closed_when_execution_moves(
 def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "sources.integral_page("
     assert source.count(old) == 2
     stationary_contract_tree(tmp_path, source.replace(old, "sources.integral(", 1))
@@ -914,7 +914,7 @@ def test_primitive_page_gate_fails_closed_when_callback_bypasses_producer(
 def test_primitive_page_gate_fails_closed_when_budget_initialization_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "self.page_work_budget = int(page_work_budget)"
     assert old in source
     stationary_contract_tree(
@@ -929,7 +929,7 @@ def test_primitive_page_gate_fails_closed_when_budget_initialization_moves(
 def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -947,7 +947,7 @@ def test_primitive_page_gate_fails_closed_when_native_consumer_moves(
 def test_nuclear_pair_work_fails_closed_when_python_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = '        self.flush()\n        kind = self.kinds["nuclear", ()]'
     assert old in source
     stationary_contract_tree(
@@ -962,7 +962,7 @@ def test_nuclear_pair_work_fails_closed_when_python_consumer_moves(
 def test_nuclear_pair_work_fails_closed_when_endpoint_loop_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "            for other in range(atom):\n                sources.nuclear("
     assert old in source
     stationary_contract_tree(
@@ -981,7 +981,7 @@ def test_nuclear_pair_work_fails_closed_when_endpoint_loop_moves(
 def test_nuclear_pair_work_fails_closed_when_native_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -999,7 +999,7 @@ def test_nuclear_pair_work_fails_closed_when_native_consumer_moves(
 def test_primitive_work_fails_closed_when_endpoint_enumeration_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = '("coulomb", 4, "four_center_eri")'
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1014,7 +1014,7 @@ def test_primitive_work_fails_closed_when_endpoint_enumeration_moves(
 def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "for begin in range(0, len(grid.points), tile_points):"
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1033,7 +1033,7 @@ def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
 def test_grid_pair_work_fails_closed_when_python_geometry_route_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = 'else "stationary_geometry_enqueue"'
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1048,7 +1048,7 @@ def test_grid_pair_work_fails_closed_when_python_geometry_route_moves(
 def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -1072,7 +1072,7 @@ def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
 def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -1089,7 +1089,7 @@ def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
@@ -1107,7 +1107,7 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
 def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "(1 + int(has_exchange)) * primitive_sum**4"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "primitive_sum**3", 1))
@@ -1119,7 +1119,7 @@ def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
 def test_limit_defaults_fail_closed_when_public_forwarding_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = '"max_grid_points": max_grid_points,'
     assert source.count(old) == 1
     stationary_contract_tree(
@@ -1134,7 +1134,7 @@ def test_limit_defaults_fail_closed_when_public_forwarding_moves(
 def test_memory_bounds_fail_closed_when_production_definition_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "22 * primitive_tile"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "23 * primitive_tile", 1))
@@ -1147,25 +1147,25 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
     ("relative", "old", "new", "message"),
     [
         (
-            "python/vibeqc/_model_resolution.py",
+            "python/generativeqc/_model_resolution.py",
             'return _named_basis_record(basis, representation or "cartesian")',
             'return _named_basis_record(basis, representation or "spherical")',
             "snapshot_basis basis lowering contract changed",
         ),
         (
-            "python/vibeqc/basis.py",
+            "python/generativeqc/basis.py",
             "for row in shell.coefficients:",
             "for row in shell.coefficients[:1]:",
             "shells_for basis lowering contract changed",
         ),
         (
-            "python/vibeqc/calculator.py",
+            "python/generativeqc/calculator.py",
             "return (\n            selected_basis.shells_for(atoms)",
             "return (\n            tuple(selected_basis.shells_for(atoms))",
             "_shells_for_atoms basis lowering contract changed",
         ),
         (
-            "python/vibeqc/calculator.py",
+            "python/generativeqc/calculator.py",
             "shells = self._shells_for_atoms(atoms, basis)",
             "shells = tuple(self._shells_for_atoms(atoms, basis))",
             "_create_native_system basis lowering contract changed",
@@ -1182,10 +1182,10 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
     copy_contract_files(
         tmp_path,
         (
-            "python/vibeqc_compiler/dft/ao.py",
-            "python/vibeqc/_model_resolution.py",
-            "python/vibeqc/basis.py",
-            "python/vibeqc/calculator.py",
+            "python/generativeqc_compiler/dft/ao.py",
+            "python/generativeqc/_model_resolution.py",
+            "python/generativeqc/basis.py",
+            "python/generativeqc/calculator.py",
         ),
     )
     target = tmp_path / relative
@@ -1200,7 +1200,7 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
 def test_grid_memory_fails_closed_when_production_plan_inputs_move(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "order=2 if needs_first else 1"
     first = source.index(old)
     production = source.index(old, first + len(old))
@@ -1216,7 +1216,7 @@ def test_grid_memory_fails_closed_when_production_plan_inputs_move(
 def test_grid_memory_fails_closed_when_functional_lowering_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "functional = int(state._source.metadata[6])"
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, "functional = 0", 1))
@@ -1241,7 +1241,7 @@ def test_public_selector_contract_rejects_changed_functional_lowering(
 
 
 def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     old = "if host_bound > max_host_bytes:"
     assert old in source
     stationary_contract_tree(
@@ -1255,7 +1255,7 @@ def test_memory_bounds_fail_closed_when_host_gate_moves(tmp_path: Path) -> None:
 def test_admission_gate_order_fails_closed_when_leading_gates_move(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     small = (
         "    if not 1 <= na <= 32 or not 1 <= n <= 128:\n"
         '        raise ValueError("CUDA diagnostic small-domain atom/AO cap exceeded")\n'
@@ -1276,7 +1276,7 @@ def test_admission_gate_order_fails_closed_when_leading_gates_move(
 def test_admission_gate_order_fails_closed_when_memory_gates_move(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc/_stationary_cuda.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(encoding="utf-8")
     device = (
         "    if available <= 0:\n"
         '        raise ValueError("stationary additional-device budget exceeded")\n'
@@ -1298,10 +1298,10 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
 def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
+    source = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
     old = "          --component-domain spd"
     assert old in source
-    target = tmp_path / "cmake/VibeQCCuda.cmake"
+    target = tmp_path / "cmake/GenerativeQCCuda.cmake"
     target.parent.mkdir(parents=True)
     target.write_text(
         source.replace(old, "          --component-domain sp", 1), encoding="utf-8"
@@ -1314,10 +1314,10 @@ def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
 def test_basis_numeric_bound_fails_closed_when_production_definition_moves(
     tmp_path: Path,
 ) -> None:
-    source = (ROOT / "python/vibeqc_compiler/dft/ao.py").read_text(encoding="utf-8")
+    source = (ROOT / "python/generativeqc_compiler/dft/ao.py").read_text(encoding="utf-8")
     old = "2 * self.packed.nbytes"
     assert old in source
-    target = tmp_path / "python/vibeqc_compiler/dft/ao.py"
+    target = tmp_path / "python/generativeqc_compiler/dft/ao.py"
     target.parent.mkdir(parents=True)
     target.write_text(
         source.replace(old, "3 * self.packed.nbytes", 1), encoding="utf-8"
@@ -1373,7 +1373,7 @@ def test_spherical_component_count_fails_closed_when_layout_parser_moves(
     tmp_path: Path,
 ) -> None:
     spd_contract_tree(tmp_path)
-    target = tmp_path / "python/vibeqc/_stationary_cuda.py"
+    target = tmp_path / "python/generativeqc/_stationary_cuda.py"
     source = target.read_text(encoding="utf-8")
     old = "for term in range(int(row[3]))"
     assert old in source
@@ -1415,7 +1415,7 @@ def test_public_capability_fails_closed_when_complete_predicate_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
-    target = tmp_path / "python/vibeqc/calculator.py"
+    target = tmp_path / "python/generativeqc/calculator.py"
     source = target.read_text(encoding="utf-8")
     old = "self._ks_options.coefficients == (1.0, 1.0, 0.0)"
     first = source.index(old)
@@ -1433,7 +1433,7 @@ def test_public_capability_fails_closed_when_promotion_condition_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
-    target = tmp_path / "python/vibeqc/calculator.py"
+    target = tmp_path / "python/generativeqc/calculator.py"
     source = target.read_text(encoding="utf-8")
     old = "and self._method in _method_manifest.NATIVE_DFT_METHOD_IDS"
     assert old in source
@@ -1447,7 +1447,7 @@ def test_public_cuda_force_fails_closed_when_packaged_route_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
-    target = tmp_path / "python/vibeqc/batch.py"
+    target = tmp_path / "python/generativeqc/batch.py"
     source = target.read_text(encoding="utf-8")
     old = "and not state._source.method_ir.full_range_exact_exchange"
     assert old in source
@@ -1460,7 +1460,7 @@ def test_public_cuda_force_fails_closed_when_packaged_route_moves(
 def test_prepared_aot_route_fails_closed_when_selection_moves(
     tmp_path: Path,
 ) -> None:
-    relative = "python/vibeqc/_stationary_cuda.py"
+    relative = "python/generativeqc/_stationary_cuda.py"
     copy_contract_files(tmp_path, (relative,))
     target = tmp_path / relative
     source = target.read_text(encoding="utf-8")
@@ -1493,7 +1493,7 @@ def test_grid_count_fails_closed_when_source_only_shape_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/vibeqc_compiler/dft/grid.py"
+    target = tmp_path / "python/generativeqc_compiler/dft/grid.py"
     source = target.read_text(encoding="utf-8")
     old = "len(atoms) * len(r) * len(angular)"
     assert old in source
@@ -1507,7 +1507,7 @@ def test_grid_count_fails_closed_when_generated_layout_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/vibeqc_compiler/xc/quadrature_cuda.py"
+    target = tmp_path / "python/generativeqc_compiler/xc/quadrature_cuda.py"
     source = target.read_text(encoding="utf-8")
     old = "l.points = points;"
     assert old in source
@@ -1540,7 +1540,7 @@ def test_grid_count_fails_closed_when_public_abi_lowering_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/vibeqc/ks.py"
+    target = tmp_path / "python/generativeqc/ks.py"
     source = target.read_text(encoding="utf-8")
     old = "        grid.radial_points,"
     assert old in source
@@ -1659,16 +1659,16 @@ def test_report_requires_a_fresh_interpreter_after_qualifier_source_moves(
 def test_report_rejects_transitive_imported_module_source_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    path, _ = qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES["vibeqc_compiler.dft.ao"]
+    path, _ = qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES["generativeqc_compiler.dft.ao"]
     monkeypatch.setitem(
         qualify_capacity._IMPORTED_LOCAL_MODULE_SOURCES,
-        "vibeqc_compiler.dft.ao",
+        "generativeqc_compiler.dft.ao",
         (path, "0" * 64),
     )
 
     with pytest.raises(
         RuntimeError,
-        match="imported module source changed: vibeqc_compiler.dft.ao",
+        match="imported module source changed: generativeqc_compiler.dft.ao",
     ):
         qualify_capacity._assert_local_imports()
 
@@ -1693,7 +1693,7 @@ def test_report_rejects_dependencies_preloaded_before_qualifier_import(
     monkeypatch.setattr(
         qualify_capacity,
         "_PRELOADED_LOCAL_MODULES",
-        frozenset({"vibeqc_compiler.dft.plan"}),
+        frozenset({"generativeqc_compiler.dft.plan"}),
     )
 
     with pytest.raises(RuntimeError, match="requires a fresh interpreter"):
