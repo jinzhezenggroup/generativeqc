@@ -54,7 +54,12 @@ __global__ void compact_active_shell_quartet_tiles_kernel(
     const std::uint32_t* mixed_precision_item_census,
     const std::uint32_t* fp32_shell_quartet_tile_offsets,
     std::uint32_t* fp32_shell_quartet_tile_counts,
-    ActiveShellQuartetTile* fp32_shell_quartet_tiles) {
+    ActiveShellQuartetTile* fp32_shell_quartet_tiles,
+    const std::uint8_t* incremental_full_build,
+    unsigned long long* full_admitted_shell_quartets,
+    unsigned long long* delta_admitted_shell_quartets,
+    unsigned long long* full_admitted_quartet_tiles,
+    unsigned long long* delta_admitted_quartet_tiles) {
   // An equal-quartet-count batch is launched system-major (grid.y == batch size).
   // Resolve ownership from blockIdx.y in that case instead of performing one
   // O(log(batch)) binary search for every shell quartet. Ragged batches keep
@@ -104,6 +109,19 @@ __global__ void compact_active_shell_quartet_tiles_kernel(
                                            : first_ao_pair_count * second_ao_pair_count;
   const std::uint32_t tile_count = static_cast<std::uint32_t>(
       (ao_quartet_count + detail::kDirectQuartetTileSize - 1) / detail::kDirectQuartetTileSize);
+  if constexpr (Purpose == DirectScreeningPurpose::Fock) {
+    if (incremental_full_build != nullptr) {
+      const bool full_build = incremental_full_build[system] != 0U;
+      unsigned long long* shell_quartets =
+          full_build ? full_admitted_shell_quartets : delta_admitted_shell_quartets;
+      unsigned long long* quartet_tiles =
+          full_build ? full_admitted_quartet_tiles : delta_admitted_quartet_tiles;
+      if (shell_quartets != nullptr) atomicAdd(shell_quartets + system, 1ULL);
+      if (quartet_tiles != nullptr) {
+        atomicAdd(quartet_tiles + system, static_cast<unsigned long long>(tile_count));
+      }
+    }
+  }
   const unsigned angular_order =
       batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
       batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
@@ -196,7 +214,12 @@ void launch_compact_active_shell_quartet_tiles_kernel(
     const std::uint32_t* mixed_precision_item_census,
     const std::uint32_t* fp32_shell_quartet_tile_offsets,
     std::uint32_t* fp32_shell_quartet_tile_counts,
-    ActiveShellQuartetTile* fp32_shell_quartet_tiles) {
+    ActiveShellQuartetTile* fp32_shell_quartet_tiles,
+    const std::uint8_t* incremental_full_build,
+    unsigned long long* full_admitted_shell_quartets,
+    unsigned long long* delta_admitted_shell_quartets,
+    unsigned long long* full_admitted_quartet_tiles,
+    unsigned long long* delta_admitted_quartet_tiles) {
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
       compact_active_shell_quartet_tiles_kernel<true, DirectScreeningPurpose::Fock>
@@ -206,7 +229,9 @@ void launch_compact_active_shell_quartet_tiles_kernel(
               active_shell_quartet_tiles, mixed_precision_enabled, mixed_precision_cutoff_ceiling,
               mixed_precision_budget_error, mixed_precision_item_census,
               fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts,
-              fp32_shell_quartet_tiles);
+              fp32_shell_quartet_tiles, incremental_full_build, full_admitted_shell_quartets,
+              delta_admitted_shell_quartets, full_admitted_quartet_tiles,
+              delta_admitted_quartet_tiles);
     } else {
       compact_active_shell_quartet_tiles_kernel<true, DirectScreeningPurpose::Force>
           <<<grid, block, shared_bytes, stream>>>(
@@ -215,7 +240,9 @@ void launch_compact_active_shell_quartet_tiles_kernel(
               active_shell_quartet_tiles, mixed_precision_enabled, mixed_precision_cutoff_ceiling,
               mixed_precision_budget_error, mixed_precision_item_census,
               fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts,
-              fp32_shell_quartet_tiles);
+              fp32_shell_quartet_tiles, incremental_full_build, full_admitted_shell_quartets,
+              delta_admitted_shell_quartets, full_admitted_quartet_tiles,
+              delta_admitted_quartet_tiles);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -226,7 +253,9 @@ void launch_compact_active_shell_quartet_tiles_kernel(
               active_shell_quartet_tiles, mixed_precision_enabled, mixed_precision_cutoff_ceiling,
               mixed_precision_budget_error, mixed_precision_item_census,
               fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts,
-              fp32_shell_quartet_tiles);
+              fp32_shell_quartet_tiles, incremental_full_build, full_admitted_shell_quartets,
+              delta_admitted_shell_quartets, full_admitted_quartet_tiles,
+              delta_admitted_quartet_tiles);
     } else {
       compact_active_shell_quartet_tiles_kernel<false, DirectScreeningPurpose::Force>
           <<<grid, block, shared_bytes, stream>>>(
@@ -235,7 +264,9 @@ void launch_compact_active_shell_quartet_tiles_kernel(
               active_shell_quartet_tiles, mixed_precision_enabled, mixed_precision_cutoff_ceiling,
               mixed_precision_budget_error, mixed_precision_item_census,
               fp32_shell_quartet_tile_offsets, fp32_shell_quartet_tile_counts,
-              fp32_shell_quartet_tiles);
+              fp32_shell_quartet_tiles, incremental_full_build, full_admitted_shell_quartets,
+              delta_admitted_shell_quartets, full_admitted_quartet_tiles,
+              delta_admitted_quartet_tiles);
     }
   }
 }
