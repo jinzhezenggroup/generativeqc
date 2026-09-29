@@ -3,9 +3,9 @@
 This is the first native LDA/PBE RKS composition of the MethodIR-derived
 StationaryHVPPlan, one real CPKS nuclear response, generated first/second
 integral providers, analytic Becke mixed response and native SCF-domain XC
-Hessian contractions. It remains a tools endpoint: direct all-electron
-Cartesian CPU RKS under explicit resource budgets, with no public Calculator
-Hessian capability inferred.
+Hessian contractions. The installed endpoint remains an internal capability:
+direct all-electron Cartesian CPU RKS under explicit resource budgets, with no
+public Calculator Hessian capability inferred.
 """
 
 from __future__ import annotations
