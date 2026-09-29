@@ -70,30 +70,25 @@ bool check_gemm(CpuLinalgProvider provider,
   return close(zero_inner[0], 6.0) && check_zero_scaling(provider, ownership, threads);
 }
 
-bool check_congruence(
-    CpuLinalgProvider provider,
-    CpuLinalgThreadOwnership ownership = CpuLinalgThreadOwnership::task_parallel,
-    int threads = 1) {
+bool check_congruence(CpuLinalgProvider provider,
+                      CpuLinalgThreadOwnership ownership = CpuLinalgThreadOwnership::task_parallel,
+                      int threads = 1) {
   constexpr std::size_t n = 3;
   const CpuLinalgPlan plan{provider, ownership, threads};
-  const std::array<double, n * n> coefficients{1.0, 0.2, -0.1, 0.3, 0.9, 0.4,
-                                               -0.2, 0.5, 1.1};
-  const std::array<double, n * n> matrix{2.0, -1.0, 0.5, 0.7, 3.0, -0.4,
-                                        -0.2, 0.8, 1.5};
+  const std::array<double, n * n> coefficients{1.0, 0.2, -0.1, 0.3, 0.9, 0.4, -0.2, 0.5, 1.1};
+  const std::array<double, n * n> matrix{2.0, -1.0, 0.5, 0.7, 3.0, -0.4, -0.2, 0.8, 1.5};
   for (char trans : {'N', 'T'}) {
     std::array<double, n * n> expected{}, result{}, workspace{};
     for (std::size_t i = 0; i < n; ++i)
       for (std::size_t j = 0; j < n; ++j)
         for (std::size_t p = 0; p < n; ++p)
           for (std::size_t q = 0; q < n; ++q) {
-            const double left = trans == 'T' ? coefficients[p * n + i]
-                                              : coefficients[i * n + p];
-            const double right = trans == 'T' ? coefficients[q * n + j]
-                                               : coefficients[j * n + q];
+            const double left = trans == 'T' ? coefficients[p * n + i] : coefficients[i * n + p];
+            const double right = trans == 'T' ? coefficients[q * n + j] : coefficients[j * n + q];
             expected[i * n + j] += left * matrix[p * n + q] * right;
           }
     generativeqc::tensor::cpu_congruence(trans, n, coefficients.data(), matrix.data(),
-                                          result.data(), workspace.data(), plan);
+                                         result.data(), workspace.data(), plan);
     for (std::size_t i = 0; i < result.size(); ++i)
       if (!std::isfinite(result[i]) || !close(result[i], expected[i], 3.0e-12)) return false;
   }
@@ -102,7 +97,7 @@ bool check_congruence(
   std::array<double, 1> one{1.0}, workspace{0.0};
   try {
     generativeqc::tensor::cpu_congruence('X', 1, one.data(), one.data(), one.data(),
-                                          workspace.data(), plan);
+                                         workspace.data(), plan);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
@@ -501,12 +496,12 @@ bool check_eigen(CpuLinalgProvider provider,
 
 int main() {
   if (!check_gemm(CpuLinalgProvider::scalar) || !check_congruence(CpuLinalgProvider::scalar) ||
-      !check_gemv(CpuLinalgProvider::scalar) ||
-      !check_ger(CpuLinalgProvider::scalar) || !check_symm(CpuLinalgProvider::scalar) ||
-      !check_syr(CpuLinalgProvider::scalar) || !check_syr2(CpuLinalgProvider::scalar) ||
-      !check_syrk(CpuLinalgProvider::scalar) || !check_syr2k(CpuLinalgProvider::scalar) ||
-      !check_trsm(CpuLinalgProvider::scalar) || !check_trmm(CpuLinalgProvider::scalar) ||
-      !check_cholesky(CpuLinalgProvider::scalar) || !check_eigen(CpuLinalgProvider::scalar)) {
+      !check_gemv(CpuLinalgProvider::scalar) || !check_ger(CpuLinalgProvider::scalar) ||
+      !check_symm(CpuLinalgProvider::scalar) || !check_syr(CpuLinalgProvider::scalar) ||
+      !check_syr2(CpuLinalgProvider::scalar) || !check_syrk(CpuLinalgProvider::scalar) ||
+      !check_syr2k(CpuLinalgProvider::scalar) || !check_trsm(CpuLinalgProvider::scalar) ||
+      !check_trmm(CpuLinalgProvider::scalar) || !check_cholesky(CpuLinalgProvider::scalar) ||
+      !check_eigen(CpuLinalgProvider::scalar)) {
     std::cerr << "scalar CPU linear algebra failed\n";
     return 1;
   }

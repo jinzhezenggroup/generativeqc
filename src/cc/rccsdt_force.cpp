@@ -19,8 +19,8 @@
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
-#include "tensor/cpu_linalg.hpp"
 #include "scf/types.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -436,9 +436,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   const auto provider = posthf::numeric_block_plan(n, 0, posthf::source_capacity(system),
                                                    {n, n, n, n}, {tile, tile, tile, tile}, false);
   const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
-  const auto provider_phase =
-      sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
-           checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
+                                   checked_mul(checked_mul(13, n), sizeof(std::size_t))});
   plan.raw_phase_bytes = std::max(rank2_transform_phase, provider_phase);
   const auto raw_retained = bytes(sum({n4, checked_mul(3, n2)}));
   const auto response_retained = bytes(sum({n4, checked_mul(4, n2), ov}));

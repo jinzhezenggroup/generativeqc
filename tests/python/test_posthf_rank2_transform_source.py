@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -26,7 +25,12 @@ def test_production_rank2_transforms_use_shared_cubic_primitive():
         (
             "src/posthf/mp2_derivative_common.cpp",
             "std::vector<double> pullback_matrix(",
-            ("for (std::size_t u =", "for (std::size_t v =", "for (std::size_t p =", "for (std::size_t q ="),
+            (
+                "for (std::size_t u =",
+                "for (std::size_t v =",
+                "for (std::size_t p =",
+                "for (std::size_t q =",
+            ),
         ),
         (
             "src/posthf/mp2_force.cpp",
@@ -43,4 +47,6 @@ def test_production_rank2_transforms_use_shared_cubic_primitive():
         body = _function_body(relative, signature)
         assert "tensor::cpu_congruence(" in body
         for token in forbidden:
-            assert token not in body, f"{relative} reintroduced quartic rank-2 transform: {token}"
+            assert token not in body, (
+                f"{relative} reintroduced quartic rank-2 transform: {token}"
+            )

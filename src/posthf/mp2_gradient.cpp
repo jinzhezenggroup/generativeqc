@@ -547,8 +547,8 @@ GradientResourcePlan conventional_gradient_plan(
   plan.peak_bytes = provider_bytes;
   for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
                      plan.rank2_transform_workspace_bytes, plan.shell_cotangent_bytes,
-                     plan.derivative_staging_bytes,
-                     plan.derivative_backend_staging_bytes, plan.candidate_output_bytes})
+                     plan.derivative_staging_bytes, plan.derivative_backend_staging_bytes,
+                     plan.candidate_output_bytes})
     plan.peak_bytes = posthf::checked_add(plan.peak_bytes, bytes);
   if (plan.peak_bytes > budget_bytes)
     throw std::length_error("conventional MP2 gradient exceeds numeric memory budget");
@@ -605,10 +605,10 @@ DensityFittedGradientResourcePlan density_fitted_gradient_plan(
   plan.candidate_output_bytes = candidate_output_bytes;
 
   plan.peak_bytes = provider_bytes;
-  for (auto bytes : {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
-                     plan.rank2_transform_workspace_bytes, plan.reverse_result_bytes,
-                     plan.reverse_workspace_bytes,
-                     plan.derivative_staging_bytes, plan.candidate_output_bytes})
+  for (auto bytes :
+       {plan.adjoint_bytes, plan.response_bytes, plan.relaxed_weight_bytes,
+        plan.rank2_transform_workspace_bytes, plan.reverse_result_bytes,
+        plan.reverse_workspace_bytes, plan.derivative_staging_bytes, plan.candidate_output_bytes})
     plan.peak_bytes = posthf::checked_add(plan.peak_bytes, bytes);
   if (plan.peak_bytes > budget_bytes)
     throw std::length_error("RI-MP2 gradient exceeds numeric memory budget");

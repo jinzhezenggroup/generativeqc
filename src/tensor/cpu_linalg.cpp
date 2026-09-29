@@ -857,9 +857,9 @@ void cpu_gemm(char a_trans, char b_trans, std::size_t m, std::size_t n, std::siz
   scalar_gemm(ta, tb, m, n, k, a, b, c, alpha, beta);
 }
 
-void cpu_congruence(char coefficient_transpose, std::size_t n,
-                    const double* coefficients, const double* matrix, double* result,
-                    double* workspace, const CpuLinalgPlan& plan) {
+void cpu_congruence(char coefficient_transpose, std::size_t n, const double* coefficients,
+                    const double* matrix, double* result, double* workspace,
+                    const CpuLinalgPlan& plan) {
   bool transposed = false;
   if (coefficient_transpose == 'T' || coefficient_transpose == 't')
     transposed = true;
