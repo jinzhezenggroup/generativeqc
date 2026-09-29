@@ -116,7 +116,11 @@ def test_geometry_reset_ffi_keeps_pointer_and_tolerance_types() -> None:
     module = ast.Module(body=[binding], type_ignores=[])
     exec(compile(module, "<actual ABI>", "exec"), namespace)
     assert function.argtypes == [
-        ct.c_void_p, double_pointer, ct.c_double, ct.c_char_p, ct.c_size_t
+        ct.c_void_p,
+        double_pointer,
+        ct.c_double,
+        ct.c_char_p,
+        ct.c_size_t,
     ]
 
 
@@ -138,8 +142,7 @@ def test_native_geometry_reset_preserves_normal_reset_without_weight_uploads() -
     removed = [
         line
         for line in lines
-        if "upload(*p, p->density," in line
-        or "upload(*p, p->weighted_density," in line
+        if "upload(*p, p->density," in line or "upload(*p, p->weighted_density," in line
     ]
     assert len(removed) == 2
     expected = "".join(line for line in lines if line not in removed)
