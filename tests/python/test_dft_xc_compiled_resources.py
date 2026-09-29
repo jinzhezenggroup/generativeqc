@@ -175,7 +175,10 @@ def test_partial_final_tile_includes_tiled_and_scalar_resource_paths() -> None:
     density = dict(evidence.scopes)["density_product"]
     potential = dict(evidence.scopes)["vxc_contraction"]
     assert any("tiled_density_product" in row.function for row in density)
-    assert any("density_product<false>" in row.function and "tiled_" not in row.function for row in density)
+    assert any(
+        "density_product<false>" in row.function and "tiled_" not in row.function
+        for row in density
+    )
     assert any("tiled_potential" in row.function for row in potential)
     assert any("assemble_potential" in row.function for row in potential)
     assert evidence.profitability.compiled_registers_per_thread == 92

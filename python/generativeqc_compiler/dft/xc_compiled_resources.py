@@ -72,15 +72,21 @@ class GridXcCompiledRegionEvidence:
             any(value is not None for value in payload["static"].values())
             or payload["endpoint_seconds"] is not None
         ):
-            raise ValueError("compiled grid/XC evidence must contain compiled facts only")
+            raise ValueError(
+                "compiled grid/XC evidence must contain compiled facts only"
+            )
         names = tuple(name for name, _ in self.scopes)
         if names != GRID_XC_COMPILED_SCOPES:
-            raise ValueError("compiled grid/XC evidence is missing a required region scope")
+            raise ValueError(
+                "compiled grid/XC evidence is missing a required region scope"
+            )
         for name, resources in self.scopes:
             if not resources or any(
                 not isinstance(resource, KernelResources) for resource in resources
             ):
-                raise ValueError(f"compiled grid/XC scope {name!r} requires PTXAS resources")
+                raise ValueError(
+                    f"compiled grid/XC scope {name!r} requires PTXAS resources"
+                )
 
     @property
     def identity(self) -> str:
@@ -112,7 +118,9 @@ def _matching(
     predicate: typing.Callable[[str], bool],
     label: str,
 ) -> tuple[KernelResources, ...]:
-    selected = tuple(resource for resource in resources if predicate(_leaf(resource.function)))
+    selected = tuple(
+        resource for resource in resources if predicate(_leaf(resource.function))
+    )
     if not selected:
         raise ValueError(f"compiled native grid/XC resources are missing {label}")
     return selected
@@ -152,8 +160,9 @@ def _active_scopes(
     )
     ao_kernel = _matching(
         resources,
-        lambda name: name.startswith("ao_kernel")
-        and not name.startswith("ao_kernel_fp32"),
+        lambda name: (
+            name.startswith("ao_kernel") and not name.startswith("ao_kernel_fp32")
+        ),
         "strict-FP64 AO kernel",
     )
     ao = (*validation, *ao_kernel)
@@ -171,8 +180,10 @@ def _active_scopes(
         density_parts.extend(
             _matching(
                 resources,
-                lambda name: name.startswith("density_product<false>")
-                and not name.startswith("tiled_density_product"),
+                lambda name: (
+                    name.startswith("density_product<false>")
+                    and not name.startswith("tiled_density_product")
+                ),
                 "strict-FP64 scalar density-product kernel",
             )
         )
@@ -231,7 +242,9 @@ def _active_scopes(
     )
 
 
-def _kernel_threads(function: str, shape: GridXcCompiledResourceShape, functional: str) -> int:
+def _kernel_threads(
+    function: str, shape: GridXcCompiledResourceShape, functional: str
+) -> int:
     name = _leaf(function)
     if name.startswith("tiled_density_product") or name.startswith("tiled_potential"):
         return DEFAULT_XC_MATRIX_SCHEDULE.threads
@@ -305,7 +318,9 @@ def native_grid_xc_compiled_region_evidence(
     if any(not isinstance(resource, KernelResources) for resource in materialized):
         raise TypeError("native grid/XC compiled evidence requires KernelResources")
     if not isinstance(shape, GridXcCompiledResourceShape):
-        raise TypeError("native grid/XC compiled evidence requires a typed resource shape")
+        raise TypeError(
+            "native grid/XC compiled evidence requires a typed resource shape"
+        )
     if not isinstance(target, CudaTargetInfo):
         raise TypeError("native grid/XC compiled evidence requires CudaTargetInfo")
     if functional not in _FUNCTIONAL_CODES:

@@ -326,7 +326,9 @@ def _compiled_profitability_fields(
     if evidence.shape != expected_shape:
         raise ValueError("compiled grid/XC evidence shape differs from the candidate")
     if evidence.functional != functional:
-        raise ValueError("compiled grid/XC evidence functional differs from the candidate")
+        raise ValueError(
+            "compiled grid/XC evidence functional differs from the candidate"
+        )
     if (
         evidence.architecture != scientific.architecture
         or evidence.source_identity != scientific.source_identity
@@ -356,7 +358,9 @@ class GridXcScheduleCandidate:
         if not isinstance(self.shape, GridXcCandidateShape):
             raise TypeError("grid/XC schedule candidate requires a candidate shape")
         if self.compiled_evidence is not None and self.schedule.name != "device_fused":
-            raise ValueError("compiled grid/XC region evidence belongs to device_fused only")
+            raise ValueError(
+                "compiled grid/XC region evidence belongs to device_fused only"
+            )
         resolved = self.schedule.resolved(self.shape.tile_points)
         object.__setattr__(self, "schedule", resolved)
 
@@ -559,7 +563,9 @@ def assess_grid_xc_schedule(
             )
     resolved = grid_xc_schedule(schedule).resolved(shape.tile_points)
     if compiled_evidence is not None and resolved.name != "device_fused":
-        raise ValueError("compiled grid/XC region evidence belongs to device_fused only")
+        raise ValueError(
+            "compiled grid/XC region evidence belongs to device_fused only"
+        )
     compiled = _compiled_profitability_fields(
         compiled_evidence,
         shape=shape,
