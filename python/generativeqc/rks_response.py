@@ -144,7 +144,9 @@ class RKSResponseReference:
         expected = np.zeros(n)
         expected[: self.electron_count // 2] = 2.0
         if not np.array_equal(self.occupations, expected):
-            raise ValueError(\n                "RKS response occupations must be ordered closed-shell 2/0"\n            )
+            raise ValueError(
+                "RKS response occupations must be ordered closed-shell 2/0"
+            )
         if np.any(np.diff(self.orbital_energies) < -self.validation_tolerance):
             raise ValueError("canonical RKS orbital energies must be ascending")
         try:
@@ -156,7 +158,9 @@ class RKSResponseReference:
             raise ValueError("RKS response overlap eigenvalues must be finite")
         smallest = float(overlap_eigenvalues[0])
         if smallest <= self.overlap_threshold:
-            raise ValueError(\n                "linearly dependent RKS response AO overlap is unsupported"\n            )
+            raise ValueError(
+                "linearly dependent RKS response AO overlap is unsupported"
+            )
 
         with np.errstate(over="ignore", invalid="ignore"):
             orthogonality = float(
