@@ -604,9 +604,11 @@ struct CudaHamiltonianResponseOwner::Impl {
     layout.reference_seed = reserve(cursor, sizeof(double));
     layout.fock_seed = reserve(cursor, bytes(n2));
     layout.rotation_seed = reserve(cursor, bytes(n2));
-    const auto response_elements = std::max({generated::hamiltonian_weights_arena_elements(o, v),
-                                             generated::fock_weights_arena_elements(o, v),
-                                             generated::orbital_jvp_arena_elements(o, v)});
+    const auto response_elements =
+        std::max({generated::hamiltonian_small_weights_arena_elements(o, v),
+                  generated::hamiltonian_eri_weights_arena_elements(o, v),
+                  generated::fock_small_weights_arena_elements(o, v),
+                  generated::orbital_jvp_arena_elements(o, v)});
     layout.response_arena = reserve(cursor, bytes(response_elements));
     layout.error = reserve(cursor, sizeof(int));
     layout.total = align256(cursor);
@@ -648,11 +650,7 @@ struct CudaHamiltonianResponseOwner::Impl {
 
   ~Impl() { cleanup(); }
 
-  CudaHamiltonianResponseResult hamiltonian(CudaParameterResponseView parameters,
-                                            double reference_seed) {
-    DeviceScope active_device(device_id);
-    if (!std::isfinite(reference_seed))
-      throw std::invalid_argument("nonfinite RCCSD CUDA Hamiltonian reference seed");
+  void stage_parameters(CudaParameterResponseView parameters) {
     const std::array<std::span<const double>, 10> values = {
         parameters.foo,  parameters.fov,  parameters.fvv,  parameters.ovov, parameters.ovvo,
         parameters.oovv, parameters.ovvv, parameters.ovoo, parameters.oooo, parameters.vvvv};
@@ -671,25 +669,49 @@ struct CudaHamiltonianResponseOwner::Impl {
         state.bar_oovv, state.bar_ovvv, state.bar_ovoo, state.bar_oooo, state.bar_vvvv};
     for (std::size_t index = 0; index < values.size(); ++index)
       validate_values(values[index], sizes[index], "parameter response");
-    HostTransferFence transfers(stream);
     for (std::size_t index = 0; index < values.size(); ++index)
       upload(values[index], fields[index]);
+  }
+
+  void stage_reference_seed(double reference_seed) {
+    if (!std::isfinite(reference_seed))
+      throw std::invalid_argument("nonfinite RCCSD CUDA Hamiltonian reference seed");
     cuda_check(cudaMemcpyAsync(state.bar_reference_electronic_energy, &reference_seed,
                                sizeof(double), cudaMemcpyHostToDevice, stream));
     h2d = checked_add(h2d, sizeof(double));
+  }
+
+  CudaHamiltonianSmallResponseResult hamiltonian_small(
+      CudaParameterResponseView parameters, double reference_seed) {
+    DeviceScope active_device(device_id);
+    HostTransferFence transfers(stream);
+    stage_parameters(parameters);
+    stage_reference_seed(reference_seed);
     clear_error();
-    auto result = detach(generated::run_hamiltonian_weights_cuda(state));
+    auto result = detach_small(generated::run_hamiltonian_small_weights_cuda(state));
     transfers.complete();
     return result;
   }
 
-  CudaHamiltonianResponseResult fock(std::span<const double> bar_fock) {
+  std::vector<double> hamiltonian_eri(CudaParameterResponseView parameters,
+                                      double reference_seed) {
+    DeviceScope active_device(device_id);
+    HostTransferFence transfers(stream);
+    stage_parameters(parameters);
+    stage_reference_seed(reference_seed);
+    clear_error();
+    auto result = detach_eri(generated::run_hamiltonian_eri_weights_cuda(state));
+    transfers.complete();
+    return result;
+  }
+
+  CudaHamiltonianSmallResponseResult fock_small(std::span<const double> bar_fock) {
     DeviceScope active_device(device_id);
     validate_values(bar_fock, n2, "Fock response");
     HostTransferFence transfers(stream);
     upload(bar_fock, state.bar_fock);
     clear_error();
-    auto result = detach(generated::run_fock_weights_cuda(state));
+    auto result = detach_small(generated::run_fock_small_weights_cuda(state));
     transfers.complete();
     return result;
   }
@@ -736,10 +758,10 @@ struct CudaHamiltonianResponseOwner::Impl {
 
   void clear_error() { cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream)); }
 
-  CudaHamiltonianResponseResult detach(const generated::DeviceHamiltonianOutputs& output) {
-    CudaHamiltonianResponseResult result;
+  CudaHamiltonianSmallResponseResult detach_small(
+      const generated::DeviceHamiltonianSmallOutputs& output) {
+    CudaHamiltonianSmallResponseResult result;
     result.hcore.resize(n2);
-    result.eri.resize(n4);
     result.overlap.resize(n2);
     result.rotation_gradient.resize(n2);
     result.stationarity.resize(n2);
@@ -748,8 +770,6 @@ struct CudaHamiltonianResponseOwner::Impl {
     HostTransferFence transfers(stream);
     cuda_check(cudaMemcpyAsync(result.hcore.data(), output.hcore, bytes(n2), cudaMemcpyDeviceToHost,
                                stream));
-    cuda_check(
-        cudaMemcpyAsync(result.eri.data(), output.eri, bytes(n4), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaMemcpyAsync(result.overlap.data(), output.overlap, bytes(n2),
                                cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaMemcpyAsync(result.rotation_gradient.data(), output.rotation_gradient, bytes(n2),
@@ -761,8 +781,23 @@ struct CudaHamiltonianResponseOwner::Impl {
     cuda_check(cudaMemcpyAsync(&error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaStreamSynchronize(stream));
     transfers.complete();
-    const auto output_bytes = bytes(checked_add(n4, checked_add(checked_mul(4, n2), ov)));
+    const auto output_bytes = bytes(checked_add(checked_mul(4, n2), ov));
     d2h = checked_add(d2h, checked_add(output_bytes, sizeof(int)));
+    ++syncs;
+    check_error(error);
+    return result;
+  }
+
+  std::vector<double> detach_eri(const generated::DeviceEriWeightOutput& output) {
+    std::vector<double> result(n4);
+    int error = 0;
+    HostTransferFence transfers(stream);
+    cuda_check(
+        cudaMemcpyAsync(result.data(), output.eri, bytes(n4), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaMemcpyAsync(&error, state.error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaStreamSynchronize(stream));
+    transfers.complete();
+    d2h = checked_add(d2h, checked_add(bytes(n4), sizeof(int)));
     ++syncs;
     check_error(error);
     return result;
@@ -804,13 +839,19 @@ CudaHamiltonianResponseOwner::CudaHamiltonianResponseOwner(std::size_t nocc, std
 
 CudaHamiltonianResponseOwner::~CudaHamiltonianResponseOwner() = default;
 
-CudaHamiltonianResponseResult CudaHamiltonianResponseOwner::hamiltonian(
+CudaHamiltonianSmallResponseResult CudaHamiltonianResponseOwner::hamiltonian_small(
     CudaParameterResponseView parameters, double reference_seed) {
-  return impl_->hamiltonian(parameters, reference_seed);
+  return impl_->hamiltonian_small(parameters, reference_seed);
 }
 
-CudaHamiltonianResponseResult CudaHamiltonianResponseOwner::fock(std::span<const double> bar_fock) {
-  return impl_->fock(bar_fock);
+std::vector<double> CudaHamiltonianResponseOwner::hamiltonian_eri(
+    CudaParameterResponseView parameters, double reference_seed) {
+  return impl_->hamiltonian_eri(parameters, reference_seed);
+}
+
+CudaHamiltonianSmallResponseResult CudaHamiltonianResponseOwner::fock_small(
+    std::span<const double> bar_fock) {
+  return impl_->fock_small(bar_fock);
 }
 
 std::vector<double> CudaHamiltonianResponseOwner::orbital_jvp(std::span<const double> d_rotation) {

@@ -109,8 +109,8 @@ struct CudaParameterResponseView {
   std::span<const double> foo, fov, fvv, ovov, ovvo, oovv, ovvv, ovoo, oooo, vvvv;
 };
 
-struct CudaHamiltonianResponseResult {
-  std::vector<double> hcore, eri, overlap, rotation_gradient, stationarity, orbital_rhs;
+struct CudaHamiltonianSmallResponseResult {
+  std::vector<double> hcore, overlap, rotation_gradient, stationarity, orbital_rhs;
 };
 
 /** Reusable native owner for post-Lambda Hamiltonian/Fock/orbital response TensorIR.
@@ -128,9 +128,11 @@ class CudaHamiltonianResponseOwner {
   CudaHamiltonianResponseOwner(const CudaHamiltonianResponseOwner&) = delete;
   CudaHamiltonianResponseOwner& operator=(const CudaHamiltonianResponseOwner&) = delete;
 
-  CudaHamiltonianResponseResult hamiltonian(CudaParameterResponseView parameters,
-                                            double reference_seed);
-  CudaHamiltonianResponseResult fock(std::span<const double> bar_fock);
+  CudaHamiltonianSmallResponseResult hamiltonian_small(CudaParameterResponseView parameters,
+                                                       double reference_seed);
+  std::vector<double> hamiltonian_eri(CudaParameterResponseView parameters,
+                                      double reference_seed);
+  CudaHamiltonianSmallResponseResult fock_small(std::span<const double> bar_fock);
   std::vector<double> orbital_jvp(std::span<const double> d_rotation);
 
   [[nodiscard]] std::size_t owned_device_bytes() const noexcept;
