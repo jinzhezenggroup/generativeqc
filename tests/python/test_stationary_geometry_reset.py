@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import ast
 import ctypes as ct
-from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 from types import SimpleNamespace
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 COUNTERS = (
