@@ -107,7 +107,6 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
   }
 }
 
-
 __global__ void count_active_partner_blocks_kernel(std::size_t npoint,
                                                    const double* weighted_density,
                                                    std::uint64_t* block_offsets) {
@@ -169,16 +168,13 @@ __global__ void scatter_active_partners_ordered_kernel(std::size_t npoint,
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
-__global__ void pair_kernel_ordered(std::size_t row_offset, std::size_t row_count,
-                                    double coefficient, const double* points, const double* density,
-                                    const double* omega, const double* kappa,
-                                    const double* domega_drho, const double* domega_dsigma,
-                                    const double* dkappa_drho, const double* weighted_density,
-                                    const std::uint64_t* active_indices,
-                                    const std::uint64_t* active_count, double beta,
-                                    double* energy_terms, double* vrho, double* vsigma,
-                                    double* point_derivative, double* weight_derivative,
-                                    int* failed) {
+__global__ void pair_kernel_ordered(
+    std::size_t row_offset, std::size_t row_count, double coefficient, const double* points,
+    const double* density, const double* omega, const double* kappa, const double* domega_drho,
+    const double* domega_dsigma, const double* dkappa_drho, const double* weighted_density,
+    const std::uint64_t* active_indices, const std::uint64_t* active_count, double beta,
+    double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
+    double* weight_derivative, int* failed) {
   const auto lane = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= row_count) return;
   const auto i = row_offset + lane;
@@ -293,8 +289,7 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
                       const double* dkappa_drho, const double* weighted_density,
                       const std::uint64_t* active_indices, const std::uint64_t* active_count,
                       double beta, double* energy_terms, double* vrho, double* vsigma,
-                      double* point_derivative,
-                      double* weight_derivative, int* failed) {
+                      double* point_derivative, double* weight_derivative, int* failed) {
   if (layout.mask_zero_weight_rows)
     launch_pair_rows_impl<Variant, Features, Geometry, true>(
         layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
@@ -464,10 +459,10 @@ Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_
   const auto arrays = std::size_t{4} + (features ? 3u : 0u);
   auto slots =
       runtime::size_mul(arrays, point_count, "resident VV10 CUDA workspace extent overflow");
-  slots = runtime::size_add(
-      slots, point_count, "resident VV10 CUDA active-partner index extent overflow");
-  slots = runtime::size_add(
-      slots, partner_blocks, "resident VV10 CUDA active-partner block extent overflow");
+  slots = runtime::size_add(slots, point_count,
+                            "resident VV10 CUDA active-partner index extent overflow");
+  slots = runtime::size_add(slots, partner_blocks,
+                            "resident VV10 CUDA active-partner block extent overflow");
   slots = runtime::size_add(slots, std::size_t{1},
                             "resident VV10 CUDA active-partner count extent overflow");
   static_assert(sizeof(double) == sizeof(std::uint64_t));
@@ -571,8 +566,8 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   count_active_partner_blocks_kernel<<<partner_blocks, partner_threads, 0, stream>>>(
       npoint, weighted_density, block_offsets);
   runtime::cuda_resource_check(cudaGetLastError());
-  prefix_active_partner_blocks_kernel<<<1, 1, 0, stream>>>(
-      partner_blocks, block_offsets, active_count);
+  prefix_active_partner_blocks_kernel<<<1, 1, 0, stream>>>(partner_blocks, block_offsets,
+                                                           active_count);
   runtime::cuda_resource_check(cudaGetLastError());
   scatter_active_partners_ordered_kernel<<<partner_blocks, partner_threads, 0, stream>>>(
       npoint, weighted_density, block_offsets, active_indices);
