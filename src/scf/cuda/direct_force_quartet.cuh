@@ -11,7 +11,6 @@
 
 #include "generated_direct_high_order_pair_gradient.cuh"
 #include "generated_direct_source_contraction.cuh"
-#include "integrals/range_moments.hpp"
 #include "scf/cuda/direct_force_density.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
