@@ -8,8 +8,11 @@ from pathlib import Path
 import generativeqc.response_operator as production_operator
 import generativeqc.response_problem as production_problem
 import generativeqc.response_xc as production_xc
+import generativeqc.response_solver as production_solver
+import generativeqc.rks_response as production_rks
 
 import tools.generativeqc_response as response_api
+from tools.generativeqc_response import krylov as solver_shim
 from tools.generativeqc_response import native_ks
 from tools.generativeqc_response import operators as operator_shim
 from tools.generativeqc_response import problem as problem_shim
@@ -59,6 +62,15 @@ def test_response_xc_shim_reuses_installed_objects() -> None:
     assert xc_shim.density_feature_response is production_xc.density_feature_response
 
 
+def test_response_solver_and_rks_adapter_use_installed_owners() -> None:
+    assert solver_shim is production_solver
+    assert native_ks.NativeRKSResponse is production_rks.NativeRKSResponse
+    assert response_api.NativeRKSResponse is production_rks.NativeRKSResponse
+    assert response_api.GMRESOptions is production_solver.GMRESOptions
+    assert response_api.solve is production_solver.solve
+    assert response_api.solve_many is production_solver.solve_many
+
+
 def test_native_rks_adapter_consumes_production_cpks_owner() -> None:
     assert issubclass(
         native_ks.NativeRKSResponse,
@@ -75,6 +87,8 @@ def test_installed_response_owners_never_import_tools() -> None:
         "python/generativeqc/response_problem.py",
         "python/generativeqc/response_operator.py",
         "python/generativeqc/response_xc.py",
+        "python/generativeqc/response_solver.py",
+        "python/generativeqc/rks_response.py",
     ):
         tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
         imports: list[str] = []
@@ -99,3 +113,14 @@ def test_tools_response_shims_contain_no_scientific_definitions() -> None:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         }
         assert definitions == set()
+
+
+def test_tools_native_ks_no_longer_defines_rks_response() -> None:
+    tree = ast.parse(
+        (ROOT / "tools/generativeqc_response/native_ks.py").read_text(encoding="utf-8")
+    )
+    classes = {
+        node.name for node in tree.body if isinstance(node, ast.ClassDef)
+    }
+    assert "NativeRKSResponse" not in classes
+    assert "NativeUKSResponse" in classes
