@@ -184,7 +184,7 @@ def test_partial_final_tile_includes_tiled_and_scalar_resource_paths() -> None:
     assert evidence.profitability.compiled_registers_per_thread == 92
 
 
-def test_compiled_evidence_identity_changes_with_execution_shape() -> None:
+def test_compiled_evidence_cannot_be_relabelled_to_another_shape() -> None:
     shape = GridXcCompiledResourceShape(npoint=4096, tile_points=256, nao=96, spins=2)
     first = native_grid_xc_compiled_region_evidence(
         pbe_resources(),
@@ -193,5 +193,5 @@ def test_compiled_evidence_identity_changes_with_execution_shape() -> None:
         target=TARGET,
         source_identity="s" * 64,
     )
-    second = replace(first, shape=replace(shape, npoint=8192))
-    assert first.identity != second.identity
+    with pytest.raises(ValueError, match="binding identity is stale"):
+        replace(first, shape=replace(shape, npoint=8192))
