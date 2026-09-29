@@ -19,13 +19,12 @@ from pathlib import Path
 from types import MappingProxyType
 
 import numpy as np
-from .profiles import canonical_hash
+from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.method import StationaryHVPPlan, StationaryMeanField
 from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 from generativeqc_compiler.tensor import execute
 
-from generativeqc_compiler.common.arrays import immutable
-
+from .profiles import canonical_hash
 from .response_solver import GMRESOptions
 from .rks_hessian_directional import (
     DirectionalRKSBatchResponse,

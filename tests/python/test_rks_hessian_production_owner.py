@@ -8,7 +8,7 @@ from pathlib import Path
 
 import generativeqc.rks_hessian as production_hessian
 import generativeqc.rks_hessian_directional as production_directional
-import generativeqc.rks_hessian_integrals as production_integrals
+
 import tools.generativeqc_hessian as tools_api
 
 ROOT = Path(__file__).resolve().parents[2]

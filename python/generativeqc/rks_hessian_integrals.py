@@ -64,9 +64,7 @@ __all__ = [
     "rks_integral_topology",
 ]
 
-SEMILOCAL_RKS_FIRST_ERI_TERMS = (
-    DirectionalMatrixTerm(0, (0, 1), (2, 3), 1.0),
-)
+SEMILOCAL_RKS_FIRST_ERI_TERMS = (DirectionalMatrixTerm(0, (0, 1), (2, 3), 1.0),)
 _COMPILE_CACHE: dict[object, object] = {}
 
 
@@ -83,7 +81,7 @@ class RKSIntegralTopology:
     auxiliary_shells: tuple[typing.Any, ...] = ()
 
     @classmethod
-    def from_basis(cls, basis: typing.Any) -> "RKSIntegralTopology":
+    def from_basis(cls, basis: typing.Any) -> RKSIntegralTopology:
         if not isinstance(basis, NativeAO):
             raise TypeError("RKS Hessian integral topology requires NativeAO")
         if not basis._handle:
@@ -272,8 +270,7 @@ def _contract_directional_first_order(
         ir = build_weighted_eri_ir(angular)
         for component, gradient in provider.raw_tiles(ir, slots, atoms):
             u, v, w, x = (
-                offsets[shell] + c
-                for shell, c in zip(slots, component, strict=True)
+                offsets[shell] + c for shell, c in zip(slots, component, strict=True)
             )
             ao = (u, v, w, x)
             for term in SEMILOCAL_RKS_FIRST_ERI_TERMS:
@@ -302,12 +299,8 @@ def generated_directional_semilocal_rks_integral_first_order(
 ) -> tuple[np.ndarray, np.ndarray]:
     topology.check_current()
     vector = checked_direction(direction, len(topology.atoms))
-    ao_density = _checked_ao_weight(
-        density, topology.nbf, "RKS reference density"
-    )
-    return _contract_directional_first_order(
-        topology, ao_density, vector, cache=cache
-    )
+    ao_density = _checked_ao_weight(density, topology.nbf, "RKS reference density")
+    return _contract_directional_first_order(topology, ao_density, vector, cache=cache)
 
 
 def generated_weighted_first_integral_gradient(
@@ -362,9 +355,7 @@ def generated_weighted_first_integral_gradient(
                         "nuclear_attraction", angular, charge=float(charge)
                     )
                     centers = (*atoms, nucleus)
-                    for (u, v), gradient in provider.raw_tiles(
-                        ir, (a, b), centers
-                    ):
+                    for (u, v), gradient in provider.raw_tiles(ir, (a, b), centers):
                         accumulate(centers, gradient, block[u, v])
     else:
         if pair_weights is not None or not callable(eri_shell_weights):
@@ -449,14 +440,12 @@ def _run_kernel_hvp(
     component_count: int,
     direction: np.ndarray,
 ) -> np.ndarray:
-    center_atoms = typing.cast(tuple[int, ...], ir_extra["_center_atoms"])
+    center_atoms = typing.cast("tuple[int, ...]", ir_extra["_center_atoms"])
     extra = {k: v for k, v in ir_extra.items() if k != "_center_atoms"}
     ir = build_ir(**extra)
     center_indices = ir.requested_derivative_centers
     mapping = SecondAtomMap(center_indices, center_atoms)
-    center_direction = mapping.expand_direction(
-        direction[list(mapping.atom_indices)]
-    )
+    center_direction = mapping.expand_direction(direction[list(mapping.atom_indices)])
     full = np.zeros(len(center_indices) * 3)
     signature = ir.signature
     for ao_chunk in _component_tiles(component_count):
@@ -521,12 +510,8 @@ def _second_data(
     geometry = SimpleNamespace(
         nat=natom,
         offsets=np.cumsum((0, *topology.shell_sizes)),
-        Z=np.asarray(
-            [atom.atomic_number for atom in topology.atoms], dtype=np.float64
-        ),
-        coords=np.asarray(
-            [atom.position for atom in topology.atoms], dtype=np.float64
-        ),
+        Z=np.asarray([atom.atomic_number for atom in topology.atoms], dtype=np.float64),
+        coords=np.asarray([atom.position for atom in topology.atoms], dtype=np.float64),
     )
     primitives = tuple(
         normalized_radial_primitives(
@@ -545,9 +530,7 @@ def _second_data(
         "device_id": None,
         "budget_bytes": budget_bytes,
         "output_accumulator_bytes": output_bytes,
-        "resource_budget": ResourceBudget(
-            host_bytes=budget_bytes, device_bytes=0
-        ),
+        "resource_budget": ResourceBudget(host_bytes=budget_bytes, device_bytes=0),
         "second_executions": [],
     }
 
@@ -574,10 +557,7 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         "raw_hessian_downloads": 0,
         "intermediate_matrix_downloads": 0,
         "peak_host_bytes": max(
-            (
-                item["resources"]["peak_bytes"].get("host", 0)
-                for item in executions
-            ),
+            (item["resources"]["peak_bytes"].get("host", 0) for item in executions),
             default=0,
         ),
         "peak_device_bytes": 0,
@@ -630,9 +610,7 @@ def _run_one_electron_hvp(
                     direction,
                 )
         else:
-            centers = np.asarray(
-                [state.coords[atom_a], state.coords[atom_b]]
-            )
+            centers = np.asarray([state.coords[atom_a], state.coords[atom_b]])
             total += _run_kernel_hvp(
                 data,
                 (family, la, lb),
@@ -716,9 +694,7 @@ def generated_weighted_second_integral_hvp(
         if source_name == "one_electron":
             value = _run_one_electron_hvp(
                 data, "kinetic", weights, vector
-            ) + _run_one_electron_hvp(
-                data, "nuclear_attraction", weights, vector
-            )
+            ) + _run_one_electron_hvp(data, "nuclear_attraction", weights, vector)
         else:
             value = _run_one_electron_hvp(data, "overlap", weights, vector)
     if not np.isfinite(value).all():
@@ -733,9 +709,7 @@ def nuclear_hvp_from_topology(
 ) -> np.ndarray:
     topology.check_current()
     vector = checked_direction(direction, len(topology.atoms))
-    coords = np.asarray(
-        [atom.position for atom in topology.atoms], dtype=np.float64
-    )
+    coords = np.asarray([atom.position for atom in topology.atoms], dtype=np.float64)
     charges = np.asarray(
         [atom.atomic_number for atom in topology.atoms], dtype=np.float64
     )
