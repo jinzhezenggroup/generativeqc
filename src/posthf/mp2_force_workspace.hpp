@@ -17,7 +17,7 @@ namespace generativeqc::mp2::detail {
  */
 template <class BlockPeak>
 std::size_t streamed_force_workspace_bytes(std::size_t n, std::size_t occupied,
-                                          BlockPeak&& block_peak) {
+                                           BlockPeak&& block_peak) {
   if (!n || !occupied || occupied >= n)
     throw std::invalid_argument("invalid MP2 streamed workspace dimensions");
   const auto virtuals = n - occupied;
@@ -25,9 +25,7 @@ std::size_t streamed_force_workspace_bytes(std::size_t n, std::size_t occupied,
   const auto n3 = posthf::checked_mul(n2, n);
   const auto rotations = posthf::checked_mul(occupied, virtuals);
   const auto amplitudes = posthf::checked_mul(rotations, rotations);
-  auto bytes = [](std::size_t elements) {
-    return posthf::checked_mul(elements, sizeof(double));
-  };
+  auto bytes = [](std::size_t elements) { return posthf::checked_mul(elements, sizeof(double)); };
   // The final adjoint is already retained in the component plan; raw and
   // reordered inputs coexist with it during canonical_energy_adjoint().
   auto peak = bytes(posthf::checked_mul(2, amplitudes));
@@ -57,8 +55,8 @@ std::size_t streamed_force_workspace_bytes(std::size_t n, std::size_t occupied,
   // index lists, including temporary MOSlots copies. This is a conservative
   // allowance, not measured allocation telemetry or an extra dense N^4 weight.
   peak = posthf::checked_add(peak, bytes(n2));
-  return posthf::checked_add(
-      peak, posthf::checked_mul(posthf::checked_mul(64, n), sizeof(std::size_t)));
+  return posthf::checked_add(peak,
+                             posthf::checked_mul(posthf::checked_mul(64, n), sizeof(std::size_t)));
 }
 
 inline std::size_t remaining_force_budget(std::size_t budget, std::size_t workspace) {
