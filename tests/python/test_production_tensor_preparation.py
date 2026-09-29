@@ -64,3 +64,12 @@ def test_production_generators_cannot_restore_private_optimizer_bypasses() -> No
 
     assert "prepare_for_backend" in mp2
     assert mp2.count("prepare_for_backend(") >= 2
+
+    scf = (ROOT / "tools/generate_scf_array_native.py").read_text()
+    assert "prepare_for_backend" in scf
+    assert "preserve_reduction_order=True" in scf
+
+    stationary = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    wb97mv = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+    assert "plan_cuda(" in stationary
+    assert "plan_cuda(" in wb97mv
