@@ -30,10 +30,10 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
                                         std::size_t shells, std::size_t primitives,
                                         unsigned derivative_order);
 
-/** Conservative shape-only capacity for the optional generated pure-J owner
- * plus the exact bounded generic fallback. derivative_order reserves generic
- * derivative scratch without disabling the generated value-J owner. Counts are
- * totals as above.
+/** Conservative shape-only capacity for the optional generated shell owner
+ * plus the exact bounded generic fallback. A retained derivative order also
+ * reserves the full-range shell J/K density/force lease used by stationary
+ * consumers. Counts are totals as above.
  */
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
@@ -103,6 +103,14 @@ generativeqc_status execute_cuda_direct_rsh_energy_derivatives_item(
 generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient,
     double short_exchange_coefficient, double long_exchange_coefficient, double omega,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    std::vector<double>& derivatives, std::string& detail);
+
+/** Full-range fixed-density [J',K'] energy derivatives through the retained
+ * shell topology. The resident public-AO density is transformed once and
+ * shell Schwarz+density screening drives the bounded production scheduler. */
+generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
 }  // namespace generativeqc::scf

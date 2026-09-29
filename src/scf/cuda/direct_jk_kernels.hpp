@@ -9,6 +9,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+struct ShellPairDensityBounds;
+
 enum class DirectCoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
 
 // Shared one-output-owner reduction width, unchanged from the direct source.
@@ -47,5 +49,16 @@ void launch_independent_rsh_derivative_kernel(
     std::size_t coordinates_per_item, std::size_t system_begin, std::size_t source_stride,
     double cj, double short_ck, double long_ck, bool unrestricted, double omega, double screening,
     const double* bounds, const double* density, const double* beta, double* out);
+
+/** Provider-facing shell derivative seam. Queue/numerical ownership remains in
+ * the Direct consumer layer; host source owners borrow only this launch ABI. */
+void launch_bounded_shell_energy_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    double coulomb_coefficient, double exchange_coefficient);
 
 }  // namespace generativeqc::scf::cuda_execution
