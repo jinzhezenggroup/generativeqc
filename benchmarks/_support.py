@@ -217,7 +217,7 @@ def environment_metadata(
         },
         "packages": package_versions,
         "runtime": {
-            "vibeqc_library": os.environ.get("VIBEQC_LIBRARY"),
+            "generativeqc_library": os.environ.get("GENERATIVEQC_LIBRARY"),
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         },
         "toolchain": _toolchain_metadata(),
@@ -255,30 +255,30 @@ def benchmark_gate_failures(
     speedup: float,
     maximum_energy_error: float,
     maximum_force_error: float,
-    vibeqc_converged: bool = True,
+    generativeqc_converged: bool = True,
     reference_converged: bool = True,
     minimum_speedup: float | None = None,
-    maximum_vibeqc_over_reference: float | None = None,
+    maximum_generativeqc_over_reference: float | None = None,
     maximum_energy_error_limit: float | None = None,
     maximum_force_error_limit: float | None = None,
 ) -> list[str]:
     """Return actionable failures for optional accuracy/performance gates."""
 
     failures = []
-    if not vibeqc_converged:
-        failures.append("one or more VIBEQC systems did not converge")
+    if not generativeqc_converged:
+        failures.append("one or more GENERATIVEQC systems did not converge")
     if not reference_converged:
         failures.append("one or more GPU4PySCF reference systems did not converge")
     if minimum_speedup is not None and speedup < minimum_speedup:
         failures.append(f"warm speedup {speedup:.6g}x is below {minimum_speedup:.6g}x")
-    if maximum_vibeqc_over_reference is not None and (
-        speedup <= 0.0 or 1.0 / speedup > maximum_vibeqc_over_reference
+    if maximum_generativeqc_over_reference is not None and (
+        speedup <= 0.0 or 1.0 / speedup > maximum_generativeqc_over_reference
     ):
         ratio = float("inf") if speedup <= 0.0 else 1.0 / speedup
         failures.append(
-            "VibeQC/reference warm ratio "
+            "GenerativeQC/reference warm ratio "
             f"{ratio:.6g}x exceeds "
-            f"{maximum_vibeqc_over_reference:.6g}x"
+            f"{maximum_generativeqc_over_reference:.6g}x"
         )
     if (
         maximum_energy_error_limit is not None

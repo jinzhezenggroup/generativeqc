@@ -58,7 +58,7 @@ PREFIX = r"""
 #include <iostream>
 #include <limits>
 #include <stdexcept>
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 int owners = 0;
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max()/a) throw std::length_error("overflow");
@@ -70,7 +70,7 @@ struct Owner {
 """
 MAIN = r"""
 int main() {
-  using namespace vibeqc::cc;
+  using namespace generativeqc::cc;
   Problem valid; valid.nocc=1; valid.nvir=2;
   valid.foo.resize(1); valid.fov.resize(2); valid.fvv.resize(4);
   valid.ovov.resize(4); valid.ovvo.resize(4); valid.oovv.resize(4);

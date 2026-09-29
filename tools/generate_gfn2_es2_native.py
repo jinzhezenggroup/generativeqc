@@ -13,18 +13,20 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 # Build-time code generation must stay independent of NumPy/site packages.
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_es2_runtime import (
+from generativeqc_compiler.method.gfn2_es2_runtime import (
     GFN2_ES2_RUNTIME_VERSION,
     build_gfn2_es2_arithmetic_hardness_program,
     build_gfn2_es2_cached_gradient_weight_program,
@@ -34,13 +36,13 @@ from vibeqc_compiler.method.gfn2_es2_runtime import (
     build_gfn2_es2_pair_vjp,
     build_gfn2_es2_potential_update_program,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
 def _host_device(source: str) -> str:
-    return source.replace("inline bool ", "VIBEQC_GFN2_ES2_HD inline bool ").replace(
-        "std::isfinite", "gfn2_es2_isfinite"
-    )
+    return source.replace(
+        "inline bool ", "GENERATIVEQC_GFN2_ES2_HD inline bool "
+    ).replace("std::isfinite", "gfn2_es2_isfinite")
 
 
 def native_header() -> str:
@@ -91,12 +93,12 @@ def native_header() -> str:
 #include <cmath>
 
 #if defined(__CUDACC__)
-#define VIBEQC_GFN2_ES2_HD __host__ __device__
+#define GENERATIVEQC_GFN2_ES2_HD __host__ __device__
 #else
-#define VIBEQC_GFN2_ES2_HD
+#define GENERATIVEQC_GFN2_ES2_HD
 #endif
 
-namespace vibeqc::xtb::generated {{
+namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_es2_runtime_version = "{GFN2_ES2_RUNTIME_VERSION}";
 inline constexpr const char* gfn2_es2_arithmetic_hardness_logical_hash = "{hardness.logical_hash}";
@@ -107,7 +109,7 @@ inline constexpr const char* gfn2_es2_energy_update_logical_hash = "{energy.logi
 inline constexpr const char* gfn2_es2_cached_gradient_weight_logical_hash = "{weight.logical_hash}";
 inline constexpr const char* gfn2_es2_gradient_projection_logical_hash = "{projection.logical_hash}";
 
-VIBEQC_GFN2_ES2_HD inline bool gfn2_es2_isfinite(double value) noexcept {{
+GENERATIVEQC_GFN2_ES2_HD inline bool gfn2_es2_isfinite(double value) noexcept {{
 #if defined(__CUDA_ARCH__)
   return isfinite(value);
 #else
@@ -115,7 +117,7 @@ VIBEQC_GFN2_ES2_HD inline bool gfn2_es2_isfinite(double value) noexcept {{
 #endif
 }}
 
-VIBEQC_GFN2_ES2_HD inline double gfn2_es2_hypot(double first, double second) noexcept {{
+GENERATIVEQC_GFN2_ES2_HD inline double gfn2_es2_hypot(double first, double second) noexcept {{
 #if defined(__CUDA_ARCH__)
   return hypot(first, second);
 #else
@@ -126,7 +128,7 @@ VIBEQC_GFN2_ES2_HD inline double gfn2_es2_hypot(double first, double second) noe
 /* Numerically stable lowering of the compiler-owned arithmetic hardness mean.
  * Add-before-half preserves positive subnormals; half-before-add is used only
  * when the finite positive sum itself overflows. */
-VIBEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_arithmetic_hardness(
+GENERATIVEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_arithmetic_hardness(
     double first, double second, double& average) noexcept {{
   if (!gfn2_es2_isfinite(first) || !gfn2_es2_isfinite(second)) return false;
   const double sum = first + second;
@@ -138,7 +140,7 @@ VIBEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_arithmetic_hardness(
 /* Stable native lowering of 1/sqrt(dx^2+dy^2+dz^2+hardness^-2).
  * The TensorIR primal owns the equation/hash; nested hypot preserves the
  * production overflow/underflow envelope. */
-VIBEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_kernel_from_hardness(
+GENERATIVEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_kernel_from_hardness(
     double dx, double dy, double dz, double pair_hardness, double& kernel) noexcept {{
   if (!gfn2_es2_isfinite(dx) || !gfn2_es2_isfinite(dy) || !gfn2_es2_isfinite(dz) ||
       !(pair_hardness > 0.0) || !gfn2_es2_isfinite(pair_hardness)) return false;
@@ -156,7 +158,7 @@ VIBEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_kernel_from_hardness(
 {weight_body}
 {projection_body}
 
-VIBEQC_GFN2_ES2_HD inline bool accumulate_gfn2_es2_potential(
+GENERATIVEQC_GFN2_ES2_HD inline bool accumulate_gfn2_es2_potential(
     double kernel, double charge, double& accumulator) noexcept {{
   double updated = 0.0;
   if (!gfn2_es2_potential_update_tensor(kernel, charge, accumulator, updated)) return false;
@@ -164,7 +166,7 @@ VIBEQC_GFN2_ES2_HD inline bool accumulate_gfn2_es2_potential(
   return true;
 }}
 
-VIBEQC_GFN2_ES2_HD inline bool accumulate_gfn2_es2_energy(
+GENERATIVEQC_GFN2_ES2_HD inline bool accumulate_gfn2_es2_energy(
     double row_charge, double potential_value, double& accumulator) noexcept {{
   double updated = 0.0;
   if (!gfn2_es2_energy_update_tensor(row_charge, potential_value, accumulator, updated)) return false;
@@ -172,20 +174,20 @@ VIBEQC_GFN2_ES2_HD inline bool accumulate_gfn2_es2_energy(
   return true;
 }}
 
-VIBEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_cached_gradient_weight(
+GENERATIVEQC_GFN2_ES2_HD inline bool evaluate_gfn2_es2_cached_gradient_weight(
     double kernel, double first_charge, double second_charge, double& result) noexcept {{
   return gfn2_es2_cached_gradient_weight_tensor(kernel, first_charge, second_charge, result);
 }}
 
-VIBEQC_GFN2_ES2_HD inline bool project_gfn2_es2_gradient(
+GENERATIVEQC_GFN2_ES2_HD inline bool project_gfn2_es2_gradient(
     double weight_value, double dx, double dy, double dz,
     double& gx, double& gy, double& gz) noexcept {{
   return gfn2_es2_gradient_projection_tensor(weight_value, dx, dy, dz, gx, gy, gz);
 }}
 
-}}  // namespace vibeqc::xtb::generated
+}}  // namespace generativeqc::xtb::generated
 
-#undef VIBEQC_GFN2_ES2_HD
+#undef GENERATIVEQC_GFN2_ES2_HD
 """
 
 

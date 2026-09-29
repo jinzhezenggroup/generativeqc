@@ -7,7 +7,7 @@ from typing import Self
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell, _native
+from generativeqc import Calculator, Primitive, Shell, _native
 
 
 def _require_cuda(calculator: Calculator) -> None:
@@ -19,19 +19,19 @@ def _require_cuda(calculator: Calculator) -> None:
     )
     context = ctypes.c_void_p()
     library = calculator._library
-    status = library.vibeqc_context_create(
+    status = library.generativeqc_context_create(
         ctypes.byref(descriptor), ctypes.byref(context)
     )
     try:
         if (
             status in (_native.STATUS_NOT_IMPLEMENTED, _native.STATUS_CUDA_ERROR)
-            and os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1"
+            and os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
         ):
             pytest.skip("CUDA context unavailable before order-three execution")
         _native.check(library, status)
     finally:
         if context.value:
-            library.vibeqc_context_destroy(context)
+            library.generativeqc_context_destroy(context)
 
 
 def test_cuda_order3_fsss_fallback_matches_cpu_and_streaming(
@@ -53,13 +53,13 @@ def test_cuda_order3_fsss_fallback_matches_cpu_and_streaming(
         "screening_tolerance": 1.0e-14,
     }
     reference = Calculator(device="cpu", **common).singlepoint(system, charge=1)
-    monkeypatch.setenv("VIBEQC_AOT_SHELL_CLASSES", "ssss")
+    monkeypatch.setenv("GENERATIVEQC_AOT_SHELL_CLASSES", "ssss")
     outputs = {}
     for mode in ("exact", "streaming"):
         if mode == "streaming":
-            monkeypatch.setenv("VIBEQC_BOUNDED_DIRECT_STREAMING", "force")
+            monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
         else:
-            monkeypatch.delenv("VIBEQC_BOUNDED_DIRECT_STREAMING", raising=False)
+            monkeypatch.delenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", raising=False)
         calculator = Calculator(device="cuda", **common)
         _require_cuda(calculator)
         # After context admission, preparation and replay errors are failures.

@@ -20,8 +20,8 @@ constexpr unsigned int kWarmupLaunches = 4;
 
 enum class Workload { Compute, Memory, Gather, Mixed };
 
-extern "C" __global__ void vibeqc_cumetal_fp32_compute(const float* lhs, const float* rhs,
-                                                       float* output, unsigned int size) {
+extern "C" __global__ void generativeqc_cumetal_fp32_compute(const float* lhs, const float* rhs,
+                                                             float* output, unsigned int size) {
   const unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= size) return;
 
@@ -37,23 +37,23 @@ extern "C" __global__ void vibeqc_cumetal_fp32_compute(const float* lhs, const f
   output[index] = accumulator;
 }
 
-extern "C" __global__ void vibeqc_cumetal_fp32_memory(const float* lhs, const float* rhs,
-                                                      float* output, unsigned int size) {
+extern "C" __global__ void generativeqc_cumetal_fp32_memory(const float* lhs, const float* rhs,
+                                                            float* output, unsigned int size) {
   const unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= size) return;
   output[index] = lhs[index] * 1.0001F + rhs[index] * 0.9999F;
 }
 
-extern "C" __global__ void vibeqc_cumetal_fp32_gather(const float* lhs, const float* rhs,
-                                                      float* output, unsigned int size) {
+extern "C" __global__ void generativeqc_cumetal_fp32_gather(const float* lhs, const float* rhs,
+                                                            float* output, unsigned int size) {
   const unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= size) return;
   const unsigned int source = (index * 40503U) & (size - 1U);
   output[index] = lhs[source] * 0.625F + rhs[index] * 0.375F;
 }
 
-extern "C" __global__ void vibeqc_cumetal_fp32_mixed(const float* lhs, const float* rhs,
-                                                     float* output, unsigned int size) {
+extern "C" __global__ void generativeqc_cumetal_fp32_mixed(const float* lhs, const float* rhs,
+                                                           float* output, unsigned int size) {
   const unsigned int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index >= size) return;
 
@@ -273,16 +273,20 @@ class BenchmarkServer {
     const unsigned int blocks = (size + kThreads - 1U) / kThreads;
     switch (workload) {
       case Workload::Compute:
-        vibeqc_cumetal_fp32_compute<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_, size);
+        generativeqc_cumetal_fp32_compute<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_,
+                                                                            size);
         return;
       case Workload::Memory:
-        vibeqc_cumetal_fp32_memory<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_, size);
+        generativeqc_cumetal_fp32_memory<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_,
+                                                                           size);
         return;
       case Workload::Gather:
-        vibeqc_cumetal_fp32_gather<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_, size);
+        generativeqc_cumetal_fp32_gather<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_,
+                                                                           size);
         return;
       case Workload::Mixed:
-        vibeqc_cumetal_fp32_mixed<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_, size);
+        generativeqc_cumetal_fp32_mixed<<<blocks, kThreads, 0, stream_>>>(lhs_, rhs_, output_,
+                                                                          size);
         return;
     }
   }

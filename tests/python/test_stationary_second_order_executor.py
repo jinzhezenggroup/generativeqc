@@ -5,22 +5,22 @@ import typing
 from pathlib import Path
 from types import SimpleNamespace
 
+import generativeqc.second_order as production_second_order
 import numpy as np
 import pytest
-import vibeqc.second_order as production_second_order
-from vibeqc.second_order import (
+from generativeqc.second_order import (
     StationaryHVPContext,
     StationaryHVPContributor,
     StationaryPerturbationProvider,
     StationaryResponseDriver,
     StationarySecondOrderExecutor,
 )
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     StationaryHVPPlan,
     StationaryMeanField,
     resolve_method,
 )
-from vibeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
+from generativeqc_compiler.method.stationary_gradient import SCF_POINT_MODEL
 
 
 def test_production_second_order_owner_has_no_tools_dependency() -> None:
@@ -40,7 +40,7 @@ def test_production_second_order_owner_has_no_tools_dependency() -> None:
 
 def test_tools_compatibility_shim_reexports_production_owner() -> None:
     """Repository tools must not retain a second second-order implementation."""
-    from tools.vibeqc_hessian import stationary_executor as compatibility
+    from tools.generativeqc_hessian import stationary_executor as compatibility
 
     assert compatibility.StationaryHVPContext is StationaryHVPContext
     assert compatibility.StationaryHVPContributor is StationaryHVPContributor

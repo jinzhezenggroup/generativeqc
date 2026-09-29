@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import (
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import (
     StableGridMotion,
     StationaryDerivativeContract,
     StationaryKsState,
@@ -15,10 +15,10 @@ from vibeqc._dft_gradient import (
     scf_regularization_identity,
     xc_regularization_identity,
 )
-from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-from vibeqc_compiler.xc import functional
+from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+from generativeqc_compiler.xc import functional
 
-from tools.vibeqc_validation.dft_gradient import h2_overlap
+from tools.generativeqc_validation.dft_gradient import h2_overlap
 
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 GRID = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
@@ -36,7 +36,7 @@ GRID = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
                 method,
                 "cuda",
                 marks=pytest.mark.skipif(
-                    os.environ.get("VIBEQC_DFT_CUDA_TEST") != "1",
+                    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
                     reason="Slurm CUDA gate",
                 ),
             )

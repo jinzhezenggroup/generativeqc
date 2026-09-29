@@ -68,7 +68,9 @@ def run_benchmark(
         write_result=lambda *_: pytest.fail("unexpected file publication"),
     )
     monkeypatch.setitem(sys.modules, "_support", support)
-    monkeypatch.setitem(sys.modules, "vibeqc", SimpleNamespace(Calculator=calculator))
+    monkeypatch.setitem(
+        sys.modules, "generativeqc", SimpleNamespace(Calculator=calculator)
+    )
     monkeypatch.setitem(
         sys.modules,
         "cupy",

@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import read_trace
 from benchmarks.df_progress_ledger import read_progress, summarize_progress
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -51,10 +51,10 @@ def test_raw_upload_attribution_preserves_complete_response(
         source_backed = False
         probes = (("", ""), ("drain", ""), ("packed", ""), ("", "sharded"), ("", ""))
         for step, (probe, sink) in enumerate(probes):
-            monkeypatch.setenv("VIBEQC_DF_RESPONSE_UPLOAD_PROBE", probe)
-            monkeypatch.setenv("VIBEQC_DF_RESPONSE_SCATTER_PROBE", sink)
+            monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE", probe)
+            monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE", sink)
             path = tmp_path / f"probe-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(path))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(path))
             if probe and source_backed:
                 # Automatic budgets also use device sources: a host-only
                 # upload diagnostic must reject that owner, not create a copy.
@@ -120,7 +120,7 @@ def test_response_route_and_host_ablation(
 
     assert os.environ.get("SLURM_JOB_ID")
     monkeypatch.setenv(
-        "VIBEQC_DF_SERIAL_RESPONSE_DOT", "1" if metric_dot == "serial" else "0"
+        "GENERATIVEQC_DF_SERIAL_RESPONSE_DOT", "1" if metric_dot == "serial" else "0"
     )
     atoms = [("O", (0, 0, 0)), ("H", (0, 0, 1.8)), ("H", (1.7, 0, -0.6))]
     if method == "uhf":
@@ -156,11 +156,13 @@ def test_response_route_and_host_ablation(
         [atoms], multiplicities=[2 if method == "uhf" else 1]
     ) as owner:
         for step, host in enumerate((False, True, False)):
-            monkeypatch.setenv("VIBEQC_DF_HOST_RESPONSE_WEIGHTS", "1" if host else "0")
+            monkeypatch.setenv(
+                "GENERATIVEQC_DF_HOST_RESPONSE_WEIGHTS", "1" if host else "0"
+            )
             trace_path = tmp_path / f"cuda-{step}.jsonl"
             progress_path = tmp_path / f"progress-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace_path))
-            monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(progress_path))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace_path))
+            monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(progress_path))
             item = owner.execute(properties=("energy", "forces"), strict=True).items[0]
             assert abs(item.energy - mf.e_tot) < 1e-9
             np.testing.assert_allclose(item.forces, expected_forces, atol=1e-8, rtol=0)

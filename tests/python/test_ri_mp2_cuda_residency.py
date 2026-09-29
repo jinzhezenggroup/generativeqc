@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="requires explicitly allocated CUDA device and native library",
 )
 
@@ -17,7 +17,7 @@ def test_cuda_ri_mp2_keeps_transformed_b_on_device(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     trace = tmp_path / "ri-mp2.jsonl"
-    monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     atoms = [
         ("O", (0.0, 0.0, 0.0)),
         ("H", (0.0, -1.432, 1.107)),

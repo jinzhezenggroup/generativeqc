@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_clear_active_shell_quartet_tile_counts_kernel(
@@ -40,4 +40,4 @@ void launch_compact_generic_order5_tiles_kernel(
     const std::uint64_t* generated_shell_class_mask_pointer, std::uint32_t* generic_tile_count,
     ActiveShellQuartetTile* generic_tiles);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

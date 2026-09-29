@@ -15,7 +15,7 @@
 #include "scf/cuda/df_plan_setup.hpp"
 #include "scf/cuda/df_scf_state.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 std::uint64_t next_factor_basis_identity() noexcept {
   static std::atomic<std::uint64_t> next{1};
@@ -60,7 +60,7 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   plan = {};
 }
 
-vibeqc_status fail_plan(CudaDensityFittingJkPlan* plan, vibeqc_status status) {
+generativeqc_status fail_plan(CudaDensityFittingJkPlan* plan, generativeqc_status status) {
   if (plan != nullptr) {
     release(*plan);
     delete plan;
@@ -73,4 +73,4 @@ void destroy_persistent_scf_state(void*& opaque) noexcept {
   opaque = nullptr;
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

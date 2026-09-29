@@ -6,7 +6,11 @@ import tarfile
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash, validate_evidence
+from generativeqc_compiler.common.evidence import (
+    canonical_hash,
+    file_hash,
+    validate_evidence,
+)
 
 from benchmarks.tensor_cub_qualification import (
     _cub_candidate,

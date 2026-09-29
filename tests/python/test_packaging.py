@@ -6,14 +6,14 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc import _cuda_runtime, _native
+from generativeqc import _cuda_runtime, _native
 
 
 def test_installed_package_library_finds_wheel_layout(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    package = tmp_path / "vibeqc"
-    library = package / "lib" / "libvibeqc.so"
+    package = tmp_path / "generativeqc"
+    library = package / "lib" / "libgenerativeqc.so"
     library.parent.mkdir(parents=True)
     library.touch()
     monkeypatch.setattr(_native, "PACKAGE_DIR", package)
@@ -24,14 +24,14 @@ def test_installed_package_library_finds_wheel_layout(
 def test_native_candidates_prefer_override_then_bundled(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    explicit = tmp_path / "explicit" / "libvibeqc.so"
+    explicit = tmp_path / "explicit" / "libgenerativeqc.so"
     explicit.parent.mkdir(parents=True)
     explicit.touch()
-    package = tmp_path / "site" / "vibeqc"
-    bundled = package / "lib" / "libvibeqc.so"
+    package = tmp_path / "site" / "generativeqc"
+    bundled = package / "lib" / "libgenerativeqc.so"
     bundled.parent.mkdir(parents=True)
     bundled.touch()
-    monkeypatch.setenv("VIBEQC_LIBRARY", str(explicit))
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(explicit))
     monkeypatch.setattr(_native, "PACKAGE_DIR", package)
 
     assert _native._candidate_paths()[:2] == [explicit, bundled]
@@ -125,7 +125,7 @@ def test_cuda_runtime_loader_install_is_idempotent() -> None:
 
 
 def test_package_installs_cuda_runtime_wrapper() -> None:
-    assert getattr(_native.load_library, "_vibeqc_cuda_runtime_loader", False)
+    assert getattr(_native.load_library, "_generativeqc_cuda_runtime_loader", False)
 
 
 def test_wheel_compiler_templates_include_local_dependencies(
@@ -133,13 +133,13 @@ def test_wheel_compiler_templates_include_local_dependencies(
 ) -> None:
     """Exercise JIT source preparation using only the declared wheel payload."""
     tomllib = pytest.importorskip("tomllib")
-    from vibeqc_compiler.common import paths
-    from vibeqc_compiler.dft.ao_cuda import emit_grid_source
-    from vibeqc_compiler.tensor.cuda_execute import tensor_source_identity
+    from generativeqc_compiler.common import paths
+    from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+    from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
 
     root = Path(__file__).resolve().parents[2]
-    package = tmp_path / "vibeqc_compiler"
-    shutil.copytree(root / "python/vibeqc_compiler", package)
+    package = tmp_path / "generativeqc_compiler"
+    shutil.copytree(root / "python/generativeqc_compiler", package)
     config = tomllib.loads((root / "pyproject.toml").read_text())
     for source, destination in config["tool"]["scikit-build"]["wheel"][
         "force-include"

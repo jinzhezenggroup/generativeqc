@@ -4,8 +4,8 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.tensor import (
     density_program,
     diis_extrapolation_program,
     diis_gram_program,

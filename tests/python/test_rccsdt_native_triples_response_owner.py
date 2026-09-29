@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc.triples_response import full_triples_vjp
+from tools.generativeqc_cc.triples_response import full_triples_vjp
 
 NAMES = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
 
@@ -71,7 +71,7 @@ def _cpp_case(o: int, v: int, seed: int) -> str:
         [
             f"static int case_{o}_{v}(){{",
             *declarations,
-            "using namespace vibeqc::cc;",
+            "using namespace generativeqc::cc;",
             "Problem p;",
             f"p.nocc={o}; p.nvir={v};",
             "p.reference_energy=0.0;",
@@ -155,7 +155,7 @@ def test_native_triples_response_owner_matches_full_vjp(tmp_path: Path) -> None:
             compiler,
             "-std=c++20",
             "-O0",
-            "-DVIBEQC_HAS_CUDA=0",
+            "-DGENERATIVEQC_HAS_CUDA=0",
             "-I" + str(root / "src"),
             "-I" + str(tmp_path),
             str(root / "src/cc/solver.cpp"),

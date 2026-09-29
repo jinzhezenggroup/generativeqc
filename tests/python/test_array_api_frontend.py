@@ -4,16 +4,16 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.array_api import (
+from generativeqc_compiler.array_api import (
     VibeArray,
     capabilities,
     input_array,
     trace,
 )
-from vibeqc_compiler.array_api import (
+from generativeqc_compiler.array_api import (
     namespace as xp,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,

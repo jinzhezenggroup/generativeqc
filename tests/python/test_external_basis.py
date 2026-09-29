@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Atom,
     BasisProvenance,
     BasisShell,
@@ -20,13 +20,13 @@ from vibeqc import (
     import_bse,
     load_basis,
 )
-from vibeqc.basis import NORMALIZATION, decimal_text, read_local_json
-from vibeqc.elements import SYMBOLS
-from vibeqc.profiles import canonical_hash, file_hash
-from vibeqc_compiler.common.evidence import block_error
-from vibeqc_compiler.dft import GridSpec, MolecularGrid, NativeAO
+from generativeqc.basis import NORMALIZATION, decimal_text, read_local_json
+from generativeqc.elements import SYMBOLS
+from generativeqc.profiles import canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import block_error
+from generativeqc_compiler.dft import GridSpec, MolecularGrid, NativeAO
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 ROOT = Path(__file__).resolve().parents[1] / "data/external_basis"
 

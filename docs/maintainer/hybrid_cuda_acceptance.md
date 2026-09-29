@@ -73,16 +73,16 @@ gate above, not binary64 Libxc in the complete-endpoint test. The emitted
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:30:00 bash -lc '
-    export VIBEQC_LIBRARY=/absolute/path/to/libvibeqc.so
-    export VIBEQC_SPLIT_HYBRID_CUDA_TEST=1
-    export VIBEQC_SPLIT_HYBRID_EVIDENCE=/absolute/path/to/local-evidence
+    export GENERATIVEQC_LIBRARY=/absolute/path/to/libgenerativeqc.so
+    export GENERATIVEQC_SPLIT_HYBRID_CUDA_TEST=1
+    export GENERATIVEQC_SPLIT_HYBRID_EVIDENCE=/absolute/path/to/local-evidence
     export PYTHONPATH=python:.
     python -m pytest tests/python/test_split_hybrid_endpoints_cuda.py -q'
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:30:00 bash -lc '
-    export VIBEQC_LIBRARY=/absolute/path/to/libvibeqc.so
-    export VIBEQC_SPLIT_HYBRID_CUDA_TEST=1 PYTHONPATH=python:.
+    export GENERATIVEQC_LIBRARY=/absolute/path/to/libgenerativeqc.so
+    export GENERATIVEQC_SPLIT_HYBRID_CUDA_TEST=1 PYTHONPATH=python:.
     compute-sanitizer --tool memcheck --error-exitcode 86 \
       python -m pytest tests/python/test_split_hybrid_endpoints_cuda.py -q' \
   > /absolute/path/to/local-sanitizer.log 2>&1
@@ -108,10 +108,10 @@ are disabled during native force calls.
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:30:00 bash -lc '
-    export VIBEQC_LIBRARY=/absolute/path/to/libvibeqc.so
+    export GENERATIVEQC_LIBRARY=/absolute/path/to/libgenerativeqc.so
     export CUDACXX=/absolute/path/to/nvcc
-    export VIBEQC_HYBRID_FORCE_CUDA_TEST=1 PYTHONPATH=python:.
-    export VIBEQC_HYBRID_FORCE_EVIDENCE=.artifacts/hybrid-force
+    export GENERATIVEQC_HYBRID_FORCE_CUDA_TEST=1 PYTHONPATH=python:.
+    export GENERATIVEQC_HYBRID_FORCE_EVIDENCE=.artifacts/hybrid-force
     python -m pytest tests/python/test_global_hybrid_cuda_forces.py -q'
 ```
 

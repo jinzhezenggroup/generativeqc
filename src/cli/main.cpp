@@ -15,11 +15,11 @@
 #include <utility>
 #include <vector>
 
+#include "generativeqc/generativeqc.hpp"
 #include "methods/generated_method_manifest.hpp"
-#include "vibeqc/vibeqc.hpp"
 
-#ifndef VIBEQC_CLI_VERSION
-#define VIBEQC_CLI_VERSION "unknown"
+#ifndef GENERATIVEQC_CLI_VERSION
+#define GENERATIVEQC_CLI_VERSION "unknown"
 #endif
 
 namespace {
@@ -34,7 +34,7 @@ class UsageError : public std::runtime_error {
 struct RunOptions {
   std::string input;
   std::string method_name{"gfn2-xtb"};
-  vibeqc_backend backend{VIBEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   int device_id{0};
   int charge{0};
   std::uint32_t multiplicity{1};
@@ -95,7 +95,7 @@ int atomic_number(std::string token) {
   return static_cast<int>(std::distance(symbols.begin(), found)) + 1;
 }
 
-std::vector<vibeqc_atom> read_xyz(const RunOptions& options) {
+std::vector<generativeqc_atom> read_xyz(const RunOptions& options) {
   std::ifstream stream(options.input);
   if (!stream) throw UsageError("cannot open XYZ input: " + options.input);
 
@@ -115,7 +115,7 @@ std::vector<vibeqc_atom> read_xyz(const RunOptions& options) {
   }
   if (!std::getline(stream, line)) throw UsageError("XYZ input is missing its comment line");
 
-  std::vector<vibeqc_atom> atoms;
+  std::vector<generativeqc_atom> atoms;
   atoms.reserve(static_cast<std::size_t>(count));
   const double scale = options.input_angstrom ? kBohrPerAngstrom : 1.0;
   for (std::size_t index = 0; index < count; ++index) {
@@ -133,40 +133,40 @@ std::vector<vibeqc_atom> read_xyz(const RunOptions& options) {
   return atoms;
 }
 
-std::string_view family_name(vibeqc_method_family family) {
+std::string_view family_name(generativeqc_method_family family) {
   switch (family) {
-    case VIBEQC_METHOD_FAMILY_HARTREE_FOCK:
+    case GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK:
       return "hartree_fock";
-    case VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL:
+    case GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL:
       return "density_functional";
-    case VIBEQC_METHOD_FAMILY_COUPLED_CLUSTER:
+    case GENERATIVEQC_METHOD_FAMILY_COUPLED_CLUSTER:
       return "coupled_cluster";
-    case VIBEQC_METHOD_FAMILY_PERTURBATION:
+    case GENERATIVEQC_METHOD_FAMILY_PERTURBATION:
       return "perturbation";
-    case VIBEQC_METHOD_FAMILY_SEMIEMPIRICAL:
+    case GENERATIVEQC_METHOD_FAMILY_SEMIEMPIRICAL:
       return "semiempirical";
     default:
       return "unknown";
   }
 }
 
-std::string properties(vibeqc_property_flags flags) {
+std::string properties(generativeqc_property_flags flags) {
   std::string value;
-  if (flags & VIBEQC_PROPERTY_ENERGY) value = "energy";
-  if (flags & VIBEQC_PROPERTY_FORCES) {
+  if (flags & GENERATIVEQC_PROPERTY_ENERGY) value = "energy";
+  if (flags & GENERATIVEQC_PROPERTY_FORCES) {
     if (!value.empty()) value += ",";
     value += "forces";
   }
   return value.empty() ? "-" : value;
 }
 
-std::string_view backend_name(vibeqc_backend backend) {
+std::string_view backend_name(generativeqc_backend backend) {
   switch (backend) {
-    case VIBEQC_BACKEND_CPU_REFERENCE:
+    case GENERATIVEQC_BACKEND_CPU_REFERENCE:
       return "cpu_reference";
-    case VIBEQC_BACKEND_CUDA:
+    case GENERATIVEQC_BACKEND_CUDA:
       return "cuda";
-    case VIBEQC_BACKEND_HYBRID_CUDA:
+    case GENERATIVEQC_BACKEND_HYBRID_CUDA:
       return "hybrid_cuda";
     default:
       return "unknown";
@@ -175,12 +175,12 @@ std::string_view backend_name(vibeqc_backend backend) {
 
 void print_usage(std::ostream& out) {
   out << "Usage:\n"
-         "  vibeqc --version\n"
-         "  vibeqc methods [--json]\n"
-         "  vibeqc run INPUT.xyz [options]\n"
-         "  vibeqc resources ...   # reserved; Python frontend currently owns it\n"
-         "  vibeqc profile ...     # reserved; Python frontend currently owns it\n"
-         "  vibeqc autotune ...    # reserved; Python frontend currently owns it\n\n"
+         "  generativeqc --version\n"
+         "  generativeqc methods [--json]\n"
+         "  generativeqc run INPUT.xyz [options]\n"
+         "  generativeqc resources ...   # reserved; Python frontend currently owns it\n"
+         "  generativeqc profile ...     # reserved; Python frontend currently owns it\n"
+         "  generativeqc autotune ...    # reserved; Python frontend currently owns it\n\n"
          "Native run options:\n"
          "  --method gfn2-xtb|gfn2   Native CLI execution method (default: gfn2-xtb)\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
@@ -193,23 +193,23 @@ void print_usage(std::ostream& out) {
 }
 
 void print_methods(bool json) {
-  using vibeqc::methods::generated::kMethodManifest;
+  using generativeqc::methods::generated::kMethodManifest;
   if (json) std::cout << "[\n";
   if (!json) std::cout << "METHOD\tFAMILY\tPROPERTIES\tBATCH\tSTATUS\n";
 
   bool first = true;
   for (const auto& entry : kMethodManifest) {
-    const auto capability = vibeqc::method_capabilities(entry.method);
+    const auto capability = generativeqc::method_capabilities(entry.method);
     if (json) {
       if (!first) std::cout << ",\n";
       std::cout << "  {\"name\":\"" << entry.name << "\",\"family\":\""
                 << family_name(capability.family) << "\",\"properties\":[";
       bool first_property = true;
-      if (capability.supported_properties & VIBEQC_PROPERTY_ENERGY) {
+      if (capability.supported_properties & GENERATIVEQC_PROPERTY_ENERGY) {
         std::cout << "\"energy\"";
         first_property = false;
       }
-      if (capability.supported_properties & VIBEQC_PROPERTY_FORCES) {
+      if (capability.supported_properties & GENERATIVEQC_PROPERTY_FORCES) {
         if (!first_property) std::cout << ",";
         std::cout << "\"forces\"";
       }
@@ -226,19 +226,19 @@ void print_methods(bool json) {
   if (json) std::cout << "\n]\n";
 }
 
-vibeqc_method_descriptor gfn2_method() {
-  vibeqc_method_descriptor descriptor{};
+generativeqc_method_descriptor gfn2_method() {
+  generativeqc_method_descriptor descriptor{};
   descriptor.struct_size = sizeof(descriptor);
-  descriptor.abi_version = VIBEQC_ABI_VERSION;
-  descriptor.method = VIBEQC_METHOD_GFN2_XTB;
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = GENERATIVEQC_METHOD_GFN2_XTB;
   descriptor.max_iterations = 100;
   descriptor.diis_history = 8;
   descriptor.energy_tolerance = 1.0e-10;
   descriptor.density_tolerance = 1.0e-8;
   descriptor.screening_tolerance = 0.0;
-  descriptor.density_fitting_mode = VIBEQC_DENSITY_FITTING_NONE;
+  descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   descriptor.density_fitting_relative_threshold = 1.0e-10;
-  descriptor.precision_mode = VIBEQC_PRECISION_FP64;
+  descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
   descriptor.mp2_denominator_threshold = 1.0e-10;
   descriptor.ccsd_max_iterations = 100;
   descriptor.ccsd_diis_history = 6;
@@ -270,9 +270,9 @@ RunOptions parse_run(int argc, char** argv) {
     } else if (option == "--backend") {
       const std::string selected = lower(std::string(value()));
       if (selected == "cpu")
-        options.backend = VIBEQC_BACKEND_CPU_REFERENCE;
+        options.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
       else if (selected == "cuda")
-        options.backend = VIBEQC_BACKEND_CUDA;
+        options.backend = GENERATIVEQC_BACKEND_CUDA;
       else
         throw UsageError("--backend must be cpu or cuda");
     } else if (option == "--device-id") {
@@ -302,29 +302,30 @@ RunOptions parse_run(int argc, char** argv) {
 }
 
 int run(const RunOptions& options) {
-  const std::vector<vibeqc_atom> atoms = read_xyz(options);
+  const std::vector<generativeqc_atom> atoms = read_xyz(options);
 
-  const vibeqc_context_descriptor context_descriptor{
-      sizeof(vibeqc_context_descriptor), VIBEQC_ABI_VERSION, options.device_id, options.backend};
-  vibeqc::Context context(context_descriptor);
+  const generativeqc_context_descriptor context_descriptor{sizeof(generativeqc_context_descriptor),
+                                                           GENERATIVEQC_ABI_VERSION,
+                                                           options.device_id, options.backend};
+  generativeqc::Context context(context_descriptor);
 
-  const vibeqc_system_descriptor system_descriptor{sizeof(vibeqc_system_descriptor),
-                                                   VIBEQC_ABI_VERSION,
-                                                   atoms.data(),
-                                                   static_cast<std::uint32_t>(atoms.size()),
-                                                   nullptr,
-                                                   0,
-                                                   nullptr,
-                                                   0,
-                                                   options.charge,
-                                                   options.multiplicity,
-                                                   VIBEQC_BASIS_CARTESIAN};
-  vibeqc::System system(context, system_descriptor);
+  const generativeqc_system_descriptor system_descriptor{sizeof(generativeqc_system_descriptor),
+                                                         GENERATIVEQC_ABI_VERSION,
+                                                         atoms.data(),
+                                                         static_cast<std::uint32_t>(atoms.size()),
+                                                         nullptr,
+                                                         0,
+                                                         nullptr,
+                                                         0,
+                                                         options.charge,
+                                                         options.multiplicity,
+                                                         GENERATIVEQC_BASIS_CARTESIAN};
+  generativeqc::System system(context, system_descriptor);
 
-  const vibeqc_method_descriptor method = gfn2_method();
-  vibeqc::Calculation calculation(context, system, method);
-  const vibeqc_property_flags requested =
-      VIBEQC_PROPERTY_ENERGY | (options.forces ? VIBEQC_PROPERTY_FORCES : 0u);
+  const generativeqc_method_descriptor method = gfn2_method();
+  generativeqc::Calculation calculation(context, system, method);
+  const generativeqc_property_flags requested =
+      GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   const auto result = calculation.execute(requested);
 
   std::cout << std::setprecision(17);
@@ -362,7 +363,7 @@ int run(const RunOptions& options) {
 }
 
 int reserved_python_subcommand(std::string_view command) {
-  std::cerr << "vibeqc: native subcommand '" << command
+  std::cerr << "generativeqc: native subcommand '" << command
             << "' is reserved but not migrated yet; the Python frontend currently provides it\n";
   return 2;
 }
@@ -382,7 +383,8 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (command == "--version" || command == "version") {
-      std::cout << "vibeqc " << VIBEQC_CLI_VERSION << " (ABI " << VIBEQC_ABI_VERSION << ")\n";
+      std::cout << "generativeqc " << GENERATIVEQC_CLI_VERSION << " (ABI "
+                << GENERATIVEQC_ABI_VERSION << ")\n";
       return 0;
     }
     if (command == "methods") {
@@ -404,14 +406,14 @@ int main(int argc, char** argv) {
 
     throw UsageError("unknown command: " + std::string(command));
   } catch (const UsageError& error) {
-    std::cerr << "vibeqc: " << error.what() << "\n\n";
+    std::cerr << "generativeqc: " << error.what() << "\n\n";
     print_usage(std::cerr);
     return 2;
-  } catch (const vibeqc::Error& error) {
-    std::cerr << "vibeqc: " << error.what() << " (status " << error.status() << ")\n";
+  } catch (const generativeqc::Error& error) {
+    std::cerr << "generativeqc: " << error.what() << " (status " << error.status() << ")\n";
     return 1;
   } catch (const std::exception& error) {
-    std::cerr << "vibeqc: " << error.what() << '\n';
+    std::cerr << "generativeqc: " << error.what() << '\n';
     return 1;
   }
 }

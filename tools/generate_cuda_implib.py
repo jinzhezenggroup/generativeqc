@@ -4,7 +4,7 @@
 
 The emitted C/assembly sources use the vendored MIT-licensed Implib.so
 architecture templates. They define the CUDA host symbols referenced by
-libvibeqc while resolving the real provider SONAME only on first use, so the
+libgenerativeqc while resolving the real provider SONAME only on first use, so the
 wheel build needs nvcc and headers but no CUDA provider shared libraries.
 """
 

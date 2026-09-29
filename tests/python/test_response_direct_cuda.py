@@ -7,15 +7,15 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     CudaDirectJKBackend,
     DenseAOResponseBackend,
     GMRESOptions,
@@ -27,7 +27,7 @@ from tools.vibeqc_response import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated real GPU",
 )
 
@@ -126,7 +126,7 @@ def test_cuda_direct_cphf_action_and_all_shared_multirhs_strategies(
 def test_native_rhf_snapshot_connects_to_direct_cuda_response(
     monkeypatch: typing.Any,
 ) -> None:
-    """A real VibeQC SCF state, not only an external/synthetic fixture snapshot."""
+    """A real GenerativeQC SCF state, not only an external/synthetic fixture snapshot."""
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     atoms = [(1, (0.0, 0.0, 0.0)), (1, (0.0, 0.0, 1.4))]
     with NativeSource(atoms) as source:

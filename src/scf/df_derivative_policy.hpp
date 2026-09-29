@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Conservative schedule profile, not a correctness/capability declaration.
  * Existing device-metric, source, representation, state and allocation gates
@@ -76,4 +76,4 @@ constexpr bool df_response_shell_source_eligible(bool has_source, bool has_raw, 
   return !has_source || has_raw || has_fitted || (qualify_source && validated_full_rank_occupied);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -7,7 +7,7 @@ shell-task and DF algorithms remain roadmap work.
 
 | Requirement | Implementation | Verification |
 | --- | --- | --- |
-| Native ragged systems | `vibeqc_batch` stores independent `System` objects and force buffers; no padded molecule tensor exists | Mixed He/H2/H3+/H4 C and Python tests assert exact per-item force shapes |
+| Native ragged systems | `generativeqc_batch` stores independent `System` objects and force buffers; no padded molecule tensor exists | Mixed He/H2/H3+/H4 C and Python tests assert exact per-item force shapes |
 | Batch scheduler | `FleetPlan` sorts by `(nbf, nocc, primitive_count)` and restores input order | Bucket IDs and independent-energy ordering are tested |
 | Compatible-work parallelism | CPU buckets use bounded native worker groups; CUDA buckets use batched integral/matrix kernels and device eigensolves with an active mask | 64-system repeated stress test and CUDA same-bucket comparison |
 | Large eigensolves | Above 32 AOs, generic FP64 `XsyevBatched` is used only after an exact setup-time device-launch Graph probe; rejected signatures keep Fock/matrix work in Graphs and use ordinary-stream `Xsyevd` one matrix at a time | API/product boundary tests plus 512/513/768-AO probe and fallback checks on an allocated RTX 5090 |
@@ -132,7 +132,7 @@ matrix strategy. This observed 512/513 transition is not a cuSOLVER matrix
 size limit.
 
 For diagnosing or gating a known provider regression, setting
-`VIBEQC_GRAPH_EIGENSOLVER_OVERRIDE=graph_native` selects the Graph-native
+`GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE=graph_native` selects the Graph-native
 solver for both captured iterations and ordinary/finalization solves. This
 override bypasses the cuSOLVER probe entirely, so a rejected or unstable
 provider cannot re-enter through a split ordinary-stream path. It is an
@@ -150,11 +150,11 @@ getter publish one record per executed bucket, including ordinary and Graph
 provider families, selection source, dimensions, CUDA/cuSOLVER versions,
 workspace sizes, API decision, probe stage/status codes, and validation errors.
 Batch comparison JSON stores the same records under
-`vibeqc.eigensolver_diagnostics`.
+`generativeqc.eigensolver_diagnostics`.
 
 CUDA density-fitting batches expose an analogous metric/allocation record via
 `PreparedBatch.last_density_fitting_metric_diagnostics()` and
-`vibeqc_batch_get_last_density_fitting_metric_diagnostics`. Each record reports
+`generativeqc_batch_get_last_density_fitting_metric_diagnostics`. Each record reports
 the effective metric rank, condition number, selected auxiliary tile, solver
 workspace, and conservative host/device resident and peak byte counts, along
 with the bucket id and original prepared-batch item index.

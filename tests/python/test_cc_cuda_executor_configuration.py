@@ -5,10 +5,10 @@ from types import SimpleNamespace
 from typing import Self
 
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_cc.native_tensor_cuda import CudaCCTensorExecutor
+from tools.generativeqc_cc.native_tensor_cuda import CudaCCTensorExecutor
 
 
 def _executor(tmp_path: Path) -> tuple[CudaCCTensorExecutor, list[str]]:

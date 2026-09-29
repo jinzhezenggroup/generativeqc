@@ -6,7 +6,7 @@
 #include "generated_ecp_ao.cuh"
 #include "molecule/basis.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 namespace {
 constexpr int projector_count = generated::ecp_projector_count;
 struct Component {
@@ -153,4 +153,4 @@ void add_ecp(const EcpData& ecp, std::vector<double>& hcore, std::vector<double>
     derivative[i] = generated::ecp_add_operator(derivative[i], ecp.local_derivative[i],
                                                 ecp.nonlocal_derivative[i]);
 }
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

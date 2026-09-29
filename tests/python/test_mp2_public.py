@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Calculator,
     ObservableTarget,
     Primitive,
@@ -19,12 +19,12 @@ from vibeqc import (
     method_capabilities,
 )
 
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
 
 
 @pytest.fixture(params=["cpu", "cuda"])
 def device(request: typing.Any) -> typing.Any:
-    if request.param == "cuda" and os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1":
+    if request.param == "cuda" and os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1":
         pytest.skip("requires explicitly allocated CUDA device and native library")
     return request.param
 
@@ -67,8 +67,8 @@ def test_public_native_hf_to_mp2_components(
     assert diag.reference_residual <= 1e-8
     assert diag.numeric_capacity_bytes <= 256 << 20
     assert diag.mo_host_staging == (device == "cuda")
-    if directory := os.environ.get("VIBEQC_MP2_EVIDENCE_DIR"):
-        from tools.vibeqc_mp2.evidence import record_public_result
+    if directory := os.environ.get("GENERATIVEQC_MP2_EVIDENCE_DIR"):
+        from tools.generativeqc_mp2.evidence import record_public_result
 
         record_public_result(
             calc,
@@ -427,7 +427,7 @@ def test_public_ri_mp2_force_cpu_water_directional_finite_difference() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="requires explicitly allocated CUDA device and native library",
 )
 def test_public_cuda_ri_mp2_force_rejects_without_host_fallback() -> None:
@@ -454,7 +454,7 @@ def test_public_conventional_mp2_force_accepts_zero_derivative_degenerate_subspa
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="requires explicitly allocated CUDA device and native library",
 )
 def test_public_conventional_mp2_force_cuda_matches_cpu() -> None:
@@ -478,12 +478,12 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
     calc = Calculator(method="mp2", device="cpu")
     lib = calc._library
     context, system, calculation = ct.c_void_p(), ct.c_void_p(), ct.c_void_p()
-    from vibeqc import Atom
+    from generativeqc import Atom
 
     atoms = (Atom(1, (0, 0, -0.7)), Atom(1, (0, 0, 0.7)))
     _native.check(
         lib,
-        lib.vibeqc_context_create(
+        lib.generativeqc_context_create(
             ct.byref(calc._context_descriptor()), ct.byref(context)
         ),
     )
@@ -491,7 +491,7 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
         system = calc._create_native_system(context, atoms, 0, 1)
         _native.check(
             lib,
-            lib.vibeqc_calculation_prepare(
+            lib.generativeqc_calculation_prepare(
                 context,
                 system,
                 ct.byref(calc._method_descriptor()),
@@ -504,7 +504,7 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
         )
         _native.check(
             lib,
-            lib.vibeqc_calculation_execute(calculation, ct.byref(out)),
+            lib.generativeqc_calculation_execute(calculation, ct.byref(out)),
             context=context,
         )
         first_energy = out.energy
@@ -515,7 +515,7 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
         diag.abi_version = 0
         _native.check(
             lib,
-            lib.vibeqc_calculation_get_correlation_diagnostic(
+            lib.generativeqc_calculation_get_correlation_diagnostic(
                 calculation, ct.byref(diag)
             ),
         )
@@ -545,7 +545,7 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
         truncated.opposite_spin_energy = 123.0
         original = bytes(truncated)
         assert (
-            lib.vibeqc_calculation_get_correlation_diagnostic(
+            lib.generativeqc_calculation_get_correlation_diagnostic(
                 calculation, ct.byref(truncated)
             )
             == _native.STATUS_ABI_MISMATCH
@@ -566,12 +566,12 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
             15,
         )
         assert (
-            lib.vibeqc_calculation_execute(calculation, ct.byref(failed))
+            lib.generativeqc_calculation_execute(calculation, ct.byref(failed))
             == _native.STATUS_INVALID_ARGUMENT
         )
         assert failed.energy == 654.0 and list(failed_forces) == [456.0] * 6
         assert (
-            lib.vibeqc_calculation_get_correlation_diagnostic(
+            lib.generativeqc_calculation_get_correlation_diagnostic(
                 calculation, ct.byref(diag)
             )
             == _native.STATUS_NOT_IMPLEMENTED
@@ -591,25 +591,29 @@ def test_c_api_conventional_force_is_transactional_across_repeated_execution() -
         )
         _native.check(
             lib,
-            lib.vibeqc_calculation_execute(calculation, ct.byref(retry)),
+            lib.generativeqc_calculation_execute(calculation, ct.byref(retry)),
             context=context,
         )
         assert abs(retry.energy - first_energy) < 1e-12
         np.testing.assert_allclose(list(retry_forces), first_forces, atol=1e-12)
     finally:
         if calculation:
-            lib.vibeqc_calculation_destroy(calculation)
+            lib.generativeqc_calculation_destroy(calculation)
         if system:
-            lib.vibeqc_system_destroy(system)
-        lib.vibeqc_context_destroy(context)
+            lib.generativeqc_system_destroy(system)
+        lib.generativeqc_context_destroy(context)
 
 
 def test_generated_cpu_and_capacity_sources_are_reproducible() -> None:
-    from vibeqc_compiler.common.source_reuse import native_header as source_reuse_header
-    from vibeqc_compiler.method.mp2_schedule import native_header as mp2_schedule_header
+    from generativeqc_compiler.common.source_reuse import (
+        native_header as source_reuse_header,
+    )
+    from generativeqc_compiler.method.mp2_schedule import (
+        native_header as mp2_schedule_header,
+    )
 
     from tools.generate_mp2_native import cpu_header
-    from tools.vibeqc_posthf.plan_spec import native_header
+    from tools.generativeqc_posthf.plan_spec import native_header
 
     root = Path(__file__).resolve().parents[2]
     for name, expected in (

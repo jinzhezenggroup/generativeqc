@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.conventions import MOBlock
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
-from tools.vibeqc_posthf.mp2 import restricted_mp2, spin_orbital_mp2
-from tools.vibeqc_posthf.oracle import dense_ao_to_mo
-from tools.vibeqc_posthf.providers import BlockResult
-from tools.vibeqc_posthf.reference import ReferenceSnapshot
+from tools.generativeqc_posthf.conventions import MOBlock
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_posthf.mp2 import restricted_mp2, spin_orbital_mp2
+from tools.generativeqc_posthf.oracle import dense_ao_to_mo
+from tools.generativeqc_posthf.providers import BlockResult
+from tools.generativeqc_posthf.reference import ReferenceSnapshot
 
 
 @pytest.mark.parametrize("name", ["h2", "water", "lih", "f_heh"])

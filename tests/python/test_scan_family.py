@@ -6,12 +6,12 @@ import typing
 from fractions import Fraction
 
 import numpy as np
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     ExactExchangePrimitive,
     SemilocalXCPrimitive,
     resolve_method,
 )
-from vibeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.program import build_program
 
 RA, RB, AA, AB, BB = 0.3, 0.2, 0.015, 0.003, 0.01
 TA = AA / (8 * RA) + 0.8 * RA ** (5 / 3)

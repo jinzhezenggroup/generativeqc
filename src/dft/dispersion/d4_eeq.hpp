@@ -9,12 +9,12 @@
 #include "dft/dispersion/d4_reference.hpp"
 
 #if defined(__CUDACC__)
-#define VIBEQC_D4_EEQ_HD __host__ __device__
+#define GENERATIVEQC_D4_EEQ_HD __host__ __device__
 #else
-#define VIBEQC_D4_EEQ_HD
+#define GENERATIVEQC_D4_EEQ_HD
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 enum class D4EEQProfile : int { standard = 1, r2scan3c = 2 };
 
@@ -32,7 +32,7 @@ inline D4Tables eeq_d4_host_tables(D4EEQProfile profile) {
   const double* c6 = profile == D4EEQProfile::r2scan3c ? eeq_data::kReferenceC6R2SCAN3C.data()
                                                        : eeq_data::kReferenceC6Standard.data();
   const bool r2scan = profile == D4EEQProfile::r2scan3c;
-  const auto r2scan_parameters = ::vibeqc::generated::method_parameters::r2scan3cD4();
+  const auto r2scan_parameters = ::generativeqc::generated::method_parameters::r2scan3cD4();
   return {D4ReferenceModel::eeq,
           eeq_data::kElements.data(),
           eeq_data::kReferences.data(),
@@ -45,21 +45,21 @@ inline D4Tables eeq_d4_host_tables(D4EEQProfile profile) {
 }
 
 inline D4Parameters r2scan3c_d4_parameters() {
-  const auto p = ::vibeqc::generated::method_parameters::r2scan3cD4();
+  const auto p = ::generativeqc::generated::method_parameters::r2scan3cD4();
   return {D4ReferenceModel::eeq, p.s6,          p.s8,         p.s9, p.a1, p.a2,
           p.cn_cutoff,           p.pair_cutoff, p.atm_cutoff, p.ga, p.gc};
 }
 
 inline constexpr int kEEQMaximumAtoms = kD4MaximumAtoms;
 inline constexpr double kEEQCutoff =
-    ::vibeqc::generated::method_parameters::r2scan3cD4ChargeCnCutoff();
+    ::generativeqc::generated::method_parameters::r2scan3cD4ChargeCnCutoff();
 inline constexpr double kEEQKcn = 7.5;
 inline constexpr double kEEQMaximumCN = 8.0;
 inline constexpr double kEEQRegularizer = 1.0e-14;
 inline constexpr double kInvSqrtPi = 0.5641895835477562869480794515607726;
 inline constexpr double kSqrtTwoOverPi = 0.7978845608028653558798921198687637;
 
-VIBEQC_D4_EEQ_HD inline std::size_t eeq2019_workspace_elements(int atoms) {
+GENERATIVEQC_D4_EEQ_HD inline std::size_t eeq2019_workspace_elements(int atoms) {
   if (atoms < 0 || atoms > kEEQMaximumAtoms) return 0;
   const std::size_t n = static_cast<std::size_t>(atoms);
   const std::size_t m = n + 1;
@@ -69,19 +69,19 @@ VIBEQC_D4_EEQ_HD inline std::size_t eeq2019_workspace_elements(int atoms) {
 
 namespace eeq_detail {
 
-VIBEQC_D4_EEQ_HD inline double log_cn_cut(double cn) {
+GENERATIVEQC_D4_EEQ_HD inline double log_cn_cut(double cn) {
   return log1p(exp(kEEQMaximumCN)) - log1p(exp(kEEQMaximumCN - cn));
 }
 
-VIBEQC_D4_EEQ_HD inline double dlog_cn_cut(double cn) {
+GENERATIVEQC_D4_EEQ_HD inline double dlog_cn_cut(double cn) {
   return exp(kEEQMaximumCN) / (exp(kEEQMaximumCN) + exp(cn));
 }
 
-VIBEQC_D4_EEQ_HD inline bool finite(double value) {
+GENERATIVEQC_D4_EEQ_HD inline bool finite(double value) {
   return (value == value && value <= DBL_MAX && value >= -DBL_MAX);
 }
 
-VIBEQC_D4_EEQ_HD inline bool lu_factor(double* a, int n, int* pivots) {
+GENERATIVEQC_D4_EEQ_HD inline bool lu_factor(double* a, int n, int* pivots) {
   for (int k = 0; k < n; ++k) {
     int pivot = k;
     double maximum = fabs(a[static_cast<std::size_t>(k) * n + k]);
@@ -114,7 +114,8 @@ VIBEQC_D4_EEQ_HD inline bool lu_factor(double* a, int n, int* pivots) {
   return true;
 }
 
-VIBEQC_D4_EEQ_HD inline bool lu_solve(const double* lu, int n, const int* pivots, double* rhs) {
+GENERATIVEQC_D4_EEQ_HD inline bool lu_solve(const double* lu, int n, const int* pivots,
+                                            double* rhs) {
   for (int k = 0; k < n; ++k)
     if (pivots[k] != k) {
       const double tmp = rhs[k];
@@ -133,8 +134,9 @@ VIBEQC_D4_EEQ_HD inline bool lu_solve(const double* lu, int n, const int* pivots
   return true;
 }
 
-VIBEQC_D4_EEQ_HD inline void eeq_cn_pair(const data::D4ElementData& a, const data::D4ElementData& b,
-                                         double r, double& count, double& dcountdr) {
+GENERATIVEQC_D4_EEQ_HD inline void eeq_cn_pair(const data::D4ElementData& a,
+                                               const data::D4ElementData& b, double r,
+                                               double& count, double& dcountdr) {
   const double rc = a.covalent_radius + b.covalent_radius;
   const double x = kEEQKcn * (r - rc) / rc;
   count = 0.5 * (1.0 + erf(-x));
@@ -146,7 +148,7 @@ VIBEQC_D4_EEQ_HD inline void eeq_cn_pair(const data::D4ElementData& a, const dat
 // Molecular, nonperiodic EEQ2019 charge provider from pinned multicharge.
 // dqdr layout is [coordinate=(3*atom+axis)][charge_atom], i.e.
 // dqdr[(3*k+axis)*n+i] = dq_i / dR_{k,axis}.
-VIBEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
+GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
     int n, const std::int32_t* z, const double* xyz, double total_charge, EEQTables t,
     double* workspace, std::size_t workspace_size, double* charges, double* dqdr) {
   using namespace eeq_detail;
@@ -300,7 +302,7 @@ inline D4Status evaluate_eeq2019(int n, const std::int32_t* z, const double* xyz
                                       workspace_size, charges, dqdr);
 }
 
-VIBEQC_D4_EEQ_HD inline std::size_t complete_d4_eeq_workspace_elements(int atoms) {
+GENERATIVEQC_D4_EEQ_HD inline std::size_t complete_d4_eeq_workspace_elements(int atoms) {
   if (atoms < 0 || atoms > kD4MaximumAtoms) return 0;
   const std::size_t n = static_cast<std::size_t>(atoms);
   return eeq2019_workspace_elements(atoms) + d4_workspace_elements(atoms) + n + 3 * n * n + n +
@@ -314,7 +316,7 @@ VIBEQC_D4_EEQ_HD inline std::size_t complete_d4_eeq_workspace_elements(int atoms
 // qualified custom scientific providers.
 // The caller selects a table profile matching p.ga/p.gc; profile mismatches are
 // rejected rather than silently mixed.
-VIBEQC_D4_EEQ_HD inline D4Status evaluate_complete_d4_eeq_with_tables(
+GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_complete_d4_eeq_with_tables(
     int n, const std::int32_t* z, const double* xyz, double total_charge, const D4Parameters& p,
     D4EEQProfile profile, D4Tables d4_tables, EEQTables eeq_tables, double* workspace,
     std::size_t workspace_size, double* energy, double* gradient, double* charges) {
@@ -402,5 +404,5 @@ inline D4Status evaluate_complete_d4_eeq(int n, const std::int32_t* z, const dou
                                               workspace, workspace_size, energy, gradient, charges);
 }
 
-}  // namespace vibeqc::dft::dispersion
-#undef VIBEQC_D4_EEQ_HD
+}  // namespace generativeqc::dft::dispersion
+#undef GENERATIVEQC_D4_EEQ_HD

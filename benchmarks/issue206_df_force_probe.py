@@ -50,7 +50,7 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.issue206_resident_sentinel import validate_response_record
 
@@ -141,7 +141,7 @@ def _sample(
     case = benchmark_cases()[case_name]
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=100,
@@ -149,7 +149,7 @@ def _sample(
         density_tolerance=1.0e-10,
         screening_tolerance=1.0e-12,
         density_fitting="cuda",
-        auxiliary_basis=case.vibeqc_basis,
+        auxiliary_basis=case.generativeqc_basis,
         density_fitting_memory_budget_bytes=memory_budget_bytes,
     )
     if Path(calculator._library._name).resolve() != library:
@@ -200,7 +200,7 @@ def _traced_sample(
     host_path = path.with_suffix(".host.jsonl")
     with host_path.open("x"):
         pass
-    variables = {"VIBEQC_DF_TRACE": path, "VIBEQC_DF_HOST_TRACE": host_path}
+    variables = {"GENERATIVEQC_DF_TRACE": path, "GENERATIVEQC_DF_HOST_TRACE": host_path}
     previous = {name: os.environ.get(name) for name in variables}
     for name, target in variables.items():
         os.environ[name] = str(target.resolve())
@@ -285,9 +285,9 @@ def main() -> None:
     if any(
         os.environ.get(name)
         for name in (
-            "VIBEQC_DF_TRACE",
-            "VIBEQC_DF_HOST_TRACE",
-            "VIBEQC_DF_PROGRESS_TRACE",
+            "GENERATIVEQC_DF_TRACE",
+            "GENERATIVEQC_DF_HOST_TRACE",
+            "GENERATIVEQC_DF_PROGRESS_TRACE",
         )
     ):
         parser.error(
@@ -296,7 +296,7 @@ def main() -> None:
     library = args.library.resolve(strict=True)
     if not library.is_file():
         parser.error("--library must select a native shared library file")
-    os.environ["VIBEQC_LIBRARY"] = str(library)
+    os.environ["GENERATIVEQC_LIBRARY"] = str(library)
     source = _source_metadata(library)
 
     cases = args.cases or list(CASES)
@@ -350,7 +350,7 @@ def main() -> None:
     if _source_metadata(library) != source:
         raise RuntimeError("source or native library changed during the benchmark")
     payload = {
-        "schema": "vibeqc.issue206.df_force_ledger",
+        "schema": "generativeqc.issue206.df_force_ledger",
         "version": 2,
         "source": source,
         "execution": {

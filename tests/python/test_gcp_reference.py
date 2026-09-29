@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tools.vibeqc_gcp.reference import evaluate_r2scan3c_gcp
+from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp
 
 ZS = (5, 7, 1, 8, 5, 1, 13, 1, 5, 12, 1, 1, 1, 1, 6, 1)
 XYZ = (

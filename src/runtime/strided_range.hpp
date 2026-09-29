@@ -1,9 +1,9 @@
-#ifndef VIBEQC_RUNTIME_STRIDED_RANGE_HPP
-#define VIBEQC_RUNTIME_STRIDED_RANGE_HPP
+#ifndef GENERATIVEQC_RUNTIME_STRIDED_RANGE_HPP
+#define GENERATIVEQC_RUNTIME_STRIDED_RANGE_HPP
 
 #include <cstddef>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 /** Borrowed flat weights mapped onto a two-dimensional strided destination.
  * A complete row contains row_length entries; a final row may be partial.
  * Keeping both strides permits bounded transposed tiles without materializing
@@ -18,5 +18,5 @@ struct StridedRange {
     return offset + (element / row_length) * row_stride + (element % row_length) * column_stride;
   }
 };
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 #endif

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from tools.vibeqc_cc import ccsd_t_api as api
+from tools.generativeqc_cc import ccsd_t_api as api
 
 
 def test_force_batch_owns_irreversibly_read_only_results(

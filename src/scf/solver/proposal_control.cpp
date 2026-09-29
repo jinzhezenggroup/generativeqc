@@ -5,7 +5,7 @@
 
 #include "scf/reference/observation.hpp"
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 using reference::index;
 using reference::multiply;
 using reference::symmetric_eigen;
@@ -98,4 +98,4 @@ void validate_seed(const Matrix& overlap, const Matrix& seed, std::size_t n,
   if (!reason.empty()) throw std::invalid_argument("invalid initial proposal: " + reason);
 }
 
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver

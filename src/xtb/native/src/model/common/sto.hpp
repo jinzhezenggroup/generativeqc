@@ -1,12 +1,12 @@
-#ifndef VIBEQC_XTB_MODEL_COMMON_STO_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_COMMON_STO_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_COMMON_STO_HPP
+#define GENERATIVEQC_XTB_MODEL_COMMON_STO_HPP
 
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::xtb::detail::common {
+namespace generativeqc::xtb::detail::common {
 
 inline constexpr std::size_t kMaximumContractedPrimitives = 12;
 
@@ -26,6 +26,6 @@ void orthogonalize_to_first(const double* first_alpha, const double* first_coeff
                             std::size_t first_count, double* alpha, double* coefficients,
                             std::size_t base_count) noexcept;
 
-}  // namespace vibeqc::xtb::detail::common
+}  // namespace generativeqc::xtb::detail::common
 
-#endif  // VIBEQC_XTB_MODEL_COMMON_STO_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_COMMON_STO_HPP

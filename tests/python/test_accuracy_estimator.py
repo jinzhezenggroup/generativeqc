@@ -5,8 +5,13 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc import AccuracyAssessment, ObservableTarget, ResolvedModel, TargetAccuracy
-from vibeqc.accuracy_estimator import (
+from generativeqc import (
+    AccuracyAssessment,
+    ObservableTarget,
+    ResolvedModel,
+    TargetAccuracy,
+)
+from generativeqc.accuracy_estimator import (
     EmpiricalHFEstimator,
     HFCalibrationDomain,
     HFCalibrationSample,

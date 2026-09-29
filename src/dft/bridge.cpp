@@ -22,12 +22,13 @@ int guarded(char* error, std::size_t size, F operation) noexcept {
     return 1;
   }
 }
-using vibeqc::dft::AoBasis;
+using generativeqc::dft::AoBasis;
 }  // namespace
 
 extern "C" {
-VIBEQC_API int vibeqc_grid_basis_create_v1(const vibeqc_system* system, void** output,
-                                           std::size_t* dimensions, char* error, std::size_t size) {
+GENERATIVEQC_API int generativeqc_grid_basis_create_v1(const generativeqc_system* system,
+                                                       void** output, std::size_t* dimensions,
+                                                       char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!output) throw std::invalid_argument("null AO basis output");
     *output = nullptr;
@@ -39,9 +40,12 @@ VIBEQC_API int vibeqc_grid_basis_create_v1(const vibeqc_system* system, void** o
     *output = basis.release();
   });
 }
-VIBEQC_API void vibeqc_grid_basis_destroy_v1(void* basis) { delete static_cast<AoBasis*>(basis); }
-VIBEQC_API int vibeqc_grid_basis_pack_v1(const void* handle, double* output, std::size_t elements,
-                                         char* error, std::size_t size) {
+GENERATIVEQC_API void generativeqc_grid_basis_destroy_v1(void* basis) {
+  delete static_cast<AoBasis*>(basis);
+}
+GENERATIVEQC_API int generativeqc_grid_basis_pack_v1(const void* handle, double* output,
+                                                     std::size_t elements, char* error,
+                                                     std::size_t size) {
   return guarded(error, size, [&] {
     if (!handle || !output) throw std::invalid_argument("null AO packing input");
     const auto& basis = *static_cast<const AoBasis*>(handle);
@@ -49,10 +53,10 @@ VIBEQC_API int vibeqc_grid_basis_pack_v1(const void* handle, double* output, std
     std::copy(basis.packed.begin(), basis.packed.end(), output);
   });
 }
-VIBEQC_API int vibeqc_grid_ao_v1(const void* handle, const double* points, std::size_t npoint,
-                                 unsigned order, std::size_t begin, std::size_t count,
-                                 double* output, std::size_t elements, char* error,
-                                 std::size_t size) {
+GENERATIVEQC_API int generativeqc_grid_ao_v1(const void* handle, const double* points,
+                                             std::size_t npoint, unsigned order, std::size_t begin,
+                                             std::size_t count, double* output,
+                                             std::size_t elements, char* error, std::size_t size) {
   return guarded(error, size, [&] {
     if (!handle) throw std::invalid_argument("null AO basis");
     static_cast<const AoBasis*>(handle)->evaluate(points, npoint, order, begin, count, output,
@@ -61,10 +65,10 @@ VIBEQC_API int vibeqc_grid_ao_v1(const void* handle, const double* points, std::
 }
 /** Selected columns share the normalized AO evaluator; no global AO tile is
  * materialized. The sorted unique map and its count are explicit ABI inputs. */
-int vibeqc_grid_ao_selected_v1(const void* handle, const double* points, std::size_t npoint,
-                               unsigned order, const std::size_t* ao_ids, std::size_t count,
-                               double* output, std::size_t elements, char* error,
-                               std::size_t size) {
+int generativeqc_grid_ao_selected_v1(const void* handle, const double* points, std::size_t npoint,
+                                     unsigned order, const std::size_t* ao_ids, std::size_t count,
+                                     double* output, std::size_t elements, char* error,
+                                     std::size_t size) {
   return guarded(error, size, [&] {
     if (!handle || (count && !ao_ids)) throw std::invalid_argument("null selected AO input");
     static_cast<const AoBasis*>(handle)->evaluate(points, npoint, order, 0, count, output, elements,

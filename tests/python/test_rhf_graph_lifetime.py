@@ -73,13 +73,13 @@ cudaError_t cudaGraphLaunch(cudaGraphExec_t p, cudaStream_t) {
 int main() {
   for (bool post : {false, true}) {
     {
-      vibeqc::scf::cuda_execution::RhfIterationGraphs owner;
-      auto capture = [&](const std::function<vibeqc_status()>& body) {
+      generativeqc::scf::cuda_execution::RhfIterationGraphs owner;
+      auto capture = [&](const std::function<generativeqc_status()>& body) {
         return post ? owner.capture_post_eigensolver(0, nullptr, body)
                     : owner.capture_iteration(0, nullptr, false, body);
       };
       try {
-        capture([]() -> vibeqc_status { throw std::logic_error("original"); });
+        capture([]() -> generativeqc_status { throw std::logic_error("original"); });
         return 2;
       } catch (const std::logic_error& error) {
         if (std::string(error.what()) != "original") return 3;
@@ -88,10 +88,10 @@ int main() {
         std::cerr << "capture remained active after exception\n";
         return 4;
       }
-      auto rejected = capture([] { return VIBEQC_STATUS_NOT_IMPLEMENTED; });
-      if (rejected.ok() || rejected.body_status != VIBEQC_STATUS_NOT_IMPLEMENTED ||
+      auto rejected = capture([] { return GENERATIVEQC_STATUS_NOT_IMPLEMENTED; });
+      if (rejected.ok() || rejected.body_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED ||
           capturing || graphs || executables) return 5;
-      if (!capture([] { return VIBEQC_STATUS_SUCCESS; }).ok()) return 6;
+      if (!capture([] { return GENERATIVEQC_STATUS_SUCCESS; }).ok()) return 6;
       if (capturing || graphs != 1 || executables != 1) return 7;
       auto replay = post ? owner.launch_post_eigensolver(nullptr)
                          : owner.launch_iteration(nullptr);

@@ -14,16 +14,18 @@
 #include "methods/xtb_method.hpp"
 #include "runtime/provider_registry.hpp"
 
-namespace vibeqc::methods {
+namespace generativeqc::methods {
 namespace {
 
-using ValidateSystem = vibeqc_status (*)(vibeqc_method, const core::System&, std::string&);
+using ValidateSystem = generativeqc_status (*)(generativeqc_method, const core::System&,
+                                               std::string&);
 using PrepareCalculation = std::unique_ptr<PreparedCalculation> (*)(
-    const Capabilities&, core::ContextState&, const core::System&, const vibeqc_method_descriptor&);
+    const Capabilities&, core::ContextState&, const core::System&,
+    const generativeqc_method_descriptor&);
 using PrepareBatch = std::unique_ptr<PreparedBatch> (*)(const Capabilities&, core::ContextState&,
                                                         std::vector<core::System>,
-                                                        const vibeqc_method_descriptor&,
-                                                        vibeqc_batch_flags);
+                                                        const generativeqc_method_descriptor&,
+                                                        generativeqc_batch_flags);
 
 using MethodProviderRegistration = runtime::ProviderDescriptor<Capabilities>;
 
@@ -81,7 +83,8 @@ constexpr MethodDefinition register_method(const generated::MethodManifestEntry&
     throw "public method manifest properties disagree with native provider";
   const auto availability = executable ? runtime::ProviderAvailability::Executable
                                        : runtime::ProviderAvailability::Reserved;
-  const auto registered_properties = executable ? manifest.properties : vibeqc_property_flags{};
+  const auto registered_properties =
+      executable ? manifest.properties : generativeqc_property_flags{};
   return {{{"methods", manifest.name, 1, runtime::ProviderBackend::Any},
            {manifest.method, manifest.family, registered_properties, executable, supports_batch},
            availability,
@@ -103,24 +106,24 @@ constexpr auto build_methods() {
 
 constexpr auto kMethods = build_methods();
 
-const MethodDefinition* find_definition(vibeqc_method method) noexcept {
+const MethodDefinition* find_definition(generativeqc_method method) noexcept {
   const auto found = std::find_if(
       kMethods.begin(), kMethods.end(),
       [method](const MethodDefinition& item) { return item.provider.domain.method == method; });
   return found == kMethods.end() ? nullptr : &*found;
 }
 
-const MethodDefinition& require_available(vibeqc_method method) {
+const MethodDefinition& require_available(generativeqc_method method) {
   const MethodDefinition* definition = find_definition(method);
   if (definition == nullptr) {
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "unknown method identifier");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "unknown method identifier");
   }
   if (!runtime::provider_executable(definition->provider)) {
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       runtime::provider_diagnostic(definition->provider, "method preparation"));
   }
   if (definition->validate_system == nullptr || definition->prepare_calculation == nullptr) {
-    throw MethodError(VIBEQC_STATUS_INTERNAL_ERROR,
+    throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
                       "available method has an incomplete registry definition");
   }
   return *definition;
@@ -128,35 +131,37 @@ const MethodDefinition& require_available(vibeqc_method method) {
 
 void validate_system(const MethodDefinition& definition, const core::System& system) {
   std::string detail;
-  const vibeqc_status status =
+  const generativeqc_status status =
       definition.validate_system(definition.provider.domain.method, system, detail);
-  if (status != VIBEQC_STATUS_SUCCESS) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
     throw MethodError(status, detail.empty() ? "method rejected the system" : detail);
   }
 }
 
 void validate_option_family(const MethodDefinition& definition,
-                            const vibeqc_method_descriptor& descriptor, vibeqc_backend backend) {
+                            const generativeqc_method_descriptor& descriptor,
+                            generativeqc_backend backend) {
   if (descriptor.ks_options &&
-      definition.provider.domain.family != VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
-    throw MethodError(VIBEQC_STATUS_INVALID_ARGUMENT, "KS options require the DFT method family");
-  if (definition.provider.domain.family == VIBEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) {
+      definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "KS options require the DFT method family");
+  if (definition.provider.domain.family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) {
     std::string detail;
     const auto status = detail::validate_split_hybrid_descriptor(descriptor, backend, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) throw MethodError(status, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw MethodError(status, detail);
   }
 }
 
 }  // namespace
 
-const Capabilities* find_capabilities(vibeqc_method method) noexcept {
+const Capabilities* find_capabilities(generativeqc_method method) noexcept {
   const MethodDefinition* definition = find_definition(method);
   return definition == nullptr ? nullptr : &definition->provider.domain;
 }
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const vibeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   validate_system(definition, system);
@@ -165,12 +170,12 @@ std::unique_ptr<PreparedCalculation> prepare_calculation(
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
-                                             const vibeqc_method_descriptor& descriptor,
-                                             vibeqc_batch_flags flags) {
+                                             const generativeqc_method_descriptor& descriptor,
+                                             generativeqc_batch_flags flags) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   if (!definition.provider.domain.supports_batch || definition.prepare_batch == nullptr) {
-    throw MethodError(VIBEQC_STATUS_NOT_IMPLEMENTED,
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "requested method does not support prepared batches");
   }
   for (const core::System& system : systems) validate_system(definition, system);
@@ -178,4 +183,4 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                   descriptor, flags);
 }
 
-}  // namespace vibeqc::methods
+}  // namespace generativeqc::methods

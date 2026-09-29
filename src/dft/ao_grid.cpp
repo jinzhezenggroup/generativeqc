@@ -8,7 +8,7 @@
 
 #include "molecule/basis.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 std::size_t multiply(std::size_t a, std::size_t b) {
   if (b && a > SIZE_MAX / b) throw std::invalid_argument("AO tile size overflow");
@@ -166,4 +166,4 @@ void AoBasis::evaluate(const double* points, std::size_t npoint, unsigned order,
       break;
   }
 }
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

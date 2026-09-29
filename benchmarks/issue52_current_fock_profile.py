@@ -58,14 +58,14 @@ def main() -> None:
     # Keep --help usable on scheduler login nodes.  CuPy and the native Python
     # binding are imported only once an allocated GPU job is actually running.
     import cupy as cp
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     from benchmarks._cases import benchmark_cases
 
     case = benchmark_cases()[args.case]
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=args.max_iterations,
@@ -99,14 +99,14 @@ def main() -> None:
         # These switches are sampled per execution by the CUDA plan.  The
         # fixed post-cold density makes each repeat a comparable Fock replay.
         diagnostic_environment = {
-            "VIBEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC": "1",
-            "VIBEQC_BOUNDED_DIRECT_AOT_ONLY_DIAGNOSTIC": "1",
-            "VIBEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE": "1",
+            "GENERATIVEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC": "1",
+            "GENERATIVEQC_BOUNDED_DIRECT_AOT_ONLY_DIAGNOSTIC": "1",
+            "GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE": "1",
         }
         if args.count:
-            diagnostic_environment["VIBEQC_BOUNDED_DIRECT_COUNT_DIAGNOSTIC"] = "1"
+            diagnostic_environment["GENERATIVEQC_BOUNDED_DIRECT_COUNT_DIAGNOSTIC"] = "1"
         if fock_classes is not None:
-            diagnostic_environment["VIBEQC_AOT_FOCK_SHELL_CLASSES"] = fock_classes
+            diagnostic_environment["GENERATIVEQC_AOT_FOCK_SHELL_CLASSES"] = fock_classes
         previous_environment = {
             name: os.environ.get(name) for name in diagnostic_environment
         }

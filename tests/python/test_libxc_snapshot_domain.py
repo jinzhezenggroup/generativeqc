@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _constructor() -> CodeType:
-    path = ROOT / "python/vibeqc/_ks_snapshot.py"
+    path = ROOT / "python/generativeqc/_ks_snapshot.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     owner = next(
         node
@@ -83,10 +83,10 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         destroyed.append(handle)
 
     library = SimpleNamespace(
-        vibeqc_ks_snapshot_create_v1=create,
-        vibeqc_ks_snapshot_check_v1=lambda *args: 0,
-        vibeqc_ks_snapshot_copy_v1=copy,
-        vibeqc_ks_snapshot_destroy_v1=destroy,
+        generativeqc_ks_snapshot_create_v1=create,
+        generativeqc_ks_snapshot_check_v1=lambda *args: 0,
+        generativeqc_ks_snapshot_copy_v1=copy,
+        generativeqc_ks_snapshot_destroy_v1=destroy,
     )
 
     class Batch:
@@ -106,7 +106,7 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
 
         def close(self) -> None:
             if self._handle:
-                self._library.vibeqc_ks_snapshot_destroy_v1(self._handle)
+                self._library.generativeqc_ks_snapshot_destroy_v1(self._handle)
                 self._handle = 0
 
     def check(library: typing.Any, status: int, **kwargs: typing.Any) -> None:
@@ -158,11 +158,11 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
 
 
 def test_snapshot_imports_the_producer_work_domain_version() -> None:
-    path = ROOT / "python/vibeqc/_ks_snapshot.py"
+    path = ROOT / "python/generativeqc/_ks_snapshot.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     assert any(
         isinstance(node, ast.ImportFrom)
-        and node.module == "vibeqc_compiler.xc.libxc_work"
+        and node.module == "generativeqc_compiler.xc.libxc_work"
         and any(alias.name == "LIBXC_WORK_DOMAIN_VERSION" for alias in node.names)
         for node in tree.body
     )

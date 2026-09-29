@@ -27,18 +27,24 @@ sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import pyscf
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc_compiler.common.cuda_adapter import (
     CudaBenchmarkExecutor,
     CudaCompilerAdapter,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import file_hash
-from vibeqc_compiler.integral.df_cuda import df_program_inventory, emit_df_values_cuda
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import file_hash
+from generativeqc_compiler.integral.df_cuda import (
+    df_program_inventory,
+    emit_df_values_cuda,
+)
 
-from tools.vibeqc_validation.df_values import df_value_matrix, make_df_value_fixture
-from tools.vibeqc_validation.df_values_cuda import emit_df_value_driver
-from tools.vibeqc_validation.f_shell import cuobjdump_resources
-from tools.vibeqc_validation.f_shell_numerics import numerical_error
+from tools.generativeqc_validation.df_values import (
+    df_value_matrix,
+    make_df_value_fixture,
+)
+from tools.generativeqc_validation.df_values_cuda import emit_df_value_driver
+from tools.generativeqc_validation.f_shell import cuobjdump_resources
+from tools.generativeqc_validation.f_shell_numerics import numerical_error
 
 
 def main() -> None:
@@ -60,13 +66,15 @@ def main() -> None:
     if args.derivatives:
         from itertools import product
 
-        from vibeqc_compiler.integral.df_derivatives_cuda import (
+        from generativeqc_compiler.integral.df_derivatives_cuda import (
             df_derivative_inventory,
             emit_df_derivatives_cuda,
         )
 
-        from tools.vibeqc_validation.df_derivatives import make_df_derivative_fixture
-        from tools.vibeqc_validation.df_derivatives_cuda import (
+        from tools.generativeqc_validation.df_derivatives import (
+            make_df_derivative_fixture,
+        )
+        from tools.generativeqc_validation.df_derivatives_cuda import (
             emit_df_derivative_driver,
         )
 
@@ -132,9 +140,9 @@ def main() -> None:
         default_slurm_time="00:05:00",
     )
     report = {
-        "schema": "vibeqc.df_derivative_validation"
+        "schema": "generativeqc.df_derivative_validation"
         if args.derivatives
-        else "vibeqc.df_value_validation",
+        else "generativeqc.df_value_validation",
         "version": 1,
         "tier": "isolated_native_derivatives"
         if args.derivatives

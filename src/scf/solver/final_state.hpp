@@ -12,7 +12,7 @@
 #include "scf/reference/linalg.hpp"
 #include "scf/solver/eigen_frame.hpp"
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 /** Immutable prepared-source identity plus one solve and determinant state.
  * `factor.basis` binds ordered basis/geometry/representation/device ownership;
  * `factor.reference` identifies the source item, as in occupied RI-K. The
@@ -161,4 +161,4 @@ FinalStateSelection select_final_state(
     const PhysicalFockOperation& evaluate, const initial_guess::EigenOperation& eigen,
     const FinalStateLimits& limits, bool compute_weighted_density, bool force_rebuild = false,
     const FinalStateOperations* operations = nullptr);
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver

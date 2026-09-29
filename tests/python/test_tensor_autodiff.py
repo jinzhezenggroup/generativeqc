@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     AD_PRIMITIVES,
     AD_RULE_VERSION,
     AD_RULES,
@@ -34,8 +34,8 @@ from vibeqc_compiler.tensor import (
     transpose,
     vjp,
 )
-from vibeqc_compiler.tensor.autodiff import _JVP_RULES, _VJP_RULES
-from vibeqc_compiler.tensor.ir import PRIMITIVES
+from generativeqc_compiler.tensor.autodiff import _JVP_RULES, _VJP_RULES
+from generativeqc_compiler.tensor.ir import PRIMITIVES
 
 RNG = np.random.default_rng(151)
 

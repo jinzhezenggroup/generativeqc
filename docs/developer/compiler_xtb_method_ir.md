@@ -133,7 +133,7 @@ and type-check the audited scientific graph; it does **not** mean a
 
 ## Dependency rule
 
-Production VibeQC code in this layer depends only on VibeQC compiler modules.
+Production GenerativeQC code in this layer depends only on GenerativeQC compiler modules.
 It does not import xTBloom and does not invoke an external xtb executable or
 library. xTBloom may be used independently as a qualification oracle in later
 implementation slices.

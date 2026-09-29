@@ -8,7 +8,7 @@
 #include <numbers>
 #include <stdexcept>
 
-namespace vibeqc::dft::nlc {
+namespace generativeqc::dft::nlc {
 namespace {
 
 constexpr double kFourPiOverThree = 4.0 * std::numbers::pi_v<double> / 3.0;
@@ -23,13 +23,14 @@ std::uint64_t checked_array_bytes(std::uint32_t points, std::uint64_t arrays) {
   return arrays * bytes * n;
 }
 
-Vv10ResourceUsage resource_usage(vibeqc_backend backend, std::uint32_t point_count,
+Vv10ResourceUsage resource_usage(generativeqc_backend backend, std::uint32_t point_count,
                                  std::uint32_t tile_points, std::uint64_t maximum_bytes) {
   const auto n = static_cast<std::uint64_t>(point_count);
   const auto tile = static_cast<std::uint64_t>(std::min(tile_points, point_count));
-  const auto host = checked_array_bytes(point_count, backend == VIBEQC_BACKEND_CUDA ? 7u : 12u);
+  const auto host =
+      checked_array_bytes(point_count, backend == GENERATIVEQC_BACKEND_CUDA ? 7u : 12u);
   std::uint64_t device = 0;
-  if (backend == VIBEQC_BACKEND_CUDA) {
+  if (backend == GENERATIVEQC_BACKEND_CUDA) {
     device = checked_array_bytes(point_count, 21u);
     if (device > std::numeric_limits<std::uint64_t>::max() - sizeof(double))
       throw std::overflow_error("VV10 CUDA failure-flag extent overflow");
@@ -87,25 +88,25 @@ bool finite_pair(const PairValues& value) {
 
 }  // namespace
 
-std::unique_ptr<Vv10Plan> Vv10Plan::prepare(vibeqc_backend backend, int device_id,
+std::unique_ptr<Vv10Plan> Vv10Plan::prepare(generativeqc_backend backend, int device_id,
                                             std::uint32_t point_count, std::uint32_t tile_points,
                                             Vv10Parameters parameters, std::uint64_t maximum_bytes,
-                                            std::string& detail, vibeqc_status& status) {
-  status = VIBEQC_STATUS_INVALID_ARGUMENT;
+                                            std::string& detail, generativeqc_status& status) {
+  status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   detail.clear();
-  if (backend != VIBEQC_BACKEND_CPU_REFERENCE && backend != VIBEQC_BACKEND_CUDA) {
+  if (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) {
     detail = "VV10 production pair execution requires CPU_REFERENCE or CUDA";
-    status = VIBEQC_STATUS_NOT_IMPLEMENTED;
+    status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     return nullptr;
   }
-#if !VIBEQC_HAS_CUDA
-  if (backend == VIBEQC_BACKEND_CUDA) {
+#if !GENERATIVEQC_HAS_CUDA
+  if (backend == GENERATIVEQC_BACKEND_CUDA) {
     detail = "VV10 CUDA lowerer is unavailable in this build";
-    status = VIBEQC_STATUS_NOT_IMPLEMENTED;
+    status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     return nullptr;
   }
 #endif
-  if (backend == VIBEQC_BACKEND_CUDA && device_id < 0) {
+  if (backend == GENERATIVEQC_BACKEND_CUDA && device_id < 0) {
     detail = "VV10 CUDA execution requires a nonnegative device id";
     return nullptr;
   }
@@ -135,11 +136,11 @@ std::unique_ptr<Vv10Plan> Vv10Plan::prepare(vibeqc_backend backend, int device_i
     const auto resources = resource_usage(backend, point_count, tile_points, maximum_bytes);
     if (resources.workspace_bytes > maximum_bytes) {
       detail = "VV10 provider workspace exceeds maximum_bytes before execution";
-      status = VIBEQC_STATUS_OUT_OF_MEMORY;
+      status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
       return nullptr;
     }
     auto plan = std::unique_ptr<Vv10Plan>(new Vv10Plan(backend, device_id, parameters, resources));
-    if (backend == VIBEQC_BACKEND_CPU_REFERENCE) {
+    if (backend == GENERATIVEQC_BACKEND_CPU_REFERENCE) {
       plan->omega_.resize(point_count);
       plan->kappa_.resize(point_count);
       plan->weighted_density_.resize(point_count);
@@ -147,41 +148,42 @@ std::unique_ptr<Vv10Plan> Vv10Plan::prepare(vibeqc_backend backend, int device_i
       plan->domega_dsigma_.resize(point_count);
       plan->dkappa_drho_.resize(point_count);
     }
-    status = VIBEQC_STATUS_SUCCESS;
+    status = GENERATIVEQC_STATUS_SUCCESS;
     return plan;
   } catch (const std::bad_alloc&) {
     detail = "VV10 provider workspace allocation failed";
-    status = VIBEQC_STATUS_OUT_OF_MEMORY;
+    status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     return nullptr;
   } catch (const std::overflow_error& error) {
     detail = error.what();
-    status = VIBEQC_STATUS_OUT_OF_MEMORY;
+    status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     return nullptr;
   }
 }
 
-vibeqc_status Vv10Plan::execute(std::span<const double> coordinates,
-                                std::span<const double> weights, std::span<const double> density,
-                                std::span<const double> density_gradient, double& energy,
-                                std::span<double> vrho, std::span<double> vsigma,
-                                std::span<double> point_derivative,
-                                std::span<double> weight_derivative, std::string& detail) {
+generativeqc_status Vv10Plan::execute(std::span<const double> coordinates,
+                                      std::span<const double> weights,
+                                      std::span<const double> density,
+                                      std::span<const double> density_gradient, double& energy,
+                                      std::span<double> vrho, std::span<double> vsigma,
+                                      std::span<double> point_derivative,
+                                      std::span<double> weight_derivative, std::string& detail) {
   detail.clear();
   const auto n = static_cast<std::size_t>(resources_.point_count);
   if (coordinates.size() != 3 * n || weights.size() != n || density.size() != n ||
       density_gradient.size() != 3 * n) {
     detail = "VV10 fixed-grid input shape does not match the prepared point count";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const bool want_features = !vrho.empty() || !vsigma.empty();
   if (want_features && (vrho.size() != n || vsigma.size() != n)) {
     detail = "VV10 feature derivatives require matching vrho/vsigma output arrays";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const bool want_geometry = !point_derivative.empty() || !weight_derivative.empty();
   if (want_geometry && (point_derivative.size() != 3 * n || weight_derivative.size() != n)) {
     detail = "VV10 geometry derivatives require matching point/weight output arrays";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (std::size_t i = 0; i < n; ++i) {
     if (!finite_positive(density[i]) || !std::isfinite(weights[i]) ||
@@ -189,27 +191,27 @@ vibeqc_status Vv10Plan::execute(std::span<const double> coordinates,
         !std::isfinite(density_gradient[3 * i + 2]) || !std::isfinite(coordinates[3 * i]) ||
         !std::isfinite(coordinates[3 * i + 1]) || !std::isfinite(coordinates[3 * i + 2])) {
       detail = "VV10 fixed-grid inputs must be finite with strictly positive density";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
 
-#if VIBEQC_HAS_CUDA
-  if (backend_ == VIBEQC_BACKEND_CUDA) {
+#if GENERATIVEQC_HAS_CUDA
+  if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
     try {
       execute_vv10_cuda(coordinates.data(), weights.data(), density.data(), density_gradient.data(),
                         n, resources_.tile_points, parameters_, device_id_, energy, vrho.data(),
                         vsigma.data(), want_geometry ? point_derivative.data() : nullptr,
                         want_geometry ? weight_derivative.data() : nullptr);
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     } catch (const std::bad_alloc&) {
       detail = "VV10 CUDA workspace allocation failed";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     } catch (const std::overflow_error& error) {
       detail = error.what();
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     } catch (const std::exception& error) {
       detail = error.what();
-      return VIBEQC_STATUS_CUDA_ERROR;
+      return GENERATIVEQC_STATUS_CUDA_ERROR;
     }
   }
 #endif
@@ -220,7 +222,7 @@ vibeqc_status Vv10Plan::execute(std::span<const double> coordinates,
   const auto beta = std::pow(3.0 / (b * b), 0.75) / 32.0;
   if (!std::isfinite(beta)) {
     detail = "VV10 beta is nonfinite";
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 
   for (std::size_t i = 0; i < n; ++i) {
@@ -246,7 +248,7 @@ vibeqc_status Vv10Plan::execute(std::span<const double> coordinates,
     if (!finite_positive(omega) || !finite_positive(kappa) || !std::isfinite(domega_drho) ||
         !std::isfinite(domega_dsigma) || !std::isfinite(dkappa_drho)) {
       detail = "VV10 local scales are nonfinite";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     omega_[i] = omega;
     kappa_[i] = kappa;
@@ -274,7 +276,7 @@ vibeqc_status Vv10Plan::execute(std::span<const double> coordinates,
             pair_values(r2, omega_[i], omega_[j], kappa_[i], kappa_[j], parameters_.variant);
         if (!finite_pair(pair)) {
           detail = "VV10 pair kernel produced a nonfinite value";
-          return VIBEQC_STATUS_NUMERICAL_FAILURE;
+          return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
         }
         const auto partner = weighted_density_[j];
         sum_phi += partner * pair.phi;
@@ -316,9 +318,9 @@ vibeqc_status Vv10Plan::execute(std::span<const double> coordinates,
                          !std::all_of(weight_derivative.begin(), weight_derivative.end(),
                                       [](double x) { return std::isfinite(x); })))) {
     detail = "VV10 execution produced nonfinite output";
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::dft::nlc
+}  // namespace generativeqc::dft::nlc

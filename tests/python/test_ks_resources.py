@@ -6,14 +6,14 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, ResourceBudget, estimate_ks_resources
+from generativeqc import Calculator, ResourceBudget, estimate_ks_resources
 
 H2 = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
 HE = [(2, (0.0, 0.0, 0.0))]
 H = [(1, (0.0, 0.0, 0.0))]
 WATER = [(8, (0.0, 0.0, 0.0)), (1, (1.43, 0.0, 1.11)), (1, (-1.43, 0.0, 1.11))]
 CUDA = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated Slurm GPU job",
 )
 
@@ -21,7 +21,7 @@ CUDA = pytest.mark.skipif(
 def test_dry_run_uses_only_metadata_and_tracks_all_retained_items(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _native
+    from generativeqc import _native
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("KS dry run attempted native execution or a numerical allocation")
@@ -117,9 +117,9 @@ def test_one_byte_short_rejects_before_context_or_preparation(
         pytest.fail("an infeasible KS plan attempted native preparation")
 
     for name in (
-        "vibeqc_context_create",
-        "vibeqc_calculation_prepare",
-        "vibeqc_batch_prepare",
+        "generativeqc_context_create",
+        "generativeqc_calculation_prepare",
+        "generativeqc_batch_prepare",
     ):
         monkeypatch.setattr(calculator._library, name, forbidden)
     with pytest.raises(MemoryError, match="no supported plan fits"):
@@ -129,8 +129,8 @@ def test_one_byte_short_rejects_before_context_or_preparation(
 def test_failed_preparation_keeps_evidence_and_failed_scf_keeps_samples(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _native
-    from vibeqc_compiler.common.resources import ResourceAllocationError
+    from generativeqc import _native
+    from generativeqc_compiler.common.resources import ResourceAllocationError
 
     calculator = Calculator(method="pbe-uks", resource_budget=ResourceBudget())
     # CPU allocations have no limiter. Inject the native status at the prepare
@@ -138,7 +138,7 @@ def test_failed_preparation_keeps_evidence_and_failed_scf_keeps_samples(
     with monkeypatch.context() as patch:
         patch.setattr(
             calculator._library,
-            "vibeqc_batch_prepare",
+            "generativeqc_batch_prepare",
             lambda *args: _native.STATUS_OUT_OF_MEMORY,
         )
         with pytest.raises(ResourceAllocationError) as failed:
@@ -162,8 +162,8 @@ def test_cli_ks_dry_run_does_not_load_a_native_runtime(
 ) -> None:
     import json
 
-    from vibeqc import _native
-    from vibeqc.__main__ import main
+    from generativeqc import _native
+    from generativeqc.__main__ import main
 
     path = tmp_path / "h2.xyz"
     path.write_text("2\nbohr\nH 0 0 -0.7\nH 0 0 0.7\n")
@@ -175,7 +175,7 @@ def test_cli_ks_dry_run_does_not_load_a_native_runtime(
     monkeypatch.setattr(
         "sys.argv",
         [
-            "vibeqc",
+            "generativeqc",
             "resources",
             str(path),
             "--method",
@@ -218,12 +218,12 @@ def test_missing_inventory_and_foreign_plan_reject_before_preparation(
         pytest.fail("unsupported KS library attempted native preparation")
 
     library = SimpleNamespace(
-        vibeqc_context_create=forbidden,
-        vibeqc_calculation_prepare=forbidden,
-        vibeqc_batch_prepare=forbidden,
+        generativeqc_context_create=forbidden,
+        generativeqc_calculation_prepare=forbidden,
+        generativeqc_batch_prepare=forbidden,
     )
     if schema_version is not None:
-        library.vibeqc_ks_options_version = lambda: schema_version
+        library.generativeqc_ks_options_version = lambda: schema_version
     monkeypatch.setattr(calculator, "_library", library)
     # Missing, incompatible and inventory-less ABIs all produce an unsupported
     # estimate; execution must still reject before native preparation.
@@ -292,7 +292,7 @@ def test_cuda_ledger_owns_prepare_replay_rebuild_and_release(
 def test_cuda_shape_queries_need_no_execution_context_and_cover_large_solver(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _native, profiles
+    from generativeqc import _native, profiles
 
     library = _native.load_library(device="cpu")
 
@@ -301,7 +301,7 @@ def test_cuda_shape_queries_need_no_execution_context_and_cover_large_solver(
 
     with monkeypatch.context() as patch:
         patch.setattr(profiles, "select_library", forbidden)
-        patch.setattr(library, "vibeqc_context_create", forbidden)
+        patch.setattr(library, "generativeqc_context_create", forbidden)
         patch.setattr(np, "empty", forbidden)
         probe = estimate_ks_resources(
             [WATER], basis="def2-svp", backend="cuda", library=library
@@ -330,12 +330,12 @@ def test_cuda_failed_preparation_retains_ledger_rejection_and_releases_buffers(
     monkeypatch: typing.Any,
     partial: typing.Any,
 ) -> None:
-    from vibeqc_compiler.common.resources import ResourceAllocationError
+    from generativeqc_compiler.common.resources import ResourceAllocationError
 
     calculator = Calculator(
         method="pbe-rks", device="cuda", resource_budget=ResourceBudget()
     )
-    create = calculator._library.vibeqc_resource_ledger_create_v1
+    create = calculator._library.generativeqc_resource_ledger_create_v1
     create.argtypes = [ctypes.c_size_t, ctypes.c_int]
     create.restype = ctypes.c_void_p
     # The second case allows one complete owner before rejecting its neighbor.
@@ -347,7 +347,7 @@ def test_cuda_failed_preparation_retains_ledger_rejection_and_releases_buffers(
     # exception path so this exercises preparation cleanup rather than a mock.
     monkeypatch.setattr(
         calculator._library,
-        "vibeqc_resource_ledger_create_v1",
+        "generativeqc_resource_ledger_create_v1",
         lambda requested, device: create(capacity, device),
     )
     with pytest.raises(ResourceAllocationError) as failed:

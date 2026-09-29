@@ -14,7 +14,7 @@
 #include "posthf/raw_source.hpp"
 #include "response/solve.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 namespace {
 std::size_t square(std::size_t value) { return posthf::checked_mul(value, value); }
 
@@ -89,7 +89,7 @@ ConventionalForceResult conventional_force_impl(
     const hf::PhysicalReference& reference, const posthf::RawSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, bool cuda, int device_id) {
-#if !VIBEQC_HAS_CUDA
+#if !GENERATIVEQC_HAS_CUDA
   if (cuda) throw std::runtime_error("CUDA conventional force is unavailable in this build");
 #endif
   if (!reference.nocc || reference.nocc >= reference.nbf || source.nbf() != reference.nbf ||
@@ -102,7 +102,7 @@ ConventionalForceResult conventional_force_impl(
   const auto plan = response::prepare_response(problem, response_options);
   std::size_t maximum_shell = 0;
   for (const auto& shell : source.orbital().shells) {
-    const auto count = source.orbital().basis_representation == VIBEQC_BASIS_SPHERICAL
+    const auto count = source.orbital().basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                            ? 2 * shell.angular_momentum + 1
                            : (shell.angular_momentum + 1) * (shell.angular_momentum + 2) / 2;
     maximum_shell = std::max(maximum_shell, static_cast<std::size_t>(count));
@@ -235,4 +235,4 @@ ConventionalForceResult density_fitted_force_cpu(
   return result;
 }
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

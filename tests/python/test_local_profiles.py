@@ -10,11 +10,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import profiles
-from vibeqc.autotune import endpoint_gate, rank_hotspots, read_xyz
-from vibeqc.ks import profiled_ks_options, resolve_ks_options
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc import profiles
+from generativeqc.autotune import endpoint_gate, rank_hotspots, read_xyz
+from generativeqc.ks import profiled_ks_options, resolve_ks_options
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.dft.xc_schedule import (
     HOST_UNFUSED,
     GridXcScientificIdentity,
     molecular_grid_xc_workload,
@@ -99,18 +99,20 @@ def bundle(tmp_path: typing.Any, probe: typing.Any) -> typing.Any:
             }
         ],
     }
-    (directory / "libvibeqc.so").write_bytes(b"unit-test artifact, not executable")
+    (directory / "libgenerativeqc.so").write_bytes(
+        b"unit-test artifact, not executable"
+    )
     profiles.atomic_json(directory / "manifest.json", {})
     profiles.atomic_json(directory / "evidence.json", evidence)
     profile = {
-        "schema": "vibeqc.local_profile",
+        "schema": "generativeqc.local_profile",
         "schema_version": profiles.PROFILE_SCHEMA,
         "identity": profiles.compatibility_identity(probe),
         "toolchain": {"nvcc": "test NVCC", "ptxas": "test PTXAS"},
         "kernels": [kernel],
         "artifacts": {
             name: profiles.file_hash(directory / name)
-            for name in ("libvibeqc.so", "manifest.json", "evidence.json")
+            for name in ("libgenerativeqc.so", "manifest.json", "evidence.json")
         },
     }
     profiles.atomic_json(directory / "profile.json", profile)
@@ -208,7 +210,7 @@ def test_corrupt_and_ungated_profiles_are_rejected(
         with pytest.raises(ValueError, match="promotion gates"):
             profiles.validate_bundle(bundle, probe)
     profiles.atomic_json(path, original)
-    (bundle / "libvibeqc.so").write_bytes(b"changed")
+    (bundle / "libgenerativeqc.so").write_bytes(b"changed")
     with pytest.raises(ValueError, match="artifact hash"):
         profiles.validate_bundle(bundle, probe)
 
@@ -263,7 +265,7 @@ def test_export_import_roundtrip_and_clear_leave_live_binary(
     assert len(json.loads((root / "active.json").read_text())) == 1
     profiles.clear_profiles(root=root)
     assert json.loads((root / "active.json").read_text()) == {}
-    assert (installed / "libvibeqc.so").exists()
+    assert (installed / "libgenerativeqc.so").exists()
 
 
 def test_import_path_traversal_is_rejected(
@@ -271,25 +273,25 @@ def test_import_path_traversal_is_rejected(
 ) -> None:
     archive = tmp_path / "bad.zip"
     with zipfile.ZipFile(archive, "w") as stream:
-        stream.writestr("../libvibeqc.so", "invalid")
+        stream.writestr("../libgenerativeqc.so", "invalid")
     with pytest.raises(ValueError, match="exactly the four"):
         profiles.import_bundle(archive, probe, root=tmp_path / "cache")
-    assert not (tmp_path / "libvibeqc.so").exists()
+    assert not (tmp_path / "libgenerativeqc.so").exists()
 
 
 def test_automatic_selection_and_corruption_fall_back(
     bundle: typing.Any, probe: typing.Any, tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
     base, local = object(), object()
-    monkeypatch.setenv("VIBEQC_PROFILE_CACHE", str(tmp_path / "cache"))
-    monkeypatch.delenv("VIBEQC_PROFILE", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_PROFILE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.delenv("GENERATIVEQC_PROFILE", raising=False)
     monkeypatch.setattr(profiles, "probe_device", lambda *a: probe)
     monkeypatch.setattr(profiles, "find_nvcc", lambda: None)
     monkeypatch.setattr(profiles, "verify_library", lambda *a: local)
     installed = profiles.install_bundle(bundle, probe)
     selected, diagnostic = profiles.select_library(base)
     assert selected is local and diagnostic["source"] == "local"
-    (installed / "libvibeqc.so").write_bytes(b"corrupt")
+    (installed / "libgenerativeqc.so").write_bytes(b"corrupt")
     selected, diagnostic = profiles.select_library(base)
     assert selected is base and diagnostic["source"] == "portable"
     assert "artifact hash" in diagnostic["rejected"][0]
@@ -522,10 +524,10 @@ def test_installed_cli_help_and_show_need_no_native_library(
 ) -> None:
     import os
 
-    env = {**os.environ, "VIBEQC_PROFILE_CACHE": str(tmp_path)}
+    env = {**os.environ, "GENERATIVEQC_PROFILE_CACHE": str(tmp_path)}
     for args in (("--help",), ("autotune", "--help"), ("profile", "show")):
         run = subprocess.run(
-            [sys.executable, "-m", "vibeqc", *args],
+            [sys.executable, "-m", "generativeqc", *args],
             env=env,
             check=True,
             capture_output=True,
@@ -535,13 +537,13 @@ def test_installed_cli_help_and_show_need_no_native_library(
 
 
 def test_generic_numerical_driver_supports_tuned_s_and_p_consumers() -> None:
-    from vibeqc_compiler.integral.autotune import supported_schedule_trials
-    from vibeqc_compiler.integral.benchmark import emit_shell_class_resource_cuda
-    from vibeqc_compiler.integral.fused_schedule import build_fused_shell_plan
-    from vibeqc_compiler.integral.ir import KernelConsumer
-    from vibeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+    from generativeqc_compiler.integral.autotune import supported_schedule_trials
+    from generativeqc_compiler.integral.benchmark import emit_shell_class_resource_cuda
+    from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
+    from generativeqc_compiler.integral.ir import KernelConsumer
+    from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
-    from tools.vibeqc_validation.f_shell_cuda import emit_numerical_driver
+    from tools.generativeqc_validation.f_shell_cuda import emit_numerical_driver
 
     for name in ("ssss", "pppp"):
         for consumer in ("force", "fock"):
@@ -570,23 +572,23 @@ def test_generic_numerical_driver_supports_tuned_s_and_p_consumers() -> None:
 def test_native_source_identity_and_probe_abi_match_checkout() -> None:
     import ctypes
 
-    from vibeqc import _native
-    from vibeqc.autotune import source_identity
+    from generativeqc import _native
+    from generativeqc.autotune import source_identity
 
     library = _native.load_library()
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    assert library.vibeqc_get_source_identity().decode() == source_identity(
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    assert library.generativeqc_get_source_identity().decode() == source_identity(
         Path(__file__).resolve().parents[2]
     )
     descriptor = (
         profiles.DeviceDescriptor()
     )  # invalid size must fail before any GPU probe
-    library.vibeqc_cuda_tuning_device.argtypes = [
+    library.generativeqc_cuda_tuning_device.argtypes = [
         ctypes.c_int32,
         ctypes.POINTER(profiles.DeviceDescriptor),
     ]
-    library.vibeqc_cuda_tuning_device.restype = ctypes.c_int
-    assert library.vibeqc_cuda_tuning_device(0, ctypes.byref(descriptor)) != 0
+    library.generativeqc_cuda_tuning_device.restype = ctypes.c_int
+    assert library.generativeqc_cuda_tuning_device(0, ctypes.byref(descriptor)) != 0
 
 
 def test_workload_without_direct_counters_is_a_noop_but_other_errors_propagate(
@@ -594,7 +596,7 @@ def test_workload_without_direct_counters_is_a_noop_but_other_errors_propagate(
 ) -> None:
     from types import SimpleNamespace
 
-    from vibeqc import _autotune_worker
+    from generativeqc import _autotune_worker
 
     error = [NotImplementedError("cached ERI route")]
     result = SimpleNamespace(

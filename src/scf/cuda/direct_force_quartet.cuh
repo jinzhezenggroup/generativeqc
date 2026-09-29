@@ -23,7 +23,7 @@
 // Retained direct force quartet contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <bool Unrestricted, unsigned AngularOrder>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scaled(
@@ -210,4 +210,4 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile(
       exchange_coefficient, active_subtile, ao_quartet_lane);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

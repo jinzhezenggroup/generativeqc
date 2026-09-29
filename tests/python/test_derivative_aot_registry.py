@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vibeqc_compiler.integral.derivative_aot_registry import (
+from generativeqc_compiler.integral.derivative_aot_registry import (
     DerivativeAotKey,
     component_group,
     component_groups,
@@ -12,13 +12,13 @@ from vibeqc_compiler.integral.derivative_aot_registry import (
     select_packaged_component_derivative_aot,
     select_packaged_derivative_aot,
 )
-from vibeqc_compiler.integral.first_derivative_schedule import (
+from generativeqc_compiler.integral.first_derivative_schedule import (
     COMPONENT_LABELS,
     CPU_AOT_SHARDS,
     cpu_aot_symbol,
 )
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
 
 
 def test_registry_identity_covers_backend_radial_shell_and_group() -> None:
@@ -93,7 +93,7 @@ def test_full_range_has_method_neutral_registry_identity() -> None:
     radial = CoulombKernel("full_range", 0.0)
     key = make_key(radial, (0, 0, 0, 0), 0, backend="cpu")
     prefix = entry_prefix_for_key(key)
-    assert prefix.startswith("vibeqc_derivative_cpu_d1_full_")
+    assert prefix.startswith("generativeqc_derivative_cpu_d1_full_")
     assert "rsh" not in prefix
 
 
@@ -157,7 +157,7 @@ def test_component_bundle_fails_closed_when_one_shard_is_missing() -> None:
 
 def test_radial_inventory_is_backend_scoped_and_rejects_duplicates() -> None:
     payload = {
-        "schema": "vibeqc.derivative-aot.radials.v1",
+        "schema": "generativeqc.derivative-aot.radials.v1",
         "entries": [
             {"backend": "cpu", "family": "short_range", "omega": 0.3},
             {"backend": "cuda", "family": "short_range", "omega": 0.3},
@@ -193,7 +193,7 @@ def test_radial_inventory_rejects_undeclared_schema_or_entry_shape() -> None:
     with pytest.raises(ValueError, match="entry"):
         radial_inventory_from_payload(
             {
-                "schema": "vibeqc.derivative-aot.radials.v1",
+                "schema": "generativeqc.derivative-aot.radials.v1",
                 "entries": [
                     {
                         "backend": "cpu",

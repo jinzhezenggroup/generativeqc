@@ -8,7 +8,7 @@
 
 #include "tensor/cpu_linalg.hpp"
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 namespace {
 std::size_t index(std::size_t row, std::size_t column, std::size_t n) { return row * n + column; }
 
@@ -151,4 +151,4 @@ DensityFittingMetricFactor factor_density_fitting_metric(const std::vector<doubl
   return result;
 }
 
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

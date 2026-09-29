@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 
 from tools.generate_cc_triples_references import GROUND_TRUTH, _triples_feeds
+from tools.generativeqc_cc.triples import triples_energy
+from tools.generativeqc_cc.triples_response import full_triples_vjp
 from tools.validate_ccsd_t_gradient import (
     FD_STEPS,
     analytic_oracle,
     finite_difference,
 )
-from tools.vibeqc_cc.triples import triples_energy
-from tools.vibeqc_cc.triples_response import full_triples_vjp
 
 
 @pytest.mark.parametrize("name", ("h2o", "nh3"))
@@ -117,5 +117,5 @@ def test_ccsdt_oracle_is_not_the_runtime_force_endpoint() -> None:
         "open_shell": False,
     }
     # The validator is intentionally independent evidence. It must not claim
-    # that VibeQC's public RCCSD(T) force capability is already available.
-    assert "vibeqc" not in record["analytic"]["source_sha256"]
+    # that GenerativeQC's public RCCSD(T) force capability is already available.
+    assert "generativeqc" not in record["analytic"]["source_sha256"]

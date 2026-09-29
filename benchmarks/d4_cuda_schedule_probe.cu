@@ -10,7 +10,7 @@
 
 #include "dft/dispersion/d4_cuda.hpp"
 
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 
 namespace {
 

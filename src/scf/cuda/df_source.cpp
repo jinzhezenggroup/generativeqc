@@ -14,7 +14,7 @@
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/topology.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Bounded raw/transformed tile replay and public source diagnostics. Geometry/topology allocations
  * remain owned by the source until destruction. */
@@ -36,17 +36,17 @@ std::size_t cuda_density_fitting_integral_source_device_bytes_impl(
   return source == nullptr ? 0U : source->device_bytes;
 }
 
-vibeqc_status generate_cuda_density_fitting_transformed_tile_impl(
+generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
     CudaDensityFittingIntegralSourceImpl* source, std::size_t system, std::size_t pair_begin,
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, const double* inverse_square_root, void* stream_handle,
     double* output, std::string& detail, bool apply_metric_transform) {
   detail.clear();
   std::size_t pair_total = 0;
-  if (source != nullptr &&
-      !vibeqc::runtime::checked_multiply(source->public_nbf, source->public_nbf, pair_total)) {
+  if (source != nullptr && !generativeqc::runtime::checked_multiply(
+                               source->public_nbf, source->public_nbf, pair_total)) {
     detail = "bounded DF transformed tile dimensions overflow size_t";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   if (source == nullptr || output == nullptr ||
       (apply_metric_transform && inverse_square_root == nullptr) || stream_handle == nullptr ||
@@ -54,10 +54,10 @@ vibeqc_status generate_cuda_density_fitting_transformed_tile_impl(
       pair_count > pair_total - pair_begin || auxiliary_begin > source->public_naux ||
       auxiliary_count > source->public_naux - auxiliary_begin) {
     detail = "bounded DF transformed tile dimensions are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // Empty blocks at valid offsets are legal no-ops and perform no device work.
-  if (pair_count == 0U || auxiliary_count == 0U) return VIBEQC_STATUS_SUCCESS;
+  if (pair_count == 0U || auxiliary_count == 0U) return GENERATIVEQC_STATUS_SUCCESS;
   if (derivative_coordinate >= 0) {
     // The public API indexes coordinates relative to the selected system,
     // while the packed recurrence metadata uses fleet-global atom offsets.
@@ -67,13 +67,13 @@ vibeqc_status generate_cuda_density_fitting_transformed_tile_impl(
     std::size_t coordinate_count = 0;
     if (system + 1U >= source->host_atom_offsets.size() || source->host_atom_offsets[system] < 0 ||
         source->host_atom_offsets[system + 1U] < source->host_atom_offsets[system] ||
-        !vibeqc::runtime::checked_multiply(
+        !generativeqc::runtime::checked_multiply(
             static_cast<std::size_t>(source->host_atom_offsets[system + 1U] -
                                      source->host_atom_offsets[system]),
             3U, coordinate_count) ||
         static_cast<std::size_t>(derivative_coordinate) >= coordinate_count) {
       detail = "bounded DF transformed tile derivative coordinate is invalid";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
   cudaError_t cuda_error = cudaSetDevice(source->device_id);
@@ -85,14 +85,14 @@ vibeqc_status generate_cuda_density_fitting_transformed_tile_impl(
   const unsigned outputs_per_block =
       derivative_coordinate < 0 && mapping == 2U ? source_threads / 32U : source_threads;
   std::size_t tile_elements = 0;
-  if (!vibeqc::runtime::checked_multiply(pair_count, auxiliary_count, tile_elements)) {
+  if (!generativeqc::runtime::checked_multiply(pair_count, auxiliary_count, tile_elements)) {
     detail = "bounded DF transformed tile size overflows size_t";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   if (tile_elements >
       static_cast<std::size_t>(std::numeric_limits<unsigned>::max()) * outputs_per_block) {
     detail = "bounded DF transformed tile launch exceeds CUDA grid limits";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const unsigned blocks =
       static_cast<unsigned>((tile_elements + outputs_per_block - 1U) / outputs_per_block);
@@ -103,7 +103,7 @@ vibeqc_status generate_cuda_density_fitting_transformed_tile_impl(
       (source->host_atom_offsets[system] >
        (std::numeric_limits<std::int64_t>::max() - derivative_coordinate) / 3)) {
     detail = "bounded DF transformed tile derivative coordinate overflows";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::int64_t system_derivative_coordinate =
       derivative_coordinate < 0 ? derivative_coordinate
@@ -134,17 +134,17 @@ vibeqc_status generate_cuda_density_fitting_transformed_tile_impl(
   if (cuda_error != cudaSuccess) return source_cuda_status(cuda_error);
   if (derivative_coordinate < 0) {
     std::size_t generated_bytes = 0;
-    if (!vibeqc::runtime::checked_multiply(tile_elements, sizeof(double), generated_bytes)) {
+    if (!generativeqc::runtime::checked_multiply(tile_elements, sizeof(double), generated_bytes)) {
       detail = "bounded DF generated byte count overflows size_t";
-      return VIBEQC_STATUS_OUT_OF_MEMORY;
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
     source->generated_value_bytes.fetch_add(generated_bytes, std::memory_order_relaxed);
     source->generated_value_tiles.fetch_add(1U, std::memory_order_relaxed);
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status generate_cuda_density_fitting_metric_derivative_tile_impl(
+generativeqc_status generate_cuda_density_fitting_metric_derivative_tile_impl(
     CudaDensityFittingIntegralSourceImpl* source, std::size_t system,
     std::size_t auxiliary_row_begin, std::size_t auxiliary_row_count,
     std::int64_t derivative_coordinate, void* stream_handle, double* output, std::string& detail) {
@@ -156,29 +156,30 @@ vibeqc_status generate_cuda_density_fitting_metric_derivative_tile_impl(
       auxiliary_row_begin > source->public_naux ||
       auxiliary_row_count > source->public_naux - auxiliary_row_begin) {
     detail = "bounded DF metric derivative tile dimensions are invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::size_t atom_count = static_cast<std::size_t>(source->host_atom_offsets[system + 1U] -
                                                           source->host_atom_offsets[system]);
   std::size_t coordinate_count = 0;
-  if (!vibeqc::runtime::checked_multiply(atom_count, 3U, coordinate_count) ||
+  if (!generativeqc::runtime::checked_multiply(atom_count, 3U, coordinate_count) ||
       static_cast<std::size_t>(derivative_coordinate) >= coordinate_count) {
     detail = "bounded DF metric derivative coordinate is invalid";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::size_t elements = 0;
-  if (!vibeqc::runtime::checked_multiply(auxiliary_row_count, source->public_naux, elements) ||
+  if (!generativeqc::runtime::checked_multiply(auxiliary_row_count, source->public_naux,
+                                               elements) ||
       elements == 0U ||
       elements > static_cast<std::size_t>(std::numeric_limits<unsigned>::max()) * 128U) {
     detail = "bounded DF metric derivative tile dimensions overflow";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   cudaError_t cuda_error = cudaSetDevice(source->device_id);
   if (cuda_error != cudaSuccess) return source_cuda_status(cuda_error);
   if (source->host_atom_offsets[system] >
       (std::numeric_limits<std::int64_t>::max() - derivative_coordinate) / 3) {
     detail = "bounded DF metric derivative coordinate overflows";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const std::int64_t global_coordinate =
       derivative_coordinate + source->host_atom_offsets[system] * 3;
@@ -189,34 +190,34 @@ vibeqc_status generate_cuda_density_fitting_metric_derivative_tile_impl(
       system, auxiliary_row_begin, auxiliary_row_count, global_coordinate,
       source->auxiliary_to_cartesian, output);
   cuda_error = cudaPeekAtLastError();
-  return cuda_error == cudaSuccess ? VIBEQC_STATUS_SUCCESS : source_cuda_status(cuda_error);
+  return cuda_error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS : source_cuda_status(cuda_error);
 }
 
 }  // namespace
 
-vibeqc_status create_cuda_density_fitting_integral_source(
+generativeqc_status create_cuda_density_fitting_integral_source(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems, CudaDensityFittingIntegralSource** source,
     std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail) {
   runtime::df_progress::Scope progress("source_setup");
   if (source == nullptr) {
     detail = "bounded DF source output handle is null";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *source = nullptr;
   CudaDensityFittingIntegralSourceImpl* implementation = nullptr;
-  const vibeqc_status status = create_cuda_density_fitting_integral_source_impl(
+  const generativeqc_status status = create_cuda_density_fitting_integral_source_impl(
       device_id, orbital_systems, auxiliary_systems, &implementation, metrics, nbf, naux, detail);
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   auto* handle = new (std::nothrow) CudaDensityFittingIntegralSource{};
   if (handle == nullptr) {
     destroy_cuda_density_fitting_integral_source_impl(implementation);
     detail = "bounded DF source handle allocation failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   handle->implementation = implementation;
   *source = handle;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 void destroy_cuda_density_fitting_integral_source(
@@ -342,14 +343,14 @@ bool cuda_density_fitting_integral_source_geometry_matches(
          owner.auxiliary_identities[system].matches(auxiliary);
 }
 
-vibeqc_status generate_cuda_density_fitting_transformed_tile(
+generativeqc_status generate_cuda_density_fitting_transformed_tile(
     CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, const double* inverse_square_root, void* stream_handle,
     double* output, std::string& detail) {
   if (source == nullptr || source->implementation == nullptr) {
     detail = "bounded DF source handle is null";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   return generate_cuda_density_fitting_transformed_tile_impl(
       static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
@@ -357,13 +358,13 @@ vibeqc_status generate_cuda_density_fitting_transformed_tile(
       inverse_square_root, stream_handle, output, detail, true);
 }
 
-vibeqc_status generate_cuda_density_fitting_raw_tile(
+generativeqc_status generate_cuda_density_fitting_raw_tile(
     CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, void* stream_handle, double* output, std::string& detail) {
   if (source == nullptr || source->implementation == nullptr) {
     detail = "bounded DF source handle is null";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   return generate_cuda_density_fitting_transformed_tile_impl(
       static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
@@ -371,13 +372,13 @@ vibeqc_status generate_cuda_density_fitting_raw_tile(
       stream_handle, output, detail, false);
 }
 
-vibeqc_status generate_cuda_density_fitting_metric_derivative_tile(
+generativeqc_status generate_cuda_density_fitting_metric_derivative_tile(
     CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t auxiliary_row_begin,
     std::size_t auxiliary_row_count, std::int64_t derivative_coordinate, void* stream_handle,
     double* output, std::string& detail) {
   if (source == nullptr || source->implementation == nullptr) {
     detail = "bounded DF source handle is null";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   return generate_cuda_density_fitting_metric_derivative_tile_impl(
       static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
@@ -385,4 +386,4 @@ vibeqc_status generate_cuda_density_fitting_metric_derivative_tile(
       detail);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

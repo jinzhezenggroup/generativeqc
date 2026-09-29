@@ -8,7 +8,7 @@
 #include "backends/cuda/gfn2_aes2.cuh"
 #include "generated_gfn2_aes2_native.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -121,7 +121,7 @@ __device__ bool load_and_validate_system(const Gfn2AES2DeviceBatch& batch, std::
     const double radius = batch.multipole_radius[atom];
     const double valence_cn = batch.multipole_valence_cn[atom];
     if (!isfinite(dipole_kernel) || !isfinite(quadrupole_kernel) || !(radius > 0.0) ||
-        radius > vibeqc::xtb::generated::gfn2_aes2_multipole_max_radius || !isfinite(radius) ||
+        radius > generativeqc::xtb::generated::gfn2_aes2_multipole_max_radius || !isfinite(radius) ||
         !(valence_cn > 0.0) || !isfinite(valence_cn)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2AES2DeviceError::kInvalidElementParameter);
@@ -134,8 +134,8 @@ __device__ bool load_and_validate_system(const Gfn2AES2DeviceBatch& batch, std::
 
 __device__ double multipole_radius(const Gfn2AES2DeviceBatch& batch, std::int64_t atom,
                                    double coordination_number) {
-  vibeqc::xtb::generated::Gfn2AES2RadiusResult result{};
-  if (!vibeqc::xtb::generated::evaluate_gfn2_aes2_radius(
+  generativeqc::xtb::generated::Gfn2AES2RadiusResult result{};
+  if (!generativeqc::xtb::generated::evaluate_gfn2_aes2_radius(
           coordination_number, batch.multipole_radius[atom], batch.multipole_valence_cn[atom],
           result)) {
     return nan("");
@@ -145,8 +145,8 @@ __device__ double multipole_radius(const Gfn2AES2DeviceBatch& batch, std::int64_
 
 __device__ double multipole_radius_cn_derivative(const Gfn2AES2DeviceBatch& batch,
                                                  std::int64_t atom, double coordination_number) {
-  vibeqc::xtb::generated::Gfn2AES2RadiusResult result{};
-  if (!vibeqc::xtb::generated::evaluate_gfn2_aes2_radius(
+  generativeqc::xtb::generated::Gfn2AES2RadiusResult result{};
+  if (!generativeqc::xtb::generated::evaluate_gfn2_aes2_radius(
           coordination_number, batch.multipole_radius[atom], batch.multipole_valence_cn[atom],
           result)) {
     return nan("");
@@ -155,8 +155,8 @@ __device__ double multipole_radius_cn_derivative(const Gfn2AES2DeviceBatch& batc
 }
 
 __device__ bool pair_kernels(double distance, double radius, double* kernel3, double* kernel5) {
-  vibeqc::xtb::generated::Gfn2AES2KernelResult result{};
-  if (!vibeqc::xtb::generated::evaluate_gfn2_aes2_pair_kernels(distance, radius, result)) {
+  generativeqc::xtb::generated::Gfn2AES2KernelResult result{};
+  if (!generativeqc::xtb::generated::evaluate_gfn2_aes2_pair_kernels(distance, radius, result)) {
     return false;
   }
   *kernel3 = result.kernel3;
@@ -322,8 +322,8 @@ __global__ void potential_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2De
   double* const quadrupole_scratch = potential_scratch + total_atoms * 4;
   for (std::int64_t atom = ranges.atom_begin + threadIdx.x; atom < ranges.atom_end;
        atom += blockDim.x) {
-    vibeqc::xtb::generated::Gfn2AES2OnsitePotentialResult onsite{};
-    bool finite_result = vibeqc::xtb::generated::evaluate_gfn2_aes2_onsite_potential(
+    generativeqc::xtb::generated::Gfn2AES2OnsitePotentialResult onsite{};
+    bool finite_result = generativeqc::xtb::generated::evaluate_gfn2_aes2_onsite_potential(
         batch.dipole_kernel[atom], batch.quadrupole_kernel[atom], atomic_dipoles + atom * 3,
         atomic_quadrupoles + atom * 6, onsite);
     double charge_potential = 0.0;
@@ -345,8 +345,8 @@ __global__ void potential_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2De
       const std::int64_t second = target_is_first ? peer : atom;
       const std::int64_t pair = pair_index(ranges, first, second);
       const double* const pair_data = cache.pair_data + pair * kGfn2AES2PairDataElements;
-      vibeqc::xtb::generated::Gfn2AES2PairPotentialResult pair_result{};
-      finite_result = vibeqc::xtb::generated::evaluate_gfn2_aes2_pair_potential(
+      generativeqc::xtb::generated::Gfn2AES2PairPotentialResult pair_result{};
+      finite_result = generativeqc::xtb::generated::evaluate_gfn2_aes2_pair_potential(
           pair_data[0], pair_data[1], pair_data[2], pair_data[3], pair_data[4],
           atomic_charges[first], atomic_charges[second], atomic_dipoles + first * 3,
           atomic_dipoles + second * 3, atomic_quadrupoles + first * 6,
@@ -409,7 +409,7 @@ __global__ void publish_potential_kernel(Gfn2AES2DeviceBatch batch, const double
 
 __device__ bool onsite_energy(const Gfn2AES2DeviceBatch& batch, std::int64_t atom,
                               const double* dipoles, const double* quadrupoles, double* energy) {
-  return vibeqc::xtb::generated::evaluate_gfn2_aes2_onsite_energy(
+  return generativeqc::xtb::generated::evaluate_gfn2_aes2_onsite_energy(
       batch.dipole_kernel[atom], batch.quadrupole_kernel[atom], dipoles + atom * 3,
       quadrupoles + atom * 6, *energy);
 }
@@ -417,7 +417,7 @@ __device__ bool onsite_energy(const Gfn2AES2DeviceBatch& batch, std::int64_t ato
 __device__ bool pair_energy(const double* pair_data, std::int64_t first, std::int64_t second,
                             const double* charges, const double* dipoles, const double* quadrupoles,
                             double* energy) {
-  return vibeqc::xtb::generated::evaluate_gfn2_aes2_pair_energy(
+  return generativeqc::xtb::generated::evaluate_gfn2_aes2_pair_energy(
       pair_data[0], pair_data[1], pair_data[2], pair_data[3], pair_data[4], charges[first],
       charges[second], dipoles + first * 3, dipoles + second * 3, quadrupoles + first * 6,
       quadrupoles + second * 6, *energy);
@@ -593,8 +593,8 @@ __device__ bool pair_vjp(const double* pair_data, double average_radius,
                          std::int64_t first, std::int64_t second, const double* charges,
                          const double* dipoles, const double* quadrupoles, double* pair_gradient,
                          double* first_cn_adjoint, double* second_cn_adjoint) {
-  vibeqc::xtb::generated::Gfn2AES2PairVjpResult result{};
-  if (!vibeqc::xtb::generated::evaluate_gfn2_aes2_pair_vjp(
+  generativeqc::xtb::generated::Gfn2AES2PairVjpResult result{};
+  if (!generativeqc::xtb::generated::evaluate_gfn2_aes2_pair_vjp(
           pair_data[0], pair_data[1], pair_data[2], pair_data[3], pair_data[4], average_radius,
           first_radius_cn_derivative, second_radius_cn_derivative, charges[first], charges[second],
           dipoles + first * 3, dipoles + second * 3, quadrupoles + first * 6,
@@ -1313,4 +1313,4 @@ cudaError_t evaluate_gfn2_aes2_scc_energy_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

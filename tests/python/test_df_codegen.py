@@ -5,15 +5,15 @@ import typing
 from itertools import product
 
 import pytest
-from vibeqc_compiler.integral.df_values import (
+from generativeqc_compiler.integral.df_values import (
     build_df_axis_moment,
     build_df_component_kernel,
     build_df_value_ir,
     evaluate_df_primitive,
 )
-from vibeqc_compiler.integral.ir import OperatorFamily
-from vibeqc_compiler.integral.ir_serialization import integral_from_payload
-from vibeqc_compiler.integral.shell_spec import cartesian_components
+from generativeqc_compiler.integral.ir import OperatorFamily
+from generativeqc_compiler.integral.ir_serialization import integral_from_payload
+from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 
 def test_raw_df_operator_roles_domain_and_permutations() -> None:
@@ -51,7 +51,7 @@ def test_raw_df_operator_roles_domain_and_permutations() -> None:
 def test_cuda_df_inventory_retains_all_operator_signatures_and_exact_root_counts() -> (
     None
 ):
-    from vibeqc_compiler.integral.df_cuda import df_program_inventory
+    from generativeqc_compiler.integral.df_cuda import df_program_inventory
 
     inventory = df_program_inventory()
     assert len(inventory["programs"]) == 16 + 64

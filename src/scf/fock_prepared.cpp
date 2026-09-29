@@ -12,13 +12,13 @@
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 constexpr std::size_t kDefaultDeviceBudget = 256U * 1024U * 1024U;
-void checked(vibeqc_status status, const std::string& detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void checked(generativeqc_status status, const std::string& detail) {
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 bool needs(const FockBuildSpec& spec, FockApproximation approximation) {
   return (spec.coulomb.present && spec.coulomb.approximation == approximation) ||
@@ -50,7 +50,7 @@ std::size_t df_source_bytes(const core::System& orbital, const core::System& aux
                multiply_size(auxiliary_cartesian, molecule::ao_count(auxiliary))));
 }
 FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
   if (strategy.backend == FockBackend::Cpu) return {};
   FockExecutionVariant result;
   const auto& cuda_provider = runtime::active_cuda_provider();
@@ -220,7 +220,7 @@ struct PreparedFockPlan::Impl {
     DfResourceEnvelope df_resource{};
     DfBudgetWorkload df_workload{};
     if (has_df) {
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
       const auto memory = cuda_density_fitting_memory_info(device);
       df_resource = {memory.free_bytes, memory.total_bytes, memory.available};
 #endif
@@ -332,8 +332,8 @@ const integrals::IntegralData& PreparedFockPlan::one_electron() const noexcept {
 initial_guess::EigenOperation PreparedFockPlan::eigen_operation(EigenUse use) const {
   auto* plan = impl_->cuda_df.get();
   if (!plan) return {};
-  const char* control = use == EigenUse::Setup          ? "VIBEQC_DF_REFERENCE_SETUP_EIGEN"
-                        : use == EigenUse::Finalization ? "VIBEQC_DF_REFERENCE_FINAL_EIGEN"
+  const char* control = use == EigenUse::Setup          ? "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN"
+                        : use == EigenUse::Finalization ? "GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN"
                                                         : nullptr;
   const char* value = control ? std::getenv(control) : nullptr;
   if (value && value[0] == '1' && value[1] == '\0') return {};
@@ -422,4 +422,4 @@ bool PreparedFockPlan::matches(const core::System& orbital, const core::System* 
   }
   return !impl_->auxiliary || same_system(*impl_->auxiliary, auxiliary ? *auxiliary : orbital);
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

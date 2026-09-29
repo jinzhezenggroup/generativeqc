@@ -12,7 +12,7 @@
 #include "generated_gfn2_h0_native.hpp"
 #include "generated_gfn2_sdq_cuda.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 64;
@@ -339,8 +339,8 @@ __global__ void integral_shell_pair_kernel(Gfn2IntegralDeviceBatch batch, const 
         if (product_exponent > batch.integral_cutoff) {
           continue;
         }
-        vibeqc::xtb::generated::Gfn2SdqPrimitive primitive{};
-        if (!vibeqc::xtb::generated::evaluate_gfn2_sdq_values_primitive(
+        generativeqc::xtb::generated::Gfn2SdqPrimitive primitive{};
+        if (!generativeqc::xtb::generated::evaluate_gfn2_sdq_values_primitive(
                 static_cast<unsigned>(bra_l), static_cast<unsigned>(ket_l),
                 static_cast<unsigned>(bra_cartesian), static_cast<unsigned>(ket_cartesian),
                 bra_alpha, ket_alpha, vector, primitive)) {
@@ -1015,7 +1015,7 @@ __device__ bool force_member_is_active(const Gfn2ForceDeviceActivity& activity, 
     }
     return false;
   }
-  return requested == 1u && activity.system_statuses[system] == VIBEQC_XTB_STATUS_SUCCESS &&
+  return requested == 1u && activity.system_statuses[system] == GENERATIVEQC_XTB_STATUS_SUCCESS &&
          system_is_valid(system_errors, system);
 }
 
@@ -1328,8 +1328,8 @@ __global__ void integral_force_shell_pair_kernel(
         if (product_exponent > batch.integral_cutoff) {
           continue;
         }
-        vibeqc::xtb::generated::Gfn2SdqPrimitive primitive{};
-        if (!vibeqc::xtb::generated::evaluate_gfn2_sdq_primitive(
+        generativeqc::xtb::generated::Gfn2SdqPrimitive primitive{};
+        if (!generativeqc::xtb::generated::evaluate_gfn2_sdq_primitive(
                 static_cast<unsigned>(bra_l), static_cast<unsigned>(ket_l),
                 static_cast<unsigned>(bra_cartesian), static_cast<unsigned>(ket_cartesian),
                 bra_alpha, ket_alpha, vector, primitive)) {
@@ -1512,7 +1512,7 @@ __global__ void publish_integral_force_kernel(Gfn2IntegralDeviceBatch batch,
                                               const std::uint32_t* system_errors) {
   const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
   if (!force_sequence_is_active(workspace) || activity.requested_mask[system] != 1u ||
-      activity.system_statuses[system] != VIBEQC_XTB_STATUS_SUCCESS ||
+      activity.system_statuses[system] != GENERATIVEQC_XTB_STATUS_SUCCESS ||
       !system_is_valid(system_errors, system)) {
     return;
   }
@@ -1548,7 +1548,7 @@ cudaError_t validate_integral_force_descriptors(
       input.dipole_adjoint_elements < dipoles || input.quadrupole_adjoint_elements < quadrupoles ||
       output.gradient_elements < coordinates || workspace.gradient_elements < coordinates ||
       !is_aligned(activity.requested_mask, alignof(std::uint8_t)) ||
-      !is_aligned(activity.system_statuses, alignof(vibeqc_xtb_status_t)) ||
+      !is_aligned(activity.system_statuses, alignof(generativeqc_xtb_status_t)) ||
       !required_pointer(input.positions, coordinates) ||
       !required_pointer(input.overlap_adjoint, batch.total_matrix_elements) ||
       !required_pointer(input.dipole_adjoint, dipoles) ||
@@ -1650,4 +1650,4 @@ cudaError_t add_gfn2_integral_gradient_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

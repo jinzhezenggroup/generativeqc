@@ -9,11 +9,11 @@ from typing import NoReturn
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.first_gradient_execute import first_gradient_storage
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.first_gradient_execute import first_gradient_storage
 
-from tools.vibeqc_hessian import first_order_cuda, hvp
+from tools.generativeqc_hessian import first_order_cuda, hvp
 
 
 @pytest.mark.parametrize("entry", ["hvp", "contraction"])

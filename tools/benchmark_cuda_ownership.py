@@ -77,23 +77,25 @@ def worker(args: typing.Any) -> None:
         raise RuntimeError("endpoint evidence requires a clean source checkout")
     sys.path.insert(0, str(args.root / "python"))
     import numpy as np
-    from vibeqc import Calculator, Primitive, Shell
-    from vibeqc.autotune import source_identity
-    from vibeqc_compiler.common.resources import ResourceBudget
+    from generativeqc import Calculator, Primitive, Shell
+    from generativeqc.autotune import source_identity
+    from generativeqc_compiler.common.resources import ResourceBudget
 
-    os.environ["VIBEQC_LIBRARY"] = str(args.build / "libvibeqc.so")
+    os.environ["GENERATIVEQC_LIBRARY"] = str(args.build / "libgenerativeqc.so")
     if args.domain == "df":
-        os.environ["VIBEQC_DF_DERIVATIVES"] = args.selection
-        os.environ["VIBEQC_DF_DERIVATIVE_MAPPING"] = "thread"
-        os.environ["VIBEQC_DF_VALUE_MAPPING"] = "primitive"
-        os.environ["VIBEQC_ONE_ELECTRON_VALUE_MAPPING"] = "shell_warp"
+        os.environ["GENERATIVEQC_DF_DERIVATIVES"] = args.selection
+        os.environ["GENERATIVEQC_DF_DERIVATIVE_MAPPING"] = "thread"
+        os.environ["GENERATIVEQC_DF_VALUE_MAPPING"] = "primitive"
+        os.environ["GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"] = "shell_warp"
         # One-electron force ownership is generated-only on both sides.
     else:
-        os.environ["VIBEQC_ONE_ELECTRON_VALUES"] = args.selection
-        os.environ["VIBEQC_ONE_ELECTRON_VALUE_MAPPING"] = args.mapping
-    library = ctypes.CDLL(os.environ["VIBEQC_LIBRARY"])
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    if library.vibeqc_get_source_identity().decode() != source_identity(args.root):
+        os.environ["GENERATIVEQC_ONE_ELECTRON_VALUES"] = args.selection
+        os.environ["GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"] = args.mapping
+    library = ctypes.CDLL(os.environ["GENERATIVEQC_LIBRARY"])
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    if library.generativeqc_get_source_identity().decode() != source_identity(
+        args.root
+    ):
         raise RuntimeError(
             "selected library does not match the measured source checkout"
         )
@@ -116,19 +118,19 @@ def worker(args: typing.Any) -> None:
             "coordinate-wise DF response was retired; select an archived baseline checkout"
         )
     cache = (args.build / "CMakeCache.txt").read_text()
-    if "VIBEQC_CUDA_FAST_COMPILE:BOOL=OFF" not in cache:
+    if "GENERATIVEQC_CUDA_FAST_COMPILE:BOOL=OFF" not in cache:
         raise RuntimeError("production timing requires FAST_COMPILE=OFF")
     if "CMAKE_BUILD_TYPE:STRING=Release" not in cache:
         raise RuntimeError("production timing requires Release")
     if args.case and len(set(args.case)) != len(args.case):
         raise ValueError("duplicate endpoint requests")
     records = {
-        "schema": "vibeqc.cuda-ownership-endpoints.v1",
+        "schema": "generativeqc.cuda-ownership-endpoints.v1",
         "revision": capture(["git", "-C", str(args.root), "rev-parse", "HEAD"]),
         "dirty": False,
-        "native_source_identity": library.vibeqc_get_source_identity().decode(),
+        "native_source_identity": library.generativeqc_get_source_identity().decode(),
         "library_sha256": hashlib.sha256(
-            (args.build / "libvibeqc.so").read_bytes()
+            (args.build / "libgenerativeqc.so").read_bytes()
         ).hexdigest(),
         "selection": args.selection,
         "domain": args.domain,
@@ -155,8 +157,8 @@ def worker(args: typing.Any) -> None:
                 (
                     "CMAKE_BUILD_TYPE:",
                     "CMAKE_CUDA_ARCHITECTURES:",
-                    "VIBEQC_CUDA_FAST_COMPILE:",
-                    "VIBEQC_AOT_PROFILE:",
+                    "GENERATIVEQC_CUDA_FAST_COMPILE:",
+                    "GENERATIVEQC_AOT_PROFILE:",
                 )
             )
         ],
@@ -213,7 +215,7 @@ def worker(args: typing.Any) -> None:
             from benchmarks._cases import benchmark_cases
 
             fixture = benchmark_cases()[family]
-            basis = fixture.vibeqc_basis
+            basis = fixture.generativeqc_basis
             atoms = [
                 [
                     (element, tuple(np.asarray(r) * (1 + 0.01 * i)))
@@ -395,7 +397,7 @@ def collect_runs(args: typing.Any) -> typing.Any:
     is identical. They retain all values and can reconstruct each process record
     losslessly; no samples are dropped, averaged or selected during aggregation.
     """
-    from vibeqc_compiler.common.timing import interleaved_selection_order
+    from generativeqc_compiler.common.timing import interleaved_selection_order
 
     if args.process_scope not in ("inventory", "case") or args.samples < 5:
         raise ValueError("known process scope and at least five samples are required")
@@ -458,8 +460,8 @@ def compare(args: typing.Any) -> None:
     import numpy as np
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
-    from vibeqc_compiler.common.evidence import canonical_hash
-    from vibeqc_compiler.common.performance import assess_comparison
+    from generativeqc_compiler.common.evidence import canonical_hash
+    from generativeqc_compiler.common.performance import assess_comparison
 
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("compare requires a finite Slurm GPU allocation")
@@ -587,7 +589,7 @@ def compare(args: typing.Any) -> None:
         )
         rows.append(row)
     report = {
-        "schema": "vibeqc.cuda-ownership-comparison.v1",
+        "schema": "generativeqc.cuda-ownership-comparison.v1",
         "samples": args.samples,
         "domain": args.domain,
         "process_scope": args.process_scope,

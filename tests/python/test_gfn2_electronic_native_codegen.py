@@ -5,13 +5,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from test_gfn2_electronic_ir import _restricted_feeds, _topology
-from vibeqc_compiler.method import build_gfn2_electronic_program
-from vibeqc_compiler.method.gfn2_electronic import (
+from generativeqc_compiler.method import build_gfn2_electronic_program
+from generativeqc_compiler.method.gfn2_electronic import (
     GFN2_DIPOLE_COMPONENTS,
     GFN2_QUADRUPOLE_COMPONENTS,
 )
-from vibeqc_compiler.method.gfn2_electronic_runtime import (
+from generativeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_core_energy_update_program,
     build_gfn2_multipole_hamiltonian_update_program,
     build_gfn2_multipole_integral_vjp_program,
@@ -21,7 +20,8 @@ from vibeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_scalar_hamiltonian_update_program,
     build_gfn2_scalar_integral_vjp_program,
 )
-from vibeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor import Program, execute
+from test_gfn2_electronic_ir import _restricted_feeds, _topology
 
 ROOT = Path(__file__).resolve().parents[2]
 

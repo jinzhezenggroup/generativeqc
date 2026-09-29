@@ -1,5 +1,5 @@
-#ifndef VIBEQC_RUNTIME_RESOURCE_LEDGER_HPP
-#define VIBEQC_RUNTIME_RESOURCE_LEDGER_HPP
+#ifndef GENERATIVEQC_RUNTIME_RESOURCE_LEDGER_HPP
+#define GENERATIVEQC_RUNTIME_RESOURCE_LEDGER_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -7,7 +7,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Numeric device allocations owned by one prepared resource request.
  *
@@ -37,6 +37,6 @@ inline std::unordered_map<void*, DeviceAllocationOwner> device_allocation_owners
 inline std::uint64_t device_allocation_generation{};
 inline thread_local std::shared_ptr<DeviceResourceLedger> active_device_resource_ledger;
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 
 #endif

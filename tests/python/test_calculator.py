@@ -3,7 +3,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell, _native, method_capabilities
+from generativeqc import Calculator, Primitive, Shell, _native, method_capabilities
 
 
 def test_h2_energy_and_force_invariance() -> None:
@@ -122,13 +122,13 @@ def test_cuda_energy_only_output_selection_omits_forces(
         context = ctypes.c_void_p()
         _native.check(
             calculator._library,
-            calculator._library.vibeqc_context_create(
+            calculator._library.generativeqc_context_create(
                 ctypes.byref(calculator._context_descriptor()), ctypes.byref(context)
             ),
         )
     except RuntimeError as error:
         pytest.skip(f"CUDA device unavailable: {error}")
-    calculator._library.vibeqc_context_destroy(context)
+    calculator._library.generativeqc_context_destroy(context)
     state = {"charge": charge, "multiplicity": multiplicity}
     energy_only = calculator.singlepoint(atoms, properties=("energy",), **state)
     energy_and_forces = calculator.singlepoint(atoms, **state)
@@ -638,9 +638,9 @@ def test_screened_direct_jk_force_matches_energy_finite_difference(
             # execution rather than cached in the immutable direct-J/K plan.
             # Compare both paths on one prepared batch so the A/B switch and
             # the conservative loose-threshold cap remain covered together.
-            monkeypatch.setenv("VIBEQC_FORCE_DENSITY_PRODUCT_SCREENING", "0")
+            monkeypatch.setenv("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING", "0")
             unscreened = batch.execute([coordinates(1.4)], strict=True).items[0]
-            monkeypatch.delenv("VIBEQC_FORCE_DENSITY_PRODUCT_SCREENING")
+            monkeypatch.delenv("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING")
             plus = batch.execute([coordinates(1.4001)], strict=True).items[0]
             minus = batch.execute([coordinates(1.3999)], strict=True).items[0]
     except RuntimeError as error:
@@ -681,7 +681,7 @@ def test_cuda_final_fock_reuse_matches_forced_rebuild(
 
     try:
         reused = evaluate()
-        monkeypatch.setenv("VIBEQC_FINAL_FOCK_REBUILD", "1")
+        monkeypatch.setenv("GENERATIVEQC_FINAL_FOCK_REBUILD", "1")
         rebuilt = evaluate()
     except RuntimeError as error:
         pytest.skip(f"CUDA device unavailable: {error}")

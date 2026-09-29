@@ -16,16 +16,16 @@ PREFIX = r"""
 #include <memory>
 #include <stdexcept>
 int allocations=0, executions=0;
-constexpr int VIBEQC_BACKEND_CPU_REFERENCE=1, VIBEQC_STATUS_OUT_OF_MEMORY=2;
+constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2;
 namespace core { struct System {}; }
 namespace runtime {
 struct ExecutionContext {
   bool cuda=false;
-  int backend() const { return cuda ? 3 : VIBEQC_BACKEND_CPU_REFERENCE; }
+  int backend() const { return cuda ? 3 : GENERATIVEQC_BACKEND_CPU_REFERENCE; }
   bool cuda_requested() const { return cuda; }
 };
 }
-struct vibeqc_method_descriptor { std::size_t budget=100; bool valid=true; };
+struct generativeqc_method_descriptor { std::size_t budget=100; bool valid=true; };
 struct MethodError : std::runtime_error {
   MethodError(int,const char* msg) : std::runtime_error(msg) {}
 };
@@ -43,12 +43,12 @@ namespace posthf {
 std::size_t rhf_reference_capacity(const core::System&,int,bool) { return 80; }
 }
 struct RccsdNativeState { bool cached; };
-void validate_descriptor(const vibeqc_method_descriptor& d,const runtime::ExecutionContext&) {
+void validate_descriptor(const generativeqc_method_descriptor& d,const runtime::ExecutionContext&) {
   if (!d.valid) throw std::invalid_argument("invalid descriptor");
 }
-std::size_t correlation_budget(const vibeqc_method_descriptor& d) { return d.budget; }
-int cc_options(const vibeqc_method_descriptor&,std::size_t) { return 0; }
-Reference reference_options(const vibeqc_method_descriptor&,std::size_t) { return {}; }
+std::size_t correlation_budget(const generativeqc_method_descriptor& d) { return d.budget; }
+int cc_options(const generativeqc_method_descriptor&,std::size_t) { return 0; }
+Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,int,std::size_t,scf::PreparedFockPlan* p) {
   ++executions;
@@ -62,7 +62,7 @@ int main(int argc,char** argv) {
   const int mode=std::atoi(argv[1]);
   runtime::ExecutionContext execution;
   core::System system;
-  vibeqc_method_descriptor descriptor;
+  generativeqc_method_descriptor descriptor;
   std::unique_ptr<scf::PreparedFockPlan> cache;
   if (mode == 0) descriptor.budget=79;
   if (mode == 1) descriptor.valid=false;
@@ -94,7 +94,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     start = source.index("RccsdNativeState run_rccsd_native_state(")
-    end = source.index("\nvibeqc_status validate_rccsd_system", start)
+    end = source.index("\ngenerativeqc_status validate_rccsd_system", start)
     program = PREFIX + source[start:end] + MAIN
     path, executable = tmp_path / "probe.cpp", tmp_path / "probe"
     path.write_text(program)

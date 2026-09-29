@@ -6,11 +6,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc.autotune import _source_identity_paths
+from generativeqc.autotune import _source_identity_paths
 
 
 def _write_manifest(root: Path, payload: dict[str, object]) -> None:
-    manifest = root / "cmake/VibeQCSourceIdentity.json"
+    manifest = root / "cmake/GenerativeQCSourceIdentity.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -19,13 +19,15 @@ def _configure_manifest(root: Path) -> subprocess.CompletedProcess[str]:
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("CMake is required for the cross-consumer manifest gate")
-    helper = Path(__file__).resolve().parents[2] / "cmake/VibeQCSourceIdentity.cmake"
-    shutil.copyfile(helper, root / "cmake/VibeQCSourceIdentity.cmake")
+    helper = (
+        Path(__file__).resolve().parents[2] / "cmake/GenerativeQCSourceIdentity.cmake"
+    )
+    shutil.copyfile(helper, root / "cmake/GenerativeQCSourceIdentity.cmake")
     (root / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.20)\n"
         "project(source_identity_test NONE)\n"
-        "include(cmake/VibeQCSourceIdentity.cmake)\n"
-        "vibeqc_collect_source_identity_inputs(inputs)\n"
+        "include(cmake/GenerativeQCSourceIdentity.cmake)\n"
+        "generativeqc_collect_source_identity_inputs(inputs)\n"
         'file(WRITE "${CMAKE_BINARY_DIR}/inputs.txt" "${inputs}")\n',
         encoding="utf-8",
     )
@@ -59,7 +61,7 @@ def test_source_identity_manifest_expands_recursive_and_explicit_inputs(
         for path in _source_identity_paths(tmp_path)
     } == {
         "CMakeLists.txt",
-        "cmake/VibeQCSourceIdentity.json",
+        "cmake/GenerativeQCSourceIdentity.json",
         "src/nested/kernel.cpp",
     }
 

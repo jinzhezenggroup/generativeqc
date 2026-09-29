@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import read_host_trace, read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -35,17 +35,18 @@ def test_occupied_response_replay_and_zero_rank_spin(
     from pyscf import gto, scf
 
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_STORAGE", "jk-scratch")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "jk-scratch")
     monkeypatch.setenv(
-        "VIBEQC_DF_WEIGHTED_EXECUTION", "generic" if pairs == "generic" else "shell"
+        "GENERATIVEQC_DF_WEIGHTED_EXECUTION",
+        "generic" if pairs == "generic" else "shell",
     )
-    monkeypatch.setenv("VIBEQC_DF_SHELL_SCHEDULE", "compact")
-    monkeypatch.setenv("VIBEQC_DF_PRIMITIVE_BUCKETS", "packet")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", "compact")
+    monkeypatch.setenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", "packet")
     monkeypatch.setenv(
-        "VIBEQC_DF_DERIVATIVE_PAIRS", "full" if pairs == "generic" else pairs
+        "GENERATIVEQC_DF_DERIVATIVE_PAIRS", "full" if pairs == "generic" else pairs
     )
-    monkeypatch.setenv("VIBEQC_DF_SHELL_COUNTERS", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_COUNTERS", "1")
     atoms = [(elements[0], (0.0, 0.0, -0.7)), (elements[1], (0.1, 0.0, 0.7))]
     if elements == ("O", "H"):
         # Reuse the independently qualified open-shell geometry and explicitly
@@ -93,12 +94,12 @@ def test_occupied_response_replay_and_zero_rank_spin(
                 ("occupied", True, False),
             ]
         ):
-            monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", space)
-            monkeypatch.setenv("VIBEQC_DF_FORCE_FINAL_REBUILD", str(int(rebuild)))
+            monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", space)
+            monkeypatch.setenv("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", str(int(rebuild)))
             trace = tmp_path / f"response-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             host_trace = tmp_path / f"host-response-{step}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(host_trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(host_trace))
             result = batch.execute(
                 [np.array([r for _, r in moved])] * batch_size if changed else None,
                 strict=True,
@@ -189,16 +190,16 @@ def test_packed_response_crosses_ao_blocks_and_auxiliary_panels(
     reference.kernel()
     assert reference.converged
     expected = -reference.nuc_grad_method().kernel()
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_STORAGE", "jk-scratch")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_SPACE", "occupied")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_BATCHING", batch_products)
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "shell")
-    monkeypatch.setenv("VIBEQC_DF_SHELL_SCHEDULE", "compact")
-    monkeypatch.setenv("VIBEQC_DF_PRIMITIVE_BUCKETS", "packet")
-    monkeypatch.setenv("VIBEQC_DF_DERIVATIVE_PAIRS", "packed")
-    monkeypatch.setenv("VIBEQC_DF_PACKED_AO_BLOCK_ROWS", "64")
-    monkeypatch.setenv("VIBEQC_DF_SHELL_COUNTERS", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_STORAGE", "jk-scratch")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BATCHING", batch_products)
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", "compact")
+    monkeypatch.setenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", "packet")
+    monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", "packed")
+    monkeypatch.setenv("GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS", "64")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_COUNTERS", "1")
     calc = Calculator(
         method="rhf",
         basis="def2-svp",
@@ -212,7 +213,7 @@ def test_packed_response_crosses_ao_blocks_and_auxiliary_panels(
     with calc.prepare_batch([case.atoms]) as batch:
         batch.execute(strict=True)
         trace = tmp_path / "packed-panels.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+        monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
         actual = batch.execute(strict=True).items[0]
         assert actual.energy == pytest.approx(reference.e_tot, abs=1e-9, rel=0)
         np.testing.assert_allclose(actual.forces, expected, atol=1e-8, rtol=0)
@@ -267,13 +268,13 @@ def test_batched_full_response_keeps_rectangular_output(
     assert reference.converged
     expected = -reference.nuc_grad_method().kernel()
     for name, value in {
-        "VIBEQC_DF_EXCHANGE": "occupied",
-        "VIBEQC_DF_RESPONSE_STORAGE": "jk-scratch",
-        "VIBEQC_DF_RESPONSE_SPACE": "occupied",
-        "VIBEQC_DF_WEIGHTED_EXECUTION": "shell",
-        "VIBEQC_DF_SHELL_SCHEDULE": "compact",
-        "VIBEQC_DF_PRIMITIVE_BUCKETS": "packet",
-        "VIBEQC_DF_DERIVATIVE_PAIRS": "full",
+        "GENERATIVEQC_DF_EXCHANGE": "occupied",
+        "GENERATIVEQC_DF_RESPONSE_STORAGE": "jk-scratch",
+        "GENERATIVEQC_DF_RESPONSE_SPACE": "occupied",
+        "GENERATIVEQC_DF_WEIGHTED_EXECUTION": "shell",
+        "GENERATIVEQC_DF_SHELL_SCHEDULE": "compact",
+        "GENERATIVEQC_DF_PRIMITIVE_BUCKETS": "packet",
+        "GENERATIVEQC_DF_DERIVATIVE_PAIRS": "full",
     }.items():
         monkeypatch.setenv(name, value)
     calc = Calculator(
@@ -290,9 +291,9 @@ def test_batched_full_response_keeps_rectangular_output(
         batch.execute(strict=True)
         batch.set_warm_start_updates(False)
         for policy in ("off", "auto"):
-            monkeypatch.setenv("VIBEQC_DF_RESPONSE_BATCHING", policy)
+            monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BATCHING", policy)
             trace = tmp_path / f"full-{policy}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             actual = batch.execute(strict=True).items[0]
             assert actual.energy == pytest.approx(reference.e_tot, abs=1e-9, rel=0)
             np.testing.assert_allclose(actual.forces, expected, atol=1e-8, rtol=0)

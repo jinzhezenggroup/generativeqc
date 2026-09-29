@@ -1,5 +1,5 @@
 // Copyright (C) 2017 M.A.L. Marques
-// Copyright (C) 2026 VibeQC contributors
+// Copyright (C) 2026 GenerativeQC contributors
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -10,12 +10,12 @@
 // Parameters/composition follow xc/expressions.py and the vendored Libxc 7
 // sources. See docs/developer/xc_scf_domain.md for the algebra and boundary policy.
 #if defined(__CUDACC__)
-#define VIBEQC_XC_HD __host__ __device__
+#define GENERATIVEQC_XC_HD __host__ __device__
 #else
-#define VIBEQC_XC_HD
+#define GENERATIVEQC_XC_HD
 #endif
 
-namespace vibeqc::dft::point {
+namespace generativeqc::dft::point {
 
 inline constexpr const char* kDomain = "semilocal-scaled-v1/pbe-spin-c2-1e-18";
 
@@ -30,12 +30,12 @@ struct Value {
 };
 
 namespace detail {
-VIBEQC_XC_HD inline bool finite(double x) { return x >= -DBL_MAX && x <= DBL_MAX; }
+GENERATIVEQC_XC_HD inline bool finite(double x) { return x >= -DBL_MAX && x <= DBL_MAX; }
 /** Shared SCF/response admission for a reference gradient component. AO
  * contractions can round density to zero with a subnormal gradient residue;
  * SCF already admits that numerically-null reference at the analytic vacuum.
  * Positive-density values are unchanged. Tangent admission is checked separately. */
-VIBEQC_XC_HD inline bool valid_gradient_component(double rho, double gradient) {
+GENERATIVEQC_XC_HD inline bool valid_gradient_component(double rho, double gradient) {
   return finite(gradient) && (rho != 0.0 || ::fabs(gradient) < DBL_MIN);
 }
 /** Forward differentiation in locally scaled physical coordinates. The scale
@@ -45,55 +45,55 @@ struct Jet {
   static constexpr bool second_order = false;
   double v{};
   double d[8]{};
-  VIBEQC_XC_HD Jet() {}
-  VIBEQC_XC_HD Jet(double value) : v(value) {}
-  VIBEQC_XC_HD static Jet variable(double value, unsigned index) {
+  GENERATIVEQC_XC_HD Jet() {}
+  GENERATIVEQC_XC_HD Jet(double value) : v(value) {}
+  GENERATIVEQC_XC_HD static Jet variable(double value, unsigned index) {
     Jet out(value);
     out.d[index] = 1.0;
     return out;
   }
 };
-VIBEQC_XC_HD inline Jet operator+(const Jet& a, const Jet& b) {
+GENERATIVEQC_XC_HD inline Jet operator+(const Jet& a, const Jet& b) {
   Jet out(a.v + b.v);
   for (unsigned i = 0; i < 8; ++i) out.d[i] = a.d[i] + b.d[i];
   return out;
 }
-VIBEQC_XC_HD inline Jet operator-(const Jet& a, const Jet& b) {
+GENERATIVEQC_XC_HD inline Jet operator-(const Jet& a, const Jet& b) {
   Jet out(a.v - b.v);
   for (unsigned i = 0; i < 8; ++i) out.d[i] = a.d[i] - b.d[i];
   return out;
 }
-VIBEQC_XC_HD inline Jet operator-(const Jet& a) { return Jet(0.0) - a; }
-VIBEQC_XC_HD inline Jet operator*(const Jet& a, const Jet& b) {
+GENERATIVEQC_XC_HD inline Jet operator-(const Jet& a) { return Jet(0.0) - a; }
+GENERATIVEQC_XC_HD inline Jet operator*(const Jet& a, const Jet& b) {
   Jet out(a.v * b.v);
   for (unsigned i = 0; i < 8; ++i) out.d[i] = a.d[i] * b.v + a.v * b.d[i];
   return out;
 }
-VIBEQC_XC_HD inline Jet operator/(const Jet& a, const Jet& b) {
+GENERATIVEQC_XC_HD inline Jet operator/(const Jet& a, const Jet& b) {
   Jet out(a.v / b.v);
   // Do not square a small denominator: that spuriously underflows in tails.
   for (unsigned i = 0; i < 8; ++i) out.d[i] = (a.d[i] - out.v * b.d[i]) / b.v;
   return out;
 }
-VIBEQC_XC_HD inline Jet power(const Jet& a, double p) {
+GENERATIVEQC_XC_HD inline Jet power(const Jet& a, double p) {
   Jet out(::pow(a.v, p));
   // All powers evaluated at zero here have p>1 and a zero first derivative.
   const double slope = a.v == 0.0 ? 0.0 : p * ::pow(a.v, p - 1.0);
   for (unsigned i = 0; i < 8; ++i) out.d[i] = slope * a.d[i];
   return out;
 }
-VIBEQC_XC_HD inline Jet log1p(const Jet& a) {
+GENERATIVEQC_XC_HD inline Jet log1p(const Jet& a) {
   Jet out(::log1p(a.v));
   for (unsigned i = 0; i < 8; ++i) out.d[i] = a.d[i] / (1.0 + a.v);
   return out;
 }
-VIBEQC_XC_HD inline Jet expm1(const Jet& a) {
+GENERATIVEQC_XC_HD inline Jet expm1(const Jet& a) {
   Jet out(::expm1(a.v));
   for (unsigned i = 0; i < 8; ++i) out.d[i] = ::exp(a.v) * a.d[i];
   return out;
 }
 template <class Scalar>
-VIBEQC_XC_HD inline Scalar log1p_over_x(const Scalar& a) {
+GENERATIVEQC_XC_HD inline Scalar log1p_over_x(const Scalar& a) {
   // Analytic continuation, including its derivative, when direct subtraction
   // in the quotient derivative would lose all significant digits.
   if (::fabs(a.v) < 1.0e-4)
@@ -105,7 +105,7 @@ VIBEQC_XC_HD inline Scalar log1p_over_x(const Scalar& a) {
  * derivatives match the mathematical expression at u=1e-18; u=0 has its
  * exact value and a finite specified derivative. No rho/sigma clipping. */
 template <class Scalar>
-VIBEQC_XC_HD inline Scalar spin_two_thirds(const Scalar& u) {
+GENERATIVEQC_XC_HD inline Scalar spin_two_thirds(const Scalar& u) {
   constexpr double cutoff = 1.0e-18;
   if (u.v >= cutoff) return power(u, 2.0 / 3.0);
   const Scalar t = u / cutoff;
@@ -113,8 +113,8 @@ VIBEQC_XC_HD inline Scalar spin_two_thirds(const Scalar& u) {
 }
 
 template <class Scalar>
-VIBEQC_XC_HD inline Scalar pw_channel(const Scalar& x, double a, double alpha, double b1, double b2,
-                                      double b3, double b4) {
+GENERATIVEQC_XC_HD inline Scalar pw_channel(const Scalar& x, double a, double alpha, double b1,
+                                            double b2, double b3, double b4) {
   constexpr double c = 0.6203504908994001;  // (3/(4*pi))^(1/3)
   const Scalar x2 = x * x;
   const Scalar q = b1 * ::sqrt(c) * x2 * x + b2 * c * x2 + b3 * ::pow(c, 1.5) * x + b4 * c * c;
@@ -130,16 +130,16 @@ VIBEQC_XC_HD inline Scalar pw_channel(const Scalar& x, double a, double alpha, d
  * identical; no density floor or model extension is introduced here. */
 // The value path keeps its original arithmetic. The response consumer seeds
 // Jet directions through these same potential formulas, including grad=0.
-VIBEQC_XC_HD inline double primal(double x) { return x; }
-VIBEQC_XC_HD inline double primal(const Jet& x) { return x.v; }
-VIBEQC_XC_HD inline double cube_root(double x) { return ::cbrt(x); }
-VIBEQC_XC_HD inline Jet cube_root(const Jet& x) {
+GENERATIVEQC_XC_HD inline double primal(double x) { return x; }
+GENERATIVEQC_XC_HD inline double primal(const Jet& x) { return x.v; }
+GENERATIVEQC_XC_HD inline double cube_root(double x) { return ::cbrt(x); }
+GENERATIVEQC_XC_HD inline Jet cube_root(const Jet& x) {
   Jet out(::cbrt(x.v));
   for (unsigned i = 0; i < 8; ++i) out.d[i] = out.v * (x.d[i] / x.v) / 3.0;
   return out;
 }
-VIBEQC_XC_HD inline double square_root(double x) { return ::sqrt(x); }
-VIBEQC_XC_HD inline Jet square_root(const Jet& x) { return power(x, 0.5); }
+GENERATIVEQC_XC_HD inline double square_root(double x) { return ::sqrt(x); }
+GENERATIVEQC_XC_HD inline Jet square_root(const Jet& x) { return power(x, 0.5); }
 
 template <class Scalar>
 struct ExchangeValue {
@@ -147,8 +147,8 @@ struct ExchangeValue {
 };
 using Exchange = ExchangeValue<double>;
 template <class Scalar>
-VIBEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const Scalar& rho,
-                                                         const Scalar gradient[3]) {
+GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const Scalar& rho,
+                                                               const Scalar gradient[3]) {
   ExchangeValue<Scalar> out;
   if (primal(rho) == 0.0) return out;
   constexpr double pi = 3.141592653589793238462643383279502884;
@@ -200,7 +200,7 @@ VIBEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const Scalar&
   out.rho = -cx * (4.0 / 3.0) * rho13 * (enhancement - 2.0 * radial_response);
   return out;
 }
-VIBEQC_XC_HD inline Exchange exchange(bool pbe, double rho, const double gradient[3]) {
+GENERATIVEQC_XC_HD inline Exchange exchange(bool pbe, double rho, const double gradient[3]) {
   // Preserve the value-only exact-zero-gradient branch, including when rho43
   // underflows; response rejects unrepresentable directional coefficients.
   const bool nonzero = gradient[0] != 0.0 || gradient[1] != 0.0 || gradient[2] != 0.0;
@@ -208,9 +208,9 @@ VIBEQC_XC_HD inline Exchange exchange(bool pbe, double rho, const double gradien
 }
 
 template <class Scalar>
-VIBEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a, const Scalar& b,
-                                                 const Scalar g[3], double scale,
-                                                 double gradient_ratio) {
+GENERATIVEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a, const Scalar& b,
+                                                       const Scalar g[3], double scale,
+                                                       double gradient_ratio) {
   constexpr double pi = 3.141592653589793238462643383279502884;
   constexpr double beta = 0.06672455060314922;
   const double gamma = (1.0 - ::log(2.0)) / (pi * pi);
@@ -270,8 +270,9 @@ VIBEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a, cons
 /** Evaluate full-spin LDA_XC_PW or PBE energy and AO-potential coefficients.
  * Invalid inputs return valid=false on both CPU and CUDA (no device throw).
  * At zero spin density, reference gradient components must be zero or subnormal. */
-VIBEQC_XC_HD inline Value evaluate(bool pbe, const double rho[2], const double gradient[2][3],
-                                   double exchange_scale = 1.0, double correlation_scale = 1.0) {
+GENERATIVEQC_XC_HD inline Value evaluate(bool pbe, const double rho[2], const double gradient[2][3],
+                                         double exchange_scale = 1.0,
+                                         double correlation_scale = 1.0) {
   Value out;
   // Scale the audited X/C components independently, including every first
   // derivative. Exact exchange is supplied exclusively by the Fock provider.
@@ -331,8 +332,8 @@ VIBEQC_XC_HD inline Value evaluate(bool pbe, const double rho[2], const double g
  * programs whose public contract
  * rejects vacuum derivatives and features outside the audited
  * interior. */
-VIBEQC_XC_HD inline Value evaluate_interior(bool pbe, const double rho[2],
-                                            const double gradient[2][3]) {
+GENERATIVEQC_XC_HD inline Value evaluate_interior(bool pbe, const double rho[2],
+                                                  const double gradient[2][3]) {
   Value invalid;
   const auto value = evaluate(pbe, rho, gradient);
   if (!value.valid) return value;
@@ -356,6 +357,6 @@ VIBEQC_XC_HD inline Value evaluate_interior(bool pbe, const double rho[2],
   return value;
 }
 
-}  // namespace vibeqc::dft::point
+}  // namespace generativeqc::dft::point
 
-#undef VIBEQC_XC_HD
+#undef GENERATIVEQC_XC_HD

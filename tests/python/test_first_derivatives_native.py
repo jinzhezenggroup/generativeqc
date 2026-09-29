@@ -7,9 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.integral.first_derivatives_execute import (
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.integral.first_derivatives_execute import (
     FirstDerivativeEvaluator,
     FirstDerivativeShellEvaluator,
     compile_first_derivative,
@@ -17,13 +17,13 @@ from vibeqc_compiler.integral.first_derivatives_execute import (
     first_derivative_component_tiles,
     first_derivative_shell_identity,
 )
-from vibeqc_compiler.integral.one_electron_derivatives import (
+from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
-from vibeqc_compiler.integral.weight_pullback import normalized_radial_primitives
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weight_pullback import normalized_radial_primitives
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +76,9 @@ def test_raw_eri_component_matches_independent_native_source(
 def test_full_shell_eri_tiles_match_independent_native_oracle(
     full_shell_artifact: typing.Any,
 ) -> None:
-    from vibeqc_compiler.integral.weight_pullback import normalized_cartesian_components
+    from generativeqc_compiler.integral.weight_pullback import (
+        normalized_cartesian_components,
+    )
 
     assert [len(tile.component_indices) for tile in full_shell_artifact.tiles] == [
         5,
@@ -273,7 +275,9 @@ def test_one_electron_component_matches_closed_form_overlap(
 def test_higher_components_and_coincident_slots_match_native_oracle(
     tmp_path: typing.Any, angular: typing.Any
 ) -> None:
-    from vibeqc_compiler.integral.weight_pullback import normalized_cartesian_components
+    from generativeqc_compiler.integral.weight_pullback import (
+        normalized_cartesian_components,
+    )
 
     ir = build_weighted_eri_ir((angular, 0, 0, 0))
     indices = tuple(range(ir.signature.component_count))
@@ -321,7 +325,9 @@ def test_higher_components_and_coincident_slots_match_native_oracle(
 def test_generated_stv_includes_both_basis_motions_and_operator_nucleus(
     tmp_path: typing.Any, angular: typing.Any
 ) -> None:
-    from vibeqc_compiler.integral.weight_pullback import normalized_cartesian_components
+    from generativeqc_compiler.integral.weight_pullback import (
+        normalized_cartesian_components,
+    )
 
     coords = np.array([[0.13, -0.31, 0.24], [-0.43, 0.27, 0.51]])
     shells = (
@@ -381,10 +387,10 @@ def test_installed_asset_layout_contains_first_runtime(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
     import tomllib
-    from vibeqc_compiler.common import paths
+    from generativeqc_compiler.common import paths
 
     repository = Path(__file__).resolve().parents[2]
-    package = tmp_path / "installed" / "vibeqc_compiler"
+    package = tmp_path / "installed" / "generativeqc_compiler"
     headers = (
         "src/integrals/first_component_runtime.hpp",
         "src/integrals/eri_geometry.hpp",
@@ -396,7 +402,7 @@ def test_installed_asset_layout_contains_first_runtime(
         destination = package / "assets" / header
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(repository / header, destination)
-        assert included[header] == "vibeqc_compiler/assets/" + header
+        assert included[header] == "generativeqc_compiler/assets/" + header
     monkeypatch.setattr(paths, "PACKAGE", package)
     artifact = compile_first_derivative(
         build_weighted_eri_ir((0, 0, 0, 0)),

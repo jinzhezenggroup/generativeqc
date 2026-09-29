@@ -1,10 +1,10 @@
 # Scientific compiler ownership
 
-`python/vibeqc_compiler` is the importable scientific compilation subsystem.
-It is installed beside `vibeqc`, whose public molecular API and native-library
+`python/generativeqc_compiler` is the importable scientific compilation subsystem.
+It is installed beside `generativeqc`, whose public molecular API and native-library
 selection remain separate. `tools/generate_*.py` and benchmark/reproduction
 commands are clients of these packages. Source generation does not import the
-public runtime, load `libvibeqc`, probe a GPU, or import PySCF, Torch or CuPy.
+public runtime, load `libgenerativeqc`, probe a GPU, or import PySCF, Torch or CuPy.
 NumPy remains the existing dependency for recurrence/reference arithmetic.
 
 | Owner | Responsibility | Allowed compiler dependencies |
@@ -90,7 +90,7 @@ retained in
 Integral and TensorIR execution no longer depend on one another's runtime
 classes. DFT and XC use that same artifact cache and allocation lock. The public
 global resource planner and local-profile hashing/atomic-JSON helpers are re-exported
-from their original `vibeqc` APIs; their implementations are not duplicated. Shared evidence
+from their original `generativeqc` APIs; their implementations are not duplicated. Shared evidence
 and timing helpers do not import benchmark command modules.
 
 ## ProgramIR storage overlays
@@ -164,8 +164,8 @@ consumer migration boundaries are recorded in the
 With the existing NumPy dependency available, CMake can run the generator
 scripts directly from an uninstalled checkout. Each script bootstraps the
 explicit `python/` package root; compiler libraries never manipulate `sys.path`.
-CMake and `vibeqc.autotune.source_identity` expand the same
-`cmake/VibeQCSourceIdentity.json` inventory. CMake retains `CONFIGURE_DEPENDS`
+CMake and `generativeqc.autotune.source_identity` expand the same
+`cmake/GenerativeQCSourceIdentity.json` inventory. CMake retains `CONFIGURE_DEPENDS`
 for recursive groups so adding or removing a covered source reconfigures the
 build before the compatibility hash is reused.
 
@@ -212,9 +212,9 @@ timestamps, bytecode or compatibility shim bytes. Old artifacts must be rebuilt;
 binary content verification and numerical promotion gates are unchanged.
 
 
-The compiler now has a single import surface under python/vibeqc_compiler.
-The former tools/vibeqc_codegen, tools/vibeqc_tensor, tools/vibeqc_xc and
-tools/vibeqc_dft forwarding packages were removed rather than retained as
+The compiler now has a single import surface under python/generativeqc_compiler.
+The former tools/generativeqc_codegen, tools/generativeqc_tensor, tools/generativeqc_xc and
+tools/generativeqc_dft forwarding packages were removed rather than retained as
 compatibility aliases. Repository generators and tests import canonical owners
 directly; generated-artifact identities therefore contain no shim bytes.
 
@@ -237,7 +237,7 @@ performance claim. Raw run logs and generated build products belong in ignored
 
 ## Stationary semilocal gradient plans
 
-`vibeqc_compiler.method.StationaryGradientPlan` combines a resolved semilocal
+`generativeqc_compiler.method.StationaryGradientPlan` combines a resolved semilocal
 MethodIR with an explicit `StationaryMeanField` envelope. The envelope declares
 all-electron/direct full-range Coulomb, fixed integer occupations, real FP64,
 the XC point model and a stable differentiable grid branch. An XC graph alone

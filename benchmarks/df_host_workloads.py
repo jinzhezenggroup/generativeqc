@@ -15,8 +15,11 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash
-from vibeqc_compiler.common.performance import assess_comparison, measure_interleaved
+from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.common.performance import (
+    assess_comparison,
+    measure_interleaved,
+)
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import convergence_payload, scaled_geometries
@@ -43,7 +46,7 @@ class AblationBranchMismatch(ValueError):
             + repr(mismatches)
         )
         self.evidence = {
-            "schema": "vibeqc.issue206.rejected_host_workloads",
+            "schema": "generativeqc.issue206.rejected_host_workloads",
             "version": 1,
             "status": "rejected",
             "reason": "SCF iteration/retry branch mismatch",
@@ -320,7 +323,7 @@ def host_workloads(
     is collected inside that region and includes all failed attempts; its wall
     time is diagnostic and must never be compared to a clean sample as a gain.
     """
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     if repeats < 5 or batch_size < 1:
         raise ValueError(
@@ -328,7 +331,11 @@ def host_workloads(
         )
     if any(
         os.environ.get(k)
-        for k in ("VIBEQC_DF_TRACE", "VIBEQC_DF_HOST_TRACE", "VIBEQC_DF_PROGRESS_TRACE")
+        for k in (
+            "GENERATIVEQC_DF_TRACE",
+            "GENERATIVEQC_DF_HOST_TRACE",
+            "GENERATIVEQC_DF_PROGRESS_TRACE",
+        )
     ):
         raise ValueError(
             "provide trace_directory explicitly; ambient profiling is not clean timing"
@@ -336,11 +343,11 @@ def host_workloads(
     if any(
         os.environ.get(k)
         for k in (
-            "VIBEQC_DF_EAGER_CORE_GUESS",
-            "VIBEQC_DF_REBUILD_OVERLAP",
-            "VIBEQC_DF_REFERENCE_FINAL_EIGEN",
-            "VIBEQC_DF_FORCE_FINAL_REBUILD",
-            "VIBEQC_DF_REFERENCE_SETUP_EIGEN",
+            "GENERATIVEQC_DF_EAGER_CORE_GUESS",
+            "GENERATIVEQC_DF_REBUILD_OVERLAP",
+            "GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN",
+            "GENERATIVEQC_DF_FORCE_FINAL_REBUILD",
+            "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN",
         )
     ):
         raise ValueError(
@@ -380,11 +387,11 @@ def host_workloads(
         "case": case_name,
         "systems": systems,
         "method": case.method,
-        "basis": case.vibeqc_basis,
+        "basis": case.generativeqc_basis,
         "representation": case.basis_representation,
         "charge": case.charge,
         "multiplicity": case.multiplicity,
-        "auxiliary_basis": case.vibeqc_basis,
+        "auxiliary_basis": case.generativeqc_basis,
         "properties": properties,
         "energy_tolerance": 1e-12,
         "density_tolerance": 1e-10,
@@ -423,7 +430,7 @@ def host_workloads(
     input_hash = canonical_hash(inputs)
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=100,
@@ -431,7 +438,7 @@ def host_workloads(
         density_tolerance=1e-10,
         screening_tolerance=1e-12,
         density_fitting="cuda",
-        auxiliary_basis=case.vibeqc_basis,
+        auxiliary_basis=case.generativeqc_basis,
         density_fitting_relative_threshold=1e-10,
         density_fitting_memory_budget_bytes=memory_budget_bytes,
     )
@@ -455,20 +462,24 @@ def host_workloads(
                 path = trace_directory / f"{sequence:04d}-{workload}.jsonl"
                 with path.open("x"):
                     pass
-                os.environ["VIBEQC_DF_HOST_TRACE"] = str(path.resolve())
+                os.environ["GENERATIVEQC_DF_HOST_TRACE"] = str(path.resolve())
             sequence += 1
             try:
                 if policies:
                     eager, rebuild = policies[_selection]
-                    os.environ["VIBEQC_DF_EAGER_CORE_GUESS"] = "1" if eager else "0"
-                    os.environ["VIBEQC_DF_REBUILD_OVERLAP"] = "1" if rebuild else "0"
+                    os.environ["GENERATIVEQC_DF_EAGER_CORE_GUESS"] = (
+                        "1" if eager else "0"
+                    )
+                    os.environ["GENERATIVEQC_DF_REBUILD_OVERLAP"] = (
+                        "1" if rebuild else "0"
+                    )
                 if (
                     final_eigen_ablation
                     or setup_eigen_ablation
                     or final_state_ablation
                     or combined_host_ablation
                 ):
-                    os.environ["VIBEQC_DF_FORCE_FINAL_REBUILD"] = (
+                    os.environ["GENERATIVEQC_DF_FORCE_FINAL_REBUILD"] = (
                         "1"
                         if final_eigen_ablation
                         or setup_eigen_ablation
@@ -476,11 +487,11 @@ def host_workloads(
                         else "0"
                     )
                 if final_eigen_ablation or combined_host_ablation:
-                    os.environ["VIBEQC_DF_REFERENCE_FINAL_EIGEN"] = (
+                    os.environ["GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN"] = (
                         "1" if _selection == "baseline" else "0"
                     )
                 if setup_eigen_ablation or combined_host_ablation:
-                    os.environ["VIBEQC_DF_REFERENCE_SETUP_EIGEN"] = (
+                    os.environ["GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN"] = (
                         "1" if _selection == "baseline" else "0"
                     )
                 result = evaluate()
@@ -491,16 +502,16 @@ def host_workloads(
                     or final_state_ablation
                     or combined_host_ablation
                 ):
-                    os.environ.pop("VIBEQC_DF_FORCE_FINAL_REBUILD", None)
+                    os.environ.pop("GENERATIVEQC_DF_FORCE_FINAL_REBUILD", None)
                 if setup_eigen_ablation or combined_host_ablation:
-                    os.environ.pop("VIBEQC_DF_REFERENCE_SETUP_EIGEN", None)
+                    os.environ.pop("GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN", None)
                 if final_eigen_ablation or combined_host_ablation:
-                    os.environ.pop("VIBEQC_DF_REFERENCE_FINAL_EIGEN", None)
+                    os.environ.pop("GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN", None)
                 if policies:
-                    os.environ.pop("VIBEQC_DF_EAGER_CORE_GUESS", None)
-                    os.environ.pop("VIBEQC_DF_REBUILD_OVERLAP", None)
+                    os.environ.pop("GENERATIVEQC_DF_EAGER_CORE_GUESS", None)
+                    os.environ.pop("GENERATIVEQC_DF_REBUILD_OVERLAP", None)
                 if path is not None:
-                    os.environ.pop("VIBEQC_DF_HOST_TRACE")
+                    os.environ.pop("GENERATIVEQC_DF_HOST_TRACE")
             if path is not None:
                 components = aggregate_host(read_host_trace(path))
                 if eager_core_ablation:
@@ -720,7 +731,7 @@ def host_workloads(
         ):
             raise RuntimeError("cold/replay force endpoint changed")
     return {
-        "schema": "vibeqc.issue206.df_host_workloads",
+        "schema": "generativeqc.issue206.df_host_workloads",
         "version": 1,
         "source": source,
         "device": device,

@@ -45,7 +45,7 @@ def test_transitive_resources_participate_in_all_tensor_consumer_identities() ->
         "method/stationary_cuda.py",
     )
     for module in modules:
-        text = (ROOT / "python/vibeqc_compiler" / module).read_text()
+        text = (ROOT / "python/generativeqc_compiler" / module).read_text()
         for header in (
             "bounded_workspace.hpp",
             "cuda_resources.cuh",

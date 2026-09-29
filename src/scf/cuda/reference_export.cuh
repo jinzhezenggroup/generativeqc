@@ -13,11 +13,11 @@
 #include "scf/mean_field.hpp"
 #include "tensor/cuda_error.hpp"
 
-namespace vibeqc::scf::reference_detail {
+namespace generativeqc::scf::reference_detail {
 inline std::size_t free_bytes(cudaStream_t stream) {
-  vibeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
+  generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
   std::size_t available = 0, total = 0;
-  vibeqc_tensor::cuda_check(cudaMemGetInfo(&available, &total));
+  generativeqc_tensor::cuda_check(cudaMemGetInfo(&available, &total));
   return available;
 }
 inline std::size_t retained_bytes(cudaStream_t stream, std::size_t before, std::size_t allowance) {
@@ -91,13 +91,13 @@ std::size_t base_capacity(std::size_t arena, const Host& host, std::size_t matri
 /** Stage the final physical P/F/C/epsilon from the existing GPU solve.
  * Matrix slots are S,h,F,C,P in column-major storage, scalar slots are energy,
  * energy change and density RMS. Nothing is published on failure. */
-inline vibeqc_status download(cudaStream_t stream, std::size_t n, std::size_t occupied,
-                              std::size_t capacity,
-                              const std::array<const double*, 5>& matrix_sources,
-                              const double* epsilon,
-                              const std::array<const double*, 3>& scalar_sources,
-                              const std::uint8_t* converged, const std::uint8_t* failed,
-                              const std::uint32_t* iterations, ScfResult& result) {
+inline generativeqc_status download(cudaStream_t stream, std::size_t n, std::size_t occupied,
+                                    std::size_t capacity,
+                                    const std::array<const double*, 5>& matrix_sources,
+                                    const double* epsilon,
+                                    const std::array<const double*, 3>& scalar_sources,
+                                    const std::uint8_t* converged, const std::uint8_t* failed,
+                                    const std::uint32_t* iterations, ScfResult& result) {
   std::uint8_t ok = 0, bad = 0;
   std::uint32_t count = 0;
   // Declare staging owners before Drain so exceptional copy exits synchronize
@@ -113,15 +113,17 @@ inline vibeqc_status download(cudaStream_t stream, std::size_t n, std::size_t oc
     }
   } drain{stream};
   auto copy = [&](void* to, const void* from, std::size_t bytes) {
-    vibeqc_tensor::cuda_check(cudaMemcpyAsync(to, from, bytes, cudaMemcpyDeviceToHost, stream));
+    generativeqc_tensor::cuda_check(
+        cudaMemcpyAsync(to, from, bytes, cudaMemcpyDeviceToHost, stream));
   };
   // Read convergence status before reserving any n-by-n reference matrices so
   // failed or unconverged solves preserve their status under tight memory.
   copy(&ok, converged, sizeof(ok));
   copy(&bad, failed, sizeof(bad));
   copy(&count, iterations, sizeof(count));
-  vibeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
-  if (bad || !ok) return bad ? VIBEQC_STATUS_NUMERICAL_FAILURE : VIBEQC_STATUS_NOT_CONVERGED;
+  generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
+  if (bad || !ok)
+    return bad ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : GENERATIVEQC_STATUS_NOT_CONVERGED;
 
   ref = std::make_shared<PhysicalReference>();
   ref->nbf = n;
@@ -133,7 +135,7 @@ inline vibeqc_status download(cudaStream_t stream, std::size_t n, std::size_t oc
     copy(matrices[k].data(), matrix_sources[k], matrix_size * sizeof(double));
   copy(ref->orbital_energies.data(), epsilon, n * sizeof(double));
   for (unsigned k = 0; k < 3; ++k) copy(scalars + k, scalar_sources[k], sizeof(double));
-  vibeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
+  generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
   drain.done = true;
   std::array<std::vector<double>*, 5> targets{&ref->overlap, &ref->hcore, &ref->fock,
                                               &ref->coefficients, &ref->density};
@@ -152,6 +154,6 @@ inline vibeqc_status download(cudaStream_t stream, std::size_t n, std::size_t oc
   result.density_rms = scalars[2];
   result.converged = true;
   result.reference = std::move(ref);
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
-}  // namespace vibeqc::scf::reference_detail
+}  // namespace generativeqc::scf::reference_detail

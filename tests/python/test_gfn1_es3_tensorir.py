@@ -3,14 +3,14 @@ import json
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.gfn1_es3 import (
+from generativeqc_compiler.method.gfn1_es3 import (
     GFN1_ES3_VERSION,
     build_gfn1_es3_kernel,
     build_gfn1_es3_primal,
 )
-from vibeqc_compiler.method.gfn2_es3_runtime import build_gfn2_es3_primal
-from vibeqc_compiler.method.xtb import GFN1_PARAMETER_SET
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.method.gfn2_es3_runtime import build_gfn2_es3_primal
+from generativeqc_compiler.method.xtb import GFN1_PARAMETER_SET
+from generativeqc_compiler.tensor import execute
 
 from tools import source_registry
 from tools.parameters import generate_gfn1

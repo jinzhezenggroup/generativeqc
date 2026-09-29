@@ -14,9 +14,9 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.fixtures import load_fixture, source_arguments
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.fixtures import load_fixture, source_arguments
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     CudaSpinJKBackend,
     GMRESOptions,
     NativeJKBackend,
@@ -26,7 +26,7 @@ from tools.vibeqc_response import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated real GPU",
 )
 

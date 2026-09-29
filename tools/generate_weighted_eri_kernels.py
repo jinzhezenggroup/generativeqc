@@ -14,7 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vibeqc_compiler.integral.weighted_eri_cuda import emit_low_order_weighted_header
+from generativeqc_compiler.integral.weighted_eri_cuda import (
+    emit_low_order_weighted_header,
+)
 
 
 def main() -> None:

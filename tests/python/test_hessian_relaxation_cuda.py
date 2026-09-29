@@ -10,20 +10,25 @@ from typing import NoReturn
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-from tools.vibeqc_hessian import NativeRHFState, rhf_hessian, rhf_hvp, rhf_hvp_many
-from tools.vibeqc_hessian.directional import directional_rhf_response
-from tools.vibeqc_hessian.first_order import generated_rhf_relaxation_contraction
-from tools.vibeqc_hessian.first_order_cuda import (
+from tools.generativeqc_hessian import (
+    NativeRHFState,
+    rhf_hessian,
+    rhf_hvp,
+    rhf_hvp_many,
+)
+from tools.generativeqc_hessian.directional import directional_rhf_response
+from tools.generativeqc_hessian.first_order import generated_rhf_relaxation_contraction
+from tools.generativeqc_hessian.first_order_cuda import (
     generated_rhf_relaxation_contraction_cuda,
 )
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="explicit real-GPU qualification",
 )
 
@@ -35,7 +40,7 @@ def compiler() -> typing.Any:
     assert nvcc, "selected CUDA qualification needs nvcc on PATH"
     return CudaCompilerAdapter(
         Path(nvcc),
-        cuda_target_info(os.environ.get("VIBEQC_TEST_CUDA_ARCH", "sm_120")),
+        cuda_target_info(os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "sm_120")),
     )
 
 
@@ -78,7 +83,7 @@ def test_complete_hvp_can_select_cuda_relaxation_without_cpu_substitution(
         raise AssertionError("CUDA relaxation substituted the CPU contraction")
 
     monkeypatch.setattr(
-        "tools.vibeqc_hessian.hvp.generated_rhf_relaxation_contraction",
+        "tools.generativeqc_hessian.hvp.generated_rhf_relaxation_contraction",
         forbidden,
     )
     actual = rhf_hvp(
@@ -114,7 +119,7 @@ def test_resident_response_feeds_cuda_relaxation_without_host_d1_w1_reupload(
         raise AssertionError("resident relaxation validated/reuploaded host D1/W1")
 
     monkeypatch.setattr(
-        "tools.vibeqc_hessian.first_order_cuda._checked_ao_weight",
+        "tools.generativeqc_hessian.first_order_cuda._checked_ao_weight",
         forbidden,
     )
     actual = rhf_hvp(
@@ -151,7 +156,7 @@ def test_resident_block_response_feeds_cuda_relaxation_without_host_d1_w1_reuplo
         raise AssertionError("resident block relaxation revalidated host D1/W1")
 
     monkeypatch.setattr(
-        "tools.vibeqc_hessian.first_order_cuda._checked_ao_weight",
+        "tools.generativeqc_hessian.first_order_cuda._checked_ao_weight",
         forbidden,
     )
     actual = rhf_hvp_many(
@@ -197,7 +202,7 @@ def test_resident_full_hessian_feeds_cuda_relaxation_without_host_d1_w1_reupload
         raise AssertionError("resident Hessian relaxation revalidated host D1/W1")
 
     monkeypatch.setattr(
-        "tools.vibeqc_hessian.first_order_cuda._checked_ao_weight",
+        "tools.generativeqc_hessian.first_order_cuda._checked_ao_weight",
         forbidden,
     )
     actual = rhf_hessian(

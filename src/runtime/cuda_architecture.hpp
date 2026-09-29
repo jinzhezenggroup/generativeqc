@@ -2,7 +2,7 @@
 
 #include <cuda_runtime.h>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Read only the two attributes needed by a schedule/profile lookup.
  * Full cudaGetDeviceProperties queries may inspect expensive unrelated
@@ -19,4 +19,4 @@ inline cudaError_t cuda_architecture(int device, unsigned& architecture) noexcep
   return error;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

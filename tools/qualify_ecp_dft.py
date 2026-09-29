@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pyscf
-from vibeqc.profiles import file_hash
+from generativeqc.profiles import file_hash
 
 
 def main() -> None:
@@ -29,13 +29,13 @@ def main() -> None:
         "python": platform.python_version(),
         "pyscf": pyscf.__version__,
         "numpy": np.__version__,
-        "library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "source_sha256": {
             name: file_hash(root / name)
             for name in (
                 "tests/python/test_ecp.py",
                 "tests/python/test_ecp_dft.py",
-                "python/vibeqc/basis_capabilities.py",
+                "python/generativeqc/basis_capabilities.py",
                 "tools/qualify_ecp_dft.py",
             )
         },

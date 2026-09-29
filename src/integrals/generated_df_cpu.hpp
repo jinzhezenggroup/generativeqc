@@ -1,7 +1,7 @@
-#ifndef VIBEQC_INTEGRALS_GENERATED_DF_CPU_HPP
-#define VIBEQC_INTEGRALS_GENERATED_DF_CPU_HPP
+#ifndef GENERATIVEQC_INTEGRALS_GENERATED_DF_CPU_HPP
+#define GENERATIVEQC_INTEGRALS_GENERATED_DF_CPU_HPP
 
-namespace vibeqc::integrals::generated_df_cpu {
+namespace generativeqc::integrals::generated_df_cpu {
 
 struct Vec3 {
   double x{}, y{}, z{};
@@ -25,6 +25,6 @@ struct Response {
                                                Vec3 b_center, Angular b, double gamma,
                                                Vec3 c_center, Angular c);
 
-}  // namespace vibeqc::integrals::generated_df_cpu
+}  // namespace generativeqc::integrals::generated_df_cpu
 
 #endif

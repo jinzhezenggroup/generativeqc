@@ -17,7 +17,7 @@ from benchmarks._retention import raw_output_path
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace, read_trace
 from benchmarks.df_progress_ledger import read_progress
 
-SCHEMA = "vibeqc.issue438.operator-ledger.v1"
+SCHEMA = "generativeqc.issue438.operator-ledger.v1"
 _FINAL_KEYS = (
     "final_fock_evaluations",
     "final_eigen_solves",

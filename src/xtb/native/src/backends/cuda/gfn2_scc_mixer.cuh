@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_MIXER_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_MIXER_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_MIXER_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_MIXER_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -12,7 +12,7 @@
 #include "backends/cuda/gfn2_scc.cuh"
 #include "backends/cuda/gfn2_scc_iteration_control.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* First asynchronous semantic failure recorded by a mixer sequence. */
 enum class Gfn2SccMixerDeviceError : std::uint32_t {
@@ -69,7 +69,7 @@ struct Gfn2SccMixerDeviceState {
   double* residual_maximum = nullptr;
   std::uint64_t* iterations = nullptr;
   std::uint64_t* restart_counts = nullptr;
-  vibeqc_xtb_status_t* system_statuses = nullptr;
+  generativeqc_xtb_status_t* system_statuses = nullptr;
   std::uint8_t* initialized = nullptr;
   /*
    * Residual-only diagnostic using the mixer's RMS and maximum thresholds.
@@ -178,15 +178,15 @@ cudaError_t restart_gfn2_scc_mixer_system_cuda(
  *
  * Numerical failure leaves raw/next_mixed and all persistent numerical
  * history unchanged for that member; only system_statuses records
- * VIBEQC_XTB_STATUS_INTERNAL_ERROR. Healthy peers still commit. The launcher has
+ * GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR. Healthy peers still commit. The launcher has
  * no steady-state allocation, host/device transfer, or synchronization and is
  * safe for custom streams and CUDA Graph capture.
  *
  * The SCC composer must not feed device_error to #87 normalization because it
  * uses Gfn2SccMixerDeviceError codes while system_statuses uses
- * vibeqc_xtb_status_t codes. The canonical kMixer report therefore uses
- * system_statuses with kVibeqcXtbStatus, a peer mask containing only
- * VIBEQC_XTB_STATUS_INTERNAL_ERROR, a null device_error, and workspace's
+ * generativeqc_xtb_status_t codes. The canonical kMixer report therefore uses
+ * system_statuses with kGenerativeQCXtbStatus, a peer mask containing only
+ * GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR, a null device_error, and workspace's
  * sequence_active as the plan latch. device_error remains a tracing channel;
  * a closed plan latch is recorded through #87's SequenceClosed fallback.
  */
@@ -209,6 +209,6 @@ cudaError_t mix_gfn2_scc_broyden_cuda(
     const Gfn2SccMixerDeviceState& state, const Gfn2SccMixerDeviceWorkspace& workspace,
     std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_SCC_MIXER_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_SCC_MIXER_CUH

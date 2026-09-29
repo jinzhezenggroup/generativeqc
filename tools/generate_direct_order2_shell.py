@@ -6,7 +6,7 @@ from pathlib import Path
 
 _compiler_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from vibeqc_compiler.integral.direct_order2_shell_cuda import (
+from generativeqc_compiler.integral.direct_order2_shell_cuda import (
     emit_direct_order2_shell_header,
 )
 

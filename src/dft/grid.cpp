@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 
 std::size_t multiply(std::size_t a, std::size_t b) {
@@ -307,4 +307,4 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
   return result;
 }
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

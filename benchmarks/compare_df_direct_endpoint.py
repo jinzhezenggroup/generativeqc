@@ -93,8 +93,8 @@ def select_control(route: str) -> None:
     """Change only final-K/response arithmetic; retain the same value/SCF owner."""
     if route in CONTROLS:
         final, metric = CONTROLS[route]
-        os.environ["VIBEQC_DF_FINAL_EXCHANGE"] = final
-        os.environ["VIBEQC_DF_OCCUPIED_METRIC"] = metric
+        os.environ["GENERATIVEQC_DF_FINAL_EXCHANGE"] = final
+        os.environ["GENERATIVEQC_DF_OCCUPIED_METRIC"] = metric
 
 
 def check_endpoint(item: Any, reference: dict) -> dict:
@@ -360,7 +360,7 @@ def main() -> None:
             cp.get_default_memory_pool().free_all_blocks()
         return
 
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     if args.reference is None:
         parser.error("native mode requires --reference results.json")
@@ -374,7 +374,7 @@ def main() -> None:
         args.reference.read_bytes()
     ).hexdigest()
     for name in list(os.environ):
-        if name.startswith("VIBEQC_DF_"):
+        if name.startswith("GENERATIVEQC_DF_"):
             del os.environ[name]
     if is_df:
         for name, value in {
@@ -395,17 +395,17 @@ def main() -> None:
                 }[args.aos]
             ),
         }.items():
-            os.environ["VIBEQC_DF_" + name] = value
+            os.environ["GENERATIVEQC_DF_" + name] = value
     select_control(args.route)
     if args.disable_warm_reuse:
-        os.environ["VIBEQC_DF_WARM_REUSE"] = "0"
+        os.environ["GENERATIVEQC_DF_WARM_REUSE"] = "0"
     identity["environment"] = {
-        k: v for k, v in os.environ.items() if k.startswith("VIBEQC_")
+        k: v for k, v in os.environ.items() if k.startswith("GENERATIVEQC_")
     }
     calc = Calculator(
         device="cuda",
         method="rhf",
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation="spherical",
         auxiliary_basis=native_aux if is_df else None,
         density_fitting="cuda" if is_df else "none",
@@ -434,11 +434,11 @@ def main() -> None:
             coords = None if index == 0 else [np.asarray([x for _, x in moved])]
             trace = output / f"{phase}-{route}-{repeat}.jsonl"
             if diagnostic:
-                os.environ["VIBEQC_DF_TRACE"] = str(trace)
+                os.environ["GENERATIVEQC_DF_TRACE"] = str(trace)
             start = time.perf_counter()
             item = owner.execute(coords, strict=False).items[0]
             seconds = time.perf_counter() - start
-            os.environ.pop("VIBEQC_DF_TRACE", None)
+            os.environ.pop("GENERATIVEQC_DF_TRACE", None)
             row = {
                 "phase": phase,
                 "route": route,

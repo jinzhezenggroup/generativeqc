@@ -7,7 +7,7 @@ the single-system interface. Direct and density-fitted HF use the same contract;
 CPU and CUDA can exchange checkpoints without exchanging runtime objects.
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 systems = [[("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]]
 with Calculator(method="rhf", device="cuda").prepare_batch(systems) as batch:
@@ -102,7 +102,7 @@ The byte layout is deliberately simple and uncompressed:
 1. Eight magic bytes `VQHFCP01`.
 2. Unsigned 64-bit **little-endian** JSON-manifest length.
 3. Thirty-two SHA-256 bytes for that manifest.
-4. The exact UTF-8 JSON manifest (`schema="vibeqc.hf_checkpoint"`, version 1).
+4. The exact UTF-8 JSON manifest (`schema="generativeqc.hf_checkpoint"`, version 1).
 5. Contiguous blobs at manifest-relative payload offsets. Every element is
    IEEE-754 binary64, **little-endian**, C/row-major order. Density shape is
    `(spin_block, nao, nao)`; geometry shape is `(natom, 3)` in Bohr.
@@ -135,8 +135,8 @@ outside the resource planner's numeric-buffer scope. Loading does not replace
 the current resource plan, device budget, or execution schedule. Correlated and
 response streaming formats are future extensions, not silently supported fields.
 
-The public C buffer functions `vibeqc_batch_get_hf_warm_state` and
-`vibeqc_batch_restore_hf_warm_states` expose scientific state without a file
+The public C buffer functions `generativeqc_batch_get_hf_warm_state` and
+`generativeqc_batch_restore_hf_warm_states` expose scientific state without a file
 format. C callers must verify complete model/basis/provider identity themselves;
 the Python checkpoint layer performs that verification. The C descriptor is a
 live ABI structure and must never be written as an on-disk checkpoint.
@@ -144,7 +144,7 @@ live ABI structure and must never be written as an on-disk checkpoint.
 ## Reproducible validation
 
 ```bash
-cmake -S . -B build -G Ninja -DVIBEQC_ENABLE_CUDA=OFF -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -G Ninja -DGENERATIVEQC_ENABLE_CUDA=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 PYTHONPATH=python:. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   .venv/bin/python -m pytest tests/python/test_checkpoint.py -q
@@ -155,8 +155,8 @@ For real CUDA coverage, build CUDA normally and run through the scheduler:
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:10:00 bash -lc 'PYTHONPATH=python:. OMP_NUM_THREADS=1 \
-  OPENBLAS_NUM_THREADS=1 VIBEQC_LIBRARY=$PWD/build-cuda/libvibeqc.so \
-  VIBEQC_CHECKPOINT_DEVICE=cuda .venv/bin/python -m pytest \
+  OPENBLAS_NUM_THREADS=1 GENERATIVEQC_LIBRARY=$PWD/build-cuda/libgenerativeqc.so \
+  GENERATIVEQC_CHECKPOINT_DEVICE=cuda .venv/bin/python -m pytest \
   tests/python/test_checkpoint.py -q'
 ```
 

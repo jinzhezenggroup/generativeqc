@@ -115,7 +115,7 @@ def manifest_payload(
     """Build a reviewable protocol record before any GPU work starts."""
 
     return {
-        "schema": "vibeqc.issue206.df_matrix",
+        "schema": "generativeqc.issue206.df_matrix",
         "version": 1,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": {
@@ -146,7 +146,7 @@ def manifest_payload(
             "screening_tolerance": 1.0e-12,
             "direct_scf_tolerance": 1.0e-14,
             "warm_policy": "fixed post-cold engine-local density snapshot",
-            "comparison": "VibeQC DF versus GPU4PySCF DF; no mixed direct/DF claim",
+            "comparison": "GenerativeQC DF versus GPU4PySCF DF; no mixed direct/DF claim",
             "maximum_energy_error_hartree": 1.0e-9,
             "maximum_force_error_hartree_per_bohr": None if energy_only else 1.0e-8,
         },
@@ -209,7 +209,7 @@ def run_matrix(
         raise SystemExit("--run requires Slurm-provided CUDA_VISIBLE_DEVICES")
 
     environment = os.environ.copy()
-    environment["VIBEQC_LIBRARY"] = str(library)
+    environment["GENERATIVEQC_LIBRARY"] = str(library)
     environment["PYTHONPATH"] = os.pathsep.join(
         [str(ROOT / "python"), environment.get("PYTHONPATH", "")]
     ).rstrip(os.pathsep)
@@ -363,7 +363,7 @@ def main() -> None:
     parser.add_argument(
         "--library",
         type=Path,
-        default=ROOT / "build" / "cuda-dev-fast" / "libvibeqc.so",
+        default=ROOT / "build" / "cuda-dev-fast" / "libgenerativeqc.so",
     )
     parser.add_argument(
         "--output-dir",
@@ -443,7 +443,7 @@ def main() -> None:
     if args.run and args.host_workloads:
         from benchmarks.df_host_workloads import AblationBranchMismatch, host_workloads
 
-        os.environ["VIBEQC_LIBRARY"] = str(library)
+        os.environ["GENERATIVEQC_LIBRARY"] = str(library)
         for entry in payload["matrix"]:
             stem = f"host-{entry['ao_count']}ao-b{entry['batch_size']}"
             result_path = output_dir / f"{stem}.json"

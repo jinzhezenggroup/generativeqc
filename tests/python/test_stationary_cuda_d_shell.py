@@ -29,8 +29,14 @@ def _d_shell_basis() -> SimpleNamespace:
 
 
 def test_stationary_cuda_d_shell_layout_uses_canonical_component_inventory() -> None:
-    from vibeqc._stationary_cuda import _component_domain, _component_mode, _layout
-    from vibeqc_compiler.integral.first_derivative_schedule import derivative_requests
+    from generativeqc._stationary_cuda import (
+        _component_domain,
+        _component_mode,
+        _layout,
+    )
+    from generativeqc_compiler.integral.first_derivative_schedule import (
+        derivative_requests,
+    )
 
     _, _, expansions, requests = _layout(_d_shell_basis())
 
@@ -41,7 +47,7 @@ def test_stationary_cuda_d_shell_layout_uses_canonical_component_inventory() -> 
 
 
 def test_stationary_cuda_d_shell_layout_rejects_unsupported_records() -> None:
-    from vibeqc._stationary_cuda import _component_domain, _layout
+    from generativeqc._stationary_cuda import _component_domain, _layout
 
     basis = _d_shell_basis()
     high_l = SimpleNamespace(
@@ -67,9 +73,13 @@ def test_stationary_cuda_d_shell_layout_rejects_unsupported_records() -> None:
 def test_stationary_cuda_component_tasks_preserve_public_ao_indices_and_weights() -> (
     None
 ):
-    from vibeqc._stationary_cuda import _CudaSources, _layout
-    from vibeqc_compiler.integral.first_derivative_schedule import derivative_binding
-    from vibeqc_compiler.method.stationary_cuda import encode_stationary_derivative_kind
+    from generativeqc._stationary_cuda import _CudaSources, _layout
+    from generativeqc_compiler.integral.first_derivative_schedule import (
+        derivative_binding,
+    )
+    from generativeqc_compiler.method.stationary_cuda import (
+        encode_stationary_derivative_kind,
+    )
 
     _, aos, expansions, requests = _layout(_d_shell_basis())
     owner = object.__new__(_CudaSources)
@@ -106,9 +116,13 @@ def test_stationary_cuda_component_tasks_preserve_public_ao_indices_and_weights(
 
 
 def test_stationary_cuda_component_nuclear_task_encodes_binding() -> None:
-    from vibeqc._stationary_cuda import _CudaSources
-    from vibeqc_compiler.integral.first_derivative_schedule import derivative_binding
-    from vibeqc_compiler.method.stationary_cuda import encode_stationary_derivative_kind
+    from generativeqc._stationary_cuda import _CudaSources
+    from generativeqc_compiler.integral.first_derivative_schedule import (
+        derivative_binding,
+    )
+    from generativeqc_compiler.method.stationary_cuda import (
+        encode_stationary_derivative_kind,
+    )
 
     calls = []
     owner = object.__new__(_CudaSources)
@@ -132,7 +146,7 @@ def test_stationary_cuda_component_nuclear_task_encodes_binding() -> None:
 
 
 def test_stationary_cuda_derivative_shards_are_bounded_and_uniquely_named() -> None:
-    from vibeqc_compiler.integral.first_derivative_schedule import (
+    from generativeqc_compiler.integral.first_derivative_schedule import (
         CUDA_REQUESTS_PER_UNIT,
         MAX_UNIT_BYTES,
         derivative_cuda_sources,
@@ -154,7 +168,7 @@ def test_stationary_cuda_derivative_shards_are_bounded_and_uniquely_named() -> N
 
 
 def test_stationary_cuda_shard_adapter_uses_explicit_schedule_width() -> None:
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc_compiler.method.stationary_cuda import (
         _sharded_first_derivative_adapter,
     )
 
@@ -170,7 +184,7 @@ def test_stationary_cuda_shard_adapter_uses_explicit_schedule_width() -> None:
 def test_stationary_cuda_d_shell_work_cap_is_explicit() -> None:
     import inspect
 
-    from vibeqc._stationary_cuda import (
+    from generativeqc._stationary_cuda import (
         _complete_rks_cuda_gradient_diagnostic,
         complete_rks_cuda_gradient_diagnostic,
     )
@@ -192,9 +206,9 @@ def test_stationary_cuda_d_shell_work_cap_is_explicit() -> None:
 def test_prepared_d_shell_execution_selects_component_aot(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from vibeqc import _stationary_cuda
-    from vibeqc._stationary_cuda import PreparedStationaryCudaExecution
-    from vibeqc_compiler.method.stationary_cuda import QUALIFIED_SPD_COMPONENTS
+    from generativeqc import _stationary_cuda
+    from generativeqc._stationary_cuda import PreparedStationaryCudaExecution
+    from generativeqc_compiler.method.stationary_cuda import QUALIFIED_SPD_COMPONENTS
 
     class StopAfterStationaryLoad(Exception):
         pass
@@ -270,10 +284,12 @@ def test_component_subset_loads_real_aot_contract_and_uses_packaged_kind_indices
     """Opaque binary bytes exercise loading/ABI mapping without executing a GPU."""
     import json
 
-    from vibeqc._stationary_cuda import _artifact_derivative_requests, _layout
-    from vibeqc_compiler.common.provenance import file_hash
-    from vibeqc_compiler.integral.first_derivative_schedule import derivative_requests
-    from vibeqc_compiler.method.stationary_cuda import (
+    from generativeqc._stationary_cuda import _artifact_derivative_requests, _layout
+    from generativeqc_compiler.common.provenance import file_hash
+    from generativeqc_compiler.integral.first_derivative_schedule import (
+        derivative_requests,
+    )
+    from generativeqc_compiler.method.stationary_cuda import (
         QUALIFIED_SPD_COMPONENTS,
         _qualified_aot_plan,
         load_stationary_aot_artifact,
@@ -281,10 +297,10 @@ def test_component_subset_loads_real_aot_contract_and_uses_packaged_kind_indices
     )
 
     plan = _qualified_aot_plan(0, "unpolarized")
-    library = tmp_path / "libvibeqc_stationary_lda_rks_spd.so"
+    library = tmp_path / "libgenerativeqc_stationary_lda_rks_spd.so"
     library.write_bytes(b"opaque component inventory fixture; never dlopen")
     metadata = {
-        "schema": "vibeqc.stationary-cuda-aot.v3",
+        "schema": "generativeqc.stationary-cuda-aot.v3",
         "functional": 0,
         "spin": "unpolarized",
         "plan_identity": plan.identity,
@@ -302,7 +318,9 @@ def test_component_subset_loads_real_aot_contract_and_uses_packaged_kind_indices
         "binary_bytes": library.stat().st_size,
         "compile_contract": {"fp64": True, "fmad": False},
     }
-    (tmp_path / "vibeqc_stationary_lda_rks_spd.json").write_text(json.dumps(metadata))
+    (tmp_path / "generativeqc_stationary_lda_rks_spd.json").write_text(
+        json.dumps(metadata)
+    )
     artifact = load_stationary_aot_artifact(
         tmp_path,
         functional=0,

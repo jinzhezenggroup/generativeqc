@@ -4,7 +4,7 @@
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_tile_compaction.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void clear_active_shell_quartet_tile_counts_kernel(
     std::uint32_t* active_shell_quartet_tile_counts, std::uint32_t* persistent_fock_task_heads,
@@ -253,4 +253,4 @@ void launch_compact_generic_order5_tiles_kernel(
       generic_tiles);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -3,7 +3,7 @@
 
 This optional oracle tool is not imported by the source generator or compiler.
 It reads IDs from the catalog, but no Maple expression, Graph, derivative or
-parameter binding from VibeQC participates in the reference calculation.
+parameter binding from GenerativeQC participates in the reference calculation.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "python/vibeqc_compiler/xc/libxc_bulk_catalog.json"
+CATALOG = ROOT / "python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
 OUTPUT = ROOT / "tests/data/xc/libxc-bulk"
 _DOUBLE_POINTER = ctypes.POINTER(ctypes.c_double)
 
@@ -126,7 +126,7 @@ def main() -> int:
                     }
                 )
         result = {
-            "schema": "vibeqc.libxc-bulk-interior-reference/v1",
+            "schema": "generativeqc.libxc-bulk-interior-reference/v1",
             "oracle": {
                 "pyscf": pyscf.__version__,
                 "libxc": libxc.__version__,

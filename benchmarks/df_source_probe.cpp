@@ -25,17 +25,17 @@ using Clock = std::chrono::steady_clock;
 void check(cudaError_t error) {
   if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
-void require(vibeqc_status status, const std::string& detail) {
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void require(generativeqc_status status, const std::string& detail) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 struct AoWork {
   std::uint64_t terms{}, primitive_products{};
 };
-std::vector<AoWork> ao_work(const vibeqc::core::System& system) {
+std::vector<AoWork> ao_work(const generativeqc::core::System& system) {
   std::vector<AoWork> result;
   for (const auto& shell : system.shells)
-    for (const auto& expansion :
-         vibeqc::molecule::ao_expansions(shell.angular_momentum, system.basis_representation)) {
+    for (const auto& expansion : generativeqc::molecule::ao_expansions(
+             shell.angular_momentum, system.basis_representation)) {
       std::uint64_t nonzero = 0;
       for (const auto& term : expansion) nonzero += term.coefficient != 0;
       result.push_back({nonzero, nonzero * shell.primitives.size()});
@@ -45,7 +45,7 @@ std::vector<AoWork> ao_work(const vibeqc::core::System& system) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
   try {
     if (!std::getenv("SLURM_JOB_ID") || argc != 5)
       throw std::runtime_error("usage inside Slurm: source-probe INPUT REPEATS OUTPUT RAW-ARRAY");
@@ -54,10 +54,10 @@ int main(int argc, char** argv) {
     unsigned representation;
     std::string magic;
     input >> magic >> atoms >> shells >> representation >> rank;
-    if (magic != "vibeqc-occupied-v1" || !atoms || !shells)
+    if (magic != "generativeqc-occupied-v1" || !atoms || !shells)
       throw std::runtime_error("invalid source fixture");
-    vibeqc::core::System system;
-    system.basis_representation = static_cast<vibeqc_basis_representation>(representation);
+    generativeqc::core::System system;
+    system.basis_representation = static_cast<generativeqc_basis_representation>(representation);
     system.atoms.resize(atoms);
     system.shells.resize(shells);
     for (auto& atom : system.atoms)
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
     }
     if (!input) throw std::runtime_error("truncated source fixture");
     std::string detail;
-    require(vibeqc::molecule::validate_and_normalize(system, detail), detail);
+    require(generativeqc::molecule::validate_and_normalize(system, detail), detail);
     CudaDensityFittingIntegralSource* raw_source = nullptr;
     std::vector<double> metric;
     std::size_t n, a;
@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
                     decltype(&destroy_cuda_density_fitting_integral_source)>
         source(raw_source, destroy_cuda_density_fitting_integral_source);
     const auto placement = cuda_density_fitting_integral_source_diagnostic(source.get());
-    const auto c = vibeqc::molecule::cartesian_ao_count(system);
+    const auto c = generativeqc::molecule::cartesian_ao_count(system);
     const auto work = ao_work(system);
     const auto setup_seconds = std::chrono::duration<double>(Clock::now() - setup_start).count();
     const unsigned lanes = std::string(placement.value_mapping) == "primitive" ? 32 : 1;

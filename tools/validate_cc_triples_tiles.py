@@ -4,8 +4,8 @@ Run on qz (inspire) with access to NVCC and CUDA.
 Usage (on qz):
   export SCRATCH=/path/to/scratch/issue-150-b
   source $SCRATCH/venv/bin/activate
-  export VIBEQC_TENSOR_ARCH=sm_90
-  export VIBEQC_NVCC=/usr/local/cuda/bin/nvcc
+  export GENERATIVEQC_TENSOR_ARCH=sm_90
+  export GENERATIVEQC_NVCC=/usr/local/cuda/bin/nvcc
   export PYTHONPATH=$SCRATCH/repo/python:$SCRATCH/repo
   python tools/validate_cc_triples_tiles.py --output $SCRATCH/results --cache $SCRATCH/cache \\
       --nvcc /usr/local/cuda/bin/nvcc --architecture sm_90
@@ -28,19 +28,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 for candidate in (ROOT, Path(os.environ.get("SCRATCH", "")) / "repo"):
-    if (candidate / "tools/vibeqc_cc").is_dir():
+    if (candidate / "tools/generativeqc_cc").is_dir():
         ROOT = candidate.resolve()
         break
 
 _compiler_sys.path.insert(0, str(ROOT / "python"))
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor.cuda_execute import tensor_source_identity
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
 
-from tools.vibeqc_cc.triples import triples_energy
-from tools.vibeqc_cc.triples_cuda import (
+from tools.generativeqc_cc.triples import triples_energy
+from tools.generativeqc_cc.triples_cuda import (
     CudaTriplesTiles,
     TriplesTileConfig,
 )
@@ -56,9 +56,9 @@ GROUND_TRUTH = {
 
 
 QUALIFICATION_SOURCE_PATHS = (
-    "tools/vibeqc_cc/triples.py",
-    "tools/vibeqc_cc/triples_tiles.py",
-    "tools/vibeqc_cc/triples_cuda.py",
+    "tools/generativeqc_cc/triples.py",
+    "tools/generativeqc_cc/triples_tiles.py",
+    "tools/generativeqc_cc/triples_cuda.py",
     "tools/validate_cc_triples_tiles.py",
 )
 
@@ -148,7 +148,7 @@ def run(args: typing.Any) -> None:
 
     manifest = {
         "scope": "#150 B bounded CUDA triples tiles",
-        "schema": "vibeqc.ccsd-t.tile-validation/1",
+        "schema": "generativeqc.ccsd-t.tile-validation/1",
         "compile_only": args.compile_only,
         "tensor_source_identity": tensor_source_identity(),
         "qualification_source_identity": source_identity,
@@ -216,7 +216,7 @@ def run(args: typing.Any) -> None:
                     if args.compile_only:
                         # Use the same budget-driven runtime-domain selection as
                         # production, but stop before device allocation/execution.
-                        from vibeqc_compiler.tensor.cuda_resident import (
+                        from generativeqc_compiler.tensor.cuda_resident import (
                             compile_resident,
                         )
 

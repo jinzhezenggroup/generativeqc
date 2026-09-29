@@ -5,7 +5,7 @@ import statistics
 import time
 
 from _support import environment_metadata, raw_output_path, write_result
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 
 def main() -> None:

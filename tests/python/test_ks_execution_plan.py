@@ -3,15 +3,15 @@
 from fractions import Fraction
 
 import pytest
-from vibeqc import _generated_methods
-from vibeqc.ks import (
+from generativeqc import _generated_methods
+from generativeqc.ks import (
     ks_coefficients,
     ks_range_exchange_parameters,
     native_dft_carrier,
     public_dft_selectors,
     resolve_ks_method,
 )
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     ExactExchangePrimitive,
     MethodIR,
     RangeSeparatedExchangePrimitive,
@@ -183,7 +183,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
 ) -> None:
     from dataclasses import replace
 
-    from vibeqc.ks import (
+    from generativeqc.ks import (
         WB97MV_SCF_DOMAIN,
         KsOptions,
         _native_semilocal_code,
@@ -191,7 +191,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
         resolve_ks_method,
         resolve_ks_options,
     )
-    from vibeqc_compiler.dft.grid import GridSpec
+    from generativeqc_compiler.dft.grid import GridSpec
 
     graph = resolve_method("WB97M-V", spin=spin)
     renamed = replace(graph, identifier="not-a-method-dispatch-key")
@@ -205,7 +205,7 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
         "threshold": "1/100000000",
         "active_comparison": ">=",
     }
-    from vibeqc import _native
+    from generativeqc import _native
 
     native = native_ks_options(options)
     assert native.scf_domain.decode() == WB97MV_SCF_DOMAIN
@@ -236,8 +236,8 @@ def test_wb97mv_internal_projection_preserves_all_primitives_and_domain(
 def test_wb97mv_internal_projection_rejects_missing_or_changed_contributions() -> None:
     from dataclasses import replace
 
-    from vibeqc.ks import _native_semilocal_code
-    from vibeqc_compiler.method import (
+    from generativeqc.ks import _native_semilocal_code
+    from generativeqc_compiler.method import (
         NonlocalCorrelationPrimitive,
         RangeSeparatedExchangePrimitive,
         SemilocalXCPrimitive,

@@ -7,14 +7,14 @@ from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.method import DensityFittingRHFResponsePlan
-from vibeqc_compiler.method.df_hf_response_contract import CONTRACT_IDENTITY
-from vibeqc_compiler.method.df_hf_response_cuda import (
+from generativeqc_compiler.method import DensityFittingRHFResponsePlan
+from generativeqc_compiler.method.df_hf_response_contract import CONTRACT_IDENTITY
+from generativeqc_compiler.method.df_hf_response_cuda import (
     df_rhf_charge_gemm_kind,
     emit_df_hf_response_contract,
     emit_df_hf_response_cuda,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 
 def _fixture() -> typing.Any:

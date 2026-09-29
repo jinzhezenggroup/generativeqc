@@ -5,15 +5,15 @@
 
 #include "scf/df_response_weights.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 void require(bool condition, const char* detail) {
   if (!condition) throw std::invalid_argument(detail);
 }
-void checked(vibeqc_status status, const std::string& detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void checked(generativeqc_status status, const std::string& detail) {
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 }  // namespace
 
@@ -69,7 +69,7 @@ DirectJkMatrices CudaFockProviderView::build(FockBuildSpec spec, const std::vect
   DirectJkMatrices out;
   out.nbf = nbf();
   std::string detail;
-  vibeqc_status status;
+  generativeqc_status status;
   if (exact_)
     status = execute_cuda_direct_jk_item(exact_, item_, spec, density, beta, out.coulomb,
                                          out.exchange_alpha, out.exchange_beta, detail);
@@ -125,4 +125,4 @@ std::vector<double> CudaFockProviderView::derivative(FockBuildSpec spec,
   if (out.size() != ncoord()) throw std::runtime_error("CUDA DF response coordinate mismatch");
   return out;
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

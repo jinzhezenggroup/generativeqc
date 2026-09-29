@@ -28,33 +28,36 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 import numpy as np
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import (
     CudaCompilerAdapter,
     resolve_cuda_execution_profile,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     new_evidence,
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash, find_nvcc
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import DensitySource, NativeAO
-from vibeqc_compiler.dft.cuda import CudaGrid, compile_cuda
-from vibeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.integration_fixtures import CASES, load_integration_fixture
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash, find_nvcc
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import DensitySource, NativeAO
+from generativeqc_compiler.dft.cuda import CudaGrid, compile_cuda
+from generativeqc_compiler.dft.fixtures import NAMES, basis_arguments, load_fixture
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.integration_fixtures import (
+    CASES,
+    load_integration_fixture,
+)
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
-from tools.vibeqc_validation.hardware import (
+from tools.generativeqc_validation.hardware import (
     CUDA_BENCHMARK_PROFILES,
     qualify_cuda_device,
 )
@@ -558,11 +561,11 @@ def main() -> None:
     nvcc = find_nvcc()
     if nvcc is None:
         raise RuntimeError("NVCC is required")
-    os.environ["VIBEQC_LIBRARY"] = str(args.library.resolve())
+    os.environ["GENERATIVEQC_LIBRARY"] = str(args.library.resolve())
     library = ctypes.CDLL(str(args.library.resolve()))
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
     identity = source_identity(ROOT)
-    if library.vibeqc_get_source_identity().decode() != identity:
+    if library.generativeqc_get_source_identity().decode() != identity:
         raise ValueError("native library/source identity mismatch; rebuild first")
     report = new_evidence(
         tier="endpoint",
@@ -768,7 +771,7 @@ def main() -> None:
                 "env",
                 "OMP_NUM_THREADS=1",
                 "OPENBLAS_NUM_THREADS=1",
-                "VIBEQC_NVCC=" + str(nvcc),
+                "GENERATIVEQC_NVCC=" + str(nvcc),
                 sys.executable,
                 "tools/benchmark_density_sources.py",
                 *sys.argv[1:],
@@ -777,7 +780,7 @@ def main() -> None:
     }
     write_evidence(args.output / "evidence.json", report)
     specification = {
-        "schema": "vibeqc.benchmark-publication.v1",
+        "schema": "generativeqc.benchmark-publication.v1",
         "source": {"revision": report["revision"], "dirty": False},
         "reproduction": report["reproduction"],
         "files": [{"path": "evidence.json", "role": "evidence"}],

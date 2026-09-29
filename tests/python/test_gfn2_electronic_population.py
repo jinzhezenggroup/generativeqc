@@ -5,13 +5,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     Gfn2ElectronicTopology,
     build_gfn2_electronic_program,
     build_gfn2_mixed_electronic_program,
     build_gfn2_population_program,
 )
-from vibeqc_compiler.tensor import dot_test, execute
+from generativeqc_compiler.tensor import dot_test, execute
 
 
 def _h2_topology() -> Gfn2ElectronicTopology:
@@ -34,7 +34,7 @@ def _two_h2_topology() -> Gfn2ElectronicTopology:
     )
 
 
-def test_population_matches_pinned_vibeqc_xtb_two_ao_fixture() -> None:
+def test_population_matches_pinned_generativeqc_xtb_two_ao_fixture() -> None:
     """Freeze tests/mulliken_test.cpp::test_two_ao_population_fixture."""
 
     compiled = build_gfn2_population_program(
@@ -246,9 +246,9 @@ def test_mixed_spin_generated_sdq_adjoint_passes_dot_test() -> None:
 
 
 def test_new_population_and_mixed_graphs_lower_through_cuda() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     topology = _two_h2_topology()
     population = build_gfn2_population_program(
@@ -267,21 +267,21 @@ def test_new_population_and_mixed_graphs_lower_through_cuda() -> None:
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_GFN2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_GFN2_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 def test_new_population_and_mixed_graphs_execute_on_cuda(tmp_path: Path) -> None:
-    from vibeqc.profiles import find_nvcc
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     nvcc = find_nvcc()
     if nvcc is None:
-        pytest.fail("VIBEQC_GFN2_CUDA_TEST requires a CUDA compiler")
+        pytest.fail("GENERATIVEQC_GFN2_CUDA_TEST requires a CUDA compiler")
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
     topology = _two_h2_topology()
     population = build_gfn2_population_program(

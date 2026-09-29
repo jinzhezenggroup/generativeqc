@@ -29,7 +29,7 @@ def product_probe(tmp_path_factory: typing.Any) -> typing.Any:
 #define __device__
 inline void atomicAdd(double* out, double value) { *out += value; }
 #include "runtime/cuda_gaussian_products.cuh"
-namespace gp = vibeqc::runtime::cuda_gaussian_products;
+namespace gp = generativeqc::runtime::cuda_gaussian_products;
 struct Policy {
   struct Vec3 { double x, y, z; };
   struct Angular { unsigned x, y, z; };

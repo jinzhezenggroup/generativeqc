@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.matrix_function import SymmetricMatrixFunctionSpec
-from vibeqc_compiler.method.spectral_projector import prepare_fixed_rank_projector
+from generativeqc_compiler.method.matrix_function import SymmetricMatrixFunctionSpec
+from generativeqc_compiler.method.spectral_projector import prepare_fixed_rank_projector
 
 
 @pytest.mark.parametrize("exponent", (8, 10, 12))

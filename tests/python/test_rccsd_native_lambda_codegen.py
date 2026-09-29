@@ -9,14 +9,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
-from tools.vibeqc_cc.lambda_equations import (
+from tools.generativeqc_cc.lambda_equations import (
     PARAMETERS,
     build_lambda_programs,
     build_parameter_vjp,
 )
-from tools.vibeqc_cc.oracle import dense_feeds, random_case
+from tools.generativeqc_cc.oracle import dense_feeds, random_case
 
 FIELDS = (
     "foo",
@@ -117,10 +117,10 @@ def _case_cpp(o: int, v: int) -> str:
         [
             f"static int case_{o}_{v}(){{",
             *declarations,
-            "vibeqc::cc::generated::Inputs inputs{};",
+            "generativeqc::cc::generated::Inputs inputs{};",
             *assignments,
             f"constexpr std::size_t o={o},v={v};",
-            "using namespace vibeqc::cc::generated;",
+            "using namespace generativeqc::cc::generated;",
             "const auto arena_count=std::max({lambda_rhs_arena_elements(o,v),"
             "lambda_transpose_arena_elements(o,v)," + parameter_arenas + "});",
             "std::vector<double> arena(arena_count);",

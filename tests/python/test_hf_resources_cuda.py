@@ -6,10 +6,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, ResourceBudget, estimate_hf_resources
+from generativeqc import Calculator, ResourceBudget, estimate_hf_resources
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
 )
 
@@ -87,7 +87,7 @@ def test_small_direct_cuda_global_budget_covers_all_ragged_caches(
 def test_cuda_dry_run_query_never_calls_profile_or_context(
     monkeypatch: typing.Any,
 ) -> None:
-    from vibeqc import _native, profiles
+    from generativeqc import _native, profiles
 
     library = _native.load_library(device="cpu")
 
@@ -95,7 +95,7 @@ def test_cuda_dry_run_query_never_calls_profile_or_context(
         pytest.fail("dry-run resource query initialized a CUDA execution context")
 
     monkeypatch.setattr(profiles, "select_library", forbidden)
-    monkeypatch.setattr(library, "vibeqc_context_create", forbidden)
+    monkeypatch.setattr(library, "generativeqc_context_create", forbidden)
     monkeypatch.setattr(np, "empty", forbidden)
     plan = estimate_hf_resources([WATER], backend="cuda", library=library)
     assert plan.status == "feasible"
@@ -110,9 +110,9 @@ def test_cuda_dry_run_query_never_calls_profile_or_context(
 @pytest.mark.parametrize(
     "variable,value",
     [
-        ("VIBEQC_GRAPH_EIGENSOLVER_OVERRIDE", "graph_native"),
-        ("VIBEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE", "profile"),
-        ("VIBEQC_FINAL_FOCK_REBUILD", "1"),
+        ("GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE", "graph_native"),
+        ("GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE", "profile"),
+        ("GENERATIVEQC_FINAL_FOCK_REBUILD", "1"),
     ],
 )
 def test_cuda_execution_rejects_changed_resource_schedule(
@@ -134,16 +134,16 @@ def test_cuda_df_budget_freezes_exchange_policy(
     monkeypatch: typing.Any, initial: typing.Any, changed: typing.Any
 ) -> None:
     """A changed factor reservation must be rejected before native execution."""
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", initial)
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", initial)
     calculator = Calculator(
         device="cuda", density_fitting="cuda", resource_budget=ResourceBudget()
     )
     with calculator.prepare_batch([H2]) as batch:
         batch.execute(strict=True)
-        monkeypatch.setenv("VIBEQC_DF_EXCHANGE", changed)
+        monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", changed)
         with pytest.raises(ValueError, match="schedule changed"):
             batch.execute(strict=True)
-        monkeypatch.setenv("VIBEQC_DF_EXCHANGE", initial)
+        monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", initial)
         batch.execute(strict=True)
 
 
@@ -154,10 +154,10 @@ def test_cuda_df_common_ledger_preserves_factor_differential(
     monkeypatch: typing.Any, mode: typing.Any, old_peak: typing.Any
 ) -> None:
     """Charge ordinary eigen and final snapshots to both exchange policies."""
-    from vibeqc_compiler.common.resources import ResourcePlan, plan_resources
+    from generativeqc_compiler.common.resources import ResourcePlan, plan_resources
 
     calculator = Calculator(device="cuda", density_fitting="cuda")
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
     dense = calculator._resource_request([H2])
     candidate = next(c for c in dense.candidates if c.mode == mode)
     selected = ResourcePlan(
@@ -183,7 +183,7 @@ def test_cuda_df_common_ledger_preserves_factor_differential(
     # The source route needs a host cap to force its selection over resident.
     budget = ResourceBudget(host_bytes=selected.peak_bytes["host"], device_bytes=peak)
     assert plan_resources([dense], budget).status == "feasible"
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "occupied")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
     occupied = calculator._resource_request([H2])
     factor_candidate = next(c for c in occupied.candidates if c.mode == mode)
     factored = ResourcePlan(
@@ -207,14 +207,14 @@ def test_native_ledger_rejects_unplanned_arena_and_releases_failed_state(
     with calculator.prepare_batch([H2]) as batch:
         ledger = batch._resource_ledger
         ledger.close()
-        ledger.handle = calculator._library.vibeqc_resource_ledger_create_v1(1, 0)
+        ledger.handle = calculator._library.generativeqc_resource_ledger_create_v1(1, 0)
         failed = batch.execute()
         assert not failed.items[0].succeeded
         observation = batch.resource_diagnostics["observation"]["device_ledger"]
         assert observation["rejected_allocations"] >= 1
         assert observation["live_bytes"] == 0
         ledger.close()
-        ledger.handle = calculator._library.vibeqc_resource_ledger_create_v1(
+        ledger.handle = calculator._library.generativeqc_resource_ledger_create_v1(
             ledger.limit, 0
         )
         result = batch.execute(strict=True)
@@ -233,7 +233,7 @@ def test_native_ledger_rejects_unplanned_arena_and_releases_failed_state(
 def test_cuda_df_global_candidates_bind_execution_and_respect_host_device_caps(
     mode: typing.Any, method: typing.Any
 ) -> None:
-    from vibeqc_compiler.common.resources import ResourcePlan, plan_resources
+    from generativeqc_compiler.common.resources import ResourcePlan, plan_resources
 
     systems = [H2, WATER, H2]
     options = {
@@ -337,7 +337,7 @@ def test_cuda_df_distinct_auxiliary_basis_and_open_shell_inventory(
     mode: typing.Any,
 ) -> None:
     """Orbital dimensions cannot substitute for auxiliary or spin dimensions."""
-    from vibeqc_compiler.common.resources import ResourcePlan
+    from generativeqc_compiler.common.resources import ResourcePlan
 
     options = {
         "method": "uhf",

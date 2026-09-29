@@ -10,7 +10,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Node,
@@ -31,8 +31,8 @@ from vibeqc_compiler.tensor import (
     slice_tensor,
     transpose,
 )
-from vibeqc_compiler.tensor.examples import example_cases
-from vibeqc_compiler.tensor.types import SPACE_KINDS
+from generativeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.tensor.types import SPACE_KINDS
 
 
 def tensor(
@@ -113,7 +113,7 @@ def test_order_and_provenance_do_not_change_equation_identity() -> None:
 
 def test_hash_is_stable_across_python_hash_seeds() -> None:
     source = """
-from vibeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.tensor.examples import example_cases
 for case in example_cases():
     print(case.program.logical_hash)
 """

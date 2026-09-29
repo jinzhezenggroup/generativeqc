@@ -3,8 +3,11 @@
 import typing
 
 import pytest
-from vibeqc import Calculator
-from vibeqc.resources_df import density_fitting_tile_plan, density_fitting_value_layout
+from generativeqc import Calculator
+from generativeqc.resources_df import (
+    density_fitting_tile_plan,
+    density_fitting_value_layout,
+)
 
 
 def test_df_value_layout_contract_is_explicit_without_native_runtime() -> None:
@@ -29,7 +32,7 @@ def test_packed_query_preserves_complete_u_when_budget_shrinks(
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("packed shape query created a CUDA context")
 
-    monkeypatch.setattr(library, "vibeqc_context_create", forbidden)
+    monkeypatch.setattr(library, "generativeqc_context_create", forbidden)
 
     def query(
         rank: typing.Any = 160, budget: typing.Any = 0, fixed: typing.Any = 4096
@@ -100,7 +103,7 @@ def test_auto_reserves_only_authorized_rhf_work_policy_candidates(
 ) -> None:
     """Only a known profitable RHF occupation can charge automatic factor storage."""
     library = Calculator()._library
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
     dense = density_fitting_tile_plan(
         library,
         *shape,
@@ -108,7 +111,7 @@ def test_auto_reserves_only_authorized_rhf_work_policy_candidates(
         fixed_device_bytes=0,
         rhf_occupied=shape[-1],
     )
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "auto")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "auto")
     automatic = density_fitting_tile_plan(
         library,
         *shape,
@@ -141,13 +144,13 @@ def test_ineligible_auto_keeps_dense_budget_and_tiles(
             rhf_occupied=rhf_rank,
         )
 
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
     budget = query(0).peak_workspace_bytes
     dense = query(budget)
     assert dense.stores_full_three_center
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "auto")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "auto")
     assert query(budget) == dense
-    monkeypatch.delenv("VIBEQC_DF_EXCHANGE")
+    monkeypatch.delenv("GENERATIVEQC_DF_EXCHANGE")
     assert query(budget) == dense
 
 
@@ -169,10 +172,10 @@ def test_optional_auto_factors_do_not_force_streaming(
             rhf_occupied=2,
         )
 
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
     budget = query(0).peak_workspace_bytes
     dense = query(budget)
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "auto")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "auto")
     assert query(budget) == dense
     reserve = 2 * 8 * 8 * 8 + 12
     admitted = query(budget + reserve)
@@ -203,7 +206,7 @@ def test_exchange_reservation_preserves_full_scratch_and_minimum_boundaries(
     solver_reserve += (9 * 8 * 8 + 8) * 8 + (3 * 1 + 1) * 128
     full_bytes += solver_reserve
     minimum_bytes = 1084719 + solver_reserve
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
 
     def query(budget: typing.Any) -> typing.Any:
         return density_fitting_tile_plan(
@@ -225,9 +228,9 @@ def test_exchange_reservation_preserves_full_scratch_and_minimum_boundaries(
         query(minimum_bytes - 1)
 
     if occupied_policy is None:
-        monkeypatch.delenv("VIBEQC_DF_EXCHANGE", raising=False)
+        monkeypatch.delenv("GENERATIVEQC_DF_EXCHANGE", raising=False)
     else:
-        monkeypatch.setenv("VIBEQC_DF_EXCHANGE", occupied_policy)
+        monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", occupied_policy)
     # Two full 8x8 factors, two generation words and an error word per item.
     reserve = 2 * 8 * 8 * 8 + 12
     assert query(0).peak_workspace_bytes == full_bytes + reserve
@@ -282,8 +285,8 @@ def test_df_shape_query_needs_no_integrals_or_context(
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("DF shape query allocated a numerical tensor or context")
 
-    monkeypatch.setattr(library, "vibeqc_context_create", forbidden)
-    monkeypatch.setattr(library, "vibeqc_batch_execute", forbidden)
+    monkeypatch.setattr(library, "generativeqc_context_create", forbidden)
+    monkeypatch.setattr(library, "generativeqc_batch_execute", forbidden)
     monkeypatch.setattr(np, "empty", forbidden)
     monkeypatch.setattr(np, "zeros", forbidden)
     plan = density_fitting_tile_plan(
@@ -341,7 +344,7 @@ def test_generated_source_auto_occupied_requires_complete_q_scratch(
 ) -> None:
     """Automatic RHF factors are admitted only with the full source lease."""
     library = Calculator()._library
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "dense")
     dense = density_fitting_tile_plan(
         library,
         1,
@@ -355,7 +358,7 @@ def test_generated_source_auto_occupied_requires_complete_q_scratch(
     assert dense.auxiliary_tile == 128
     assert dense.automatic_rhf_rank == 0
 
-    monkeypatch.setenv("VIBEQC_DF_EXCHANGE", "auto")
+    monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "auto")
     full_budget = 1 << 40
     complete = density_fitting_tile_plan(
         library,
@@ -392,7 +395,9 @@ def test_streamed_auto_reserves_factors_without_a_dense_fallback_cliff(
     monkeypatch: typing.Any,
 ) -> None:
     """The practical auxiliary shape stays within budget in both policies."""
-    from vibeqc_compiler.method.df_exchange_schedule import projected_exchange_schedule
+    from generativeqc_compiler.method.df_exchange_schedule import (
+        projected_exchange_schedule,
+    )
 
     library = Calculator()._library
     n, a, rank = 768, 3712, 160
@@ -400,7 +405,7 @@ def test_streamed_auto_reserves_factors_without_a_dense_fallback_cliff(
     for budget in (4 << 30, 8 << 30, 13_685_173_124, 16 << 30):
         plans = []
         for policy in ("dense", "auto"):
-            monkeypatch.setenv("VIBEQC_DF_EXCHANGE", policy)
+            monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", policy)
             plans.append(
                 density_fitting_tile_plan(
                     library,
@@ -474,11 +479,11 @@ def test_packed_inventory_charges_both_owners_and_separates_identity(
 
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     calc = Calculator(device="cuda", density_fitting="cuda")
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "dense")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     dense = calc._resource_request([atoms] * 2)
     if not dense.candidates:
         pytest.skip("requires a CUDA-enabled library, no GPU execution")
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "packed")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed")
     packed = calc._resource_request([atoms] * 2)
     assert packed.identity != dense.identity
     assert [candidate.name for candidate in packed.candidates] == ["cuda-df-packed"]
@@ -529,14 +534,14 @@ def test_packed_inventory_charges_both_owners_and_separates_identity(
         assert after["resident_device_bytes"] - before["resident_device_bytes"] == (
             packed_values - dense_values
         )
-    monkeypatch.setenv("VIBEQC_DF_VALUE_STORAGE", "invalid")
-    with pytest.raises(ValueError, match="VIBEQC_DF_VALUE_STORAGE"):
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "invalid")
+    with pytest.raises(ValueError, match="GENERATIVEQC_DF_VALUE_STORAGE"):
         calc._resource_request([atoms])
 
 
 def test_diis_reservation_precedes_retained_panel_selection() -> None:
     """History growth must consume capacity before a retained-B plan picks Q."""
-    from vibeqc.resources_df import (
+    from generativeqc.resources_df import (
         density_fitting_diis_bytes,
         density_fitting_tile_plan,
     )

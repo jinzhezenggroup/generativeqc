@@ -10,11 +10,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import generativeqc_compiler.tensor.cpu as tensor_cpu
 import numpy as np
 import pytest
-import vibeqc_compiler.tensor.cpu as tensor_cpu
-from vibeqc.extensions import tensor
-from vibeqc_compiler.common import cpp_adapter
+from generativeqc.extensions import tensor
+from generativeqc_compiler.common import cpp_adapter
 
 
 def _program() -> tensor.Program:
@@ -191,7 +191,7 @@ def test_tensor_jit_resolves_toolchain_and_cache_only_on_explicit_request(
     monkeypatch.setattr(cpp_adapter, "CppCompilerAdapter", FakeCompilerAdapter)
     monkeypatch.setattr(tensor_cpu, "NativeTensorProgram", FakeNativeTensorProgram)
     monkeypatch.setenv("CXX", "configured-c++")
-    monkeypatch.setenv("VIBEQC_TENSOR_CACHE", str(tmp_path))
+    monkeypatch.setenv("GENERATIVEQC_TENSOR_CACHE", str(tmp_path))
 
     tensor.compile(_program())
 
@@ -231,7 +231,7 @@ def test_unsupported_ir_and_budgets_do_not_discover_toolchain(
         program = tensor.Program({"value": node})
         expected = "float64"
     elif case == "primitive":
-        from vibeqc_compiler.tensor import exp
+        from generativeqc_compiler.tensor import exp
 
         program = tensor.Program({"value": exp(program.outputs["value"])})
         expected = "unsupported CPU primitive"
@@ -257,7 +257,7 @@ def forbidden(*args, **kwargs):
 
 shutil.which = forbidden
 subprocess.Popen = forbidden
-from vibeqc.extensions import tensor
+from generativeqc.extensions import tensor
 space = tensor.IndexSpace('ao', 'ao', 2)
 node = tensor.input_tensor('x', tensor.TensorSpec((tensor.Index('i', space),), role='input'))
 program = tensor.Program({'value': node})
@@ -270,10 +270,10 @@ for kwargs in ({'mode': 'aot'}, {'target': 'cuda'}):
     else:
         raise AssertionError('unsupported compilation accepted')
 assert not {
-    'vibeqc_compiler.common.cpp_adapter',
-    'vibeqc_compiler.common.cuda_adapter',
-    'vibeqc_compiler.common.native_runtime',
-    'vibeqc_compiler.tensor.cpu',
+    'generativeqc_compiler.common.cpp_adapter',
+    'generativeqc_compiler.common.cuda_adapter',
+    'generativeqc_compiler.common.native_runtime',
+    'generativeqc_compiler.tensor.cpu',
 } & sys.modules.keys()
 """
     root = Path(__file__).resolve().parents[2]

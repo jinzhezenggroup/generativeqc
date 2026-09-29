@@ -3,17 +3,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.method import bulk_ks
-from vibeqc_compiler.method.spec import UnsupportedMethod
-from vibeqc_compiler.xc.capability_resolution import (
+from generativeqc_compiler.method import bulk_ks
+from generativeqc_compiler.method.spec import UnsupportedMethod
+from generativeqc_compiler.xc.capability_resolution import (
     CapabilityNotQualified,
     CapabilityResolution,
 )
-from vibeqc_compiler.xc.libxc_blacklist import (
+from generativeqc_compiler.xc.libxc_blacklist import (
     LIBXC_SEMILOCAL_BLACKLIST,
     blacklist_reason,
 )
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 
 
 def _compiled_cpu() -> dict[str, str]:

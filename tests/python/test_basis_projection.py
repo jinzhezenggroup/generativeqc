@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc.projection import (
+from generativeqc.projection import (
     ProjectionPolicy,
     ProjectionRejected,
     project_density,

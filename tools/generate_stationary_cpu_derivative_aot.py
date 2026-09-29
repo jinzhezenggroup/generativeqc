@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.integral.first_derivative_schedule import (
+from generativeqc_compiler.integral.first_derivative_schedule import (
     CPU_AOT_SHARDS,
     derivative_cpu_aot_sources,
 )
@@ -32,7 +32,8 @@ def main() -> None:
         raise RuntimeError("stationary CPU derivative AOT shard contract drift")
     for shard, (_, source) in enumerate(sources):
         _write_if_changed(
-            args.output_directory / f"vibeqc_stationary_cpu_derivative_{shard}.cpp",
+            args.output_directory
+            / f"generativeqc_stationary_cpu_derivative_{shard}.cpp",
             source,
         )
 

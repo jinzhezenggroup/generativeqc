@@ -1,5 +1,5 @@
-#ifndef VIBEQC_RUNTIME_RESOURCE_CUDA_CUH
-#define VIBEQC_RUNTIME_RESOURCE_CUDA_CUH
+#ifndef GENERATIVEQC_RUNTIME_RESOURCE_CUDA_CUH
+#define GENERATIVEQC_RUNTIME_RESOURCE_CUDA_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -9,7 +9,7 @@
 
 #include "resource_ledger.hpp"
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Keep partial device uploads owned across host staging/vector failures.
  * The callable outlives this noncopyable guard and may also run explicitly
@@ -155,6 +155,6 @@ inline cudaError_t resource_cuda_free_async(void* pointer, cudaStream_t stream) 
   return status;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime
 
 #endif

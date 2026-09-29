@@ -1,12 +1,12 @@
-#ifndef VIBEQC_DFT_COSX_SCF_HPP
-#define VIBEQC_DFT_COSX_SCF_HPP
+#ifndef GENERATIVEQC_DFT_COSX_SCF_HPP
+#define GENERATIVEQC_DFT_COSX_SCF_HPP
 
 #include <vector>
 
 #include "dft/cosx_fock_provider.hpp"
 #include "scf/types.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Host-controlled RHF using the prepared RI-J/COSX-K value/force provider. */
 scf::ScfResult run_cosx_rhf(PreparedCosxFockPlan& plan, const scf::ScfOptions& options,
@@ -16,6 +16,6 @@ scf::ScfResult run_cosx_rhf(PreparedCosxFockPlan& plan, const scf::ScfOptions& o
 scf::ScfResult run_cosx_uhf(PreparedCosxFockPlan& plan, const scf::ScfOptions& options,
                             const std::vector<double>* initial_density = nullptr);
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft
 
 #endif

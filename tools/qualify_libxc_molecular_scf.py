@@ -27,23 +27,25 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-from vibeqc_compiler.common.evidence import canonical_hash
-from vibeqc_compiler.method.bulk_ks import resolve_bulk_ks_candidate
-from vibeqc_compiler.xc.bulk_point_program import bind_runtime_semilocal_point_program
-from vibeqc_compiler.xc.bulk_runtime import (
+from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks_candidate
+from generativeqc_compiler.xc.bulk_point_program import (
+    bind_runtime_semilocal_point_program,
+)
+from generativeqc_compiler.xc.bulk_runtime import (
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
 )
-from vibeqc_compiler.xc.molecular_scf_evidence import (
+from generativeqc_compiler.xc.molecular_scf_evidence import (
     build_result,
     stage_evidence,
 )
 
 from tools.generate_validation_references import pyscf_molecule
 
-CAMPAIGN_SCHEMA = "vibeqc.libxc-molecular-scf-campaign/v1"
-FIXTURE_SCHEMA = "vibeqc.libxc-molecular-scf-fixture/v1"
-REFERENCE_SCHEMA = "vibeqc.libxc-molecular-scf-reference/v1"
+CAMPAIGN_SCHEMA = "generativeqc.libxc-molecular-scf-campaign/v1"
+FIXTURE_SCHEMA = "generativeqc.libxc-molecular-scf-fixture/v1"
+REFERENCE_SCHEMA = "generativeqc.libxc-molecular-scf-reference/v1"
 SPINS = ("polarized", "unpolarized")
 PHASES = ("cold", "warm-replay", "changed-geometry")
 
@@ -77,12 +79,12 @@ def _runner_source(binding_source: str, binding_identity: str) -> str:
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
 
-namespace vibeqc::dft::bulk_generated {{
+namespace generativeqc::dft::bulk_generated {{
 const SemilocalPointProgram& qualification_program() {{ return kPointProgram; }}
 }}
 
 namespace {{
-using namespace vibeqc;
+using namespace generativeqc;
 
 core::System h2(double displacement = 0.0) {{
   core::System system;
@@ -95,7 +97,7 @@ core::System h2(double displacement = 0.0) {{
                 {{0.6239137298, 0.5353281423}},
                 {{0.168855404, 0.4446345422}}}}}}}};
   std::string detail;
-  if (molecule::validate_and_normalize(system, detail) != VIBEQC_STATUS_SUCCESS)
+  if (molecule::validate_and_normalize(system, detail) != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error("invalid molecular-SCF qualification fixture: " + detail);
   return system;
 }}
@@ -186,22 +188,26 @@ int main() {{
 
 def _find_library(build_dir: Path) -> Path:
     direct = (
-        build_dir / "libvibeqc.so",
-        build_dir / "libvibeqc.dylib",
-        build_dir / "vibeqc.dll",
+        build_dir / "libgenerativeqc.so",
+        build_dir / "libgenerativeqc.dylib",
+        build_dir / "generativeqc.dll",
     )
     for candidate in direct:
         if candidate.is_file():
             return candidate.resolve()
     matches = sorted(
         path.resolve()
-        for pattern in ("libvibeqc.so", "libvibeqc.dylib", "vibeqc.dll")
+        for pattern in (
+            "libgenerativeqc.so",
+            "libgenerativeqc.dylib",
+            "generativeqc.dll",
+        )
         for path in build_dir.rglob(pattern)
         if path.is_file()
     )
     if len(matches) != 1:
         raise RuntimeError(
-            f"expected one built VibeQC library below {build_dir}, found {matches}"
+            f"expected one built GenerativeQC library below {build_dir}, found {matches}"
         )
     return matches[0]
 
@@ -227,7 +233,7 @@ def _compile_and_run(
         raise ValueError("molecular-SCF timeout must be positive and finite")
     library = _find_library(build_dir)
     compiler = _compiler(cxx)
-    with tempfile.TemporaryDirectory(prefix="vibeqc-libxc-scf-") as directory:
+    with tempfile.TemporaryDirectory(prefix="generativeqc-libxc-scf-") as directory:
         root = Path(directory)
         source_path = root / "molecular_scf.cpp"
         executable = root / "molecular_scf"
@@ -243,7 +249,7 @@ def _compile_and_run(
             str(source_path),
             "-L",
             str(library.parent),
-            "-lvibeqc",
+            "-lgenerativeqc",
             "-pthread",
             f"-Wl,-rpath,{library.parent}",
             "-o",
@@ -429,7 +435,7 @@ def _reference(
 def _geometry_identity(inputs: Mapping[str, Any]) -> str:
     return canonical_hash(
         {
-            "schema": "vibeqc.libxc-molecular-scf-geometry/v1",
+            "schema": "generativeqc.libxc-molecular-scf-geometry/v1",
             "atomic_numbers": inputs["atomic_numbers"],
             "coordinates": inputs["coordinates"],
             "charge": inputs["charge"],

@@ -12,8 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.common.provenance import file_hash
-from vibeqc_compiler.integral.derivative_aot_registry import (
+from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.integral.derivative_aot_registry import (
     AOT_ANGULAR_DOMAIN,
     AOT_COMPONENT_CONTRACTION_CONTRACT,
     AOT_COMPONENT_OUTPUT_CONTRACT,
@@ -26,14 +26,14 @@ from vibeqc_compiler.integral.derivative_aot_registry import (
     make_key,
     radial_inventory_from_payload,
 )
-from vibeqc_compiler.integral.first_derivative_schedule import (
+from generativeqc_compiler.integral.first_derivative_schedule import (
     CPU_AOT_COMPONENTS,
     CPU_AOT_SHARDS,
     cpu_aot_symbol,
     derivative_cpu_aot_sources,
 )
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.rsh_cpu_aot import program_source
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
 
 def _source_statistics(sources: tuple[str, ...]) -> dict[str, int]:
@@ -105,16 +105,16 @@ def _symbol_status(
             if not hasattr(library, symbol):
                 missing.append(symbol)
     source_identity = None
-    if hasattr(library, "vibeqc_get_source_identity"):
-        library.vibeqc_get_source_identity.argtypes = []
-        library.vibeqc_get_source_identity.restype = ct.c_char_p
-        value = library.vibeqc_get_source_identity()
+    if hasattr(library, "generativeqc_get_source_identity"):
+        library.generativeqc_get_source_identity.argtypes = []
+        library.generativeqc_get_source_identity.restype = ct.c_char_p
+        value = library.generativeqc_get_source_identity()
         source_identity = None if value is None else value.decode()
     native_abi = None
-    if hasattr(library, "vibeqc_get_abi_version"):
-        library.vibeqc_get_abi_version.argtypes = []
-        library.vibeqc_get_abi_version.restype = ct.c_uint32
-        native_abi = int(library.vibeqc_get_abi_version())
+    if hasattr(library, "generativeqc_get_abi_version"):
+        library.generativeqc_get_abi_version.argtypes = []
+        library.generativeqc_get_abi_version.restype = ct.c_uint32
+        native_abi = int(library.generativeqc_get_abi_version())
     return {
         "path": str(library_path),
         "binary_bytes": library_path.stat().st_size,
@@ -153,12 +153,13 @@ def audit(
         contraction_contract=AOT_COMPONENT_CONTRACTION_CONTRACT,
     )
     return {
-        "schema": "vibeqc.derivative-aot.audit.v1",
+        "schema": "generativeqc.derivative-aot.audit.v1",
         "provenance": {
             "radial_manifest": str(radial_manifest),
             "radial_manifest_sha256": file_hash(radial_manifest),
             "registry_sha256": file_hash(
-                ROOT / "python/vibeqc_compiler/integral/derivative_aot_registry.py"
+                ROOT
+                / "python/generativeqc_compiler/integral/derivative_aot_registry.py"
             ),
         },
         "full_range": {

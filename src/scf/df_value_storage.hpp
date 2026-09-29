@@ -7,7 +7,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Persistent value representation, independent of packed derivative weights.
  * Dense permits arbitrary public tensors. SymmetricLower is admitted only
@@ -31,13 +31,13 @@ enum class DfPairStorageRequest { Automatic, Dense, SymmetricLower, SymmetricLow
  * Native explicit constructors never consult this ambient setting.
  */
 inline DfPairStorageRequest requested_df_pair_storage_request() {
-  const char* value = std::getenv("VIBEQC_DF_VALUE_STORAGE");
+  const char* value = std::getenv("GENERATIVEQC_DF_VALUE_STORAGE");
   if (!value || std::strcmp(value, "auto") == 0) return DfPairStorageRequest::Automatic;
   if (std::strcmp(value, "dense") == 0) return DfPairStorageRequest::Dense;
   if (std::strcmp(value, "packed") == 0) return DfPairStorageRequest::SymmetricLower;
   if (std::strcmp(value, "packed-single") == 0) return DfPairStorageRequest::SymmetricLowerSingle;
   throw std::invalid_argument(
-      "VIBEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single");
+      "GENERATIVEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single");
 }
 
 /** Compatibility view for callers that have not yet run the workload planner.
@@ -117,4 +117,4 @@ inline DfPackedValueCapacity df_packed_value_capacity(std::size_t batch, std::si
   return c;
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

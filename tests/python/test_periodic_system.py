@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc_compiler.periodic import SYSTEM_SCHEMA, PeriodicCell, PeriodicSystem
+from generativeqc_compiler.periodic import SYSTEM_SCHEMA, PeriodicCell, PeriodicSystem
 
 
 def _system() -> PeriodicSystem:

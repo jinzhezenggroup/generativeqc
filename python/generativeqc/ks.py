@@ -1,0 +1,1006 @@
+"""Immutable native semilocal KS model and execution controls.
+
+The compiler's FunctionalSpec supplies composition and ingredient requirements.
+Native SCF has its own audited tail/spin domain, distinct from the compiler's
+interior-only reference contract. Unsupported compositions fail before prepare.
+"""
+
+import math
+import typing
+from dataclasses import asdict, dataclass, field, replace
+from fractions import Fraction
+
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft.grid import (
+    GridPolicy,
+    GridSpec,
+    checked_int,
+    grid_policy_provenance,
+)
+from generativeqc_compiler.dft.nonlocal_policy import (
+    MOLECULAR_VV10_DENSITY_POLICY,
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
+)
+from generativeqc_compiler.method import (
+    D4_METHOD_SUFFIX,
+    METHOD_ALIASES,
+    METHOD_CATALOG,
+    D4Spec,
+    DispersionCorrectionPrimitive,
+    MethodIR,
+    SemilocalXCPrimitive,
+    compile_ks_execution_plan,
+    d4_composite_method_identifiers,
+    resolve_method,
+)
+from generativeqc_compiler.xc._generated_native_semilocal import (
+    SCF_DOMAIN_BY_VERSION,
+    SEMILOCAL_FAMILIES,
+)
+from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from generativeqc_compiler.xc.automatic_semilocal import (
+    AUTOMATIC_SCF_DOMAIN,
+    automatic_functional_code,
+)
+from generativeqc_compiler.xc.spec import (
+    CATALOG,
+    FunctionalSpec,
+    UnsupportedXC,
+    functional,
+)
+
+SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
+B3LYP_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[2]
+WB97MV_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[3]
+SPLIT_HYBRID_SCF_DOMAIN = "libxc-7.0/split-global-hybrid-v1"
+_NATIVE_SCF_DOMAINS = frozenset(
+    (
+        *SCF_DOMAIN_BY_VERSION.values(),
+        SPLIT_HYBRID_SCF_DOMAIN,
+        AUTOMATIC_SCF_DOMAIN,
+    )
+)
+
+_AUTOMATIC_LIBXC_PREFIXES = (
+    ("libxc-uks:", "polarized"),
+    ("libxc-rks:", "unpolarized"),
+    ("libxc:", "unpolarized"),
+)
+
+
+def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None:
+    """Parse and structurally validate one public automatic Libxc selector."""
+    if not isinstance(method, str):
+        return None
+    lowered = method.lower()
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if not lowered.startswith(prefix):
+            continue
+        name = method[len(prefix) :].strip().upper()
+        if not name:
+            raise ValueError("Libxc selector requires a functional registration name")
+        automatic_functional_code(name)
+        return name, spin
+    return None
+
+
+# DFT scientific identity belongs to the compiler catalog, not the native ABI
+# manifest.  Keep only genuine compatibility spellings here; ordinary
+# <MethodIR-name>-rks/-uks selectors are discovered from METHOD_CATALOG.
+_LEGACY_KS_SELECTORS = {
+    "lda-rks": ("LDA_XC_PW", "unpolarized"),
+    "lda-uks": ("LDA_XC_PW", "polarized"),
+    "pbe-d4-rks": ("PBE-D4(BJ-EEQ-ATM)", "unpolarized"),
+    "wb97m-v": ("WB97M-V", "unpolarized"),
+    "wb97m-v-rks": ("WB97M-V", "unpolarized"),
+}
+
+
+def _public_dft_identifier_index() -> dict[str, str]:
+    result = {identifier.lower(): identifier for identifier in METHOD_CATALOG}
+    for alias, canonical in METHOD_ALIASES.items():
+        key = alias.lower()
+        existing = result.get(key)
+        if existing is not None and existing != canonical:
+            raise RuntimeError(f"ambiguous public DFT selector {alias!r}")
+        # Preserve the requested alias in MethodIR provenance; resolve_method()
+        # still maps it to the canonical mathematical specification.
+        result[key] = alias
+    for identifier in d4_composite_method_identifiers():
+        result[identifier.lower()] = identifier
+        base = identifier[: -len(D4_METHOD_SUFFIX)]
+        short = f"{base}-D4".lower()
+        existing = result.get(short)
+        if existing is not None and existing != identifier:
+            raise RuntimeError(f"ambiguous public D4 selector {short!r}")
+        result[short] = identifier
+    return result
+
+
+_PUBLIC_DFT_IDENTIFIERS = _public_dft_identifier_index()
+
+
+def _public_dft_binding(method: typing.Any) -> tuple[str, str]:
+    if not isinstance(method, str):
+        raise TypeError("KS options require a string RKS/UKS method selector")
+    selector = method.lower()
+    legacy = _LEGACY_KS_SELECTORS.get(selector)
+    if legacy is not None:
+        return legacy
+    if selector.endswith("-rks"):
+        spin, stem = "unpolarized", selector[:-4]
+    elif selector.endswith("-uks"):
+        spin, stem = "polarized", selector[:-4]
+    else:
+        raise ValueError("KS options require an explicit RKS/UKS method selector")
+    identifier = _PUBLIC_DFT_IDENTIFIERS.get(stem)
+    if identifier is None:
+        raise ValueError(f"unknown DFT method selector {method!r}")
+    return identifier, spin
+
+
+@dataclass(frozen=True)
+class KsOptions:
+    """A snapshotted native KS composition, quadrature, and bounded XC tile.
+
+    RKS requires unpolarized MethodIR semantics; UKS requires polarized. Native
+    execution accepts audited LDA/PBE/r2SCAN plus canonical B3LYP. CPU global
+    hybrids consume MethodIR-owned full-range exact exchange through common J/K.
+    CUDA hybrids and unsupported primitive families fail closed. A different
+    model requires a new prepared owner.
+    """
+
+    functional: FunctionalSpec | None = None
+    composition: MethodIR | None = None
+    grid: GridSpec | None = None
+    grid_accuracy: str = "standard"
+    tile_points: int = 256
+    xc_schedule: str = "device_fused"
+    scf_domain: str = SCF_DOMAIN
+    nonlocal_memory_budget_bytes: int = 256 << 20
+    _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.functional is not None and not isinstance(
+            self.functional, FunctionalSpec
+        ):
+            raise TypeError("KS functional must be a FunctionalSpec")
+        if self.composition is not None and not isinstance(self.composition, MethodIR):
+            raise TypeError("KS composition must be a resolved MethodIR")
+        if self.functional is not None and self.composition is not None:
+            raise ValueError("provide KS functional or composition, not both")
+        if self.grid is not None and not isinstance(self.grid, GridSpec):
+            raise TypeError("KS grid must be a GridSpec or None")
+        if self.grid_accuracy not in ("standard", "tight"):
+            raise ValueError("KS grid_accuracy must be 'standard' or 'tight'")
+        checked_int(self.tile_points, "KS XC tile points")
+        if self.xc_schedule not in ("device_fused", "host_unfused"):
+            raise ValueError("KS XC schedule must be 'device_fused' or 'host_unfused'")
+        if self.scf_domain not in _NATIVE_SCF_DOMAINS:
+            raise NotImplementedError("unsupported native KS tail/spin domain policy")
+        if (
+            type(self.nonlocal_memory_budget_bytes) is not int
+            or not 0 < self.nonlocal_memory_budget_bytes < 2**64
+        ):
+            raise ValueError(
+                "nonlocal_memory_budget_bytes must be a positive uint64 integer"
+            )
+
+    @property
+    def method_ir(self) -> typing.Any:
+        """Resolved method graph consumed by this native KS option set."""
+        if self._method_ir is None:
+            raise ValueError("resolve KS options against a method first")
+        return self._method_ir
+
+    @property
+    def execution_plan(self) -> typing.Any:
+        """Method-name-free scientific contribution plan for this KS calculation."""
+        return compile_ks_execution_plan(self.method_ir)
+
+    @property
+    def coefficients(self) -> typing.Any:
+        """Resolved (semilocal X, semilocal C, raw Fock K) coefficients."""
+        if _is_pbe_d4_composition(self.method_ir):
+            return (1.0, 1.0, 0.0)
+        return ks_coefficients(self.method_ir)
+
+    @property
+    def has_nondefault_composition(self) -> bool:
+        return self.coefficients != (1.0, 1.0, 0.0)
+
+    @property
+    def uses_host_xc_schedule(self) -> bool:
+        return self.xc_schedule != "device_fused"
+
+    @property
+    def has_nonlocal_correlation(self) -> bool:
+        return self.execution_plan.nonlocal_correlation is not None
+
+    @property
+    def has_range_exchange(self) -> bool:
+        return any(
+            term.operator in ("short-range", "long-range")
+            for term in self.execution_plan.exchange
+        )
+
+    @property
+    def ao_order(self) -> typing.Any:
+        """SCF needs the potential; GGA/meta-GGA compositions need first AO jets."""
+        if self.functional is None:
+            raise ValueError("resolve KS options against a method first")
+        return int("sigma" in self.functional.ingredients)
+
+    def to_payload(self) -> typing.Any:
+        """Keep composition provenance and the effective SCF domain explicit."""
+        if self.functional is None:
+            raise ValueError("resolve KS options against a method first")
+        if self.grid is None:
+            raise ValueError("resolve KS grid policy against a method first")
+        payload = {
+            "functional": self.functional.to_payload(),
+            "scf_domain": self.scf_domain,
+            "grid": asdict(self.grid),
+            "grid_provenance": grid_policy_provenance(self.grid),
+            "tile_points": self.tile_points,
+            "xc_schedule": self.xc_schedule,
+            "required_ao_order": self.ao_order,
+            "required_ingredients": self.functional.ingredients,
+            "scalar_derivative_order": 1,
+            "observable": "scf-energy",
+        }
+        if self._method_ir is not None:
+            payload["method_ir"] = self._method_ir.to_payload()
+            payload["method_ir_identity"] = self._method_ir.identity
+            if self.execution_plan.nonlocal_correlation is not None:
+                payload["nonlocal_memory_budget_bytes"] = (
+                    self.nonlocal_memory_budget_bytes
+                )
+        if self.scf_domain == WB97MV_SCF_DOMAIN:
+            payload["nonlocal_density_policy"] = {
+                "version": MOLECULAR_VV10_DENSITY_POLICY,
+                "threshold": str(MOLECULAR_VV10_DENSITY_THRESHOLD),
+                "active_comparison": ">=",
+            }
+        return payload
+
+    @property
+    def identity(self) -> typing.Any:
+        return canonical_hash(self.to_payload())
+
+
+@dataclass(frozen=True)
+class ProfiledKsSelection:
+    """Batch-local KS options plus exact-profile qualification provenance."""
+
+    options: KsOptions | None
+    exact_profile_match: bool = False
+
+
+def _native_execution_plan(method_ir: typing.Any) -> typing.Any:
+    """Project the common KS plan onto primitive lowerers available in native v2."""
+    plan = compile_ks_execution_plan(method_ir)
+    if plan.post_scf:
+        raise NotImplementedError(
+            "native KS electronic projection requires one semilocal XC primitive "
+            "and supported exchange only; geometry-only post-SCF corrections "
+            "require a separate qualified composition owner"
+        )
+    full_range = tuple(term for term in plan.exchange if term.operator == "full-range")
+    range_terms = tuple(
+        term for term in plan.exchange if term.operator in ("short-range", "long-range")
+    )
+    unsupported = tuple(
+        term
+        for term in plan.exchange
+        if term.operator not in ("full-range", "short-range", "long-range")
+    )
+    if unsupported:
+        raise NotImplementedError(
+            "native KS execution plan requires unavailable lowerers: "
+            + ", ".join(f"{term.operator}-exchange" for term in unsupported)
+        )
+    if full_range and range_terms:
+        raise NotImplementedError(
+            "native KS execution cannot mix full-range and range-separated exchange"
+        )
+    if len(full_range) > 1:
+        raise NotImplementedError(
+            "native KS accepts at most one full-range exchange contribution"
+        )
+    if range_terms:
+        operators = {term.operator for term in range_terms}
+        omegas = {term.omega for term in range_terms}
+        if len(range_terms) != 2 or operators != {"short-range", "long-range"}:
+            raise NotImplementedError(
+                "native KS range separation requires one short- and one long-range exchange contribution"
+            )
+        if len(omegas) != 1:
+            raise NotImplementedError(
+                "native KS range-separated exchange requires one shared omega"
+            )
+    return plan
+
+
+def _is_pbe_d4_composition(method_ir: typing.Any) -> bool:
+    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 2:
+        return False
+    semilocal, correction = method_ir.primitives
+    pbe = functional("PBE", spin="unpolarized")
+    return (
+        type(semilocal) is SemilocalXCPrimitive
+        and type(correction) is DispersionCorrectionPrimitive
+        and isinstance(correction.specification, D4Spec)
+        and correction.specification.charge_model == "eeq2019"
+        and correction.specification.reference_model == "eeq"
+        and semilocal.functional.spin == "unpolarized"
+        and semilocal.functional.ingredients == pbe.ingredients
+        and SemilocalXCPrimitive(semilocal.functional).semantic_payload()
+        == SemilocalXCPrimitive(pbe).semantic_payload()
+    )
+
+
+def _native_pbe_d4_semilocal(method_ir: typing.Any) -> typing.Any:
+    if not _is_pbe_d4_composition(method_ir):
+        raise NotImplementedError(
+            "public PBE-D4 requires one PBE semilocal primitive plus one D4(BJ)-EEQ correction"
+        )
+    return typing.cast("SemilocalXCPrimitive", method_ir.primitives[0]).functional
+
+
+def _d4_electronic_projection(method_ir: typing.Any) -> MethodIR | None:
+    """Strip one standalone D4 correction while preserving electronic semantics."""
+    if not isinstance(method_ir, MethodIR):
+        return None
+    corrections = tuple(
+        primitive
+        for primitive in method_ir.primitives
+        if isinstance(primitive, DispersionCorrectionPrimitive)
+    )
+    if len(corrections) != 1 or not isinstance(corrections[0].specification, D4Spec):
+        return None
+    return replace(
+        method_ir,
+        identifier=f"{method_ir.identifier}/electronic",
+        primitives=tuple(
+            primitive
+            for primitive in method_ir.primitives
+            if not isinstance(primitive, DispersionCorrectionPrimitive)
+        ),
+    )
+
+
+def _native_semilocal(method_ir: typing.Any) -> typing.Any:
+    return _native_execution_plan(method_ir).semilocal.functional
+
+
+def _automatic_semilocal_name(method_ir: typing.Any) -> str | None:
+    """Return the sole default-allow automatic component in a pure semilocal IR."""
+    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 1:
+        return None
+    plan = _native_execution_plan(method_ir)
+    if plan.exchange or plan.nonlocal_correlation is not None or plan.post_scf:
+        return None
+    components = plan.semilocal.functional.components
+    if len(components) != 1 or components[0][1] != Fraction(1):
+        return None
+    name = components[0][0]
+    try:
+        automatic_functional_code(name)
+    except UnsupportedXC:
+        return None
+    return name
+
+
+def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
+    """Return the generated split-hybrid record for one exact canonical MethodIR."""
+
+    plan = _native_execution_plan(method_ir)
+    components = dict(plan.semilocal.functional.components)
+    for record in SPLIT_HYBRIDS.values():
+        expected = {
+            name: Fraction(coefficient) for name, coefficient in record["components"]
+        }
+        if components != expected:
+            continue
+        if len(plan.exchange) != 1:
+            continue
+        exchange = plan.exchange[0]
+        if (
+            exchange.operator == "full-range"
+            and exchange.coefficient == Fraction(record["exact_exchange"])
+            and exchange.omega == 0
+        ):
+            return record
+    return None
+
+
+def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
+    """Check derivative source coverage for an already admitted CUDA KS graph.
+
+    Native preparation still enforces the SCF point-domain and composition
+    contract. This adds no name-based method admission: only one semilocal
+    source plus positive full-range exchange has a complete CUDA pullback.
+    Range separation, dispersion and nonlocal correlation need other providers.
+    """
+    plan = compile_ks_execution_plan(method_ir)
+    return (
+        len(method_ir.primitives) == 2
+        and plan.semilocal is not None
+        and plan.semilocal.functional.ingredients
+        in (("rho",), ("rho", "sigma"), ("rho", "sigma", "tau"))
+        and len(plan.exchange) == 1
+        and plan.exchange[0].operator == "full-range"
+        and plan.exchange[0].coefficient > 0
+        and plan.exchange[0].omega == 0
+        and plan.nonlocal_correlation is None
+    )
+
+
+def _record_components(record: typing.Mapping[str, typing.Any]) -> dict[str, Fraction]:
+    return {name: Fraction(coefficient) for name, coefficient in record["components"]}
+
+
+def _curated_semilocal_record(
+    functional_spec: FunctionalSpec,
+    *,
+    plan: typing.Any = None,
+    method_ir: MethodIR | None = None,
+) -> typing.Mapping[str, typing.Any]:
+    """Resolve one curated native lowerer from generated semantic metadata."""
+    components = dict(functional_spec.components)
+    for record in SEMILOCAL_FAMILIES:
+        expected = _record_components(record)
+        if record["coefficient_policy"] == "native-scales":
+            if not set(components) <= set(expected):
+                continue
+        elif components != expected:
+            continue
+        # A zero registry omega denotes an omega-independent point program.
+        # Exchange primitives still own and validate their own range parameter.
+        # Nonzero semilocal omega, notably canonical B97M, must match exactly.
+        expected_omega = Fraction(record["range_omega"])
+        if expected_omega and functional_spec.range_omega != expected_omega:
+            raise NotImplementedError(
+                f"native {record['name']} lowerer requires canonical semilocal omega"
+            )
+        if plan is not None:
+            policy = record["exchange_policy"]
+            if policy == "none" and (
+                plan.exchange or plan.nonlocal_correlation is not None
+            ):
+                raise NotImplementedError("unsupported native KS semilocal composition")
+            if policy == "canonical":
+                if method_ir is None:
+                    continue
+                canonical = compile_ks_execution_plan(
+                    resolve_method(record["canonical_method"], spin=method_ir.spin)
+                )
+                if (
+                    plan.semilocal.semantic_payload()
+                    != canonical.semilocal.semantic_payload()
+                    or plan.exchange != canonical.exchange
+                    or plan.nonlocal_correlation != canonical.nonlocal_correlation
+                ):
+                    raise NotImplementedError(
+                        f"native {record['name']} lowerer requires canonical "
+                        f"{record['canonical_method']} composition"
+                    )
+        return record
+    raise NotImplementedError(
+        "native KS semilocal primitive graph has no qualified lowerer"
+    )
+
+
+def _native_semilocal_record(method_ir: typing.Any) -> typing.Mapping[str, typing.Any]:
+    if _is_pbe_d4_composition(method_ir):
+        return _curated_semilocal_record(_native_pbe_d4_semilocal(method_ir))
+    plan = _native_execution_plan(method_ir)
+    return _curated_semilocal_record(
+        plan.semilocal.functional, plan=plan, method_ir=method_ir
+    )
+
+
+def _native_semilocal_code(method_ir: typing.Any) -> int:
+    """Return the stable curated/generated selector consumed by native KS execution."""
+    if not _is_pbe_d4_composition(method_ir):
+        automatic_name = _automatic_semilocal_name(method_ir)
+        if automatic_name is not None:
+            return automatic_functional_code(automatic_name)
+        split = _split_hybrid_record(method_ir)
+        if split is not None:
+            return int(split["functional_code"])
+    return int(_native_semilocal_record(method_ir)["code"])
+
+
+def ks_coefficients(method_ir: typing.Any) -> typing.Any:
+    """Lower one supported MethodIR graph to explicit native X/C/K coefficients."""
+    if not isinstance(method_ir, MethodIR):
+        raise TypeError("KS coefficients require a resolved MethodIR")
+    plan = _native_execution_plan(method_ir)
+    components = dict(plan.semilocal.functional.components)
+    automatic_name = _automatic_semilocal_name(method_ir)
+    split = _split_hybrid_record(method_ir)
+    if automatic_name is not None or split is not None:
+        exchange_scale = correlation_scale = Fraction(1)
+    else:
+        record = _native_semilocal_record(method_ir)
+        if record["coefficient_policy"] == "native-scales":
+            component_names = tuple(name for name, _ in record["components"])
+            exchange_scale = components.get(component_names[0], Fraction(0))
+            correlation_scale = components.get(component_names[1], Fraction(0))
+        else:
+            # Exact point programs own their internal component coefficients.
+            # Native outer X/C scales stay unity.
+            exchange_scale = correlation_scale = Fraction(1)
+    if not plan.exchange:
+        fock_exchange = Fraction(0)
+    elif len(plan.exchange) == 1:
+        fock_exchange = plan.exchange[0].fock_coefficient
+    else:
+        fock_exchange = next(
+            term.fock_coefficient
+            for term in plan.exchange
+            if term.operator == "short-range"
+        )
+    values = tuple(
+        float(value) for value in (exchange_scale, correlation_scale, fock_exchange)
+    )
+    if (
+        not all(math.isfinite(value) for value in values)
+        or exchange_scale < 0
+        or correlation_scale < 0
+    ):
+        raise NotImplementedError("native KS composition coefficients are invalid")
+    return values
+
+
+def ks_range_exchange_parameters(method_ir: typing.Any) -> typing.Any:
+    """Return MethodIR-owned (short, long, omega) RSH parameters, if present."""
+    if not isinstance(method_ir, MethodIR):
+        raise TypeError("KS range exchange requires a resolved MethodIR")
+    plan = compile_ks_execution_plan(method_ir)
+    range_terms = tuple(
+        term for term in plan.exchange if term.operator in ("short-range", "long-range")
+    )
+    if not range_terms:
+        return None
+    operators = {term.operator for term in range_terms}
+    omegas = {term.omega for term in range_terms}
+    if len(range_terms) != 2 or operators != {"short-range", "long-range"}:
+        raise NotImplementedError(
+            "native KS range separation requires one short- and one long-range exchange contribution"
+        )
+    if len(omegas) != 1:
+        raise NotImplementedError(
+            "native KS range-separated exchange requires one shared omega"
+        )
+    short = next(term for term in range_terms if term.operator == "short-range")
+    long = next(term for term in range_terms if term.operator == "long-range")
+    return float(short.coefficient), float(long.coefficient), float(short.omega)
+
+
+def resolve_ks_method(method: typing.Any) -> typing.Any:
+    """Resolve a public KS selector from the compiler-owned MethodIR catalog."""
+    identifier, spin = _public_dft_binding(method)
+    method_ir = resolve_method(identifier, spin=spin)
+
+    # MethodIR is authoritative for scientific composition.  The native ABI
+    # registry owns stable provider IDs only and is deliberately not a DFT
+    # discovery whitelist.
+    # Catalog-backed primitives retain their qualified native projection and
+    # declaration identity. Discover them from the existing catalog, not a
+    # second hand-maintained public-name or coefficient table.
+    if identifier in CATALOG:
+        # Reject unavailable post-SCF operators before the named-selector
+        # consistency check, preserving the established capability exception.
+        semilocal = _native_semilocal(method_ir)
+        if len(method_ir.primitives) != 1:
+            raise RuntimeError("MethodIR composition disagrees with native KS selector")
+        runtime_functional = functional(identifier, spin=spin)
+        if SemilocalXCPrimitive(semilocal).semantic_payload() != (
+            SemilocalXCPrimitive(runtime_functional).semantic_payload()
+        ):
+            raise RuntimeError(
+                "MethodIR semilocal node disagrees with native KS XC catalog"
+            )
+        return method_ir, runtime_functional
+
+    if _is_pbe_d4_composition(method_ir):
+        return method_ir, functional("PBE", spin=spin)
+
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        semilocal = _native_semilocal(d4_electronic)
+        ks_coefficients(d4_electronic)
+        return method_ir, semilocal
+
+    semilocal = _native_semilocal(method_ir)
+    ks_coefficients(method_ir)
+    return method_ir, semilocal
+
+
+def public_dft_selectors() -> tuple[str, ...]:
+    """Enumerate compiler-owned DFT selectors that pass current native lowerer gates."""
+    selectors = set(_LEGACY_KS_SELECTORS)
+    # Ordinary aliases remain resolvable without duplicating catalog rows.
+    identifiers = set(METHOD_CATALOG)
+    identifiers.update(d4_composite_method_identifiers())
+    for identifier in sorted(identifiers):
+        if identifier.endswith(D4_METHOD_SUFFIX):
+            stem = f"{identifier[: -len(D4_METHOD_SUFFIX)].lower()}-d4"
+        else:
+            stem = identifier.lower()
+        for suffix in ("rks", "uks"):
+            selector = f"{stem}-{suffix}"
+            try:
+                resolve_ks_method(selector)
+                native_dft_carrier(selector)
+            except (ValueError, NotImplementedError):
+                continue
+            selectors.add(selector)
+    return tuple(sorted(selectors))
+
+
+def native_dft_carrier_for_ir(method_ir: MethodIR) -> str:
+    """Choose a provider carrier from the electronic ingredient contract."""
+    semilocal = _native_semilocal(method_ir)
+    ks_coefficients(method_ir)
+    carrier = {
+        ("rho",): "lda",
+        ("rho", "sigma"): "pbe",
+        ("rho", "sigma", "tau"): "r2scan",
+    }.get(semilocal.ingredients)
+    if carrier is None:
+        raise NotImplementedError(
+            "native KS has no provider carrier for these XC ingredients"
+        )
+    suffix = "uks" if method_ir.spin == "polarized" else "rks"
+    return f"{carrier}-{suffix}"
+
+
+def native_dft_carrier(method: typing.Any) -> str:
+    """Return the stable native provider carrier for one compiler-resolved DFT selector."""
+    method_ir, _ = resolve_ks_method(method)
+    if _is_pbe_d4_composition(method_ir):
+        return "pbe-d4-rks"
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        return native_dft_carrier_for_ir(d4_electronic)
+    return "pbe-uks" if method_ir.spin == "polarized" else "pbe-rks"
+
+
+def _scf_domain_for_ir(method_ir: typing.Any) -> str:
+    """Select the native work domain from the resolved, possibly renamed IR."""
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        method_ir = d4_electronic
+    if _automatic_semilocal_name(method_ir) is not None:
+        return AUTOMATIC_SCF_DOMAIN
+    if not _is_pbe_d4_composition(method_ir):
+        split = _split_hybrid_record(method_ir)
+        if split is not None:
+            return SPLIT_HYBRID_SCF_DOMAIN
+    return str(_native_semilocal_record(method_ir)["scf_domain"])
+
+
+def scf_domain_for_method(method: typing.Any) -> str:
+    """Return the exact native point-domain identity for one public KS method."""
+    method_ir, _ = resolve_ks_method(method)
+    return _scf_domain_for_ir(method_ir)
+
+
+def native_xc_functional_code(method: typing.Any) -> int:
+    """Return the lowerer code selected from one public or automatic KS selector."""
+    automatic = parse_automatic_libxc_selector(method)
+    if automatic is not None:
+        name, _ = automatic
+        return automatic_functional_code(name)
+    method_ir, _ = resolve_ks_method(method)
+    d4_electronic = _d4_electronic_projection(method_ir)
+    if d4_electronic is not None:
+        method_ir = d4_electronic
+    return _native_semilocal_code(method_ir)
+
+
+def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing.Any:
+    """Validate a MethodIR-resolved model before resource/native allocation."""
+    named_ir, expected = resolve_ks_method(method)
+    options = KsOptions() if options is None else options
+    if not isinstance(options, KsOptions):
+        raise TypeError("ks_options must be KsOptions")
+
+    native_named_ir = named_ir
+    if not _is_pbe_d4_composition(named_ir):
+        d4_electronic = _d4_electronic_projection(named_ir)
+        if d4_electronic is not None:
+            native_named_ir = d4_electronic
+    method_ir = native_named_ir
+    # Calculator passes its resolved options to resource planning. Keep that
+    # graph authoritative: rebinding the descriptive selector loses custom K.
+    composition = options.composition or options._method_ir
+    if composition is not None:
+        method_ir = composition
+        if _is_pbe_d4_composition(named_ir):
+            if method_ir.identity != named_ir.identity:
+                raise NotImplementedError(
+                    "public PBE-D4 requires the pinned named MethodIR without parameter overrides"
+                )
+            selected = _native_pbe_d4_semilocal(method_ir)
+        else:
+            selected = _native_semilocal(method_ir)
+        # The native selector chooses only the ingredient/spin family; all
+        # scientific coefficients remain explicit in the supplied MethodIR.
+        if (
+            method_ir.spin != named_ir.spin
+            or selected.spin != expected.spin
+            or selected.ingredients != expected.ingredients
+        ):
+            raise NotImplementedError(
+                "KS composition/spin disagrees with native family selector"
+            )
+        if not _is_pbe_d4_composition(named_ir):
+            ks_coefficients(method_ir)
+        # Preserve the independent catalog projection's declaration order and
+        # identity when options have already been resolved.
+        resolved = selected if options.functional is None else options.functional
+        if SemilocalXCPrimitive(resolved).semantic_payload() != (
+            SemilocalXCPrimitive(selected).semantic_payload()
+        ):
+            raise ValueError("resolved KS functional disagrees with its MethodIR")
+    else:
+        resolved = expected if options.functional is None else options.functional
+        if (
+            resolved.spin != expected.spin
+            or resolved.version != expected.version
+            or sorted(resolved.components) != sorted(expected.components)
+            or resolved.exact_exchange != expected.exact_exchange
+            or resolved.range_omega != expected.range_omega
+            or resolved.long_range_exchange != expected.long_range_exchange
+        ):
+            raise NotImplementedError(
+                "KS FunctionalSpec does not match the method's supported composition/spin"
+            )
+
+    grid = options.grid
+    if grid is None:
+        if (
+            "tau" in expected.ingredients
+            and not compile_ks_execution_plan(native_named_ir).exchange
+        ):
+            # The v2 policy has no qualified pure meta-GGA profile. Preserve
+            # the existing explicit v1 default rather than assigning a GGA grid.
+            if options.grid_accuracy != "standard":
+                raise NotImplementedError(
+                    "r2SCAN grid accuracy profiles require an explicit GridSpec"
+                )
+            grid = GridSpec()
+        elif _is_pbe_d4_composition(named_ir):
+            grid = GridPolicy(options.grid_accuracy).resolve(
+                "pbe-rks", derivative_order=0
+            )
+        elif ks_coefficients(method_ir)[2] != 0.0:
+            raise NotImplementedError(
+                "global-hybrid grid policy requires an explicit GridSpec"
+            )
+        else:
+            grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
+    domain = _scf_domain_for_ir(method_ir)
+    if options.scf_domain not in (SCF_DOMAIN, domain):
+        raise NotImplementedError(
+            "KS tail/spin domain does not match the selected method"
+        )
+    result = replace(
+        options, functional=resolved, composition=None, grid=grid, scf_domain=domain
+    )
+    object.__setattr__(result, "_method_ir", method_ir)
+    return result
+
+
+def profiled_ks_selection(
+    options: KsOptions | None,
+    diagnostics: dict[str, typing.Any],
+    systems: typing.Any,
+    *,
+    charges: typing.Any,
+    multiplicities: typing.Any,
+) -> ProfiledKsSelection:
+    """Resolve one exact local DFT09 winner and retain qualification provenance."""
+
+    if (
+        options is None
+        or options.xc_schedule != "device_fused"
+        or diagnostics.get("source") != "local"
+    ):
+        return ProfiledKsSelection(options)
+    target = diagnostics.get("target")
+    if not isinstance(target, dict):
+        return ProfiledKsSelection(options)
+    device = target.get("device")
+    source_identity = target.get("source_identity")
+    if (
+        not isinstance(device, dict)
+        or type(device.get("major")) is not int
+        or type(device.get("minor")) is not int
+        or not isinstance(source_identity, str)
+        or not source_identity
+    ):
+        return ProfiledKsSelection(options)
+
+    from generativeqc_compiler.dft.xc_schedule import (
+        grid_xc_schedule,
+        molecular_grid_xc_workload,
+    )
+
+    from .profiles import select_dft_schedule
+
+    selected = []
+    architecture = f"sm_{device['major']}{device['minor']}"
+    for atoms, charge, multiplicity in zip(
+        systems, charges, multiplicities, strict=True
+    ):
+        workload = molecular_grid_xc_workload(
+            architecture=architecture,
+            functional=options.functional,
+            atoms=atoms,
+            grid_spec=options.grid,
+            charge=charge,
+            multiplicity=multiplicity,
+            source_identity=source_identity,
+            screening_identity=None,
+            observable="potential",
+            density_route="density_matrix",
+        )
+        payload = select_dft_schedule(diagnostics, workload.to_payload())
+        if payload is None:
+            return ProfiledKsSelection(options)
+        schedule = grid_xc_schedule(payload)
+        if schedule.point_tile is None:
+            raise ValueError("local DFT schedule winner must resolve its point tile")
+        selected.append(schedule)
+    if not selected or any(item != selected[0] for item in selected[1:]):
+        return ProfiledKsSelection(options)
+
+    winner = selected[0]
+    result = replace(
+        options,
+        xc_schedule=winner.name,
+        tile_points=winner.point_tile,
+    )
+    object.__setattr__(result, "_method_ir", options._method_ir)
+    return ProfiledKsSelection(result, exact_profile_match=True)
+
+
+def profiled_ks_options(
+    options: KsOptions | None,
+    diagnostics: dict[str, typing.Any],
+    systems: typing.Any,
+    *,
+    charges: typing.Any,
+    multiplicities: typing.Any,
+) -> KsOptions | None:
+    """Apply one exact local DFT09 winner to a batch, otherwise preserve the portable plan."""
+
+    return profiled_ks_selection(
+        options,
+        diagnostics,
+        systems,
+        charges=charges,
+        multiplicities=multiplicities,
+    ).options
+
+
+def native_ks_options(options: typing.Any) -> typing.Any:
+    """Lower one compiler KS execution plan into the current semantic C ABI.
+
+    The ABI carries MethodIR primitives directly.  No named-method/family code
+    and no historical suffix version is selected here.
+    """
+    import ctypes
+
+    from . import _native
+
+    grid = options.grid
+    if grid is None:
+        raise ValueError("native KS options require a resolved GridSpec")
+    radii = None
+    if grid.element_radii:
+        fill = 0.0 if grid.version >= 2 else 1.0
+        radii = (ctypes.c_double * 119)(*[fill] * 119)
+        for z, radius in grid.element_radii:
+            radii[z] = radius
+
+    if _is_pbe_d4_composition(options.method_ir):
+        semilocal = typing.cast("SemilocalXCPrimitive", options.method_ir.primitives[0])
+        exchange = ()
+        nonlocal_primitive = None
+    else:
+        plan = _native_execution_plan(options.method_ir)
+        semilocal = plan.semilocal
+        exchange = plan.exchange
+        nonlocal_primitive = plan.nonlocal_correlation
+
+    component_ids = tuple(
+        name.encode("ascii") for name, _ in semilocal.functional.components
+    )
+    component_type = _native.KsSemilocalComponentDescriptor * len(component_ids)
+    components = component_type(
+        *(
+            _native.KsSemilocalComponentDescriptor(component_id, float(coefficient))
+            for component_id, (_, coefficient) in zip(
+                component_ids, semilocal.functional.components, strict=True
+            )
+        )
+    )
+
+    operators = {
+        "full-range": _native.KS_EXCHANGE_FULL_RANGE,
+        "short-range": _native.KS_EXCHANGE_SHORT_RANGE,
+        "long-range": _native.KS_EXCHANGE_LONG_RANGE,
+    }
+    exchange_type = _native.KsExchangeTermDescriptor * len(exchange)
+    exchange_terms = exchange_type(
+        *(
+            _native.KsExchangeTermDescriptor(
+                operators[term.operator],
+                float(term.coefficient),
+                float(term.omega),
+                float(term.fock_coefficient),
+            )
+            for term in exchange
+        )
+    )
+
+    variants = {"vv10": _native.NONLOCAL_VV10, "rvv10": _native.NONLOCAL_RVV10}
+    if nonlocal_primitive is not None:
+        try:
+            nonlocal_variant = variants[nonlocal_primitive.spec.variant]
+        except KeyError as error:
+            raise NotImplementedError(
+                f"unsupported native nonlocal variant {nonlocal_primitive.spec.variant!r}"
+            ) from error
+        nonlocal_b = float(nonlocal_primitive.spec.b)
+        nonlocal_c = float(nonlocal_primitive.spec.c)
+        nonlocal_coefficient = float(nonlocal_primitive.coefficient)
+    else:
+        nonlocal_variant = 0
+        nonlocal_b = nonlocal_c = nonlocal_coefficient = 0.0
+
+    domain = options.scf_domain.encode("ascii")
+    descriptor = _native.KsOptionsDescriptor(
+        ctypes.sizeof(_native.KsOptionsDescriptor),
+        _native.ABI_VERSION,
+        domain,
+        grid.version,
+        grid.radial_points,
+        grid.angular_polar,
+        grid.angular_azimuth,
+        grid.partition_iterations,
+        grid.coincident_tolerance,
+        options.tile_points,
+        radii,
+        119 if radii is not None else 0,
+        _native.XC_EXECUTION_DEVICE_FUSED
+        if options.xc_schedule == "device_fused"
+        else _native.XC_EXECUTION_HOST_UNFUSED,
+        1 if options.method_ir.spin == "unpolarized" else 2,
+        components,
+        len(components),
+        float(semilocal.functional.range_omega),
+        exchange_terms if exchange_terms else None,
+        len(exchange_terms),
+        1 if nonlocal_primitive is not None else 0,
+        nonlocal_variant,
+        nonlocal_b,
+        nonlocal_c,
+        nonlocal_coefficient,
+        options.nonlocal_memory_budget_bytes if nonlocal_primitive is not None else 0,
+    )
+    # ctypes pointer fields do not own their pointees.  Retain every borrowed
+    # object for exactly as long as the short-lived descriptor is alive.
+    descriptor._domain_owner = domain
+    descriptor._component_ids_owner = component_ids
+    descriptor._components_owner = components
+    descriptor._exchange_owner = exchange_terms
+    descriptor._radii_owner = radii
+    return descriptor

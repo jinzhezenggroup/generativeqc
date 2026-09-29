@@ -4,7 +4,7 @@
 
 #include "runtime/allocation_measurement.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 void RhfIterationGraphs::destroy(cudaGraph_t& graph, cudaGraphExec_t& executable) noexcept {
   if (executable != nullptr) {
@@ -24,20 +24,19 @@ RhfIterationGraphs::~RhfIterationGraphs() {
   destroy(iteration_graph_, iteration_graph_exec_);
 }
 
-RhfGraphCaptureResult RhfIterationGraphs::capture(cudaStream_t stream, cudaGraph_t& graph,
-                                                  cudaGraphExec_t& executable,
-                                                  unsigned long long instantiate_flags,
-                                                  bool synchronize_before,
-                                                  const std::function<vibeqc_status()>& body) {
+RhfGraphCaptureResult RhfIterationGraphs::capture(
+    cudaStream_t stream, cudaGraph_t& graph, cudaGraphExec_t& executable,
+    unsigned long long instantiate_flags, bool synchronize_before,
+    const std::function<generativeqc_status()>& body) {
   destroy(graph, executable);
 
   cudaError_t error = synchronize_before ? cudaStreamSynchronize(stream) : cudaSuccess;
   if (error == cudaSuccess) {
     error = cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
   }
-  if (error != cudaSuccess) return {VIBEQC_STATUS_SUCCESS, error};
+  if (error != cudaSuccess) return {GENERATIVEQC_STATUS_SUCCESS, error};
 
-  vibeqc_status body_status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status body_status = GENERATIVEQC_STATUS_SUCCESS;
   try {
     body_status = body();
   } catch (...) {
@@ -48,7 +47,7 @@ RhfGraphCaptureResult RhfIterationGraphs::capture(cudaStream_t stream, cudaGraph
     if (abandoned_graph != nullptr) (void)cudaGraphDestroy(abandoned_graph);
     throw;
   }
-  if (body_status != VIBEQC_STATUS_SUCCESS) {
+  if (body_status != GENERATIVEQC_STATUS_SUCCESS) {
     cudaGraph_t abandoned_graph = nullptr;
     (void)cudaStreamEndCapture(stream, &abandoned_graph);
     if (abandoned_graph != nullptr) (void)cudaGraphDestroy(abandoned_graph);
@@ -57,18 +56,19 @@ RhfGraphCaptureResult RhfIterationGraphs::capture(cudaStream_t stream, cudaGraph
 
   error = cudaStreamEndCapture(stream, &graph);
   if (error != cudaSuccess || graph == nullptr) {
-    return {VIBEQC_STATUS_SUCCESS, error != cudaSuccess ? error : cudaErrorInvalidResourceHandle};
+    return {GENERATIVEQC_STATUS_SUCCESS,
+            error != cudaSuccess ? error : cudaErrorInvalidResourceHandle};
   }
 
   error = cudaGraphInstantiate(&executable, graph, instantiate_flags);
   if (error == cudaSuccess) error = cudaGraphUpload(executable, stream);
   if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
-  return {VIBEQC_STATUS_SUCCESS, error};
+  return {GENERATIVEQC_STATUS_SUCCESS, error};
 }
 
 RhfGraphCaptureResult RhfIterationGraphs::capture_iteration(
     int device_id, cudaStream_t stream, bool device_launch,
-    const std::function<vibeqc_status()>& body) {
+    const std::function<generativeqc_status()>& body) {
   device_id_ = device_id;
   const auto instantiate_flags =
       device_launch ? static_cast<unsigned long long>(cudaGraphInstantiateFlagDeviceLaunch) : 0ULL;
@@ -76,7 +76,7 @@ RhfGraphCaptureResult RhfIterationGraphs::capture_iteration(
 }
 
 RhfGraphCaptureResult RhfIterationGraphs::capture_post_eigensolver(
-    int device_id, cudaStream_t stream, const std::function<vibeqc_status()>& body) {
+    int device_id, cudaStream_t stream, const std::function<generativeqc_status()>& body) {
   device_id_ = device_id;
   return capture(stream, post_eigensolver_graph_, post_eigensolver_graph_exec_, 0ULL, false, body);
 }
@@ -89,4 +89,4 @@ cudaError_t RhfIterationGraphs::launch_post_eigensolver(cudaStream_t stream) con
   return cudaGraphLaunch(post_eigensolver_graph_exec_, stream);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

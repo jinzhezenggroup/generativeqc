@@ -19,7 +19,7 @@
 // Retained direct fock quartet contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 template <bool Unrestricted, unsigned AngularOrder, typename EvalScalar = double>
 __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
@@ -105,4 +105,4 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

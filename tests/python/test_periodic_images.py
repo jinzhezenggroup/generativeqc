@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import pytest
-from vibeqc_compiler.periodic import PeriodicCell
+from generativeqc_compiler.periodic import PeriodicCell
 
 
 def _brute_force_offsets(

@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.xc import libxc_bulk_capabilities
-from vibeqc_compiler.xc.capability_resolution import CapabilityNotQualified
-from vibeqc_compiler.xc.endpoint_capability import (
+from generativeqc_compiler.xc import libxc_bulk_capabilities
+from generativeqc_compiler.xc.capability_resolution import CapabilityNotQualified
+from generativeqc_compiler.xc.endpoint_capability import (
     ENDPOINT_COVERAGE_SCHEMA,
     ENDPOINT_RESOLUTION_SCHEMA,
     resolve_endpoint_capability,
 )
-from vibeqc_compiler.xc.molecular_scf_evidence import (
+from generativeqc_compiler.xc.molecular_scf_evidence import (
     QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
 )
-from vibeqc_compiler.xc.molecular_scf_evidence import (
+from generativeqc_compiler.xc.molecular_scf_evidence import (
     RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
 )
-from vibeqc_compiler.xc.public_method_evidence import build_result, stage_evidence
+from generativeqc_compiler.xc.public_method_evidence import build_result, stage_evidence
 
 
 def _coverage(

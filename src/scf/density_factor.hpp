@@ -7,7 +7,7 @@
 
 #include "scf/density_fitting.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 enum class DensityFactorSpin { Restricted, Alpha, Beta };
 
@@ -70,4 +70,4 @@ std::optional<std::vector<double>> occupied_density_fitting_exchange(
     const DensityFittingThreeCenter& three_center, const OccupiedDensityFactor* factor,
     DensityFactorIdentity identity, DensityFactorSpin spin, std::span<const double> density);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

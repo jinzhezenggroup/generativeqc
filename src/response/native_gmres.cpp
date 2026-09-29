@@ -5,7 +5,7 @@
 #include <limits>
 #include <stdexcept>
 
-namespace vibeqc::response {
+namespace generativeqc::response {
 namespace {
 using WorkspaceVector = runtime::TrackedVector<double>;
 
@@ -317,4 +317,4 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                     iterations, restarts, operator_actions, preconditioner_actions);
 }
 
-}  // namespace vibeqc::response
+}  // namespace generativeqc::response

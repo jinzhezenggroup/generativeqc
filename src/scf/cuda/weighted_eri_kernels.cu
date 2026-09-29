@@ -6,7 +6,7 @@
 #include "scf/cuda/scalar_math.cuh"
 #include "scf/cuda/weighted_eri_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Independent unscreened primitive fallback, with no HF density contraction. */
 template <unsigned MaximumAngular>
@@ -139,27 +139,27 @@ void launch_weighted_eri_reference_kernel(unsigned maximum_angular, dim3 grid, d
                                           const CudaWeightedEriPrimitive* records,
                                           std::size_t count, bool generated,
                                           CudaWeightedEriResult* output) {
-#define VIBEQC_WEIGHTED_ERI_ORDER_CASE(order)                                                     \
+#define GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(order)                                               \
   case order:                                                                                     \
     launch_weighted_eri_reference_order<order>(grid, block, shared_bytes, stream, records, count, \
                                                generated, output);                                \
     return
   switch (maximum_angular) {
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(0);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(1);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(2);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(3);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(4);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(5);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(6);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(7);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(8);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(9);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(10);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(11);
-    VIBEQC_WEIGHTED_ERI_ORDER_CASE(12);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(0);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(1);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(2);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(3);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(4);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(5);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(6);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(7);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(8);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(9);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(10);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(11);
+    GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE(12);
   }
-#undef VIBEQC_WEIGHTED_ERI_ORDER_CASE
+#undef GENERATIVEQC_WEIGHTED_ERI_ORDER_CASE
 }
 
 void launch_weighted_eri_generated_psss_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -169,4 +169,4 @@ void launch_weighted_eri_generated_psss_kernel(dim3 grid, dim3 block, std::size_
   weighted_eri_generated_psss_kernel<<<grid, block, shared_bytes, stream>>>(records, count, output);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

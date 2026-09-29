@@ -5,8 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from vibeqc_compiler.xc import capability_catalog, capability_transition
-from vibeqc_compiler.xc.libxc_bulk_capabilities import CAPABILITY_STAGES
+from generativeqc_compiler.xc import capability_catalog, capability_transition
+from generativeqc_compiler.xc.libxc_bulk_capabilities import CAPABILITY_STAGES
 
 
 def _snapshot(

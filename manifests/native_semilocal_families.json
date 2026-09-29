@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.native-semilocal-families.v1",
+  "schema": "generativeqc.native-semilocal-families.v1",
   "families": [
     {
       "symbol": "Lda",
@@ -20,7 +20,11 @@
       ],
       "range_omega": "0",
       "coefficient_policy": "exact",
-      "exchange_policy": "none"
+      "exchange_policy": "none",
+      "requires_gradient": false,
+      "requires_tau": false,
+      "stationary_kernel": "lda",
+      "stationary_ecp_gradient": true
     },
     {
       "symbol": "Pbe",
@@ -41,7 +45,11 @@
       ],
       "range_omega": "0",
       "coefficient_policy": "native-scales",
-      "exchange_policy": "any"
+      "exchange_policy": "any",
+      "requires_gradient": true,
+      "requires_tau": false,
+      "stationary_kernel": "pbe",
+      "stationary_ecp_gradient": true
     },
     {
       "symbol": "R2scan",
@@ -62,7 +70,11 @@
       ],
       "range_omega": "0",
       "coefficient_policy": "exact",
-      "exchange_policy": "none"
+      "exchange_policy": "none",
+      "requires_gradient": true,
+      "requires_tau": true,
+      "stationary_kernel": "r2scan",
+      "stationary_ecp_gradient": false
     },
     {
       "symbol": "B3lyp",
@@ -91,7 +103,11 @@
       ],
       "range_omega": "0",
       "coefficient_policy": "exact",
-      "exchange_policy": "any"
+      "exchange_policy": "any",
+      "requires_gradient": true,
+      "requires_tau": false,
+      "stationary_kernel": "composed",
+      "stationary_ecp_gradient": true
     },
     {
       "symbol": "Wb97mv",
@@ -113,7 +129,11 @@
       "range_omega": "3/10",
       "coefficient_policy": "exact",
       "exchange_policy": "canonical",
-      "canonical_method": "WB97M-V"
+      "canonical_method": "WB97M-V",
+      "requires_gradient": true,
+      "requires_tau": true,
+      "stationary_kernel": "wb97mv",
+      "stationary_ecp_gradient": true
     }
   ]
 }

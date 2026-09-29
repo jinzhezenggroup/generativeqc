@@ -4,10 +4,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.xc import expression_dispatch
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.wb97mv_maple import wb97mv_maple_provenance
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc import expression_dispatch
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.wb97mv_maple import wb97mv_maple_provenance
 
 
 def _spec(spin: str) -> typing.Any:
@@ -88,7 +88,7 @@ def test_cutover_adapter_is_pinned_in_scientific_source_registry() -> None:
     root = Path(__file__).resolve().parents[2]
     registry = json.loads((root / "upstream/manifest.json").read_text())
     inputs = registry["products"]["libxc-xc-admission"]["canonical_inputs"]
-    relative = "python/vibeqc_compiler/xc/wb97mv_maple.py"
+    relative = "python/generativeqc_compiler/xc/wb97mv_maple.py"
     assert (
         inputs[relative] == hashlib.sha256((root / relative).read_bytes()).hexdigest()
     )

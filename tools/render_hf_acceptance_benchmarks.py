@@ -131,7 +131,7 @@ def checked_run(
         ],
         "medians": {
             phase: {
-                "vibeqc_seconds": statistics.median(
+                "generativeqc_seconds": statistics.median(
                     r["complete_seconds"] for r in rows
                 ),
                 "gpu4pyscf_seconds": statistics.median(
@@ -154,7 +154,7 @@ def checked_run(
         "engines": {},
     }
     for engine, rows in (
-        ("VibeQC", groups["warm"]),
+        ("GenerativeQC", groups["warm"]),
         ("GPU4PySCF", reference_groups["warm"]),
     ):
         plot["engines"][engine] = {
@@ -210,11 +210,11 @@ def draw_hf(plots: dict[str, list], destination: Path, repeats: int) -> None:
             "font.family": "DejaVu Sans",
             "font.size": 10,
             "svg.fonttype": "none",
-            "svg.hashsalt": "vibeqc-hf-comparison",
+            "svg.hashsalt": "generativeqc-hf-comparison",
         }
     )
     fig, ax = plt.subplots(figsize=(8.2, 4.1))
-    for engine in ("VibeQC", "GPU4PySCF"):
+    for engine in ("GenerativeQC", "GPU4PySCF"):
         for route, label, style in (
             ("direct", "direct J/K", "o-"),
             ("df", "DF J/K", "s--"),
@@ -284,11 +284,11 @@ def main() -> None:
     args.destination.mkdir(parents=True, exist_ok=True)
     plots: dict[str, list] = defaultdict(list)
     summary = {
-        "schema": "vibeqc.hf-comparison.v2",
+        "schema": "generativeqc.hf-comparison.v2",
         "repeats": args.repeats,
         "scope": "complete RHF energy and analytic forces; explicit packed-single fitted DF",
         "timing": "separate engine processes; cold includes prepare; frozen warm replays; traces excluded",
-        "figure": "VibeQC/GPU4PySCF direct/DF medians and min-max over every warm repeat; crosses mark varying iteration counts",
+        "figure": "GenerativeQC/GPU4PySCF direct/DF medians and min-max over every warm repeat; crosses mark varying iteration counts",
         "cases": [],
         "parts": [],
         "native_endpoint_samples": 0,
@@ -312,7 +312,7 @@ def main() -> None:
                 args.repeats,
             )
             identity = record["native_identity"]
-            disabled = identity["environment"].get("VIBEQC_DF_WARM_REUSE") == "0"
+            disabled = identity["environment"].get("GENERATIVEQC_DF_WARM_REUSE") == "0"
             if disabled != (route == "df-disabled"):
                 raise ValueError("warm-reuse control differs from its label")
             shared = {

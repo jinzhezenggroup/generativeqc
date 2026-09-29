@@ -21,7 +21,7 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import convergence_payload
@@ -50,13 +50,13 @@ def main() -> None:
     positions = np.array([r for _, r in case.atoms])
     changed = positions.copy()
     changed[1, 0] += 0.001
-    library = Path(os.environ["VIBEQC_LIBRARY"])
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"])
     payload = {
         "case": CASES[args.aos],
         "aos": args.aos,
         "budget": args.budget,
         "scope": "intrusive diagnostic" if args.trace else "clean endpoints",
-        "basis": case.vibeqc_basis,
+        "basis": case.generativeqc_basis,
         "basis_representation": case.basis_representation,
         "metric_relative_threshold": 1e-10,
         "coordinates_bohr": positions.tolist(),
@@ -77,17 +77,17 @@ def main() -> None:
         for policy in (
             ("generic", "candidate") if repeat % 2 == 0 else ("candidate", "generic")
         ):
-            os.environ["VIBEQC_DF_VALUE_MATH"] = policy
-            os.environ["VIBEQC_DF_VALUE_RAW_MAPPING"] = (
+            os.environ["GENERATIVEQC_DF_VALUE_MATH"] = policy
+            os.environ["GENERATIVEQC_DF_VALUE_RAW_MAPPING"] = (
                 "scalar" if policy == "generic" else "candidate"
             )
             calc = Calculator(
                 method="rhf",
-                basis=case.vibeqc_basis,
+                basis=case.generativeqc_basis,
                 basis_representation=case.basis_representation,
                 device="cuda",
                 density_fitting="cuda",
-                auxiliary_basis=case.vibeqc_basis,
+                auxiliary_basis=case.generativeqc_basis,
                 density_fitting_memory_budget_bytes=args.budget,
                 energy_tolerance=1e-12,
                 density_tolerance=1e-10,
@@ -110,8 +110,8 @@ def main() -> None:
                     if args.trace:
                         trace = args.output.with_suffix(f".{suffix}.jsonl")
                         host = args.output.with_suffix(f".{suffix}.host.jsonl")
-                        os.environ["VIBEQC_DF_TRACE"] = str(trace)
-                        os.environ["VIBEQC_DF_HOST_TRACE"] = str(host)
+                        os.environ["GENERATIVEQC_DF_TRACE"] = str(trace)
+                        os.environ["GENERATIVEQC_DF_HOST_TRACE"] = str(host)
                     start = time.perf_counter()
                     result = batch.execute(
                         [changed if phase == "changed" else positions],
@@ -163,8 +163,8 @@ def main() -> None:
                         else float(np.max(np.abs(forces - expected_forces)))
                     )
                     if args.trace:
-                        os.environ.pop("VIBEQC_DF_TRACE")
-                        os.environ.pop("VIBEQC_DF_HOST_TRACE")
+                        os.environ.pop("GENERATIVEQC_DF_TRACE")
+                        os.environ.pop("GENERATIVEQC_DF_HOST_TRACE")
                         row["components"] = aggregate(read_trace(trace))
                         row["host"] = read_host_trace(host)
                     payload["samples"].append(row)

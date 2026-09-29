@@ -8,9 +8,9 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_local_cc import staging
-from tools.vibeqc_local_cc.buckets import PairBucketKey, PairStateBucket
-from tools.vibeqc_local_cc.spaces import PairSpace
+from tools.generativeqc_local_cc import staging
+from tools.generativeqc_local_cc.buckets import PairBucketKey, PairStateBucket
+from tools.generativeqc_local_cc.spaces import PairSpace
 
 
 def _space(*, crossing: bool = False) -> PairSpace:

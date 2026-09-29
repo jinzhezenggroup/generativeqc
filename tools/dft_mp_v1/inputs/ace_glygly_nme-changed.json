@@ -215,7 +215,7 @@
   "schema_version": 1,
   "source": {
     "atom_index": 0,
-    "attribution": "VibeQC DFT-MP-v1 contract; geometry generated with RDKit (BSD-3-Clause)",
+    "attribution": "GenerativeQC DFT-MP-v1 contract; geometry generated with RDKit (BSD-3-Clause)",
     "axis": "x",
     "delta_bohr": 0.01,
     "kind": "fixed_displacement",

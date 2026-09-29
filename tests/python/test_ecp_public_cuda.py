@@ -8,15 +8,15 @@ from time import perf_counter
 
 import numpy as np
 import pytest
+from generativeqc import Calculator, KsOptions, ResourceBudget, _native
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc_compiler.dft import NativeAO
 from test_dft_complete_cuda import no_cpu_derivatives
 from test_ecp import fixture
 from test_ecp_stationary_cpu import GRID, reference
-from vibeqc import Calculator, KsOptions, ResourceBudget, _native
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc_compiler.dft import NativeAO
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_ECP_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_ECP_CUDA_TEST") != "1",
     reason="explicit real-device ECP gate",
 )
 
@@ -212,8 +212,8 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
 def test_public_ecp_force_failure_is_transactional_and_closes_snapshot(
     monkeypatch: typing.Any, representation: typing.Any
 ) -> None:
-    from vibeqc import _stationary_cuda
-    from vibeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc import _stationary_cuda
+    from generativeqc._ks_snapshot import NativeKsSnapshot
 
     atoms, record, _ = fixture(representation=representation)
     fragment = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]

@@ -11,20 +11,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
-from vibeqc_compiler.xc.automatic_semilocal import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
     automatic_functional_code,
 )
-from vibeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
-from vibeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
-from vibeqc_compiler.xc.libxc_work import (
+from generativeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.libxc_work import (
     LIBXC_WORK_DOMAIN_VERSION,
     automatic_work_policy,
     polarized_work_setup,
 )
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 SHARD_COUNT = 8
 SUPPORTED_LAYOUTS = {
@@ -96,7 +96,7 @@ def _point_program_source(entry: RegistryEntry) -> str:
     refs = [emitter.reference(root) for root in program.roots]
     expression_identity = canonical_hash(
         {
-            "schema": "vibeqc.automatic-libxc-work-point.v1",
+            "schema": "generativeqc.automatic-libxc-work-point.v1",
             "interior_expression": program.expression_hash,
             "work_policy": policy.to_payload(),
             "features": features,
@@ -204,7 +204,7 @@ def emit_header() -> str:
 #include <string_view>
 #include "dft/xc.hpp"
 
-namespace vibeqc::dft::generated {{
+namespace generativeqc::dft::generated {{
 inline constexpr const char* kAutomaticLibxcScfDomain =
     "{AUTOMATIC_SCF_DOMAIN}";
 struct AutomaticLibxcEntry {{
@@ -214,7 +214,7 @@ struct AutomaticLibxcEntry {{
 }};
 AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept;
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept;
-}}  // namespace vibeqc::dft::generated
+}}  // namespace generativeqc::dft::generated
 """
 
 
@@ -235,7 +235,7 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
             "#include <string_view>",
             '#include "generated_libxc_semilocal_registry.hpp"',
             "",
-            "namespace vibeqc::dft::generated {",
+            "namespace generativeqc::dft::generated {",
             "namespace {",
             declarations,
             "}  // namespace",
@@ -247,7 +247,7 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
             "  }",
             "  return {};",
             "}",
-            "}  // namespace vibeqc::dft::generated",
+            "}  // namespace generativeqc::dft::generated",
             "",
         ]
     )
@@ -275,7 +275,7 @@ def emit_registry() -> str:
             "// Generated automatic Libxc CPU registry dispatcher; do not edit.",
             '#include "generated_libxc_semilocal_registry.hpp"',
             "",
-            "namespace vibeqc::dft::generated {",
+            "namespace generativeqc::dft::generated {",
             declarations,
             "",
             "AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept {",
@@ -289,7 +289,7 @@ def emit_registry() -> str:
             "    default: return {};",
             "  }",
             "}",
-            "}  // namespace vibeqc::dft::generated",
+            "}  // namespace generativeqc::dft::generated",
             "",
         ]
     )

@@ -1,6 +1,6 @@
 # CUDA DF component evidence
 
-`VIBEQC_DF_TRACE=/absolute/path.jsonl` enables diagnostic CUDA event intervals,
+`GENERATIVEQC_DF_TRACE=/absolute/path.jsonl` enables diagnostic CUDA event intervals,
 NVTX ranges (when toolkit NVTX headers are available), transfer/work counters,
 and a logical three-center tile ledger. It covers RI-J, RI-K, generated raw and
 transformed tiles, DF-HF response weights, exchange response matrix products,
@@ -21,12 +21,12 @@ through a finite Slurm allocation, preserving the assigned device visibility:
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env PYTHONPATH="$PWD/python" /path/to/python benchmarks/issue206_df_force_probe.py \
-  --library "$PWD/build/cuda/libvibeqc.so" --repeats 3 \
+  --library "$PWD/build/cuda/libgenerativeqc.so" --repeats 3 \
   --output /path/to/evidence/unprofiled.json
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env PYTHONPATH="$PWD/python" /path/to/python benchmarks/issue206_df_force_probe.py \
-  --library "$PWD/build/cuda/libvibeqc.so" --repeats 1 \
+  --library "$PWD/build/cuda/libgenerativeqc.so" --repeats 1 \
   --component-trace-dir /path/to/evidence/new-traces \
   --output /path/to/evidence/components.json
 ```
@@ -40,7 +40,7 @@ Trace files must be fresh; the probe never overwrites earlier captures.
 
 ## Host eigensolve ledger for #308
 
-`VIBEQC_DF_HOST_TRACE=/absolute/fresh.jsonl` records host scopes and actual
+`GENERATIVEQC_DF_HOST_TRACE=/absolute/fresh.jsonl` records host scopes and actual
 CPU-reference eigensolve invocations. The existing force probe's
 `--component-trace-dir` collects this companion file together with the CUDA
 ledger. The two clocks are reported separately. Setting either trace variable
@@ -93,7 +93,7 @@ The existing #206 matrix entry point also supports native protocol controls:
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:20:00 \
   env PYTHONPATH="$PWD/python" /path/to/python benchmarks/issue206_df_matrix.py \
   --run --host-workloads --case water-tetramer-def2-svp-spherical --batch 1 \
-  --library "$PWD/build/cuda/libvibeqc.so" --memory-budget-bytes 1073741824 \
+  --library "$PWD/build/cuda/libgenerativeqc.so" --memory-budget-bytes 1073741824 \
   --energy-only --repeats 5 --host-trace-dir /path/to/fresh-host-traces \
   --output-dir /path/to/host-components
 ```
@@ -109,7 +109,7 @@ DF-versus-DF matrix remains the owner of parity acceptance.
 
 For the lazy-initial-density slice, add `--eager-core-ablation` to the host
 workload invocation. The baseline selection explicitly requests the old warm
-core frame through `VIBEQC_DF_EAGER_CORE_GUESS=1`; the candidate consumes the
+core frame through `GENERATIVEQC_DF_EAGER_CORE_GUESS=1`; the candidate consumes the
 same frozen density without that unused solve. Cold density, overlap and
 finalization are identical. Actual leaf counts must distinguish the selections
 in a separate traced run. Clean interleaved endpoint timings own any savings
@@ -131,7 +131,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   --trace=cuda,nvtx --cuda-graph-trace=node --sample=none --cpuctxsw=none \
   --output=/path/to/evidence/df-nsys \
   /path/to/python benchmarks/issue206_df_force_probe.py \
-  --library "$PWD/build/cuda/libvibeqc.so" --repeats 1 \
+  --library "$PWD/build/cuda/libgenerativeqc.so" --repeats 1 \
   --component-trace-dir /path/to/evidence/new-nsys-traces \
   --output /path/to/evidence/nsys-components.json
 ```
@@ -201,7 +201,7 @@ claim the combined improvement. External parity remains the matched #206 gate.
 
 ## Incomplete-stage journal for #308
 
-`VIBEQC_DF_PROGRESS_TRACE=/absolute/fresh.jsonl` writes a separate append-only
+`GENERATIVEQC_DF_PROGRESS_TRACE=/absolute/fresh.jsonl` writes a separate append-only
 journal. Every BEGIN, VALUE and END line is closed immediately. A killed process
 therefore leaves its active stage visible without waiting for the enclosing
 operation to finish. This guarantees process-exit visibility, not power-loss
@@ -279,10 +279,10 @@ finite Slurm allocation. For example, from the repository root:
 ```bash
 c++ -std=c++20 -O3 -Iinclude -Isrc -I/path/to/cuda/include \
   benchmarks/df_stage_probe.cpp -Lbuild/cuda -Wl,-rpath,"$PWD/build/cuda" \
-  -lvibeqc -ldl -o .artifacts/df-stage-probe
+  -lgenerativeqc -ldl -o .artifacts/df-stage-probe
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:06:00 \
   env PYTHONPATH=python:. python -m benchmarks.issue308_stage_probe \
-  --input INPUT --output NEW_RUN --library build/cuda/libvibeqc.so \
+  --input INPUT --output NEW_RUN --library build/cuda/libgenerativeqc.so \
   --probe .artifacts/df-stage-probe --progress --timeout 300
 ```
 

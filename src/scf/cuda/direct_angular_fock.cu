@@ -14,7 +14,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Fixed-capacity wrapper retained for high-register angular orders. */
 template <bool Unrestricted, unsigned AngularOrder, typename EvalScalar = double>
@@ -237,4 +237,4 @@ void dispatch_angular_fock_quartets(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

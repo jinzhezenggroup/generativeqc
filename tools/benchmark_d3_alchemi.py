@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Compare VibeQC D3(BJ) against NVIDIA ALCHEMI Toolkit-Ops.
+"""Compare GenerativeQC D3(BJ) against NVIDIA ALCHEMI Toolkit-Ops.
 
 The benchmark deliberately reports NVIDIA neighbor-list construction, D3-only,
-and combined pipeline latency separately. VibeQC currently has no explicit
+and combined pipeline latency separately. GenerativeQC currently has no explicit
 neighbor-list stage, so its synchronous warm execute latency is reported as one
 endpoint. The output records precision and cutoff semantics to prevent an FP64
-VibeQC result from being presented as directly equivalent to ALCHEMI's FP32 D3
+GenerativeQC result from being presented as directly equivalent to ALCHEMI's FP32 D3
 outputs.
 """
 
@@ -102,7 +102,7 @@ def _median_timed(
 
 
 def _cutoff_method(method: str, cutoff_bohr: float) -> typing.Any:
-    from vibeqc_compiler.method import METHOD_CATALOG
+    from generativeqc_compiler.method import METHOD_CATALOG
 
     base = METHOD_CATALOG[method]
     if base.dispersion is None:
@@ -117,7 +117,7 @@ def _cutoff_method(method: str, cutoff_bohr: float) -> typing.Any:
 
 
 def _damping(method: str) -> dict[str, float]:
-    from vibeqc_compiler.method import METHOD_CATALOG
+    from generativeqc_compiler.method import METHOD_CATALOG
 
     spec = METHOD_CATALOG[method].dispersion
     if spec is None:
@@ -125,7 +125,7 @@ def _damping(method: str) -> dict[str, float]:
     return {"s6": spec.s6, "s8": spec.s8, "a1": spec.a1, "a2": spec.a2}
 
 
-def benchmark_vibeqc(
+def benchmark_generativeqc(
     workload: Workload,
     *,
     method: str,
@@ -134,7 +134,7 @@ def benchmark_vibeqc(
     warmup: int,
     repeats: int,
 ) -> dict[str, Any]:
-    from vibeqc import D3CorrectionBatch
+    from generativeqc import D3CorrectionBatch
 
     numbers, positions = make_system(workload.atoms_per_system)
     systems = [(numbers, positions) for _ in range(workload.batch_size)]
@@ -149,7 +149,7 @@ def benchmark_vibeqc(
     finally:
         batch.close()
     return {
-        "implementation": "vibeqc",
+        "implementation": "generativeqc",
         "precision": "fp64",
         "prepare_seconds": prepare_seconds,
         "execute_median_seconds": median,
@@ -309,10 +309,12 @@ def benchmark_alchemi(
     }
 
 
-def _error_summary(vibeqc: dict[str, Any], alchemi: dict[str, Any]) -> dict[str, float]:
-    lhs_e = np.asarray(vibeqc["energies_hartree"], dtype=np.float64)
+def _error_summary(
+    generativeqc: dict[str, Any], alchemi: dict[str, Any]
+) -> dict[str, float]:
+    lhs_e = np.asarray(generativeqc["energies_hartree"], dtype=np.float64)
     rhs_e = np.asarray(alchemi["energies_hartree"], dtype=np.float64)
-    lhs_g = np.asarray(vibeqc["gradients_hartree_per_bohr"], dtype=np.float64)
+    lhs_g = np.asarray(generativeqc["gradients_hartree_per_bohr"], dtype=np.float64)
     rhs_g = np.asarray(alchemi["gradients_hartree_per_bohr"], dtype=np.float64)
     if any(
         value.ndim not in (2, 3) or value.shape[-1] != 3 for value in (lhs_g, rhs_g)
@@ -370,38 +372,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--alchemi-position-dtype", choices=("float32", "float64"), default="float64"
     )
-    parser.add_argument("--vibeqc-only", action="store_true")
+    parser.add_argument("--generativeqc-only", action="store_true")
     parser.add_argument("--alchemi-only", action="store_true")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--vibeqc-library", type=Path)
+    parser.add_argument("--generativeqc-library", type=Path)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.vibeqc_only and args.alchemi_only:
-        raise SystemExit("--vibeqc-only and --alchemi-only are mutually exclusive")
+    if args.generativeqc_only and args.alchemi_only:
+        raise SystemExit(
+            "--generativeqc-only and --alchemi-only are mutually exclusive"
+        )
     if args.cutoff_angstrom <= 0 or args.warmup < 0 or args.repeats < 1:
         raise SystemExit("cutoff/repeat arguments are invalid")
-    if args.vibeqc_library is not None:
-        os.environ["VIBEQC_LIBRARY"] = str(args.vibeqc_library.resolve())
+    if args.generativeqc_library is not None:
+        os.environ["GENERATIVEQC_LIBRARY"] = str(args.generativeqc_library.resolve())
     workloads = args.workload or [Workload(32, 1), Workload(128, 1), Workload(32, 32)]
     cutoff_bohr = args.cutoff_angstrom * BOHR_PER_ANGSTROM
     neighbor_method = (
         None if args.alchemi_neighbor_method == "auto" else args.alchemi_neighbor_method
     )
     output: dict[str, Any] = {
-        "schema": "vibeqc.d3_alchemi_benchmark.v1",
+        "schema": "generativeqc.d3_alchemi_benchmark.v1",
         "host": platform.node(),
         "python": platform.python_version(),
-        "vibeqc_revision": _repository_revision(),
-        "vibeqc_library": os.environ.get("VIBEQC_LIBRARY", "auto"),
+        "generativeqc_revision": _repository_revision(),
+        "generativeqc_library": os.environ.get("GENERATIVEQC_LIBRARY", "auto"),
         "method": args.method,
         "cutoff_angstrom": args.cutoff_angstrom,
         "cutoff_bohr": cutoff_bohr,
         "timing": "synchronized wall-clock warm-call latency",
         "precision_note": (
-            "VibeQC production D3 is FP64. ALCHEMI Toolkit-Ops 0.4.x uses FP32 "
+            "GenerativeQC production D3 is FP64. ALCHEMI Toolkit-Ops 0.4.x uses FP32 "
             "reference parameters and FP32 energy/force/CN outputs; timing is a "
             "performance reference, not an equal-precision winner claim."
         ),
@@ -410,7 +414,7 @@ def main() -> None:
     for workload in workloads:
         case: dict[str, Any] = {"workload": asdict(workload)}
         if not args.alchemi_only:
-            case["vibeqc"] = benchmark_vibeqc(
+            case["generativeqc"] = benchmark_generativeqc(
                 workload,
                 method=args.method,
                 cutoff_bohr=cutoff_bohr,
@@ -418,7 +422,7 @@ def main() -> None:
                 warmup=args.warmup,
                 repeats=args.repeats,
             )
-        if not args.vibeqc_only:
+        if not args.generativeqc_only:
             case["alchemi"] = benchmark_alchemi(
                 workload,
                 method=args.method,
@@ -430,9 +434,11 @@ def main() -> None:
                 neighbor_method=neighbor_method,
                 position_dtype=args.alchemi_position_dtype,
             )
-        if "vibeqc" in case and "alchemi" in case:
-            case["numerical_delta"] = _error_summary(case["vibeqc"], case["alchemi"])
-        for implementation in ("vibeqc", "alchemi"):
+        if "generativeqc" in case and "alchemi" in case:
+            case["numerical_delta"] = _error_summary(
+                case["generativeqc"], case["alchemi"]
+            )
+        for implementation in ("generativeqc", "alchemi"):
             if implementation in case:
                 _compact_scientific_outputs(case[implementation])
         output["cases"].append(case)

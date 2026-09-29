@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
-namespace vibeqc::mp2::generated {
+namespace generativeqc::mp2::generated {
 using CpuRun = void (*)(const double*, const double*, double, double, const double*, const double*,
                         double*);
 struct CpuPlan {
@@ -13,7 +13,7 @@ struct CpuPlan {
   std::size_t numeric_bytes;
   const char* equation_hash;
 };
-// TensorIR equation e1b9599ab4f5a727d10d66d3a1b2eddc572b14b5b55173cd70f3b50975a1a673
+// TensorIR equation 045e04e6d211b10fa6d55b30d09feca64b4fc8a6a44b69efbb5cd280c6aee4dd
 inline void tile_1(const double* const* inputs, double* const* outputs) {
   const double* v0 = inputs[0];
   if (!v0) throw std::invalid_argument("null tensor input");
@@ -115,7 +115,7 @@ inline void run_1(const double* g, const double* x, double ei, double ej, const 
   double* outputs[] = {out, out + 1};
   tile_1(inputs, outputs);
 }
-// TensorIR equation 2e48d48c98be350c27b6928523d3c296effdbb922b4342873795f85033b3323b
+// TensorIR equation 741d5548aace7608ce1f8d78c37514634eb154f9d8a537669aee6d69570b9f8d
 inline void tile_2(const double* const* inputs, double* const* outputs) {
   const double* v0 = inputs[0];
   if (!v0) throw std::invalid_argument("null tensor input");
@@ -217,7 +217,7 @@ inline void run_2(const double* g, const double* x, double ei, double ej, const 
   double* outputs[] = {out, out + 1};
   tile_2(inputs, outputs);
 }
-// TensorIR equation 9878b88969e70606ed7ddae54a0c1f1ecf57cd2b4fabe8d72f8cb37fe42fc16c
+// TensorIR equation efc96df9ddc056303859f0e128ff3572bd3bbd9bf860cab53331295560e7a6f9
 inline void tile_4(const double* const* inputs, double* const* outputs) {
   const double* v0 = inputs[0];
   if (!v0) throw std::invalid_argument("null tensor input");
@@ -319,7 +319,7 @@ inline void run_4(const double* g, const double* x, double ei, double ej, const 
   double* outputs[] = {out, out + 1};
   tile_4(inputs, outputs);
 }
-// TensorIR equation 88ae7fcb2aee0410f171b7617387b57006536098c84f6f3c0d91641046da0073
+// TensorIR equation 72566a332016571d27d0d6795f4bdbeb9bb6b21a3c1143a10b3bf74ad1916549
 inline void tile_8(const double* const* inputs, double* const* outputs) {
   const double* v0 = inputs[0];
   if (!v0) throw std::invalid_argument("null tensor input");
@@ -424,15 +424,15 @@ inline void run_8(const double* g, const double* x, double ei, double ej, const 
 inline CpuPlan cpu_plan(unsigned tile) {
   switch (tile) {
     case 1:
-      return {run_1, 216ULL, "e1b9599ab4f5a727d10d66d3a1b2eddc572b14b5b55173cd70f3b50975a1a673"};
+      return {run_1, 216ULL, "045e04e6d211b10fa6d55b30d09feca64b4fc8a6a44b69efbb5cd280c6aee4dd"};
     case 2:
-      return {run_2, 544ULL, "2e48d48c98be350c27b6928523d3c296effdbb922b4342873795f85033b3323b"};
+      return {run_2, 544ULL, "741d5548aace7608ce1f8d78c37514634eb154f9d8a537669aee6d69570b9f8d"};
     case 4:
-      return {run_4, 1824ULL, "9878b88969e70606ed7ddae54a0c1f1ecf57cd2b4fabe8d72f8cb37fe42fc16c"};
+      return {run_4, 1824ULL, "efc96df9ddc056303859f0e128ff3572bd3bbd9bf860cab53331295560e7a6f9"};
     case 8:
-      return {run_8, 6880ULL, "88ae7fcb2aee0410f171b7617387b57006536098c84f6f3c0d91641046da0073"};
+      return {run_8, 6880ULL, "72566a332016571d27d0d6795f4bdbeb9bb6b21a3c1143a10b3bf74ad1916549"};
     default:
       throw std::invalid_argument("unsupported MP2 tile");
   }
 }
-}  // namespace vibeqc::mp2::generated
+}  // namespace generativeqc::mp2::generated

@@ -19,8 +19,8 @@ int main(int argc, char** argv) try {
   if (!n || n > std::numeric_limits<std::size_t>::max() / sizeof(double) / n)
     throw std::invalid_argument("invalid probe matrix extent");
 
-  using vibeqc::tensor::CpuLinalgProvider;
-  using vibeqc::tensor::CpuLinalgThreadOwnership;
+  using generativeqc::tensor::CpuLinalgProvider;
+  using generativeqc::tensor::CpuLinalgThreadOwnership;
   CpuLinalgProvider provider = CpuLinalgProvider::automatic;
   if (provider_name == "scalar")
     provider = CpuLinalgProvider::scalar;
@@ -30,7 +30,7 @@ int main(int argc, char** argv) try {
     return 3;
   const auto ownership =
       provider_threads > 1 || (provider == CpuLinalgProvider::openblas &&
-                               !vibeqc::tensor::cpu_openblas_local_thread_control_built())
+                               !generativeqc::tensor::cpu_openblas_local_thread_control_built())
           ? CpuLinalgThreadOwnership::provider_parallel
           : CpuLinalgThreadOwnership::task_parallel;
 
@@ -40,22 +40,23 @@ int main(int argc, char** argv) try {
   for (double& value : a) value = distribution(rng);
   for (double& value : b) value = distribution(rng);
 
-  const auto plan = vibeqc::tensor::CpuLinalgPlan{provider, ownership, provider_threads};
-  const auto diagnostic = vibeqc::tensor::cpu_linalg_diagnostic(plan);
-  vibeqc::tensor::cpu_gemm('N', 'N', n, n, n, a.data(), b.data(), c.data(), 1.0, 0.0, plan);
+  const auto plan = generativeqc::tensor::CpuLinalgPlan{provider, ownership, provider_threads};
+  const auto diagnostic = generativeqc::tensor::cpu_linalg_diagnostic(plan);
+  generativeqc::tensor::cpu_gemm('N', 'N', n, n, n, a.data(), b.data(), c.data(), 1.0, 0.0, plan);
 
   const auto start = std::chrono::steady_clock::now();
   for (int repeat = 0; repeat < repeats; ++repeat)
-    vibeqc::tensor::cpu_gemm('N', 'N', n, n, n, a.data(), b.data(), c.data(), 1.0, 0.0, plan);
+    generativeqc::tensor::cpu_gemm('N', 'N', n, n, n, a.data(), b.data(), c.data(), 1.0, 0.0, plan);
   const auto stop = std::chrono::steady_clock::now();
   const double seconds = std::chrono::duration<double>(stop - start).count() / repeats;
   const double gflops = (2.0 * static_cast<double>(n) * n * n) / seconds / 1.0e9;
 
-  std::cout << "{\"schema\":\"vibeqc.cpu-linalg-probe.v1\",\"operation\":\"gemm\",\"m\":" << n
+  std::cout << "{\"schema\":\"generativeqc.cpu-linalg-probe.v1\",\"operation\":\"gemm\",\"m\":" << n
             << ",\"n\":" << n << ",\"k\":" << n << ",\"transpose_a\":\"N\",\"transpose_b\":\"N\""
             << ",\"repeats\":" << repeats << ",\"cpu_target\":\"" << diagnostic.cpu_target
-            << "\",\"requested_provider\":\"" << vibeqc::tensor::cpu_linalg_provider_name(provider)
-            << "\",\"provider\":\"" << vibeqc::tensor::cpu_linalg_provider_name(diagnostic.provider)
+            << "\",\"requested_provider\":\""
+            << generativeqc::tensor::cpu_linalg_provider_name(provider) << "\",\"provider\":\""
+            << generativeqc::tensor::cpu_linalg_provider_name(diagnostic.provider)
             << "\",\"provider_threads\":" << diagnostic.provider_threads
             << ",\"thread_ownership\":\""
             << (diagnostic.thread_ownership == CpuLinalgThreadOwnership::task_parallel

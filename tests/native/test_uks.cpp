@@ -11,7 +11,7 @@
 #include "scf/reference/mean_field.hpp"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 using scf::reference::Matrix;
 
 void require(bool passed, const char* message) {
@@ -37,7 +37,7 @@ core::System closed_shell_h2(double displacement = 0.0) {
        0,
        {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}}};
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "invalid closed-shell RSH fixture");
   return system;
 }
@@ -54,7 +54,7 @@ core::System hydrogens(unsigned count, double shift = 0) {
          {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}});
   }
   std::string detail;
-  require(molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "invalid UKS fixture");
   return system;
 }

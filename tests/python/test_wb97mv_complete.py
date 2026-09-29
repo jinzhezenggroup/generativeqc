@@ -5,10 +5,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._dft_gradient import StationaryKsState
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
 
 ATOMS = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
 GRID = GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)

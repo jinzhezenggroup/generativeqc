@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 
-from tools.vibeqc_validation.xc_retirement import scan_legacy_consumers
+from tools.generativeqc_validation.xc_retirement import scan_legacy_consumers
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,9 +18,9 @@ def _function_names(path: Path) -> set[str]:
 
 
 def test_production_policy_is_separate_from_legacy_formula_dispatch() -> None:
-    legacy = ROOT / "python/vibeqc_compiler/xc/expressions.py"
-    canonical = ROOT / "python/vibeqc_compiler/xc/semilocal_family.py"
-    policy = ROOT / "python/vibeqc_compiler/xc/production_policy.py"
+    legacy = ROOT / "python/generativeqc_compiler/xc/expressions.py"
+    canonical = ROOT / "python/generativeqc_compiler/xc/semilocal_family.py"
+    policy = ROOT / "python/generativeqc_compiler/xc/production_policy.py"
     policy_names = _function_names(policy)
     assert {
         "lda_xc_pw_unpolarized_tail_expression",
@@ -37,16 +37,17 @@ def test_production_policy_is_separate_from_legacy_formula_dispatch() -> None:
 def test_runtime_and_cpu_generator_use_only_the_lightweight_dispatch() -> None:
     consumers = scan_legacy_consumers(ROOT)
     forbidden = {
-        "python/vibeqc_compiler/xc/program.py",
+        "python/generativeqc_compiler/xc/program.py",
         "tools/generate_xc_cpu.py",
     }
     assert all(consumer.path not in forbidden for consumer in consumers)
     assert all(
-        consumer.module != "vibeqc_compiler.xc.expressions" for consumer in consumers
+        consumer.module != "generativeqc_compiler.xc.expressions"
+        for consumer in consumers
     )
     bridge = {
         (consumer.path, consumer.module)
         for consumer in consumers
-        if consumer.path == "python/vibeqc_compiler/xc/expression_dispatch.py"
+        if consumer.path == "python/generativeqc_compiler/xc/expression_dispatch.py"
     }
     assert bridge == set()

@@ -1,7 +1,7 @@
 """Incomplete PTXAS function records must not disappear from eligibility."""
 
 import pytest
-from vibeqc_compiler.xc import bulk_aot
+from generativeqc_compiler.xc import bulk_aot
 
 GOOD = (
     "ptxas info : Function properties for bulk_xc_census_probe\n"

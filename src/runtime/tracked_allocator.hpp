@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 struct AllocationSnapshot {
   std::size_t live_bytes{};
@@ -108,4 +108,4 @@ class TrackedAllocator {
 template <class T>
 using TrackedVector = std::vector<T, TrackedAllocator<T>>;
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

@@ -173,7 +173,7 @@ def ownership_report(
     root: typing.Any, ledger: typing.Any, build: typing.Any = None
 ) -> typing.Any:
     """Check complete source coverage and return stable per-region/file totals."""
-    if ledger.get("schema") != "vibeqc.cuda-ownership.v1":
+    if ledger.get("schema") != "generativeqc.cuda-ownership.v1":
         raise ValueError("unsupported CUDA ownership ledger")
     records = ledger["files"]
     paths = [row["path"] for row in records]
@@ -294,7 +294,7 @@ def ownership_report(
             }
         )
     return {
-        "schema": "vibeqc.cuda-ownership-report.v1",
+        "schema": "generativeqc.cuda-ownership-report.v1",
         "maintained_code_lines": totals,
         # Reclassifying scientific code as an oracle/exception cannot be
         # advertised as deleting handwritten scientific implementation.
@@ -310,7 +310,7 @@ def ownership_report(
 
 def validate_baseline(baseline: typing.Any) -> None:
     """Reject internally inconsistent historical totals before claiming a delta."""
-    if baseline.get("schema") != "vibeqc.cuda-ownership-report.v1":
+    if baseline.get("schema") != "generativeqc.cuda-ownership-report.v1":
         raise ValueError("baseline uses a different ownership report schema")
     totals = dict.fromkeys(ROLES, 0)
     paths = set()

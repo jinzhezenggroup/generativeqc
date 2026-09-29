@@ -1,6 +1,6 @@
 """Compare the complete native CPU RCCSD(T) force endpoint with/without tile bundles.
 
-Run from an installed Linux checkout with VIBEQC_LIBRARY set to its CPU native
+Run from an installed Linux checkout with GENERATIVEQC_LIBRARY set to its CPU native
 library. Separate child processes and fresh per-route caches keep cold and
 warm-cache measurements distinct. The separate route disables only the new
 triples-tile prewarm; all other production consumers and equations are identical.
@@ -82,19 +82,19 @@ def _rss() -> dict[str, int]:
 
 
 def _run_child(mode: str, case: str, cache: Path) -> dict[str, object]:
-    from vibeqc_compiler.tensor.cpu import emit_cpu
+    from generativeqc_compiler.tensor.cpu import emit_cpu
 
     from tools.cc_gradient_fixtures import inputs, source_arguments
-    from tools.vibeqc_cc import (
+    from tools.generativeqc_cc import (
         lambda_solver,
         native_tensor_cpu,
         rccsd_t_force,
         triples_complete_gradient,
         triples_lambda_response,
     )
-    from tools.vibeqc_posthf.sources import NativeSource
+    from tools.generativeqc_posthf.sources import NativeSource
 
-    os.environ["VIBEQC_TENSOR_CACHE"] = str(cache)
+    os.environ["GENERATIVEQC_TENSOR_CACHE"] = str(cache)
     before = {path.resolve() for path in cache.rglob("runtime.so")}
     inventory: collections.Counter[str] = collections.Counter()
     programs = {}
@@ -285,7 +285,7 @@ def main() -> None:
     args.cache_root.mkdir(parents=True)
     records = {"separate": {}, "bundled": {}}
     report = {
-        "schema": "vibeqc.ccsdt.cpu_bundle_endpoint/1",
+        "schema": "generativeqc.ccsdt.cpu_bundle_endpoint/1",
         "source_sha": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),

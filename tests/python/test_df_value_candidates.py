@@ -6,20 +6,20 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.df_cuda import emit_df_values_cuda
-from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
-from vibeqc_compiler.integral.df_value_candidates import (
+from generativeqc_compiler.integral.df_cuda import emit_df_values_cuda
+from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+from generativeqc_compiler.integral.df_value_candidates import (
     VALUE_CLASSES,
     emit_df_value_candidates_cuda,
 )
 
-from tools.vibeqc_validation.df_values import make_df_value_fixture
+from tools.generativeqc_validation.df_values import make_df_value_fixture
 
 
 def test_candidate_codegen_gates_measured_profile_by_architecture() -> None:
     source = emit_df_value_candidates_cuda()
     assert "__CUDA_ARCH__ == 1200" in source
-    assert "VIBEQC_CUDA_PROFILE_ARCHITECTURE == 120" in source
+    assert "GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE == 120" in source
     assert "inline constexpr unsigned candidate_raw_lanes=4;" in source
     assert "#else\ninline constexpr unsigned candidate_raw_lanes=1;\n#endif" in source
 
@@ -41,7 +41,7 @@ def evaluator(tmp_path_factory: typing.Any) -> typing.Any:
 #define __forceinline__ inline
 #define __noinline__ __attribute__((noinline))
 #include "candidates.cuh"
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 struct Input {
   unsigned count; generated_df::Angular angular[3];
   generated_df::Vec3 centers[3]; double exponents[3],weight;

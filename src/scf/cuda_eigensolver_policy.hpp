@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_EIGENSOLVER_POLICY_HPP
-#define VIBEQC_SCF_CUDA_EIGENSOLVER_POLICY_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_EIGENSOLVER_POLICY_HPP
+#define GENERATIVEQC_SCF_CUDA_EIGENSOLVER_POLICY_HPP
 
 #include <array>
 #include <cstddef>
@@ -10,13 +10,13 @@
 #if defined(__has_include)
 #if __has_include(<cusolverDn.h>)
 #include <cusolverDn.h>
-#define VIBEQC_SCF_HAS_CUSOLVER_HEADER 1
+#define GENERATIVEQC_SCF_HAS_CUSOLVER_HEADER 1
 #endif
 #endif
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
-#if defined(VIBEQC_SCF_HAS_CUSOLVER_HEADER)
+#if defined(GENERATIVEQC_SCF_HAS_CUSOLVER_HEADER)
 namespace cuda_compat {
 namespace detail {
 
@@ -260,6 +260,6 @@ constexpr XsyevBatchedDispatch select_xsyev_batched_dispatch(
 XsyevBatchedGraphProbeResult probe_xsyev_batched_device_launch_graph(
     int device_id, std::uint64_t n, std::uint64_t solver_batch) noexcept;
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

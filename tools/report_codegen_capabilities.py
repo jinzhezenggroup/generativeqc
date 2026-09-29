@@ -8,7 +8,7 @@ _compiler_sys.path.insert(
     0, str(_CompilerPath(__file__).resolve().parents[1] / "python")
 )
 
-from vibeqc_compiler.integral.capabilities import main
+from generativeqc_compiler.integral.capabilities import main
 
 if __name__ == "__main__":
     main()

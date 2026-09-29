@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, method_capabilities
+from generativeqc import Calculator, method_capabilities
 
+from tools.generativeqc_cc.triples import INVENTORY_HASH
 from tools.validate_ccsd_t_gradient import analytic_oracle
-from tools.vibeqc_cc.triples import INVENTORY_HASH
 
 ROOT = Path(__file__).resolve().parents[2]
 GRADIENTS = ROOT / "tests/reference_data/cc/gradients"
@@ -49,14 +49,17 @@ def _calculator(**kwargs: object) -> Calculator:
 
 @pytest.fixture(params=("cpu", "cuda"))
 def energy_device(request: pytest.FixtureRequest) -> str:
-    if request.param == "cuda" and os.environ.get("VIBEQC_RCCSDT_CUDA_TEST") != "1":
+    if (
+        request.param == "cuda"
+        and os.environ.get("GENERATIVEQC_RCCSDT_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires explicitly allocated CUDA native library")
     return request.param
 
 
 @pytest.fixture
 def cuda_device() -> str:
-    if os.environ.get("VIBEQC_RCCSDT_CUDA_TEST") != "1":
+    if os.environ.get("GENERATIVEQC_RCCSDT_CUDA_TEST") != "1":
         pytest.skip("requires explicitly allocated CUDA native library")
     return "cuda"
 

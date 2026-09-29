@@ -5,19 +5,19 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc.accuracy import AccuracyAssessment, ObservableTarget, TargetAccuracy
+from generativeqc_compiler.common.resources import ResourceBudget
 from test_low_rank import DenseColumns
 from test_low_rank_source import source_for
-from vibeqc.accuracy import AccuracyAssessment, ObservableTarget, TargetAccuracy
-from vibeqc_compiler.common.resources import ResourceBudget
 
-from tools.vibeqc_posthf.conventions import MOBlock
-from tools.vibeqc_posthf.coulomb_columns import CoulombColumns
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
-from tools.vibeqc_posthf.low_rank import IncrementalCholesky
-from tools.vibeqc_posthf.low_rank_accuracy import audit_fixed_density
-from tools.vibeqc_posthf.low_rank_consumers import LowRankProvider
-from tools.vibeqc_posthf.mp2 import restricted_mp2
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.conventions import MOBlock
+from tools.generativeqc_posthf.coulomb_columns import CoulombColumns
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_posthf.low_rank import IncrementalCholesky
+from tools.generativeqc_posthf.low_rank_accuracy import audit_fixed_density
+from tools.generativeqc_posthf.low_rank_consumers import LowRankProvider
+from tools.generativeqc_posthf.mp2 import restricted_mp2
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def dense_approximation(factor: typing.Any) -> typing.Any:

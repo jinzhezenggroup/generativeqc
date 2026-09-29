@@ -6,11 +6,11 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.common.resources import ResourcePlan, plan_resources
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.resources import ResourcePlan, plan_resources
 
+from tools.generativeqc_validation.publication import validate_publication
 from tools.publish_spatial_tasks import dense_comparison, summarize, validate_run, write
-from tools.vibeqc_validation.publication import validate_publication
 
 BUNDLE = Path(__file__).resolve().parents[2] / "benchmarks/results/spatial-tasks"
 

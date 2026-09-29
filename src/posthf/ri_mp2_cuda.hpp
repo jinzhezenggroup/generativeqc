@@ -7,7 +7,7 @@
 #include "posthf/raw_source.hpp"
 #include "tensor/metrics.hpp"
 
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 
 struct RiMp2CudaBlockPlan {
   std::size_t virtual_block{};
@@ -28,11 +28,11 @@ struct RiMp2CudaEnergy {
   std::size_t transfer_bytes{};
   std::size_t virtual_block{};
   std::size_t source_passes{};
-  vibeqc_tensor::Metrics metrics;
+  generativeqc_tensor::Metrics metrics;
 };
 
 RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& reference,
                                            const posthf::RawSource& source, std::size_t budget,
                                            double metric_relative_threshold, int device);
 
-}  // namespace vibeqc::mp2
+}  // namespace generativeqc::mp2

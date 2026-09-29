@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.xc import libxc_bulk_capabilities
-from vibeqc_compiler.xc.capability_resolution import (
+from generativeqc_compiler.xc import libxc_bulk_capabilities
+from generativeqc_compiler.xc.capability_resolution import (
     RESOLUTION_SCHEMA,
     CapabilityNotQualified,
     resolve_capability,

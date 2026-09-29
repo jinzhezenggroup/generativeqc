@@ -7,7 +7,7 @@ import typing
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.integral import weighted_eri_execute as runtime
+from generativeqc_compiler.integral import weighted_eri_execute as runtime
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -20,7 +20,9 @@ def _artifact(path: Path, *, packaged: bool = True) -> SimpleNamespace:
             library=path,
             metadata={
                 "identity": {
-                    "schema": "vibeqc.weighted-packaged.v1" if packaged else "jit",
+                    "schema": "generativeqc.weighted-packaged.v1"
+                    if packaged
+                    else "jit",
                 },
             },
         ),
@@ -130,7 +132,7 @@ def test_stale_packaged_artifact_is_rejected_before_cdll(
     native = SimpleNamespace(
         library=path,
         metadata={
-            "identity": {"schema": "vibeqc.weighted-packaged.v1"},
+            "identity": {"schema": "generativeqc.weighted-packaged.v1"},
             "key": "a" * 64,
             "binary_sha256": expected,
         },

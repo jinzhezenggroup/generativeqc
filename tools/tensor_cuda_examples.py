@@ -28,10 +28,10 @@ import numpy as np
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     GATES,
     block_error,
     canonical_hash,
@@ -39,21 +39,25 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     PrecisionDirective,
     conservative_precision_variants,
     describe_precision,
     lower_precision,
 )
-from vibeqc_compiler.tensor.cuda_execute import (
+from generativeqc_compiler.tensor.cuda_execute import (
     PreparedCuda,
     compile_cuda,
     tensor_source_identity,
 )
-from vibeqc_compiler.tensor.cuda_fixtures import cc_fixtures
-from vibeqc_compiler.tensor.cuda_plan import Reservations, TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_tune import tune_cuda
-from vibeqc_compiler.tensor.interpreter import execute
+from generativeqc_compiler.tensor.cuda_fixtures import cc_fixtures
+from generativeqc_compiler.tensor.cuda_plan import (
+    Reservations,
+    TensorSchedule,
+    plan_cuda,
+)
+from generativeqc_compiler.tensor.cuda_tune import tune_cuda
+from generativeqc_compiler.tensor.interpreter import execute
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,7 +91,7 @@ def run(args: typing.Any) -> typing.Any:
     """Retain full tuning ledgers and one shared-schema record per input scale."""
     nvcc = args.nvcc or find_nvcc()
     if nvcc is None:
-        raise ValueError("provide --nvcc or VIBEQC_NVCC")
+        raise ValueError("provide --nvcc or GENERATIVEQC_NVCC")
     compiler = CudaCompilerAdapter(
         nvcc, cuda_target_info(args.architecture), args.compile_timeout
     )

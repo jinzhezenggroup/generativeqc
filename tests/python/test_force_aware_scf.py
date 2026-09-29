@@ -3,8 +3,8 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc import ObservableDelta, TargetErrorBudget
-from vibeqc.force_aware_scf import (
+from generativeqc import ObservableDelta, TargetErrorBudget
+from generativeqc.force_aware_scf import (
     ForceAwareScfPolicy,
     ScfEffortLevel,
     ScfForceCalibrationSample,

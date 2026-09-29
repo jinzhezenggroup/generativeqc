@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-VibeQC's long-term goal is broad quantum-chemistry coverage behind one
+GenerativeQC's long-term goal is broad quantum-chemistry coverage behind one
 accelerator-native interface. The [methods guide](../user/methods.md) describes
 current public discovery and qualification; the generated
 [native ABI registry](../public_methods.md) records stable provider IDs and

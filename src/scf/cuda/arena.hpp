@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Offsets for one persistent SCF arena. Optional regions have zero length when their execution
  * mode is disabled. */
@@ -171,4 +171,4 @@ T* arena_pointer(void* arena, std::size_t offset) {
   return reinterpret_cast<T*>(static_cast<unsigned char*>(arena) + offset);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

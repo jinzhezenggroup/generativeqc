@@ -1,8 +1,8 @@
 """Evaluate captured CUDA XC points with the original Libxc 7 Maple C in quad precision.
 
 Requires the pinned Libxc source archive and GCC/libquadmath. This offline
-diagnostic does not import the VibeQC compiler, runtime or generated formula.
-The input is the opt-in binary capture from vibeqc_dft_cuda_tests; each output
+diagnostic does not import the GenerativeQC compiler, runtime or generated formula.
+The input is the opt-in binary capture from generativeqc_dft_cuda_tests; each output
 row is energy density, two rho, three sigma and two tau derivatives.
 """
 
@@ -52,7 +52,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     source = oracle_source(args.archive)
-    with tempfile.TemporaryDirectory(prefix="vibeqc-wb97mv-quad-") as directory:
+    with tempfile.TemporaryDirectory(prefix="generativeqc-wb97mv-quad-") as directory:
         path = Path(directory)
         (path / "oracle.cpp").write_text(source)
         subprocess.run(

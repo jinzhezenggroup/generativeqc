@@ -4,8 +4,8 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -20,7 +20,7 @@ from vibeqc_compiler.tensor import (
     runtime_indexed_select,
     transpose,
 )
-from vibeqc_compiler.tensor.cuda_plan import (
+from generativeqc_compiler.tensor.cuda_plan import (
     ALIGNMENT,
     Reservations,
     TensorSchedule,

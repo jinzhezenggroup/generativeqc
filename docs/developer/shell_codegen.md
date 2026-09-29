@@ -17,7 +17,7 @@ architecture manifest; generated production CUDA remains a build artifact.
 
 ## Current pipeline
 
-`python/vibeqc_compiler/integral/ir.py` is now strictly mathematical, while
+`python/generativeqc_compiler/integral/ir.py` is now strictly mathematical, while
 `cuda_target.py` and `cuda_schedule.py` own NVIDIA execution policy:
 
 - `IntegralIR` describes two-, three-, or four-shell operators, explicit
@@ -110,7 +110,7 @@ now have a separate Hermite DAG lowering and native candidate schedules;
 the DF value provider has its own generated Rys lowering. Their derivative
 and production-selection boundaries remain independent of the quartet ABI.
 
-For large-AO direct-J/K failures, set `VIBEQC_DIRECT_TILE_VALIDATION=validate`
+For large-AO direct-J/K failures, set `GENERATIVEQC_DIRECT_TILE_VALIDATION=validate`
 to run an opt-in device validator immediately after shell-quartet compaction.
 It checks partition counts and capacities, pair and shell IDs, Cartesian AO
 ranges, and the first decoded AO quartet before any generated or handwritten
@@ -189,9 +189,9 @@ On CUDA 12.9 `sm_120`, all four RHF/UHF ordinary and persistent wrappers use
 memory. The checked-in 8192-task, three-primitive isolated gate improved from
 218.329 ms to 183.241 ms (`1.191x`) with `8.32e-12` maximum force disagreement.
 In the fixed-`dm0`, one-iteration 384-AO endpoint, the `dppp` kernel fell from
-167.420 ms to 139.197 ms and the VibeQC median moved from 3.327 s to 3.298 s.
+167.420 ms to 139.197 ms and the GenerativeQC median moved from 3.327 s to 3.298 s.
 The smaller endpoint gain is expected: current profiling places the remaining
-VibeQC/GPU4PySCF force-kernel gap across many exact shell classes rather than
+GenerativeQC/GPU4PySCF force-kernel gap across many exact shell classes rather than
 inside `dppp` alone. The raw evidence is the
 [isolated gate](../../benchmarks/results/rtx5090-26ef747-dppp-cooperative-rys4-isolated.json),
 [384-AO endpoint](../../benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json),
@@ -260,7 +260,7 @@ The promoted Phase-3 path buckets each fixed-bra queue by the original
 device histogram/prefix/scatter adds no host synchronization, global worker
 head, primitive-loop barrier, or component reduction. It is enabled by
 default and can be disabled for same-binary A/B measurements with
-`VIBEQC_PPPS_SIGNATURE_BUCKETING=0`.
+`GENERATIVEQC_PPPS_SIGNATURE_BUCKETING=0`.
 
 On the same 384-AO queue, bucketing raises primitive-work warp efficiency from
 25.995% to 86.813% while preserving all 1,863,242 tasks and 10,300,330 units
@@ -275,7 +275,7 @@ timings, queue invariants, gates, and machine metadata are retained in the
 [signature-bucketing artifact](../../benchmarks/results/rtx5090-0b6a573-issue-41-ppps-signature-bucketing.json).
 
 The generated scalar worker also accepts 32, 64, 128, or 256 threads from the
-same binary via `VIBEQC_PPPS_BLOCK_THREADS`; 256 remains the default. With
+same binary via `GENERATIVEQC_PPPS_BLOCK_THREADS`; 256 remains the default. With
 signature bucketing enabled on both sides, five-repeat whole-descriptor ABBA
 comparisons found 128 threads 0.07% slower, 64 threads 0.40% slower, and the
 diagnostic 32-thread CTA 1.59% slower than 256. These measured results agree
@@ -300,8 +300,8 @@ signature space; counts through 63 are exact and 64 is the overflow bucket.
 The two classes share one small 66 KiB metadata allocation but retain separate
 histograms and class offsets, so no task queue is duplicated and all other
 generated classes keep their existing order. Both paths are enabled by default
-and can be disabled independently with `VIBEQC_PSPS_SIGNATURE_BUCKETING=0` and
-`VIBEQC_PPSS_SIGNATURE_BUCKETING=0`.
+and can be disabled independently with `GENERATIVEQC_PSPS_SIGNATURE_BUCKETING=0` and
+`GENERATIVEQC_PPSS_SIGNATURE_BUCKETING=0`.
 
 On the 384-AO fixed-`dm0` endpoint, five-repeat ABBA comparisons measured
 `psps` at 5.210367 s versus 5.101462 s, saving 108.905 ms (2.13%), and `ppss`
@@ -314,12 +314,12 @@ be added. Raw samples and promotion gates are retained in the
 
 The pre-DSPS Phase-0 ledger joins an unprofiled, iteration-matched endpoint
 with five Nsight warm replays and the exact final-density shell-class profile.
-At 384 AOs, the accepted endpoint is 2.887663 s for VibeQC versus 2.139527 s
-for GPU4PySCF (`1.350x`). Relative to the issue baseline, the VibeQC endpoint
+At 384 AOs, the accepted endpoint is 2.887663 s for GenerativeQC versus 2.139527 s
+for GPU4PySCF (`1.350x`). Relative to the issue baseline, the GenerativeQC endpoint
 is 293.829 ms lower and the engine gap is 290.173 ms smaller. Maximum energy
 and force errors are `1.55e-11 Eh` and `3.15e-8 Eh/bohr`, respectively.
 
-The profiled VibeQC host interval is 2886.001 ms per replay. Device kernels
+The profiled GenerativeQC host interval is 2886.001 ms per replay. Device kernels
 account for 1526.090 ms: 1458.804 ms in two-electron force, 27.542 ms in
 one-electron force, 27.447 ms in screening and queue preparation, and 12.297 ms
 in the remaining measured components. The remaining 1359.911 ms is explicitly
@@ -352,7 +352,7 @@ of `1.13e-11 Eh/bohr`. The promoted force kernel uses 252 registers, 7,248 B
 shared memory, and no stack or local memory. Its production shell-class time
 falls from 127.806 ms to 52.621 ms per replay (`2.429x`), saving 75.185 ms.
 
-On the five-repeat, iteration-matched 384-AO endpoint, VibeQC falls from
+On the five-repeat, iteration-matched 384-AO endpoint, GenerativeQC falls from
 2.887663 s to 2.810138 s while GPU4PySCF measures 2.135372 s. The change saves
 77.525 ms end to end; maximum energy and force errors remain `1.64e-11 Eh` and
 `3.15e-8 Eh/bohr`. The 96-AO guard regresses by 0.74%, below its 2% limit, and
@@ -517,7 +517,7 @@ timer fell from a five-run median of about 131 ms to 104 ms; DSDS fell from
 about 314 ms to roughly 40 ms in the same diagnostic.
 
 The final 768-AO endpoint (five interleaved one-iteration warm replays, loose
-`1e-8` SCF tolerances) measures 4.442 s for VibeQC versus 3.727 s for
+`1e-8` SCF tolerances) measures 4.442 s for GenerativeQC versus 3.727 s for
 GPU4PySCF. All replays converge in one iteration; the maximum paired errors are
 `1.41e-11 Eh` and `1.13e-7 Eh/bohr`. Alternative shared candidates are not
 promoted solely from a common lowering shape: DDPP's subgroup variant regressed
@@ -527,7 +527,7 @@ schedule.
 
 ## Architecture autotuning
 
-`python/vibeqc_compiler/integral/autotune.py` emits every CUDA-supported schedule variant
+`python/generativeqc_compiler/integral/autotune.py` emits every CUDA-supported schedule variant
 with unique symbols, compiles the translation units in parallel, links them
 into one executable, and runs all variants in one GPU allocation. A candidate
 is rejected for:
@@ -553,7 +553,7 @@ Passing compiled variants are ranked by measured kernel time. The winner can be 
 to a schema-v2, architecture-specific production manifest:
 
 ```bash
-python -m vibeqc_compiler.integral.autotune \
+python -m generativeqc_compiler.integral.autotune \
   --nvcc /group/software/cuda-12.9.1/bin/nvcc \
   --architecture sm_120 \
   --shell-class dpds \
@@ -567,7 +567,7 @@ repeating `--shell-class`, or by supplying a list file. The list-file form
 accepts one class per line, comma-separated names, and `#` comments:
 
 ```bash
-python -m vibeqc_compiler.integral.autotune \
+python -m generativeqc_compiler.integral.autotune \
   --nvcc /group/software/cuda-12.9.1/bin/nvcc \
   --architecture sm_120 \
   --shell-class-file benchmarks/issue52-hotspots.txt \
@@ -594,7 +594,7 @@ this searches the component-lane variants for three Fock classes and
 atomically promotes all three winners together:
 
 ```bash
-python -m vibeqc_compiler.integral.autotune \
+python -m generativeqc_compiler.integral.autotune \
   --nvcc /group/software/cuda-12.9.1/bin/nvcc \
   --architecture sm_120 \
   --shell-class dpps --shell-class ddds --shell-class dppp \
@@ -636,11 +636,11 @@ high-component subgroup baselines omitted from generic schedule discovery),
 autotune reads that schedule directly from the manifest instead of maintaining
 a second shell-name allowlist.
 
-CMake selects profiles with `VIBEQC_AOT_PROFILE` or `VIBEQC_AOT_PROFILES`.
+CMake selects profiles with `GENERATIVEQC_AOT_PROFILE` or `GENERATIVEQC_AOT_PROFILES`.
 `auto` resolves only an exact measured or explicitly compatible profile and is
 fail-closed when neither exists. Generic CUDA remains available through the
 explicit `portable`/`portable_cuda` profile; it is never selected by an `auto`
-miss. `VIBEQC_ENABLE_AOT_SHELLS=OFF` omits all generated shell objects.
+miss. `GENERATIVEQC_ENABLE_AOT_SHELLS=OFF` omits all generated shell objects.
 
 Optional production code shapes are declared per manifest row through the
 `capabilities` list. The current names are `streaming_fock`, `mixed_fock`, and
@@ -867,7 +867,7 @@ python tools/generate_shell_kernels.py \
   --shell-class dppp --lowering fused --format stats
 python tools/generate_shell_kernels.py \
   --shell-class fddd --lowering fused --format stats
-cmake --build build --target vibeqc_codegen_pilot
+cmake --build build --target generativeqc_codegen_pilot
 ```
 
 Generate the structural report for all 55 catalog classes:
@@ -891,7 +891,7 @@ To screen a bounded set of classes
 that is automatically discovered from the consumer-specific manifest gap:
 
 ```bash
-python -m vibeqc_compiler.integral.batch_benchmark \
+python -m generativeqc_compiler.integral.batch_benchmark \
   --discover --consumer force --limit 12 \
   --partition main --gres gpu:5090:1
 ```
@@ -921,7 +921,7 @@ descriptor-count compaction, run the focused profile through Slurm:
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:12:00 bash -lc \
-  'VIBEQC_LIBRARY=$PWD/build/libvibeqc.so.0.1.0 \
+  'GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so.0.1.0 \
    PYTHONPATH=$PWD/python:$PWD \
    python -u benchmarks/issue52_current_fock_profile.py \
    --output build/issue52-current-fock-profile.json \
@@ -938,14 +938,14 @@ can be much slower on the 768-AO topology.
 
 For the cross-engine regression gate, use the same fixed topology with the
 interleaved warm replay harness and an explicit upper bound on the
-iteration-matched VibeQC/GPU4PySCF ratio. The bound is supplied by the
+iteration-matched GenerativeQC/GPU4PySCF ratio. The bound is supplied by the
 acceptance job rather than inferred from a stale artifact:
 
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:20:00 bash -lc \
   'export LD_PRELOAD=/group/software/cuda-12.9.1/targets/x86_64-linux/lib/libcublasLt.so.12:/group/software/cuda-12.9.1/targets/x86_64-linux/lib/libcublas.so.12; \
-   VIBEQC_LIBRARY=$PWD/build/cuda-release-sm120/libvibeqc.so \
+   GENERATIVEQC_LIBRARY=$PWD/build/cuda-release-sm120/libgenerativeqc.so \
    PYTHONPATH=$PWD/python:$PWD/benchmarks:$PWD \
    /home/jzzeng/codes/qc/build/gpu4pyscf-venv/bin/python \
    benchmarks/compare_gpu4pyscf_batch.py \
@@ -953,7 +953,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
    --max-iterations 100 --energy-tolerance 1e-12 \
    --density-tolerance 1e-10 --reference-gradient-tolerance 1e-8 \
    --screening-tolerance 1e-14 \
-   --maximum-vibeqc-over-gpu4pyscf 1.30 \
+   --maximum-generativeqc-over-gpu4pyscf 1.30 \
    --output build/issue52-768-regression-gate.json'
 ```
 
@@ -965,14 +965,14 @@ Run Python gates:
 
 ```bash
 python -m pytest tests/python/test_codegen.py -q
-python -m ruff check python/vibeqc_compiler/integral tests/python/test_codegen.py
+python -m ruff check python/generativeqc_compiler/integral tests/python/test_codegen.py
 ```
 
 Run the explicit CUDA gate:
 
 ```bash
-VIBEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
-VIBEQC_CUDA_ARCH=sm_120 \
+GENERATIVEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
+GENERATIVEQC_CUDA_ARCH=sm_120 \
 python -m pytest tests/python/test_codegen.py -q -s
 ```
 

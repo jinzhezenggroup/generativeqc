@@ -4,7 +4,7 @@
 #include "scf/cuda/df_packed_values.hpp"
 #include "scf/df_value_storage.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 __device__ DfSymmetricAoPair lower_pair(std::size_t mu, std::size_t nu) {
   const auto hi = mu > nu ? mu : nu, lo = mu > nu ? nu : mu;
@@ -109,4 +109,4 @@ void launch_project_packed_df(cudaStream_t stream, std::size_t n, std::size_t a,
   else
     project_packed<false><<<grid, block, 0, stream>>>(n, a, rank, packed, coefficients, projection);
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

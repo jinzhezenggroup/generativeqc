@@ -5,10 +5,10 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.dft import GridSpec, NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments, load_fixture
-from vibeqc_compiler.dft.plan import plan_tiles
-from vibeqc_compiler.dft.prepared import PreparedGrid, PreparedGridBatch
+from generativeqc_compiler.dft import GridSpec, NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments, load_fixture
+from generativeqc_compiler.dft.plan import plan_tiles
+from generativeqc_compiler.dft.prepared import PreparedGrid, PreparedGridBatch
 
 
 def arguments(name: typing.Any = "h2") -> typing.Any:
@@ -129,7 +129,7 @@ def test_budget_scales_with_tile_and_jets_not_molecular_grid_size() -> None:
 
 
 def test_unsupported_public_basis_and_invalid_native_arrays_fail() -> None:
-    from vibeqc import Primitive, Shell
+    from generativeqc import Primitive, Shell
 
     with pytest.raises(ValueError, match="through f"):
         NativeAO([(1, (0, 0, 0))], (Shell(0, 4, (Primitive(1, 1),)),), multiplicity=2)

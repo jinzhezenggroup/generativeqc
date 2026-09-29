@@ -84,11 +84,11 @@ def _select(repository: Path, base: str, head: str) -> str:
         ("src/scf/solver.cpp", "wb97mv"),
         ("src/methods/rks.cpp", "wb97mv"),
         ("src/integrals/eri.cpp", "wb97mv"),
-        ("include/vibeqc.h", "wb97mv"),
-        ("python/vibeqc/calculator.py", "wb97mv"),
-        ("python/vibeqc_compiler/method/spec.py", "wb97mv"),
-        ("python/vibeqc_compiler/xc/spec.py", "wb97mv"),
-        ("python/vibeqc_compiler/integral/eri.py", "wb97mv"),
+        ("include/generativeqc.h", "wb97mv"),
+        ("python/generativeqc/calculator.py", "wb97mv"),
+        ("python/generativeqc_compiler/method/spec.py", "wb97mv"),
+        ("python/generativeqc_compiler/xc/spec.py", "wb97mv"),
+        ("python/generativeqc_compiler/integral/eri.py", "wb97mv"),
         ("manifests/method.json", "wb97mv"),
         ("upstream/libxc/functional.c", "wb97mv"),
         ("tools/libxc_metadata.py", "wb97mv"),
@@ -105,7 +105,10 @@ def test_changed_path_selects_bounded_extras(
 ) -> None:
     base = _git(repository, "rev-parse", "HEAD")
     head = _commit_file(repository, path)
-    assert _select(repository, base, head) == f"VIBEQC_CODSPEED_EXTRA_CASES={extra}\n"
+    assert (
+        _select(repository, base, head)
+        == f"GENERATIVEQC_CODSPEED_EXTRA_CASES={extra}\n"
+    )
 
 
 def test_base_only_change_does_not_expand_pr_tier(repository: Path) -> None:
@@ -113,7 +116,7 @@ def test_base_only_change_does_not_expand_pr_tier(repository: Path) -> None:
     head = _commit_file(repository, "docs/change.md")
     _git(repository, "checkout", "main")
     base = _commit_file(repository, "src/dft/base-only.cpp")
-    assert _select(repository, base, head) == "VIBEQC_CODSPEED_EXTRA_CASES=\n"
+    assert _select(repository, base, head) == "GENERATIVEQC_CODSPEED_EXTRA_CASES=\n"
 
 
 def test_sensitive_rename_still_selects_advanced_endpoint(repository: Path) -> None:
@@ -121,4 +124,6 @@ def test_sensitive_rename_still_selects_advanced_endpoint(repository: Path) -> N
     _git(repository, "mv", "src/dft/removed.cpp", "relocated.txt")
     _git(repository, "commit", "-m", "rename")
     head = _git(repository, "rev-parse", "HEAD")
-    assert _select(repository, base, head) == "VIBEQC_CODSPEED_EXTRA_CASES=wb97mv\n"
+    assert (
+        _select(repository, base, head) == "GENERATIVEQC_CODSPEED_EXTRA_CASES=wb97mv\n"
+    )

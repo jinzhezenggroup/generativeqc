@@ -1,5 +1,5 @@
 {
-  "adapter_sha256": "2cd77932848365d216716408f419e532651a3174f7b53d08f173ee4d16e4b69f",
+  "adapter_sha256": "3da3459a8ed0e6619ce347b54aff9560c2bdaf73c1efcb6d6f9fc404331b3a28",
   "cases": [
     "asymmetric",
     "water_dimer",
@@ -9,8 +9,8 @@
   ],
   "charges": "independent supplied inputs; no EEQ response",
   "command": "python tools/oracle/generate_d4_reference.py --prefix /path/to/reference-prefix",
-  "fixture_sha256": "bd95a5ba5a874cbeef7de9e7c483a93736f7525723eee45c0cddb374dd17ddf5",
-  "generator_sha256": "495bca514e5ee414780fcdb76c85b9844657ebcd76ce97629947ec260f3021eb",
+  "fixture_sha256": "33a1a231b4abd67eb1082941e7cff77b8604df0892815d1013971d6fc81c566f",
+  "generator_sha256": "d4a48f5537fab6a7c72c6bac457a2fb59580f814ff2afab8cd8afc915dd7e4cf",
   "libraries": {
     "libdftd4.so": "5eaf8f6a243643fba2a9cb32ab18348ece9c23913a73a6f5cc15d3534f643e5f",
     "libmctc-lib.so": "114eb96417b0ce0409fe03920c19cecd412dbad8c8bf89c3cf3b686bd0052c38",

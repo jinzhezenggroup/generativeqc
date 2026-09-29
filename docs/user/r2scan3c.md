@@ -1,6 +1,6 @@
 # r2SCAN-3c capability contract
 
-VibeQC exposes canonical r2SCAN-3c through the Python selectors
+GenerativeQC exposes canonical r2SCAN-3c through the Python selectors
 "r2scan-3c", "r2scan-3c-rks", and "r2scan-3c-uks". These names resolve to the
 same inspectable R2SCAN-3c MethodIR used by the compiler; they do not add a
 second native scientific driver or a separate native method ID.

@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Reset every streaming flag from a mask captured by value, without host storage. */
 void launch_reset_bounded_generated_streaming_flags_kernel(dim3 grid, dim3 block,
@@ -43,4 +43,4 @@ void launch_normalize_bounded_generated_task_counts_kernel(
     const std::uint32_t* task_offsets, std::uint32_t* task_counts, std::uint32_t* task_heads,
     std::uint32_t* overflow, bool preserve_overflow_counts);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

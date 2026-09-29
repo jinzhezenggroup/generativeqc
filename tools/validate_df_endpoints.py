@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from vibeqc import Calculator
-from vibeqc_compiler.common.evidence import file_hash
+from generativeqc import Calculator
+from generativeqc_compiler.common.evidence import file_hash
 
-from tools.vibeqc_validation.f_shell_numerics import numerical_error
+from tools.generativeqc_validation.f_shell_numerics import numerical_error
 
 
 def run_endpoint(
@@ -43,7 +43,7 @@ def run_endpoint(
     repeats: typing.Any,
 ) -> typing.Any:
     """Use public prepared batches, including changed coordinates and forces."""
-    os.environ["VIBEQC_DF_VALUE_MAPPING"] = route
+    os.environ["GENERATIVEQC_DF_VALUE_MAPPING"] = route
     geometry = [("O", [0.0, 0.0, 0.0]), ("H", [0.0, 1.43, 1.11])]
     if method == "rhf":
         geometry.append(("H", [0.0, -1.43, 1.11]))
@@ -162,12 +162,12 @@ def main() -> None:
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("run this real GPU endpoint through srun")
     report = {
-        "schema": "vibeqc.df_endpoint_validation",
+        "schema": "generativeqc.df_endpoint_validation",
         "version": 2,
         "comparison_kind": "generated_schedule_parity",
         "baseline_route": args.baseline_route,
-        "library": os.environ["VIBEQC_LIBRARY"],
-        "library_hash": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library": os.environ["GENERATIVEQC_LIBRARY"],
+        "library_hash": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
         "runs": [],
         "production_promoted": False,

@@ -5,7 +5,7 @@
 #include <numbers>
 #include <stdexcept>
 
-namespace vibeqc::molecule {
+namespace generativeqc::molecule {
 namespace {
 
 constexpr unsigned kMaximumPublicAngularMomentum = 4;
@@ -47,9 +47,10 @@ std::vector<CartesianComponent> cartesian_components(unsigned l) {
   return components;
 }
 
-std::vector<AoExpansion> ao_expansions(unsigned l, vibeqc_basis_representation representation) {
+std::vector<AoExpansion> ao_expansions(unsigned l,
+                                       generativeqc_basis_representation representation) {
   const std::vector<CartesianComponent> cartesian = cartesian_components(l);
-  if (representation == VIBEQC_BASIS_CARTESIAN || l < 2) {
+  if (representation == GENERATIVEQC_BASIS_CARTESIAN || l < 2) {
     std::vector<AoExpansion> expansions;
     expansions.reserve(cartesian.size());
     for (const CartesianComponent& component : cartesian) {
@@ -156,7 +157,7 @@ std::vector<AoExpansion> ao_expansions(unsigned l, vibeqc_basis_representation r
 std::size_t ao_count(const core::System& system) noexcept {
   std::size_t count = 0;
   for (const core::Shell& shell : system.shells) {
-    const std::size_t functions = system.basis_representation == VIBEQC_BASIS_SPHERICAL
+    const std::size_t functions = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                                       ? 2 * static_cast<std::size_t>(shell.angular_momentum) + 1
                                       : cartesian_count(shell.angular_momentum);
     if (functions > std::numeric_limits<std::size_t>::max() - count) return 0;
@@ -182,10 +183,10 @@ double cartesian_component_normalization(const CartesianComponent& component) no
   return 1.0 / std::sqrt(denominator);
 }
 
-vibeqc_status validate_and_normalize(core::System& system, std::string& detail) {
+generativeqc_status validate_and_normalize(core::System& system, std::string& detail) {
   if (system.atoms.empty()) {
     detail = "a system requires at least one atom";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::int64_t nuclear_charge = 0;
   for (const auto& atom : system.atoms) {
@@ -193,17 +194,17 @@ vibeqc_status validate_and_normalize(core::System& system, std::string& detail) 
       detail =
           "atomic numbers must lie in [1, 118]; element identity is independent of basis "
           "availability";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (double coordinate : atom.position) {
       if (!std::isfinite(coordinate)) {
         detail = "atom coordinates must be finite Bohr values";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
     }
     if (atom.ecp_core < 0 || atom.ecp_core >= atom.atomic_number) {
       detail = "ECP core count must leave a positive ionic charge";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     nuclear_charge += atom.ionic_charge();
   }
@@ -212,7 +213,7 @@ vibeqc_status validate_and_normalize(core::System& system, std::string& detail) 
   const std::int64_t electrons = nuclear_charge - static_cast<std::int64_t>(system.charge);
   if (electrons > std::numeric_limits<int>::max() || electrons <= 0) {
     detail = "active-electron population is outside the positive native integer range";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   system.electron_count = static_cast<int>(electrons);
   // Downstream HF occupation keys use signed int for N + (multiplicity - 1).
@@ -220,34 +221,34 @@ vibeqc_status validate_and_normalize(core::System& system, std::string& detail) 
   if (system.multiplicity == 0 || electrons + static_cast<std::int64_t>(system.multiplicity) - 1 >
                                       std::numeric_limits<int>::max()) {
     detail = "electron count and multiplicity exceed the native spin integer range";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  if (system.basis_representation != VIBEQC_BASIS_CARTESIAN &&
-      system.basis_representation != VIBEQC_BASIS_SPHERICAL) {
+  if (system.basis_representation != GENERATIVEQC_BASIS_CARTESIAN &&
+      system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL) {
     detail = "basis representation must be Cartesian or spherical";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   for (auto& shell : system.shells) {
     if (shell.atom_index >= system.atoms.size()) {
       detail = "shell atom index is out of range";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     if (shell.angular_momentum > kMaximumPublicAngularMomentum) {
       detail = "shell on atom " + std::to_string(shell.atom_index) +
                " has l=" + std::to_string(shell.angular_momentum) +
                "; native CPU Cartesian/real-spherical execution supports s through g shells";
-      return VIBEQC_STATUS_NOT_IMPLEMENTED;
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     if (shell.primitives.empty()) {
       detail = "each shell requires at least one primitive";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (auto& primitive : shell.primitives) {
       if (!(primitive.exponent > 0.0) || !std::isfinite(primitive.exponent) ||
           !std::isfinite(primitive.coefficient)) {
         detail = "primitive exponents must be positive finite and coefficients finite";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
     }
 
@@ -266,7 +267,7 @@ vibeqc_status validate_and_normalize(core::System& system, std::string& detail) 
     }
     if (!(norm2 > 0.0) || !std::isfinite(norm2)) {
       detail = "contracted shell has an invalid normalization";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     const double scale = 1.0 / std::sqrt(norm2);
     for (auto& primitive : shell.primitives) {
@@ -277,11 +278,11 @@ vibeqc_status validate_and_normalize(core::System& system, std::string& detail) 
       // through a normalization underflow or overflow.
       if (!std::isfinite(primitive.coefficient) || (nonzero && primitive.coefficient == 0.0)) {
         detail = "normalized primitive coefficient is outside nonzero FP64 range";
-        return VIBEQC_STATUS_NUMERICAL_FAILURE;
+        return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
       }
     }
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::molecule
+}  // namespace generativeqc::molecule

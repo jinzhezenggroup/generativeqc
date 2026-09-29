@@ -22,7 +22,7 @@
 #include "scf/cuda/direct_task_encoding.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Enumerate, screen, queue, and drain shell pair-of-pairs hierarchically.
@@ -327,4 +327,4 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
   }
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

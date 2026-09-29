@@ -25,8 +25,8 @@ def test_native_response_symmetry_contract_compiles_and_runs(tmp_path: Path) -> 
 #include "response/linear_problem.hpp"
 
 int main() {
-  using vibeqc::response::LinearResponseProblem;
-  using vibeqc::response::LinearResponseSymmetry;
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::LinearResponseSymmetry;
 
   auto general_apply = [](std::span<const double> input, std::span<double> output) {
     output[0] = input[0] + 2.0 * input[1];

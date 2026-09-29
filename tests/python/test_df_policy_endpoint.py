@@ -140,7 +140,7 @@ def test_reference_rejects_broadcastable_or_nonfinite_arrays(
 @pytest.mark.parametrize(
     "controls",
     [
-        {"dense": {"VIBEQC_DF_FINAL_EXCHANGE": "dense"}},
+        {"dense": {"GENERATIVEQC_DF_FINAL_EXCHANGE": "dense"}},
         {"dense": {"CUDA_VISIBLE_DEVICES": "0"}, "auto": {"CUDA_VISIBLE_DEVICES": "0"}},
         {"unknown": {}},
     ],
@@ -163,7 +163,7 @@ def test_coupled_policies_reject_incomplete_or_non_schedule_arms(
             "--output",
             str(tmp_path / "run.json"),
             "--control",
-            "VIBEQC_DF_SEED_EXCHANGE",
+            "GENERATIVEQC_DF_SEED_EXCHANGE",
             "--policies",
             "dense",
             "auto",

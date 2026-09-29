@@ -1,6 +1,6 @@
 """Fail-closed real-GPU endpoint gates for one-electron value candidates.
 
-Run with VIBEQC_ONE_ELECTRON_CUDA_TEST=1 under Slurm. Once enabled, CUDA
+Run with GENERATIVEQC_ONE_ELECTRON_CUDA_TEST=1 under Slurm. Once enabled, CUDA
 runtime errors fail these tests; they cannot become unavailable-hardware skips.
 """
 
@@ -9,10 +9,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, Primitive, Shell
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_ONE_ELECTRON_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_ONE_ELECTRON_CUDA_TEST") != "1",
     reason="explicit Slurm GPU numerical tier",
 )
 
@@ -48,9 +48,9 @@ def run_case(
 ) -> typing.Any:
     """Exercise cold, unchanged and changed geometry on one fixed topology."""
     if mapping is None:
-        monkeypatch.delenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", raising=False)
+        monkeypatch.delenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", raising=False)
     else:
-        monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
+        monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
     basis, systems, charge, multiplicity = sdf_case_inputs(method, count)
     calculator = Calculator(
         method=method,
@@ -129,11 +129,11 @@ def test_policy_changes_rebuild_reused_direct_plan(
     moved = np.array([r for _, r in atoms], dtype=float)
     moved[1, 0] += 0.01
     calc = Calculator(device="cuda", energy_tolerance=1e-12, density_tolerance=1e-10)
-    monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", "thread")
+    monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "thread")
     with calc.prepare_batch([atoms]) as prepared:
         prepared.execute(strict=True)
         for mapping in ("thread", "shell_warp", "thread"):
-            monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
+            monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
             actual = prepared.execute([moved], strict=True)
             with calc.prepare_batch([[("H", tuple(r)) for r in moved]]) as fresh:
                 expected = fresh.execute(strict=True)
@@ -144,9 +144,9 @@ def test_policy_changes_rebuild_reused_direct_plan(
                 actual.items[0].forces, expected.items[0].forces, atol=3e-9, rtol=0
             )
             controls = prepared._warm_metadata[0]["controls"]["runtime_policy"]
-            assert "VIBEQC_ONE_ELECTRON_VALUES" not in controls
-            assert "VIBEQC_DF_VALUES" not in controls
-            assert controls["VIBEQC_ONE_ELECTRON_VALUE_MAPPING"] == mapping
+            assert "GENERATIVEQC_ONE_ELECTRON_VALUES" not in controls
+            assert "GENERATIVEQC_DF_VALUES" not in controls
+            assert controls["GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"] == mapping
 
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
@@ -160,14 +160,14 @@ def test_generated_pair_policy_hcore_matches_independent_libcint(
     and moved nuclei cover the policy's weighting, component and nuclear loops.
     The independent oracle applies its own Cartesian normalization convention.
     """
-    from vibeqc.fock import FockBuildSpec, FockPlan, FockTerm
-    from vibeqc_compiler.dft import NativeAO
-    from vibeqc_compiler.dft.fixtures import basis_arguments
+    from generativeqc.fock import FockBuildSpec, FockPlan, FockTerm
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft.fixtures import basis_arguments
 
     from tools.generate_validation_references import pyscf_molecule
 
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
-    monkeypatch.setenv("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
+    monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", mapping)
     inputs = {
         "atomic_numbers": [2, 1],
         "coordinates": [[0.2, -0.3, 0.1], [-0.4, 0.15, 0.8]],

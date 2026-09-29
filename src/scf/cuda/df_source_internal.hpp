@@ -14,7 +14,7 @@
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda_density_fitting.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Private DF source ownership shared by setup and replay. These allocations contain
  * metadata/transforms, independently of SCF state. */
@@ -63,10 +63,10 @@ bool cuda_df_shell_domain(const core::System& system, const char* role, std::str
 
 /** Build a source transactionally and return its current metric; ownership transfers only on
  * success. */
-vibeqc_status create_cuda_density_fitting_integral_source_impl(
+generativeqc_status create_cuda_density_fitting_integral_source_impl(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems,
     CudaDensityFittingIntegralSourceImpl** source, std::vector<double>& metrics, std::size_t& nbf,
     std::size_t& naux, std::string& detail);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -6,23 +6,23 @@
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 using namespace cuda_execution;
 }
 
 namespace {
 
-vibeqc::integrals::CoulombRange integral_range(DirectCoulombRange range) {
+generativeqc::integrals::CoulombRange integral_range(DirectCoulombRange range) {
   switch (range) {
     case DirectCoulombRange::Full:
-      return vibeqc::integrals::CoulombRange::Full;
+      return generativeqc::integrals::CoulombRange::Full;
     case DirectCoulombRange::Long:
-      return vibeqc::integrals::CoulombRange::Long;
+      return generativeqc::integrals::CoulombRange::Long;
     case DirectCoulombRange::Short:
-      return vibeqc::integrals::CoulombRange::Short;
+      return generativeqc::integrals::CoulombRange::Short;
   }
-  return vibeqc::integrals::CoulombRange::Full;
+  return generativeqc::integrals::CoulombRange::Full;
 }
 
 __global__ void independent_jk_finite_kernel(const double* values, std::size_t count,
@@ -53,7 +53,7 @@ __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, 
 template <bool MixedJ>
 __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begin, bool want_j,
                                       bool want_k, bool unrestricted,
-                                      vibeqc::integrals::CoulombRange exchange_range,
+                                      generativeqc::integrals::CoulombRange exchange_range,
                                       double exchange_omega, double screening, const double* bounds,
                                       const double* density, const double* beta, double* j_out,
                                       double* ka_out, double* kb_out) {
@@ -107,13 +107,11 @@ __global__ void independent_jk_kernel(DeviceBatch batch, std::size_t system_begi
  * removes the previous coordinate-by-AO^4 scan without changing screening,
  * public-AO spherical expansion, coefficients, or radial operators.
  */
-__global__ void independent_jk_derivative_kernel(DeviceBatch batch, std::size_t system_begin,
-                                                 std::size_t system_count, double cj, double ck,
-                                                 bool unrestricted,
-                                                 vibeqc::integrals::CoulombRange exchange_range,
-                                                 double exchange_omega, double screening,
-                                                 const double* bounds, const double* density,
-                                                 const double* beta, double* out) {
+__global__ void independent_jk_derivative_kernel(
+    DeviceBatch batch, std::size_t system_begin, std::size_t system_count, double cj, double ck,
+    bool unrestricted, generativeqc::integrals::CoulombRange exchange_range, double exchange_omega,
+    double screening, const double* bounds, const double* density, const double* beta,
+    double* out) {
   const std::size_t n = batch.nbf, matrix = n * n, quartets = matrix * matrix;
   const std::size_t work_count = system_count * quartets;
   const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
@@ -141,7 +139,7 @@ __global__ void independent_jk_derivative_kernel(DeviceBatch batch, std::size_t 
       const std::size_t jl = static_cast<std::size_t>(j) * n + l;
       const double exchange = density[offset + ik] * density[offset + jl] +
                               (unrestricted ? beta[offset + ik] * beta[offset + jl] : 0.0);
-      if (exchange_range == vibeqc::integrals::CoulombRange::Full)
+      if (exchange_range == generativeqc::integrals::CoulombRange::Full)
         full_weight += 0.5 * ck * exchange;
       else
         range_weight = 0.5 * ck * exchange;
@@ -286,7 +284,7 @@ __global__ void independent_rsh_derivative_kernel(DeviceBatch batch, std::size_t
         const Dual3 value = contracted_eri<Dual3>(
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate,
-            vibeqc::integrals::CoulombRange::Long, omega);
+            generativeqc::integrals::CoulombRange::Long, omega);
         long_range[0] = value.derivative_x;
         long_range[1] = value.derivative_y;
         long_range[2] = value.derivative_z;
@@ -386,4 +384,4 @@ void launch_independent_rsh_derivative_kernel(
 
 }  // namespace cuda_execution
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

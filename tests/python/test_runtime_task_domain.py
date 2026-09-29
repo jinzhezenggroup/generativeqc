@@ -2,7 +2,7 @@ import itertools
 import typing
 
 import pytest
-from vibeqc_compiler.common.runtime_domain import (
+from generativeqc_compiler.common.runtime_domain import (
     RuntimeTaskDomain,
     RuntimeTaskPage,
 )

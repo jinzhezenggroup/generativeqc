@@ -1,12 +1,12 @@
-"""Interleaved homogeneous-batch VibeQC/GPU4PySCF parity benchmark.
+"""Interleaved homogeneous-batch GenerativeQC/GPU4PySCF parity benchmark.
 
-VibeQC executes one native fixed-topology bucket. GPU4PySCF currently exposes
+GenerativeQC executes one native fixed-topology bucket. GPU4PySCF currently exposes
 a single-molecule SCF interface, so one initialized GPU object and warm density
 are retained per system. Warm samples are interleaved in a deterministic ABBA
 order to reduce clock and thermal drift, and every timing remains paired with
 the SCF branch and numerical result that produced it. After one cold execution,
 both engines replay their own fixed post-cold density snapshot; an unmeasured
-priming replay settles VibeQC's resident-density upload path before timing
+priming replay settles GenerativeQC's resident-density upload path before timing
 begins. Cross-engine density identity is not asserted because each backend owns
 its AO convention.
 """
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from vibeqc import Calculator, load_basis
+from generativeqc import Calculator, load_basis
 
 if typing.TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -48,7 +48,7 @@ except ModuleNotFoundError:
         write_result,
     )
 
-VIBEQC_ENGINE = "vibeqc"
+GENERATIVEQC_ENGINE = "generativeqc"
 GPU4PYSCF_ENGINE = "gpu4pyscf"
 
 
@@ -62,8 +62,8 @@ def load_comparison_basis(
     importing GPU packages; silently dropping any of these changes the model.
     This conversion is benchmark input preparation, never a native dependency.
     """
-    from vibeqc.basis_capabilities import require_basis
-    from vibeqc.elements import SYMBOLS
+    from generativeqc.basis_capabilities import require_basis
+    from generativeqc.elements import SYMBOLS
 
     basis = load_basis(path)
     if basis.representation != case.basis_representation:
@@ -105,7 +105,7 @@ def native_build_metadata(calculator: Any) -> dict[str, Any]:
     the path requested by the environment. The native probe uses the allocated
     device's process-local ordinal and preserves its current-device selection.
     """
-    from vibeqc.profiles import probe_device
+    from generativeqc.profiles import probe_device
 
     library = calculator._library
     path = Path(library._name).resolve()
@@ -143,7 +143,7 @@ def require_tuned_native_build(
         or portable != 0
     ):
         raise RuntimeError(
-            "benchmark refuses an unqualified portable/generic VibeQC build; "
+            "benchmark refuses an unqualified portable/generic GenerativeQC build; "
             "use --allow-portable-build only for an intentional generic baseline"
         )
 
@@ -152,7 +152,7 @@ def fixed_warm_start_policy() -> dict[str, str]:
     """Describe the engine-local fixed post-cold replay contract."""
 
     return {
-        "vibeqc": "engine-local fixed post-cold converged density snapshot",
+        "generativeqc": "engine-local fixed post-cold converged density snapshot",
         "gpu4pyscf": "engine-local fixed post-cold converged density snapshot",
         "cross_engine_density_identity": (
             "not asserted because backend AO conventions are independent"
@@ -161,7 +161,7 @@ def fixed_warm_start_policy() -> dict[str, str]:
 
 
 def convergence_payload(result: typing.Any) -> list[dict[str, object]]:
-    """Serialize one VibeQC replay's per-system convergence diagnostics."""
+    """Serialize one GenerativeQC replay's per-system convergence diagnostics."""
 
     return [
         {
@@ -271,9 +271,14 @@ def interleaved_engine_order(repeats: int) -> tuple[str, ...]:
     if repeats < 1:
         raise ValueError("repeats must be positive")
     order: list[str] = []
-    counts = {VIBEQC_ENGINE: 0, GPU4PYSCF_ENGINE: 0}
-    block = (VIBEQC_ENGINE, GPU4PYSCF_ENGINE, GPU4PYSCF_ENGINE, VIBEQC_ENGINE)
-    while counts[VIBEQC_ENGINE] < repeats or counts[GPU4PYSCF_ENGINE] < repeats:
+    counts = {GENERATIVEQC_ENGINE: 0, GPU4PYSCF_ENGINE: 0}
+    block = (
+        GENERATIVEQC_ENGINE,
+        GPU4PYSCF_ENGINE,
+        GPU4PYSCF_ENGINE,
+        GENERATIVEQC_ENGINE,
+    )
+    while counts[GENERATIVEQC_ENGINE] < repeats or counts[GPU4PYSCF_ENGINE] < repeats:
         for engine in block:
             if counts[engine] >= repeats:
                 continue
@@ -289,73 +294,73 @@ def iteration_branch(sample: dict[str, Any]) -> tuple[int, ...]:
 
 
 def iteration_matched_summary(
-    vibeqc_samples: Sequence[dict[str, Any]],
+    generativeqc_samples: Sequence[dict[str, Any]],
     gpu_samples: Sequence[dict[str, Any]],
 ) -> dict[str, Any] | None:
     """Summarize the best-supported SCF branch shared by both engines."""
 
-    vibeqc_by_branch: dict[tuple[int, ...], list[float]] = {}
+    generativeqc_by_branch: dict[tuple[int, ...], list[float]] = {}
     gpu_by_branch: dict[tuple[int, ...], list[float]] = {}
-    for sample in vibeqc_samples:
-        vibeqc_by_branch.setdefault(iteration_branch(sample), []).append(
+    for sample in generativeqc_samples:
+        generativeqc_by_branch.setdefault(iteration_branch(sample), []).append(
             float(sample["seconds"])
         )
     for sample in gpu_samples:
         gpu_by_branch.setdefault(iteration_branch(sample), []).append(
             float(sample["seconds"])
         )
-    shared = set(vibeqc_by_branch) & set(gpu_by_branch)
+    shared = set(generativeqc_by_branch) & set(gpu_by_branch)
     if not shared:
         return None
     branch = min(
         shared,
         key=lambda item: (
-            -min(len(vibeqc_by_branch[item]), len(gpu_by_branch[item])),
+            -min(len(generativeqc_by_branch[item]), len(gpu_by_branch[item])),
             item,
         ),
     )
-    vibeqc_seconds = vibeqc_by_branch[branch]
+    generativeqc_seconds = generativeqc_by_branch[branch]
     gpu_seconds = gpu_by_branch[branch]
-    vibeqc_median = statistics.median(vibeqc_seconds)
+    generativeqc_median = statistics.median(generativeqc_seconds)
     gpu_median = statistics.median(gpu_seconds)
     return {
         "iteration_branch": list(branch),
-        "vibeqc_sample_count": len(vibeqc_seconds),
+        "generativeqc_sample_count": len(generativeqc_seconds),
         "gpu4pyscf_sample_count": len(gpu_seconds),
-        "vibeqc_median_seconds": vibeqc_median,
+        "generativeqc_median_seconds": generativeqc_median,
         "gpu4pyscf_median_seconds": gpu_median,
-        "speedup": gpu_median / vibeqc_median,
+        "speedup": gpu_median / generativeqc_median,
     }
 
 
 def pair_repeat_accuracy(
-    vibeqc_samples: Sequence[dict[str, Any]],
+    generativeqc_samples: Sequence[dict[str, Any]],
     gpu_samples: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Pair each engine's nth warm result and calculate numerical parity."""
 
-    if len(vibeqc_samples) != len(gpu_samples):
+    if len(generativeqc_samples) != len(gpu_samples):
         raise ValueError("warm sample counts must match")
     pairs = []
-    for repeat, (vibeqc, gpu) in enumerate(
-        zip(vibeqc_samples, gpu_samples, strict=True)
+    for repeat, (generativeqc, gpu) in enumerate(
+        zip(generativeqc_samples, gpu_samples, strict=True)
     ):
-        vibeqc_energies = np.asarray(vibeqc["energies_hartree"])
+        generativeqc_energies = np.asarray(generativeqc["energies_hartree"])
         gpu_energies = np.asarray(gpu["energies_hartree"])
-        vibeqc_forces = vibeqc["forces_hartree_per_bohr"]
+        generativeqc_forces = generativeqc["forces_hartree_per_bohr"]
         gpu_forces = gpu["forces_hartree_per_bohr"]
-        if (vibeqc_forces is None) != (gpu_forces is None):
+        if (generativeqc_forces is None) != (gpu_forces is None):
             raise ValueError("both engines must measure the same requested properties")
         if (
-            vibeqc_energies.shape != gpu_energies.shape
-            or not vibeqc_energies.size
-            or not np.isfinite(vibeqc_energies).all()
+            generativeqc_energies.shape != gpu_energies.shape
+            or not generativeqc_energies.size
+            or not np.isfinite(generativeqc_energies).all()
             or not np.isfinite(gpu_energies).all()
         ):
             raise ValueError("benchmark energies must be finite and match batch shape")
         force_error = None
-        if vibeqc_forces is not None:
-            first, second = np.asarray(vibeqc_forces), np.asarray(gpu_forces)
+        if generativeqc_forces is not None:
+            first, second = np.asarray(generativeqc_forces), np.asarray(gpu_forces)
             if first.shape != second.shape:
                 raise ValueError("benchmark force shapes must match")
             difference = first - second
@@ -366,10 +371,10 @@ def pair_repeat_accuracy(
             {
                 "repeat": repeat,
                 "iteration_branches_match": (
-                    iteration_branch(vibeqc) == iteration_branch(gpu)
+                    iteration_branch(generativeqc) == iteration_branch(gpu)
                 ),
                 "maximum_energy_error_hartree": float(
-                    np.max(np.abs(vibeqc_energies - gpu_energies))
+                    np.max(np.abs(generativeqc_energies - gpu_energies))
                 ),
                 "maximum_force_error_hartree_per_bohr": force_error,
             }
@@ -378,11 +383,11 @@ def pair_repeat_accuracy(
 
 
 def warm_start_priming_metadata(
-    vibeqc_sample: dict[str, Any], gpu_sample: dict[str, Any]
+    generativeqc_sample: dict[str, Any], gpu_sample: dict[str, Any]
 ) -> dict[str, Any]:
     """Serialize the unmeasured replay used to settle fixed-dm0 state.
 
-    After VibeQC's cold execution, the first fixed-dm0 replay can take an
+    After GenerativeQC's cold execution, the first fixed-dm0 replay can take an
     exact-resident fast path while subsequent replays upload the unchanged
     host snapshot after the device has produced a new density.  Recording an
     unmeasured replay makes all published samples use the steady fixed-dm0
@@ -396,10 +401,10 @@ def warm_start_priming_metadata(
             "settle the post-cold resident-density state before timing; every "
             "published replay still starts from the fixed post-cold dm0"
         ),
-        "engine_order": [VIBEQC_ENGINE, GPU4PYSCF_ENGINE],
-        "vibeqc": {
-            "seconds": float(vibeqc_sample["seconds"]),
-            "iteration_branch": list(iteration_branch(vibeqc_sample)),
+        "engine_order": [GENERATIVEQC_ENGINE, GPU4PYSCF_ENGINE],
+        "generativeqc": {
+            "seconds": float(generativeqc_sample["seconds"]),
+            "iteration_branch": list(iteration_branch(generativeqc_sample)),
         },
         "gpu4pyscf": {
             "seconds": float(gpu_sample["seconds"]),
@@ -475,14 +480,14 @@ def scaled_geometries(atoms: typing.Any, batch_size: int) -> typing.Any:
     return systems
 
 
-def _vibeqc_sample(
+def _generativeqc_sample(
     batch: Any, cupy_module: Any, sequence_index: int, compute_forces: bool = True
 ) -> dict[str, Any]:
-    """Execute and serialize one synchronized VibeQC warm sample."""
+    """Execute and serialize one synchronized GenerativeQC warm sample."""
 
     cupy_module.cuda.Stream.null.synchronize()
     endpoint = "energy_plus_force" if compute_forces else "energy"
-    with nvtx_range(cupy_module, f"vibeqc/warm/{endpoint.replace('_', '-')}"):
+    with nvtx_range(cupy_module, f"generativeqc/warm/{endpoint.replace('_', '-')}"):
         start = time.perf_counter()
         result = batch.execute(
             strict=True, **({} if compute_forces else {"properties": ("energy",)})
@@ -624,10 +629,10 @@ def main() -> None:
     parser.add_argument("--screening-tolerance", type=float, default=1.0e-12)
     parser.add_argument("--minimum-speedup", type=float)
     parser.add_argument(
-        "--maximum-vibeqc-over-gpu4pyscf",
+        "--maximum-generativeqc-over-gpu4pyscf",
         type=float,
         help=(
-            "optional upper bound on the iteration-matched VibeQC/GPU4PySCF "
+            "optional upper bound on the iteration-matched GenerativeQC/GPU4PySCF "
             "warm-time ratio; useful for large-topology regression gates"
         ),
     )
@@ -637,7 +642,7 @@ def main() -> None:
         "--allow-portable-build",
         action="store_true",
         help=(
-            "explicitly allow a generic/portable VibeQC build for baseline measurements"
+            "explicitly allow a generic/portable GenerativeQC build for baseline measurements"
         ),
     )
     parser.add_argument(
@@ -680,10 +685,10 @@ def main() -> None:
     if args.minimum_speedup is not None and args.minimum_speedup <= 0.0:
         raise ValueError("--minimum-speedup must be positive")
     if (
-        args.maximum_vibeqc_over_gpu4pyscf is not None
-        and args.maximum_vibeqc_over_gpu4pyscf <= 0.0
+        args.maximum_generativeqc_over_gpu4pyscf is not None
+        and args.maximum_generativeqc_over_gpu4pyscf <= 0.0
     ):
-        raise ValueError("--maximum-vibeqc-over-gpu4pyscf must be positive")
+        raise ValueError("--maximum-generativeqc-over-gpu4pyscf must be positive")
     if args.maximum_energy_error is not None and args.maximum_energy_error < 0.0:
         raise ValueError("--maximum-energy-error must be non-negative")
     if args.maximum_force_error is not None and args.maximum_force_error < 0.0:
@@ -692,7 +697,7 @@ def main() -> None:
     # Resolve exact shared basis inputs on the host before either engine is
     # created. With no override, every existing fixture keeps its old inputs.
     case = cases[args.case]
-    native_orbital, reference_orbital = case.vibeqc_basis, case.pyscf_basis
+    native_orbital, reference_orbital = case.generativeqc_basis, case.pyscf_basis
     basis_overrides = {}
     if args.orbital_basis_file:
         native_orbital, reference_orbital = load_comparison_basis(
@@ -768,7 +773,7 @@ def main() -> None:
         else:
             engine = scf.RHF(molecule)
         if args.density_fitting == "cuda":
-            # Match VibeQC's explicit auxiliary topology.  GPU4PySCF accepts
+            # Match GenerativeQC's explicit auxiliary topology.  GPU4PySCF accepts
             # the same PySCF basis description through density_fit(auxbasis=).
             engine = engine.density_fit(auxbasis=reference_auxiliary)
         if hasattr(engine, "to_gpu"):
@@ -801,7 +806,7 @@ def main() -> None:
     # a result JSON exists, but its compiled capability must remain reviewable.
     progress("native_build", **native_build)
     require_tuned_native_build(native_build, allow_portable=args.allow_portable_build)
-    vibeqc_samples: list[dict[str, Any]] = []
+    generativeqc_samples: list[dict[str, Any]] = []
     gpu_samples: list[dict[str, Any]] = []
     eigensolver_diagnostics: list[dict[str, object]] = []
     measurement_order = interleaved_engine_order(args.repeats)
@@ -814,9 +819,9 @@ def main() -> None:
     ) as batch:
         cp.cuda.Stream.null.synchronize()
         start = time.perf_counter()
-        vibeqc_cold_result = batch.execute(strict=True, properties=properties)
+        generativeqc_cold_result = batch.execute(strict=True, properties=properties)
         cp.cuda.Stream.null.synchronize()
-        vibeqc_cold = time.perf_counter() - start
+        generativeqc_cold = time.perf_counter() - start
         density_fitting_diagnostics = (
             [
                 diagnostic.to_dict()
@@ -826,14 +831,14 @@ def main() -> None:
             else []
         )
         progress(
-            "vibeqc_cold",
-            seconds=vibeqc_cold,
-            convergence=convergence_payload(vibeqc_cold_result),
+            "generativeqc_cold",
+            seconds=generativeqc_cold,
+            convergence=convergence_payload(generativeqc_cold_result),
             metric=density_fitting_diagnostics,
         )
         # Freeze the converged post-cold density before collecting either
         # engine's warm samples.  The benchmark compares the same replay from
-        # one fixed dm0; allowing VibeQC to replace its retained density after
+        # one fixed dm0; allowing GenerativeQC to replace its retained density after
         # each sample would make later samples follow a different SCF path
         # from the first one (and from GPU4PySCF's explicit dm0 snapshot).
         batch.set_warm_start_updates(False)
@@ -856,26 +861,26 @@ def main() -> None:
         gpu_warm_densities = [engine.make_rdm1().copy() for engine in gpu_objects]
 
         # Establish a steady resident-state path before starting the captured
-        # interleaved measurements.  VibeQC's first replay may reuse the
+        # interleaved measurements.  GenerativeQC's first replay may reuse the
         # post-cold device density without an upload; after that replay the
         # frozen host dm0 must be uploaded again.  GPU4PySCF already receives a
         # fresh copy of the same snapshot on every replay.  The priming calls
         # are intentionally outside the profiler range and are recorded below
         # as unmeasured setup, never mixed into warm timing medians.
-        vibeqc_prime = _vibeqc_sample(batch, cp, -1, compute_forces)
+        generativeqc_prime = _generativeqc_sample(batch, cp, -1, compute_forces)
         gpu_prime = _gpu_sample(gpu_objects, gpu_warm_densities, cp, -1, compute_forces)
-        warm_start_priming = warm_start_priming_metadata(vibeqc_prime, gpu_prime)
+        warm_start_priming = warm_start_priming_metadata(generativeqc_prime, gpu_prime)
         progress("primed", **warm_start_priming)
 
         if args.capture_warm_range:
             cp.cuda.profiler.start()
         try:
             for sequence_index, engine in enumerate(measurement_order):
-                if engine == VIBEQC_ENGINE:
-                    vibeqc_samples.append(
-                        _vibeqc_sample(batch, cp, sequence_index, compute_forces)
+                if engine == GENERATIVEQC_ENGINE:
+                    generativeqc_samples.append(
+                        _generativeqc_sample(batch, cp, sequence_index, compute_forces)
                     )
-                    progress("vibeqc_warm", **vibeqc_samples[-1])
+                    progress("generativeqc_warm", **generativeqc_samples[-1])
                 else:
                     gpu_samples.append(
                         _gpu_sample(
@@ -903,18 +908,18 @@ def main() -> None:
         except NotImplementedError:
             eigensolver_diagnostics = []
 
-    repeat_accuracy = pair_repeat_accuracy(vibeqc_samples, gpu_samples)
+    repeat_accuracy = pair_repeat_accuracy(generativeqc_samples, gpu_samples)
     maximum_energy_error = max(
         item["maximum_energy_error_hartree"] for item in repeat_accuracy
     )
     maximum_force_error = _maximum_force_error(repeat_accuracy)
     gate_accuracy = accuracy_gate_summary(repeat_accuracy)
-    vibeqc_warm = [float(sample["seconds"]) for sample in vibeqc_samples]
+    generativeqc_warm = [float(sample["seconds"]) for sample in generativeqc_samples]
     gpu_warm = [float(sample["seconds"]) for sample in gpu_samples]
-    vibeqc_warm_median = statistics.median(vibeqc_warm)
+    generativeqc_warm_median = statistics.median(generativeqc_warm)
     gpu_warm_median = statistics.median(gpu_warm)
-    ordinary_speedup = gpu_warm_median / vibeqc_warm_median
-    matched = iteration_matched_summary(vibeqc_samples, gpu_samples)
+    ordinary_speedup = gpu_warm_median / generativeqc_warm_median
+    matched = iteration_matched_summary(generativeqc_samples, gpu_samples)
     matched_speedup = None if matched is None else float(matched["speedup"])
     # Preserve a measured zero speedup as a real regression signal instead of
     # silently falling back to the ordinary (possibly unmatched) statistic.
@@ -922,8 +927,10 @@ def main() -> None:
         matched_speedup if matched_speedup is not None else ordinary_speedup
     )
 
-    vibeqc_converged = all(
-        item["converged"] for sample in vibeqc_samples for item in sample["convergence"]
+    generativeqc_converged = all(
+        item["converged"]
+        for sample in generativeqc_samples
+        for item in sample["convergence"]
     )
     reference_converged = all(
         item["converged"] for sample in gpu_samples for item in sample["convergence"]
@@ -936,10 +943,10 @@ def main() -> None:
             if compute_forces
             else 0.0
         ),
-        vibeqc_converged=vibeqc_converged,
+        generativeqc_converged=generativeqc_converged,
         reference_converged=reference_converged,
         minimum_speedup=args.minimum_speedup,
-        maximum_vibeqc_over_reference=(args.maximum_vibeqc_over_gpu4pyscf),
+        maximum_generativeqc_over_reference=(args.maximum_generativeqc_over_gpu4pyscf),
         maximum_energy_error_limit=args.maximum_energy_error,
         maximum_force_error_limit=args.maximum_force_error,
     )
@@ -955,17 +962,19 @@ def main() -> None:
         f"accuracy gate ({gate_accuracy['selection']}): "
         f"{gate_accuracy['maximum_energy_error_hartree']:.3e} Eh"
     )
-    print(f"VibeQC/reference converged: {vibeqc_converged}/{reference_converged}")
-    print(f"VibeQC cold batch: {vibeqc_cold * 1e3:.3f} ms")
     print(
-        f"VibeQC warm median/min: {vibeqc_warm_median * 1e3:.3f}/"
-        f"{min(vibeqc_warm) * 1e3:.3f} ms"
+        f"GenerativeQC/reference converged: {generativeqc_converged}/{reference_converged}"
+    )
+    print(f"GenerativeQC cold batch: {generativeqc_cold * 1e3:.3f} ms")
+    print(
+        f"GenerativeQC warm median/min: {generativeqc_warm_median * 1e3:.3f}/"
+        f"{min(generativeqc_warm) * 1e3:.3f} ms"
     )
     print(
-        "VibeQC warm SCF iterations: "
+        "GenerativeQC warm SCF iterations: "
         + "; ".join(
             ",".join(str(item["iterations"]) for item in sample["convergence"])
-            for sample in vibeqc_samples
+            for sample in generativeqc_samples
         )
     )
     print(f"GPU4PySCF cold batch: {gpu_cold * 1e3:.3f} ms")
@@ -989,7 +998,7 @@ def main() -> None:
     print("warning: GPU4PySCF is measured through its single-system interface")
 
     if args.output:
-        final_vibeqc = vibeqc_samples[-1]
+        final_generativeqc = generativeqc_samples[-1]
         final_gpu = gpu_samples[-1]
         payload = {
             "schema_version": 2,
@@ -1033,7 +1042,7 @@ def main() -> None:
                 "reference_gradient_tolerance": args.reference_gradient_tolerance,
                 "reference_incremental_fock": bool(gpu_objects[0].direct_scf),
                 "max_iterations": args.max_iterations,
-                "vibeqc_screening_tolerance": args.screening_tolerance,
+                "generativeqc_screening_tolerance": args.screening_tolerance,
                 "direct_scf_tolerance": 1.0e-14,
                 "density_fitting": args.density_fitting,
                 "density_fitting_relative_threshold": (
@@ -1063,8 +1072,8 @@ def main() -> None:
                 "density_fitting_metric_diagnostics": density_fitting_diagnostics,
                 "gates": {
                     "minimum_iteration_matched_speedup": args.minimum_speedup,
-                    "maximum_iteration_matched_vibeqc_over_gpu4pyscf": (
-                        args.maximum_vibeqc_over_gpu4pyscf
+                    "maximum_iteration_matched_generativeqc_over_gpu4pyscf": (
+                        args.maximum_generativeqc_over_gpu4pyscf
                     ),
                     "maximum_energy_error_hartree": args.maximum_energy_error,
                     "maximum_force_error_hartree_per_bohr": args.maximum_force_error,
@@ -1079,9 +1088,9 @@ def main() -> None:
             "timing_summary": {
                 "integral_contraction_breakdown": {
                     "component_split_measured": False,
-                    "cold_setup_and_integral_generation_seconds": vibeqc_cold,
-                    "warm_endpoint_seconds": vibeqc_warm_median,
-                    "warm_contraction_and_force_seconds": vibeqc_warm_median
+                    "cold_setup_and_integral_generation_seconds": generativeqc_cold,
+                    "warm_endpoint_seconds": generativeqc_warm_median,
+                    "warm_contraction_and_force_seconds": generativeqc_warm_median
                     if compute_forces
                     else None,
                     "note": (
@@ -1092,7 +1101,7 @@ def main() -> None:
                     ),
                 },
                 "ordinary": {
-                    "vibeqc_median_seconds": vibeqc_warm_median,
+                    "generativeqc_median_seconds": generativeqc_warm_median,
                     "gpu4pyscf_median_seconds": gpu_warm_median,
                     "speedup": ordinary_speedup,
                     "iteration_branches_match_for_every_pair": all(
@@ -1104,17 +1113,19 @@ def main() -> None:
                     "iteration_matched" if matched is not None else "unmatched_labeled"
                 ),
             },
-            "vibeqc": {
+            "generativeqc": {
                 "eigensolver_diagnostics": eigensolver_diagnostics,
-                "energies_hartree": final_vibeqc["energies_hartree"],
-                "forces_hartree_per_bohr": final_vibeqc["forces_hartree_per_bohr"],
-                "convergence": final_vibeqc["convergence"],
-                "cold_seconds": vibeqc_cold,
-                "cold_convergence": convergence_payload(vibeqc_cold_result),
-                "warm_samples": vibeqc_samples,
-                "warm_seconds": vibeqc_warm,
-                "warm_median_seconds": vibeqc_warm_median,
-                "warm_systems_per_second": args.batch / vibeqc_warm_median,
+                "energies_hartree": final_generativeqc["energies_hartree"],
+                "forces_hartree_per_bohr": final_generativeqc[
+                    "forces_hartree_per_bohr"
+                ],
+                "convergence": final_generativeqc["convergence"],
+                "cold_seconds": generativeqc_cold,
+                "cold_convergence": convergence_payload(generativeqc_cold_result),
+                "warm_samples": generativeqc_samples,
+                "warm_seconds": generativeqc_warm,
+                "warm_median_seconds": generativeqc_warm_median,
+                "warm_systems_per_second": args.batch / generativeqc_warm_median,
             },
             "gpu4pyscf": {
                 "energies_hartree": final_gpu["energies_hartree"],

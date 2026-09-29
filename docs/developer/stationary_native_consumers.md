@@ -103,7 +103,7 @@ rounded-zero products, translations/permutations/partial tiles, invalid
 inputs/dtypes, tiny budgets, size overflow and transactional late failure.
 
 ```sh
-PYTHONPATH=.:python VIBEQC_LIBRARY="$PWD/build/libvibeqc.so" \
+PYTHONPATH=.:python GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 CXX=c++ \
 python -m pytest -q tests/python/test_tensor_cpu.py \
   tests/python/test_grid_native.py tests/python/test_dft_complete_cpu.py
@@ -112,7 +112,7 @@ python -m pytest -q tests/python/test_tensor_cpu.py \
 For complete prepared CPU SCF + snapshot + AO owner + gradient measurements:
 
 ```sh
-PYTHONPATH=.:python VIBEQC_LIBRARY="$PWD/build/libvibeqc.so" \
+PYTHONPATH=.:python GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 CXX=c++ \
 python tools/benchmark_stationary_consumers.py --repeats 5 \
   --cache .cache/stationary-consumers --output /tmp/stationary-consumers.json

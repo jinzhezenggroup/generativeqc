@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from vibeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.range_separation import CoulombKernel
 
 from tools import audit_derivative_aot_registry as audit
 
@@ -29,7 +29,7 @@ def test_audit_schema_keeps_radial_identity_and_provenance(
     manifest.write_text(
         json.dumps(
             {
-                "schema": "vibeqc.derivative-aot.radials.v1",
+                "schema": "generativeqc.derivative-aot.radials.v1",
                 "entries": [
                     {
                         "backend": "cpu",
@@ -68,7 +68,7 @@ def test_audit_schema_keeps_radial_identity_and_provenance(
     monkeypatch.setattr(audit, "file_hash", lambda path: f"hash:{Path(path).name}")
 
     result = audit.audit(radial_manifest=manifest)
-    assert result["schema"] == "vibeqc.derivative-aot.audit.v1"
+    assert result["schema"] == "generativeqc.derivative-aot.audit.v1"
     assert result["provenance"]["radial_manifest_sha256"] == "hash:radials.json"
     assert result["full_range"]["translation_units"] == 2
     assert result["full_range"]["target"] == "native-host"

@@ -27,17 +27,21 @@ sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import pyscf
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc_compiler.common.cuda_adapter import (
     CudaBenchmarkExecutor,
     CudaCompilerAdapter,
 )
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import block_error, file_hash
-from vibeqc_compiler.integral.one_electron_cuda import emit_one_electron_values_cuda
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import block_error, file_hash
+from generativeqc_compiler.integral.one_electron_cuda import (
+    emit_one_electron_values_cuda,
+)
 
-from tools.vibeqc_validation.f_shell import cuobjdump_resources
-from tools.vibeqc_validation.one_electron_cuda import emit_one_electron_value_driver
-from tools.vibeqc_validation.one_electron_values import one_electron_value_matrix
+from tools.generativeqc_validation.f_shell import cuobjdump_resources
+from tools.generativeqc_validation.one_electron_cuda import (
+    emit_one_electron_value_driver,
+)
+from tools.generativeqc_validation.one_electron_values import one_electron_value_matrix
 
 
 def main() -> None:
@@ -58,14 +62,14 @@ def main() -> None:
     directory = args.directory.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     if args.derivatives:
-        from vibeqc_compiler.integral.one_electron_derivatives_cuda import (
+        from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
             emit_one_electron_derivatives_cuda,
         )
 
-        from tools.vibeqc_validation.one_electron_derivatives import (
+        from tools.generativeqc_validation.one_electron_derivatives import (
             one_electron_derivative_matrix,
         )
-        from tools.vibeqc_validation.one_electron_derivatives_cuda import (
+        from tools.generativeqc_validation.one_electron_derivatives_cuda import (
             emit_one_electron_derivative_driver,
         )
 
@@ -123,9 +127,9 @@ def main() -> None:
         default_slurm_time="00:05:00",
     )
     report = {
-        "schema": "vibeqc.one_electron_derivative_validation"
+        "schema": "generativeqc.one_electron_derivative_validation"
         if args.derivatives
-        else "vibeqc.one_electron_value_validation",
+        else "generativeqc.one_electron_value_validation",
         "version": 1,
         "production_promoted": False,
         "source_hash": file_hash(header),

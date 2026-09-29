@@ -7,7 +7,7 @@ import typing
 from fractions import Fraction
 
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     PSSS_SPEC,
     AlgebraForm,
     AlgebraFusion,
@@ -22,8 +22,8 @@ from vibeqc_compiler.integral import (
     build_psss_kernel,
     build_weighted_shell_contraction_kernel,
 )
-from vibeqc_compiler.integral.cuda import CudaEmitter, format_constant
-from vibeqc_compiler.integral.expr import Graph, ScalarDomain
+from generativeqc_compiler.integral.cuda import CudaEmitter, format_constant
+from generativeqc_compiler.integral.expr import Graph, ScalarDomain
 
 
 def test_subexpression_replacement_is_simultaneous_and_preserves_branches() -> None:

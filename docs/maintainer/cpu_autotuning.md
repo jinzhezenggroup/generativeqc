@@ -37,7 +37,7 @@ Every candidate records a labeled static resource payload before compilation:
 - detected L1-data/L2 sizes when the operating system exposes them, plus
   working-set fit booleans.
 
-The `vibeqc.cpu.static-cost.v2` record includes complete-consumer numeric
+The `generativeqc.cpu.static-cost.v2` record includes complete-consumer numeric
 storage; the evaluator's numeric reservation is also recorded after loading.
 `maximum_working_set_bytes` is enforced without silently increasing it. The
 bound is per concurrent endpoint, not the aggregate tuning process: compiler

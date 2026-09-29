@@ -13,13 +13,13 @@
 #include <string>
 #include <vector>
 
-#include "../../tools/vibeqc_validation/df_shell_fixture.hpp"
+#include "../../tools/generativeqc_validation/df_shell_fixture.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "scf/cuda/df_shell_derivatives.cuh"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
@@ -29,7 +29,7 @@ void select_schedule(unsigned variant) {
   const char* schedules[] = {"warp", "packed", "compact"};
   // The direct launch API receives the variant explicitly. Prevent automatic
   // production policy from overriding it so all three schedules are exercised.
-  require(setenv("VIBEQC_DF_SHELL_SCHEDULE", schedules[variant], 1) == 0,
+  require(setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", schedules[variant], 1) == 0,
           "cannot select the explicit test schedule");
 }
 
@@ -46,9 +46,11 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
                     {0, 2, {{.9, 1}}},
                     {1, 1, {{.6, .7}, {1.7, -.1}, {2.3, .1}}},
                     {2, 0, {{.75, 1}}}};
-  orbital.basis_representation = spherical_o ? VIBEQC_BASIS_SPHERICAL : VIBEQC_BASIS_CARTESIAN;
+  orbital.basis_representation =
+      spherical_o ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
   auto auxiliary = orbital;
-  auxiliary.basis_representation = spherical_x ? VIBEQC_BASIS_SPHERICAL : VIBEQC_BASIS_CARTESIAN;
+  auxiliary.basis_representation =
+      spherical_x ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
   auxiliary.shells = {
       {2, 3, {{.8, 1}}}, {0, 0, {{1.1, .8}, {2.1, -.2}}}, {2, 2, {{.9, 1}}}, {1, 1, {{1.2, 1}}}};
   if (many_signatures) {
@@ -66,7 +68,7 @@ void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) 
   }
   std::string detail;
   for (auto* system : {&orbital, &auxiliary})
-    require(molecule::validate_and_normalize(*system, detail) == VIBEQC_STATUS_SUCCESS,
+    require(molecule::validate_and_normalize(*system, detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail.c_str());
   const auto raw = integrals::build_density_fitting_integrals(orbital, auxiliary);
   const auto n = raw.nbf, a = raw.naux, packed_size = n * (n + 1) / 2;
@@ -274,7 +276,8 @@ int main() {
   if (!std::getenv("SLURM_JOB_ID")) return 77;
   try {
     for (const char* policy : {"legacy", "auto"}) {
-      require(setenv("VIBEQC_DF_SHELL_POLICY", policy, 1) == 0, "cannot select the test policy");
+      require(setenv("GENERATIVEQC_DF_SHELL_POLICY", policy, 1) == 0,
+              "cannot select the test policy");
       for (bool spherical_o : {false, true})
         for (bool spherical_x : {false, true}) exercise(spherical_o, spherical_x);
       exercise(false, false, true);

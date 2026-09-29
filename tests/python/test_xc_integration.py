@@ -5,21 +5,23 @@ from dataclasses import replace
 from fractions import Fraction
 from functools import lru_cache
 
+import generativeqc_compiler.dft.features as feature_module
 import numpy as np
 import pytest
-import vibeqc_compiler.dft.features as feature_module
-from vibeqc_compiler.dft import (
+from generativeqc_compiler.dft import (
     ExplicitGrid,
     GridSpec,
     MolecularGrid,
     NativeAO,
     density_features,
 )
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import FixedDensityXC, UnsupportedXC, functional
-from vibeqc_compiler.xc.integration_fixtures import CASES
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture as fixture
-from vibeqc_compiler.xc.potential import assemble_potential
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import FixedDensityXC, UnsupportedXC, functional
+from generativeqc_compiler.xc.integration_fixtures import CASES
+from generativeqc_compiler.xc.integration_fixtures import (
+    load_integration_fixture as fixture,
+)
+from generativeqc_compiler.xc.potential import assemble_potential
 
 
 def check(actual: typing.Any, expected: typing.Any) -> None:
@@ -267,7 +269,7 @@ def test_unsupported_domain_invalid_density_and_empty_grid_are_explicit() -> Non
 def test_independent_gate_rejects_deliberate_factor_faults(
     monkeypatch: typing.Any, fault: typing.Any
 ) -> None:
-    from vibeqc_compiler.xc import integration
+    from generativeqc_compiler.xc import integration
 
     meta, data, grid = fixture("water")
     if fault == "double_weight":
@@ -284,7 +286,7 @@ def test_independent_gate_rejects_deliberate_factor_faults(
             integration, "spin_densities", lambda d, n: 2 * original(d, n)
         )
     else:
-        from vibeqc_compiler.xc import contractions
+        from generativeqc_compiler.xc import contractions
 
         original = contractions.assemble_coefficients
         monkeypatch.setattr(

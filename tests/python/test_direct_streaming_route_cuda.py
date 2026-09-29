@@ -5,10 +5,10 @@ from dataclasses import asdict
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -27,8 +27,8 @@ def test_primary_streaming_partition_replay_matches_libcint(
     from pyscf import gto, scf
 
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("VIBEQC_BOUNDED_DIRECT_STREAMING", "force")
-    monkeypatch.delenv("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
+    monkeypatch.delenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", raising=False)
     separate = method == "uhf"
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
     coordinates = np.array([position for _, position in atoms])
@@ -77,7 +77,9 @@ def test_primary_streaming_partition_replay_matches_libcint(
     ) as prepared:
         work = None
         for mask in ("all", "all", "0x15", "none", "all"):
-            monkeypatch.setenv("VIBEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", mask)
+            monkeypatch.setenv(
+                "GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", mask
+            )
             result = prepared.execute(strict=True)
             for item, (energy, forces) in zip(result.items, references, strict=True):
                 assert item.executed_backend == "cuda"

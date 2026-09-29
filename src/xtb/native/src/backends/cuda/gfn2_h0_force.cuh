@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_H0_FORCE_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_H0_FORCE_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_H0_FORCE_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_H0_FORCE_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -11,7 +11,7 @@
 #include "backends/cuda/gfn2_force_common.cuh"
 #include "backends/cuda/gfn2_integrals.cuh"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Per-system failure codes for the stationary H0/Pulay seed contraction. */
 enum class Gfn2H0ForceDeviceError : std::uint32_t {
@@ -107,6 +107,6 @@ cudaError_t add_gfn2_h0_pulay_gradient_cuda(
     std::uint32_t* system_errors, std::uint32_t* device_error,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_H0_FORCE_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_H0_FORCE_CUH

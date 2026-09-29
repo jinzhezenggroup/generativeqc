@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_ONE_ELECTRON_GRADIENT_HPP
-#define VIBEQC_SCF_CUDA_ONE_ELECTRON_GRADIENT_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_ONE_ELECTRON_GRADIENT_HPP
+#define GENERATIVEQC_SCF_CUDA_ONE_ELECTRON_GRADIENT_HPP
 
 #include <cstddef>
 #include <span>
@@ -8,7 +8,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Explicit staging boundary of the standalone generic gradient operation. */
 struct OneElectronGradientResources {
@@ -26,24 +26,22 @@ struct OneElectronGradientResources {
  * This synchronous host bridge is used by standalone DF and diagnostics;
  * prepared Direct HF invokes the same kernel on its existing owning stream.
  */
-vibeqc_status execute_cuda_one_electron_gradient(int device_id, const core::System& system,
-                                                 std::span<const double> overlap_weights,
-                                                 std::span<const double> kinetic_weights,
-                                                 std::span<const double> attraction_weights,
-                                                 unsigned schedule, std::size_t maximum_bytes,
-                                                 std::vector<double>& gradient, std::string& detail,
-                                                 OneElectronGradientResources* resources = nullptr,
-                                                 double overlap_scale = 1.0);
+generativeqc_status execute_cuda_one_electron_gradient(
+    int device_id, const core::System& system, std::span<const double> overlap_weights,
+    std::span<const double> kinetic_weights, std::span<const double> attraction_weights,
+    unsigned schedule, std::size_t maximum_bytes, std::vector<double>& gradient,
+    std::string& detail, OneElectronGradientResources* resources = nullptr,
+    double overlap_scale = 1.0);
 
 /** Evaluate the stationary hcore and overlap/Pulay sources under one prepared
  * topology/metadata upload and one stream drain. The two scientific outputs
  * remain separate: hcore uses D for T/V, while Pulay uses -W for S. */
-vibeqc_status execute_cuda_stationary_one_electron_pair(
+generativeqc_status execute_cuda_stationary_one_electron_pair(
     int device_id, const core::System& system, std::span<const double> density,
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
     OneElectronGradientResources* resources = nullptr);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

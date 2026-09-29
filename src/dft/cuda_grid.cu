@@ -7,13 +7,13 @@
 #include <new>
 
 #include "../tensor/cuda_runtime.cuh"
+#include "generativeqc/generativeqc.h"
 #include "grid_task_view.cuh"
-#include "vibeqc/vibeqc.h"
 #include "xc_point.hpp"
 
 namespace {
-using namespace vibeqc_tensor;
-#if VIBEQC_TEST_HOOKS
+using namespace generativeqc_tensor;
+#if GENERATIVEQC_TEST_HOOKS
 thread_local unsigned fail_next_grid_allocation = 0;
 thread_local bool fail_next_grid_runtime = false;
 #endif
@@ -47,13 +47,13 @@ int guarded(char* error, size_t size, F operation) noexcept {
     return 0;
   } catch (const std::bad_alloc& e) {
     error_text(error, size, e.what());
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const DeviceAllocationError& e) {
     error_text(error, size, e.what());
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const DeviceRuntimeError& e) {
     error_text(error, size, e.what());
-    return VIBEQC_STATUS_CUDA_ERROR;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (const std::exception& e) {
     error_text(error, size, e.what());
     return 1;
@@ -115,7 +115,7 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
     *output = nullptr;
     if (!dimensions || !basis || !capacity || capacity > INT_MAX || order > 3)
       throw std::invalid_argument("invalid CUDA grid plan");
-#if VIBEQC_TEST_HOOKS
+#if GENERATIVEQC_TEST_HOOKS
     if (fail_next_grid_allocation) {
       const auto failure = fail_next_grid_allocation;
       fail_next_grid_allocation = 0;
@@ -215,7 +215,7 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
     *output = p.release();
   });
 }
-#if VIBEQC_TEST_HOOKS
+#if GENERATIVEQC_TEST_HOOKS
 void grid_cuda_fail_next_allocation_for_test_v1() { fail_next_grid_allocation = 1; }
 void grid_cuda_fail_next_host_allocation_for_test_v1() { fail_next_grid_allocation = 2; }
 void grid_cuda_fail_next_runtime_for_test_v1() { fail_next_grid_runtime = true; }
@@ -263,7 +263,7 @@ int grid_cuda_density_v1(void* pointer, const double* density, size_t elements, 
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
     ctx.check_device();
-#if VIBEQC_TEST_HOOKS
+#if GENERATIVEQC_TEST_HOOKS
     if (fail_next_grid_runtime) {
       fail_next_grid_runtime = false;
       throw DeviceRuntimeError("injected CUDA grid runtime failure");
@@ -502,7 +502,8 @@ int grid_cuda_run_v1(void* pointer, const double* points, size_t npoint, int fea
                                    jet_output, error, size);
 }
 
-int grid_cuda_view_v1(void* pointer, vibeqc::dft::GridTaskView* output, char* error, size_t size) {
+int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, char* error,
+                      size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !output) throw std::invalid_argument("null grid view");
     auto& p = *static_cast<GridPlan*>(pointer);
@@ -526,7 +527,7 @@ int grid_cuda_view_v1(void* pointer, vibeqc::dft::GridTaskView* output, char* er
   });
 }
 
-int grid_cuda_basis_v1(void* pointer, vibeqc::dft::GridBasisView* output, char* error,
+int grid_cuda_basis_v1(void* pointer, generativeqc::dft::GridBasisView* output, char* error,
                        size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !output) throw std::invalid_argument("null grid basis view");

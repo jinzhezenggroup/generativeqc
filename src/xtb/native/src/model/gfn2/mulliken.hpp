@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_MULLIKEN_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_MULLIKEN_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_MULLIKEN_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_MULLIKEN_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -16,7 +16,7 @@
 #include "model/gfn2/wavefunction.hpp"
 #include "runtime/types.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 struct MullikenPlanData;
 
@@ -77,10 +77,10 @@ class MullikenPlan {
 
   std::shared_ptr<const MullikenPlanData> data_;
 
-  friend vibeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
+  friend generativeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                                              const WavefunctionLayout& wavefunction,
                                              MullikenPlan& plan, std::string& error);
-  friend vibeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
+  friend generativeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                                              const WavefunctionLayout& wavefunction,
                                              const MullikenKernelTable& kernels, MullikenPlan& plan,
                                              std::string& error);
@@ -173,13 +173,13 @@ struct MullikenWorkspace {
   std::int64_t elements = 0;
 };
 
-vibeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
+generativeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                                     const WavefunctionLayout& wavefunction, MullikenPlan& plan,
                                     std::string& error);
 
 /* CPU runtime overload that freezes a context-selected leaf table into the
  * immutable plan. Backend-neutral callers and tests keep the baseline overload. */
-vibeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
+generativeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPlan& integrals,
                                     const WavefunctionLayout& wavefunction,
                                     const MullikenKernelTable& kernels, MullikenPlan& plan,
                                     std::string& error);
@@ -196,7 +196,7 @@ vibeqc_xtb_status_t make_mulliken_plan(const BasisPlan& basis, const IntegralPla
  * target population slices remain unchanged. The canonical caller-owned
  * workspace is used for staging, and successful calls allocate nothing.
  */
-vibeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
+generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
     const MullikenPlan& plan, const MullikenIntegralView& integrals,
     const MullikenDensityView& density, const MullikenPopulationView& population,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
@@ -208,7 +208,7 @@ vibeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
  * converted to charge and magnetization, with magnetization N_beta-N_alpha.
  * All outputs are overwritten atomically; successful calls allocate nothing.
  */
-vibeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& plan,
+generativeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& plan,
                                                   const MullikenIntegralView& integrals,
                                                   const MullikenDensityView& density,
                                                   const MullikenPopulationView& population,
@@ -235,7 +235,7 @@ vibeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& plan,
  * target Hamiltonian slice remains unchanged. The canonical caller-owned
  * workspace is used for staging, and successful calls allocate nothing.
  */
-vibeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
+generativeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
     const MullikenPlan& plan, const MullikenIntegralView& integrals,
     const MullikenPotentialView& potential, const MullikenHamiltonianView& hamiltonian,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
@@ -252,13 +252,13 @@ vibeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
  * components. Charge/magnetization potentials are converted to alpha/beta
  * before assembly. H is unchanged on any failure.
  */
-vibeqc_xtb_status_t add_mulliken_hamiltonian_cpu(const MullikenPlan& plan,
+generativeqc_xtb_status_t add_mulliken_hamiltonian_cpu(const MullikenPlan& plan,
                                               const MullikenIntegralView& integrals,
                                               const MullikenPotentialView& potential,
                                               const MullikenHamiltonianView& hamiltonian,
                                               const MullikenWorkspace& workspace,
                                               std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_MULLIKEN_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_MULLIKEN_HPP

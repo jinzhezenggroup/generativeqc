@@ -1,7 +1,7 @@
 """Regenerate independent, pinned Libxc XC energy/feature derivative fixtures.
 
 Run with PySCF 2.14.0 / Libxc 7.0.0. Inputs come from actual Cartesian gradient
-vectors, never arbitrary sigma triples. This script imports no VibeQC XC code.
+vectors, never arbitrary sigma triples. This script imports no GenerativeQC XC code.
 """
 
 import argparse
@@ -164,7 +164,7 @@ def main() -> None:
         "conventions": "energy per volume; spin sigma_ab without factor two; tau=one-half gradient square; packed upper Hessian",
         "typical_tolerance": {"atol": 1e-11, "rtol": 1e-10},
         "boundary_tolerance": {"atol": 1e-8, "rtol": 2e-6},
-        "boundary_rationale": "Nearly polarized spin interpolation loses relative accuracy in Libxc's 1-z subtraction; large density and gradient ratios amplify high derivatives. Scale-aware gate applies only to named boundary fixtures; no clipping is applied by VibeQC.",
+        "boundary_rationale": "Nearly polarized spin interpolation loses relative accuracy in Libxc's 1-z subtraction; large density and gradient ratios amplify high derivatives. Scale-aware gate applies only to named boundary fixtures; no clipping is applied by GenerativeQC.",
     }
     (args.output / "libxc.json").write_text(json.dumps(metadata, indent=2) + "\n")
 

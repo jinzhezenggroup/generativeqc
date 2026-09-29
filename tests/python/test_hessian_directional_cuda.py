@@ -6,13 +6,13 @@ import typing
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import NativeRHFState, directional_rhf_response
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import NativeJKBackend
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_hessian import NativeRHFState, directional_rhf_response
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import NativeJKBackend
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESPONSE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESPONSE_CUDA_TEST") != "1",
     reason="requires an explicitly allocated real GPU",
 )
 
@@ -127,8 +127,8 @@ def test_directional_cuda_budget_failure_and_valid_replay() -> None:
 def test_directional_cuda_closes_plan_after_derivative_failure(
     monkeypatch: typing.Any,
 ) -> None:
-    from tools.vibeqc_hessian import directional
-    from tools.vibeqc_response import CudaDirectJKBackend
+    from tools.generativeqc_hessian import directional
+    from tools.generativeqc_response import CudaDirectJKBackend
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     with NativeSource(**fixture_inputs("h2")) as source:

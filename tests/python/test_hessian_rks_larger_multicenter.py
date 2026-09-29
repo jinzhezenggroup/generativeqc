@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from vibeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
+from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
 
-from tools.vibeqc_hessian import rks_hvp
-from tools.vibeqc_response import GMRESOptions, NativeRKSResponse
+from tools.generativeqc_hessian import rks_hvp
+from tools.generativeqc_response import GMRESOptions, NativeRKSResponse
 
 if TYPE_CHECKING:
     from pathlib import Path

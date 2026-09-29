@@ -50,7 +50,7 @@ def test_stationary_timeline_normalizes_without_zero_filling_missing_components(
 
     record = normalize_force_work(work, state_export_seconds=0.1)
 
-    assert record["schema"] == "vibeqc.dft-force-components.v1"
+    assert record["schema"] == "generativeqc.dft-force-components.v1"
     assert record["source_route"] == "stationary-exclusive-wall"
     assert record["endpoint_seconds"] == pytest.approx(2.1)
     assert record["wall_seconds"]["host_packing"] == pytest.approx(0.5)

@@ -4,7 +4,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -14,7 +14,7 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     reduce_sum,
 )
-from vibeqc_compiler.tensor.cuda_inline import (
+from generativeqc_compiler.tensor.cuda_inline import (
     exact_cuda_literal,
     lower_inline_cuda_output,
 )
@@ -126,7 +126,7 @@ def test_inline_cuda_preserves_bound_expression_precedence(
     import shutil
     import subprocess
 
-    from vibeqc_compiler.tensor import einsum
+    from generativeqc_compiler.tensor import einsum
 
     compiler = shutil.which("c++")
     if compiler is None:

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Read the stream profiling clock without host synchronization. */
 __device__ __forceinline__ std::uint64_t globaltimer_nanoseconds() {
@@ -11,4 +11,4 @@ __device__ __forceinline__ std::uint64_t globaltimer_nanoseconds() {
   return value;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

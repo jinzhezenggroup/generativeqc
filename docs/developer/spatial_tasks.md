@@ -1,6 +1,6 @@
 # Spatial AO tasks
 
-`vibeqc_compiler.dft.spatial` separates deterministic geometric regions from
+`generativeqc_compiler.dft.spatial` separates deterministic geometric regions from
 hardware tile sizes. A task retains source point IDs and bounds, sorted active
 shell/AO maps, requested ordinary spatial derivatives, discarded-AO envelope
 diagnostics, and a generation identity binding basis, geometry, quadrature and
@@ -25,9 +25,9 @@ or adaptive error-allocation capability follows from the AO cutoff.
 ## Explicit execution candidate
 
 ```python
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
 
 with PreparedSpatialGrid(
     basis,

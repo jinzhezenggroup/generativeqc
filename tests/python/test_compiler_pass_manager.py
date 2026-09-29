@@ -1,8 +1,8 @@
 """Deterministic pass-pipeline execution and bisection contracts."""
 
 import pytest
-from vibeqc_compiler.common.pass_manager import PassManager, PassStage
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.pass_manager import PassManager, PassStage
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -131,7 +131,7 @@ def test_tensor_optimizer_records_shared_pipeline_without_changing_equation() ->
         "dead_nodes",
     ]
     pruning = provenance["pruning_diagnostics"]
-    assert pruning["schema"] == "vibeqc.compiler.pruning.v1"
+    assert pruning["schema"] == "generativeqc.compiler.pruning.v1"
     assert pruning["requested_outputs"] == ["value"]
     assert pruning["retained_outputs"] == ["value"]
     assert pruning["nodes_before"] > pruning["nodes_after"]

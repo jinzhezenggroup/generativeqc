@@ -5,12 +5,12 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions
-from vibeqc._ks_snapshot import NativeKsSnapshot
-from vibeqc_compiler.dft import ExplicitGrid, NativeAO
-from vibeqc_compiler.xc import functional
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._ks_snapshot import NativeKsSnapshot
+from generativeqc_compiler.dft import ExplicitGrid, NativeAO
+from generativeqc_compiler.xc import functional
 
-from tools.vibeqc_response import (
+from tools.generativeqc_response import (
     GMRESOptions,
     KrylovRecycleSpace,
     NativeRKSResponse,

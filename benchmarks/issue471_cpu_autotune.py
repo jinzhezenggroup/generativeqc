@@ -16,21 +16,21 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Primitive, Shell
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.integral.cpu_tune import (
+from generativeqc import Primitive, Shell
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.integral.cpu_tune import (
     CpuTuneLimits,
     tune_cpu_first_derivative_shell,
     write_cpu_tuning_manifest,
 )
-from vibeqc_compiler.integral.weight_pullback import (
+from generativeqc_compiler.integral.weight_pullback import (
     normalized_cartesian_components,
     normalized_radial_primitives,
 )
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 def _fixture() -> typing.Any:
@@ -117,10 +117,12 @@ def main() -> None:
     executable = shutil.which("c++")
     if executable is None:
         raise RuntimeError("a C++ compiler is required")
-    native_library = os.environ.get("VIBEQC_LIBRARY")
+    native_library = os.environ.get("GENERATIVEQC_LIBRARY")
     if not native_library or not Path(native_library).is_file():
-        raise RuntimeError("VIBEQC_LIBRARY must name the fresh independent CPU library")
-    cache = (args.cache or Path(tempfile.mkdtemp(prefix="vibeqc471-"))).resolve()
+        raise RuntimeError(
+            "GENERATIVEQC_LIBRARY must name the fresh independent CPU library"
+        )
+    cache = (args.cache or Path(tempfile.mkdtemp(prefix="generativeqc471-"))).resolve()
     cache.mkdir(parents=True, exist_ok=True)
 
     angular, coordinates, specs, primitives, shells = _fixture()
@@ -128,7 +130,7 @@ def main() -> None:
     reference = _independent_reference(angular, coordinates, shells)
     reference_identity = canonical_hash(
         {
-            "schema": "vibeqc.issue471.reference.v1",
+            "schema": "generativeqc.issue471.reference.v1",
             "oracle": "native-dynamic-jet-four-center-values-and-derivatives",
             "native_library_sha256": file_hash(Path(native_library)),
             "angular": angular,
@@ -153,7 +155,7 @@ def main() -> None:
         limits=limits,
     )
     result["benchmark"] = {
-        "schema": "vibeqc.issue471.benchmark.v1",
+        "schema": "generativeqc.issue471.benchmark.v1",
         "shell": "psss",
         "primitive_record_count": int(np.prod([len(shell) for shell in primitives])),
         "native_library_sha256": file_hash(Path(native_library)),

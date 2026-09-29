@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
+from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
@@ -30,7 +30,7 @@ def test_admitted_point_consumers(tmp_path: Path) -> None:
     source.write_text(
         "#include <cstdint>\n#include <stdexcept>\n#include <limits>\n"
         '#include "generated_split_hybrid_registry.cuh"\n'
-        "namespace generated = vibeqc::dft::generated;\n"
+        "namespace generated = generativeqc::dft::generated;\n"
         "using CudaXcPointLauncher = void (*)();\n"
         "unsigned selected_functional; bool selected_response;\n"
         "template <unsigned F, bool R> void launch_points() {\n"

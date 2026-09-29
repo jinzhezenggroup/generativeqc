@@ -101,7 +101,7 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     end = source.index("__device__ inline void fail_once", begin)
     helpers = source[begin:end].replace("{{", "{").replace("}}", "}")
     begin = source.index("CudaResult evaluate_cuda(")
-    end = source.index("\n}}  // namespace vibeqc::cc::triples", begin)
+    end = source.index("\n}}  // namespace generativeqc::cc::triples", begin)
     owner = source[begin:end].replace("{{", "{").replace("}}", "}")
     owner, replacements = re.subn(
         r"triples_kernel<<<blocks, threads, 0, stream>>>\([\s\S]*?\);",

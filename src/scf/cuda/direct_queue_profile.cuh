@@ -7,7 +7,7 @@
 
 #include "scf/cuda/direct_queue_index.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Accumulate the same final-density shell-class ledger as exact compaction. */
 __device__ inline void profile_bounded_direct_shell_quartet(DeviceBatch batch,
@@ -43,4 +43,4 @@ __device__ inline void profile_bounded_direct_shell_quartet(DeviceBatch batch,
   atomicAdd(&entry.primitive_quartets, primitive_quartets);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

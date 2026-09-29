@@ -14,18 +14,20 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 # Build-time generation must remain independent of NumPy/site packages.
-import vibeqc_compiler
+import generativeqc_compiler
 
 for package_name in ("tensor", "method"):
-    qualified = f"vibeqc_compiler.{package_name}"
+    qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)
-        package.__path__ = [str(ROOT / "python" / "vibeqc_compiler" / package_name)]
+        package.__path__ = [
+            str(ROOT / "python" / "generativeqc_compiler" / package_name)
+        ]
         package.__package__ = qualified
         sys.modules[qualified] = package
-        setattr(vibeqc_compiler, package_name, package)
+        setattr(generativeqc_compiler, package_name, package)
 
-from vibeqc_compiler.method.gfn2_aes2 import (
+from generativeqc_compiler.method.gfn2_aes2 import (
     DIPOLE_NAMES,
     FIRST_DIPOLE_NAMES,
     FIRST_QUADRUPOLE_NAMES,
@@ -45,7 +47,7 @@ from vibeqc_compiler.method.gfn2_aes2 import (
     build_gfn2_aes2_pair_vjp_compose_program,
     build_gfn2_aes2_radius_from_fraction_program,
 )
-from vibeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
 def _inputs(program: typing.Any) -> tuple[str, ...]:
@@ -327,7 +329,7 @@ def _header(*, cuda: bool) -> str:
 
 #include <cmath>
 
-namespace vibeqc::xtb::generated {{
+namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_aes2_runtime_version = "{GFN2_AES2_RUNTIME_VERSION}";
 inline constexpr double gfn2_aes2_multipole_max_radius = 5.0;
@@ -447,7 +449,7 @@ struct Gfn2AES2PairVjpResult {{
   return {compose_call};
 }}
 
-}}  // namespace vibeqc::xtb::generated
+}}  // namespace generativeqc::xtb::generated
 """
 
 

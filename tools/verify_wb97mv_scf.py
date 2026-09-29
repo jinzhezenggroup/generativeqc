@@ -57,7 +57,7 @@ def verify(path: Path) -> list[dict]:
             abs(mf.energy_tot(dm=dm, vhf=veff) - case["energy"])
         )
         fock_error = float(np.max(np.abs(fock - native_fock)))
-        # Re-converge independently from a core guess, not from VibeQC's answer.
+        # Re-converge independently from a core guess, not from GenerativeQC's answer.
         energy = float(mf.kernel(dm0=mf.get_init_guess(key="1e")))
         assert mf.converged, case["name"]
         density_error = float(np.max(np.abs(mf.make_rdm1() - dm)))

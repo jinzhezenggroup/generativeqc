@@ -22,7 +22,7 @@ cudaGraphExec_t capture_flags(cudaStream_t stream, std::uint32_t* flags, std::ui
   cudaGraph_t graph{};
   cudaGraphExec_t executable{};
   check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
-  vibeqc::scf::cuda_execution::launch_reset_bounded_generated_streaming_flags_kernel(
+  generativeqc::scf::cuda_execution::launch_reset_bounded_generated_streaming_flags_kernel(
       1, 64, 0, stream, mask, flags);
   check(cudaGetLastError());
   check(cudaStreamEndCapture(stream, &graph));
@@ -43,14 +43,14 @@ int main() {
   std::uint32_t* flags{};
   cudaGraphExec_t executable{};
   try {
-    constexpr auto count = vibeqc::scf::detail::kDirectQuartetShellClassCount;
+    constexpr auto count = generativeqc::scf::detail::kDirectQuartetShellClassCount;
     std::array<std::uint32_t, count> actual{};
     check(cudaStreamCreate(&stream));
     check(cudaMalloc(reinterpret_cast<void**>(&flags), sizeof(actual)));
     for (const bool device_launch : {false, true}) {
       // CuMetal implements host replay; device launch is an NVIDIA capability.
-      if (device_launch &&
-          vibeqc::runtime::active_cuda_provider().kind != vibeqc::runtime::CudaProviderKind::Nvidia)
+      if (device_launch && generativeqc::runtime::active_cuda_provider().kind !=
+                               generativeqc::runtime::CudaProviderKind::Nvidia)
         continue;
       for (const auto mask : {std::uint64_t{0}, std::uint64_t{0x15}, std::uint64_t{1} << 54U,
                               std::uint64_t{1} << 63U, std::numeric_limits<std::uint64_t>::max()}) {

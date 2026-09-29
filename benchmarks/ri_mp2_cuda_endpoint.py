@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from _support import raw_output_path, write_result
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 ATOMS = [
     ("O", (0.0, 0.0, 0.0)),
@@ -52,10 +52,10 @@ def endpoint(basis: str, device: str, repeats: int) -> dict:
 
 
 def traced_cuda(basis: str) -> dict:
-    with tempfile.TemporaryDirectory(prefix="vibeqc-ri-mp2-") as directory:
+    with tempfile.TemporaryDirectory(prefix="generativeqc-ri-mp2-") as directory:
         path = Path(directory) / "trace.jsonl"
-        previous = os.environ.get("VIBEQC_DF_TRACE")
-        os.environ["VIBEQC_DF_TRACE"] = str(path)
+        previous = os.environ.get("GENERATIVEQC_DF_TRACE")
+        os.environ["GENERATIVEQC_DF_TRACE"] = str(path)
         try:
             calc = Calculator(
                 method="mp2", basis=basis, device="cuda", density_fitting="cuda"
@@ -63,9 +63,9 @@ def traced_cuda(basis: str) -> dict:
             sample(calc)
         finally:
             if previous is None:
-                os.environ.pop("VIBEQC_DF_TRACE", None)
+                os.environ.pop("GENERATIVEQC_DF_TRACE", None)
             else:
-                os.environ["VIBEQC_DF_TRACE"] = previous
+                os.environ["GENERATIVEQC_DF_TRACE"] = previous
         rows = [json.loads(line) for line in path.read_text().splitlines()]
     matches = [row for row in rows if row["operation"] == "ri_mp2_energy"]
     if len(matches) != 1:

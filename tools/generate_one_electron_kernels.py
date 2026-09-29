@@ -17,20 +17,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.integral.one_electron_cpu import emit_one_electron_cpu
-from vibeqc_compiler.integral.one_electron_cuda import (
+from generativeqc_compiler.integral.one_electron_cpu import emit_one_electron_cpu
+from generativeqc_compiler.integral.one_electron_cuda import (
     emit_one_electron_values_cuda,
     one_electron_program_inventory,
 )
-from vibeqc_compiler.integral.one_electron_derivative_policy_cuda import (
+from generativeqc_compiler.integral.one_electron_derivative_policy_cuda import (
     emit_one_electron_derivative_policy_cuda,
     one_electron_derivative_policy_inventory,
 )
-from vibeqc_compiler.integral.one_electron_derivatives_cuda import (
+from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
     emit_one_electron_derivatives_cuda,
     one_electron_derivative_inventory,
 )
-from vibeqc_compiler.integral.one_electron_policy_cuda import (
+from generativeqc_compiler.integral.one_electron_policy_cuda import (
     emit_one_electron_policy_cuda,
     one_electron_policy_inventory,
 )

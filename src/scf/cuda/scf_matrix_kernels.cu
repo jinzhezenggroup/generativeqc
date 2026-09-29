@@ -5,7 +5,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void copy_matrix_kernel(std::size_t elements, const double* source,
                                    double* destination) {
@@ -238,4 +238,4 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
       batch_size, matrices_per_system, nbf, subtract, active, minuend);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

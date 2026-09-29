@@ -67,7 +67,7 @@ def run_benchmark(
     monkeypatch.setattr(
         sys, "argv", ["benchmark", "--batch-sizes", "2", "--repeats", "1"]
     )
-    fake_module("vibeqc", Calculator=Calculator)
+    fake_module("generativeqc", Calculator=Calculator)
     fake_module(
         "cupy",
         cuda=SimpleNamespace(

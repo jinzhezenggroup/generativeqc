@@ -6,8 +6,8 @@ import typing
 
 import pytest
 
-from tools.vibeqc_validation.retention import check, digest, tracked_blobs
-from tools.vibeqc_validation.retention_review import (
+from tools.generativeqc_validation.retention import check, digest, tracked_blobs
+from tools.generativeqc_validation.retention_review import (
     campaign_inventory,
     raw_json_markers,
     review_changes,
@@ -18,7 +18,7 @@ ROOT = "benchmarks/results/"
 
 def policy(limit: typing.Any = 16, **exceptions: typing.Any) -> typing.Any:
     return {
-        "schema": "vibeqc.retention-policy.v1",
+        "schema": "generativeqc.retention-policy.v1",
         "review_size_bytes": 1 << 20,
         "change_review_max_bytes": limit,
         "exceptions": exceptions,
@@ -174,7 +174,7 @@ def test_audit_marks_only_complete_hash_bound_publications(
 ) -> None:
     prefix, data = ROOT + "bundle/", b"independently validated elsewhere"
     entries = [{"path": "data.json", "bytes": len(data), "sha256": digest(data)}]
-    manifest = {"schema": "vibeqc.benchmark-publication.v1", "files": entries}
+    manifest = {"schema": "generativeqc.benchmark-publication.v1", "files": entries}
     blobs = {prefix + "data.json": data}
     if damage == "missing":
         blobs.clear()

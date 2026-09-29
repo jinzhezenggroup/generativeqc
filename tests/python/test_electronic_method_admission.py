@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.method import StateSpec, rhf_electronic_method_ir
+from generativeqc_compiler.method import StateSpec, rhf_electronic_method_ir
 
 
 @pytest.mark.parametrize("version", (True, 1.0, "1"))

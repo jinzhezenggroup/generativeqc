@@ -23,7 +23,7 @@ try:
 except ModuleNotFoundError:
     from _retention import raw_output_path
 
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     TIERS,
     attach_artifact,
     block_error,
@@ -34,10 +34,13 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.common.performance import assess_comparison, measure_interleaved
+from generativeqc_compiler.common.performance import (
+    assess_comparison,
+    measure_interleaved,
+)
 
 from benchmarks._support import environment_metadata
-from tools.vibeqc_validation.fixtures import (
+from tools.generativeqc_validation.fixtures import (
     calculator_inputs,
     load_fixtures,
     mathematical_hash,
@@ -52,9 +55,9 @@ def _cuda() -> typing.Any:
     """
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU tier requires a Slurm allocation on this machine")
-    library = os.environ.get("VIBEQC_LIBRARY")
+    library = os.environ.get("GENERATIVEQC_LIBRARY")
     if not library:
-        raise RuntimeError("set VIBEQC_LIBRARY to the CUDA build being validated")
+        raise RuntimeError("set GENERATIVEQC_LIBRARY to the CUDA build being validated")
     runtime = ctypes.CDLL(library)
     count = ctypes.c_int()
     if runtime.cudaGetDeviceCount(ctypes.byref(count)) != 0 or count.value == 0:
@@ -92,7 +95,7 @@ def _provenance(record: typing.Any) -> None:
             if p.is_file() and p.suffix in {".py", ".cpp", ".cu", ".hpp", ".h"}
         }
     )
-    library = os.environ.get("VIBEQC_LIBRARY")
+    library = os.environ.get("GENERATIVEQC_LIBRARY")
     record["library_sha256"] = (
         file_hash(library) if library and Path(library).is_file() else None
     )
@@ -107,7 +110,7 @@ def _provenance(record: typing.Any) -> None:
                 key, value = line.split("=", 1)
                 key = key.split(":", 1)[0]
                 if key.startswith(
-                    ("VIBEQC_", "CMAKE_CUDA_", "CMAKE_CXX_", "CMAKE_BUILD_TYPE")
+                    ("GENERATIVEQC_", "CMAKE_CUDA_", "CMAKE_CXX_", "CMAKE_BUILD_TYPE")
                 ):
                     settings[key] = value
             record["build"] = {"cache_sha256": file_hash(cache), "settings": settings}
@@ -127,7 +130,7 @@ def hf_evidence(
     complete solver history, or allocator peaks; these remain explicit gaps
     and prohibit performance/production promotion.
     """
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     reference = next(
         r

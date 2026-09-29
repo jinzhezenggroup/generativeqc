@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from test_projected_state_transport import _projected_transport, _source_amplitudes
 
-from tools.vibeqc_cc.projected_transport import (
+from tools.generativeqc_cc.projected_transport import (
     ProjectedAmplitudePolicy,
     project_amplitude_guess,
 )

@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SOLVER_DIIS_HPP
-#define VIBEQC_SOLVER_DIIS_HPP
+#ifndef GENERATIVEQC_SOLVER_DIIS_HPP
+#define GENERATIVEQC_SOLVER_DIIS_HPP
 
 #include <cstddef>
 #include <numeric>
@@ -10,7 +10,7 @@
 #include "solver/diis_coefficients.hpp"
 #include "solver/diis_history.hpp"
 
-namespace vibeqc::solver {
+namespace generativeqc::solver {
 
 /** Method-neutral host Pulay DIIS for flattened FP64 state/error vectors.
  *
@@ -68,6 +68,6 @@ class Diis {
   detail::DiisHistory history_;
 };
 
-}  // namespace vibeqc::solver
+}  // namespace generativeqc::solver
 
 #endif

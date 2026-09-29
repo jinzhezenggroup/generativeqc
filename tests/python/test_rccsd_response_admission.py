@@ -24,7 +24,7 @@ void* operator new(std::size_t n){
 void operator delete(void* p) noexcept {std::free(p);}
 void operator delete(void* p,std::size_t) noexcept {std::free(p);}
 int main(){
- using namespace vibeqc::cc;
+ using namespace generativeqc::cc;
  Problem p;p.nocc=2;p.nvir=3;p.reference_energy=0.;
  p.foo.assign(4,0.);p.fov.assign(6,0.);p.fvv.assign(9,0.);
  p.ovov.assign(36,0.);p.ovvo.assign(36,0.);p.oovv.assign(36,0.);
@@ -87,7 +87,7 @@ def test_response_budget_precedes_numeric_allocation(tmp_path: Path) -> None:
             compiler,
             "-std=c++20",
             "-O0",
-            "-DVIBEQC_HAS_CUDA=0",
+            "-DGENERATIVEQC_HAS_CUDA=0",
             "-I" + str(root / "src"),
             "-I" + str(tmp_path),
             str(root / "src/cc/solver.cpp"),

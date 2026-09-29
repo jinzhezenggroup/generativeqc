@@ -25,19 +25,19 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
-from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.xc.libxc_bulk_capabilities import (
+from generativeqc_compiler.common.provenance import atomic_json
+from generativeqc_compiler.xc.libxc_bulk_capabilities import (
     BulkFunctionalCapability,
     available_capabilities,
 )
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from tools.qualify_libxc_compiled_cpu import qualify_compiled_cpu
 from tools.qualify_libxc_molecular_scf import qualify_molecular_scf
 from tools.qualify_libxc_production_domain import qualify_functional
 from tools.qualify_libxc_public_method import qualify_public_method
 
-MATRIX_SCHEMA = "vibeqc.libxc-broad-promotion-matrix/v2"
+MATRIX_SCHEMA = "generativeqc.libxc-broad-promotion-matrix/v2"
 DEFAULT_QUOTAS = {"lda": 3, "gga": 5, "mgga": 3}
 _FAMILY_ORDER = ("lda", "gga", "mgga")
 _STAGE_ORDER = ("production-domain", "compiled-cpu", "molecular-scf", "public-method")

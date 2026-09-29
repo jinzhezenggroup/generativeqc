@@ -1,9 +1,9 @@
-#ifndef VIBEQC_SCF_GENERATED_SHELL_TASK_HPP
-#define VIBEQC_SCF_GENERATED_SHELL_TASK_HPP
+#ifndef GENERATIVEQC_SCF_GENERATED_SHELL_TASK_HPP
+#define GENERATIVEQC_SCF_GENERATED_SHELL_TASK_HPP
 
 #include <cstdint>
 
-namespace vibeqc::scf::detail {
+namespace generativeqc::scf::detail {
 
 /** Value consumer identity; integral recurrence and quartet symmetry are shared. */
 enum class GeneratedFockConsumer : std::uint32_t { HartreeFock = 0, Coulomb = 1, Exchange = 2 };
@@ -113,6 +113,6 @@ struct GeneratedPppsResidentTask {
 static_assert(sizeof(GeneratedPppsResidentTask) == 12);
 static_assert(alignof(GeneratedPppsResidentTask) == alignof(std::uint32_t));
 
-}  // namespace vibeqc::scf::detail
+}  // namespace generativeqc::scf::detail
 
 #endif

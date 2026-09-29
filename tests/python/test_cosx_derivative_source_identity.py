@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from vibeqc.autotune import _source_identity_paths, source_identity
+from generativeqc.autotune import _source_identity_paths, source_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = Path("tools/generate_cosx_derivative_native.py")
@@ -14,7 +14,7 @@ GENERATOR = Path("tools/generate_cosx_derivative_native.py")
 def checkout(tmp_path: Path) -> Path:
     # Populate the real inventory in an isolated metadata-only checkout. This
     # exercises the production expander/hash, not a second test-only hash.
-    manifest = ROOT / "cmake/VibeQCSourceIdentity.json"
+    manifest = ROOT / "cmake/GenerativeQCSourceIdentity.json"
     payload = json.loads(manifest.read_text())
     for group in payload["recursive_groups"]:
         (tmp_path / group["root"]).mkdir(parents=True, exist_ok=True)
@@ -22,7 +22,9 @@ def checkout(tmp_path: Path) -> Path:
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture\n")
-    (tmp_path / "cmake/VibeQCSourceIdentity.json").write_text(manifest.read_text())
+    (tmp_path / "cmake/GenerativeQCSourceIdentity.json").write_text(
+        manifest.read_text()
+    )
     generator = tmp_path / GENERATOR
     generator.parent.mkdir(parents=True, exist_ok=True)
     generator.write_text("# original scalar wrapper\n")

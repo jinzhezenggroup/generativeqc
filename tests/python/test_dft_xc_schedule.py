@@ -5,9 +5,13 @@ from __future__ import annotations
 import copy
 
 import pytest
-from vibeqc.autotune import dft_endpoint_gate
-from vibeqc_compiler.dft.grid import GridSpec, MolecularGrid, molecular_grid_identity
-from vibeqc_compiler.dft.xc_schedule import (
+from generativeqc.autotune import dft_endpoint_gate
+from generativeqc_compiler.dft.grid import (
+    GridSpec,
+    MolecularGrid,
+    molecular_grid_identity,
+)
+from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
     GridXcCandidateLimits,

@@ -7,18 +7,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
 from test_cc_api import fixture_problem
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor.cuda_resident_emit import resident_source
 
-from tools.vibeqc_cc.gpu_state import AmplitudeSnapshot, solver_plans
-from tools.vibeqc_cc.resident_solver import (
+from tools.generativeqc_cc.gpu_state import AmplitudeSnapshot, solver_plans
+from tools.generativeqc_cc.resident_solver import (
     PreparedResidentCCSD,
     _resident_extension,
     solve_gpu_resident,
 )
-from tools.vibeqc_cc.solver import SolverOptions
+from tools.generativeqc_cc.solver import SolverOptions
 
 
 def test_resident_solver_extension_owns_iteration_state_without_new_equations() -> None:
@@ -38,9 +38,9 @@ def test_resident_solver_extension_owns_iteration_state_without_new_equations() 
         "resident_cc_advance_trial",
         "resident_cc_diis",
         "resident_cc_download_amplitudes",
-        "vibeqc::cc::residual_partials",
-        "vibeqc::cc::diis_gram",
-        "vibeqc::cc::diis_combine_slice",
+        "generativeqc::cc::residual_partials",
+        "generativeqc::cc::diis_gram",
+        "generativeqc::cc::diis_combine_slice",
     ):
         assert name in source
     # Iteration-state mutation is post-processing around the exact generated
@@ -106,17 +106,17 @@ def test_resident_warm_start_requires_exact_reference_before_compile(
         )
 
 
-_REAL = os.environ.get("VIBEQC_CC_RESIDENT_CUDA_TEST") == "1"
+_REAL = os.environ.get("GENERATIVEQC_CC_RESIDENT_CUDA_TEST") == "1"
 
 
 def _compiler_cache(tmp_path: typing.Any) -> typing.Any:
-    from vibeqc.profiles import find_nvcc
+    from generativeqc.profiles import find_nvcc
 
     return (
         CudaCompilerAdapter(
-            find_nvcc(), cuda_target_info(os.environ["VIBEQC_TENSOR_ARCH"])
+            find_nvcc(), cuda_target_info(os.environ["GENERATIVEQC_TENSOR_ARCH"])
         ),
-        Path(os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path / "cache")),
+        Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path / "cache")),
     )
 
 
@@ -243,7 +243,7 @@ def test_resident_zero_diis_stays_device_resident(tmp_path: typing.Any) -> None:
 def test_internal_energy_facade_selects_resident_backend(
     tmp_path: typing.Any,
 ) -> None:
-    from tools.vibeqc_cc.api import energy
+    from tools.generativeqc_cc.api import energy
 
     snapshot, provider, meta, _ = fixture_problem("h2")
     compiler, cache = _compiler_cache(tmp_path)
@@ -319,7 +319,7 @@ def test_two_resident_owners_keep_state_isolated(tmp_path: typing.Any) -> None:
 def test_resident_convenience_entry_forwards_exact_warm_start(
     monkeypatch: typing.Any, tmp_path: typing.Any
 ) -> None:
-    from tools.vibeqc_cc import resident_solver
+    from tools.generativeqc_cc import resident_solver
 
     received = {}
     warm_start = object()

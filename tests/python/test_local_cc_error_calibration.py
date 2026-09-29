@@ -5,9 +5,13 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_local_cc.error_calibration import calibrate_discarded_space
-from tools.vibeqc_local_cc.mp2 import LocalMP2Result, LocalSpacePlan, PairMP2Result
-from tools.vibeqc_local_cc.spaces import PairSpace
+from tools.generativeqc_local_cc.error_calibration import calibrate_discarded_space
+from tools.generativeqc_local_cc.mp2 import (
+    LocalMP2Result,
+    LocalSpacePlan,
+    PairMP2Result,
+)
+from tools.generativeqc_local_cc.spaces import PairSpace
 
 
 def _pair(

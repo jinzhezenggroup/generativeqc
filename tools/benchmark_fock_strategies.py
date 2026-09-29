@@ -34,11 +34,11 @@ def provenance(root: typing.Any, build: typing.Any) -> typing.Any:
         "CMAKE_CUDA_ARCHITECTURES",
         "CMAKE_CUDA_COMPILER",
         "CMAKE_CXX_COMPILER",
-        "VIBEQC_CUDA_FAST_COMPILE",
-        "VIBEQC_ENABLE_AOT_SHELLS",
-        "VIBEQC_AOT_PROFILE",
-        "VIBEQC_AOT_SPLIT_COMPILE_THREADS",
-        "VIBEQC_CUDA_SPLIT_COMPILE_THREADS",
+        "GENERATIVEQC_CUDA_FAST_COMPILE",
+        "GENERATIVEQC_ENABLE_AOT_SHELLS",
+        "GENERATIVEQC_AOT_PROFILE",
+        "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS",
+        "GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS",
     )
     entries = dict(
         line.split("=", 1)
@@ -51,7 +51,7 @@ def provenance(root: typing.Any, build: typing.Any) -> typing.Any:
     }
     if (
         controls["CMAKE_BUILD_TYPE"] != "Release"
-        or controls["VIBEQC_CUDA_FAST_COMPILE"] != "OFF"
+        or controls["GENERATIVEQC_CUDA_FAST_COMPILE"] != "OFF"
     ):
         raise ValueError(
             "matched endpoint evidence requires Release and FAST_COMPILE=OFF"
@@ -72,7 +72,7 @@ def provenance(root: typing.Any, build: typing.Any) -> typing.Any:
         "environment": {
             k: v
             for k, v in os.environ.items()
-            if k.startswith("VIBEQC_")
+            if k.startswith("GENERATIVEQC_")
             or k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS")
         },
         "gpu": command(
@@ -91,16 +91,18 @@ def worker(args: typing.Any) -> None:
     """Time synchronous public endpoints without import/setup clock pollution."""
     sys.path.insert(0, str(args.root / "python"))
     import numpy as np
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     record = provenance(args.root, args.build)
     record["filters"] = {
         key: getattr(args, key) for key in ("case", "spin", "approximation", "endpoint")
     }
     record["numpy"] = np.__version__
-    library = ctypes.CDLL(str(args.build / "libvibeqc.so"))
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    record["native_source_identity"] = library.vibeqc_get_source_identity().decode()
+    library = ctypes.CDLL(str(args.build / "libgenerativeqc.so"))
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    record["native_source_identity"] = (
+        library.generativeqc_get_source_identity().decode()
+    )
     rows = []
     record["prepared_diagnostics"] = []
     cases = {
@@ -274,7 +276,7 @@ def worker(args: typing.Any) -> None:
             "-L",
             str(args.build),
             "-Wl,-rpath," + str(args.build),
-            "-lvibeqc",
+            "-lgenerativeqc",
             "-o",
             str(probe),
         ]
@@ -406,8 +408,8 @@ def main() -> None:
             output = (args.output / f"{label}-{device}.json").resolve()
             env = os.environ.copy()
             env.update(
-                VIBEQC_LIBRARY=str(build / "libvibeqc.so"),
-                VIBEQC_PROFILE="off",
+                GENERATIVEQC_LIBRARY=str(build / "libgenerativeqc.so"),
+                GENERATIVEQC_PROFILE="off",
                 OMP_NUM_THREADS="1",
                 OPENBLAS_NUM_THREADS="1",
             )

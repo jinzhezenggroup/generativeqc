@@ -21,10 +21,10 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import atomic_json
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import atomic_json
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -33,9 +33,9 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     multiply,
 )
-from vibeqc_compiler.tensor.cuda_execute import tensor_source_identity
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
-from vibeqc_compiler.tensor.cuda_tune import tune_cuda
+from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_tune import tune_cuda
 
 
 def fixture(
@@ -89,7 +89,7 @@ def run(args: typing.Any) -> typing.Any:
     row = selection.evidence["candidates"][0]
     root = Path(__file__).resolve().parents[1]
     summary = {
-        "schema": "vibeqc.tensor.layout-qualification.v1",
+        "schema": "generativeqc.tensor.layout-qualification.v1",
         "base_revision": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=root, text=True
         ).strip(),

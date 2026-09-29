@@ -7,7 +7,7 @@ import importlib.util
 from graphlib import TopologicalSorter
 from pathlib import Path
 
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     production,
     production_bundle,
     production_emission,
@@ -15,7 +15,7 @@ from vibeqc_compiler.integral import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-INTEGRAL = ROOT / "python" / "vibeqc_compiler" / "integral"
+INTEGRAL = ROOT / "python" / "generativeqc_compiler" / "integral"
 PRODUCTION_MODULES = {
     "production",
     "production_bundle",
@@ -25,7 +25,7 @@ PRODUCTION_MODULES = {
     "production_registry",
     "production_selection",
 }
-INTEGRAL_PACKAGE = "vibeqc_compiler.integral"
+INTEGRAL_PACKAGE = "generativeqc_compiler.integral"
 EMISSION_IMPORTS = {
     "__future__",
     "capabilities",
@@ -43,7 +43,7 @@ EMISSION_IMPORTS = {
     "shell_spec",
     "signature",
     "typing",
-    "vibeqc_compiler.common.cuda_target",
+    "generativeqc_compiler.common.cuda_target",
 }
 
 
@@ -146,9 +146,9 @@ def test_import_normalization_covers_equivalent_package_spellings() -> None:
         """
 from . import production_bundle
 from .production_registry import emit_registry_source
-from vibeqc_compiler.integral import production
-from vibeqc_compiler.integral.production_selection import KernelSelection
-import vibeqc_compiler.integral.production_cost
+from generativeqc_compiler.integral import production
+from generativeqc_compiler.integral.production_selection import KernelSelection
+import generativeqc_compiler.integral.production_cost
 """
     )
     assert imports == {

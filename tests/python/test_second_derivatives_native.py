@@ -8,23 +8,23 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.integral.second_derivatives import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
     build_second_derivative_kernel,
 )
-from vibeqc_compiler.integral.second_derivatives_execute import (
+from generativeqc_compiler.integral.second_derivatives_execute import (
     PreparedSecondDerivative,
     SecondPrimitive,
     compile_second_derivative,
     pack_second_primitive,
 )
 
-from tools.vibeqc_validation.second_derivatives import (
+from tools.generativeqc_validation.second_derivatives import (
     evaluate_second_primitive,
     libcint_eri_hessian,
     libcint_one_electron_hessian,
@@ -43,8 +43,8 @@ EXPONENTS = (0.6, 0.8, 1.1, 0.9)
 def compiler(request: typing.Any, tmp_path_factory: typing.Any) -> typing.Any:
     """Compile with the common adapter; every actual CUDA call requires Slurm."""
     cuda = request.param == "cuda"
-    if cuda and os.environ.get("VIBEQC_TEST_SECOND_CUDA") != "1":
-        pytest.skip("set VIBEQC_TEST_SECOND_CUDA=1 inside a Slurm GPU job")
+    if cuda and os.environ.get("GENERATIVEQC_TEST_SECOND_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_SECOND_CUDA=1 inside a Slurm GPU job")
     if cuda and not os.environ.get("SLURM_JOB_ID"):
         pytest.fail("second derivative CUDA validation requires Slurm")
     executable = shutil.which("nvcc" if cuda else "c++")
@@ -170,7 +170,7 @@ def test_failed_late_chunk_native_errors_empty_replay_and_budget(
         )
         with pytest.raises(ValueError, match="stride"):
             plan._call(
-                "vibeqc_second_run_v1",
+                "generativeqc_second_run_v1",
                 plan._handle,
                 plan._records.ctypes.data,
                 1,
@@ -188,7 +188,7 @@ def test_failed_late_chunk_native_errors_empty_replay_and_budget(
         )
         with pytest.raises(FloatingPointError):
             plan._call(
-                "vibeqc_second_run_v1",
+                "generativeqc_second_run_v1",
                 plan._handle,
                 plan._records.ctypes.data,
                 1,
@@ -199,7 +199,7 @@ def test_failed_late_chunk_native_errors_empty_replay_and_budget(
             )
         np.testing.assert_array_equal(output, 173)
         plan._call(
-            "vibeqc_second_run_v1",
+            "generativeqc_second_run_v1",
             plan._handle,
             None,
             0,
@@ -239,7 +239,7 @@ def test_native_svec_preserves_offdiagonal_inner_product_factors(
     compiler: typing.Any,
 ) -> None:
     pytest.importorskip("pyscf")
-    from vibeqc_compiler.integral.second_order_layout import HessianLayout
+    from generativeqc_compiler.integral.second_order_layout import HessianLayout
 
     ir = build_eri_second_ir((1, 0, 0, 0), output="weighted_hessian", packing="svec")
     # Two negative signs and a nonunit factor exercise generated consumer

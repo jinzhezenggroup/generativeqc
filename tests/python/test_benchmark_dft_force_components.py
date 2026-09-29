@@ -9,7 +9,7 @@ from tools.benchmark_dft_force_components import _coverage, extract_records
 
 def test_extract_stationary_record_uses_normalized_component_schema() -> None:
     payload = {
-        "schema": "vibeqc.stationary-cuda-force-benchmark.v1",
+        "schema": "generativeqc.stationary-cuda-force-benchmark.v1",
         "records": [
             {
                 "status": "ok",
@@ -46,7 +46,7 @@ def test_extract_stationary_record_uses_normalized_component_schema() -> None:
     assert len(rows) == 2
     assert rows[0]["metadata"]["method"] == "pbe-rks"
     components = rows[0]["components"]
-    assert components["schema"] == "vibeqc.dft-force-components.v1"
+    assert components["schema"] == "generativeqc.dft-force-components.v1"
     assert components["wall_seconds"]["host_packing"] == 0.4
     assert components["endpoint_seconds"] == 1.0
     assert rows[1]["status"] == "unsupported"
@@ -79,7 +79,7 @@ def test_extract_wb97mv_uses_latest_cumulative_force_work() -> None:
         },
     }
     payload = {
-        "schema": "vibeqc.readme-wb97mv.v1",
+        "schema": "generativeqc.readme-wb97mv.v1",
         "method": "WB97M-V/RKS",
         "atoms": 3,
         "native_force_work": [
@@ -103,7 +103,7 @@ def test_extract_wb97mv_uses_latest_cumulative_force_work() -> None:
 
 def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
     force_components = {
-        "schema": "vibeqc.dft-force-components.v1",
+        "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
         "wall_seconds": {"stationary_integral_derivatives": 0.4},
         "profiled_ms": {},
@@ -114,13 +114,13 @@ def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
         },
     }
     scf_profile = {
-        "schema": "vibeqc.dft-scf-components.v1",
+        "schema": "generativeqc.dft-scf-components.v1",
         "profiled_ms": {"scf_fock_j": 2.0},
         "expected_components": ["scf_fock_j", "semilocal_ao_grid_xc"],
         "missing_expected_components": ["semilocal_ao_grid_xc"],
     }
     payload = {
-        "schema": "vibeqc.dft-force-matrix.v1",
+        "schema": "generativeqc.dft-force-matrix.v1",
         "records": [
             {
                 "status": "measured",
@@ -154,7 +154,7 @@ def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
     assert rows[0]["metadata"]["method_identity"] == "method-identity"
     assert rows[0]["metadata"]["ks_options_identity"] == "ks-identity"
     assert rows[0]["metadata"]["library_sha256"] == "library-sha"
-    assert rows[0]["components"]["schema"] == "vibeqc.dft-force-components.v1"
+    assert rows[0]["components"]["schema"] == "generativeqc.dft-force-components.v1"
     assert rows[1]["metadata"]["scenario"] == "diagnostic_scf_profile"
     assert rows[1]["scf_profile"]["profiled_ms"]["scf_fock_j"] == 2.0
     assert "components" not in rows[1]
@@ -162,7 +162,7 @@ def test_extract_cross_functional_matrix_keeps_scf_profile_separate() -> None:
 
 def test_extract_matrix_retains_case_and_force_negative_evidence() -> None:
     payload = {
-        "schema": "vibeqc.dft-force-matrix.v1",
+        "schema": "generativeqc.dft-force-matrix.v1",
         "records": [
             {
                 "status": "unsupported",
@@ -227,7 +227,7 @@ def test_report_coverage_counts_negative_outcomes() -> None:
 
 def test_extract_readme_dft_endpoint_keeps_reference_boundary_coarse() -> None:
     payload = {
-        "schema": "vibeqc.readme-endpoint.v1",
+        "schema": "generativeqc.readme-endpoint.v1",
         "status": "measured",
         "method": "pbe0-rks",
         "atoms": 3,
@@ -292,7 +292,7 @@ def test_report_coverage_tracks_external_methods_without_fake_components() -> No
 @pytest.mark.parametrize("seconds", [-1.0, float("nan"), float("inf")])
 def test_external_comparison_rejects_invalid_duration(seconds: float) -> None:
     payload = {
-        "schema": "vibeqc.readme-endpoint.v1",
+        "schema": "generativeqc.readme-endpoint.v1",
         "status": "measured",
         "method": "pbe-rks",
         "endpoint": "SCF energy",

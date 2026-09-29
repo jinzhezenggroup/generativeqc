@@ -34,7 +34,7 @@ def test_runner_deadline_and_outcome(tmp_path: Path, mode: str) -> None:
         **os.environ,
         "SLURM_JOB_ID": "host-control-flow-fixture",
         "PROBE_PID": str(tmp_path / "probe.pid"),
-        "VIBEQC_LIBRARY": "never-loaded",
+        "GENERATIVEQC_LIBRARY": "never-loaded",
         "README_BENCHMARK_PYTHON": str(helper),
         "README_BENCHMARK_OUTPUT": str(output),
         "README_BENCHMARK_POINT_TIMEOUT": "1",

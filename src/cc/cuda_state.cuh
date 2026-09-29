@@ -5,19 +5,19 @@
 
 #include "../tensor/cuda_runtime.cuh"
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 
 // Dense histories use the same Euclidean metric as #148's packed coordinates
 // with orbit weights. Keeping both ijab and jiba does not change the metric.
-inline void diis_gram(vibeqc_tensor::Context& context, const double* errors, int elements,
+inline void diis_gram(generativeqc_tensor::Context& context, const double* errors, int elements,
                       int history, double* gram) {
   if (elements < 1 || history < 2 || history > 20 || !errors || !gram || !context.handle)
     throw std::invalid_argument("invalid CC DIIS storage/dimensions/handle");
   context.check_device();
   const double one = 1.0, zero = 0.0;
-  vibeqc_tensor::blas_check(cublasDgemm(context.handle, CUBLAS_OP_T, CUBLAS_OP_N, history, history,
-                                        elements, &one, errors, elements, errors, elements, &zero,
-                                        gram, history));
+  generativeqc_tensor::blas_check(cublasDgemm(context.handle, CUBLAS_OP_T, CUBLAS_OP_N, history,
+                                              history, elements, &one, errors, elements, errors,
+                                              elements, &zero, gram, history));
 }
 
 // Only the bounded (<=21)^2 augmented DIIS system uses a serial GPU solve.
@@ -84,15 +84,15 @@ __global__ void diis_coefficients(const double* gram, int history, double* syste
 }
 
 __global__ void diis_combine(const double* vectors, const double* coefficients,
-                             vibeqc_tensor::I elements, int history, const int* status,
+                             generativeqc_tensor::I elements, int history, const int* status,
                              double* result, int* arithmetic_error) {
   if (*status) return;
-  for (vibeqc_tensor::I i = vibeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x; i < elements;
-       i += vibeqc_tensor::I(blockDim.x) * gridDim.x) {
+  for (generativeqc_tensor::I i = generativeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x;
+       i < elements; i += generativeqc_tensor::I(blockDim.x) * gridDim.x) {
     double value = 0.0;
     for (int j = 0; j < history; ++j)
       value = __dadd_rn(value, __dmul_rn(coefficients[j], vectors[j * elements + i]));
-    result[i] = vibeqc_tensor::finite(value, arithmetic_error, 0);
+    result[i] = generativeqc_tensor::finite(value, arithmetic_error, 0);
   }
 }
 
@@ -101,39 +101,40 @@ __global__ void diis_combine(const double* vectors, const double* coefficients,
 // Compact a dense history by dropping its oldest row. Each lane owns one
 // element across every row, so the in-place left shift has no cross-lane
 // read/write dependency.
-__global__ void history_shift(double* values, vibeqc_tensor::I elements, int history) {
+__global__ void history_shift(double* values, generativeqc_tensor::I elements, int history) {
   if (!values || elements < 1 || history < 2 || history > 20) return;
-  for (vibeqc_tensor::I i = vibeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x; i < elements;
-       i += vibeqc_tensor::I(blockDim.x) * gridDim.x)
+  for (generativeqc_tensor::I i = generativeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x;
+       i < elements; i += generativeqc_tensor::I(blockDim.x) * gridDim.x)
     for (int row = 0; row + 1 < history; ++row)
-      values[vibeqc_tensor::I(row) * elements + i] =
-          values[vibeqc_tensor::I(row + 1) * elements + i];
+      values[generativeqc_tensor::I(row) * elements + i] =
+          values[generativeqc_tensor::I(row + 1) * elements + i];
 }
 
 // Apply one DIIS coefficient vector to a logical slice of each dense history
 // row while T1/T2 remain in separately pinned plan spans.
 __global__ void diis_combine_slice(const double* vectors, const double* coefficients,
-                                   vibeqc_tensor::I stride, vibeqc_tensor::I offset,
-                                   vibeqc_tensor::I count, int history, const int* status,
+                                   generativeqc_tensor::I stride, generativeqc_tensor::I offset,
+                                   generativeqc_tensor::I count, int history, const int* status,
                                    double* result, int* arithmetic_error) {
   if (*status) return;
-  for (vibeqc_tensor::I i = vibeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
-       i += vibeqc_tensor::I(blockDim.x) * gridDim.x) {
+  for (generativeqc_tensor::I i = generativeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x;
+       i < count; i += generativeqc_tensor::I(blockDim.x) * gridDim.x) {
     double value = 0.0;
     for (int row = 0; row < history; ++row)
-      value = __dadd_rn(value, __dmul_rn(coefficients[row],
-                                         vectors[vibeqc_tensor::I(row) * stride + offset + i]));
-    result[i] = vibeqc_tensor::finite(value, arithmetic_error, 0);
+      value = __dadd_rn(
+          value,
+          __dmul_rn(coefficients[row], vectors[generativeqc_tensor::I(row) * stride + offset + i]));
+    result[i] = generativeqc_tensor::finite(value, arithmetic_error, 0);
   }
 }
 
-__global__ void residual_partials(const double* residual, vibeqc_tensor::I count, double* partials,
-                                  int* error) {
+__global__ void residual_partials(const double* residual, generativeqc_tensor::I count,
+                                  double* partials, int* error) {
   __shared__ double shared[256];
   double value = 0.0;
-  for (vibeqc_tensor::I i = vibeqc_tensor::I(blockIdx.x) * 256 + threadIdx.x; i < count;
-       i += vibeqc_tensor::I(gridDim.x) * 256)
-    value = fmax(value, fabs(vibeqc_tensor::finite(residual[i], error, 0)));
+  for (generativeqc_tensor::I i = generativeqc_tensor::I(blockIdx.x) * 256 + threadIdx.x; i < count;
+       i += generativeqc_tensor::I(gridDim.x) * 256)
+    value = fmax(value, fabs(generativeqc_tensor::finite(residual[i], error, 0)));
   shared[threadIdx.x] = value;
   __syncthreads();
   for (int stride = 128; stride; stride /= 2) {
@@ -151,4 +152,4 @@ __global__ void residual_finish(const double* partials, int count, double* outpu
   *output = value;
 }
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

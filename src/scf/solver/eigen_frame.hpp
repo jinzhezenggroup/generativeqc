@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace vibeqc::scf::solver {
+namespace generativeqc::scf::solver {
 /** Backend-neutral evidence for one real symmetric/generalized eigenframe. */
 struct EigenFrameDiagnostic {
   double maximum_eigen_residual{}, scaled_eigen_residual{}, maximum_metric_error{};
@@ -23,4 +23,4 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
                           const std::vector<double>& eigenvalues,
                           const std::vector<double>& coefficients, std::size_t n,
                           EigenFrameDiagnostic& diagnostic, std::string& detail);
-}  // namespace vibeqc::scf::solver
+}  // namespace generativeqc::scf::solver

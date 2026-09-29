@@ -26,7 +26,7 @@
 #include "scf/cuda_df_gradient.hpp"
 #include "scf/df_derivative_policy.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 struct CudaFailure {
   cudaError_t status;
@@ -310,7 +310,7 @@ struct ShellMetadata {
 };
 /** Intrusive #437 diagnostic: histogram the exact folded public response weights
  * seen by each shell class without changing the derivative kernel. The D2H copy
- * and host traversal are enabled only by VIBEQC_DF_SCREENING_FEATURES=1.
+ * and host traversal are enabled only by GENERATIVEQC_DF_SCREENING_FEATURES=1.
  */
 inline constexpr std::array<double, 10> kDfWeightMagnitudeEdges{1e-18, 1e-16, 1e-14, 1e-12, 1e-10,
                                                                 1e-8,  1e-6,  1e-4,  1e-2,  1.0};
@@ -409,12 +409,11 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
       }
 }
 }  // namespace
-vibeqc_status execute_cuda_df_gradient(int device, const core::System& orbital,
-                                       const core::System& auxiliary, std::span<const double> bar_a,
-                                       std::span<const double> bar_m, unsigned schedule,
-                                       std::size_t maximum_bytes, std::size_t maximum_tile_elements,
-                                       std::vector<double>& gradient, std::string& detail,
-                                       DfGradientResources* resources) {
+generativeqc_status execute_cuda_df_gradient(
+    int device, const core::System& orbital, const core::System& auxiliary,
+    std::span<const double> bar_a, std::span<const double> bar_m, unsigned schedule,
+    std::size_t maximum_bytes, std::size_t maximum_tile_elements, std::vector<double>& gradient,
+    std::string& detail, DfGradientResources* resources) {
   detail.clear();
   if (resources) *resources = {};
   const auto n = molecule::ao_count(orbital), a = molecule::ao_count(auxiliary),
@@ -425,21 +424,21 @@ vibeqc_status execute_cuda_df_gradient(int device, const core::System& orbital,
       a > index_limit || atoms > index_limit / 3 || n > maximum / n || a > maximum / a ||
       n * n > maximum / a || atoms != auxiliary.atoms.size()) {
     detail = "invalid generated DF gradient dimensions or budget";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (std::size_t i = 0; i < atoms; ++i)
     if (orbital.atoms[i].position != auxiliary.atoms[i].position) {
       detail = "DF orbital/auxiliary bases must share physical atom coordinates";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   if ((!bar_a.empty() && bar_a.size() != n * n * a) || (!bar_m.empty() && bar_m.size() != a * a)) {
     detail = "DF response weights require full A[mu,nu,P] and M[P,Q] layouts";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   for (auto weights : {bar_a, bar_m})
     if (!std::all_of(weights.begin(), weights.end(), [](double x) { return std::isfinite(x); })) {
       detail = "DF response weights must be finite";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
@@ -452,7 +451,7 @@ vibeqc_status execute_cuda_df_gradient(int device, const core::System& orbital,
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
     detail = "generated DF host staging exceeds maximum_bytes";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
     const auto host_o = pack(orbital), host_a = pack(auxiliary);
@@ -500,31 +499,29 @@ vibeqc_status execute_cuda_df_gradient(int device, const core::System& orbital,
     arena.stats.stream_synchronizations = 1;
     if (!std::all_of(result.begin(), result.end(), [](double x) { return std::isfinite(x); })) {
       detail = "nonfinite generated DF gradient";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     gradient.swap(result);
     if (resources) *resources = arena.stats;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& error) {
     detail = std::string("generated DF CUDA failure: ") + cudaGetErrorString(error.status);
-    return error.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                     : VIBEQC_STATUS_CUDA_ERROR;
+    return error.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                     : GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (const std::bad_alloc&) {
     detail = "generated DF gradient exceeded its allocation budget";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 }
 
-vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbital,
-                                            const core::System& auxiliary, unsigned kind,
-                                            runtime::StridedRange range,
-                                            std::span<const double> weights, unsigned schedule,
-                                            std::size_t maximum_bytes,
-                                            std::vector<double>& gradient, std::string& detail,
-                                            DfGradientResources* resources) {
+generativeqc_status execute_cuda_df_gradient_tile(
+    int device, const core::System& orbital, const core::System& auxiliary, unsigned kind,
+    runtime::StridedRange range, std::span<const double> weights, unsigned schedule,
+    std::size_t maximum_bytes, std::vector<double>& gradient, std::string& detail,
+    DfGradientResources* resources) {
   detail.clear();
   if (resources) *resources = {};
   const auto n = molecule::ao_count(orbital), a = molecule::ao_count(auxiliary),
@@ -536,16 +533,16 @@ vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbi
       atoms != auxiliary.atoms.size() || !range.row_length || !range.row_stride ||
       !range.column_stride || n > element_limit / n || a > element_limit / a ||
       n * n > element_limit / a || weights.size() > element_limit)
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   for (std::size_t atom = 0; atom < atoms; ++atom)
     if (orbital.atoms[atom].position != auxiliary.atoms[atom].position) {
       detail = "DF orbital/auxiliary bases must share physical atom coordinates";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   if (!std::all_of(weights.begin(), weights.end(),
                    [](double value) { return std::isfinite(value); })) {
     detail = "DF response weight tile must be finite";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto maximum = std::numeric_limits<std::size_t>::max();
   const auto row = (weights.size() - 1) / range.row_length;
@@ -554,13 +551,13 @@ vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbi
       range.offset > maximum - row * range.row_stride ||
       range.offset + row * range.row_stride > maximum - column * range.column_stride) {
     detail = "DF response weight tile range overflows size_t";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto last = range.index(weights.size() - 1);
   const auto total = kind ? a * a : n * n * a;
   if (last >= total) {
     detail = "DF response weight tile exceeds its full tensor";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
@@ -572,7 +569,7 @@ vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbi
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
     detail = "generated DF tile host staging exceeds maximum_bytes";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
     const auto host_o = pack(orbital), host_a = pack(auxiliary);
@@ -609,25 +606,25 @@ vibeqc_status execute_cuda_df_gradient_tile(int device, const core::System& orbi
     if (!std::all_of(result.begin(), result.end(),
                      [](double value) { return std::isfinite(value); })) {
       detail = "nonfinite generated DF tile gradient";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     gradient.swap(result);
     if (resources) *resources = arena.stats;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& error) {
     detail = std::string("generated DF tile CUDA failure: ") + cudaGetErrorString(error.status);
-    return error.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                     : VIBEQC_STATUS_CUDA_ERROR;
+    return error.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                     : GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (const std::bad_alloc&) {
     detail = "generated DF tile gradient exceeded its allocation budget";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NOT_IMPLEMENTED;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 }
 
-vibeqc_status execute_cuda_df_hf_gradient(
+generativeqc_status execute_cuda_df_hf_gradient(
     int device, void* stream_handle, CudaDensityFittingIntegralSource* source,
     std::size_t source_index, const core::System& orbital, const core::System& auxiliary,
     std::span<const double> raw_a, const std::vector<double>& metric,
@@ -640,13 +637,13 @@ vibeqc_status execute_cuda_df_hf_gradient(
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
-  const char* screen_control = std::getenv("VIBEQC_DF_FORCE_SCREEN_ABS");
+  const char* screen_control = std::getenv("GENERATIVEQC_DF_FORCE_SCREEN_ABS");
   if (screen_control && std::string_view(screen_control) != "off") {
     char* end = nullptr;
     target = std::strtod(screen_control, &end);
     if (end == screen_control || *end || !std::isfinite(target) || target < 0) {
-      detail = "VIBEQC_DF_FORCE_SCREEN_ABS requires off or a finite nonnegative force budget";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      detail = "GENERATIVEQC_DF_FORCE_SCREEN_ABS requires off or a finite nonnegative force budget";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
 
@@ -667,7 +664,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
       terms.empty() || !std::isfinite(relative_threshold) || relative_threshold <= 0 ||
       relative_threshold >= 1) {
     detail = "invalid generated DF-HF response dimensions or budget";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto metric_matches = [&](const CudaDfMetricView& view) {
     return device_metric && view.inverse_square_root == device_metric->inverse_square_root &&
@@ -683,21 +680,21 @@ vibeqc_status execute_cuda_df_hf_gradient(
         occupied->naux != a || !source || borrowed || packed_raw ||
         (whitened && !whitened->packed_pairs) || terms.size() > occupied->factors.size()) {
       detail = "streamed occupied DF factors differ from the full-rank metric owner";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (const auto& factor : occupied->factors) {
       if (factor.rank > n || (factor.rank && !factor.coefficients) ||
           !std::isfinite(factor.density_scale) || factor.density_scale < 0 ||
           factor.rank * factor.rank > maximum / a / occupied->factors.size()) {
         detail = "invalid streamed occupied DF response factor";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
     }
     if (occupied->final_fitted_occupied_projection &&
         (!whitened || !whitened->packed_pairs || terms.size() != 1 || !occupied->factors[0].rank ||
          occupied->factors[0].density_scale != 2.0)) {
       detail = "final fitted occupied projection lacks its canonical single-B owner";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
   if (whitened &&
@@ -712,13 +709,13 @@ vibeqc_status execute_cuda_df_hf_gradient(
                      (borrowed->resident_raw.data &&
                       whitened->owner_identity != borrowed->resident_raw.owner_identity))))) {
     detail = "resident whitened DF view differs from response shape, rank or metric owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (packed_raw && (!packed_raw->data || !packed_raw->owner_identity || packed_raw->nbf != n ||
                      packed_raw->naux != a || packed_raw->pair_count != n * (n + 1) / 2 ||
                      !metric_matches(packed_raw->metric))) {
     detail = "packed raw DF view differs from response shape or metric owner";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   // A packed resident borrow is admitted only for the occupied algorithm.
   // Dense/rejected factors keep the bounded loader below; they must not enter
@@ -753,7 +750,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
        borrowed->staging_weights == borrowed->exchange_response ||
        borrowed->raw_auxiliary_major == borrowed->exchange_response)) {
     detail = "invalid borrowed resident DF response tensors";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (borrowed && borrowed->resident_raw.data) {
     const auto& raw = borrowed->resident_raw;
@@ -767,13 +764,13 @@ vibeqc_status execute_cuda_df_hf_gradient(
         raw.metric.full_rank != device_metric->full_rank ||
         raw.metric.owner_identity != device_metric->owner_identity) {
       detail = "resident raw DF view differs from the response shape/layout/metric owner";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
   if (borrowed && borrowed->occupied_response) {
     if (terms.size() > borrowed->occupied_factors.size()) {
       detail = "too many occupied DF response descriptors";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     std::size_t projected = 0;
     for (std::size_t t = 0; t < terms.size(); ++t) {
@@ -783,7 +780,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
           factor.rank * factor.rank > borrowed->staging_capacity() / a - projected ||
           factor.rank * factor.rank > borrowed->exchange_capacity() / a) {
         detail = "invalid occupied DF response factor or borrowed capacity";
-        return VIBEQC_STATUS_INVALID_ARGUMENT;
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
       projected += factor.rank * factor.rank;
     }
@@ -792,20 +789,20 @@ vibeqc_status execute_cuda_df_hf_gradient(
     if (term.density.size() != n * n || !std::isfinite(term.coulomb_coefficient) ||
         !std::isfinite(term.exchange_coefficient)) {
       detail = "invalid HF density response term";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (std::size_t i = 0; i < n; ++i)
       for (std::size_t j = 0; j < n; ++j)
         if (!std::isfinite(term.density[i * n + j]) ||
             std::abs(term.density[i * n + j] - term.density[j * n + i]) > 1e-10) {
           detail = "HF response requires finite symmetric densities";
-          return VIBEQC_STATUS_INVALID_ARGUMENT;
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
   }
   for (std::size_t atom = 0; atom < atoms; ++atom)
     if (orbital.atoms[atom].position != auxiliary.atoms[atom].position) {
       detail = "DF-HF orbital/auxiliary bases must share physical atoms";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
@@ -817,7 +814,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
     detail = "generated DF-HF metadata exceeds maximum_bytes";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
     const auto host_o = pack(orbital), host_a = pack(auxiliary);
@@ -853,14 +850,15 @@ vibeqc_status execute_cuda_df_hf_gradient(
     // the generic route. Packed response has a separate qualification boundary.
     bool promoted_default = false;
     unsigned derivative_architecture = 0;
-    const char* upload_diagnostic = std::getenv("VIBEQC_DF_RESPONSE_UPLOAD_PROBE");
-    const char* scatter_diagnostic = std::getenv("VIBEQC_DF_RESPONSE_SCATTER_PROBE");
-    const char* serial_diagnostic = std::getenv("VIBEQC_DF_SERIAL_RESPONSE_DOT");
-    const char* source_schedule_control = std::getenv("VIBEQC_DF_SOURCE_DERIVATIVE_SCHEDULE");
+    const char* upload_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE");
+    const char* scatter_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
+    const char* serial_diagnostic = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
+    const char* source_schedule_control = std::getenv("GENERATIVEQC_DF_SOURCE_DERIVATIVE_SCHEDULE");
     const std::string_view source_schedule =
         source_schedule_control ? source_schedule_control : "auto";
     if (source_schedule != "auto" && source_schedule != "qualify")
-      throw std::invalid_argument("VIBEQC_DF_SOURCE_DERIVATIVE_SCHEDULE requires auto or qualify");
+      throw std::invalid_argument(
+          "GENERATIVEQC_DF_SOURCE_DERIVATIVE_SCHEDULE requires auto or qualify");
     const bool source_schedule_eligible = df_response_shell_source_eligible(
         source != nullptr, packed_raw != nullptr, whitened != nullptr,
         occupied && device_metric && device_metric->full_rank, source_schedule == "qualify");
@@ -876,7 +874,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
       // evidence. Keep automatic response on the established symmetric/full
       // routes; explicit packed selection remains available for qualification.
     }
-    const char* execution_control = std::getenv("VIBEQC_DF_WEIGHTED_EXECUTION");
+    const char* execution_control = std::getenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION");
     const std::string_view execution =
         execution_control ? execution_control : (promoted_default ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
@@ -885,7 +883,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
     const bool full_shell_domain = execution == "shell";
-    const char* pair_control = std::getenv("VIBEQC_DF_DERIVATIVE_PAIRS");
+    const char* pair_control = std::getenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS");
     const std::string_view pair_policy = pair_control ? pair_control : "auto";
     if (pair_policy != "auto" && pair_policy != "full" && pair_policy != "symmetric" &&
         pair_policy != "packed")
@@ -901,7 +899,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
                                           (pair_policy == "auto" && promoted_default)
                                       ? DfDerivativePairs::symmetric
                                       : DfDerivativePairs::full;
-    const char* screening_feature_control = std::getenv("VIBEQC_DF_SCREENING_FEATURES");
+    const char* screening_feature_control = std::getenv("GENERATIVEQC_DF_SCREENING_FEATURES");
     const std::string_view screening_feature_policy =
         screening_feature_control ? screening_feature_control : "off";
     if (screening_feature_policy != "off" && screening_feature_policy != "1")
@@ -910,7 +908,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
     if (screening_features && (!shell_execution || !full_shell_domain))
       throw std::invalid_argument("DF screening feature diagnostic requires full shell execution");
     const auto response_pair_stride = packed_pairs ? n * (n + 1) / 2 : n * n;
-    const char* block_control = std::getenv("VIBEQC_DF_PACKED_AO_BLOCK_ROWS");
+    const char* block_control = std::getenv("GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS");
     // The 64-row experiment halved weight storage but paid for many small
     // GEMMs. 256 rows recover the complete endpoint while still skipping all
     // upper off-diagonal blocks; diagnostic sizes preserve that experiment.
@@ -922,7 +920,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
                                           : block_policy == "128" ? 128
                                           : block_policy == "256" ? 256
                                                                   : 384;
-    const char* shell_schedule_control = std::getenv("VIBEQC_DF_SHELL_SCHEDULE");
+    const char* shell_schedule_control = std::getenv("GENERATIVEQC_DF_SHELL_SCHEDULE");
     const std::string_view shell_schedule =
         shell_schedule_control ? shell_schedule_control : (promoted_default ? "compact" : "warp");
     if (shell_schedule != "auto" && shell_schedule != "warp" && shell_schedule != "packed" &&
@@ -932,7 +930,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
                                    : shell_schedule == "warp"   ? 0
                                    : shell_schedule == "packed" ? 1
                                                                 : 2;
-    const char* primitive_bucket_control = std::getenv("VIBEQC_DF_PRIMITIVE_BUCKETS");
+    const char* primitive_bucket_control = std::getenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS");
     const std::string_view primitive_bucket_policy =
         primitive_bucket_control ? primitive_bucket_control : "auto";
     if (primitive_bucket_policy != "auto" && primitive_bucket_policy != "off" &&
@@ -959,8 +957,8 @@ vibeqc_status execute_cuda_df_hf_gradient(
     const bool automatic_packets =
         primitive_bucket_policy == "auto" && promoted_default && full_shell_domain &&
         shell_variant == 2 && derivative_pairs != DfDerivativePairs::full && terms.size() == 1 &&
-        orbital.basis_representation == VIBEQC_BASIS_SPHERICAL &&
-        auxiliary.basis_representation == VIBEQC_BASIS_SPHERICAL &&
+        orbital.basis_representation == GENERATIVEQC_BASIS_SPHERICAL &&
+        auxiliary.basis_representation == GENERATIVEQC_BASIS_SPHERICAL &&
         df_signature_packets_preferred(orbital_primitives, auxiliary_primitives,
                                        orbital_heterogeneous || auxiliary_heterogeneous,
                                        derivative_architecture);
@@ -1003,7 +1001,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
               derivative_pairs != DfDerivativePairs::full && la == lb ? na * (na + 1) / 2 : na * nb;
         }
       runtime::cuda_trace::trace_counter("shell_pairs_logical", logical_pairs);
-      const char* counter_control = std::getenv("VIBEQC_DF_SHELL_COUNTERS");
+      const char* counter_control = std::getenv("GENERATIVEQC_DF_SHELL_COUNTERS");
       if (counter_control && std::string_view(counter_control) == "1") {
         shell_counters =
             static_cast<unsigned long long*>(arena.allocate(sizeof(observed_shell_work)));
@@ -1041,7 +1039,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
           }
         }
       }
-      const char* work_control = std::getenv("VIBEQC_DF_SHELL_WORK");
+      const char* work_control = std::getenv("GENERATIVEQC_DF_SHELL_WORK");
       if (work_control && std::string_view(work_control) == "1") {
         // One fixed packet buffer is reused after each explicitly intrusive
         // readback. Keep its host destination alive through exceptional drains.
@@ -1084,9 +1082,9 @@ vibeqc_status execute_cuda_df_hf_gradient(
         }
       const auto factor_capacity =
           static_cast<std::size_t>(available / sizeof(double) - fixed_elements);
-      const char* requested_algebra = std::getenv("VIBEQC_DF_RESPONSE_ALGEBRA");
-      const char* requested_dot = std::getenv("VIBEQC_DF_SERIAL_RESPONSE_DOT");
-      const char* requested_scatter = std::getenv("VIBEQC_DF_RESPONSE_SCATTER_PROBE");
+      const char* requested_algebra = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
+      const char* requested_dot = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
+      const char* requested_scatter = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
       // Only the truly bounded range needs a different factor layout. Full
       // tensor and resident-C routes retain their already qualified selection.
       // Both UHF projections coexist; the reusable projection/weight buffer
@@ -1193,7 +1191,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
       // drain prior work before a raw read; packed additionally exposes the
       // CPU gather and a contiguous pinned H2D copy as separate intervals.
       // Probes retain the original pageable strided submission by default.
-      const char* upload_probe = std::getenv("VIBEQC_DF_RESPONSE_UPLOAD_PROBE");
+      const char* upload_probe = std::getenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE");
       const std::string_view probe = upload_probe ? upload_probe : "";
       if (!probe.empty() && probe != "drain" && probe != "packed")
         throw std::invalid_argument("unknown DF response upload probe (use drain or packed)");
@@ -1201,7 +1199,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
         throw std::invalid_argument("DF response upload probe requires resident host raw values");
       if (borrowed && !probe.empty())
         throw std::invalid_argument("resident JK scratch cannot be combined with upload probes");
-      const char* staging_control = std::getenv("VIBEQC_DF_RAW_STAGING");
+      const char* staging_control = std::getenv("GENERATIVEQC_DF_RAW_STAGING");
       const std::string_view staging =
           staging_control ? staging_control : (promoted_default ? "pinned-panels" : "pageable");
       if (staging != "pageable" && staging != "pinned-panels")
@@ -1224,7 +1222,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
       // Keep the original auxiliary tile and response scratch unchanged. This
       // diagnostic reserves only unused budget headroom; insufficient room is
       // an error, never a silent tile/traffic change that confounds attribution.
-      const char* sink_policy = std::getenv("VIBEQC_DF_RESPONSE_SCATTER_PROBE");
+      const char* sink_policy = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
       const std::string_view sink = sink_policy ? sink_policy : "";
       if (!sink.empty() && sink != "sharded")
         throw std::invalid_argument("unknown DF response scatter probe (use sharded)");
@@ -1248,9 +1246,9 @@ vibeqc_status execute_cuda_df_hf_gradient(
                                          arena.stats.device_bytes);
       preparation.finish();
       runtime::cuda_trace::TraceRegion response_weights("response_weights", arena.stream);
-      const char* dot_policy = std::getenv("VIBEQC_DF_SERIAL_RESPONSE_DOT");
+      const char* dot_policy = std::getenv("GENERATIVEQC_DF_SERIAL_RESPONSE_DOT");
       const bool serial_dot = dot_policy && dot_policy[0] == '1' && dot_policy[1] == '\0';
-      const char* algebra_control = std::getenv("VIBEQC_DF_RESPONSE_ALGEBRA");
+      const char* algebra_control = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
       // Response algebra is independent of storage/resource ownership. Production
       // always uses the compiler-qualified BLAS contractions; scalar remains an
       // explicit diagnostic/ablation route only.
@@ -1269,8 +1267,8 @@ vibeqc_status execute_cuda_df_hf_gradient(
         const auto status = generate_cuda_density_fitting_raw_tile(
             source, source_index, 0, n * n, 0, a, -1, stream_handle, borrowed->staging_weights,
             detail);
-        if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-        if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+        if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+        if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
         cuda_df::launch_gather_auxiliary_tile_kernel(
             dim3(cuda_df::blocks_for(n * n * a)), dim3(cuda_df::kThreads), 0, arena.stream, n * n,
             a, 0, 0, a, borrowed->staging_weights, borrowed->raw_auxiliary_major);
@@ -1313,11 +1311,11 @@ vibeqc_status execute_cuda_df_hf_gradient(
         runtime::cuda_trace::trace_counter("raw_value_owner_identity", packed_raw->owner_identity);
       }
       std::function<void(std::size_t, std::size_t, double*, double*)> source_panel_reader;
-      const char* source_projection_control = std::getenv("VIBEQC_DF_SOURCE_PROJECTION");
+      const char* source_projection_control = std::getenv("GENERATIVEQC_DF_SOURCE_PROJECTION");
       const std::string_view source_projection =
           source_projection_control ? source_projection_control : "auto";
       if (source_projection != "auto" && source_projection != "batched")
-        throw std::invalid_argument("VIBEQC_DF_SOURCE_PROJECTION requires auto or batched");
+        throw std::invalid_argument("GENERATIVEQC_DF_SOURCE_PROJECTION requires auto or batched");
       if (source_projection == "batched") {
         if (!source || !owned_occupied || whitened)
           throw std::invalid_argument(
@@ -1326,8 +1324,8 @@ vibeqc_status execute_cuda_df_hf_gradient(
                                   double* staging) {
           const auto status = generate_cuda_density_fitting_raw_tile(
               source, source_index, 0, n * n, begin, count, -1, stream_handle, staging, detail);
-          if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-          if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+          if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+          if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
           cuda_df::launch_gather_auxiliary_tile_kernel(dim3(cuda_df::blocks_for(n * n * count)),
                                                        dim3(cuda_df::kThreads), 0, arena.stream,
                                                        n * n, count, 0, 0, count, staging, panels);
@@ -1429,8 +1427,8 @@ vibeqc_status execute_cuda_df_hf_gradient(
             const auto pairs = std::min(pair_tile, n * n - pair);
             const auto status = generate_cuda_density_fitting_raw_tile(
                 source, source_index, pair, pairs, 0, a, -1, stream_handle, raw, detail);
-            if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-            if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+            if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+            if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
             arena.stats.recomputed_value_bytes += pairs * a * sizeof(double);
             ++arena.stats.value_slices;
             // Raw [pair,P] is column-major [P,pair]. Divide Q^T*A before
@@ -1470,8 +1468,8 @@ vibeqc_status execute_cuda_df_hf_gradient(
             } else if (source) {
               const auto status = generate_cuda_density_fitting_raw_tile(
                   source, source_index, 0, n * n, p, 1, -1, stream_handle, values, detail);
-              if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-              if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+              if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+              if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
               arena.stats.recomputed_value_bytes += n * n * sizeof(double);
             } else {
               const unsigned raw_panel =
@@ -1748,25 +1746,25 @@ vibeqc_status execute_cuda_df_hf_gradient(
       throw std::runtime_error("nonfinite generated DF-HF gradient");
     gradient.swap(result);
     if (resources) *resources = arena.stats;
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const CudaFailure& error) {
     detail = std::string("generated DF-HF CUDA failure: ") + cudaGetErrorString(error.status);
-    return error.status == cudaErrorMemoryAllocation ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                     : VIBEQC_STATUS_CUDA_ERROR;
+    return error.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                     : GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (const CudaDfResponseBlasFailure& error) {
     detail = "generated DF-HF metric response cuBLAS failure (status " +
              std::to_string(static_cast<int>(error.status)) + ")";
-    return error.status == CUBLAS_STATUS_ALLOC_FAILED ? VIBEQC_STATUS_OUT_OF_MEMORY
-                                                      : VIBEQC_STATUS_CUDA_ERROR;
+    return error.status == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                      : GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (const std::bad_alloc&) {
     detail = "generated DF-HF response exceeded its allocation budget";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

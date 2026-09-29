@@ -1,11 +1,11 @@
-#ifndef VIBEQC_SCF_GRADIENT_HF_GRADIENT_HPP
-#define VIBEQC_SCF_GRADIENT_HF_GRADIENT_HPP
+#ifndef GENERATIVEQC_SCF_GRADIENT_HF_GRADIENT_HPP
+#define GENERATIVEQC_SCF_GRADIENT_HF_GRADIENT_HPP
 #include <span>
 
 #include "integrals/s_integrals.hpp"
 #include "scf/reference/linalg.hpp"
 
-namespace vibeqc::scf::gradient {
+namespace generativeqc::scf::gradient {
 using reference::Matrix;
 /** Assemble stationary restricted HF forces from separately owned derivatives.
  * two_electron is the resolved provider's positive energy derivative. D and W
@@ -25,5 +25,5 @@ std::vector<double> analytic_uhf_forces(const integrals::IntegralData& ints,
                                         const Matrix& alpha_weighted_density,
                                         const Matrix& beta_weighted_density,
                                         std::span<const double> two_electron);
-}  // namespace vibeqc::scf::gradient
+}  // namespace generativeqc::scf::gradient
 #endif

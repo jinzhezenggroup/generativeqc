@@ -24,8 +24,8 @@ def test_one_electron_mapping_uses_explicit_cuda_provider_capability() -> None:
     assert "CUMETAL_ROOT" not in policy
     assert "active_cuda_provider()" in policy
     assert "templated_shell_warp_one_electron" in provider
-    assert 'VIBEQC_CUDA_PROVIDER "nvidia"' in cmake
-    assert "-DVIBEQC_CUDA_PROVIDER=cumetal" in workflow
+    assert 'GENERATIVEQC_CUDA_PROVIDER "nvidia"' in cmake
+    assert "-DGENERATIVEQC_CUDA_PROVIDER=cumetal" in workflow
 
 
 def test_component_trace_cannot_depend_on_scf_provider(

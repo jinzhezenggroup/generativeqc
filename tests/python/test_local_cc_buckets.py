@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.vibeqc_local_cc.buckets import PairBucketKey, plan_pair_state_buckets
-from tools.vibeqc_local_cc.spaces import PairSpace
+from tools.generativeqc_local_cc.buckets import PairBucketKey, plan_pair_state_buckets
+from tools.generativeqc_local_cc.spaces import PairSpace
 
 
 def _space(

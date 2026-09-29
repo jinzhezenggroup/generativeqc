@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.xc.semilocal_codegen import (
+from generativeqc_compiler.xc.semilocal_codegen import (
     emit_polarized_semilocal,
     polarized_feature_count,
 )
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS, functional
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -178,7 +178,7 @@ def test_generator_tools_do_not_reown_semilocal_differentiation() -> None:
     wb97mv_cuda = (ROOT / "tools/generate_xc_wb97mv_cuda.py").read_text()
 
     assert "def build_roots(" not in cpu
-    assert "from vibeqc_compiler.xc.semilocal_codegen import" in cpu
+    assert "from generativeqc_compiler.xc.semilocal_codegen import" in cpu
     assert "ScalarCEmitter" not in cuda
     assert "build_roots" not in cuda
     assert "tools.generate_xc_cpu" not in cuda

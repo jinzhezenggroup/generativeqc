@@ -23,8 +23,8 @@ the complete source map. Tensor storage is released only after this process.
 The existing serialized workspace allowance already covers these operations;
 there is no additional provider handle or retained per-item workspace.
 
-The private `VIBEQC_DF_REFERENCE_SETUP_EIGEN=1` control restores actual reference
-setup decompositions independently of `VIBEQC_DF_REFERENCE_FINAL_EIGEN` and the
+The private `GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN=1` control restores actual reference
+setup decompositions independently of `GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN` and the
 lazy-core/overlap-rebuild controls. Host ledgers report device calls by reason,
 so a cold overlap/core call cannot be counted as a final solve. Preparation
 work-count gates sum reference and device leaves; provider comparison checks

@@ -5,10 +5,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, projected_singlepoint
+from generativeqc import Calculator, projected_singlepoint
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_PROJECTION_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_PROJECTION_CUDA_TEST") != "1",
     reason="explicit Slurm projection GPU tier",
 )
 

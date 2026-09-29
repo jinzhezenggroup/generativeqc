@@ -6,14 +6,14 @@
 #include <cub/block/block_scan.cuh>
 #include <vector>
 
-extern "C" __global__ void vibeqc_test_indexing_kernel(const float* input, float* output,
-                                                       std::size_t size) {
+extern "C" __global__ void generativeqc_test_indexing_kernel(const float* input, float* output,
+                                                             std::size_t size) {
   const std::size_t index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (index < size) output[index] = 2.0F * input[index] + 1.0F;
 }
 
-extern "C" __global__ void vibeqc_test_block_scan_kernel(const int* input, int* exclusive,
-                                                         int* aggregate) {
+extern "C" __global__ void generativeqc_test_block_scan_kernel(const int* input, int* exclusive,
+                                                               int* aggregate) {
   using BlockScan = cub::BlockScan<int, 32>;
   __shared__ typename BlockScan::TempStorage storage;
   int prefix = 0;
@@ -23,7 +23,9 @@ extern "C" __global__ void vibeqc_test_block_scan_kernel(const int* input, int* 
   if (threadIdx.x == 0) *aggregate = total;
 }
 
-extern "C" __global__ void vibeqc_test_atomic_kernel(float* output) { atomicAdd(output, 1.0F); }
+extern "C" __global__ void generativeqc_test_atomic_kernel(float* output) {
+  atomicAdd(output, 1.0F);
+}
 
 namespace {
 
@@ -70,7 +72,7 @@ bool test_indexing(cudaStream_t stream) {
                                        cudaMemcpyHostToDevice, stream),
                        "cudaMemcpyAsync(index input)");
   if (ok) {
-    vibeqc_test_indexing_kernel<<<3, 32, 0, stream>>>(device_input, device_output, size);
+    generativeqc_test_indexing_kernel<<<3, 32, 0, stream>>>(device_input, device_output, size);
     ok = check_cuda(cudaGetLastError(), "indexing kernel launch") &&
          check_cuda(cudaMemcpyAsync(output.data(), device_output, size * sizeof(float),
                                     cudaMemcpyDeviceToHost, stream),
@@ -114,8 +116,8 @@ bool test_block_scan(cudaStream_t stream) {
                                        cudaMemcpyHostToDevice, stream),
                        "cudaMemcpyAsync(scan input)");
   if (ok) {
-    vibeqc_test_block_scan_kernel<<<1, threads, 0, stream>>>(device_input, device_output,
-                                                             device_aggregate);
+    generativeqc_test_block_scan_kernel<<<1, threads, 0, stream>>>(device_input, device_output,
+                                                                   device_aggregate);
     ok = check_cuda(cudaGetLastError(), "BlockScan launch") &&
          check_cuda(cudaMemcpyAsync(output.data(), device_output, threads * sizeof(int),
                                     cudaMemcpyDeviceToHost, stream),
@@ -154,7 +156,7 @@ bool test_atomic(cudaStream_t stream) {
             check_cuda(cudaMemsetAsync(device_value, 0, sizeof(float), stream),
                        "cudaMemsetAsync(atomic)");
   if (ok) {
-    vibeqc_test_atomic_kernel<<<1, 32, 0, stream>>>(device_value);
+    generativeqc_test_atomic_kernel<<<1, 32, 0, stream>>>(device_value);
     ok = check_cuda(cudaGetLastError(), "atomicAdd launch") &&
          check_cuda(
              cudaMemcpyAsync(&value, device_value, sizeof(float), cudaMemcpyDeviceToHost, stream),
@@ -178,7 +180,7 @@ bool test_cublas(cudaStream_t stream) {
   const float beta = 0.0F;
 
   // Fresh cuBLAS handles are non-atomic by contract. Exercise the controls
-  // VibeQC actually needs without requiring optional atomics-mode APIs.
+  // GenerativeQC actually needs without requiring optional atomics-mode APIs.
   bool ok = check_cublas(cublasCreate(&handle), "cublasCreate") &&
             check_cublas(cublasSetStream(handle, stream), "cublasSetStream") &&
             check_cuda(cudaMalloc(&workspace, 4096), "cudaMalloc(cuBLAS workspace)") &&

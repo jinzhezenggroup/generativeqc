@@ -8,7 +8,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __device__ inline void decode_lower_triangle(std::size_t packed, std::size_t& first,
                                              std::size_t& second) {
@@ -186,4 +186,4 @@ __device__ inline bool decode_direct_tile_ao_ordinal(
   return i < direct_nbf && j < direct_nbf && k < direct_nbf && l < direct_nbf;
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

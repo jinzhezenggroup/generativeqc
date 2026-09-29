@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:5090:1
 #SBATCH --time=02:00:00
-#SBATCH --output=/tmp/vibeqc-issue493-d4-%j.out
-#SBATCH --error=/tmp/vibeqc-issue493-d4-%j.err
+#SBATCH --output=/tmp/generativeqc-issue493-d4-%j.out
+#SBATCH --error=/tmp/generativeqc-issue493-d4-%j.err
 set -euo pipefail
 
 ROOT="${ISSUE493_ROOT:-${SLURM_SUBMIT_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}}"
@@ -33,27 +33,27 @@ cmake -S . -B "${BUILD}" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CUDA_COMPILER="${CUDA_ROOT}/bin/nvcc" \
   -DCMAKE_CUDA_ARCHITECTURES=120 \
-  -DVIBEQC_ENABLE_AOT_SHELLS=OFF
+  -DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF
 cmake --build "${BUILD}" -j8 --target \
-  vibeqc_d4_reference_tests vibeqc_d4_reference_cuda_tests \
-  vibeqc_d4_eeq_tests vibeqc_d4_eeq_cuda_tests vibeqc_d4_schedule_cuda_tests \
-  vibeqc_d4_production_tests vibeqc_d4_ragged_tests vibeqc_dft_api_tests
-export VIBEQC_LIBRARY="${BUILD}/libvibeqc.so"
-export VIBEQC_GPU_ALLOCATION_ID="slurm:${SLURM_JOB_ID}"
+  generativeqc_d4_reference_tests generativeqc_d4_reference_cuda_tests \
+  generativeqc_d4_eeq_tests generativeqc_d4_eeq_cuda_tests generativeqc_d4_schedule_cuda_tests \
+  generativeqc_d4_production_tests generativeqc_d4_ragged_tests generativeqc_dft_api_tests
+export GENERATIVEQC_LIBRARY="${BUILD}/libgenerativeqc.so"
+export GENERATIVEQC_GPU_ALLOCATION_ID="slurm:${SLURM_JOB_ID}"
 
 ctest --test-dir "${BUILD}" --output-on-failure -R \
-  'vibeqc_d4_(reference|eeq|production|ragged|schedule)'
+  'generativeqc_d4_(reference|eeq|production|ragged|schedule)'
 
-"${BUILD}/vibeqc_d4_production_tests" cuda
-"${BUILD}/vibeqc_d4_ragged_tests" cuda
-CUDA_VISIBLE_DEVICES="" "${BUILD}/vibeqc_dft_api_tests"
+"${BUILD}/generativeqc_d4_production_tests" cuda
+"${BUILD}/generativeqc_d4_ragged_tests" cuda
+CUDA_VISIBLE_DEVICES="" "${BUILD}/generativeqc_dft_api_tests"
 "${PYTHON}" -m pytest -q tests/python/test_d4_production.py tests/python/test_d4_eeq.py
 
 compute-sanitizer --tool memcheck --error-exitcode=99 \
-  "${BUILD}/vibeqc_d4_production_tests" cuda \
+  "${BUILD}/generativeqc_d4_production_tests" cuda \
   >"${OUTPUT}/memcheck-production.txt" 2>&1
 compute-sanitizer --tool memcheck --error-exitcode=99 \
-  "${BUILD}/vibeqc_d4_ragged_tests" cuda \
+  "${BUILD}/generativeqc_d4_ragged_tests" cuda \
   >"${OUTPUT}/memcheck-ragged.txt" 2>&1
 
 "${PYTHON}" benchmarks/d4_production_gate.py --device cpu --repeats 7 \

@@ -66,7 +66,7 @@ subprocess.Popen = _forbid_subprocess
     missing = tmp_path / "missing-toolchain"
 
     code = """
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 result = Calculator(method="rhf", basis="sto-3g", device="cpu").singlepoint(atoms)

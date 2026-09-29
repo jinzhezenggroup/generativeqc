@@ -1,6 +1,6 @@
 # Maintainer Guide
 
-Use this guide to keep VibeQC scientifically trustworthy, reproducible, performant, and maintainable.
+Use this guide to keep GenerativeQC scientifically trustworthy, reproducible, performant, and maintainable.
 
 - [Validation gates](validation.md)
 - [Performance engineering](performance_engineering.md)

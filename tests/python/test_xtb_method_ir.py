@@ -5,7 +5,7 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     GFN1_PARAMETER_SET,
     GFN2_PARAMETER_SET,
     XTB_METHOD_CATALOG,

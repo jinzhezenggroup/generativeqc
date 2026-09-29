@@ -25,7 +25,7 @@ from _support import (
     raw_output_path,
     write_result,
 )
-from vibeqc import BatchResult, Calculator, InactiveEigensolverProfileEntry
+from generativeqc import BatchResult, Calculator, InactiveEigensolverProfileEntry
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -234,7 +234,7 @@ def measure_workload(
     coordinates = divergent_coordinates(case.atoms, batch_size, maximum_distortion_bohr)
     calculator = Calculator(
         method=method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         max_iterations=max_iterations,
@@ -500,7 +500,7 @@ def main() -> None:
             "density_tolerance": args.density_tolerance,
             "screening_tolerance": args.screening_tolerance,
             "graph_eigensolver_override": os.environ.get(
-                "VIBEQC_GRAPH_EIGENSOLVER_OVERRIDE"
+                "GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE"
             ),
             "warm_start_policy": (
                 "freeze the common base-geometry converged density, then replay "

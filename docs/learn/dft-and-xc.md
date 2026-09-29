@@ -127,6 +127,6 @@ $$
 
 with the required terms belonging to the named method identity.
 
-Use the generated [public method table](../public_methods.md) for current VibeQC method identities instead of copied tutorial lists.
+Use the generated [public method table](../public_methods.md) for current GenerativeQC method identities instead of copied tutorial lists.
 
 Next: [energies and derivatives](energy-force-hessian.md).

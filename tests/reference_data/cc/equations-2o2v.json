@@ -14,7 +14,7 @@
         2,
         3
       ],
-      "schema": "vibeqc.tensor.packing",
+      "schema": "generativeqc.tensor.packing",
       "schema_version": 1,
       "signs": [
         1,
@@ -93,7 +93,7 @@
         13,
         15
       ],
-      "schema": "vibeqc.tensor.packing",
+      "schema": "generativeqc.tensor.packing",
       "schema_version": 1,
       "signs": [
         1,
@@ -202,7 +202,7 @@
       "inner_product": "real Euclidean dense; packed coordinates carry orbit weights",
       "reshape": "logical C order; physical copies/views are executor decisions"
     },
-    "logical_hash": "226e8deec60c8df23a8fd4d230e0f0554c396cd5fcb9cc952df03a7565b3d021",
+    "logical_hash": "92ab878729f06baf43aeef7e28433399838a2b44080c105cbb9a58c301b69644",
     "nodes": [
       {
         "attributes": {
@@ -3707,7 +3707,7 @@
       "slice": "A",
       "source": "PySCF 2.14.0 rccsd + rintermediates; see source_manifest.json"
     },
-    "schema": "vibeqc.tensor",
+    "schema": "generativeqc.tensor",
     "schema_version": 1
   },
   "terms": {

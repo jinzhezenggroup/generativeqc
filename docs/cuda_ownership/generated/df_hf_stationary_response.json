@@ -4,5 +4,5 @@
     "generated/generated_df_hf_response_contract.hpp",
     "generated/generated_df_hf_response.cuh"
   ],
-  "owner": "python/vibeqc_compiler/method/df_hf_response_cuda.py"
+  "owner": "python/generativeqc_compiler/method/df_hf_response_cuda.py"
 }

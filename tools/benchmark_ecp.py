@@ -18,10 +18,10 @@ from time import perf_counter
 
 import numpy as np
 import pyscf
+from generativeqc import Calculator
+from generativeqc.ecp import ecp_integrals
+from generativeqc.profiles import file_hash
 from pyscf import scf
-from vibeqc import Calculator
-from vibeqc.ecp import ecp_integrals
-from vibeqc.profiles import file_hash
 
 
 def timed(call: typing.Any, repeats: typing.Any) -> typing.Any:
@@ -54,7 +54,7 @@ def main() -> None:
         "python": platform.python_version(),
         "pyscf": pyscf.__version__,
         "machine": platform.machine(),
-        "library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "grid": {"radial": 160, "polar": 32, "azimuth": 64},
         "refined_grid": {"radial": 224, "polar": 44, "azimuth": 88},
         "atoms_bohr": atoms,

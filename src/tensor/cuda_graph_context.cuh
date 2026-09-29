@@ -3,10 +3,10 @@
 #include "../runtime/cuda_graph_region.cuh"
 #include "cuda_runtime.cuh"
 
-namespace vibeqc_tensor {
+namespace generativeqc_tensor {
 struct GraphContext : Context {
-  vibeqc::runtime::CudaGraphRegion graph;
-  vibeqc::runtime::GraphBinding binding;
+  generativeqc::runtime::CudaGraphRegion graph;
+  generativeqc::runtime::GraphBinding binding;
   bool graph_enabled = false;
 
   void configure_graph(bool enabled, const char* qualification) {
@@ -14,7 +14,8 @@ struct GraphContext : Context {
     if (!qualification || std::strlen(qualification) != 64)
       throw std::invalid_argument("invalid graph qualification identity");
     cuda_check(cudaStreamSynchronize(stream));
-    std::lock_guard<std::mutex> allocation_lock(vibeqc::runtime::allocation_measurement_mutex);
+    std::lock_guard<std::mutex> allocation_lock(
+        generativeqc::runtime::allocation_measurement_mutex);
     graph.invalidate();
     graph_enabled = enabled;
     binding = {qualification, device, stream, arena, handle};
@@ -28,7 +29,8 @@ struct GraphContext : Context {
     graph.submit(binding, graph_enabled, profile, operation);
   }
   ~GraphContext() {
-    std::lock_guard<std::mutex> allocation_lock(vibeqc::runtime::allocation_measurement_mutex);
+    std::lock_guard<std::mutex> allocation_lock(
+        generativeqc::runtime::allocation_measurement_mutex);
     // Keep destruction nonthrowing and destroy graph references before base
     // Context destroys the stream, library handle, events and arena.
     int previous = 0;
@@ -39,4 +41,4 @@ struct GraphContext : Context {
     cudaSetDevice(previous);
   }
 };
-}  // namespace vibeqc_tensor
+}  // namespace generativeqc_tensor

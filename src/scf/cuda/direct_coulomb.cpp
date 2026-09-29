@@ -20,7 +20,7 @@
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/queue_plan.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 namespace {
 void check(cudaError_t error) {
   if (error != cudaSuccess) throw error;
@@ -518,4 +518,4 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* den
                                             p.temporary, p.zero, p.active, coulomb);
   return cudaGetLastError();
 }
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

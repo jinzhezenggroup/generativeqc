@@ -49,16 +49,16 @@ def test_cuda_df_scf_has_device_resident_iteration_boundary() -> None:
 def test_cuda_df_metric_diagnostics_are_publicly_wired() -> None:
     """Keep metric/allocation evidence available through every public layer."""
 
-    header = (REPOSITORY_ROOT / "include" / "vibeqc" / "vibeqc.h").read_text(
+    header = (
+        REPOSITORY_ROOT / "include" / "generativeqc" / "generativeqc.h"
+    ).read_text(encoding="utf-8")
+    native = (REPOSITORY_ROOT / "python" / "generativeqc" / "_native.py").read_text(
         encoding="utf-8"
     )
-    native = (REPOSITORY_ROOT / "python" / "vibeqc" / "_native.py").read_text(
+    batch = (REPOSITORY_ROOT / "python" / "generativeqc" / "batch.py").read_text(
         encoding="utf-8"
     )
-    batch = (REPOSITORY_ROOT / "python" / "vibeqc" / "batch.py").read_text(
-        encoding="utf-8"
-    )
-    assert "vibeqc_density_fitting_metric_diagnostic" in header
-    assert "vibeqc_batch_get_last_density_fitting_metric_diagnostics" in header
+    assert "generativeqc_density_fitting_metric_diagnostic" in header
+    assert "generativeqc_batch_get_last_density_fitting_metric_diagnostics" in header
     assert "DensityFittingMetricDiagnostic" in native
     assert "last_density_fitting_metric_diagnostics" in batch

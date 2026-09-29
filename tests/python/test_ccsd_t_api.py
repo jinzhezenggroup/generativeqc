@@ -8,12 +8,12 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import canonical_hash
 
 from tools.cc_endpoint_fixtures import load, snapshot_from_fixture
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     PreparedRCCSDTBatch,
     PreparedRCCSDTForceBatch,
     SolverOptions,
@@ -23,9 +23,9 @@ from tools.vibeqc_cc import (
     rccsd_t_force,
     rccsd_t_method_capabilities,
 )
-from tools.vibeqc_cc import ccsd_t_api as api
-from tools.vibeqc_cc.triples_cuda import CudaTriplesResult
-from tools.vibeqc_posthf.providers import BlockResult, ConventionalProvider
+from tools.generativeqc_cc import ccsd_t_api as api
+from tools.generativeqc_cc.triples_cuda import CudaTriplesResult
+from tools.generativeqc_posthf.providers import BlockResult, ConventionalProvider
 
 TRIPLES_REFERENCE = {
     "h2": 8.392021714075268e-49,
@@ -163,7 +163,7 @@ def test_endpoint_artifact_records_components_and_identity(
     result = rccsd_t_energy(snapshot, provider)
     path = tmp_path / "h2o-rccsd-t.json"
     record = result.write(path)
-    assert record["schema"] == "vibeqc.rccsd-t.endpoint/1"
+    assert record["schema"] == "generativeqc.rccsd-t.endpoint/1"
     assert record["record_hash"]
     assert record["provenance"]["ccsd_state_identity"]
     assert record["triples"]["tile_count"] == result.triples.tile_count

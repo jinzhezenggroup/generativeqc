@@ -5,10 +5,10 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires a finite Slurm GPU allocation",
 )
 
@@ -50,9 +50,9 @@ def test_value_math_replay_and_geometry(
         assert ref.converged
         references.append((ref.e_tot, -ref.nuc_grad_method().kernel()))
     for math in ("generic", "polynomial", "rys", "candidate"):
-        monkeypatch.setenv("VIBEQC_DF_VALUE_MATH", math)
+        monkeypatch.setenv("GENERATIVEQC_DF_VALUE_MATH", math)
         monkeypatch.setenv(
-            "VIBEQC_DF_VALUE_RAW_MAPPING",
+            "GENERATIVEQC_DF_VALUE_RAW_MAPPING",
             {
                 "generic": "scalar",
                 "polynomial": "subgroup",

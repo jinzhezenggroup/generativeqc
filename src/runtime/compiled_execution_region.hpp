@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 struct CompiledExecutionBinding {
   std::string qualification;
@@ -106,4 +106,4 @@ class CompiledExecutionRegion {
   bool failed_ = false;
 };
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

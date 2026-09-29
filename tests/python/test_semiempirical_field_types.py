@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.method.semiempirical import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.method.semiempirical import (
     InvalidSemiempiricalMethod,
     ParameterResource,
     ParameterSetRef,

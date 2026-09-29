@@ -27,10 +27,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
 
-from tools.vibeqc_validation.df_gradient import reference_df_matrices
-from tools.vibeqc_validation.f_shell_numerics import numerical_error
+from tools.generativeqc_validation.df_gradient import reference_df_matrices
+from tools.generativeqc_validation.f_shell_numerics import numerical_error
 
 
 def fixture_systems(
@@ -200,14 +200,14 @@ def main() -> None:
     libraries = [
         line.split()[2]
         for line in linked.stdout.splitlines()
-        if line.strip().startswith("libvibeqc.so") and "=>" in line
+        if line.strip().startswith("libgenerativeqc.so") and "=>" in line
     ]
     if len(libraries) != 1 or not Path(libraries[0]).is_file():
         raise RuntimeError(
             "cannot verify the production library linked by the native probe"
         )
     report = {
-        "schema": "vibeqc.df_source_validation",
+        "schema": "generativeqc.df_source_validation",
         "version": 1,
         "probe_hash": file_hash(args.probe),
         "library": libraries[0],
@@ -253,7 +253,7 @@ def main() -> None:
                 prefix = directory / name
                 env = {
                     **os.environ,
-                    "VIBEQC_DF_VALUE_MAPPING": mapping,
+                    "GENERATIVEQC_DF_VALUE_MAPPING": mapping,
                 }
                 command = [
                     str(args.probe.resolve()),

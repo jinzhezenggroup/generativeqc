@@ -7,7 +7,7 @@
 
 #include "scf/density_fitting.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 DensityFittingResponseWeightResources contract_density_fitting_response_weights(
     std::size_t n, std::size_t a, const std::vector<double>& metric,
     const std::vector<double>& inverse, std::span<const DensityFittingDensityResponse> terms,
@@ -127,4 +127,4 @@ DensityFittingResponseWeightResources contract_density_fitting_response_weights(
   ++resources.weight_tiles;
   return resources;
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

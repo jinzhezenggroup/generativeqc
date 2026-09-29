@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.method import (
+from generativeqc_compiler.method import (
     METHOD_CATALOG,
     D4Spec,
     DispersionCorrectionPrimitive,
@@ -14,7 +14,7 @@ from vibeqc_compiler.method import (
     r2scan3c_d4_eeq,
     resolve_method,
 )
-from vibeqc_compiler.method.d4_derivative import PRODUCTION_D4_EEQ_DERIVATIVE
+from generativeqc_compiler.method.d4_derivative import PRODUCTION_D4_EEQ_DERIVATIVE
 
 
 def test_r2scan3c_d4_manifest_is_exact_and_roundtrips() -> None:
@@ -72,7 +72,7 @@ def test_d4_manifest_rejects_semantic_mismatch(
 
 
 def test_d4_and_nonlocal_correlation_survive_shared_method_composition() -> None:
-    from vibeqc_compiler.method import VV10, original_nonlocal_correlation
+    from generativeqc_compiler.method import VV10, original_nonlocal_correlation
 
     correction = r2scan3c_d4_eeq()
     nonlocal_correlation = original_nonlocal_correlation(VV10)

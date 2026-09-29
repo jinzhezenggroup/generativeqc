@@ -15,11 +15,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.common.evidence import canonical_hash
 
-from tools.vibeqc_cc.solver import SolverOptions, solve
-from tools.vibeqc_posthf import MOBlock, ReferenceSnapshot
-from tools.vibeqc_posthf.providers import BlockResult, ConventionalProvider
+from tools.generativeqc_cc.solver import SolverOptions, solve
+from tools.generativeqc_posthf import MOBlock, ReferenceSnapshot
+from tools.generativeqc_posthf.providers import BlockResult, ConventionalProvider
 
 
 class _SavedProvider(ConventionalProvider):
@@ -51,7 +51,7 @@ def replay(path: typing.Any) -> typing.Any:
     ):
         raise ValueError("CCSD replay record identity mismatch")
     if (
-        record["schema"] != "vibeqc.ccsd.result"
+        record["schema"] != "generativeqc.ccsd.result"
         or record["version"] != 1
         or canonical_hash(record["inputs"]) != record["inputs_hash"]
     ):

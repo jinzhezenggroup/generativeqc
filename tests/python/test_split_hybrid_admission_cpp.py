@@ -20,7 +20,7 @@ def test_native_split_hybrid_descriptor_gate(tmp_path: Path) -> None:
         [
             compiler,
             "-std=c++17",
-            "-DVIBEQC_HAS_CUDA=1",
+            "-DGENERATIVEQC_HAS_CUDA=1",
             "-I" + str(ROOT / "include"),
             "-I" + str(ROOT / "src"),
             "-I" + str(tmp_path),

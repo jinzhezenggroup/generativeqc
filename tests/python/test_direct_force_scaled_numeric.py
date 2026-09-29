@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _emitted_scalar_source() -> str:
-    path = ROOT / "python/vibeqc_compiler/integral/lowering/dispatch.py"
+    path = ROOT / "python/generativeqc_compiler/integral/lowering/dispatch.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
     owner = next(
         node

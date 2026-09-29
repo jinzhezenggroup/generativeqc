@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Generic eigensolver record layout and native launch limits, independent of HF provider storage.
  */
@@ -27,4 +27,4 @@ constexpr std::int32_t kSmallEigensolverLimit = 16;
 constexpr std::int32_t kBatchedEigensolverLimit = 32;
 constexpr unsigned kGraphEigensolverThreads = 64;
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

@@ -9,12 +9,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc.autotune import dft_density_candidates
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 from test_xc_contractions_native import native_factory  # noqa: F401
-from vibeqc.autotune import dft_density_candidates
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
 
 from tools.density_workload_matrix import (
     batch_resources,

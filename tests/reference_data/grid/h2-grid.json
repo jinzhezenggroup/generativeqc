@@ -1,5 +1,5 @@
 {
-  "schema": "vibeqc.explicit-grid",
+  "schema": "generativeqc.explicit-grid",
   "version": 1,
   "points_bohr": [
     [
@@ -268,5 +268,5 @@
     },
     "units": "Bohr"
   },
-  "sha256": "df771338666d8b19412919ff17c083d8238686cfef0aa322ee072fdb7089173d"
+  "sha256": "bceacf0ca1c802cdc2f7eac6d897632970e4477b29d416abce8e14a67e79b3c6"
 }

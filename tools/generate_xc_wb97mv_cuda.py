@@ -7,9 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.method.spec import SemilocalXCPrimitive, resolve_method
-from vibeqc_compiler.xc.semilocal_codegen import emit_polarized_semilocal
-from vibeqc_compiler.xc.wb97mv_maple import (
+from generativeqc_compiler.method.spec import SemilocalXCPrimitive, resolve_method
+from generativeqc_compiler.xc.semilocal_codegen import emit_polarized_semilocal
+from generativeqc_compiler.xc.wb97mv_maple import (
     DENSITY_THRESHOLD,
     SIGMA_THRESHOLD,
     TAU_THRESHOLD,
@@ -43,9 +43,9 @@ def emit_wb97mv_device() -> str:
             "// Generated from pinned Libxc omegaB97M-V semilocal expressions.",
             "#pragma once",
             "#include <cmath>",
-            "namespace vibeqc::dft::generated {",
+            "namespace generativeqc::dft::generated {",
             body.rstrip("\n"),
-            "}  // namespace vibeqc::dft::generated",
+            "}  // namespace generativeqc::dft::generated",
             "",
         ]
     )

@@ -6,13 +6,13 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.xc import libxc_bulk
-from vibeqc_compiler.xc.bulk_aot import SourceVariant
-from vibeqc_compiler.xc.bulk_point_program import (
+from generativeqc_compiler.xc import libxc_bulk
+from generativeqc_compiler.xc.bulk_aot import SourceVariant
+from generativeqc_compiler.xc.bulk_point_program import (
     POINT_PROGRAM_BINDING_SCHEMA,
     SemilocalPointBinding,
 )
-from vibeqc_compiler.xc.bulk_runtime import PRODUCTION_DENSITY_CANDIDATE_DOMAIN
+from generativeqc_compiler.xc.bulk_runtime import PRODUCTION_DENSITY_CANDIDATE_DOMAIN
 
 
 def variant() -> SourceVariant:

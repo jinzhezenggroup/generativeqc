@@ -6,10 +6,12 @@ import subprocess
 import typing
 
 import pytest
-from vibeqc_compiler.integral.df_cuda import emit_df_values_cuda
-from vibeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
-from vibeqc_compiler.integral.df_policy import emit_df_policy_cuda
-from vibeqc_compiler.integral.df_value_candidates import emit_df_value_candidates_cuda
+from generativeqc_compiler.integral.df_cuda import emit_df_values_cuda
+from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+from generativeqc_compiler.integral.df_policy import emit_df_policy_cuda
+from generativeqc_compiler.integral.df_value_candidates import (
+    emit_df_value_candidates_cuda,
+)
 
 
 def test_shared_df_headers_have_translation_unit_safe_linkage(
@@ -40,7 +42,7 @@ def test_shared_df_headers_have_translation_unit_safe_linkage(
 #include "values.cuh"
 #include "derivatives.cuh"
 extern "C" double ENTRY(double exponent) {
-  namespace policy = vibeqc::scf::generated_df_policy;
+  namespace policy = generativeqc::scf::generated_df_policy;
   double e[2]{exponent, 0.8}, value = 0;
   policy::Value::Vec3 v[2]{{0,0,0},{0.3,0.2,0.1}};
   policy::Value::Angular a[2]{{0,0,0},{0,0,0}};

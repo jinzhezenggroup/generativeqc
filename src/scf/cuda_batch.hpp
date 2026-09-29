@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_BATCH_HPP
-#define VIBEQC_SCF_CUDA_BATCH_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_BATCH_HPP
+#define GENERATIVEQC_SCF_CUDA_BATCH_HPP
 
 #include <array>
 #include <cstddef>
@@ -11,10 +11,10 @@
 #include "scf/direct_task_layout.hpp"
 #include "scf/types.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 struct RhfBucketItem {
-  vibeqc_status status{VIBEQC_STATUS_INTERNAL_ERROR};
+  generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
   ScfResult scf;
   /** A completed isolated Fock measurement deliberately has no converged SCF
    * result. Fleet must preserve its input instead of retrying a cold solve. */
@@ -247,6 +247,6 @@ void set_rhf_cuda_bucket_warm_start_updates(CudaRhfBucketPlan* plan, bool enable
 /** Discard both resident and frozen warm-start state for a CUDA bucket. */
 void clear_rhf_cuda_bucket_warm_starts(CudaRhfBucketPlan* plan) noexcept;
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

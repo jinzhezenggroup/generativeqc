@@ -4,7 +4,7 @@
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_queue_scan.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Device-launchable graphs cannot borrow a call-local host upload buffer. */
 __global__ void reset_bounded_generated_streaming_flags_kernel(std::uint64_t selected_mask,
@@ -174,4 +174,4 @@ void launch_normalize_bounded_generated_task_counts_kernel(
       task_offsets, task_counts, task_heads, overflow, preserve_overflow_counts);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

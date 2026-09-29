@@ -13,7 +13,7 @@ import pytest
 from benchmarks.issue308_stage_probe import prepare
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -25,7 +25,7 @@ def fixed_density_probe(tmp_path_factory: typing.Any) -> typing.Any:
     compiler = shutil.which("c++")
     if not compiler:
         pytest.skip("host C++ compiler unavailable")
-    library = Path(os.environ["VIBEQC_LIBRARY"]).resolve()
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     root = Path(__file__).resolve().parents[2]
     directory = tmp_path_factory.mktemp("streamed-k")
     fixture = directory / "input"
@@ -76,7 +76,9 @@ def test_streamed_raw_reuse_matches_independent_jk(
     trace = tmp_path / "trace.jsonl"
     arrays = tmp_path / "arrays.bin"
     env = dict(
-        os.environ, VIBEQC_DF_TRACE=str(trace), VIBEQC_DF_RESIDENT_EXCHANGE=exchange
+        os.environ,
+        GENERATIVEQC_DF_TRACE=str(trace),
+        GENERATIVEQC_DF_RESIDENT_EXCHANGE=exchange,
     )
     subprocess.run(
         [

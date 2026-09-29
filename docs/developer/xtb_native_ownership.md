@@ -2,8 +2,8 @@
 
 `Calculator(method="gfn2-xtb")` executes the native molecular GFN2 runtime in
 `src/xtb/native/`. Its private descriptor types and CPU/CUDA implementation use
-VibeQC identity. The imported xTBloom C entry-point declarations, version header
-and `include/xtbloom/` interface are retired. The public VibeQC ABI is unchanged.
+GenerativeQC identity. The imported xTBloom C entry-point declarations, version header
+and `include/xtbloom/` interface are retired. The public GenerativeQC ABI is unchanged.
 
 The private execution adapter accepts one molecule, fresh SCC, energy and
 analytic forces. It rejects periodic cells, external charge/response/field
@@ -27,7 +27,7 @@ ragged storage traversal, validation, scheduling, accumulation and publication.
 | H0 shell factors, CN/radial/Cartesian adjoints and AO adjoint updates | `method/gfn2_h0_force_runtime.py` | CPU H0 values/VJP and CUDA H0 values/forces |
 | Shell spin energy and potential | `method/gfn2_spin_runtime.py` | CPU and CUDA spin owners |
 
-Paths in this table are relative to `python/vibeqc_compiler/`. H0 value and force
+Paths in this table are relative to `python/generativeqc_compiler/`. H0 value and force
 consumers share `generated_gfn2_h0_native.hpp`. Spin consumers share
 `generated_gfn2_spin_native.hpp`; generation preserves the ordered FMA
 accumulation and records the reverse-AD identity of the symmetric shell energy.
@@ -38,7 +38,7 @@ science does not admit a new public unrestricted endpoint.
 SCC iteration/mixing/convergence, occupations, generalized eigensolver provider
 selection, workspace/cache lifetime, per-system errors and public method
 admission remain native runtime responsibilities. Generation needs no installed
-VibeQC runtime, GPU, or scientific oracle.
+GenerativeQC runtime, GPU, or scientific oracle.
 
 ## Remaining native scientific work
 
@@ -48,7 +48,7 @@ charge-response hot loop, and optional interaction primitives shared with the
 remaining lower-level descriptor machinery still contain native scientific
 arithmetic. These
 need their own generated replacements and independent gates. Molecular final
-D4 derivatives already reuse the shared VibeQC D4 provider.
+D4 derivatives already reuse the shared GenerativeQC D4 provider.
 
 The CUDA ownership ledger continues to count remaining handwritten science;
 renaming or relocating a source is not a scientific retirement gate. Public
@@ -65,16 +65,16 @@ identities are unchanged. `src/xtb/native/CUDA_SOURCE_PROVENANCE.json` retains
 upstream hashes and records the current adapted source hashes.
 
 Native CPU execution requires LP64 OpenBLAS with LAPACKE; a development build
-can set `VIBEQC_XTB_CPU_LINALG_LIBRARY` to the provider's absolute path. Wheel
+can set `GENERATIVEQC_XTB_CPU_LINALG_LIBRARY` to the provider's absolute path. Wheel
 builds retain their pinned private OpenBLAS provider and native shim. The former
 `XTBLOOM_CPU_LINALG_LIBRARY` build setting has been retired.
 
 Relevant gates are `test_gfn2_h0_force_codegen.py`,
 `test_gfn2_spin_native_codegen.py`, `test_gfn2_runtime_bridge_boundary.py`,
 `test_gfn2_xtb.py`, and `test_gfn2_xtb_force_qualification.py` under
-`tests/python/`. GPU endpoint tests require `VIBEQC_TEST_GFN2_CUDA=1` inside a
+`tests/python/`. GPU endpoint tests require `GENERATIVEQC_TEST_GFN2_CUDA=1` inside a
 Slurm allocation on `main` with `--gres=gpu:5090:1` and a finite time limit.
-The additional compiler graph CUDA gates use `VIBEQC_GFN2_CUDA_TEST=1` in the
+The additional compiler graph CUDA gates use `GENERATIVEQC_GFN2_CUDA_TEST=1` in the
 same allocation; these are separate from the native endpoint opt-in.
 Run `python tools/check_compiler_structure.py` and
 `python tools/report_cuda_ownership.py --check` for ownership validation.

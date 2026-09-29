@@ -15,7 +15,7 @@ def test_public_xtb_method_uses_only_the_native_bridge() -> None:
 def test_native_bridge_header_does_not_leak_execution_descriptors() -> None:
     header = (ROOT / "src/methods/gfn2_runtime_bridge.hpp").read_text()
     assert "xtbloom" not in header.lower()
-    assert "vibeqc_xtb_" not in header
+    assert "generativeqc_xtb_" not in header
     assert "gfn2_cpu_execution" not in header
     assert "gfn2_cuda_execution" not in header
 
@@ -26,7 +26,7 @@ def test_native_bridge_exposes_atomic_charges_only_by_explicit_request() -> None
     assert "bool compute_atomic_charges = false;" in header
     assert "std::vector<double> atomic_charges;" in header
     assert "request.compute_atomic_charges" in source
-    assert "VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES" in source
+    assert "GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES" in source
     assert "output.atomic_charges = output_buffer(atomic_charges);" in source
     assert "result.atomic_charges = std::move(atomic_charges);" in source
 
@@ -59,14 +59,14 @@ def test_method_layer_has_no_vendor_abi() -> None:
 def test_native_execution_is_confined_to_bridge_implementation() -> None:
     source = (ROOT / "src/methods/gfn2_runtime_bridge.cpp").read_text()
     assert '"runtime/gfn2_cpu_execution.hpp"' in source
-    assert "vibeqc::xtb::detail::execute_restricted_gfn2_cpu" in source
-    assert "vibeqc::xtb::detail::Gfn2CpuExecutionCache" in source
+    assert "generativeqc::xtb::detail::execute_restricted_gfn2_cpu" in source
+    assert "generativeqc::xtb::detail::Gfn2CpuExecutionCache" in source
 
 
 def test_cpu_scc_uses_shared_method_neutral_iteration_control() -> None:
     source = (ROOT / "src/xtb/native/src/runtime/gfn2_cpu_execution.cpp").read_text()
     assert '"solver/iteration_control.hpp"' in source
-    assert "vibeqc::solver::run_bounded_iterations" in source
+    assert "generativeqc::solver::run_bounded_iterations" in source
     assert "while (driver_state.converged[0]" not in source
 
 
@@ -79,9 +79,9 @@ def test_cpu_runtime_does_not_stage_rejected_attachments() -> None:
         "point_charge_positions",
         "periodic_shifts",
         "periodic_response",
-        "VIBEQC_XTB_COMPUTE_POINT_CHARGE_FORCES",
-        "VIBEQC_XTB_COMPUTE_DIPOLE_MOMENTS",
-        "VIBEQC_XTB_COMPUTE_STRAIN_DERIVATIVES",
+        "GENERATIVEQC_XTB_COMPUTE_POINT_CHARGE_FORCES",
+        "GENERATIVEQC_XTB_COMPUTE_DIPOLE_MOMENTS",
+        "GENERATIVEQC_XTB_COMPUTE_STRAIN_DERIVATIVES",
         "ExternalPointChargePlan",
         "PeriodicEmbeddingPlan",
     ):
@@ -91,10 +91,10 @@ def test_cpu_runtime_does_not_stage_rejected_attachments() -> None:
 def test_cuda_runtime_ingress_matches_molecular_contract() -> None:
     source = (ROOT / "src/xtb/native/src/runtime/gfn2_cuda_execution.cu").read_text()
     assert "struct Gfn2CudaNumericalInputView" not in source
-    ingress = source.split("vibeqc_xtb_status_t stage_numerical_ingress_locked(", 1)[
-        1
-    ].split("vibeqc_xtb_status_t execute_numerical_body_locked(", 1)[0]
-    assert "const vibeqc_xtb_const_buffer_t& positions" in ingress
+    ingress = source.split(
+        "generativeqc_xtb_status_t stage_numerical_ingress_locked(", 1
+    )[1].split("generativeqc_xtb_status_t execute_numerical_body_locked(", 1)[0]
+    assert "const generativeqc_xtb_const_buffer_t& positions" in ingress
     assert "sources.positions" in ingress
     for retired in (
         "input.point_charge_positions",
@@ -158,9 +158,9 @@ def test_cuda_public_runtime_is_fresh_only() -> None:
         "reset_gfn2_warm_scc_trace_kernel",
     ):
         assert retired not in source
-    inference = source.split("vibeqc_xtb_status_t execute_inference_locked(", 1)[
+    inference = source.split("generativeqc_xtb_status_t execute_inference_locked(", 1)[
         1
-    ].split("vibeqc_xtb_status_t settle_public_submissions_locked(", 1)[0]
+    ].split("generativeqc_xtb_status_t settle_public_submissions_locked(", 1)[0]
     assert "Gfn2CudaSccStartMode" not in inference
     assert "upload_if_admitted_async" in inference
     public = source.split("execute_restricted_gfn2_cuda_impl(", 1)[1]
@@ -182,7 +182,7 @@ def test_retired_runtime_and_external_api_cannot_reenter_production() -> None:
         assert not re.search(r"\b(?:xtbloom_|XTBLOOM_|xtbloom::)", code), path
     descriptors = (native / "src/runtime/types.hpp").read_text()
     assert 'extern "C"' not in descriptors
-    assert "#define VIBEQC_XTB_API " not in descriptors
+    assert "#define GENERATIVEQC_XTB_API " not in descriptors
     for unused in (
         "context_options_t",
         "request_info_t",
@@ -201,7 +201,7 @@ def test_retired_runtime_and_external_api_cannot_reenter_production() -> None:
 
 
 def test_bridge_is_part_of_main_library_sources() -> None:
-    cmake = (ROOT / "cmake/VibeQCSources.cmake").read_text()
+    cmake = (ROOT / "cmake/GenerativeQCSources.cmake").read_text()
     assert "src/methods/gfn2_runtime_bridge.cpp" in cmake
 
 
@@ -246,53 +246,53 @@ def test_retired_descriptors_fail_before_staging(tmp_path: Path) -> None:
 #include "runtime/molecular_request.hpp"
 #include <cassert>
 int main() {
-  vibeqc_xtb_batch_t batch{};
-  vibeqc_xtb_compute_options_t options{};
+  generativeqc_xtb_batch_t batch{};
+  generativeqc_xtb_compute_options_t options{};
   batch.batch_size = 1;
-  options.model = VIBEQC_XTB_MODEL_GFN2_XTB;
-  options.flags = VIBEQC_XTB_COMPUTE_ENERGY | VIBEQC_XTB_COMPUTE_FORCES;
-  options.scc_start_mode = VIBEQC_XTB_SCC_START_FRESH;
+  options.model = GENERATIVEQC_XTB_MODEL_GFN2_XTB;
+  options.flags = GENERATIVEQC_XTB_COMPUTE_ENERGY | GENERATIVEQC_XTB_COMPUTE_FORCES;
+  options.scc_start_mode = GENERATIVEQC_XTB_SCC_START_FRESH;
   std::string error;
   const auto validate = [&] {
-    return vibeqc::xtb::detail::validate_molecular_request(batch, options, error);
+    return generativeqc::xtb::detail::validate_molecular_request(batch, options, error);
   };
-  assert(validate() == VIBEQC_XTB_STATUS_SUCCESS);
-  options.flags |= VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES;
-  assert(validate() == VIBEQC_XTB_STATUS_SUCCESS);
-  options.flags &= ~VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES;
+  assert(validate() == GENERATIVEQC_XTB_STATUS_SUCCESS);
+  options.flags |= GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES;
+  assert(validate() == GENERATIVEQC_XTB_STATUS_SUCCESS);
+  options.flags &= ~GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES;
   const auto original = batch;
-  const vibeqc_xtb_const_buffer_t poison{reinterpret_cast<void*>(1), 8,
-                                       VIBEQC_XTB_MEMORY_HOST, 0};
-  for (auto member : {&vibeqc_xtb_batch_t::point_charge_offsets,
-                      &vibeqc_xtb_batch_t::point_charge_positions,
-                      &vibeqc_xtb_batch_t::point_charge_values,
-                      &vibeqc_xtb_batch_t::point_charge_gammas,
-                      &vibeqc_xtb_batch_t::charge_response_offsets,
-                      &vibeqc_xtb_batch_t::cell_matrices,
-                      &vibeqc_xtb_batch_t::periodic_axes,
-                      &vibeqc_xtb_batch_t::atomic_potential_shifts,
-                      &vibeqc_xtb_batch_t::charge_response_matrix,
-                      &vibeqc_xtb_batch_t::interaction_descriptors,
-                      &vibeqc_xtb_batch_t::interaction_payload}) {
+  const generativeqc_xtb_const_buffer_t poison{reinterpret_cast<void*>(1), 8,
+                                       GENERATIVEQC_XTB_MEMORY_HOST, 0};
+  for (auto member : {&generativeqc_xtb_batch_t::point_charge_offsets,
+                      &generativeqc_xtb_batch_t::point_charge_positions,
+                      &generativeqc_xtb_batch_t::point_charge_values,
+                      &generativeqc_xtb_batch_t::point_charge_gammas,
+                      &generativeqc_xtb_batch_t::charge_response_offsets,
+                      &generativeqc_xtb_batch_t::cell_matrices,
+                      &generativeqc_xtb_batch_t::periodic_axes,
+                      &generativeqc_xtb_batch_t::atomic_potential_shifts,
+                      &generativeqc_xtb_batch_t::charge_response_matrix,
+                      &generativeqc_xtb_batch_t::interaction_descriptors,
+                      &generativeqc_xtb_batch_t::interaction_payload}) {
     batch.*member = poison;
-    assert(validate() == VIBEQC_XTB_STATUS_NOT_SUPPORTED);
+    assert(validate() == GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED);
     batch = original;
   }
-  for (auto member : {&vibeqc_xtb_batch_t::total_point_charges,
-                      &vibeqc_xtb_batch_t::total_charge_response_elements,
-                      &vibeqc_xtb_batch_t::total_interactions}) {
+  for (auto member : {&generativeqc_xtb_batch_t::total_point_charges,
+                      &generativeqc_xtb_batch_t::total_charge_response_elements,
+                      &generativeqc_xtb_batch_t::total_interactions}) {
     batch.*member = 1;
-    assert(validate() == VIBEQC_XTB_STATUS_NOT_SUPPORTED);
+    assert(validate() == GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED);
     batch = original;
   }
   batch.batch_size = 2;
-  assert(validate() == VIBEQC_XTB_STATUS_NOT_SUPPORTED);
+  assert(validate() == GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED);
   batch = original;
-  options.scc_start_mode = VIBEQC_XTB_SCC_START_WARM;
-  assert(validate() == VIBEQC_XTB_STATUS_NOT_SUPPORTED);
-  options.scc_start_mode = VIBEQC_XTB_SCC_START_FRESH;
-  options.flags |= VIBEQC_XTB_COMPUTE_STRAIN_DERIVATIVES;
-  assert(validate() == VIBEQC_XTB_STATUS_NOT_SUPPORTED);
+  options.scc_start_mode = GENERATIVEQC_XTB_SCC_START_WARM;
+  assert(validate() == GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED);
+  options.scc_start_mode = GENERATIVEQC_XTB_SCC_START_FRESH;
+  options.flags |= GENERATIVEQC_XTB_COMPUTE_STRAIN_DERIVATIVES;
+  assert(validate() == GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED);
 }
 """)
     executable = tmp_path / "admission"

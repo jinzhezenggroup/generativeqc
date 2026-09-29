@@ -5,13 +5,13 @@ from functools import lru_cache
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import Program, execute
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
-from tools.vibeqc_cc.equations import amplitude_layouts
-from tools.vibeqc_cc.lambda_equations import build_lambda_programs
-from tools.vibeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
+from tools.generativeqc_cc.equations import amplitude_layouts
+from tools.generativeqc_cc.lambda_equations import build_lambda_programs
+from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 
 
 @lru_cache(maxsize=8)
@@ -133,7 +133,7 @@ def test_numerical_jacobian_transpose_and_orbit_multiplicity(
 def test_generated_actions_plug_into_existing_gmres(
     numerical_jacobian: typing.Any,
 ) -> None:
-    from tools.vibeqc_response.krylov import GMRESOptions, solve
+    from tools.generativeqc_response.krylov import GMRESOptions, solve
 
     feeds, layouts, matrix, energy_derivative, weights = numerical_jacobian
     programs = _programs(2, 2)

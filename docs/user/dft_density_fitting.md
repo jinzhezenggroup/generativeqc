@@ -13,7 +13,7 @@ range-separated/nonlocal DF compositions, ECP DF and automatic mixed precision
 are rejected. This interface does not change the selected functional or grid.
 
 ```python
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 calc = Calculator(method="pbe-rks", basis="sto-3g", device="cuda",
                   density_fitting="auto", auxiliary_basis="def2-svp")
@@ -42,7 +42,7 @@ export is also rejected natively because it lacks auxiliary/metric response.
 `tests/python/test_dft_df_public.py` compares independently converged PySCF
 energies with copied orbital/auxiliary primitives and identical quadrature
 (absolute energy gate `1e-8 Eh`, physical residual below `1e-9`). GPU acceptance
-requires `VIBEQC_DFT_CUDA_TEST=1` and a scheduler-allocated CUDA device.
+requires `GENERATIVEQC_DFT_CUDA_TEST=1` and a scheduler-allocated CUDA device.
 
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
 for the retained boundaries.

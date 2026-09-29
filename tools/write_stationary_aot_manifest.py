@@ -11,12 +11,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.integral.first_derivative_schedule import (
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.integral.first_derivative_schedule import (
     CUDA_REQUESTS_PER_UNIT,
     derivative_cuda_sources,
 )
-from vibeqc_compiler.method.stationary_cuda import (
+from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_AOT_SHARD_WIDTH,
     QUALIFIED_SPD_AOT_SHARDS,
     QUALIFIED_SPD_COMPONENTS,
@@ -112,7 +112,7 @@ def main() -> None:
 
     component_domain = None
     source_identity = canonical_hash(args.source.read_text())
-    schema = "vibeqc.stationary-cuda-aot.v2"
+    schema = "generativeqc.stationary-cuda-aot.v2"
     component_payload: dict[str, object] = {}
     if args.component_domain == "spd":
         if len(args.primitive_source) != QUALIFIED_SPD_AOT_SHARDS:
@@ -144,7 +144,7 @@ def main() -> None:
         )
         if actual_identity != source_identity:
             raise ValueError("stationary s/p/d generated source identity mismatch")
-        schema = "vibeqc.stationary-cuda-aot.v3"
+        schema = "generativeqc.stationary-cuda-aot.v3"
         component_payload = {
             "component_domain": list(component_domain),
             "primitive_shard_width": QUALIFIED_SPD_AOT_SHARD_WIDTH,

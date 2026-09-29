@@ -4,11 +4,11 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.expr import Expr, Graph
-from vibeqc_compiler.xc.program import build_program
-from vibeqc_compiler.xc.pw_maple import pw_correlation, pw_maple_provenance
-from vibeqc_compiler.xc.spec import FunctionalSpec
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.expr import Expr, Graph
+from generativeqc_compiler.xc.program import build_program
+from generativeqc_compiler.xc.pw_maple import pw_correlation, pw_maple_provenance
+from generativeqc_compiler.xc.spec import FunctionalSpec
 
 POLARIZED = ("rho_a", "rho_b", "sigma_aa", "sigma_ab", "sigma_bb", "tau_a", "tau_b")
 UNPOLARIZED = ("rho", "sigma", "tau")

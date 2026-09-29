@@ -20,16 +20,19 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import block_error, canonical_hash, file_hash
-from vibeqc_compiler.tensor import execute
-from vibeqc_compiler.tensor.cuda_execute import compile_cuda, tensor_source_identity
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import block_error, canonical_hash, file_hash
+from generativeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor.cuda_execute import (
+    compile_cuda,
+    tensor_source_identity,
+)
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
+from tools.generativeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
+from tools.generativeqc_cc.oracle import dense_feeds
 from tools.validate_cc import load_references
-from tools.vibeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
-from tools.vibeqc_cc.oracle import dense_feeds
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,7 +49,10 @@ def run(
     references = load_references(reference_path)
     sources = {
         p.relative_to(ROOT).as_posix(): file_hash(p)
-        for p in [*sorted((ROOT / "tools/vibeqc_cc").glob("*.py")), Path(__file__)]
+        for p in [
+            *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
+            Path(__file__),
+        ]
     }
     manifest = {
         "scope": "#149 A fixed amplitudes only; B/C and molecular endpoints pending",

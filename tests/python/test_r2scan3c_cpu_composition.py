@@ -2,14 +2,14 @@
 
 import numpy as np
 import pytest
-from vibeqc import (
+from generativeqc import (
     Calculator,
     GridSpec,
     KsOptions,
     evaluate_r2scan3c_correction,
     load_r2scan3c_basis,
 )
-from vibeqc_compiler.method import resolve_method
+from generativeqc_compiler.method import resolve_method
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])

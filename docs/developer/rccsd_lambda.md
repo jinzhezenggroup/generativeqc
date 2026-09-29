@@ -1,6 +1,6 @@
 # RCCSD Lambda and fixed-orbital input response
 
-`tools.vibeqc_cc.build_lambda_programs(nocc, nvir)` generates the fixed-amplitude
+`tools.generativeqc_cc.build_lambda_programs(nocc, nvir)` generates the fixed-amplitude
 energy gradient, residual Jacobian-vector product and transpose action for the
 same conventional real RCCSD equations as `build_ccsd_program`. It is an internal
 mathematical frontend. `BoundCCSDLambda` additionally binds a converged internal RCCSD state and solves
@@ -49,8 +49,8 @@ For example, given the same mathematical input `feeds` used by the primal:
 
 ```python
 import numpy as np
-from tools.vibeqc_cc import build_lambda_programs
-from vibeqc_compiler.tensor import execute
+from tools.generativeqc_cc import build_lambda_programs
+from generativeqc_compiler.tensor import execute
 
 programs = build_lambda_programs(nocc, nvir)
 rhs = execute(
@@ -111,7 +111,7 @@ PYTHONPATH=python:. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 ## Bound converged-state consumer
 
 ```python
-from tools.vibeqc_cc import BoundCCSDLambda, LambdaOptions, SolverOptions, solve
+from tools.generativeqc_cc import BoundCCSDLambda, LambdaOptions, SolverOptions, solve
 
 # snapshot is the validated RHF ReferenceSnapshot used by this provider.
 cc = solve(
@@ -193,7 +193,7 @@ not misrepresented as a resident GPU reference provider.
 
 ```bash
 PYTHONPATH=python:. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
-VIBEQC_LIBRARY=/path/to/current/cpu/libvibeqc.so python -m pytest -q \
+GENERATIVEQC_LIBRARY=/path/to/current/cpu/libgenerativeqc.so python -m pytest -q \
   tests/python/test_cc_lambda_solver.py tests/python/test_cc_lambda.py \
   tests/python/test_implicit_vjp.py tests/python/test_implicit_response.py
 ```
@@ -229,7 +229,7 @@ Weight generation neither calls a CC/adjoint solver nor differentiates its
 iterations. It uses the same shared and expanded primal DAGs with #151 VJPs.
 
 ```python
-from tools.vibeqc_cc import BoundCCSDResponse
+from tools.generativeqc_cc import BoundCCSDResponse
 
 response = BoundCCSDResponse(bound, lambda_result, max_bytes=256 << 20)
 for weight in response.iter_weights(reference_identity=snapshot.identity):
@@ -314,7 +314,7 @@ aliasing, false generated weights and state/block memory admission.
 
 ```bash
 PYTHONPATH=python:. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
-VIBEQC_LIBRARY=/path/to/current/cpu/libvibeqc.so python -m pytest -q \
+GENERATIVEQC_LIBRARY=/path/to/current/cpu/libgenerativeqc.so python -m pytest -q \
   tests/python/test_cc_lambda_response.py tests/python/test_cc_lambda_solver.py \
   tests/python/test_cc_lambda.py tests/python/test_implicit_vjp.py
 ```

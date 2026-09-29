@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_DENSITY_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_DENSITY_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_DENSITY_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_DENSITY_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/common/gfn2_plan_schema.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Per-system failure code; the batch diagnostic is canonicalized by system index. */
 enum class Gfn2DensityDeviceError : std::uint32_t {
@@ -179,6 +179,6 @@ cudaError_t evaluate_gfn2_spin_density_cuda(
     const Gfn2DensityDeviceWorkspace& workspace, std::uint32_t* system_errors,
     std::uint32_t* device_error, cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_DENSITY_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_DENSITY_CUH

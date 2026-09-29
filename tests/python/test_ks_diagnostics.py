@@ -12,15 +12,18 @@ from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
-from vibeqc import Atom, Calculator, KsDiagnostic, KsTransportDiagnostic, _native
-from vibeqc_compiler.dft.grid import MolecularGrid
+from generativeqc import Atom, Calculator, KsDiagnostic, KsTransportDiagnostic, _native
+from generativeqc_compiler.dft.grid import MolecularGrid
 
 H3 = [("H", (0, 0, 0)), ("H", (0.15, 0.13, 1.5)), ("H", (0.6, 0.26, 3.0))]
 
 
 @pytest.fixture(params=("cpu", "cuda"))
 def device(request: typing.Any) -> typing.Any:
-    if request.param == "cuda" and os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1":
+    if (
+        request.param == "cuda"
+        and os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires an explicitly Slurm-allocated GPU")
     return request.param
 
@@ -144,7 +147,7 @@ def test_batch_snapshot_history_abi_invalidation(device: typing.Any) -> None:
     with calculator.prepare_batch(
         [H3, [("H", (0, 0, 0))]], multiplicities=[2, 2]
     ) as batch:
-        query = batch._library.vibeqc_batch_get_ks_diagnostic
+        query = batch._library.generativeqc_batch_get_ks_diagnostic
         summary = _native.KsDiagnosticDescriptor(
             ctypes.sizeof(_native.KsDiagnosticDescriptor), _native.ABI_VERSION
         )
@@ -200,7 +203,7 @@ def test_batch_snapshot_history_abi_invalidation(device: typing.Any) -> None:
         batch.execute(properties=("energy",), strict=True)
         outputs = (_native.BatchItemResultDescriptor * 1)()
         assert (
-            batch._library.vibeqc_batch_execute(batch._batch, None, 0, outputs, 1)
+            batch._library.generativeqc_batch_execute(batch._batch, None, 0, outputs, 1)
             == _native.STATUS_INVALID_ARGUMENT
         )
         assert query(batch._batch, 1, None, None, 0) == _native.STATUS_NOT_IMPLEMENTED
@@ -232,7 +235,7 @@ def test_hf_has_no_ks_snapshot() -> None:
             is None
         )
         assert (
-            batch._library.vibeqc_batch_get_ks_diagnostic(
+            batch._library.generativeqc_batch_get_ks_diagnostic(
                 batch._batch, 0, None, None, 0
             )
             == _native.STATUS_NOT_IMPLEMENTED
@@ -248,7 +251,7 @@ def test_cpu_reports_no_cuda_ks_transport() -> None:
     )
     with calculator.prepare_batch([atoms]) as batch:
         assert batch.ks_transport_diagnostics == (None,)
-        query = batch._library.vibeqc_batch_get_ks_transport_diagnostic
+        query = batch._library.generativeqc_batch_get_ks_transport_diagnostic
         value = _native.KsTransportDiagnosticDescriptor(
             ctypes.sizeof(_native.KsTransportDiagnosticDescriptor),
             _native.ABI_VERSION,
@@ -321,7 +324,7 @@ def test_cold_retry_replaces_the_failed_warm_attempt_history(
     device: typing.Any,
 ) -> None:
     """A normalized virtual determinant forces a retry within a two-step limit."""
-    from vibeqc import cross_overlap
+    from generativeqc import cross_overlap
 
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     calculator = Calculator(method="pbe-rks", device=device, max_iterations=2)
@@ -331,7 +334,7 @@ def test_cold_retry_replaces_the_failed_warm_attempt_history(
         state = _native.HfWarmState(
             ctypes.sizeof(_native.HfWarmState), _native.ABI_VERSION
         )
-        getter = batch._library.vibeqc_batch_get_hf_warm_state
+        getter = batch._library.generativeqc_batch_get_hf_warm_state
         _native.check(batch._library, getter(batch._batch, 0, ctypes.byref(state)))
         density, coordinates = (
             np.empty(state.density_count),
@@ -346,7 +349,9 @@ def test_cold_retry_replaces_the_failed_warm_attempt_history(
         states = (_native.HfWarmState * 1)(state)
         _native.check(
             batch._library,
-            batch._library.vibeqc_batch_restore_hf_warm_states(batch._batch, states, 1),
+            batch._library.generativeqc_batch_restore_hf_warm_states(
+                batch._batch, states, 1
+            ),
         )
         retried = batch.execute(properties=("energy",), strict=True).items[0]
         assert retried.warm_start_used and retried.warm_start_fallback

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     GATES,
     attach_artifact,
     block_error,
@@ -20,10 +20,13 @@ from vibeqc_compiler.common.evidence import (
     validate_evidence,
     write_evidence,
 )
-from vibeqc_compiler.common.performance import assess_comparison, measure_interleaved
+from generativeqc_compiler.common.performance import (
+    assess_comparison,
+    measure_interleaved,
+)
 
-from tools.vibeqc_validation.capabilities import capability_table
-from tools.vibeqc_validation.fixtures import (
+from tools.generativeqc_validation.capabilities import capability_table
+from tools.generativeqc_validation.fixtures import (
     REFERENCE_DIRECTORY,
     calculator_inputs,
     load_fixtures,
@@ -32,7 +35,7 @@ from tools.vibeqc_validation.fixtures import (
     small_inputs,
     validate_fixture,
 )
-from tools.vibeqc_validation.integrals import evaluate_quartet
+from tools.generativeqc_validation.integrals import evaluate_quartet
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = load_fixtures()
@@ -111,7 +114,7 @@ def test_generator_integrals_and_derivatives_against_independent_libcint(
 def test_small_molecular_cpu_endpoints_against_pinned_pyscf(
     reference: typing.Any,
 ) -> None:
-    from vibeqc import Calculator
+    from generativeqc import Calculator
 
     inputs = reference["inputs"]
     result = Calculator(device="cpu", **calculator_inputs(inputs)).singlepoint(

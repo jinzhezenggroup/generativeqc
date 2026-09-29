@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <limits>
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 // Execution only: Program supplies the compiler-generated value/derivative DAG.
 // A record contains positive exponents, Bohr centers, then a fixed coefficient.
 // Both invalid inputs and late numerical failures leave output unchanged.
@@ -37,4 +37,4 @@ int contract_first_components(const double* records, std::size_t count, std::siz
   for (std::size_t j = 0; j < output_size; ++j) output[j] = accumulated[j];
   return 0;
 }
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

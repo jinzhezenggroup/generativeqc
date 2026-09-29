@@ -10,7 +10,7 @@
 #include "backends/cuda/gfn2_h0_force.cuh"
 #include "generated_gfn2_h0_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 128;
@@ -92,7 +92,7 @@ __device__ bool load_force_gate(const Gfn2ForceDeviceActivity& activity, std::in
     if (requested > 1u) {
       record_system_error(system_errors, system, device_error,
                           Gfn2H0ForceDeviceError::kInvalidActiveMask);
-    } else if (requested == 1u && activity.system_statuses[system] == VIBEQC_XTB_STATUS_SUCCESS) {
+    } else if (requested == 1u && activity.system_statuses[system] == GENERATIVEQC_XTB_STATUS_SUCCESS) {
       *selected = 1;
     }
   }
@@ -265,7 +265,7 @@ __global__ void preflight_and_seed_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0D
       record_system_error(system_errors, system, device_error,
                           Gfn2H0ForceDeviceError::kNonfiniteOutputSeed);
       atomicExch(&valid, 0);
-    } else if (!vibeqc::xtb::generated::evaluate_gfn2_h0_pulay_seed(
+    } else if (!generativeqc::xtb::generated::evaluate_gfn2_h0_pulay_seed(
                    seed, weighted, pulay_seed)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2H0ForceDeviceError::kNonfiniteArithmetic);
@@ -305,7 +305,7 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
     const std::int64_t second_atom = batch.shell_to_atom[second_shell];
     const bool same_atom = first_atom == second_atom;
 
-    vibeqc::xtb::generated::Gfn2H0PairInput pair_input{};
+    generativeqc::xtb::generated::Gfn2H0PairInput pair_input{};
     pair_input.first_shell_level = h0_plan.shell_levels[first_shell];
     pair_input.second_shell_level = h0_plan.shell_levels[second_shell];
     pair_input.first_cn_scale = h0_plan.shell_coordination_scale[first_shell];
@@ -318,7 +318,7 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
     // validating level/CN arithmetic before coordinate-difference work.
     double factor = 0.0;
     bool finite =
-        vibeqc::xtb::generated::evaluate_gfn2_h0_onsite_factor(pair_input, factor);
+        generativeqc::xtb::generated::evaluate_gfn2_h0_onsite_factor(pair_input, factor);
     if (!finite) {
       record_system_error(system_errors, system, device_error,
                           Gfn2H0ForceDeviceError::kNonfiniteArithmetic);
@@ -339,7 +339,7 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
         finite = false;
       }
       double distance_squared = 0.0;
-      if (finite && !vibeqc::xtb::generated::evaluate_gfn2_h0_distance(
+      if (finite && !generativeqc::xtb::generated::evaluate_gfn2_h0_distance(
                         dx, dy, dz, distance_squared, distance)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2H0ForceDeviceError::kCoordinateDifferenceOverflow);
@@ -357,7 +357,7 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
         pair_input.pair_scale = h0_plan.shell_pair_scale[pair_begin + local_pair];
         pair_input.distance = distance;
         finite =
-            vibeqc::xtb::generated::evaluate_gfn2_h0_offsite_factor(pair_input, factor);
+            generativeqc::xtb::generated::evaluate_gfn2_h0_offsite_factor(pair_input, factor);
       }
       if (!finite) {
         if (system_is_valid(system_errors, system)) {
@@ -381,7 +381,7 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
         const std::int64_t column = second_orbital - orbital_begin;
         const std::int64_t matrix = matrix_begin + row * orbital_count + column;
         double overlap_adjoint = workspace.overlap_adjoint_scratch[matrix];
-        if (!vibeqc::xtb::generated::accumulate_gfn2_h0_ao(
+        if (!generativeqc::xtb::generated::accumulate_gfn2_h0_ao(
                 input.density[matrix], input.overlap[matrix], factor,
                 overlap_adjoint, block_weight)) {
           record_system_error(system_errors, system, device_error,
@@ -396,11 +396,11 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
       continue;
     }
 
-    vibeqc::xtb::generated::Gfn2H0PairAdjoint pair_adjoint{};
+    generativeqc::xtb::generated::Gfn2H0PairAdjoint pair_adjoint{};
     finite = same_atom
-                 ? vibeqc::xtb::generated::evaluate_gfn2_h0_onsite_vjp(
+                 ? generativeqc::xtb::generated::evaluate_gfn2_h0_onsite_vjp(
                        block_weight, pair_input, pair_adjoint)
-                 : vibeqc::xtb::generated::evaluate_gfn2_h0_offsite_vjp(
+                 : generativeqc::xtb::generated::evaluate_gfn2_h0_offsite_vjp(
                        block_weight, pair_input, pair_adjoint);
     if (!finite ||
         !add_finite_atomic(workspace.coordination_adjoint_scratch + first_atom,
@@ -413,8 +413,8 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
     }
 
     if (!same_atom) {
-      vibeqc::xtb::generated::Gfn2H0CartesianAdjoint cartesian_adjoint{};
-      if (!vibeqc::xtb::generated::evaluate_gfn2_h0_distance_vjp(
+      generativeqc::xtb::generated::Gfn2H0CartesianAdjoint cartesian_adjoint{};
+      if (!generativeqc::xtb::generated::evaluate_gfn2_h0_distance_vjp(
               pair_adjoint.distance, dx, dy, dz, cartesian_adjoint)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2H0ForceDeviceError::kNonfiniteArithmetic);
@@ -440,7 +440,7 @@ __global__ void publish_kernel(Gfn2IntegralDeviceBatch batch, Gfn2ForceDeviceAct
                                const std::uint32_t* system_errors) {
   const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
   if (!sequence_is_active(workspace) || activity.requested_mask[system] != 1u ||
-      activity.system_statuses[system] != VIBEQC_XTB_STATUS_SUCCESS ||
+      activity.system_statuses[system] != GENERATIVEQC_XTB_STATUS_SUCCESS ||
       !system_is_valid(system_errors, system)) {
     return;
   }
@@ -570,7 +570,7 @@ cudaError_t validate_descriptors(
       !required_pointer(h0_plan.shell_polynomial, batch.total_shells) ||
       !required_pointer(h0_plan.shell_pair_scale, batch.total_shell_pair_elements) ||
       !is_aligned(activity.requested_mask, alignof(std::uint8_t)) ||
-      !is_aligned(activity.system_statuses, alignof(vibeqc_xtb_status_t)) ||
+      !is_aligned(activity.system_statuses, alignof(generativeqc_xtb_status_t)) ||
       !required_pointer(input.positions, batch.total_atoms * 3) ||
       !required_pointer(input.coordination_numbers, batch.total_atoms) ||
       !required_pointer(input.overlap, batch.total_matrix_elements) ||
@@ -709,4 +709,4 @@ cudaError_t add_gfn2_h0_pulay_gradient_cuda(
   return check_launch();
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

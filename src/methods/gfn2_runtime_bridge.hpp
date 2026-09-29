@@ -1,5 +1,5 @@
-#ifndef VIBEQC_METHODS_GFN2_RUNTIME_BRIDGE_HPP
-#define VIBEQC_METHODS_GFN2_RUNTIME_BRIDGE_HPP
+#ifndef GENERATIVEQC_METHODS_GFN2_RUNTIME_BRIDGE_HPP
+#define GENERATIVEQC_METHODS_GFN2_RUNTIME_BRIDGE_HPP
 
 #include <cstdint>
 #include <memory>
@@ -10,7 +10,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::methods::detail {
+namespace generativeqc::methods::detail {
 
 enum class Gfn2RuntimeBackend : std::uint8_t { kCpu = 1, kCuda = 2 };
 
@@ -82,6 +82,6 @@ class Gfn2RuntimeBridge {
 
 [[nodiscard]] const char* gfn2_runtime_status_name(Gfn2RuntimeStatus status) noexcept;
 
-}  // namespace vibeqc::methods::detail
+}  // namespace generativeqc::methods::detail
 
 #endif

@@ -1,6 +1,6 @@
 """Compare actual streamed XC boundary retention on separately selected checkouts.
 
-Run with PYTHONPATH pointing at the checkout under test and VIBEQC_LIBRARY at an
+Run with PYTHONPATH pointing at the checkout under test and GENERATIVEQC_LIBRARY at an
 explicit CPU library. Instrumented lifetime checks and ordinary endpoint timings
 are separate. This reports no process/device peak or SCF/GPU speedup.
 """
@@ -17,14 +17,14 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.provenance import file_hash
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
 
 def main() -> None:
@@ -37,8 +37,8 @@ def main() -> None:
     if args.repeats < 3 or args.tile_points < 1:
         parser.error("repeats must be at least 3 and tile-points positive")
     compiler = shutil.which("c++")
-    if compiler is None or not os.environ.get("VIBEQC_LIBRARY"):
-        parser.error("c++ and an explicit VIBEQC_LIBRARY are required")
+    if compiler is None or not os.environ.get("GENERATIVEQC_LIBRARY"):
+        parser.error("c++ and an explicit GENERATIVEQC_LIBRARY are required")
     meta, data, grid = load_integration_fixture(args.case)
     refs, before = [], []
     with tempfile.TemporaryDirectory(prefix="programir-xc-") as cache:
@@ -142,7 +142,9 @@ def main() -> None:
                     "tile_boundary_releases"
                 ),
                 "host_source_hashes": program.metadata["host_source_hashes"],
-                "native_library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+                "native_library_sha256": file_hash(
+                    Path(os.environ["GENERATIVEQC_LIBRARY"])
+                ),
                 "scope": "live returned AO/potential/electron ndarray payload before each new collocation; excludes provider interiors, caller history, allocator/RSS and GPU/SCF claims",
             }
     print(json.dumps(report, indent=2))

@@ -9,7 +9,7 @@
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 
-namespace vibeqc::mp2::detail {
+namespace generativeqc::mp2::detail {
 namespace {
 bool finite(const std::vector<double>& values) {
   return std::all_of(values.begin(), values.end(),
@@ -22,7 +22,7 @@ std::size_t fourth(std::size_t value) { return square(square(value)); }
 std::vector<std::size_t> shell_offsets(const core::System& system) {
   std::vector<std::size_t> offsets(system.shells.size() + 1, 0);
   for (std::size_t shell = 0; shell < system.shells.size(); ++shell) {
-    const auto count = system.basis_representation == VIBEQC_BASIS_SPHERICAL
+    const auto count = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
                            ? 2 * system.shells[shell].angular_momentum + 1
                            : molecule::cartesian_count(system.shells[shell].angular_momentum);
     offsets[shell + 1] = posthf::checked_add(offsets[shell], count);
@@ -137,4 +137,4 @@ std::vector<double> conventional_derivative(const core::System& system,
   return derivative;
 }
 
-}  // namespace vibeqc::mp2::detail
+}  // namespace generativeqc::mp2::detail

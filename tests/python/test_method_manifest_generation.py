@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from vibeqc import _generated_methods, _native
-from vibeqc.ks import resolve_ks_method
-from vibeqc_compiler.method import compile_ks_execution_plan
+from generativeqc import _generated_methods, _native
+from generativeqc.ks import resolve_ks_method
+from generativeqc_compiler.method import compile_ks_execution_plan
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_ABI_IDS = {

@@ -2,8 +2,8 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Node,
@@ -21,8 +21,8 @@ from vibeqc_compiler.tensor import (
     reduce_sum,
     transpose_program,
 )
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
-from vibeqc_compiler.tensor.cuda_search import execution_key
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_search import execution_key
 
 
 def _input(dtype: str = "float64") -> Node:
@@ -144,6 +144,6 @@ def test_strict_ad_does_not_acquire_precision_qualification() -> None:
 
 @pytest.mark.parametrize("op", ["scatter_add", "segment_sum"])
 def test_ragged_accumulations_keep_reduction_sensitivity(op: str) -> None:
-    from vibeqc_compiler.tensor.precision import _sensitivity
+    from generativeqc_compiler.tensor.precision import _sensitivity
 
     assert _sensitivity(op) == "reduction"

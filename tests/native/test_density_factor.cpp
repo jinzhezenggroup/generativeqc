@@ -23,7 +23,7 @@ void invalid(F&& operation) {
 
 int main() {
   try {
-    using namespace vibeqc::scf;
+    using namespace generativeqc::scf;
     const DensityFactorIdentity identity{11, 29, 3, 5};
     constexpr std::size_t n = 4, a = 3;
     DensityFittingThreeCenter tensor{n, a, a, std::vector<double>(n * n * a)};

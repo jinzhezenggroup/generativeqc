@@ -6,8 +6,8 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 
-from vibeqc_compiler.integral import production, production_cost
-from vibeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
+from generativeqc_compiler.integral import production, production_cost
+from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 
 def test_production_preserves_cost_policy_compatibility_reexports() -> None:
@@ -39,7 +39,7 @@ def test_production_cost_policy_has_leaf_dependencies() -> None:
         for alias in node.names
     }
     assert relative_modules == {"shell_spec"}
-    assert absolute_roots.isdisjoint({"benchmarks", "tools", "vibeqc"})
+    assert absolute_roots.isdisjoint({"benchmarks", "tools", "generativeqc"})
 
 
 def test_stable_aot_slots_preserve_eight_shard_identity_and_expand() -> None:

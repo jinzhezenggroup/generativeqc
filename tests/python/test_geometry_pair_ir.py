@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry import (
+from generativeqc_compiler.geometry import (
     GeometryIR,
     PairCutoff,
     PairTopology,
@@ -13,7 +13,7 @@ from vibeqc_compiler.geometry import (
     pair_to_atom,
     pair_to_system,
 )
-from vibeqc_compiler.tensor import Program, TensorSpec, execute, input_tensor
+from generativeqc_compiler.tensor import Program, TensorSpec, execute, input_tensor
 
 
 def _geometry() -> typing.Any:
@@ -43,8 +43,8 @@ def _energy(pair_program: typing.Any, coordinates: typing.Any) -> typing.Any:
 
 
 def test_inplace_donation_reduces_real_pairir_peak_storage() -> None:
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
-    from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
     atom_count = 64
     geometry = GeometryIR(
@@ -279,9 +279,9 @@ def test_compiler_identity_invalidates_cutoff_topology_and_parameter_contracts()
 
 
 def test_primal_and_generated_reverse_lower_through_existing_cuda_tensorir() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     pair_program = inverse_power_program(
         _geometry(),

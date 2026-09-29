@@ -1,5 +1,5 @@
-#ifndef VIBEQC_DFT_GRID_HPP
-#define VIBEQC_DFT_GRID_HPP
+#ifndef GENERATIVEQC_DFT_GRID_HPP
+#define GENERATIVEQC_DFT_GRID_HPP
 
 #include <array>
 #include <cstddef>
@@ -10,7 +10,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Table-free molecular quadrature. Version 1 preserves the historical
  * one-Bohr fallback exactly. Version 2 is a resolved production contract and
@@ -72,6 +72,6 @@ class MolecularGrid {
 /** Pure shape query for all temporary CUDA quadrature allocations. */
 std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points);
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft
 
 #endif

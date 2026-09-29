@@ -36,7 +36,7 @@ def test_cpu_solver_reserves_all_known_live_numeric_buffers(tmp_path: Path) -> N
             compiler,
             "-std=c++20",
             "-O0",
-            "-DVIBEQC_HAS_CUDA=0",
+            "-DGENERATIVEQC_HAS_CUDA=0",
             "-I" + str(root / "src"),
             "-I" + str(tmp_path),
             str(root / "src/cc/solver.cpp"),
@@ -61,7 +61,7 @@ CPP = r"""
 #include <iostream>
 #include <stdexcept>
 int main() {
-  using namespace vibeqc::cc;
+  using namespace generativeqc::cc;
   Problem p; p.nocc = 1; p.nvir = 2;
   p.foo = {-1}; p.fov.resize(2); p.fvv = {1,0,0,1};
   p.ovov.resize(4); p.ovvo.resize(4); p.oovv.resize(4);

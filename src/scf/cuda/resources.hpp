@@ -9,7 +9,7 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/matrix_library.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 struct DirectTileValidationRecord;
 
@@ -45,4 +45,4 @@ class CudaResources {
   std::size_t provider_retained_bytes_{};
 };
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

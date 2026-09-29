@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import pytest
-from vibeqc_compiler.xc import libxc_bulk_capabilities
-from vibeqc_compiler.xc.endpoint_capability import (
+from generativeqc_compiler.xc import libxc_bulk_capabilities
+from generativeqc_compiler.xc.endpoint_capability import (
     ENDPOINT_COVERAGE_SCHEMA,
     resolve_endpoint_capability,
 )
-from vibeqc_compiler.xc.molecular_scf_evidence import (
+from generativeqc_compiler.xc.molecular_scf_evidence import (
     QUALIFICATION_SCHEMA as MOLECULAR_SCF_QUALIFICATION_SCHEMA,
 )
-from vibeqc_compiler.xc.molecular_scf_evidence import (
+from generativeqc_compiler.xc.molecular_scf_evidence import (
     RESULT_SCHEMA as MOLECULAR_SCF_RESULT_SCHEMA,
 )
 
@@ -78,7 +78,7 @@ def test_exact_prerequisites_produce_public_method_evidence() -> None:
     )
 
     public = campaign["stage_evidence"]
-    assert campaign["schema"] == "vibeqc.libxc-public-method-campaign/v1"
+    assert campaign["schema"] == "generativeqc.libxc-public-method-campaign/v1"
     assert public["stage"] == "public-method"
     assert public["status"] == "pass"
 

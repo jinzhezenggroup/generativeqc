@@ -8,7 +8,7 @@
 
 #include "tensor/cpu_linalg.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 
 void require(bool condition, const char* message) {
@@ -162,7 +162,7 @@ constexpr FockProviderRegistration make_registration(
           provenance};
 }
 
-#if VIBEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 constexpr auto kCudaAvailability = runtime::ProviderAvailability::Executable;
 constexpr std::string_view kCudaReason{};
 constexpr auto kCosxCudaAvailability = runtime::ProviderAvailability::Executable;
@@ -473,4 +473,4 @@ double contract_exact_direct_energy_derivative(const ResolvedFockBuild& strategy
       strategy, build_exact_direct_jk(strategy, nbf, eri_derivative, density, beta), density, beta);
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

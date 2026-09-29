@@ -5,8 +5,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,
@@ -15,7 +15,7 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     multiply,
 )
-from vibeqc_compiler.tensor.cpu_bundle import NativeTensorProgramBundle
+from generativeqc_compiler.tensor.cpu_bundle import NativeTensorProgramBundle
 
 
 def _tensor(name: str, size: int = 4) -> typing.Any:

@@ -4,7 +4,7 @@ import typing
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.cuda_adapter import (
+from generativeqc_compiler.common.cuda_adapter import (
     CudaBenchmarkExecutor,
     CudaExecutionProfile,
     resolve_cuda_execution_profile,
@@ -37,13 +37,13 @@ def test_cuda_execution_profile_uses_device_agnostic_gpu_default() -> None:
 def test_cuda_execution_profile_environment_overrides_project_defaults() -> None:
     profile = resolve_cuda_execution_profile(
         environment={
-            "VIBEQC_BENCHMARK_PARTITION": "accelerated",
-            "VIBEQC_BENCHMARK_GRES": "gpu:a100:2",
-            "VIBEQC_BENCHMARK_NODES": "2",
-            "VIBEQC_BENCHMARK_NTASKS": "4",
-            "VIBEQC_BENCHMARK_CPUS_PER_TASK": "8",
-            "VIBEQC_BENCHMARK_TIME": "00:25:00",
-            "VIBEQC_BENCHMARK_SRUN": "/opt/slurm/bin/srun",
+            "GENERATIVEQC_BENCHMARK_PARTITION": "accelerated",
+            "GENERATIVEQC_BENCHMARK_GRES": "gpu:a100:2",
+            "GENERATIVEQC_BENCHMARK_NODES": "2",
+            "GENERATIVEQC_BENCHMARK_NTASKS": "4",
+            "GENERATIVEQC_BENCHMARK_CPUS_PER_TASK": "8",
+            "GENERATIVEQC_BENCHMARK_TIME": "00:25:00",
+            "GENERATIVEQC_BENCHMARK_SRUN": "/opt/slurm/bin/srun",
         }
     )
     assert profile.partition == "accelerated"
@@ -60,11 +60,11 @@ def test_cuda_execution_profile_environment_overrides_project_defaults() -> None
 def test_explicit_execution_arguments_override_environment() -> None:
     profile = resolve_cuda_execution_profile(
         environment={
-            "VIBEQC_BENCHMARK_PARTITION": "environment",
-            "VIBEQC_BENCHMARK_GRES": "gpu:environment:1",
-            "VIBEQC_BENCHMARK_NODES": "9",
-            "VIBEQC_BENCHMARK_TIME": "01:00:00",
-            "VIBEQC_BENCHMARK_LOCAL": "0",
+            "GENERATIVEQC_BENCHMARK_PARTITION": "environment",
+            "GENERATIVEQC_BENCHMARK_GRES": "gpu:environment:1",
+            "GENERATIVEQC_BENCHMARK_NODES": "9",
+            "GENERATIVEQC_BENCHMARK_TIME": "01:00:00",
+            "GENERATIVEQC_BENCHMARK_LOCAL": "0",
         },
         local=True,
         partition="argument",
@@ -83,9 +83,9 @@ def test_explicit_execution_arguments_override_environment() -> None:
 def test_empty_environment_scheduler_fields_disable_optional_flags() -> None:
     profile = resolve_cuda_execution_profile(
         environment={
-            "VIBEQC_BENCHMARK_PARTITION": "",
-            "VIBEQC_BENCHMARK_GRES": "",
-            "VIBEQC_BENCHMARK_TIME": "",
+            "GENERATIVEQC_BENCHMARK_PARTITION": "",
+            "GENERATIVEQC_BENCHMARK_GRES": "",
+            "GENERATIVEQC_BENCHMARK_TIME": "",
         }
     )
     assert profile.wrap(["worker"]) == [
@@ -100,7 +100,7 @@ def test_executor_uses_caller_time_as_default_but_environment_can_override() -> 
     executor = CudaBenchmarkExecutor.from_environment(
         30,
         default_slurm_time="00:30:00",
-        environment={"VIBEQC_BENCHMARK_TIME": "00:04:00"},
+        environment={"GENERATIVEQC_BENCHMARK_TIME": "00:04:00"},
     )
     assert executor.profile.slurm_time == "00:04:00"
     assert executor.command(Path("benchmark"))[-2:] == ["--time=00:04:00", "benchmark"]
@@ -109,9 +109,9 @@ def test_executor_uses_caller_time_as_default_but_environment_can_override() -> 
 @pytest.mark.parametrize(
     ("environment", "match"),
     [
-        ({"VIBEQC_BENCHMARK_LOCAL": "sometimes"}, "boolean"),
-        ({"VIBEQC_BENCHMARK_NODES": "many"}, "integer"),
-        ({"VIBEQC_BENCHMARK_CPUS_PER_TASK": "many"}, "integer"),
+        ({"GENERATIVEQC_BENCHMARK_LOCAL": "sometimes"}, "boolean"),
+        ({"GENERATIVEQC_BENCHMARK_NODES": "many"}, "integer"),
+        ({"GENERATIVEQC_BENCHMARK_CPUS_PER_TASK": "many"}, "integer"),
     ],
 )
 def test_invalid_execution_environment_fails_closed(
@@ -149,9 +149,9 @@ def test_f_shell_cli_preserves_timeout_precedence(
     # of scheduler argument parsing or this control-flow regression.
     monkeypatch.setitem(sys.modules, "pyscf", SimpleNamespace(__version__="unused"))
     if environment_time is None:
-        monkeypatch.delenv("VIBEQC_BENCHMARK_TIME", raising=False)
+        monkeypatch.delenv("GENERATIVEQC_BENCHMARK_TIME", raising=False)
     else:
-        monkeypatch.setenv("VIBEQC_BENCHMARK_TIME", environment_time)
+        monkeypatch.setenv("GENERATIVEQC_BENCHMARK_TIME", environment_time)
     original = CudaBenchmarkExecutor.from_environment
 
     def capture(cls: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> None:
@@ -190,7 +190,7 @@ def test_distributed_requests_cannot_duplicate_single_process_benchmarks(
 
 def test_single_task_preserves_explicit_compiler_cpu_allocation() -> None:
     profile = resolve_cuda_execution_profile(
-        environment={"VIBEQC_BENCHMARK_CPUS_PER_TASK": "8"}
+        environment={"GENERATIVEQC_BENCHMARK_CPUS_PER_TASK": "8"}
     )
     command = profile.wrap(["worker"])
     assert "--cpus-per-task=8" in command

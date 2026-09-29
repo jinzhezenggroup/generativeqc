@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-#ifndef VIBEQC_XTB_DATA_PARAMETERS_TBLITE_STO_HPP
-#define VIBEQC_XTB_DATA_PARAMETERS_TBLITE_STO_HPP
+#ifndef GENERATIVEQC_XTB_DATA_PARAMETERS_TBLITE_STO_HPP
+#define GENERATIVEQC_XTB_DATA_PARAMETERS_TBLITE_STO_HPP
 
 #include <array>
 
-namespace vibeqc::xtb::parameters::tblite {
+namespace generativeqc::xtb::parameters::tblite {
 
 /*
  * Stewart STO-3G, STO-4G, and STO-6G tables copied from
@@ -160,6 +160,6 @@ inline constexpr std::array<double, 6> kAlpha6p{{6.696537714e-1, 1.395089793e-1,
 inline constexpr std::array<double, 6> kCoeff6p{{2.782723680e-3, -1.282887780e-1, -2.266255943e-1,
                                                  4.682259383e-1, 6.752048848e-1, 1.091534212e-1}};
 
-}  // namespace vibeqc::xtb::parameters::tblite
+}  // namespace generativeqc::xtb::parameters::tblite
 
-#endif  // VIBEQC_XTB_DATA_PARAMETERS_TBLITE_STO_HPP
+#endif  // GENERATIVEQC_XTB_DATA_PARAMETERS_TBLITE_STO_HPP

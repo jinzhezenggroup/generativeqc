@@ -222,7 +222,7 @@ def validate(
     command = [
         compiler,
         "-std=c++17",
-        f"-DVIBEQC_VALIDATE_CUDA={int(backend == 'cuda')}",
+        f"-DGENERATIVEQC_VALIDATE_CUDA={int(backend == 'cuda')}",
         *flags,
         "-I" + str(work),
         str(source),

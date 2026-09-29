@@ -8,7 +8,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from vibeqc.torch import batched_energy, energy
+from generativeqc.torch import batched_energy, energy
 
 
 class QuadraticCalculator:
@@ -185,7 +185,7 @@ def test_invalid_input_does_not_construct_default_calculator(
     def unexpected_calculator(**kwargs: typing.Any) -> None:
         pytest.fail("invalid input constructed a native calculator")
 
-    monkeypatch.setattr("vibeqc.torch.Calculator", unexpected_calculator)
+    monkeypatch.setattr("generativeqc.torch.Calculator", unexpected_calculator)
     with pytest.raises(ValueError, match="ionic charge must be an integer"):
         evaluate(route, xyz, None, charge=0.9)
 
@@ -285,7 +285,7 @@ def test_coordinate_dtype_is_checked_before_default_calculator(
     def unexpected_calculator(**kwargs: typing.Any) -> None:
         pytest.fail("invalid coordinate dtype constructed a native calculator")
 
-    monkeypatch.setattr("vibeqc.torch.Calculator", unexpected_calculator)
+    monkeypatch.setattr("generativeqc.torch.Calculator", unexpected_calculator)
     coordinates = torch.ones((2, 3), dtype=torch.int64)
     with pytest.raises(TypeError, match="real floating-point tensor"):
         evaluate(route, coordinates, None)

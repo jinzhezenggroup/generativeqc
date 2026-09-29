@@ -5,36 +5,37 @@
 
 #include "dft/ao_grid.hpp"
 #include "dft/grid.hpp"
+#include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
-#include "vibeqc/vibeqc.h"
 
 namespace {
-using namespace vibeqc;
+using namespace generativeqc;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
 struct Handles {
-  vibeqc_context* context{};
-  vibeqc_system* system{};
-  vibeqc_calculation* calculation{};
+  generativeqc_context* context{};
+  generativeqc_system* system{};
+  generativeqc_calculation* calculation{};
   ~Handles() {
-    vibeqc_calculation_destroy(calculation);
-    vibeqc_system_destroy(system);
-    vibeqc_context_destroy(context);
+    generativeqc_calculation_destroy(calculation);
+    generativeqc_system_destroy(system);
+    generativeqc_context_destroy(context);
   }
 };
 
 void check_measures(bool uks, bool pbe) {
   // Asymmetric H3/H3+ is nonstationary after one iteration. Symmetric H2
   // would make both measures almost zero and hide the adapter regression.
-  const std::array<vibeqc_atom, 3> atoms{{{1, 0, 0, 0}, {1, .15, .13, 1.5}, {1, .6, .26, 3.0}}};
-  const std::array<vibeqc_primitive, 3> primitives{
+  const std::array<generativeqc_atom, 3> atoms{
+      {{1, 0, 0, 0}, {1, .15, .13, 1.5}, {1, .6, .26, 3.0}}};
+  const std::array<generativeqc_primitive, 3> primitives{
       {{3.425250914, .1543289673}, {.6239137298, .5353281423}, {.168855404, .4446345422}}};
-  const std::array<vibeqc_shell, 3> shells{{{0, 0, 0, 3}, {1, 0, 0, 3}, {2, 0, 0, 3}}};
+  const std::array<generativeqc_shell, 3> shells{{{0, 0, 0, 3}, {1, 0, 0, 3}, {2, 0, 0, 3}}};
   core::System native_system;
   native_system.charge = uks ? 0 : 1;
   native_system.multiplicity = uks ? 2 : 1;
@@ -45,7 +46,7 @@ void check_measures(bool uks, bool pbe) {
       native_system.shells.back().primitives.push_back({primitive.exponent, primitive.coefficient});
   }
   std::string detail;
-  require(molecule::validate_and_normalize(native_system, detail) == VIBEQC_STATUS_SUCCESS,
+  require(molecule::validate_and_normalize(native_system, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "invalid diagnostic fixture");
   scf::FockBuildSpec spec;
   spec.spin = uks ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
@@ -65,64 +66,71 @@ void check_measures(bool uks, bool pbe) {
           "fixture cannot distinguish density update from physical residual");
 
   Handles handles;
-  const vibeqc_context_descriptor context{sizeof(context), VIBEQC_ABI_VERSION, 0,
-                                          VIBEQC_BACKEND_CPU_REFERENCE};
-  require(vibeqc_context_create(&context, &handles.context) == VIBEQC_STATUS_SUCCESS,
+  const generativeqc_context_descriptor context{sizeof(context), GENERATIVEQC_ABI_VERSION, 0,
+                                                GENERATIVEQC_BACKEND_CPU_REFERENCE};
+  require(generativeqc_context_create(&context, &handles.context) == GENERATIVEQC_STATUS_SUCCESS,
           "context creation failed");
-  const vibeqc_system_descriptor system{sizeof(system),        VIBEQC_ABI_VERSION,
-                                        atoms.data(),          3,
-                                        shells.data(),         3,
-                                        primitives.data(),     3,
-                                        native_system.charge,  native_system.multiplicity,
-                                        VIBEQC_BASIS_CARTESIAN};
-  require(vibeqc_system_create(handles.context, &system, &handles.system) == VIBEQC_STATUS_SUCCESS,
+  const generativeqc_system_descriptor system{sizeof(system),
+                                              GENERATIVEQC_ABI_VERSION,
+                                              atoms.data(),
+                                              3,
+                                              shells.data(),
+                                              3,
+                                              primitives.data(),
+                                              3,
+                                              native_system.charge,
+                                              native_system.multiplicity,
+                                              GENERATIVEQC_BASIS_CARTESIAN};
+  require(generativeqc_system_create(handles.context, &system, &handles.system) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           "system creation failed");
-  vibeqc_method_descriptor method{};
+  generativeqc_method_descriptor method{};
   method.struct_size = sizeof(method);
-  method.abi_version = VIBEQC_ABI_VERSION;
-  method.method = uks ? (pbe ? VIBEQC_METHOD_PBE_UKS : VIBEQC_METHOD_LDA_UKS)
-                      : (pbe ? VIBEQC_METHOD_PBE_RKS : VIBEQC_METHOD_LDA_RKS);
+  method.abi_version = GENERATIVEQC_ABI_VERSION;
+  method.method = uks ? (pbe ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_LDA_UKS)
+                      : (pbe ? GENERATIVEQC_METHOD_PBE_RKS : GENERATIVEQC_METHOD_LDA_RKS);
   method.max_iterations = 1;
-  require(vibeqc_calculation_prepare(handles.context, handles.system, &method,
-                                     &handles.calculation) == VIBEQC_STATUS_SUCCESS,
+  require(generativeqc_calculation_prepare(handles.context, handles.system, &method,
+                                           &handles.calculation) == GENERATIVEQC_STATUS_SUCCESS,
           "preparation failed");
-  vibeqc_scf_diagnostic diagnostic{sizeof(diagnostic), VIBEQC_ABI_VERSION, -7, -11};
-  vibeqc_ks_diagnostic ks{};
+  generativeqc_scf_diagnostic diagnostic{sizeof(diagnostic), GENERATIVEQC_ABI_VERSION, -7, -11};
+  generativeqc_ks_diagnostic ks{};
   ks.struct_size = sizeof(ks);
-  ks.abi_version = VIBEQC_ABI_VERSION;
+  ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.nuclear_energy = -19;
-  require(vibeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, nullptr, 0) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  require(generativeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, nullptr, 0) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               ks.nuclear_energy == -19,
           "unexecuted calculation published a KS snapshot");
-  require(
-      vibeqc_calculation_get_scf_diagnostic(nullptr, &diagnostic) == VIBEQC_STATUS_INVALID_ARGUMENT,
-      "null calculation accepted");
-  require(vibeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
-              vibeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  require(generativeqc_calculation_get_scf_diagnostic(nullptr, &diagnostic) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null calculation accepted");
+  require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+              generativeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               diagnostic.density_rms == -7 && diagnostic.physical_residual_rms == -11,
           "unexecuted calculation published a diagnostic");
-  vibeqc_result_descriptor result{};
+  generativeqc_result_descriptor result{};
   result.struct_size = sizeof(result);
-  result.abi_version = VIBEQC_ABI_VERSION;
-  require(vibeqc_calculation_execute(handles.calculation, &result) == VIBEQC_STATUS_NOT_CONVERGED,
+  result.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_execute(handles.calculation, &result) ==
+              GENERATIVEQC_STATUS_NOT_CONVERGED,
           "one-iteration fixture unexpectedly converged");
-  require(vibeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
-                  VIBEQC_STATUS_SUCCESS &&
-              vibeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
-                  VIBEQC_STATUS_SUCCESS,
+  require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              generativeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
           "completed nonconverged diagnostic unavailable");
   require(std::abs(result.density_rms - native.density_rms) < 1e-13 &&
               diagnostic.density_rms == result.density_rms &&
               std::abs(diagnostic.physical_residual_rms - native.physical_residual_rms) < 1e-13,
           "C API changed the legacy density measure or conflated it with physical residual");
-  vibeqc_ks_iteration row{};
+  generativeqc_ks_iteration row{};
   row.struct_size = sizeof(row);
-  row.abi_version = VIBEQC_ABI_VERSION;
-  require(vibeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, &row, 1) ==
-              VIBEQC_STATUS_SUCCESS,
+  row.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, &row, 1) ==
+              GENERATIVEQC_STATUS_SUCCESS,
           "completed valid nonconverged KS history unavailable");
   const auto& physical = native.dft_diagnostic;
   require(ks.history_count == 1 && row.iteration == 1 && ks.fock_builds == 1 &&
@@ -136,40 +144,41 @@ void check_measures(bool uks, bool pbe) {
               std::abs(row.density_change_max - physical.history[0].density_change) < 1e-13,
           "KS snapshot lost its model, occupations, physical components or iteration history");
   ks.nuclear_energy = -19;
-  require(vibeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, &row, 0) ==
-                  VIBEQC_STATUS_INVALID_ARGUMENT &&
+  require(generativeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, &row, 0) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               ks.nuclear_energy == -19,
           "short KS history buffer partially overwrote summary");
   row.abi_version += 1;
-  require(vibeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, &row, 1) ==
-                  VIBEQC_STATUS_ABI_MISMATCH &&
+  require(generativeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, &row, 1) ==
+                  GENERATIVEQC_STATUS_ABI_MISMATCH &&
               ks.nuclear_energy == -19,
           "invalid KS history ABI partially overwrote summary");
   diagnostic.abi_version += 1;
-  require(vibeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
-              VIBEQC_STATUS_ABI_MISMATCH,
+  require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
+              GENERATIVEQC_STATUS_ABI_MISMATCH,
           "diagnostic ABI mismatch accepted");
-  diagnostic.abi_version = VIBEQC_ABI_VERSION;
+  diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
   diagnostic.struct_size = sizeof(diagnostic) - 1;
-  require(vibeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
-              VIBEQC_STATUS_ABI_MISMATCH,
+  require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
+              GENERATIVEQC_STATUS_ABI_MISMATCH,
           "undersized diagnostic accepted");
-  diagnostic = {sizeof(diagnostic), VIBEQC_ABI_VERSION, -7, -11};
+  diagnostic = {sizeof(diagnostic), GENERATIVEQC_ABI_VERSION, -7, -11};
   // A valid execution request that fails in the backend must discard the
   // preceding run's values, for both availability probes and copy-out.
   std::array<double, 9> forces{};
   result.forces = forces.data();
   result.force_count = forces.size();
-  require(vibeqc_calculation_execute(handles.calculation, &result) == VIBEQC_STATUS_NOT_IMPLEMENTED,
+  require(generativeqc_calculation_execute(handles.calculation, &result) ==
+              GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "unsupported force execution did not fail");
-  require(vibeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
-              vibeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+              generativeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               diagnostic.density_rms == -7 && diagnostic.physical_residual_rms == -11,
           "failed backend execution retained stale diagnostic values");
-  require(vibeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, nullptr, 0) ==
-                  VIBEQC_STATUS_NOT_IMPLEMENTED &&
+  require(generativeqc_calculation_get_ks_diagnostic(handles.calculation, &ks, nullptr, 0) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               ks.nuclear_energy == -19,
           "failed execution exposed the preceding KS history");
 }

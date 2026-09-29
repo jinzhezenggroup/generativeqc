@@ -10,10 +10,10 @@
 #include "backends/cuda/gfn2_d4.cuh"
 #include "dft/dispersion/d4_math.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
-namespace d4_math = ::vibeqc::dft::dispersion::math;
+namespace d4_math = ::generativeqc::dft::dispersion::math;
 
 constexpr int kThreadsPerBlock = 256;
 constexpr double kChargeScalingHeight = 3.0;
@@ -989,7 +989,7 @@ __global__ void pairlist_two_body_gradient_kernel(Gfn2D4DeviceBatch batch,
   }
 }
 
-#if defined(VIBEQC_XTB_CUDA_TEST_HOOKS)
+#if defined(GENERATIVEQC_XTB_CUDA_TEST_HOOKS)
 /* White-box regression kernel for the reduction/transaction boundary shared by energy paths. */
 __global__ void atm_reduction_test_kernel(Gfn2D4DeviceBatch batch, const double* values,
                                           Gfn2D4DeviceWorkspace workspace,
@@ -2580,7 +2580,7 @@ cudaError_t add_gfn2_d4_atm_gradient_pairlist_cuda(
                                            workspace, device_error, stream);
 }
 
-#if defined(VIBEQC_XTB_CUDA_TEST_HOOKS)
+#if defined(GENERATIVEQC_XTB_CUDA_TEST_HOOKS)
 std::int32_t test_gfn2_d4_atm_split_blocks_per_system(
     const Gfn2D4DeviceBatch& batch, const Gfn2D4DeviceWorkspace& workspace) noexcept {
   return atm_split_blocks_per_system(batch, workspace);
@@ -2675,4 +2675,4 @@ cudaError_t test_gfn2_d4_atm_addition_cuda(const Gfn2D4DeviceBatch& batch,
 }
 #endif
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

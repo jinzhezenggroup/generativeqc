@@ -10,8 +10,8 @@ import time
 from pathlib import Path
 
 import pytest
-from vibeqc import Atom, GridSpec
-from vibeqc_compiler.dft.grid import molecular_grid_identity
+from generativeqc import Atom, GridSpec
+from generativeqc_compiler.dft.grid import molecular_grid_identity
 
 from tools.dft_mp_v1 import prepare_campaign
 from tools.dft_mp_v1 import validate as contract_validator
@@ -178,7 +178,7 @@ def test_campaign_plan_binds_merged_source_and_installed_artifacts(
     tmp_path: Path, contract: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = "a" * 40
-    library = tmp_path / "libvibeqc.so"
+    library = tmp_path / "libgenerativeqc.so"
     artifact = tmp_path / "scientific.aot"
     adapter = tmp_path / "adapter.py"
     conditions = tmp_path / "conditions.json"
@@ -577,7 +577,10 @@ def test_mixed_numerical_oracle_and_work_negative_controls(
                 screening_thresholds={"direct_eri": 1e-9}
             ),
         ),
-        ("shared oracle", lambda x: x["independent_oracle"].update(provider="vibeqc")),
+        (
+            "shared oracle",
+            lambda x: x["independent_oracle"].update(provider="generativeqc"),
+        ),
         (
             "force error",
             lambda x: x["mixed_vs_strict"].update(force_component_max_eh_per_bohr=1e-5),
@@ -607,7 +610,7 @@ def test_mixed_numerical_oracle_and_work_negative_controls(
 
 @pytest.mark.parametrize(
     "provider",
-    [None, "", False, 7, [], {}, "vibeqc", "native-dft"],
+    [None, "", False, 7, [], {}, "generativeqc", "native-dft"],
 )
 def test_oracle_provider_is_a_nonempty_independent_string(
     tmp_path: Path, contract: dict, provider: object
@@ -639,7 +642,7 @@ def test_schemas_encode_oracle_and_review_identity_constraints() -> None:
     ]
     assert provider_schema["type"] == "string"
     assert provider_schema["minLength"] == 1
-    assert set(provider_schema["not"]["enum"]) == {"vibeqc", "native-dft"}
+    assert set(provider_schema["not"]["enum"]) == {"generativeqc", "native-dft"}
 
     receipt_schema = json.loads(
         (ROOT / "receipt.schema.json").read_text(encoding="utf-8")
@@ -1119,7 +1122,7 @@ def test_optional_nonpass_never_replaces_required_final_row(
             "issue": 1190,
             "status": "PASS",
             "source_commit": campaign["source_commit"],
-            "review_url": "https://github.com/jinzhezenggroup/vibeqc/issues/1190#issuecomment-123",
+            "review_url": "https://github.com/jinzhezenggroup/generativeqc/issues/1190#issuecomment-123",
             "raw_receipt": raw_final,
         },
     }
@@ -1131,10 +1134,10 @@ def test_optional_nonpass_never_replaces_required_final_row(
     assert len(outcome["optional_findings"]) == 2
     valid_review_url = receipt["final_acceptance"]["review_url"]
     for invalid_review_url in (
-        "https://github.com/jinzhezenggroup/vibeqc/README.md",
-        "https://github.com/jinzhezenggroup/vibeqc/issues/1191#issuecomment-123",
-        "https://github.com/jinzhezenggroup/vibeqc/issues/1190",
-        "https://github.com/jinzhezenggroup/vibeqc/issues/1190#issuecomment-not-a-number",
+        "https://github.com/jinzhezenggroup/generativeqc/README.md",
+        "https://github.com/jinzhezenggroup/generativeqc/issues/1191#issuecomment-123",
+        "https://github.com/jinzhezenggroup/generativeqc/issues/1190",
+        "https://github.com/jinzhezenggroup/generativeqc/issues/1190#issuecomment-not-a-number",
     ):
         receipt["final_acceptance"]["review_url"] = invalid_review_url
         path.write_bytes(canonical(receipt))

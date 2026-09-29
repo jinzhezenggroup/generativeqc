@@ -6,5 +6,5 @@
     "generated/generated_direct_eri_order4.cuh",
     "generated/generated_direct_shell_class.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/direct_recurrence_cuda.py"
+  "owner": "python/generativeqc_compiler/integral/direct_recurrence_cuda.py"
 }

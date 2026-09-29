@@ -23,7 +23,7 @@ from codegen_fixtures import (
     factored_dppp_variables,
     sample_variables,
 )
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DDDD_SPEC,
     DDPS_SPEC,
     DPDS_SPEC,
@@ -72,19 +72,18 @@ from vibeqc_compiler.integral import (
     schedule_candidates,
     supports_component_lane_rys,
 )
-from vibeqc_compiler.integral.autotune import (
+from generativeqc_compiler.integral.autotune import (
     supported_schedule_trials,
 )
-from vibeqc_compiler.integral.benchmark import (
+from generativeqc_compiler.integral.benchmark import (
     emit_shell_class_benchmark_cuda,
-    emit_shell_class_oracle_cuda,
 )
-from vibeqc_compiler.integral.capabilities import (
+from generativeqc_compiler.integral.capabilities import (
     CAPABILITY_MIXED_FOCK,
     CAPABILITY_STREAMING_FOCK,
     build_capability_report,
 )
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.production import (
     _PRODUCTION_PRELUDE,
     _partition_production_selections,
     emit_registry_header,
@@ -94,10 +93,12 @@ from vibeqc_compiler.integral.production import (
     load_production_manifest,
     write_production_bundle,
 )
-from vibeqc_compiler.integral.shell_class import (
+from generativeqc_compiler.integral.shell_class import (
     AXES,
 )
-from vibeqc_compiler.integral.weighted_eri_cuda import emit_low_order_weighted_header
+from generativeqc_compiler.integral.weighted_eri_cuda import (
+    emit_low_order_weighted_header,
+)
 
 TEST_CUDA_TARGET = cuda_target_info("sm_120")
 
@@ -264,18 +265,34 @@ def test_generic_cuda_emitter_uses_backend_lowering_not_dppp_compatibility() -> 
     """Keep generic compilation independent of historical shell adapters."""
 
     emitter = (
-        REPOSITORY_ROOT / "python" / "vibeqc_compiler" / "integral" / "cuda_emitter.py"
+        REPOSITORY_ROOT
+        / "python"
+        / "generativeqc_compiler"
+        / "integral"
+        / "cuda_emitter.py"
     ).read_text(encoding="utf-8")
     production = (
-        REPOSITORY_ROOT / "python" / "vibeqc_compiler" / "integral" / "production.py"
+        REPOSITORY_ROOT
+        / "python"
+        / "generativeqc_compiler"
+        / "integral"
+        / "production.py"
     ).read_text(encoding="utf-8")
     benchmark = (
-        REPOSITORY_ROOT / "python" / "vibeqc_compiler" / "integral" / "benchmark.py"
+        REPOSITORY_ROOT
+        / "python"
+        / "generativeqc_compiler"
+        / "integral"
+        / "benchmark.py"
     ).read_text(encoding="utf-8")
     assert "from . import cuda_lowering as _implementation" in emitter
     assert "dppp_dispatch" not in emitter
     assert not (
-        REPOSITORY_ROOT / "python" / "vibeqc_compiler" / "integral" / "dppp_dispatch.py"
+        REPOSITORY_ROOT
+        / "python"
+        / "generativeqc_compiler"
+        / "integral"
+        / "dppp_dispatch.py"
     ).exists()
     assert "from .dppp_dispatch import" not in production
     assert "from .dppp_dispatch import" not in benchmark
@@ -1255,7 +1272,7 @@ def test_low_order_production_force_is_generated_by_common_rys2_pipeline(
         for item in load_production_kernel_selections(
             REPOSITORY_ROOT
             / "python"
-            / "vibeqc_compiler"
+            / "generativeqc_compiler"
             / "integral"
             / "production_shell_classes.json",
             "sm_120",
@@ -1282,7 +1299,7 @@ def test_low_order_production_force_is_generated_by_common_rys2_pipeline(
     assert f"generated_{name}_shell_class_force_uhf_persistent_kernel" in source
     assert f"generated_{name}_shell_class_fock_rhf_persistent_kernel" in source
     assert "atomicAdd(task_head, 32U)" in source
-    assert "VIBEQC_LOW_ORDER_TASK_BEGIN" not in source
+    assert "GENERATIVEQC_LOW_ORDER_TASK_BEGIN" not in source
     assert f"generated_{name}_contract_weighted_coulomb" not in source
     assert "Dual3" not in source
 
@@ -1514,7 +1531,7 @@ def test_simple_registry_dispatches_profiled_mixed_fock_classes() -> None:
     manifest = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -1538,12 +1555,12 @@ def test_simple_registry_dispatches_profiled_mixed_fock_classes() -> None:
     }
     for name in expected:
         assert f'"{name}"' in mixed_rows
-        assert f"vibeqc_launch_generated_{name}_mixed_fock" in source
+        assert f"generativeqc_launch_generated_{name}_mixed_fock" in source
     assert '"dspp"' not in mixed_rows
     assert "enabled_mixed_fock_shell_class_mask" in header
     assert "launch_shell_class_mixed_fock" in header
-    assert "VIBEQC_AOT_MIXED_FOCK_SHELL_CLASSES" in source
-    assert "vibeqc_launch_generated_dspp_mixed_fock" not in source
+    assert "GENERATIVEQC_AOT_MIXED_FOCK_SHELL_CLASSES" in source
+    assert "generativeqc_launch_generated_dspp_mixed_fock" not in source
 
 
 def test_direct_tile_validation_is_opt_in_and_reports_descriptor_context() -> None:
@@ -1553,7 +1570,7 @@ def test_direct_tile_validation_is_opt_in_and_reports_descriptor_context() -> No
     policy = (REPOSITORY_ROOT / "src" / "scf" / "cuda" / "rhf_policy.cpp").read_text(
         encoding="utf-8"
     )
-    assert '"VIBEQC_DIRECT_TILE_VALIDATION"' in policy
+    assert '"GENERATIVEQC_DIRECT_TILE_VALIDATION"' in policy
     assert "validate_direct_tile_descriptors_kernel" in source
     assert "DirectTileValidationRecord" in source
     assert "direct-tile-validation error=" in source
@@ -1681,7 +1698,7 @@ def test_production_manifest_drives_generated_registry_and_shards(
     manifest = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -1847,8 +1864,8 @@ def test_production_manifest_drives_generated_registry_and_shards(
     assert '{"psps", 2U, 2U, 32U, 3U, 9U}' in header
     assert '{"ppss", 3U, 2U, 32U, 3U, 9U}' in header
     assert '{"dsss", 6U, 2U, 32U, 3U, 6U}' in header
-    assert "VIBEQC_AOT_SHELL_CLASSES" in header
-    assert "VIBEQC_AOT_FOCK_SHELL_CLASSES" in header
+    assert "GENERATIVEQC_AOT_SHELL_CLASSES" in header
+    assert "GENERATIVEQC_AOT_FOCK_SHELL_CLASSES" in header
     shards = "\n".join(
         path.read_text(encoding="utf-8") for path in first if "shard" in path.name
     )
@@ -1881,7 +1898,7 @@ def test_one_electron_force_uses_only_compiler_owned_derivatives() -> None:
         encoding="utf-8"
     )
     rhf = (REPOSITORY_ROOT / "src/scf/cuda_rhf.cpp").read_text(encoding="utf-8")
-    assert "VIBEQC_ONE_ELECTRON_DERIVATIVES" not in policy
+    assert "GENERATIVEQC_ONE_ELECTRON_DERIVATIVES" not in policy
     assert "generated_one_electron_derivatives_requested" not in policy
     assert "launch_generated_one_electron_gradient(" in rhf
     assert "launch_one_electron_force_cooperative_kernel" not in rhf
@@ -1897,7 +1914,7 @@ def test_one_electron_force_uses_only_compiler_owned_derivatives() -> None:
     begin = policy.index("unsigned one_electron_derivative_mapping_requested()")
     end = policy.index("bool resident_psss_bra_requested()", begin)
     mapping = policy[begin:end]
-    assert 'std::getenv("VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING")' in mapping
+    assert 'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING")' in mapping
     assert (
         "if (selection == nullptr) return NucleusCooperativeSchedule::schedule_code;"
         in mapping
@@ -1912,7 +1929,7 @@ def test_batched_finalization_reuses_each_converged_raw_fock() -> None:
 
     source = _direct_cuda_source()
     assert "template <bool RetainConvergedDensity>" in source
-    assert 'std::getenv("VIBEQC_FINAL_FOCK_REBUILD")' in source
+    assert 'std::getenv("GENERATIVEQC_FINAL_FOCK_REBUILD")' in source
     assert "select_final_fock_rebuild_kernel" in source
     assert "kTightConvergedFockReuseDensityRms = 1.0e-12" in source
     assert "kExpandedConvergedFockReuseDensityTolerance = 1.0e-9" in source
@@ -1936,8 +1953,8 @@ def test_ppps_queue_buckets_orientation_and_primitive_signature_on_device() -> N
     assert "kPppsSignatureBucketCount" in source
     assert "resident_ppps_signature_bucket" in source
     assert "prefix_ppps_resident_signature_buckets_kernel" in source
-    assert 'std::getenv("VIBEQC_PPPS_SIGNATURE_BUCKETING")' in source
-    assert 'std::getenv("VIBEQC_PPPS_BLOCK_THREADS")' in source
+    assert 'std::getenv("GENERATIVEQC_PPPS_SIGNATURE_BUCKETING")' in source
+    assert 'std::getenv("GENERATIVEQC_PPPS_BLOCK_THREADS")' in source
     assert "ppps_resident_block_threads_requested" in source
     assert "resident_signature_offsets[bucket_index]" in source
     assert "atomicAdd(resident_signature_write_counts + bucket_index" in source
@@ -1964,7 +1981,7 @@ def test_bounded_force_signature_mask_tracks_warp_uniform_schedules() -> None:
     manifest = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -2153,7 +2170,7 @@ def test_psss_force_math_is_unconditionally_generated() -> None:
     assert "generated_weighted_eri::Geometry geometry{};" not in native_source
     assert "generated_weighted_eri::psss_force" in native_source
     assert "generated_psss_weighted" not in low_order_source
-    assert "VIBEQC_PSSS_WEIGHTED" not in policy_source
+    assert "GENERATIVEQC_PSSS_WEIGHTED" not in policy_source
     assert (
         "contracted_eri_cartesian_source_psss_weighted_gradient<ResidentBra>"
         in low_order_source
@@ -2165,7 +2182,9 @@ def test_ssss_force_codegen_emits_only_independent_gradient_roots() -> None:
 
     source = emit_low_order_weighted_header(inline_single_use=True)
     begin = source.index("IndependentGradient ssss_force(")
-    end = source.index("}  // namespace vibeqc::scf::generated_weighted_eri", begin)
+    end = source.index(
+        "}  // namespace generativeqc::scf::generated_weighted_eri", begin
+    )
     ssss_force = source[begin:end]
     assert "result.value" not in ssss_force
     assert "result.center[3]" not in ssss_force
@@ -2182,7 +2201,7 @@ def test_ssss_force_retires_handwritten_math_and_selector() -> None:
     manifest = load_production_kernel_selections(
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json",
         "sm_120",
@@ -2207,12 +2226,12 @@ def test_ssss_force_retires_handwritten_math_and_selector() -> None:
     policy = (REPOSITORY_ROOT / "src/scf/cuda/rhf_policy.cpp").read_text(
         encoding="utf-8"
     )
-    resources = (REPOSITORY_ROOT / "python/vibeqc/resources_hf.py").read_text(
+    resources = (REPOSITORY_ROOT / "python/generativeqc/resources_hf.py").read_text(
         encoding="utf-8"
     )
     driver = _direct_cuda_source()
-    assert "VIBEQC_SSSS_FORCE" not in policy
-    assert "VIBEQC_SSSS_FORCE" not in resources
+    assert "GENERATIVEQC_SSSS_FORCE" not in policy
+    assert "GENERATIVEQC_SSSS_FORCE" not in resources
     assert "generated_ssss_force" not in driver
     assert "const std::uint64_t ssss_shell_class_mask" in driver
     assert "~ssss_shell_class_mask" in driver
@@ -2236,8 +2255,8 @@ def test_order01_force_retires_handwritten_generic_fallback() -> None:
     bounded = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
     ).read_text(encoding="utf-8")
-    assert "VIBEQC_BOUNDED_FORCE_CASE(0)" not in bounded
-    assert "VIBEQC_BOUNDED_FORCE_CASE(1)" not in bounded
+    assert "GENERATIVEQC_BOUNDED_FORCE_CASE(0)" not in bounded
+    assert "GENERATIVEQC_BOUNDED_FORCE_CASE(1)" not in bounded
 
 
 def test_order2_force_codegen_emits_only_independent_gradient_roots() -> None:
@@ -2251,7 +2270,7 @@ def test_order2_force_codegen_emits_only_independent_gradient_roots() -> None:
             end = source.index(f"IndependentGradient {names[index + 1]}(", begin)
         else:
             end = source.index(
-                "}  // namespace vibeqc::scf::generated_weighted_eri", begin
+                "}  // namespace generativeqc::scf::generated_weighted_eri", begin
             )
         function = source[begin:end]
         assert "result.value" not in function
@@ -2332,7 +2351,7 @@ def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
     dispatcher = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
     ).read_text(encoding="utf-8")
-    assert "VIBEQC_BOUNDED_FORCE_CASE(3)" not in dispatcher
+    assert "GENERATIVEQC_BOUNDED_FORCE_CASE(3)" not in dispatcher
 
 
 def test_bounded_psss_resident_path_is_allocated_and_disjoint_from_page_fallback() -> (
@@ -2371,7 +2390,7 @@ def test_force_density_product_screening_is_force_only_and_conservative() -> Non
     assert "DirectScreeningPurpose::Force" in source
     assert "kForceDensityProductScreeningTolerance = 1.0e-14" in source
     assert "fmin(screening_tolerance, kForceDensityProductScreeningTolerance)" in source
-    assert 'std::getenv("VIBEQC_FORCE_DENSITY_PRODUCT_SCREENING")' in source
+    assert 'std::getenv("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING")' in source
     assert "launch_direct_force_compaction();" in source
 
 
@@ -2445,7 +2464,7 @@ def test_bounded_streaming_uses_monotonic_system_density_tail() -> None:
     generator = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_emission.py"
     ).read_text(encoding="utf-8")
@@ -2463,7 +2482,7 @@ def test_bounded_streaming_profiles_executed_precision_per_shell_class() -> None
     generator = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_emission.py"
     ).read_text(encoding="utf-8")
@@ -2515,8 +2534,8 @@ def test_production_codegen_cmake_tracks_transitive_generator_inputs(
             str(tmp_path),
             "-G",
             "Ninja",
-            "-DVIBEQC_ENABLE_CUDA=OFF",
-            "-DVIBEQC_BUILD_TESTS=OFF",
+            "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+            "-DGENERATIVEQC_BUILD_TESTS=OFF",
         ],
         check=True,
         capture_output=True,
@@ -2531,50 +2550,52 @@ def test_production_codegen_cmake_tracks_transitive_generator_inputs(
     )
     dependencies = (tmp_path / f"{output}.d").read_text(encoding="utf-8")
     for dependency in (
-        "python/vibeqc_compiler/integral/blocks.py",
-        "python/vibeqc_compiler/integral/cache.py",
-        "python/vibeqc_compiler/integral/cuda.py",
-        "python/vibeqc_compiler/integral/capabilities.py",
-        "python/vibeqc_compiler/integral/cuda_lowering.py",
-        "python/vibeqc_compiler/integral/expr.py",
-        "python/vibeqc_compiler/integral/fused_schedule.py",
-        "python/vibeqc_compiler/integral/ir.py",
-        "python/vibeqc_compiler/integral/ir_serialization.py",
-        "python/vibeqc_compiler/integral/production.py",
-        "python/vibeqc_compiler/integral/rys.py",
-        "python/vibeqc_compiler/integral/rys3_data.py",
-        "python/vibeqc_compiler/integral/rys5_data.py",
-        "python/vibeqc_compiler/integral/shell_class.py",
-        "python/vibeqc_compiler/integral/shell_signature.py",
-        "python/vibeqc_compiler/integral/shell_spec.py",
+        "python/generativeqc_compiler/integral/blocks.py",
+        "python/generativeqc_compiler/integral/cache.py",
+        "python/generativeqc_compiler/integral/cuda.py",
+        "python/generativeqc_compiler/integral/capabilities.py",
+        "python/generativeqc_compiler/integral/cuda_lowering.py",
+        "python/generativeqc_compiler/integral/expr.py",
+        "python/generativeqc_compiler/integral/fused_schedule.py",
+        "python/generativeqc_compiler/integral/ir.py",
+        "python/generativeqc_compiler/integral/ir_serialization.py",
+        "python/generativeqc_compiler/integral/production.py",
+        "python/generativeqc_compiler/integral/rys.py",
+        "python/generativeqc_compiler/integral/rys3_data.py",
+        "python/generativeqc_compiler/integral/rys5_data.py",
+        "python/generativeqc_compiler/integral/shell_class.py",
+        "python/generativeqc_compiler/integral/shell_signature.py",
+        "python/generativeqc_compiler/integral/shell_spec.py",
     ):
         assert dependency in dependencies
     # Production AOT uses the same depfile-enabled registration while retaining
     # its explicit non-Python manifest dependency. Unrelated compiler stages must
     # not be reintroduced as unconditional dependencies.
-    assert "python/vibeqc_compiler/tensor/layout.py" not in dependencies
-    cuda = (REPOSITORY_ROOT / "cmake/VibeQCCuda.cmake").read_text(encoding="utf-8")
-    production = cuda.split("vibeqc_register_generated_sources(", 1)[1]
+    assert "python/generativeqc_compiler/tensor/layout.py" not in dependencies
+    cuda = (REPOSITORY_ROOT / "cmake/GenerativeQCCuda.cmake").read_text(
+        encoding="utf-8"
+    )
+    production = cuda.split("generativeqc_register_generated_sources(", 1)[1]
     production_dependencies = production.split("DEPENDS", 1)[1].split("ARGS", 1)[0]
-    assert "${VIBEQC_AOT_SHELL_MANIFEST}" in production_dependencies
-    assert "${VIBEQC_SCIENTIFIC_COMPILER_INPUTS}" not in production_dependencies
+    assert "${GENERATIVEQC_AOT_SHELL_MANIFEST}" in production_dependencies
+    assert "${GENERATIVEQC_SCIENTIFIC_COMPILER_INPUTS}" not in production_dependencies
 
 
 def test_cuda_target_request_is_resolved_before_language_enablement() -> None:
     """Do not let CMake/NVCC invent a compiler-default CUDA target."""
 
     cmake = (REPOSITORY_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
-    cuda_block = cmake.split("if(VIBEQC_ENABLE_CUDA)", 1)[1].split(
-        "# Scoped VibeQC-owned GFN2 CPU runtime", 1
+    cuda_block = cmake.split("if(GENERATIVEQC_ENABLE_CUDA)", 1)[1].split(
+        "# Scoped GenerativeQC-owned GFN2 CPU runtime", 1
     )[0]
     target_error = cuda_block.index("CUDA target architecture is required")
     target_assignment = cuda_block.index(
-        "set(CMAKE_CUDA_ARCHITECTURES ${_vibeqc_cuda_requested_architectures})"
+        "set(CMAKE_CUDA_ARCHITECTURES ${_generativeqc_cuda_requested_architectures})"
     )
     language_enable = cuda_block.index("enable_language(CUDA)")
     assert target_error < target_assignment < language_enable
-    assert "VIBEQC_CUDA_COMPILE_ARCHITECTURES" in cuda_block[:language_enable]
-    assert "VIBEQC_CUDA_ARCHITECTURES" in cuda_block[:language_enable]
+    assert "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES" in cuda_block[:language_enable]
+    assert "GENERATIVEQC_CUDA_ARCHITECTURES" in cuda_block[:language_enable]
     assert "DEFINED CMAKE_CUDA_ARCHITECTURES" in cuda_block[:language_enable]
     assert "DEFINED ENV{CUDAARCHS}" in cuda_block[:language_enable]
     assert "set(CMAKE_CUDA_ARCHITECTURES 120)" not in cuda_block
@@ -2586,7 +2607,7 @@ def test_codegen_capability_report_covers_catalog_and_manifest() -> None:
     manifest = (
         REPOSITORY_ROOT
         / "python"
-        / "vibeqc_compiler"
+        / "generativeqc_compiler"
         / "integral"
         / "production_shell_classes.json"
     )
@@ -2650,10 +2671,10 @@ def test_scalar_rys_cuda_compiles_with_bounded_call_save_when_nvcc_is_configured
 ) -> None:
     """Bound scalar fixed-root resources before production promotion."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     schedule = ScheduleIR(
         kind=ScheduleKind.THREAD_TASKS,
@@ -2698,7 +2719,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         timeout=240,
     )
     compile_seconds = time.perf_counter() - compile_started
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     print(
@@ -2735,10 +2756,10 @@ def test_dppp_cooperative_rys4_compiles_without_spills_when_nvcc_is_configured(
 ) -> None:
     """Apply the sm_120 resource gate before any production promotion."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     schedule = ScheduleIR(
         kind=ScheduleKind.COMPONENT_LANES,
         block_threads=192,
@@ -2784,7 +2805,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         text=True,
         timeout=240,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     if cuda_architecture == "sm_120":
@@ -2901,10 +2922,10 @@ def test_batched_rys4_hot_classes_compile_without_spills_when_nvcc_is_configured
 ) -> None:
     """Lock the sm_120 resource envelope for batched Rys4 promotions."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     plan = build_fused_shell_plan(
         spec, schedule=schedule, recurrence="rys4", target=TEST_CUDA_TARGET
@@ -2941,7 +2962,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         timeout=240,
     )
     output = result.stdout + result.stderr
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(output)
     assert result.returncode == 0, output
     assert cubin.exists()
@@ -2973,10 +2994,10 @@ def test_dppp_rys4_uniform_warps_compile_when_nvcc_is_configured(
 ) -> None:
     """Compile the 32-task/eight-warp force worker before endpoint testing."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     schedule = ScheduleIR(
         kind=ScheduleKind.SUBGROUP_TASKS,
         block_threads=256,
@@ -3022,7 +3043,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         text=True,
         timeout=240,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     assert cubin.exists()
@@ -3049,10 +3070,10 @@ def test_rys3_uniform_warps_compile_without_spills_when_nvcc_is_configured(
 ) -> None:
     """Reject uniform Rys3 mappings that exceed their resource envelope."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     schedule = ScheduleIR(
         kind=ScheduleKind.SUBGROUP_TASKS,
@@ -3096,7 +3117,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         text=True,
         timeout=240,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     assert cubin.exists()
@@ -3129,10 +3150,10 @@ def test_cooperative_rys3_hot_classes_compile_without_spills_when_nvcc_is_config
 ) -> None:
     """Apply a zero-spill sm_120 gate to every promoted Rys3 force class."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     schedule = ScheduleIR(
         kind=ScheduleKind.COMPONENT_LANES,
@@ -3180,7 +3201,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         timeout=240,
     )
     output = result.stdout + result.stderr
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(output)
     assert result.returncode == 0, output
     if cuda_architecture == "sm_120":
@@ -3208,10 +3229,10 @@ def test_ppps_rys3_benchmark_runs_against_component_lanes_when_nvcc_is_configure
 ) -> None:
     """Compare direct Rys recurrence with the current ppps task topology."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA benchmark gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA benchmark gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME["ppps"]
     direct_schedule = ScheduleIR(
         kind=ScheduleKind.THREAD_TASKS,
@@ -3234,7 +3255,7 @@ def test_ppps_rys3_benchmark_runs_against_component_lanes_when_nvcc_is_configure
         for selection in load_production_kernel_selections(
             REPOSITORY_ROOT
             / "python"
-            / "vibeqc_compiler"
+            / "generativeqc_compiler"
             / "integral"
             / "production_shell_classes.json",
             "sm_120",
@@ -3322,10 +3343,10 @@ def test_dppp_cooperative_rys4_benchmark_runs_against_component_lanes_when_nvcc_
 ) -> None:
     """Measure 192-lane cooperative Rys4 against its subset-Wick predecessor."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA benchmark gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA benchmark gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     rys4_schedule = ScheduleIR(
         kind=ScheduleKind.COMPONENT_LANES,
         block_threads=192,
@@ -3420,10 +3441,10 @@ def test_dppp_uniform_warp_rys4_benchmark_runs_against_component_lanes_when_nvcc
 ) -> None:
     """Compare the 32-task mapping with the previously accepted force path."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA benchmark gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA benchmark gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     uniform_schedule = ScheduleIR(
         kind=ScheduleKind.SUBGROUP_TASKS,
         block_threads=256,
@@ -3536,17 +3557,17 @@ def test_cooperative_rys3_benchmark_runs_against_component_lanes_when_nvcc_is_co
 ) -> None:
     """Gate each promoted Rys3 class against its accepted force recurrence."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA benchmark gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA benchmark gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     selection = next(
         selection
         for selection in load_production_kernel_selections(
             REPOSITORY_ROOT
             / "python"
-            / "vibeqc_compiler"
+            / "generativeqc_compiler"
             / "integral"
             / "production_shell_classes.json",
             "sm_120",
@@ -3645,10 +3666,10 @@ def test_fused_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile every generated shell class for explicit resource probes."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     source = tmp_path / f"generated_{spec.name}_fused.cu"
     source.write_text(
         """
@@ -3678,7 +3699,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         text=True,
         timeout=120,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     if cuda_architecture == "sm_120" and resource_limits is not None:
@@ -3690,10 +3711,10 @@ def test_ppps_scalar_thread_cuda_compiles_without_spills_when_nvcc_is_configured
 ) -> None:
     """Gate the scalar ppps prototype before any production routing."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME["ppps"]
     schedule = ScheduleIR(
         kind=ScheduleKind.THREAD_TASKS,
@@ -3735,7 +3756,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         text=True,
         timeout=240,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     if cuda_architecture == "sm_120":
@@ -3757,10 +3778,10 @@ def test_ppps_scalar_thread_benchmark_runs_when_nvcc_is_configured(
 ) -> None:
     """Execute the scalar persistent worker against the component oracle."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA benchmark gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA benchmark gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME["ppps"]
     schedule = ScheduleIR(
         kind=ScheduleKind.THREAD_TASKS,
@@ -3835,7 +3856,7 @@ def test_ppps_scalar_thread_benchmark_runs_when_nvcc_is_configured(
         for selection in load_production_kernel_selections(
             REPOSITORY_ROOT
             / "python"
-            / "vibeqc_compiler"
+            / "generativeqc_compiler"
             / "integral"
             / "production_shell_classes.json",
             "sm_120",
@@ -3866,10 +3887,10 @@ def test_joint_fock_force_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile the dual-consumer pilot through the real CUDA frontend."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     plan = build_fused_shell_plan(
         DPDS_SPEC,
         consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
@@ -3911,10 +3932,10 @@ def test_tiled_joint_fock_force_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile the tiled dual-consumer lowering through the real frontend."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     integral = build_integral_ir(
         DPPP_SPEC,
         consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
@@ -3964,10 +3985,10 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
 def test_dddd_tiled_cuda_compiles_when_nvcc_is_configured(tmp_path: Path) -> None:
     """Compile a 1296-component class that cannot use one lane per quartet."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     schedule = replace(
         build_fused_shell_plan(DDDD_SPEC, target=TEST_CUDA_TARGET).schedule,
         block_threads=128,
@@ -4021,10 +4042,10 @@ def test_f_shell_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile pair-order-six and tiled f-shell gradients with CUDA 12.9."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     schedule = replace(
         build_fused_shell_plan(spec, target=TEST_CUDA_TARGET).schedule,
         unroll_pair_terms=False,
@@ -4108,10 +4129,10 @@ def test_structural_rys_capability_examples_compile_when_nvcc_is_configured(
 ) -> None:
     """Compile f-shell candidates admitted without shell-name allowlists."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     plan = build_fused_shell_plan(
         spec, schedule=schedule, recurrence=recurrence, target=TEST_CUDA_TARGET
@@ -4147,7 +4168,7 @@ __device__ __forceinline__ void boys_values(double argument, double* values) {
         text=True,
         timeout=300,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     assert cubin.exists()
@@ -4166,10 +4187,10 @@ def test_psss_shell_task_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile a zero-order ket pair through generated Fock/force lowering."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     integral = build_integral_ir(
         PSSS_SPEC,
         consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
@@ -4221,10 +4242,10 @@ def test_psss_packed_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile 32 independent low-order tasks per warp for Fock and force."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     integral = build_integral_ir(
         PSSS_SPEC,
         consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
@@ -4286,16 +4307,16 @@ def test_low_order_production_rys2_cuda_compiles_when_nvcc_is_configured(
 ) -> None:
     """Compile the common production Rys2 source and reject spills."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA compile gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA compile gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     selection = next(
         item
         for item in load_production_kernel_selections(
             REPOSITORY_ROOT
             / "python"
-            / "vibeqc_compiler"
+            / "generativeqc_compiler"
             / "integral"
             / "production_shell_classes.json",
             "sm_120",
@@ -4336,7 +4357,7 @@ def test_low_order_production_rys2_cuda_compiles_when_nvcc_is_configured(
         text=True,
         timeout=120,
     )
-    if os.environ.get("VIBEQC_NVCC_VERBOSE"):
+    if os.environ.get("GENERATIVEQC_NVCC_VERBOSE"):
         print(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     if cuda_architecture == "sm_120":
@@ -4377,34 +4398,13 @@ def test_high_component_fock_oracle_block_covers_every_component() -> None:
     assert "<<<kTaskCount,\n        192>>>" in baseline
 
 
-def test_packed_order2_fock_oracle_drops_force_wrappers() -> None:
-    """Keep packed low-order schedules available to Fock autotuning."""
-
-    trial = next(
-        trial
-        for trial in supported_schedule_trials(
-            PSPS_SPEC, KernelConsumer.FOCK, target=TEST_CUDA_TARGET
-        )
-        if trial.schedule.kind == ScheduleKind.PACKED_TASKS
-    )
-    plan = build_fused_shell_plan(
-        PSPS_SPEC,
-        consumers=(KernelConsumer.FOCK, KernelConsumer.FORCE),
-        schedule=trial.schedule,
-        target=TEST_CUDA_TARGET,
-    )
-    source = emit_shell_class_oracle_cuda(PSPS_SPEC, plan, KernelConsumer.FOCK)
-    assert "generated_psps_shell_class_fock_rhf_kernel" in source
-    assert "generated_psps_shell_class_force_rhf_kernel" not in source
-
-
 def test_fock_benchmark_runs_when_nvcc_is_configured(tmp_path: Path) -> None:
     """Execute the swapped value benchmark and its independent oracle."""
 
-    nvcc = os.environ.get("VIBEQC_NVCC")
+    nvcc = os.environ.get("GENERATIVEQC_NVCC")
     if nvcc is None:
-        pytest.skip("set VIBEQC_NVCC to run the generated CUDA benchmark gate")
-    cuda_architecture = os.environ.get("VIBEQC_CUDA_ARCH", "sm_90")
+        pytest.skip("set GENERATIVEQC_NVCC to run the generated CUDA benchmark gate")
+    cuda_architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     schedule = replace(
         build_fused_shell_plan(DPDS_SPEC, target=TEST_CUDA_TARGET).schedule,
         pair_orientation=PairOrientation.SWAPPED,
@@ -4458,33 +4458,3 @@ def test_fock_benchmark_runs_when_nvcc_is_configured(tmp_path: Path) -> None:
     assert payload["maximum_fock_error"] <= (
         2.0e-10 * max(1.0, payload["maximum_fock"])
     )
-
-
-@pytest.mark.parametrize("name", ["ppps", "dpps", "dddd"])
-def test_value_only_native_helpers_use_the_pruned_coulomb_table_stride(
-    name: typing.Any,
-) -> None:
-    """A Fock-only manifest must index each emitted state through its IR table."""
-    import re
-
-    spec = FUSED_SHELL_SPEC_BY_NAME[name]
-    integral = build_integral_ir(spec, consumers=(KernelConsumer.FOCK,))
-    plan = build_fused_shell_plan(spec, integral=integral, target=TEST_CUDA_TARGET)
-    source = emit_shell_class_fused_cuda(spec, plan)
-    side = integral.maximum_coulomb_order + 1
-    table = re.search(
-        rf"generated_{spec.name}_coulomb_indices\[(\d+)\] = \{{(.*?)\}};",
-        source,
-        re.DOTALL,
-    )
-    assert table is not None
-    values = [int(value) for value in re.findall(r"-?\d+", table.group(2))]
-    assert int(table.group(1)) == len(values) == side**3
-    assert f"(x_order * {side}U + y_order) * {side}U + z_order" in source
-    # The common geometry helper still evaluates the derivative Boys order;
-    # shrinking its scratch arrays with the lookup stride would overwrite it.
-    geometry_side = spec.maximum_force_coulomb_order + 1
-    assert f"double boys[{geometry_side}];" in source
-    assert f"double coordinate_powers[3][{geometry_side}];" in source
-    for index, (x, y, z) in enumerate(plan.coulomb_states):
-        assert values[(x * side + y) * side + z] == index

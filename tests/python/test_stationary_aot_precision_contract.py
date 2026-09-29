@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common.provenance import file_hash
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_cuda import (
+from generativeqc_compiler.common.provenance import file_hash
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import (
     load_stationary_aot_artifact,
     stationary_aot_contract_identity,
 )
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -34,10 +34,10 @@ def test_stationary_aot_rejects_unqualified_precision_contract(
     plan = StationaryGradientPlan(
         resolve_method("PBE"), StationaryMeanField(SCF_POINT_MODEL)
     )
-    library = tmp_path / "libvibeqc_stationary_pbe_rks.so"
+    library = tmp_path / "libgenerativeqc_stationary_pbe_rks.so"
     library.write_bytes(b"test artifact: never loaded as native code")
     metadata = {
-        "schema": "vibeqc.stationary-cuda-aot.v2",
+        "schema": "generativeqc.stationary-cuda-aot.v2",
         "functional": 1,
         "spin": "unpolarized",
         "plan_identity": plan.identity,
@@ -50,7 +50,7 @@ def test_stationary_aot_rejects_unqualified_precision_contract(
         "binary_bytes": library.stat().st_size,
         "compile_contract": contract,
     }
-    (tmp_path / "vibeqc_stationary_pbe_rks.json").write_text(json.dumps(metadata))
+    (tmp_path / "generativeqc_stationary_pbe_rks.json").write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="precision contract"):
         load_stationary_aot_artifact(
             tmp_path, functional=1, spin="unpolarized", plan=plan, architecture="sm_80"

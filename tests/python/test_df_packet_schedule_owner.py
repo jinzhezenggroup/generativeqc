@@ -3,8 +3,8 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.homogeneous_schedule import HomogeneousExecution
-from vibeqc_compiler.integral import df_shell_derivatives as emitter
+from generativeqc_compiler.common.homogeneous_schedule import HomogeneousExecution
+from generativeqc_compiler.integral import df_shell_derivatives as emitter
 
 
 @pytest.mark.parametrize("capacity", (7, 13))

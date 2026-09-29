@@ -41,10 +41,10 @@
 #include "model/gfn2/wavefunction.hpp"
 #include "solver/iteration_control.hpp"
 
-namespace vibeqc::xtb::detail {
+namespace generativeqc::xtb::detail {
 namespace {
 
-using namespace vibeqc::xtb::detail::gfn2;
+using namespace generativeqc::xtb::detail::gfn2;
 
 constexpr std::size_t kHostAlignment = 64u;
 constexpr std::int32_t kDefaultMixerHistory = 8;
@@ -116,17 +116,17 @@ class AlignedBuffer {
   std::size_t size_ = 0u;
 };
 
-vibeqc_xtb_status_t allocate(AlignedBuffer& buffer, std::size_t bytes, const char* purpose,
+generativeqc_xtb_status_t allocate(AlignedBuffer& buffer, std::size_t bytes, const char* purpose,
                              std::string& error) {
   if (buffer.allocate(bytes)) {
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
   error = std::string("failed to allocate CPU GFN2 ") + purpose;
-  return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
+  return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
 }
 
 template <typename T>
-void copy_from_c_buffer(const vibeqc_xtb_const_buffer_t& source, std::size_t count,
+void copy_from_c_buffer(const generativeqc_xtb_const_buffer_t& source, std::size_t count,
                         std::vector<T>& destination) {
   destination.resize(count);
   if (count != 0u) {
@@ -135,7 +135,7 @@ void copy_from_c_buffer(const vibeqc_xtb_const_buffer_t& source, std::size_t cou
 }
 
 template <typename T>
-void publish_to_c_buffer(const std::vector<T>& source, vibeqc_xtb_buffer_t& destination) {
+void publish_to_c_buffer(const std::vector<T>& source, generativeqc_xtb_buffer_t& destination) {
   if (!source.empty()) {
     std::memcpy(destination.data, source.data(), source.size() * sizeof(T));
   }
@@ -152,7 +152,7 @@ struct HostRequest {
   std::vector<std::int32_t> spin_channels;
 };
 
-void stage_request(const vibeqc_xtb_batch_t& batch, HostRequest& request) {
+void stage_request(const generativeqc_xtb_batch_t& batch, HostRequest& request) {
   request.batch_size = batch.batch_size;
   request.total_atoms = batch.total_atoms;
   copy_from_c_buffer(batch.atom_offsets, static_cast<std::size_t>(batch.batch_size) + 1u,
@@ -166,7 +166,7 @@ void stage_request(const vibeqc_xtb_batch_t& batch, HostRequest& request) {
   copy_from_c_buffer(batch.unpaired_electrons, static_cast<std::size_t>(batch.batch_size),
                      request.unpaired_electrons);
   const bool spin_channels_present =
-      batch.struct_size >= VIBEQC_XTB_BATCH_V2_SIZE && batch.spin_channels.data != nullptr;
+      batch.struct_size >= GENERATIVEQC_XTB_BATCH_V2_SIZE && batch.spin_channels.data != nullptr;
   if (spin_channels_present) {
     copy_from_c_buffer(batch.spin_channels, static_cast<std::size_t>(batch.batch_size),
                        request.spin_channels);
@@ -180,16 +180,16 @@ bool all_finite(const std::vector<double>& values) {
                      [](double value) { return std::isfinite(value); });
 }
 
-vibeqc_xtb_status_t validate_host_numerics(const HostRequest& request, std::string& error) {
+generativeqc_xtb_status_t validate_host_numerics(const HostRequest& request, std::string& error) {
   if (!all_finite(request.positions)) {
     error = "positions contain NaN or infinity";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   if (!all_finite(request.molecular_charges)) {
     error = "molecular_charges contain NaN or infinity";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
 struct SystemKey {
@@ -202,10 +202,10 @@ struct SystemKey {
   double charge_tolerance = 0.0;
   double energy_tolerance = 0.0;
   double electronic_temperature = 0.0;
-  vibeqc_xtb_scc_mixer_t scc_mixer = VIBEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN;
+  generativeqc_xtb_scc_mixer_t scc_mixer = GENERATIVEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN;
   std::int32_t scc_mixer_history = kDefaultMixerHistory;
   double scc_mixer_damping = kDefaultMixerDamping;
-  vibeqc_xtb_determinism_t determinism = VIBEQC_XTB_DETERMINISM_DEFAULT;
+  generativeqc_xtb_determinism_t determinism = GENERATIVEQC_XTB_DETERMINISM_DEFAULT;
 
   friend bool operator==(const SystemKey& lhs, const SystemKey& rhs) {
     return lhs.atomic_numbers == rhs.atomic_numbers &&
@@ -222,18 +222,18 @@ struct SystemKey {
 };
 
 struct NormalizedExecutionPolicy {
-  vibeqc_xtb_scc_mixer_t scc_mixer = VIBEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN;
+  generativeqc_xtb_scc_mixer_t scc_mixer = GENERATIVEQC_XTB_SCC_MIXER_MODIFIED_BROYDEN;
   std::int32_t scc_mixer_history = kDefaultMixerHistory;
   double scc_mixer_damping = kDefaultMixerDamping;
-  vibeqc_xtb_determinism_t determinism = VIBEQC_XTB_DETERMINISM_DEFAULT;
+  generativeqc_xtb_determinism_t determinism = GENERATIVEQC_XTB_DETERMINISM_DEFAULT;
 };
 
 NormalizedExecutionPolicy normalize_execution_policy(
-    const vibeqc_xtb_compute_options_t& options) noexcept {
+    const generativeqc_xtb_compute_options_t& options) noexcept {
   NormalizedExecutionPolicy policy;
   /* V1, V2, and incomplete V3 callers do not own the new suffix. Preserve
    * the historical production policy without reading beyond struct_size. */
-  if (options.struct_size >= VIBEQC_XTB_COMPUTE_OPTIONS_V3_SIZE) {
+  if (options.struct_size >= GENERATIVEQC_XTB_COMPUTE_OPTIONS_V3_SIZE) {
     policy.scc_mixer = options.scc_mixer;
     policy.scc_mixer_history = options.scc_mixer_history;
     policy.scc_mixer_damping = options.scc_mixer_damping;
@@ -242,7 +242,7 @@ NormalizedExecutionPolicy normalize_execution_policy(
   return policy;
 }
 
-void make_system_keys(const HostRequest& request, const vibeqc_xtb_compute_options_t& options,
+void make_system_keys(const HostRequest& request, const generativeqc_xtb_compute_options_t& options,
                       std::vector<SystemKey>& keys) {
   keys.resize(static_cast<std::size_t>(request.batch_size));
   const NormalizedExecutionPolicy policy = normalize_execution_policy(options);
@@ -269,7 +269,7 @@ void make_system_keys(const HostRequest& request, const vibeqc_xtb_compute_optio
 }
 
 struct SystemOutput {
-  vibeqc_xtb_status_t status = VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED;
+  generativeqc_xtb_status_t status = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
   std::int32_t iterations = 0;
   std::uint8_t converged = 0u;
   double energy = std::numeric_limits<double>::quiet_NaN();
@@ -277,7 +277,7 @@ struct SystemOutput {
   std::vector<double> atomic_charges;
 
   void reset() noexcept {
-    status = VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED;
+    status = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
     iterations = 0;
     converged = 0u;
     energy = std::numeric_limits<double>::quiet_NaN();
@@ -387,22 +387,22 @@ struct SystemExecution {
 
   std::uint64_t geometry_generation = 0u;
 
-  vibeqc_xtb_status_t build(std::string& error);
-  vibeqc_xtb_status_t infer(const CpuLinearAlgebraBackend& backend, const double* input_positions,
+  generativeqc_xtb_status_t build(std::string& error);
+  generativeqc_xtb_status_t infer(const CpuLinearAlgebraBackend& backend, const double* input_positions,
                             std::uint32_t compute_flags, SystemOutput& output,
                             std::string& error);
 
  private:
-  vibeqc_xtb_status_t refresh_geometry(const CpuLinearAlgebraBackend& backend, std::string& error);
-  vibeqc_xtb_status_t run_scc(const CpuLinearAlgebraBackend& backend, std::string& error);
-  vibeqc_xtb_status_t refresh_stationary_potentials(std::string& error);
+  generativeqc_xtb_status_t refresh_geometry(const CpuLinearAlgebraBackend& backend, std::string& error);
+  generativeqc_xtb_status_t run_scc(const CpuLinearAlgebraBackend& backend, std::string& error);
+  generativeqc_xtb_status_t refresh_stationary_potentials(std::string& error);
 };
 
-vibeqc_xtb_status_t SystemExecution::build(std::string& error) {
+generativeqc_xtb_status_t SystemExecution::build(std::string& error) {
   const std::int64_t atoms = static_cast<std::int64_t>(key.atomic_numbers.size());
   if (atoms <= 0) {
     error = "restricted CPU GFN2 system has no atoms";
-    return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
   atom_offsets[1] = atoms;
   // One-atom molecules have no D4 pair or ATM contribution.
@@ -411,49 +411,49 @@ vibeqc_xtb_status_t SystemExecution::build(std::string& error) {
   unpaired_electrons = {key.unpaired_electrons};
   spin_channels = {key.spin_channels};
 
-  vibeqc_xtb_status_t status =
+  generativeqc_xtb_status_t status =
       make_basis_plan(1, atoms, atom_offsets.data(), key.atomic_numbers.data(), basis, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_integral_plan(basis, integrals, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_coordination_plan(1, atoms, atom_offsets.data(), key.atomic_numbers.data(),
                                   coordination, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_repulsion_plan(1, atoms, atom_offsets.data(), key.atomic_numbers.data(), repulsion,
                                error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_h0_plan(basis, integrals, key.atomic_numbers.data(), h0, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_wavefunction_layout(basis, key.atomic_numbers.data(), molecular_charges.data(),
                                     unpaired_electrons.data(), spin_channels.data(),
                                     wavefunction_layout, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_es2_plan(basis, key.atomic_numbers.data(), es2, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_es3_plan(basis, key.atomic_numbers.data(), es3, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_aes2_plan(basis, key.atomic_numbers.data(), aes2, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status =
       make_mulliken_plan(basis, integrals, wavefunction_layout, mulliken_kernels, mulliken, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_eigensolver_plan(wavefunction_layout, eigensolver, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_scc_mixer_plan(wavefunction_layout, key.scc_mixer_history, key.scc_mixer_damping,
                                key.charge_tolerance, key.charge_tolerance, mixer, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = make_spin_polarization_plan(basis, wavefunction_layout, spin, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   if (d4_enabled) {
     status = make_d4_plan(1, atoms, atom_offsets.data(), key.atomic_numbers.data(), d4, error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   }
   status =
       make_scc_driver_plan(wavefunction_layout, mulliken, es2, es3, aes2, eigensolver, mixer,
                            d4_enabled ? &d4 : nullptr, nullptr,
                            static_cast<std::uint64_t>(key.maximum_iterations),
                            key.electronic_temperature, key.energy_tolerance, driver, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   const std::size_t atom_count = static_cast<std::size_t>(atoms);
   const std::size_t shells = static_cast<std::size_t>(basis.total_shells);
@@ -466,7 +466,7 @@ vibeqc_xtb_status_t SystemExecution::build(std::string& error) {
   core_hamiltonian.resize(matrix);
   status =
       allocate(integral_workspace, integrals.workspace_size_bytes, "integral workspace", error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   es2_matrix.resize(static_cast<std::size_t>(es2.total_matrix_elements()));
   es2_matrix_scratch.resize(es2_matrix.size());
@@ -492,50 +492,50 @@ vibeqc_xtb_status_t SystemExecution::build(std::string& error) {
 
   if (d4_enabled) {
     status = allocate(d4_workspace_storage, d4.workspace_size_bytes(), "D4 workspace", error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
     status = bind_d4_workspace(d4, d4_workspace_storage.data(), d4_workspace_storage.size(),
                                d4_workspace, error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
     d4_pairs.resize(static_cast<std::size_t>(d4.total_pairs()) * kD4PairDataElements);
     d4_coordination.resize(atom_count);
   }
 
   status = allocate(wavefunction_storage, wavefunction_layout.workspace_size_bytes,
                     "wavefunction state", error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = allocate(overlap_cache_storage, eigensolver.overlap_cache_size_bytes(), "overlap cache",
                     error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = allocate(eigensolver_workspace_storage, eigensolver.workspace_size_bytes(),
                     "eigensolver workspace", error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = allocate(mixer_state_storage, mixer.state_size_bytes(), "SCC mixer state", error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = allocate(driver_state_storage, driver.state_size_bytes(), "SCC driver state", error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = allocate(driver_workspace_storage, driver.workspace_size_bytes(), "SCC driver workspace",
                     error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   status = bind_wavefunction_view(wavefunction_layout, wavefunction_storage.data(),
                                   wavefunction_storage.size(), wavefunction, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = bind_eigensolver_overlap_cache(eigensolver, overlap_cache_storage.data(),
                                           overlap_cache_storage.size(), overlap_cache, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = bind_eigensolver_workspace(eigensolver, eigensolver_workspace_storage.data(),
                                       eigensolver_workspace_storage.size(), eigensolver_workspace,
                                       error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = bind_scc_mixer_state(mixer, mixer_state_storage.data(), mixer_state_storage.size(),
                                 mixer_state, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = bind_scc_driver_state(driver, driver_state_storage.data(), driver_state_storage.size(),
                                  driver_state, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = bind_scc_driver_workspace(driver, driver_workspace_storage.data(),
                                      driver_workspace_storage.size(), driver_workspace, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   component_shell_potential.resize(shells);
   scalar_shell_potential.resize(shells);
@@ -586,55 +586,55 @@ vibeqc_xtb_status_t SystemExecution::build(std::string& error) {
       d4_workspace,
   };
   error.clear();
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t SystemExecution::refresh_geometry(const CpuLinearAlgebraBackend& backend,
+generativeqc_xtb_status_t SystemExecution::refresh_geometry(const CpuLinearAlgebraBackend& backend,
                                                       std::string& error) {
   ++geometry_generation;
   if (geometry_generation == 0u) {
     geometry_generation = 1u;
   }
-  vibeqc_xtb_status_t status = VIBEQC_XTB_STATUS_SUCCESS;
+  generativeqc_xtb_status_t status = GENERATIVEQC_XTB_STATUS_SUCCESS;
 
   // SCC and stationary forces consume the same refreshed molecular CN cache.
   status =
       evaluate_coordination_cpu(coordination, positions.data(), coordination_numbers.data(), error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = evaluate_overlap_cpu(basis, integrals, positions.data(), overlap.data(),
                                 integral_workspace.data(), integral_workspace.size(), error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = evaluate_multipole_cpu(basis, integrals, positions.data(), dipole_integrals.data(),
                                   quadrupole_integrals.data(), integral_workspace.data(),
                                   integral_workspace.size(), error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = evaluate_h0_cpu(basis, integrals, h0, positions.data(), coordination_numbers.data(),
                            overlap.data(), core_hamiltonian.data(), error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   status =
       update_es2_geometry_cache_cpu(es2, positions.data(), geometry_generation, es2_matrix.data(),
                                     es2_matrix.size(), es2_workspace, es2_cache, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = update_aes2_geometry_cache_cpu(aes2, positions.data(), coordination_numbers.data(),
                                           geometry_generation, aes2_pairs.data(), aes2_pairs.size(),
                                           aes2_workspace, aes2_cache, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   if (d4_enabled) {
     status = update_d4_geometry_cache_cpu(d4, positions.data(), geometry_generation,
                                           d4_pairs.data(), d4_pairs.size(), d4_coordination.data(),
                                           d4_coordination.size(), d4_workspace, d4_cache, error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   }
   status = factor_overlap_cpu(eigensolver, overlap.data(), geometry_generation, backend,
                               eigensolver_workspace, overlap_cache, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   status = initialize_sad_multipole_state(wavefunction_layout, wavefunction, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   status = initialize_scc_driver_state_cpu(driver, wavefunction, mixer_state, driver_state, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   geometry = {};
   geometry.h0 = core_hamiltonian.data();
@@ -647,62 +647,62 @@ vibeqc_xtb_status_t SystemExecution::refresh_geometry(const CpuLinearAlgebraBack
     geometry.d4_cache = d4_cache;
   }
   geometry.geometry_generation = geometry_generation;
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t SystemExecution::run_scc(const CpuLinearAlgebraBackend& backend,
+generativeqc_xtb_status_t SystemExecution::run_scc(const CpuLinearAlgebraBackend& backend,
                                              std::string& error) {
-  vibeqc_xtb_status_t terminal_status = VIBEQC_XTB_STATUS_SUCCESS;
+  generativeqc_xtb_status_t terminal_status = GENERATIVEQC_XTB_STATUS_SUCCESS;
   const unsigned iteration_budget = static_cast<unsigned>(std::min<std::uint64_t>(
       driver.maximum_iterations(),
       static_cast<std::uint64_t>(std::numeric_limits<unsigned>::max())));
 
-  vibeqc::solver::run_bounded_iterations(iteration_budget, [&](unsigned) {
+  generativeqc::solver::run_bounded_iterations(iteration_budget, [&](unsigned) {
     if (driver_state.converged[0] != 0u ||
-        driver_state.system_statuses[0] != VIBEQC_XTB_STATUS_SUCCESS) {
+        driver_state.system_statuses[0] != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       return false;
     }
     terminal_status =
         iterate_scc_driver_batch_cpu(driver, geometry, backend, overlap_cache, wavefunction,
                                      mixer_state, driver_state, driver_workspace, error);
-    return terminal_status == VIBEQC_XTB_STATUS_SUCCESS &&
+    return terminal_status == GENERATIVEQC_XTB_STATUS_SUCCESS &&
            driver_state.converged[0] == 0u &&
-           driver_state.system_statuses[0] == VIBEQC_XTB_STATUS_SUCCESS;
+           driver_state.system_statuses[0] == GENERATIVEQC_XTB_STATUS_SUCCESS;
   });
 
-  if (terminal_status != VIBEQC_XTB_STATUS_SUCCESS) {
+  if (terminal_status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return terminal_status;
   }
   if (driver_state.converged[0] != 0u) {
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
-  if (driver_state.system_statuses[0] != VIBEQC_XTB_STATUS_SUCCESS) {
+  if (driver_state.system_statuses[0] != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return driver_state.system_statuses[0];
   }
   error = "SCC iteration budget exhausted without a terminal state";
-  return VIBEQC_XTB_STATUS_SCC_NOT_CONVERGED;
+  return GENERATIVEQC_XTB_STATUS_SCC_NOT_CONVERGED;
 }
 
-vibeqc_xtb_status_t SystemExecution::refresh_stationary_potentials(std::string& error) {
-  vibeqc_xtb_status_t status = VIBEQC_XTB_STATUS_SUCCESS;
+generativeqc_xtb_status_t SystemExecution::refresh_stationary_potentials(std::string& error) {
+  generativeqc_xtb_status_t status = GENERATIVEQC_XTB_STATUS_SUCCESS;
 
   status = evaluate_es2_potential_cpu(es2, es2_cache, wavefunction.qsh,
                                       component_shell_potential.data(), es2_workspace, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   scalar_shell_potential = component_shell_potential;
 
   status = evaluate_es3_potential_cpu(make_es3_view(es3), wavefunction.qsh,
                                       component_shell_potential.data(), error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   for (std::size_t shell = 0; shell < scalar_shell_potential.size(); ++shell) {
     scalar_shell_potential[shell] += component_shell_potential[shell];
   }
 
   if (key.spin_channels == 2) {
-    vibeqc_xtb_status_t spin_status = evaluate_spin_polarization_cpu(
+    generativeqc_xtb_status_t spin_status = evaluate_spin_polarization_cpu(
         make_spin_polarization_view(spin), wavefunction.qsh, spin_energy_scratch.data(),
         packed_spin_shell_potential.data(), error);
-    if (spin_status != VIBEQC_XTB_STATUS_SUCCESS) return spin_status;
+    if (spin_status != GENERATIVEQC_XTB_STATUS_SUCCESS) return spin_status;
     const std::size_t shell_count = scalar_shell_potential.size();
     std::copy_n(packed_spin_shell_potential.data() + shell_count, shell_count,
                 stationary_spin_shell_potential.data());
@@ -712,13 +712,13 @@ vibeqc_xtb_status_t SystemExecution::refresh_stationary_potentials(std::string& 
                                        wavefunction.quadrupole, atomic_potential.data(),
                                        dipole_potential.data(), quadrupole_potential.data(),
                                        aes2_workspace, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   if (d4_enabled) {
     status = evaluate_d4_two_body_cpu(d4, d4_cache, wavefunction.qat, energy_scratch.data(),
                                       d4_atomic_potential.data(), d4_workspace, error);
 
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   } else {
     std::fill(d4_atomic_potential.begin(), d4_atomic_potential.end(), 0.0);
   }
@@ -730,39 +730,39 @@ vibeqc_xtb_status_t SystemExecution::refresh_stationary_potentials(std::string& 
     const std::size_t atom = static_cast<std::size_t>(basis.shell_to_atom[shell]);
     scalar_shell_potential[shell] += atomic_potential[atom];
   }
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-vibeqc_xtb_status_t SystemExecution::infer(const CpuLinearAlgebraBackend& backend,
+generativeqc_xtb_status_t SystemExecution::infer(const CpuLinearAlgebraBackend& backend,
                                             const double* input_positions,
                                             std::uint32_t compute_flags, SystemOutput& output,
                                             std::string& error) {
   std::copy_n(input_positions, positions.size(), positions.data());
 
-  vibeqc_xtb_status_t status = refresh_geometry(backend, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  generativeqc_xtb_status_t status = refresh_geometry(backend, error);
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
   status = run_scc(backend, error);
   output.iterations = static_cast<std::int32_t>(std::min<std::uint64_t>(
       driver_state.iterations[0],
       static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())));
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) {
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     output.status = status;
     return status;
   }
 
-  output.status = VIBEQC_XTB_STATUS_SUCCESS;
+  output.status = GENERATIVEQC_XTB_STATUS_SUCCESS;
   output.converged = 1u;
   output.atomic_charges.assign(wavefunction.qat,
                                wavefunction.qat + wavefunction_layout.total_atoms);
 
   const bool need_energy_or_force =
-      (compute_flags & (VIBEQC_XTB_COMPUTE_ENERGY | VIBEQC_XTB_COMPUTE_FORCES)) != 0u;
+      (compute_flags & (GENERATIVEQC_XTB_COMPUTE_ENERGY | GENERATIVEQC_XTB_COMPUTE_FORCES)) != 0u;
   if (!need_energy_or_force) {
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
 
   status = refresh_stationary_potentials(error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
 
   const std::size_t matrix_elements = stationary_density.size();
   if (key.spin_channels == 1) {
@@ -781,7 +781,7 @@ vibeqc_xtb_status_t SystemExecution::infer(const CpuLinearAlgebraBackend& backen
       if (!std::isfinite(total_density) || !std::isfinite(spin_density) ||
           !std::isfinite(total_weighted)) {
         error = "unrestricted stationary density reduction overflowed";
-        return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+        return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
       }
       stationary_density[element] = total_density;
       stationary_spin_density[element] = spin_density;
@@ -789,7 +789,7 @@ vibeqc_xtb_status_t SystemExecution::infer(const CpuLinearAlgebraBackend& backen
     }
   }
 
-  const bool need_qm_forces = (compute_flags & VIBEQC_XTB_COMPUTE_FORCES) != 0u;
+  const bool need_qm_forces = (compute_flags & GENERATIVEQC_XTB_COMPUTE_FORCES) != 0u;
   output.forces.assign(need_qm_forces ? positions.size() : 0u, 0.0);
   const RestrictedGfn2StationaryInput input{
       positions.data(),
@@ -822,8 +822,8 @@ vibeqc_xtb_status_t SystemExecution::infer(const CpuLinearAlgebraBackend& backen
       basis, integrals, coordination, repulsion, h0, mulliken, es2, es2_cache, aes2, aes2_cache,
       d4_enabled ? &d4 : nullptr, d4_enabled ? &d4_cache : nullptr, nullptr, input, &output.energy,
       need_qm_forces ? output.forces.data() : nullptr, nullptr, {}, composer_workspace, error);
-  if (status != VIBEQC_XTB_STATUS_SUCCESS) return status;
-  return VIBEQC_XTB_STATUS_SUCCESS;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
+  return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
 }  // namespace
@@ -846,7 +846,7 @@ struct Gfn2CpuExecutionCache::Impl {
   std::vector<SystemKey> requested_keys;
   std::vector<SystemOutput> outputs;
   std::vector<std::string> system_errors;
-  std::vector<vibeqc_xtb_status_t> inference_statuses;
+  std::vector<generativeqc_xtb_status_t> inference_statuses;
   std::vector<TaskFailure> task_failures;
   std::vector<double> energies;
   std::vector<double> forces;
@@ -856,35 +856,35 @@ struct Gfn2CpuExecutionCache::Impl {
   std::vector<std::int32_t> system_statuses;
 
   const MullikenKernelTable mulliken_kernels;
-  vibeqc_xtb_status_t ensure_backend(std::string& error) {
+  generativeqc_xtb_status_t ensure_backend(std::string& error) {
     if (backend_initialized) {
-      return VIBEQC_XTB_STATUS_SUCCESS;
+      return GENERATIVEQC_XTB_STATUS_SUCCESS;
     }
-    const vibeqc_xtb_status_t status = make_mkl_rt_lp64_backend(backend, error);
-    if (status == VIBEQC_XTB_STATUS_SUCCESS) {
+    const generativeqc_xtb_status_t status = make_mkl_rt_lp64_backend(backend, error);
+    if (status == GENERATIVEQC_XTB_STATUS_SUCCESS) {
       backend_initialized = true;
     }
     return status;
   }
 
-  vibeqc_xtb_status_t ensure_systems(const std::vector<SystemKey>& requested, std::string& error) {
+  generativeqc_xtb_status_t ensure_systems(const std::vector<SystemKey>& requested, std::string& error) {
     if (requested == keys) {
-      return VIBEQC_XTB_STATUS_SUCCESS;
+      return GENERATIVEQC_XTB_STATUS_SUCCESS;
     }
     std::vector<std::unique_ptr<SystemExecution>> candidate;
     candidate.reserve(requested.size());
     for (const SystemKey& key : requested) {
       auto system = std::make_unique<SystemExecution>(key, mulliken_kernels);
 
-      const vibeqc_xtb_status_t status = system->build(error);
-      if (status != VIBEQC_XTB_STATUS_SUCCESS) {
+      const generativeqc_xtb_status_t status = system->build(error);
+      if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
         return status;
       }
       candidate.push_back(std::move(system));
     }
     systems = std::move(candidate);
     keys = requested;
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
 
   void prepare_staging(std::uint32_t flags) {
@@ -902,23 +902,23 @@ struct Gfn2CpuExecutionCache::Impl {
       outputs[index].atomic_charges.reserve(atoms);
     }
     system_errors.resize(batch_size);
-    inference_statuses.assign(batch_size, VIBEQC_XTB_STATUS_INTERNAL_ERROR);
+    inference_statuses.assign(batch_size, GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR);
     task_failures.assign(batch_size, TaskFailure::kNone);
     iterations.assign(batch_size, 0);
     converged.assign(batch_size, 0u);
-    system_statuses.assign(batch_size, VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED);
+    system_statuses.assign(batch_size, GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED);
 
-    if ((flags & VIBEQC_XTB_COMPUTE_ENERGY) != 0u) {
+    if ((flags & GENERATIVEQC_XTB_COMPUTE_ENERGY) != 0u) {
       energies.assign(batch_size, nan);
     } else {
       energies.clear();
     }
-    if ((flags & VIBEQC_XTB_COMPUTE_FORCES) != 0u) {
+    if ((flags & GENERATIVEQC_XTB_COMPUTE_FORCES) != 0u) {
       forces.assign(3u * atom_count, nan);
     } else {
       forces.clear();
     }
-    if ((flags & VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES) != 0u) {
+    if ((flags & GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES) != 0u) {
       atomic_charges.assign(atom_count, nan);
     } else {
       atomic_charges.clear();
@@ -927,7 +927,7 @@ struct Gfn2CpuExecutionCache::Impl {
 
   struct InferenceJob {
     Impl& owner;
-    const vibeqc_xtb_compute_options_t& options;
+    const generativeqc_xtb_compute_options_t& options;
   };
 
   static void infer_system(void* opaque_job, std::size_t index) noexcept {
@@ -945,11 +945,11 @@ struct Gfn2CpuExecutionCache::Impl {
           owner.backend, request.positions.data() + 3 * atom_begin, job.options.flags, output,
           system_error);
     } catch (const std::bad_alloc&) {
-      owner.inference_statuses[index] = VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
+      owner.inference_statuses[index] = GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
       owner.task_failures[index] = TaskFailure::kAllocation;
       system_error.clear();
     } catch (const std::exception& exception) {
-      owner.inference_statuses[index] = VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      owner.inference_statuses[index] = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
       owner.task_failures[index] = TaskFailure::kException;
       try {
         system_error = exception.what();
@@ -957,7 +957,7 @@ struct Gfn2CpuExecutionCache::Impl {
         system_error.clear();
       }
     } catch (...) {
-      owner.inference_statuses[index] = VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      owner.inference_statuses[index] = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
       owner.task_failures[index] = TaskFailure::kUnknown;
       system_error.clear();
     }
@@ -968,32 +968,32 @@ Gfn2CpuExecutionCache::Gfn2CpuExecutionCache(CpuIsa cpu_isa)
     : impl_(std::make_unique<Impl>(cpu_isa)) {}
 Gfn2CpuExecutionCache::~Gfn2CpuExecutionCache() = default;
 
-vibeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
-                                                const vibeqc_xtb_batch_t& batch,
-                                                const vibeqc_xtb_compute_options_t& options,
-                                                vibeqc_xtb_batch_result_t& result,
+generativeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
+                                                const generativeqc_xtb_batch_t& batch,
+                                                const generativeqc_xtb_compute_options_t& options,
+                                                generativeqc_xtb_batch_result_t& result,
                                                 std::string& error) {
   const auto contract_status = validate_molecular_request(batch, options, error);
-  if (contract_status != VIBEQC_XTB_STATUS_SUCCESS) return contract_status;
+  if (contract_status != GENERATIVEQC_XTB_STATUS_SUCCESS) return contract_status;
 
   try {
     std::lock_guard<std::mutex> lock(cache.impl_->mutex);
     Gfn2CpuExecutionCache::Impl& implementation = *cache.impl_;
     stage_request(batch, implementation.request);
-    vibeqc_xtb_status_t status = validate_host_numerics(implementation.request, error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) {
+    generativeqc_xtb_status_t status = validate_host_numerics(implementation.request, error);
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       return status;
     }
     make_system_keys(implementation.request, options, implementation.requested_keys);
 
     status = implementation.ensure_backend(error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       return status;
     }
 
     implementation.prepare_staging(options.flags);
     status = implementation.ensure_systems(implementation.requested_keys, error);
-    if (status != VIBEQC_XTB_STATUS_SUCCESS) {
+    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       return status;
     }
 
@@ -1008,9 +1008,9 @@ vibeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
       SystemOutput& output = implementation.outputs[index];
       status = implementation.inference_statuses[index];
       implementation.iterations[index] = output.iterations;
-      if (status != VIBEQC_XTB_STATUS_SUCCESS) {
-        if (status == VIBEQC_XTB_STATUS_SCC_NOT_CONVERGED ||
-            status == VIBEQC_XTB_STATUS_EIGENSOLVER_FAILED) {
+      if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
+        if (status == GENERATIVEQC_XTB_STATUS_SCC_NOT_CONVERGED ||
+            status == GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED) {
           implementation.system_statuses[index] = status;
           continue;
         }
@@ -1028,28 +1028,28 @@ vibeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
         return status;
       }
 
-      implementation.system_statuses[index] = VIBEQC_XTB_STATUS_SUCCESS;
+      implementation.system_statuses[index] = GENERATIVEQC_XTB_STATUS_SUCCESS;
       implementation.converged[index] = 1u;
-      if ((options.flags & VIBEQC_XTB_COMPUTE_ENERGY) != 0u) {
+      if ((options.flags & GENERATIVEQC_XTB_COMPUTE_ENERGY) != 0u) {
         implementation.energies[index] = output.energy;
       }
-      if ((options.flags & VIBEQC_XTB_COMPUTE_FORCES) != 0u) {
+      if ((options.flags & GENERATIVEQC_XTB_COMPUTE_FORCES) != 0u) {
         std::copy(output.forces.begin(), output.forces.end(),
                   implementation.forces.begin() + 3 * atom_begin);
       }
-      if ((options.flags & VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES) != 0u) {
+      if ((options.flags & GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES) != 0u) {
         std::copy(output.atomic_charges.begin(), output.atomic_charges.end(),
                   implementation.atomic_charges.begin() + atom_begin);
       }
     }
 
-    if ((options.flags & VIBEQC_XTB_COMPUTE_ENERGY) != 0u) {
+    if ((options.flags & GENERATIVEQC_XTB_COMPUTE_ENERGY) != 0u) {
       publish_to_c_buffer(implementation.energies, result.energies);
     }
-    if ((options.flags & VIBEQC_XTB_COMPUTE_FORCES) != 0u) {
+    if ((options.flags & GENERATIVEQC_XTB_COMPUTE_FORCES) != 0u) {
       publish_to_c_buffer(implementation.forces, result.forces);
     }
-    if ((options.flags & VIBEQC_XTB_COMPUTE_ATOMIC_CHARGES) != 0u) {
+    if ((options.flags & GENERATIVEQC_XTB_COMPUTE_ATOMIC_CHARGES) != 0u) {
       publish_to_c_buffer(implementation.atomic_charges, result.atomic_charges);
     }
     publish_to_c_buffer(implementation.iterations, result.scc_iterations);
@@ -1057,15 +1057,15 @@ vibeqc_xtb_status_t execute_restricted_gfn2_cpu(Gfn2CpuExecutionCache& cache,
     publish_to_c_buffer(implementation.system_statuses, result.per_system_status);
     result.flags = 0u;
     error.clear();
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     error = "failed to allocate CPU GFN2 execution staging";
-    return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
+    return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
   }
 }
 
 
-vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
+generativeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
     Gfn2CpuExecutionCache& cache, Gfn2CpuOrbitalSnapshot& snapshot, std::string& error) {
   try {
     std::lock_guard<std::mutex> lock(cache.impl_->mutex);
@@ -1073,12 +1073,12 @@ vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
     if (implementation.request.batch_size != 1 || implementation.systems.size() != 1u ||
         implementation.system_statuses.size() != 1u || implementation.converged.size() != 1u) {
       error = "GFN2 orbital snapshot requires one completed CPU system";
-      return VIBEQC_XTB_STATUS_INVALID_ARGUMENT;
+      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
-    if (implementation.system_statuses[0] != VIBEQC_XTB_STATUS_SUCCESS ||
+    if (implementation.system_statuses[0] != GENERATIVEQC_XTB_STATUS_SUCCESS ||
         implementation.converged[0] == 0u) {
       error = "GFN2 orbital snapshot requires a converged SCC state";
-      return VIBEQC_XTB_STATUS_SCC_NOT_CONVERGED;
+      return GENERATIVEQC_XTB_STATUS_SCC_NOT_CONVERGED;
     }
 
     const SystemExecution& system = *implementation.systems[0];
@@ -1087,14 +1087,14 @@ vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
         static_cast<std::uint64_t>(orbital_count64) >
             std::numeric_limits<std::size_t>::max()) {
       error = "GFN2 orbital snapshot has an invalid orbital count";
-      return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
     const std::size_t n = static_cast<std::size_t>(orbital_count64);
     if (n > std::numeric_limits<std::size_t>::max() / n ||
         n > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()) / n ||
         n > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max()) / 2u) {
       error = "GFN2 orbital snapshot matrix dimensions overflow";
-      return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
     const std::size_t matrix_size = n * n;
     if (system.overlap.size() != matrix_size ||
@@ -1104,14 +1104,14 @@ vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
             static_cast<std::int64_t>(2u * n) ||
         system.wavefunction.coefficients == nullptr || system.wavefunction.occupations == nullptr) {
       error = "GFN2 orbital snapshot disagrees with the converged wavefunction layout";
-      return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
 
     if (system.wavefunction_layout.electron_counts.size() != 1u ||
         system.wavefunction_layout.alpha_electron_counts.size() != 1u ||
         system.wavefunction_layout.beta_electron_counts.size() != 1u) {
       error = "GFN2 orbital snapshot is missing valence electron metadata";
-      return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
 
     Gfn2CpuOrbitalSnapshot candidate;
@@ -1136,18 +1136,18 @@ vibeqc_xtb_status_t copy_restricted_gfn2_orbital_snapshot_cpu(
         !std::isfinite(candidate.beta_electron_count) || !all_finite(candidate.overlap) ||
         !all_finite(candidate.coefficients) || !all_finite(candidate.occupations)) {
       error = "GFN2 converged orbital snapshot contains NaN or infinity";
-      return VIBEQC_XTB_STATUS_INTERNAL_ERROR;
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
     snapshot = std::move(candidate);
     error.clear();
-    return VIBEQC_XTB_STATUS_SUCCESS;
+    return GENERATIVEQC_XTB_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     error = "failed to allocate GFN2 orbital snapshot";
-    return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
+    return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
   } catch (const std::length_error&) {
     error = "GFN2 orbital snapshot dimensions exceed host container limits";
-    return VIBEQC_XTB_STATUS_ALLOCATION_FAILED;
+    return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
   }
 }
 
-}  // namespace vibeqc::xtb::detail
+}  // namespace generativeqc::xtb::detail

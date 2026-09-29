@@ -23,7 +23,7 @@
   "schema_version": 1,
   "source": {
     "atom_index": 0,
-    "attribution": "VibeQC DFT-MP-v1 contract",
+    "attribution": "GenerativeQC DFT-MP-v1 contract",
     "axis": "x",
     "delta_bohr": 0.01,
     "kind": "fixed_displacement",

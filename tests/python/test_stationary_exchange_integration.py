@@ -4,13 +4,13 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method import resolve_method
-from vibeqc_compiler.method.stationary_gradient import (
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 
 @pytest.mark.parametrize("spin,blocks", [("unpolarized", 1), ("polarized", 2)])

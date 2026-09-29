@@ -12,7 +12,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void build_fock_direct_packed_kernel(
     DeviceBatch batch, double screening_tolerance, const double* hcore,
@@ -175,4 +175,4 @@ void launch_build_uhf_fock_direct_packed_kernel(
       density, active, fock);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

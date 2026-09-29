@@ -11,18 +11,18 @@ import pytest
 @pytest.mark.parametrize(
     "first_import",
     (
-        "from vibeqc_compiler.tensor import PASSES",
-        "from vibeqc_compiler.tensor import rewrite",
-        "from vibeqc_compiler.tensor.optimize import PASSES",
-        "from vibeqc_compiler.tensor import *",
+        "from generativeqc_compiler.tensor import PASSES",
+        "from generativeqc_compiler.tensor import rewrite",
+        "from generativeqc_compiler.tensor.optimize import PASSES",
+        "from generativeqc_compiler.tensor import *",
         "import runpy; runpy.run_path('tools/generate_df_hf_response.py')",
     ),
 )
 def test_public_optimize_remains_callable(first_import: str) -> None:
     root = Path(__file__).resolve().parents[2]
     code = f"""{first_import}
-from vibeqc_compiler.tensor import optimize, rewrite
-from vibeqc_compiler.tensor.optimize import optimize as canonical
+from generativeqc_compiler.tensor import optimize, rewrite
+from generativeqc_compiler.tensor.optimize import optimize as canonical
 assert callable(optimize)
 assert optimize is canonical
 assert callable(rewrite)

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 def test_qualified_mgga_reaches_native_state_admission(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from vibeqc import _stationary_cuda as runtime
+    from generativeqc import _stationary_cuda as runtime
 
     contract = SimpleNamespace(family="mgga", validate=lambda state: None)
     monkeypatch.setattr(
@@ -33,7 +33,7 @@ def test_qualified_mgga_reaches_native_state_admission(
 def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from vibeqc import _stationary_cuda as runtime
+    from generativeqc import _stationary_cuda as runtime
 
     names = (
         "stationary_create",
@@ -142,7 +142,7 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
 def test_weight_fusion_orchestration_runs_without_a_device(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool
 ) -> None:
-    from vibeqc import _stationary_cuda as runtime
+    from generativeqc import _stationary_cuda as runtime
 
     contract = SimpleNamespace(
         family="lda", spin="unpolarized", validate=lambda state: state
@@ -153,7 +153,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
     class FakeCompiler:
         def __init__(self) -> None:
-            from vibeqc_compiler.common.cuda_target import cuda_target_info
+            from generativeqc_compiler.common.cuda_target import cuda_target_info
 
             self.target = cuda_target_info("sm_120")
 
@@ -294,7 +294,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         owners=np.empty(0, dtype=np.int64),
         weights=np.empty(0),
     )
-    from vibeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method import resolve_method
 
     method_ir = resolve_method("LDA_XC_PW")
     source = SimpleNamespace(
@@ -369,7 +369,7 @@ def test_stationary_cuda_production_task_page_default() -> None:
     """Keep the qualified large-page schedule explicit and bounded."""
     import inspect
 
-    from vibeqc._stationary_cuda import (
+    from generativeqc._stationary_cuda import (
         _complete_rks_cuda_gradient_diagnostic,
         complete_rks_cuda_gradient_diagnostic,
     )
@@ -387,7 +387,7 @@ def test_borrowed_grid_owner_outlives_stationary_consumer() -> None:
     from pathlib import Path
 
     source = (
-        Path(__file__).resolve().parents[2] / "python/vibeqc/_stationary_cuda.py"
+        Path(__file__).resolve().parents[2] / "python/generativeqc/_stationary_cuda.py"
     ).read_text()
     prepared = source.split("        stack = ExitStack()", 1)[1].split(
         "        self._stack = stack", 1

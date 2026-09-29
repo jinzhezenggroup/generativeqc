@@ -14,18 +14,18 @@ import argparse
 import json
 from pathlib import Path
 
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.cuda_emitter import emit_shell_class_fused_cuda
-from vibeqc_compiler.integral.fused_schedule import build_fused_shell_plan
-from vibeqc_compiler.integral.ir import KernelConsumer
-from vibeqc_compiler.integral.lowering.fock_accumulation import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.cuda_emitter import emit_shell_class_fused_cuda
+from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
+from generativeqc_compiler.integral.ir import KernelConsumer
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
 )
-from vibeqc_compiler.integral.production import (
+from generativeqc_compiler.integral.production import (
     write_production_bundle,
     write_production_bundles,
 )
-from vibeqc_compiler.integral.shell_class import (
+from generativeqc_compiler.integral.shell_class import (
     build_dppp_component_kernel,
     build_dppp_contraction_kernel,
     build_psss_kernel,
@@ -33,7 +33,10 @@ from vibeqc_compiler.integral.shell_class import (
     emit_dppp_contraction_cuda,
     emit_psss_cuda,
 )
-from vibeqc_compiler.integral.shell_spec import DPPP_SPEC, FUSED_SHELL_SPEC_BY_NAME
+from generativeqc_compiler.integral.shell_spec import (
+    DPPP_SPEC,
+    FUSED_SHELL_SPEC_BY_NAME,
+)
 
 FUSED_SPECS = FUSED_SHELL_SPEC_BY_NAME
 

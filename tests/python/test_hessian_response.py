@@ -5,15 +5,15 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     build_rhf_nuclear_rhs,
     build_stationary_nuclear_rhs,
     metric_density_response_mo,
     solve_stationary_nuclear_perturbation,
 )
-from tools.vibeqc_hessian.perturbation import solve_rhf_nuclear_perturbation
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
-from tools.vibeqc_response import (
+from tools.generativeqc_hessian.perturbation import solve_rhf_nuclear_perturbation
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_response import (
     CPKSResponseOperator,
     DenseAOResponseBackend,
     RHFResponseOperator,

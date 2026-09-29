@@ -18,17 +18,17 @@
 #include "scf/fock_build.hpp"
 #if __has_include("scf/fock_provider.hpp")
 #include "scf/cuda_fock_provider.hpp"
-#define VIBEQC_PROBE_HAS_PROVIDER 1
+#define GENERATIVEQC_PROBE_HAS_PROVIDER 1
 #else
-#define VIBEQC_PROBE_HAS_PROVIDER 0
+#define GENERATIVEQC_PROBE_HAS_PROVIDER 0
 #endif
 
-using namespace vibeqc::scf;
+using namespace generativeqc::scf;
 using Clock = std::chrono::steady_clock;
 
 namespace {
-void checked(vibeqc_status status, const std::string& detail) {
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void checked(generativeqc_status status, const std::string& detail) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 void array(const std::vector<double>& values) {
   std::cout << '[';
@@ -81,7 +81,7 @@ void probe(std::size_t n, bool fitted, bool cuda) {
   std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> owner(
       cuda_raw, destroy_cuda_density_fitting_jk_plan);
   std::function<DirectJkMatrices()> build;
-#if VIBEQC_PROBE_HAS_PROVIDER
+#if GENERATIVEQC_PROBE_HAS_PROVIDER
   std::unique_ptr<CpuFockPlanView> cpu_plan;
   std::unique_ptr<CudaFockPlanView> cuda_plan;
   if (cuda) {
@@ -139,8 +139,8 @@ int main(int argc, char** argv) {
     const bool cuda = argc == 2 && std::string(argv[1]) == "cuda";
     if (cuda && !std::getenv("SLURM_JOB_ID"))
       throw std::runtime_error("CUDA probe must run inside a Slurm GPU allocation");
-    std::cout << std::setprecision(17) << "{\"provider_boundary\":" << VIBEQC_PROBE_HAS_PROVIDER
-              << ",\"rows\":[";
+    std::cout << std::setprecision(17)
+              << "{\"provider_boundary\":" << GENERATIVEQC_PROBE_HAS_PROVIDER << ",\"rows\":[";
     bool first = true;
     for (std::size_t n : {2, 16})
       for (bool fitted : {false, true}) {

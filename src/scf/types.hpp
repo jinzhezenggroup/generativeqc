@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_TYPES_HPP
-#define VIBEQC_SCF_TYPES_HPP
+#ifndef GENERATIVEQC_SCF_TYPES_HPP
+#define GENERATIVEQC_SCF_TYPES_HPP
 
 #include <memory>
 #include <optional>
@@ -7,11 +7,11 @@
 
 #include "dft/density_source.hpp"
 #include "dft/scf_diagnostic.hpp"
+#include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
 #include "scf/fock_build.hpp"
-#include "vibeqc/vibeqc.h"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 struct ScfHooks;
 
@@ -45,8 +45,8 @@ struct IncrementalDirectJkDiagnostic {
 /** How the requested floating-point precision policy actually resolved. */
 struct PrecisionProvenance {
   uint32_t policy_version{1};
-  /** Requested mode (\p vibeqc_precision_mode). */
-  int32_t requested_mode{VIBEQC_PRECISION_FP64};
+  /** Requested mode (\p generativeqc_precision_mode). */
+  int32_t requested_mode{GENERATIVEQC_PRECISION_FP64};
   /** Effective Fock bits: 64 for FP64, 32 when a mixed route is active. */
   uint32_t effective_bits{64};
   /** Tile threshold for \p auto; zero when the mixed route is not active. */
@@ -92,7 +92,7 @@ struct ScfOptions {
    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
   unsigned incremental_direct_jk_rebuild_interval{8};
   /** Select the DF solver; direct four-center remains the default. */
-  vibeqc_density_fitting_mode density_fitting_mode{VIBEQC_DENSITY_FITTING_NONE};
+  generativeqc_density_fitting_mode density_fitting_mode{GENERATIVEQC_DENSITY_FITTING_NONE};
   /** Relative cutoff used when factoring the auxiliary Coulomb metric. */
   double density_fitting_relative_threshold{1.0e-10};
   /** Byte budget for bounded DF plan/integral work; zero means implementation default. */
@@ -102,12 +102,12 @@ struct ScfOptions {
   std::size_t reference_memory_budget_bytes{};
   /**
    * Requested floating-point execution policy. \p std::nullopt (absent) preserves
-   * the legacy VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch; an
-   * explicit \p VIBEQC_PRECISION_FP64 keeps the pure double path; an explicit
-   * \p VIBEQC_PRECISION_AUTO derives the mixed Fock threshold from the
+   * the legacy GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD diagnostic switch; an
+   * explicit \p GENERATIVEQC_PRECISION_FP64 keeps the pure double path; an explicit
+   * \p GENERATIVEQC_PRECISION_AUTO derives the mixed Fock threshold from the
    * tolerances and finishes with a strict FP64 target refinement.
    */
-  std::optional<vibeqc_precision_mode> precision_mode{};
+  std::optional<generativeqc_precision_mode> precision_mode{};
   /** Resolved once; old internal callers may leave this unset for direct HF. */
   std::optional<ResolvedFockBuild> resolved_fock_build;
   /** Explicit synchronous CPU proposal/trace opt-in; null has no snapshot work. */
@@ -186,6 +186,6 @@ struct ScfResult {
   dft::ScfDiagnostic dft_diagnostic;
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

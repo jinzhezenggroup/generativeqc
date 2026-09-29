@@ -6,12 +6,12 @@ from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
+from generativeqc_compiler.tensor import Program, execute
 from test_cc_complete_gradient import _direct_fields, _source
 from test_cc_native_tensor_cuda import _fake_executor
-from vibeqc_compiler.tensor import Program, execute
 
 from tools.cc_gradient_fixtures import inputs
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     BoundCCSDLambda,
     BoundCCSDTOrbitalResponse,
     BoundCCSDTResponse,
@@ -19,17 +19,17 @@ from tools.vibeqc_cc import (
     solve,
     solve_corrected_lambda,
 )
-from tools.vibeqc_cc.gradient_equations import build_fock_weight_program
-from tools.vibeqc_cc.oracle import random_case
-from tools.vibeqc_cc.triples_orbital_response import (
+from tools.generativeqc_cc.gradient_equations import build_fock_weight_program
+from tools.generativeqc_cc.oracle import random_case
+from tools.generativeqc_cc.triples_orbital_response import (
     _minimum_same_space_gap,
     _same_space_fock_cotangent,
 )
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_response import NativeJKBackend, RHFResponseOperator
-from tools.vibeqc_response.krylov import _HostKrylovEngine
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_response import NativeJKBackend, RHFResponseOperator
+from tools.generativeqc_response.krylov import _HostKrylovEngine
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 @contextmanager
@@ -264,7 +264,7 @@ def test_borrowed_response_backend_owns_physical_z_actions(
             del args, kwargs
             raise AssertionError("orbital response rebuilt its hard-coded CPU backend")
 
-        from tools.vibeqc_cc import complete_gradient as complete_gradient_module
+        from tools.generativeqc_cc import complete_gradient as complete_gradient_module
 
         monkeypatch.setattr(
             complete_gradient_module,

@@ -7,25 +7,25 @@
 #include "dft/dispersion/d3_bj.hpp"
 
 #if defined(__CUDACC__)
-#define VIBEQC_D3_ZERO_HD __host__ __device__
+#define GENERATIVEQC_D3_ZERO_HD __host__ __device__
 #else
-#define VIBEQC_D3_ZERO_HD
+#define GENERATIVEQC_D3_ZERO_HD
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 struct D3ZeroParameters {
   double s6{}, s8{}, rs6{}, rs8{}, alpha6{14.0};
   double cn_cutoff{}, pair_cutoff{}, pair_switch_width{};
 };
 
-VIBEQC_D3_ZERO_HD inline std::size_t d3_zero_workspace_elements(std::size_t atoms) {
+GENERATIVEQC_D3_ZERO_HD inline std::size_t d3_zero_workspace_elements(std::size_t atoms) {
   return d3_workspace_elements(atoms);
 }
 
 namespace d3_zero_detail {
 
-VIBEQC_D3_ZERO_HD inline bool valid_parameters(const D3ZeroParameters& p) {
+GENERATIVEQC_D3_ZERO_HD inline bool valid_parameters(const D3ZeroParameters& p) {
   using d3_detail::finite;
   const bool cn = p.cn_cutoff == 0.0 || (finite(p.cn_cutoff) && p.cn_cutoff > 0.0);
   const bool pair = p.pair_cutoff == 0.0 || (finite(p.pair_cutoff) && p.pair_cutoff > 0.0);
@@ -41,9 +41,9 @@ struct DampedInversePower {
   double derivative_over_distance{};
 };
 
-VIBEQC_D3_ZERO_HD inline DampedInversePower damped_inverse_power(double r, double r2,
-                                                                 double scaled_r0, double exponent,
-                                                                 int power) {
+GENERATIVEQC_D3_ZERO_HD inline DampedInversePower damped_inverse_power(double r, double r2,
+                                                                       double scaled_r0,
+                                                                       double exponent, int power) {
   using d3_detail::finite;
   if (!(r > 0.0) || !(scaled_r0 > 0.0) || !(exponent > 0.0)) return {};
   const double ratio = scaled_r0 / r;
@@ -73,12 +73,12 @@ VIBEQC_D3_ZERO_HD inline DampedInversePower damped_inverse_power(double r, doubl
 // Standalone non-periodic two-body D3(0) contribution with complete dE/dR,
 // including coordination-number response of interpolated C6/C8 coefficients.
 // Qualification only: this does not widen the public D3(BJ) runtime capability.
-VIBEQC_D3_ZERO_HD inline D3Status evaluate_d3_zero(std::size_t n, const std::int32_t* z,
-                                                   const double* xyz,
-                                                   const D3ZeroParameters& parameters,
-                                                   D3Tables tables, double* workspace,
-                                                   std::size_t workspace_elements, double* energy,
-                                                   double* gradient) {
+GENERATIVEQC_D3_ZERO_HD inline D3Status evaluate_d3_zero(std::size_t n, const std::int32_t* z,
+                                                         const double* xyz,
+                                                         const D3ZeroParameters& parameters,
+                                                         D3Tables tables, double* workspace,
+                                                         std::size_t workspace_elements,
+                                                         double* energy, double* gradient) {
   using namespace d3_detail;
   using namespace d3_zero_detail;
   if (!z || !xyz || !workspace || !energy || n == 0 || n > kD3MaximumAtomsPerSystem ||
@@ -197,6 +197,6 @@ VIBEQC_D3_ZERO_HD inline D3Status evaluate_d3_zero(std::size_t n, const std::int
   return D3Status::success;
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion
 
-#undef VIBEQC_D3_ZERO_HD
+#undef GENERATIVEQC_D3_ZERO_HD

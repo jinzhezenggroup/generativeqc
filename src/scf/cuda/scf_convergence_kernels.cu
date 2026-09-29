@@ -7,7 +7,7 @@
 #include "scf/cuda/scf_convergence_kernels.hpp"
 #include "scf/cuda/scf_convergence_policy.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 __global__ void compute_energy_kernel(std::int32_t batch_size, std::int32_t nbf,
                                       const double* density, const double* hcore,
@@ -394,4 +394,4 @@ void launch_select_final_fock_rebuild_kernel(dim3 grid, dim3 block, std::size_t 
       rebuild_count);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

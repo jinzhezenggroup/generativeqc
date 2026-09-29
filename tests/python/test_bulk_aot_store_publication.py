@@ -8,8 +8,8 @@ from threading import Event
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.xc import bulk_aot_store as store
-from vibeqc_compiler.xc.bulk_aot_cache import CacheClosure, CacheDependency
+from generativeqc_compiler.xc import bulk_aot_store as store
+from generativeqc_compiler.xc.bulk_aot_cache import CacheClosure, CacheDependency
 
 if TYPE_CHECKING:
     from pathlib import Path

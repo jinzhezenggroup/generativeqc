@@ -13,10 +13,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from vibeqc_compiler.common.evidence import canonical_hash, file_hash
+from generativeqc_compiler.common.evidence import canonical_hash, file_hash
 
-from tools.vibeqc_cc.oracle import random_case
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_cc.oracle import random_case
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,7 +27,9 @@ def generate(*, full: typing.Any = False) -> typing.Any:
     from pyscf.cc import rccsd, rintermediates
     from threadpoolctl import threadpool_info, threadpool_limits
 
-    manifest = json.loads((ROOT / "tools/vibeqc_cc/source_manifest.json").read_text())
+    manifest = json.loads(
+        (ROOT / "tools/generativeqc_cc/source_manifest.json").read_text()
+    )
     if pyscf.__version__ != manifest["version"]:
         raise ValueError("reference generation requires pinned PySCF 2.14.0")
     # Only the RCCSD upstream files participate in the fixed-amplitude A/B
@@ -126,7 +128,7 @@ def generate(*, full: typing.Any = False) -> typing.Any:
                 }
         threads = threadpool_info()
     return {
-        "schema": "vibeqc.rccsd.fixed-amplitude-reference",
+        "schema": "generativeqc.rccsd.fixed-amplitude-reference",
         "version": 1,
         "pyscf": pyscf.__version__,
         "numpy": np.__version__,

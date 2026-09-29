@@ -5,7 +5,7 @@
 #include "scf/cuda/direct_generated_tasks.hpp"
 #include "scf/cuda/direct_task_encoding.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 // Slots without an enabled exact class remain on the existing native route.
 constexpr std::uint8_t kNoGeneratedShellClass = std::numeric_limits<std::uint8_t>::max();
@@ -195,4 +195,4 @@ void launch_materialize_generated_shell_tasks_kernel(
       low_order_signature_mask, low_order_signature_offsets, low_order_signature_write_counts);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

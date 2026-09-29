@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace vibeqc::cc {
+namespace generativeqc::cc {
 
 struct SolverOptions {
   unsigned max_iterations{100};
@@ -76,4 +76,4 @@ std::size_t problem_host_bytes(const Problem& problem);
 SolverResult solve_cpu(const Problem& problem, const SolverOptions& options);
 SolverResult solve_cuda(const Problem& problem, const SolverOptions& options, int device);
 
-}  // namespace vibeqc::cc
+}  // namespace generativeqc::cc

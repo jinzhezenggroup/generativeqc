@@ -1,7 +1,7 @@
 """Runtime stage-count regression for #192."""
 
-from vibeqc.accuracy import ObservableTarget, ResolvedModel, TargetAccuracy
-from vibeqc.progressive_controller import (
+from generativeqc.accuracy import ObservableTarget, ResolvedModel, TargetAccuracy
+from generativeqc.progressive_controller import (
     ArithmeticPolicy,
     HFConvergence,
     ProgressiveBudget,
@@ -11,7 +11,7 @@ from vibeqc.progressive_controller import (
     TargetProblem,
     TransferOperation,
 )
-from vibeqc.progressive_ledger import audit_runtime_ledger
+from generativeqc.progressive_ledger import audit_runtime_ledger
 
 
 def test_runtime_stage_count_is_charged() -> None:

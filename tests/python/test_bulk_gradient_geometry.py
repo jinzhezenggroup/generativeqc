@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc._dft_gradient import StableGridMotion, _native_ao_atoms
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.method.bulk_gradient import (
+from generativeqc._dft_gradient import StableGridMotion, _native_ao_atoms
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.method.bulk_gradient import (
     BULK_FORCE_GEOMETRY_SCHEMA,
     resolve_bulk_force_geometry_diagnostic,
 )
-from vibeqc_compiler.xc import libxc_bulk_capabilities
-from vibeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc import libxc_bulk_capabilities
+from generativeqc_compiler.xc.endpoint_capability import ENDPOINT_COVERAGE_SCHEMA
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
 
-from tools.vibeqc_validation.dft_gradient import finite_difference_xc_directional
+from tools.generativeqc_validation.dft_gradient import finite_difference_xc_directional
 
 
 def _coverage(

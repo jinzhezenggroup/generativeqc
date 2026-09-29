@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     FUSED_SHELL_SPEC_BY_NAME,
     KernelConsumer,
     build_fused_shell_plan,
@@ -131,7 +131,7 @@ extern "C" unsigned run(const double* input, double* output, unsigned mode) {
     cpp.write_text(
         prefix
         + boys
-        + "\nusing vibeqc::scf::cuda_execution::boys_values;\n"
+        + "\nusing generativeqc::scf::cuda_execution::boys_values;\n"
         + declarations
         + functions
         + body

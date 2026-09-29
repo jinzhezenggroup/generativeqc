@@ -35,7 +35,7 @@ struct Device {
 
 void check_convergence(unsigned spins, bool retain, bool require_physical, bool approximate,
                        double tolerance) {
-  using namespace vibeqc::scf::cuda_execution;
+  using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned n = 8, batch = 6;
   const std::size_t size = spins * n * n;
   const double bound = std::min(1e-8, tolerance);
@@ -120,9 +120,9 @@ void check_direct_df_acceptance(unsigned spins) {
     Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0));
     if (!fitted) {
       Device<double> current(density), proposal(next);
-      const auto launch = spins == 1
-                              ? vibeqc::scf::cuda_execution::launch_update_convergence_kernel
-                              : vibeqc::scf::cuda_execution::launch_update_uhf_convergence_kernel;
+      const auto launch =
+          spins == 1 ? generativeqc::scf::cuda_execution::launch_update_convergence_kernel
+                     : generativeqc::scf::cuda_execution::launch_update_uhf_convergence_kernel;
       launch(false, batch, 32, 0, nullptr, batch, n, 1e-12, 1e-10, true, d_energy.data,
              previous.data, proposal.data, current.data, active.data, converged.data,
              iterations.data, change.data, rms.data, d_residual.data, nullptr);
@@ -141,12 +141,12 @@ void check_direct_df_acceptance(unsigned spins) {
         }
       Device<double> da(alpha), db(beta), na(next_alpha), nb(next_beta);
       if (spins == 1)
-        vibeqc::scf::cuda_df::launch_update_device_convergence_kernel(
+        generativeqc::scf::cuda_df::launch_update_device_convergence_kernel(
             batch, 32, 0, nullptr, batch, n, 1e-12, 1e-10, d_energy.data, previous.data, na.data,
             da.data, active.data, converged.data, iterations.data, change.data, rms.data,
             d_residual.data);
       else
-        vibeqc::scf::cuda_df::launch_update_device_uhf_convergence_kernel(
+        generativeqc::scf::cuda_df::launch_update_device_uhf_convergence_kernel(
             batch, 32, 0, nullptr, batch, n, 1e-12, 1e-10, d_energy.data, previous.data, na.data,
             nb.data, da.data, db.data, active.data, converged.data, iterations.data, change.data,
             rms.data, d_residual.data);

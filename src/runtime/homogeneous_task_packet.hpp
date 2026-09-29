@@ -5,7 +5,7 @@
 #include <limits>
 #include <type_traits>
 
-namespace vibeqc::runtime {
+namespace generativeqc::runtime {
 
 /** Bounded by-value packet for homogeneous task-range descriptors.
  *
@@ -56,4 +56,4 @@ bool finalize_homogeneous_task_packet(
   return true;
 }
 
-}  // namespace vibeqc::runtime
+}  // namespace generativeqc::runtime

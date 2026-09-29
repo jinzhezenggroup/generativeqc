@@ -6,14 +6,14 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
-from vibeqc._dft_gradient import _native_ao_atoms
-from vibeqc._stationary_cpu import complete_rks_gradient_diagnostic
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.xc.contractions import ExternalPointContraction
-from vibeqc_compiler.xc.grid_response import partition_response
+from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
+from generativeqc._dft_gradient import _native_ao_atoms
+from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.xc.contractions import ExternalPointContraction
+from generativeqc_compiler.xc.grid_response import partition_response
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     directional_rks_response,
     directional_rks_responses,
     native_rks_xc_hvp_components,
@@ -21,7 +21,7 @@ from tools.vibeqc_hessian import (
     rks_hvp,
     rks_hvp_many,
 )
-from tools.vibeqc_response import GMRESOptions, NativeRKSResponse
+from tools.generativeqc_response import GMRESOptions, NativeRKSResponse
 
 H2 = [("H", (0.0, 0.0, -0.72)), ("H", (0.08, -0.03, 0.71))]
 LARGE_HE = [("He", (0.13, -0.21, 0.17))]
@@ -161,7 +161,7 @@ def test_rks_nuclear_response_multi_rhs_matches_single(
     case: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The RKS response layer must use one shared solve_many call for all RHSs."""
-    import tools.vibeqc_hessian.rks_directional as rks_directional_module
+    import tools.generativeqc_hessian.rks_directional as rks_directional_module
 
     _, operator, direction, single = case
     other = np.roll(direction.reshape(-1), 1).reshape(direction.shape)
@@ -378,7 +378,7 @@ def test_complete_rks_hvp_many_reuses_one_multi_rhs_response(
     case: typing.Any, tmp_path: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Complete HVP blocks must not fall back to one CPKS solve per direction."""
-    import tools.vibeqc_hessian.rks_directional as rks_directional_module
+    import tools.generativeqc_hessian.rks_directional as rks_directional_module
 
     method, operator, direction, _ = case
     if method != "lda-rks":
@@ -442,7 +442,7 @@ def test_rks_hessian_assembles_raw_columns_in_blocks(
     case: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Full assembly must preserve raw HVP columns without symmetrization."""
-    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+    import tools.generativeqc_hessian.rks_molecular as rks_molecular_module
 
     _, operator, _, _ = case
     coordinates = 3 * operator.xc_kernel.basis.natom
@@ -488,7 +488,7 @@ def test_rks_hessian_output_budget_fails_before_hvp(
     case: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Insufficient full-output storage must fail before any HVP is evaluated."""
-    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+    import tools.generativeqc_hessian.rks_molecular as rks_molecular_module
 
     _, operator, _, _ = case
     coordinates = 3 * operator.xc_kernel.basis.natom
@@ -510,7 +510,7 @@ def test_rks_hvp_integral_budget_fails_before_response(
     case: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An undersized integral budget must reject work before CPKS starts."""
-    import tools.vibeqc_hessian.rks_molecular as rks_molecular_module
+    import tools.generativeqc_hessian.rks_molecular as rks_molecular_module
 
     _, operator, direction, _ = case
 

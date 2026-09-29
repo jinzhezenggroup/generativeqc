@@ -10,8 +10,8 @@
 __global__ void evaluate_policy(const EcpPolicyCase* cases, int count, int* results) {
   const int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < count)
-    results[i] = vibeqc::generated::ecp_grid_pair_accepted(cases[i].coarse, cases[i].fine,
-                                                           cases[i].derivative);
+    results[i] = generativeqc::generated::ecp_grid_pair_accepted(cases[i].coarse, cases[i].fine,
+                                                                 cases[i].derivative);
 }
 
 int main() {

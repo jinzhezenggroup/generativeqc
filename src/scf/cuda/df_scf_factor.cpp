@@ -16,7 +16,7 @@
 #include "scf/df_exchange_policy.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 bool qualified_resident_rhf_exchange(const CudaDensityFittingJkPlan& plan,
                                      std::size_t rank) noexcept {
@@ -58,9 +58,10 @@ bool qualified_value_rhf_exchange(const CudaDensityFittingJkPlan& plan, std::siz
                  .rows != 0;
 }
 
-vibeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                          const double* density, bool& accepted, std::size_t& rank,
-                                          std::string& detail) {
+generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,
+                                                PersistentScfState& state, const double* density,
+                                                bool& accepted, std::size_t& rank,
+                                                std::string& detail) {
   using namespace runtime::cuda_trace;
   TraceOperation trace(
       "density_exchange_seed", plan.stream,
@@ -80,7 +81,7 @@ vibeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan, Persis
   if (state.unrestricted || plan.batch_size != 1 || !state.occupied_exchange ||
       (!resident && !streamed) || plan.nbf < 2) {
     trace_counter("unsupported", 1);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   constexpr double spectral_threshold = 1e-13;
   constexpr double discarded_frobenius_tolerance = 1e-12;
@@ -91,7 +92,7 @@ vibeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan, Persis
   if (error != cudaSuccess) return cuda_failure(error, "copy density seed for eigensolve", detail);
   auto status = solve_device_batch(plan, state.solver, plan.nbf, 1, state.d_fock,
                                    state.d_eigenvalues, state.d_info, detail);
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   std::vector<double> values(plan.nbf);
   int info = 0;
   error = cudaMemcpyAsync(values.data(), state.d_eigenvalues, plan.nbf * sizeof(double),
@@ -105,14 +106,14 @@ vibeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan, Persis
   trace_counter("explicit_synchronizations", 1);
   if (info) {
     trace_counter("solver_rejected", 1);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   double discarded_square = 0;
   for (std::size_t i = 0; i < values.size(); ++i) {
     const double value = values[i];
     if (!std::isfinite(value) || value < -spectral_threshold || (i && value < values[i - 1])) {
       trace_counter("spectrum_rejected", 1);
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     if (value > spectral_threshold)
       ++rank;
@@ -123,7 +124,7 @@ vibeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan, Persis
   if (rank > state.alpha_factor_rank ||
       discarded_square > discarded_frobenius_tolerance * discarded_frobenius_tolerance) {
     trace_counter("rank_rejected", 1);
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   // d_fock/d_eigenvalues are scratch before the first physical SCF iteration.
   // No canonical generation is published for this algebraic factor.
@@ -168,19 +169,19 @@ vibeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan, Persis
              errors[0] <= maximum_tolerance && errors[1] <= rms_tolerance;
   trace_counter(accepted ? "accepted" : "reconstruction_rejected", 1);
   runtime::df_progress::number("density_seed_rank", rank);
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status occupied_scf_policy(const CudaDensityFittingJkPlan& plan, bool& enabled,
-                                  std::string& detail, std::span<const std::int32_t> alpha,
-                                  std::span<const std::int32_t> beta) {
-  const char* value = std::getenv("VIBEQC_DF_EXCHANGE");
+generativeqc_status occupied_scf_policy(const CudaDensityFittingJkPlan& plan, bool& enabled,
+                                        std::string& detail, std::span<const std::int32_t> alpha,
+                                        std::span<const std::int32_t> beta) {
+  const char* value = std::getenv("GENERATIVEQC_DF_EXCHANGE");
   // No dimensions are supplied here: the helper's zero defaults keep auto
   // disabled until every runtime qualification below succeeds.
   enabled = df_occupied_exchange_requested();
   if (value && !enabled && std::string(value) != "dense" && std::string(value) != "auto") {
-    detail = "VIBEQC_DF_EXCHANGE must be auto, dense or occupied";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_EXCHANGE must be auto, dense or occupied";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (df_occupied_exchange_auto_requested()) {
     enabled = alpha.size() == 1 && beta.empty() && alpha[0] > 0 &&
@@ -188,28 +189,29 @@ vibeqc_status occupied_scf_policy(const CudaDensityFittingJkPlan& plan, bool& en
   }
   if (enabled && !plan.occupied_scf_reserved) {
     detail = "CUDA DF plan did not reserve occupied SCF storage; recreate the plan";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-vibeqc_status allocate_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                   const std::vector<std::int32_t>& alpha,
-                                   const std::vector<std::int32_t>& beta, std::string& detail) {
+generativeqc_status allocate_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
+                                         const std::vector<std::int32_t>& alpha,
+                                         const std::vector<std::int32_t>& beta,
+                                         std::string& detail) {
   if (!plan.occupied_scf_reserved) {
     detail = "CUDA DF plan did not reserve occupied SCF storage; recreate the plan";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   try {
     state.factor_alpha_ranks = alpha;
     state.factor_beta_ranks = beta;
     state.alpha_factor_rank = *std::max_element(alpha.begin(), alpha.end());
     state.beta_factor_rank = beta.empty() ? 0 : *std::max_element(beta.begin(), beta.end());
-    const auto allocate = [&](auto** pointer, std::size_t bytes) -> vibeqc_status {
-      if (!bytes) return VIBEQC_STATUS_SUCCESS;
+    const auto allocate = [&](auto** pointer, std::size_t bytes) -> generativeqc_status {
+      if (!bytes) return GENERATIVEQC_STATUS_SUCCESS;
       const auto status = allocate_device(reinterpret_cast<void**>(pointer), bytes,
                                           "allocate CUDA DF occupied SCF state", detail);
-      if (status == VIBEQC_STATUS_SUCCESS) {
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
         try {
           state.allocations.push_back(*pointer);
         } catch (const std::bad_alloc&) {
@@ -222,23 +224,24 @@ vibeqc_status allocate_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScf
     };
     auto status = allocate(&state.d_alpha_factor,
                            plan.batch_size * plan.nbf * state.alpha_factor_rank * sizeof(double));
-    if (status == VIBEQC_STATUS_SUCCESS)
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
       status = allocate(&state.d_alpha_factor_generation, plan.batch_size * sizeof(std::uint32_t));
-    if (status == VIBEQC_STATUS_SUCCESS && !beta.empty())
+    if (status == GENERATIVEQC_STATUS_SUCCESS && !beta.empty())
       status = allocate(&state.d_beta_factor,
                         plan.batch_size * plan.nbf * state.beta_factor_rank * sizeof(double));
-    if (status == VIBEQC_STATUS_SUCCESS && !beta.empty())
+    if (status == GENERATIVEQC_STATUS_SUCCESS && !beta.empty())
       status = allocate(&state.d_beta_factor_generation, plan.batch_size * sizeof(std::uint32_t));
-    if (status == VIBEQC_STATUS_SUCCESS) status = allocate(&state.d_factor_error, sizeof(int));
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = allocate(&state.d_factor_error, sizeof(int));
     return status;
   } catch (const std::bad_alloc&) {
     detail = "host allocation for occupied SCF ownership failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 }
 
-vibeqc_status reset_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                std::string& detail) {
+generativeqc_status reset_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
+                                      std::string& detail) {
   // Every solve discards old provenance before attempting an algebraic seed.
   // Only the first canonical SCF update may publish a new orbital generation.
   state.density_seed_used = false;
@@ -251,27 +254,27 @@ vibeqc_status reset_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfSta
   if (error == cudaSuccess && state.unrestricted)
     error = cudaMemsetAsync(state.d_beta_factor_generation, 0,
                             plan.batch_size * sizeof(std::uint32_t), plan.stream);
-  return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+  return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                               : cuda_failure(error, "reset occupied SCF generations", detail);
 }
 
-vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                    const double* alpha, const double* beta, bool ready,
-                                    std::string& detail, bool retained_seed) {
+generativeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
+                                          const double* alpha, const double* beta, bool ready,
+                                          std::string& detail, bool retained_seed) {
   // Only the ordinary first iteration may consume the just-restored, qualified
   // snapshot at generation zero. Captured iterations never enable this grant.
   if (retained_seed && (!ready || !state.warm_seed_used || beta || plan.batch_size != 1)) {
     detail = "invalid retained warm factor admission";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   bool seed = false;
   std::size_t seed_rank = 0;
   if (!ready && !beta && state.occupied_exchange) {
-    const char* policy = std::getenv("VIBEQC_DF_SEED_EXCHANGE");
+    const char* policy = std::getenv("GENERATIVEQC_DF_SEED_EXCHANGE");
     if (policy && std::string(policy) != "auto" && std::string(policy) != "dense" &&
         std::string(policy) != "factor") {
-      detail = "VIBEQC_DF_SEED_EXCHANGE must be auto, dense or factor";
-      return VIBEQC_STATUS_INVALID_ARGUMENT;
+      detail = "GENERATIVEQC_DF_SEED_EXCHANGE must be auto, dense or factor";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     bool selected = policy && std::string(policy) == "factor";
     if (!policy || std::string(policy) == "auto") {
@@ -283,7 +286,7 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
     }
     if (selected) {
       const auto status = factor_density_for_exchange(plan, state, alpha, seed, seed_rank, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
   }
   const std::size_t joint_rank = seed ? seed_rank
@@ -294,11 +297,11 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
                                   ? df_projected_exchange_schedule(plan.nbf, plan.naux, joint_rank,
                                                                    plan.panel_capacity, true)
                                   : generated::ProjectedExchangeSchedule{};
-  const auto* shared_policy = std::getenv("VIBEQC_DF_JK_SHARED_SOURCE");
+  const auto* shared_policy = std::getenv("GENERATIVEQC_DF_JK_SHARED_SOURCE");
   if (shared_policy && std::strcmp(shared_policy, "auto") != 0 &&
       std::strcmp(shared_policy, "0") != 0 && std::strcmp(shared_policy, "1") != 0) {
-    detail = "VIBEQC_DF_JK_SHARED_SOURCE must be auto, 0 or 1";
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    detail = "GENERATIVEQC_DF_JK_SHARED_SOURCE must be auto, 0 or 1";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const bool shared_explicit_multiblock = shared_policy && std::strcmp(shared_policy, "1") == 0;
   const bool shared_requested =
@@ -315,7 +318,7 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
         state.d_alpha_factor_generation, state.d_beta_factor_generation, state.d_factor_error,
         retained_seed);
   const JkTermSelection terms{true, !ready && !seed};
-  vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   if (shared) {
     status =
         build_shared_coulomb_occupied_exchange(plan, alpha, state.d_alpha_factor, joint_rank,
@@ -327,15 +330,16 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
     status = execute_cuda_density_fitting_rhf_jk_device(&plan, alpha, plan.coulomb,
                                                         plan.alpha_exchange, detail, terms);
   }
-  if (status != VIBEQC_STATUS_SUCCESS) return status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   if (seed) {
     state.density_seed_used = true;
     state.density_seed_rank = seed_rank;
     if (!shared)
       status = build_occupied_exchange(plan, 0, state.d_alpha_factor, seed_rank, true, 1,
                                        plan.alpha_exchange, detail);
-    const char* verify = std::getenv("VIBEQC_DF_SEED_VERIFY");
-    if (status != VIBEQC_STATUS_SUCCESS || !verify || std::string(verify) != "1") return status;
+    const char* verify = std::getenv("GENERATIVEQC_DF_SEED_VERIFY");
+    if (status != GENERATIVEQC_STATUS_SUCCESS || !verify || std::string(verify) != "1")
+      return status;
     // Intrusive qualification only: compute both K matrices for the identical
     // supplied density. Restore candidate K so endpoint gates test its actual
     // arithmetic, and never include this pass in clean performance claims.
@@ -346,7 +350,7 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
                         cudaMemcpyDeviceToDevice, plan.stream);
     if (error != cudaSuccess) return cuda_failure(error, "retain candidate seed K", detail);
     status = build_exchange(plan, alpha, plan.alpha_exchange, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     launch_density_exchange_error(plan.stream, plan.matrix_elements, state.d_fock,
                                   plan.alpha_exchange, state.d_next_density);
     double errors[2]{};
@@ -365,12 +369,12 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
     if (!std::isfinite(errors[0]) || !std::isfinite(errors[1]) || errors[0] > 1e-10 ||
         errors[1] > 1e-11) {
       detail = "density seed K failed dense reference qualification";
-      return VIBEQC_STATUS_NUMERICAL_FAILURE;
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     error =
         cudaMemcpyAsync(plan.alpha_exchange, state.d_fock, plan.matrix_elements * sizeof(double),
                         cudaMemcpyDeviceToDevice, plan.stream);
-    return error == cudaSuccess ? VIBEQC_STATUS_SUCCESS
+    return error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                                 : cuda_failure(error, "restore candidate seed K", detail);
   }
   if (!ready) return status;
@@ -386,17 +390,17 @@ vibeqc_status build_scf_occupied_jk(CudaDensityFittingJkPlan& plan, PersistentSc
         state.d_alpha_factor ? state.d_alpha_factor + item * plan.nbf * state.alpha_factor_rank
                              : nullptr,
         state.factor_alpha_ranks[item], true, beta ? 1 : 2, plan.alpha_exchange, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (beta) {
       status = build_occupied_exchange(
           plan, item,
           state.d_beta_factor ? state.d_beta_factor + item * plan.nbf * state.beta_factor_rank
                               : nullptr,
           state.factor_beta_ranks[item], true, 1, plan.beta_exchange, detail);
-      if (status != VIBEQC_STATUS_SUCCESS) return status;
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
   }
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 void store_scf_factor(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
@@ -412,9 +416,9 @@ void store_scf_factor(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
       beta ? state.d_beta_factor_generation : state.d_alpha_factor_generation);
 }
 
-vibeqc_status verify_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
-                                 const std::vector<std::uint32_t>& iterations,
-                                 std::string& detail) {
+generativeqc_status verify_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
+                                       const std::vector<std::uint32_t>& iterations,
+                                       std::string& detail) {
   using namespace runtime::cuda_trace;
   TraceOperation trace(
       "occupied_scf_provenance", plan.stream,
@@ -429,7 +433,7 @@ vibeqc_status verify_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfSt
   if (error != cudaSuccess) return cuda_failure(error, "validate occupied SCF provenance", detail);
   if (failed) {
     detail = "CUDA DF occupied factor generation differs from its canonical density";
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
   trace_counter("validated_density_generations", plan.batch_size);
   trace_counter("dense_seed_iterations", !state.density_seed_used && !state.warm_seed_used);
@@ -443,7 +447,7 @@ vibeqc_status verify_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfSt
                         sizeof(double) +
                     plan.batch_size * (state.unrestricted ? 2 : 1) * sizeof(std::uint32_t) +
                     sizeof(int));
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

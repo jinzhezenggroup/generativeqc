@@ -1,8 +1,8 @@
 """Legacy positional schedules must not implicitly opt into streaming."""
 
 import pytest
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule
-from vibeqc_compiler.tensor.cuda_search import TensorScheduleSpace
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule
+from generativeqc_compiler.tensor.cuda_search import TensorScheduleSpace
 
 
 @pytest.mark.parametrize("direct", (False, True))

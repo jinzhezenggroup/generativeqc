@@ -8,14 +8,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.vibeqc_hessian import (
+from tools.generativeqc_hessian import (
     NativeRHFState,
     analytic_hessian,
     rhf_hessian,
     rhf_hvp_many,
 )
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_validation.hessian_fixtures import fixture_inputs
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_validation.hessian_fixtures import fixture_inputs
 
 
 @pytest.fixture(scope="module")
@@ -77,7 +77,7 @@ def test_hvp_many_recycled_matches_dense_columns_and_reports_shared_solve(
 def test_hvp_many_uses_solve_many_not_single_solver(
     h2_case: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from tools.vibeqc_hessian import perturbation
+    from tools.generativeqc_hessian import perturbation
 
     state, dense, directions = h2_case
 
@@ -113,7 +113,7 @@ def test_full_hessian_blocked_matches_native_dense_assembly(
 def test_block_budget_rejects_before_first_integral_work(
     h2_state: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     state, directions = h2_state
 
@@ -128,7 +128,7 @@ def test_block_budget_rejects_before_first_integral_work(
 def test_full_output_budget_rejects_without_partial_hessian(
     h2_state: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     state, _ = h2_state
 
@@ -146,7 +146,7 @@ def assembly_only_state(monkeypatch: typing.Any) -> typing.Any:
     """Exercise assembly ownership without allocating a native RHF source."""
     from types import SimpleNamespace
 
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     class AssemblyState:
         nat = 2
@@ -167,7 +167,7 @@ def test_full_hessian_releases_previous_block_before_next_call(
 ) -> None:
     import weakref
 
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     previous = []
 
@@ -195,7 +195,7 @@ def test_full_hessian_releases_previous_block_before_next_call(
 def test_full_hessian_reserves_output_publication_before_any_block(
     assembly_only_state: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("output publication budget was not preflighted")
@@ -214,7 +214,7 @@ def test_full_hessian_default_block_size_adapts_to_coordinate_count(
 ) -> None:
     from types import SimpleNamespace
 
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     state = assembly_only_state
     state.nat = natoms
@@ -243,10 +243,10 @@ def test_full_hessian_default_block_size_adapts_to_coordinate_count(
 def test_cuda_relaxation_budget_rejects_before_response_work(
     h2_state: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-    from vibeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-    from tools.vibeqc_hessian import block
+    from tools.generativeqc_hessian import block
 
     state, directions = h2_state
     compiler = CudaCompilerAdapter(Path("/bin/false"), cuda_target_info("sm_80"))

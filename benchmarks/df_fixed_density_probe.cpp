@@ -25,24 +25,25 @@
 #include "scf/cuda_df_gradient.hpp"
 
 int main(int argc, char** argv) {
-  using namespace vibeqc;
+  using namespace generativeqc;
   try {
     if (argc != 3 || !std::getenv("SLURM_JOB_ID") || !std::getenv("CUDA_VISIBLE_DEVICES"))
       throw std::runtime_error("Slurm only: probe INPUT OUTPUT_DIRECTORY");
     std::cout << std::unitbuf << std::setprecision(17);
     Dl_info identity{};
-    if (!dladdr(reinterpret_cast<void*>(&vibeqc_get_source_identity), &identity))
+    if (!dladdr(reinterpret_cast<void*>(&generativeqc_get_source_identity), &identity))
       throw std::runtime_error("cannot identify loaded native library");
     std::cout << "{\"operation\":\"identity\",\"library\":" << std::quoted(identity.dli_fname)
-              << ",\"source_identity\":" << std::quoted(vibeqc_get_source_identity()) << "}\n";
+              << ",\"source_identity\":" << std::quoted(generativeqc_get_source_identity())
+              << "}\n";
     std::ifstream input(argv[1]);
     std::string magic, detail;
     std::size_t atoms{}, orbital_shells{}, auxiliary_shells{}, expected_n{}, expected_a{};
     input >> magic >> atoms >> orbital_shells >> auxiliary_shells >> expected_n >> expected_a;
-    if (magic != "vibeqc-response-v1" || !atoms || !expected_n || !expected_a)
+    if (magic != "generativeqc-response-v1" || !atoms || !expected_n || !expected_a)
       throw std::runtime_error("invalid response fixture header");
     core::System orbital;
-    orbital.basis_representation = VIBEQC_BASIS_SPHERICAL;
+    orbital.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
     orbital.atoms.resize(atoms);
     for (auto& atom : orbital.atoms)
       input >> atom.atomic_number >> atom.position[0] >> atom.position[1] >> atom.position[2];
@@ -72,8 +73,8 @@ int main(int argc, char** argv) {
       file.write(reinterpret_cast<const char*>(values.data()), values.size() * sizeof(double));
       if (!file) throw std::runtime_error("cannot save native array");
     };
-    const auto check = [&](vibeqc_status status) {
-      if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    const auto check = [&](generativeqc_status status) {
+      if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
     };
     check(molecule::validate_and_normalize(orbital, detail));
     check(molecule::validate_and_normalize(auxiliary, detail));

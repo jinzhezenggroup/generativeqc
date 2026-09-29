@@ -19,8 +19,8 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
 
-vibeqc::core::System h2() {
-  vibeqc::core::System system;
+generativeqc::core::System h2() {
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, 0.0}}, {1, {0.1, 0.2, 1.4}}};
   system.shells = {
       {0,
@@ -31,8 +31,9 @@ vibeqc::core::System h2() {
        {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}},
   };
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "COSX H2 normalization failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "COSX H2 normalization failed");
   return system;
 }
 
@@ -45,9 +46,9 @@ double max_abs_diff(const std::vector<double>& first, const std::vector<double>&
   return error;
 }
 
-std::vector<double> direct_exchange(const vibeqc::core::System& system,
+std::vector<double> direct_exchange(const generativeqc::core::System& system,
                                     const std::vector<double>& density) {
-  const auto integrals = vibeqc::integrals::build_integrals(system, false, true);
+  const auto integrals = generativeqc::integrals::build_integrals(system, false, true);
   const std::size_t n = integrals.nbf;
   require(density.size() == n * n, "direct exchange density size mismatch");
   std::vector<double> exchange(n * n, 0.0);
@@ -63,11 +64,11 @@ std::vector<double> direct_exchange(const vibeqc::core::System& system,
   return exchange;
 }
 
-std::vector<double> numerical_esp(const vibeqc::core::System& system,
+std::vector<double> numerical_esp(const generativeqc::core::System& system,
                                   const std::array<double, 3>& probe,
-                                  const vibeqc::dft::GridSpec& spec) {
-  const vibeqc::dft::MolecularGrid grid(system, spec);
-  const vibeqc::dft::AoBasis basis(system);
+                                  const generativeqc::dft::GridSpec& spec) {
+  const generativeqc::dft::MolecularGrid grid(system, spec);
+  const generativeqc::dft::AoBasis basis(system);
   const std::size_t n = basis.nao;
   std::vector<double> ao(grid.point_count() * n);
   basis.evaluate(grid.points().data(), grid.point_count(), 0, 0, n, ao.data(), ao.size());
@@ -89,14 +90,14 @@ std::vector<double> numerical_esp(const vibeqc::core::System& system,
   return value;
 }
 
-std::vector<double> brute_discrete_exchange(const vibeqc::core::System& system,
-                                            const vibeqc::dft::MolecularGrid& grid,
+std::vector<double> brute_discrete_exchange(const generativeqc::core::System& system,
+                                            const generativeqc::dft::MolecularGrid& grid,
                                             const std::vector<double>& density) {
-  const vibeqc::dft::AoBasis basis(system);
+  const generativeqc::dft::AoBasis basis(system);
   const std::size_t n = basis.nao;
   std::vector<double> ao(grid.point_count() * n);
   basis.evaluate(grid.points().data(), grid.point_count(), 0, 0, n, ao.data(), ao.size());
-  const auto esp = vibeqc::integrals::build_esp_integrals(system, grid.points());
+  const auto esp = generativeqc::integrals::build_esp_integrals(system, grid.points());
   std::vector<double> raw(n * n, 0.0);
   for (std::size_t i = 0; i < n; ++i) {
     for (std::size_t j = 0; j < n; ++j) {
@@ -122,11 +123,11 @@ int main() {
     const auto system = h2();
     const std::vector<double> density{0.8, 0.2, 0.2, 0.6};
 
-    const vibeqc::dft::GridSpec tiny{1, 2, 2, 4, 3, 1.0e-12};
-    const vibeqc::dft::MolecularGrid tiny_grid(system, tiny);
-    const auto rhf =
-        vibeqc::dft::build_cosx_reference(system, tiny_grid.points(), tiny_grid.weights(), density,
-                                          vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const generativeqc::dft::GridSpec tiny{1, 2, 2, 4, 3, 1.0e-12};
+    const generativeqc::dft::MolecularGrid tiny_grid(system, tiny);
+    const auto rhf = generativeqc::dft::build_cosx_reference(
+        system, tiny_grid.points(), tiny_grid.weights(), density,
+        generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     const auto brute = brute_discrete_exchange(system, tiny_grid, density);
     require(rhf.nbf == 2 && rhf.npoint == tiny_grid.point_count(),
             "COSX reference dimensions are wrong");
@@ -146,9 +147,9 @@ int main() {
     require(std::abs(rhf.exchange_energy - expected_rhf_energy) < 2.0e-15,
             "COSX RHF exchange-energy spin factor is wrong");
 
-    const auto point_derivative = vibeqc::dft::build_cosx_point_derivative_reference(
+    const auto point_derivative = generativeqc::dft::build_cosx_point_derivative_reference(
         system, tiny_grid.points(), tiny_grid.weights(), density,
-        vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+        generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     require(std::abs(point_derivative.value.exchange_energy - rhf.exchange_energy) < 2.0e-15 &&
                 point_derivative.point_gradient.size() == 3 * tiny_grid.point_count(),
             "COSX point derivative changed the underlying discrete energy");
@@ -160,12 +161,12 @@ int main() {
         auto minus = tiny_grid.points();
         plus[3 * point + axis] += point_step;
         minus[3 * point + axis] -= point_step;
-        const auto plus_value =
-            vibeqc::dft::build_cosx_reference(system, plus, tiny_grid.weights(), density,
-                                              vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
-        const auto minus_value =
-            vibeqc::dft::build_cosx_reference(system, minus, tiny_grid.weights(), density,
-                                              vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+        const auto plus_value = generativeqc::dft::build_cosx_reference(
+            system, plus, tiny_grid.weights(), density,
+            generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
+        const auto minus_value = generativeqc::dft::build_cosx_reference(
+            system, minus, tiny_grid.weights(), density,
+            generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
         const double finite_difference =
             (plus_value.exchange_energy - minus_value.exchange_energy) / (2.0 * point_step);
         require(std::abs(finite_difference - point_derivative.point_gradient[3 * point + axis]) <
@@ -174,8 +175,8 @@ int main() {
       }
     }
 
-    const auto molecular = vibeqc::dft::build_cosx_molecular_derivative_reference(
-        tiny_grid, density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const auto molecular = generativeqc::dft::build_cosx_molecular_derivative_reference(
+        tiny_grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     require(std::abs(molecular.value.exchange_energy - rhf.exchange_energy) < 2.0e-15 &&
                 molecular.nuclear_gradient.size() == 3 * system.atoms.size(),
             "COSX molecular derivative changed the underlying discrete energy");
@@ -194,14 +195,14 @@ int main() {
           auto plus_system = system, minus_system = system;
           plus_system.atoms[atom].position[axis] += step;
           minus_system.atoms[atom].position[axis] -= step;
-          const vibeqc::dft::MolecularGrid plus_grid(plus_system, tiny);
-          const vibeqc::dft::MolecularGrid minus_grid(minus_system, tiny);
-          const auto plus_value = vibeqc::dft::build_cosx_reference(
+          const generativeqc::dft::MolecularGrid plus_grid(plus_system, tiny);
+          const generativeqc::dft::MolecularGrid minus_grid(minus_system, tiny);
+          const auto plus_value = generativeqc::dft::build_cosx_reference(
               plus_system, plus_grid.points(), plus_grid.weights(), density,
-              vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
-          const auto minus_value = vibeqc::dft::build_cosx_reference(
+              generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
+          const auto minus_value = generativeqc::dft::build_cosx_reference(
               minus_system, minus_grid.points(), minus_grid.weights(), density,
-              vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+              generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
           return (plus_value.exchange_energy - minus_value.exchange_energy) / (2.0 * step);
         };
         const double coarse = finite_difference(molecular_step_coarse);
@@ -215,9 +216,9 @@ int main() {
     auto permuted_system = system;
     std::swap(permuted_system.atoms[0], permuted_system.atoms[1]);
     for (auto& shell : permuted_system.shells) shell.atom_index = 1 - shell.atom_index;
-    const vibeqc::dft::MolecularGrid permuted_grid(permuted_system, tiny);
-    const auto permuted = vibeqc::dft::build_cosx_molecular_derivative_reference(
-        permuted_grid, density, vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const generativeqc::dft::MolecularGrid permuted_grid(permuted_system, tiny);
+    const auto permuted = generativeqc::dft::build_cosx_molecular_derivative_reference(
+        permuted_grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     require(std::abs(permuted.value.exchange_energy - molecular.value.exchange_energy) < 2.0e-14,
             "COSX molecular energy changed under atom permutation");
     for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
@@ -228,9 +229,9 @@ int main() {
 
     std::vector<double> half_density = density;
     for (double& value : half_density) value *= 0.5;
-    const auto spin = vibeqc::dft::build_cosx_reference(
+    const auto spin = generativeqc::dft::build_cosx_reference(
         system, tiny_grid.points(), tiny_grid.weights(), half_density,
-        vibeqc::dft::CosxDensityConvention::spin_resolved);
+        generativeqc::dft::CosxDensityConvention::spin_resolved);
     for (std::size_t i = 0; i < rhf.exchange.size(); ++i) {
       require(std::abs(spin.exchange[i] - 0.5 * rhf.exchange[i]) < 2.0e-15,
               "COSX exchange is not linear in one-spin density");
@@ -240,11 +241,11 @@ int main() {
 
     const std::array<double, 3> probe{0.4, -0.3, 3.1};
     const std::vector<double> probe_xyz{probe[0], probe[1], probe[2]};
-    const auto analytic_esp = vibeqc::integrals::build_esp_integrals(system, probe_xyz);
+    const auto analytic_esp = generativeqc::integrals::build_esp_integrals(system, probe_xyz);
     require(analytic_esp.nbf == 2 && analytic_esp.npoint == 1 && analytic_esp.values.size() == 4,
             "analytic ESP reference dimensions are wrong");
     const auto analytic_esp_derivative =
-        vibeqc::integrals::build_esp_integrals_with_probe_derivatives(system, probe_xyz);
+        generativeqc::integrals::build_esp_integrals_with_probe_derivatives(system, probe_xyz);
     require(max_abs_diff(analytic_esp.values, analytic_esp_derivative.values) < 1.0e-15 &&
                 analytic_esp_derivative.probe_derivative.size() == 12,
             "analytic ESP derivative changed the value path");
@@ -254,8 +255,8 @@ int main() {
       auto minus = probe_xyz;
       plus[axis] += esp_step;
       minus[axis] -= esp_step;
-      const auto plus_value = vibeqc::integrals::build_esp_integrals(system, plus);
-      const auto minus_value = vibeqc::integrals::build_esp_integrals(system, minus);
+      const auto plus_value = generativeqc::integrals::build_esp_integrals(system, plus);
+      const auto minus_value = generativeqc::integrals::build_esp_integrals(system, minus);
       for (std::size_t element = 0; element < analytic_esp.values.size(); ++element) {
         const double finite_difference =
             (plus_value.values[element] - minus_value.values[element]) / (2.0 * esp_step);
@@ -265,25 +266,25 @@ int main() {
       }
     }
     const auto coarse_esp =
-        numerical_esp(system, probe, vibeqc::dft::GridSpec{1, 20, 10, 20, 3, 1.0e-12});
+        numerical_esp(system, probe, generativeqc::dft::GridSpec{1, 20, 10, 20, 3, 1.0e-12});
     const auto fine_esp =
-        numerical_esp(system, probe, vibeqc::dft::GridSpec{1, 72, 24, 48, 3, 1.0e-12});
+        numerical_esp(system, probe, generativeqc::dft::GridSpec{1, 72, 24, 48, 3, 1.0e-12});
     const double coarse_esp_error = max_abs_diff(coarse_esp, analytic_esp.values);
     const double fine_esp_error = max_abs_diff(fine_esp, analytic_esp.values);
     require(fine_esp_error < coarse_esp_error && fine_esp_error < 2.0e-4,
             "independent numerical ESP quadrature does not converge to the analytic ESP matrix");
 
     const auto direct = direct_exchange(system, density);
-    const vibeqc::dft::MolecularGrid coarse_grid(system,
-                                                 vibeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
-    const vibeqc::dft::MolecularGrid fine_grid(system,
-                                               vibeqc::dft::GridSpec{1, 36, 14, 28, 3, 1.0e-12});
-    const auto coarse_cosx = vibeqc::dft::build_cosx_reference(
+    const generativeqc::dft::MolecularGrid coarse_grid(
+        system, generativeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
+    const generativeqc::dft::MolecularGrid fine_grid(
+        system, generativeqc::dft::GridSpec{1, 36, 14, 28, 3, 1.0e-12});
+    const auto coarse_cosx = generativeqc::dft::build_cosx_reference(
         system, coarse_grid.points(), coarse_grid.weights(), density,
-        vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
-    const auto fine_cosx =
-        vibeqc::dft::build_cosx_reference(system, fine_grid.points(), fine_grid.weights(), density,
-                                          vibeqc::dft::CosxDensityConvention::rhf_spin_summed);
+        generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
+    const auto fine_cosx = generativeqc::dft::build_cosx_reference(
+        system, fine_grid.points(), fine_grid.weights(), density,
+        generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     const double coarse_cosx_error = max_abs_diff(coarse_cosx.exchange, direct);
     const double fine_cosx_error = max_abs_diff(fine_cosx.exchange, direct);
     require(fine_cosx_error < coarse_cosx_error && fine_cosx_error < 2.0e-6,
@@ -291,7 +292,7 @@ int main() {
 
     bool malformed_probe_rejected = false;
     try {
-      (void)vibeqc::integrals::build_esp_integrals(system, std::vector<double>{0.0, 1.0});
+      (void)generativeqc::integrals::build_esp_integrals(system, std::vector<double>{0.0, 1.0});
     } catch (const std::invalid_argument&) {
       malformed_probe_rejected = true;
     }
@@ -299,11 +300,11 @@ int main() {
 
     bool fitted_reference_rejected = false;
     try {
-      auto spec = vibeqc::dft::CosxReferenceSpec{};
+      auto spec = generativeqc::dft::CosxReferenceSpec{};
       spec.overlap_fitting = true;
-      (void)vibeqc::dft::build_cosx_reference(
+      (void)generativeqc::dft::build_cosx_reference(
           system, tiny_grid.points(), tiny_grid.weights(), density,
-          vibeqc::dft::CosxDensityConvention::rhf_spin_summed, spec);
+          generativeqc::dft::CosxDensityConvention::rhf_spin_summed, spec);
     } catch (const std::invalid_argument&) {
       fitted_reference_rejected = true;
     }

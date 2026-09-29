@@ -169,7 +169,7 @@ retained the legacy unbudgeted scope because HF inventory v1 supports at most
 [bundle](../../benchmarks/results/cuda-ownership/README.md) retains all samples,
 inputs, resource observations and the complete per-workload assessments.
 
-`VIBEQC_ONE_ELECTRON_VALUES` and `VIBEQC_DF_VALUES` are retired internal controls
+`GENERATIVEQC_ONE_ELECTRON_VALUES` and `GENERATIVEQC_DF_VALUES` are retired internal controls
 and no longer affect production dispatch or execution identities. The value
 mapping controls still select measured/diagnostic schedules of the same
 compiler-owned definitions. Historical old/new reproduction must use the exact

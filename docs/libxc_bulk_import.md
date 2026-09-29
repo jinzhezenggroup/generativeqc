@@ -11,7 +11,7 @@ These are real compiler imports, not static parser candidates or new public SCF 
 ## Use
 
 ```python
-from vibeqc_compiler.xc.libxc_bulk import available_functionals, build_bulk_program
+from generativeqc_compiler.xc.libxc_bulk import available_functionals, build_bulk_program
 program = build_bulk_program('GGA_X_PBE_SOL', spin='polarized')
 roots = program.roots(2)  # E, vxc, then upper-triangular feature Hessian
 c_source = program.emit_source(2)
@@ -37,7 +37,7 @@ python tools/import_libxc_bulk.py --check
 python tools/source_registry.py verify
 ```
 
-Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a77`. The compact raw-source projection retains the complete Maple inventory, C owners, utility/header semantics and license; it excludes generated Libxc C kernels and is not compiled into the VibeQC runtime.
+Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a77`. The compact raw-source projection retains the complete Maple inventory, C owners, utility/header semantics and license; it excludes generated Libxc C kernels and is not compiled into the GenerativeQC runtime.
 
 ## Remaining blocker groups
 
@@ -99,4 +99,4 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | parameter array length does not match registration | 11 |
 | source is not a matching energy functional | 6 |
 
-The complete per-registration source, default bindings, provenance and status are in `python/vibeqc_compiler/xc/libxc_bulk_catalog.json`.
+The complete per-registration source, default bindings, provenance and status are in `python/generativeqc_compiler/xc/libxc_bulk_catalog.json`.

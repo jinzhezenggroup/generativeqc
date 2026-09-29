@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_cosx_derivative_contractions.cuh"
   ],
-  "owner": "python/vibeqc_compiler/method/cosx_derivative_runtime.py"
+  "owner": "python/generativeqc_compiler/method/cosx_derivative_runtime.py"
 }

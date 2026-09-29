@@ -2,12 +2,12 @@
 
 from dataclasses import replace
 
-from vibeqc_compiler.common.liveness import EffectKind
-from vibeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
-from vibeqc_compiler.common.program_optimize import cleanup_program_ir
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.program_ir import fixed_density_tile_program
+from generativeqc_compiler.common.liveness import EffectKind
+from generativeqc_compiler.common.program import PlanCall, ProgramBuffer, ProgramIR
+from generativeqc_compiler.common.program_optimize import cleanup_program_ir
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.program_ir import fixed_density_tile_program
 
 
 def _redundant_program(*, outputs: tuple[str, ...] = ("out",)) -> ProgramIR:

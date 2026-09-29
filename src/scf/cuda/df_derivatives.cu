@@ -5,7 +5,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/cuda_subgroup.cuh"
 #include "scf/cuda/df_derivatives.cuh"
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace {
 namespace products = runtime::cuda_gaussian_products;
 using Policy = generated_df_policy::Derivative;
@@ -119,4 +119,4 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView o, DfDerivativeBasis
         o, x, positions, kind, range, count, weights, schedule, gradient, begin, 0, 1);
   return cudaPeekAtLastError();
 }
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

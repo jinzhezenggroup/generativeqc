@@ -18,7 +18,7 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/fock_build.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 namespace {
 
@@ -31,7 +31,7 @@ using cuda_policy::graph_native_eigensolver_override_requested;
 using cuda_policy::resolve_mixed_precision_fock_policy;
 using cuda_policy::reuse_converged_fock_requested;
 
-void fill_global_failure(std::vector<RhfBucketItem>& outputs, vibeqc_status status) {
+void fill_global_failure(std::vector<RhfBucketItem>& outputs, generativeqc_status status) {
   for (RhfBucketItem& output : outputs) output.status = status;
 }
 
@@ -89,7 +89,8 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
       nbf > kPersistentEriAoLimit || nbf > kSmallEigensolverLimit || direct_nbf < nbf ||
       direct_nbf > 2 * nbf || atoms == 0 || shells == 0 || shells > nbf || diis_history > 64 ||
       (spins != 1 && spins != 2) ||
-      (precision_mode != VIBEQC_PRECISION_FP64 && precision_mode != VIBEQC_PRECISION_AUTO) ||
+      (precision_mode != GENERATIVEQC_PRECISION_FP64 &&
+       precision_mode != GENERATIVEQC_PRECISION_AUTO) ||
       !std::isfinite(energy_tolerance) || energy_tolerance <= 0.0 ||
       !std::isfinite(screening_tolerance) || screening_tolerance <= 0.0) {
     return false;
@@ -198,7 +199,8 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   }
 
   const auto mixed_policy = cuda_policy::resolve_mixed_precision_fock_policy(
-      static_cast<vibeqc_precision_mode>(precision_mode), energy_tolerance, screening_tolerance,
+      static_cast<generativeqc_precision_mode>(precision_mode), energy_tolerance,
+      screening_tolerance,
       direct_task_layout.system_mixed_capable_tile_counts.empty()
           ? 0.0
           : static_cast<double>(direct_task_layout.system_mixed_capable_tile_counts.front()));
@@ -312,7 +314,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   if (requested_options.hooks || requested_options.strict_initial_density) {
     // Host callbacks are an explicit CPU capability, never a device fallback.
     std::vector<RhfBucketItem> outputs(systems.size());
-    fill_global_failure(outputs, VIBEQC_STATUS_NOT_IMPLEMENTED);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
     return outputs;
   }
 
@@ -332,21 +334,21 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     }
   } catch (const std::invalid_argument&) {
     std::vector<RhfBucketItem> outputs(systems.size());
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   const ScfOptions& options = execution_options;
 
   if (plan == nullptr) {
     std::vector<RhfBucketItem> outputs(systems.size());
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   HostBatch candidate;
   if (!pack_host_batch(systems, initial_densities, candidate, unrestricted,
                        options.export_physical_reference, options.compute_forces)) {
     std::vector<RhfBucketItem> outputs(systems.size());
-    fill_global_failure(outputs, VIBEQC_STATUS_INVALID_ARGUMENT);
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
   double mixed_precision_fock_threshold = 0.0;
@@ -385,7 +387,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     *plan = new (std::nothrow) CudaRhfBucketPlan{};
     if (*plan == nullptr) {
       std::vector<RhfBucketItem> outputs(systems.size());
-      fill_global_failure(outputs, VIBEQC_STATUS_OUT_OF_MEMORY);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
   }
@@ -403,7 +405,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     // native kernel so public CUDA execution remains available.
     *plan = new (std::nothrow) CudaRhfBucketPlan{};
     if (*plan == nullptr) {
-      fill_global_failure(outputs, VIBEQC_STATUS_OUT_OF_MEMORY);
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
     (*plan)->cublas_enabled = false;
@@ -543,4 +545,4 @@ std::vector<RhfBucketItem> run_uhf_cuda_bucket(
   }
 }
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

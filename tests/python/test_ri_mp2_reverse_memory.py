@@ -73,7 +73,7 @@ void operator delete(void* p, std::size_t) noexcept { ::operator delete(p); }
 void* operator new[](std::size_t n) { return ::operator new(n); }
 void operator delete[](void* p) noexcept { ::operator delete(p); }
 void operator delete[](void* p, std::size_t) noexcept { ::operator delete(p); }
-namespace vibeqc::tensor {
+namespace generativeqc::tensor {
 enum class SymmetricMatrixFunction { pseudoinverse, inverse_sqrt };
 enum class CpuLinalgProvider { automatic, scalar };
 enum class CpuLinalgThreadOwnership { task_parallel, provider_parallel };
@@ -97,8 +97,8 @@ void cpu_gemm(char ta,char tb,std::size_t m,std::size_t n,std::size_t k,
   ++trace::gemms;
   scalar_gemm(ta=='T',tb=='T',m,n,k,a,b,c,alpha,beta);
 }
-} // namespace vibeqc::tensor
-namespace vibeqc::integrals {
+} // namespace generativeqc::tensor
+namespace generativeqc::integrals {
 struct DensityFittingMetricFactor {
   std::size_t dimension{}, effective_rank{};
   double absolute_threshold{}, condition_number{};
@@ -108,13 +108,13 @@ struct DensityFittingMetricFactor {
 """
 
 PROVIDER = r"""
-namespace vibeqc::hf {
+namespace generativeqc::hf {
 struct PhysicalReference {
   std::size_t nbf, nocc;
   std::vector<double> coefficients;
 };
 }
-namespace vibeqc::posthf {
+namespace generativeqc::posthf {
 std::size_t checked_mul(std::size_t a,std::size_t b) {
   if(a && b>std::numeric_limits<std::size_t>::max()/a) throw std::overflow_error("overflow");
   return a*b;
@@ -149,7 +149,7 @@ struct DensityFittedBlockProvider {
   }
 };
 }
-namespace vibeqc::mp2 {
+namespace generativeqc::mp2 {
 std::size_t square(std::size_t n) { return posthf::checked_mul(n,n); }
 std::size_t fourth_power(std::size_t n) { return square(square(n)); }
 std::size_t eri_index(std::size_t n,std::size_t p,std::size_t q,std::size_t r,std::size_t s) {
@@ -170,10 +170,10 @@ struct DensityFittedLagrangianWeights {
 """
 
 MAIN = r"""
-} // namespace vibeqc::mp2
+} // namespace generativeqc::mp2
 int main(int argc,char** argv) {
   if(argc!=3) return 2;
-  using namespace vibeqc;
+  using namespace generativeqc;
   const std::size_t n=std::strtoul(argv[1],nullptr,10),na=std::strtoul(argv[2],nullptr,10);
   hf::PhysicalReference ref{n,1,std::vector<double>(n*n)};
   for(std::size_t i=0;i<n;++i) ref.coefficients[i*n+i]=1.0;

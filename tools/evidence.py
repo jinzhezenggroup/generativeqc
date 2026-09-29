@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.vibeqc_validation.retention import (
+from tools.generativeqc_validation.retention import (
     POLICY_PATH,
     check,
     inventory,
@@ -53,7 +53,7 @@ def main() -> int:
     publication.add_argument("--destination", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "publish":
-        from tools.vibeqc_validation.publication import publish
+        from tools.generativeqc_validation.publication import publish
 
         print(
             publish(
@@ -68,7 +68,7 @@ def main() -> int:
         errors = check(blobs, json.loads(blobs[POLICY_PATH]))
         report = None
         if args.command == "check-change":
-            from tools.vibeqc_validation.retention_review import review_changes
+            from tools.generativeqc_validation.retention_review import review_changes
 
             report = review_changes(
                 tracked_blobs(args.root, args.base),
@@ -88,7 +88,10 @@ def main() -> int:
             if path.startswith("benchmarks/results/") and path.endswith(
                 "/publication.json"
             ):
-                from tools.vibeqc_validation.retention import digest, safe_relative
+                from tools.generativeqc_validation.retention import (
+                    digest,
+                    safe_relative,
+                )
 
                 manifest = json.loads(data)
                 parent = str(PurePosixPath(path).parent)
@@ -113,7 +116,7 @@ def main() -> int:
         )
         return int(bool(errors))
     if args.command == "audit-campaigns":
-        from tools.vibeqc_validation.retention_review import campaign_inventory
+        from tools.generativeqc_validation.retention_review import campaign_inventory
 
         result = campaign_inventory(blobs, json.loads(blobs[POLICY_PATH]))
     else:

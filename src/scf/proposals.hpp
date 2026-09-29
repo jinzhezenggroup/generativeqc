@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Owned physical state, before DIIS. A callback receives a const, synchronous
  * view; copy the value to retain it. Each solve has a fresh generation, including
@@ -58,4 +58,4 @@ struct ScfHooks {
   std::function<void(const ScfSnapshot&, const ProposalDecision&)> observe;
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf

@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_MODEL_GFN2_SCC_MIXER_HPP
+#ifndef GENERATIVEQC_XTB_MODEL_GFN2_SCC_MIXER_HPP
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_MODEL_GFN2_SCC_MIXER_HPP
+#define GENERATIVEQC_XTB_MODEL_GFN2_SCC_MIXER_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +11,7 @@
 #include "model/common/scc_mixer.hpp"
 #include "model/gfn2/wavefunction.hpp"
 
-namespace vibeqc::xtb::detail::gfn2 {
+namespace generativeqc::xtb::detail::gfn2 {
 
 inline constexpr std::size_t kSccMixerWorkspaceAlignment = common::kSccMixerWorkspaceAlignment;
 
@@ -52,55 +52,55 @@ class SccMixerPlan {
  private:
   common::SccMixerPlan engine_;
 
-  friend vibeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout,
+  friend generativeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout,
                                               std::int64_t history_size, double damping,
                                               double rms_tolerance, double maximum_tolerance,
                                               SccMixerPlan& plan, std::string& error);
   friend const common::SccMixerPlan& common_plan(const SccMixerPlan& plan) noexcept;
 };
 
-vibeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout, std::int64_t history_size,
+generativeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout, std::int64_t history_size,
                                      double damping, double rms_tolerance, double maximum_tolerance,
                                      SccMixerPlan& plan, std::string& error);
 
-vibeqc_xtb_status_t bind_scc_mixer_state(const SccMixerPlan& plan, void* workspace,
+generativeqc_xtb_status_t bind_scc_mixer_state(const SccMixerPlan& plan, void* workspace,
                                       std::size_t workspace_size, SccMixerState& state,
                                       std::string& error);
 
-vibeqc_xtb_status_t bind_scc_mixer_workspace(const SccMixerPlan& plan, void* workspace,
+generativeqc_xtb_status_t bind_scc_mixer_workspace(const SccMixerPlan& plan, void* workspace,
                                           std::size_t workspace_size, SccMixerWorkspace& view,
                                           std::string& error);
 
-vibeqc_xtb_status_t initialize_scc_mixer_state_cpu(const SccMixerPlan& plan,
+generativeqc_xtb_status_t initialize_scc_mixer_state_cpu(const SccMixerPlan& plan,
                                                 const WavefunctionView& wavefunction,
                                                 const SccMixerState& state, std::string& error);
 
-vibeqc_xtb_status_t restart_scc_mixer_system_cpu(const SccMixerPlan& plan, std::int64_t system,
+generativeqc_xtb_status_t restart_scc_mixer_system_cpu(const SccMixerPlan& plan, std::int64_t system,
                                               const WavefunctionView& wavefunction,
                                               const SccMixerState& state, std::string& error);
 
-vibeqc_xtb_status_t mix_scc_broyden_system_cpu(const SccMixerPlan& plan, std::int64_t system,
+generativeqc_xtb_status_t mix_scc_broyden_system_cpu(const SccMixerPlan& plan, std::int64_t system,
                                             const WavefunctionView& wavefunction,
                                             const SccMixerState& state,
                                             const SccMixerWorkspace& workspace, std::string& error);
 
-vibeqc_xtb_status_t mix_scc_broyden_batch_cpu(const SccMixerPlan& plan,
+generativeqc_xtb_status_t mix_scc_broyden_batch_cpu(const SccMixerPlan& plan,
                                            const WavefunctionView& wavefunction,
                                            const SccMixerState& state,
                                            const SccMixerWorkspace& workspace, std::string& error);
 
-vibeqc_xtb_status_t prepare_scc_mixer_system_transaction_cpu(const SccMixerPlan& plan,
+generativeqc_xtb_status_t prepare_scc_mixer_system_transaction_cpu(const SccMixerPlan& plan,
                                                           std::int64_t system,
                                                           const SccMixerState& source,
                                                           const SccMixerState& staged,
                                                           std::string& error);
 
-vibeqc_xtb_status_t commit_scc_mixer_system_transaction_cpu(const SccMixerPlan& plan,
+generativeqc_xtb_status_t commit_scc_mixer_system_transaction_cpu(const SccMixerPlan& plan,
                                                          std::int64_t system,
                                                          const SccMixerState& staged,
                                                          const SccMixerState& destination,
                                                          std::string& error);
 
-}  // namespace vibeqc::xtb::detail::gfn2
+}  // namespace generativeqc::xtb::detail::gfn2
 
-#endif  // VIBEQC_XTB_MODEL_GFN2_SCC_MIXER_HPP
+#endif  // GENERATIVEQC_XTB_MODEL_GFN2_SCC_MIXER_HPP

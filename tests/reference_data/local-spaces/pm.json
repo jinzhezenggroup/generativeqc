@@ -3,7 +3,7 @@
   "method": "Pipek-Mezey with Mulliken populations",
   "numpy": "2.5.3",
   "pyscf": "2.14.0",
-  "record_hash": "73f9428da1a9540bff2f6c79f314a3fec32e34bd76ff6c07798447e9ba166f6f",
+  "record_hash": "46ab467b6955a8c3385601ca2bff5c2bc73f12c2dd69e2f9e01390c7833c523f",
   "rows": [
     {
       "coefficients": [
@@ -144,6 +144,6 @@
       "parent_array_hash": "e120b22195ddf4f0e6aa451961101f84d7a5843d6b8e9971e58a77f341ea5ff9"
     }
   ],
-  "schema": "vibeqc.local_space_reference",
+  "schema": "generativeqc.local_space_reference",
   "version": 1
 }

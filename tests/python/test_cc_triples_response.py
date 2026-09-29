@@ -2,19 +2,19 @@
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor import execute, optimize
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor import execute, optimize
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
-from tools.vibeqc_cc.triples import triples_energy
-from tools.vibeqc_cc.triples_response import (
+from tools.generativeqc_cc.triples import triples_energy
+from tools.generativeqc_cc.triples_response import (
     TRIPLES_RESPONSE_INPUTS,
     accumulate_tile_triples_vjp,
     build_tile_triples_vjp,
     full_triples_vjp,
     tile_triples_vjp,
 )
-from tools.vibeqc_cc.triples_tiles import build_tile_triples_program
+from tools.generativeqc_cc.triples_tiles import build_tile_triples_program
 
 INPUT_NAMES = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
 

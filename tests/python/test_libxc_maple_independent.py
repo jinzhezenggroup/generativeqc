@@ -7,9 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from test_libxc_maple_import import FEATURES, _imported_pbe_x
-from vibeqc_compiler.common.array_graph import evaluate_array_graph
-from vibeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 
 def test_imported_and_compiled_pbe_x_match_independent_libxc(tmp_path: Path) -> None:

@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import pyscf
 
-from tools.vibeqc_hessian.reference import (
+from tools.generativeqc_hessian.reference import (
     System,
     _converged_rhf,
     build_mol,
@@ -104,7 +104,7 @@ def _evidence_case(args: typing.Any, name: typing.Any) -> typing.Any:
     H = hessian_total(s)
     H_fd = fd_hessian(mol, h=args.fd_h)
     H_analytic = _converged_rhf(mol).Hessian().kernel()
-    from tools.vibeqc_hessian.numerical import numerical_hessian
+    from tools.generativeqc_hessian.numerical import numerical_hessian
 
     def gradient(coords: typing.Any, settings: typing.Any) -> typing.Any:
         moved = mol.copy().set_geom_(coords, unit="Bohr")
@@ -186,7 +186,7 @@ def run(args: typing.Any) -> typing.Any:
         "pyscf": pyscf.__version__,
         "source_sha256": {
             str(p.relative_to(_root)): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in (_root / "tools/vibeqc_hessian/reference.py", Path(__file__))
+            for p in (_root / "tools/generativeqc_hessian/reference.py", Path(__file__))
         },
         "cases": {},
     }

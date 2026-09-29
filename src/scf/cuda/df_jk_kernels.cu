@@ -12,7 +12,7 @@
 
 #include "scf/cuda/df_jk_kernels.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 
 __global__ void mirror_exchange_triangle(std::size_t n, double* matrix) {
   const auto k = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
@@ -192,4 +192,4 @@ void launch_reduce_exchange_row_tile_kernel(dim3 grid, dim3 block, std::size_t s
       nbf, row_begin, row_count, column_begin, column_count, auxiliary_count, system, contributions,
       exchange);
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

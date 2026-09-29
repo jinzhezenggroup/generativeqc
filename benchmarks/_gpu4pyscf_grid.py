@@ -28,7 +28,7 @@ def preserve_reference_grid_order(engine: Any) -> None:
 
     integrator = engine._numint
     original = integrator.block_loop
-    if getattr(original, "_vibeqc_preserves_grid_order", False):
+    if getattr(original, "_generativeqc_preserves_grid_order", False):
         return
     parameters = signature(original)
     if "strict_grid_order" not in parameters.parameters:
@@ -56,5 +56,5 @@ def preserve_reference_grid_order(engine: Any) -> None:
             else:
                 yield ao, indices, weights, coords
 
-    blocks._vibeqc_preserves_grid_order = True  # type: ignore[attr-defined]
+    blocks._generativeqc_preserves_grid_order = True  # type: ignore[attr-defined]
     integrator.block_loop = blocks

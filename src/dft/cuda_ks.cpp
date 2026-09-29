@@ -16,6 +16,7 @@
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -31,10 +32,9 @@
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/proposal_control.hpp"
-#include "vibeqc/vibeqc.hpp"
 #include "xc_cpu_generated.hpp"
 
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
 namespace {
 // One-shot injection uses the real status mapper without poisoning the CUDA
 // context, allowing the public API to verify explicit recovery and seed reuse.
@@ -43,7 +43,7 @@ thread_local bool fail_next_ks_runtime = false;
 extern "C" void ks_cuda_fail_next_runtime_for_test_v1() { fail_next_ks_runtime = true; }
 #endif
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 namespace {
 using namespace scf::cuda_execution;
 constexpr unsigned kMaximumFinalCorrections = 4;
@@ -60,13 +60,13 @@ constexpr bool is_semilocal_family(std::uint32_t functional, SemilocalFamily fam
 void check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
-    throw vibeqc::Error(VIBEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(status));
 }
-void check(vibeqc_status status, const std::string& detail) {
-  if (status == VIBEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == VIBEQC_STATUS_CUDA_ERROR) throw vibeqc::Error(status, detail);
-  if (status == VIBEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void check(generativeqc_status status, const std::string& detail) {
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_CUDA_ERROR) throw generativeqc::Error(status, detail);
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 template <class Function>
 void run_resident_nonlocal_cuda(Function function) {
@@ -78,13 +78,13 @@ void run_resident_nonlocal_cuda(Function function) {
     throw;
   } catch (const std::overflow_error&) {
     throw;
-  } catch (const vibeqc::Error&) {
+  } catch (const generativeqc::Error&) {
     throw;
   } catch (const std::runtime_error& error) {
     // The resident VV10 seam uses runtime::cuda_resource_check internally.
     // Translate its untyped CUDA runtime failures at the KS owner boundary;
     // allocation failures already arrive as std::bad_alloc.
-    throw vibeqc::Error(VIBEQC_STATUS_CUDA_ERROR, error.what());
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
   }
 }
 std::size_t product(std::size_t a, std::size_t b) {
@@ -445,16 +445,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     if (options.compute_forces || options.hooks || options.export_physical_reference ||
         options.xc_density_route != XcDensityRoute::DensityMatrix ||
-        (options.precision_mode && *options.precision_mode != VIBEQC_PRECISION_FP64 &&
-         *options.precision_mode != VIBEQC_PRECISION_AUTO))
+        (options.precision_mode && *options.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
+         *options.precision_mode != GENERATIVEQC_PRECISION_AUTO))
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
-    mixed_j = options.precision_mode && *options.precision_mode == VIBEQC_PRECISION_AUTO;
+    mixed_j = options.precision_mode && *options.precision_mode == GENERATIVEQC_PRECISION_AUTO;
     if (mixed_j && fitted_coulomb)
       throw std::invalid_argument("CUDA fitted KS requires strict FP64");
     if (mixed_j && (has_exchange || has_range_correction))
       throw std::invalid_argument("CUDA exact-exchange KS currently requires strict FP64");
-    if (mixed_j && (is_semilocal_family(functional, SemilocalFamily::R2scan) ||
-                    is_semilocal_family(functional, SemilocalFamily::Wb97mv)))
+    const auto* curated_metadata = semilocal_family_metadata_from_code(functional);
+    if (mixed_j && curated_metadata && curated_metadata->requires_tau)
       throw std::invalid_argument("meta-GGA CUDA KS currently requires strict FP64");
     if (nonlocal_correlation) {
       if (!is_semilocal_family(functional, SemilocalFamily::Pbe) &&
@@ -506,7 +506,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     device = fock_binding.device_id;
     stream = fock_binding.stream;
     if (nonlocal_correlation &&
-        (nonlocal_correlation->backend() != VIBEQC_BACKEND_CUDA ||
+        (nonlocal_correlation->backend() != GENERATIVEQC_BACKEND_CUDA ||
          nonlocal_correlation->device_id() != device ||
          nonlocal_correlation->resources().point_count != grid.point_count()))
       throw std::invalid_argument("CUDA KS nonlocal owner is incompatible with the grid or device");
@@ -632,7 +632,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_active = false;
     is_failed = true;
     current_device();
-#if defined(VIBEQC_TEST_HOOKS)
+#if defined(GENERATIVEQC_TEST_HOOKS)
     if (fail_next_ks_runtime) {
       fail_next_ks_runtime = false;
       check(cudaErrorUnknown);
@@ -665,7 +665,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     mixed_j_executed = false;
     final_corrections = 0;
     refinement_iterations = 0;
-    output.precision.requested_mode = options.precision_mode.value_or(VIBEQC_PRECISION_FP64);
+    output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
     pending_iterations = 0;
     // The bounded device-control prototype is qualified only for strict-FP64
     // direct all-electron RKS. AUTO must stay on the legacy host-controlled
@@ -720,7 +720,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   unsigned configured_chunk_width() const noexcept {
-    const char* selection = std::getenv("VIBEQC_CUDA_KS_CHUNK");
+    const char* selection = std::getenv("GENERATIVEQC_CUDA_KS_CHUNK");
     if (selection != nullptr) {
       if (std::strcmp(selection, "0") == 0 || std::strcmp(selection, "1") == 0 ||
           std::strcmp(selection, "off") == 0 || std::strcmp(selection, "none") == 0)
@@ -733,7 +733,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   bool configured_replay_enabled() const noexcept {
-    const char* selection = std::getenv("VIBEQC_CUDA_KS_REPLAY");
+    const char* selection = std::getenv("GENERATIVEQC_CUDA_KS_REPLAY");
     if (selection == nullptr) return false;
     return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "on") == 0 ||
            std::strcmp(selection, "true") == 0 || std::strcmp(selection, "small-native") == 0;
@@ -1185,7 +1185,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     ++output.iterations;
     ++output.fock_builds;
     if (mixed_j_executed && !pending_mixed_j) ++refinement_iterations;
-    output.precision.requested_mode = options.precision_mode.value_or(VIBEQC_PRECISION_FP64);
+    output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
     output.precision.effective_bits = mixed_j_executed ? 32U : 64U;
     output.precision.strict_refinement_applied = mixed_j_executed && refinement_iterations > 0;
     output.precision.refinement_iterations = refinement_iterations;
@@ -1519,24 +1519,24 @@ void CudaKsPlan::invalidate_final_state() noexcept {
   impl_->final_state_ready = impl_->final_frame_ready = false;
   impl_->final_generation = 0;
 }
-vibeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
-                                            std::string& detail) const {
+generativeqc_status CudaKsPlan::final_state_token(CudaKsFinalStateToken& token,
+                                                  std::string& detail) const {
   token = {};
   detail.clear();
   try {
     token = impl_->token();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "host allocation for CUDA KS final-state token failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::exception& error) {
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 }
-vibeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateToken& expected,
-                                                 CudaKsResidentDensityBinding& binding,
-                                                 std::string& detail) const {
+generativeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateToken& expected,
+                                                       CudaKsResidentDensityBinding& binding,
+                                                       std::string& detail) const {
   binding = {};
   detail.clear();
   try {
@@ -1554,38 +1554,38 @@ vibeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateToken& ex
                impl_->owner,
                impl_->solve_epoch,
                impl_->final_generation};
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception& error) {
     detail = error.what();
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
-vibeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& expected,
-                                           bool compute_weighted_density,
-                                           VerifiedKsFinalState& state, std::string& detail) {
+generativeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& expected,
+                                                 bool compute_weighted_density,
+                                                 VerifiedKsFinalState& state, std::string& detail) {
   state = {};
   detail.clear();
   try {
     state = impl_->read_final(expected, compute_weighted_density, detail);
     detail.clear();
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "host allocation for detached CUDA KS final state failed";
-    return VIBEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const vibeqc::Error& error) {
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const generativeqc::Error& error) {
     impl_->final_state_ready = false;
     detail = error.what();
     return error.status();
   } catch (const std::invalid_argument& error) {
     detail = error.what();
-    return VIBEQC_STATUS_INVALID_ARGUMENT;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   } catch (const std::exception& error) {
     impl_->final_state_ready = false;
     if (detail.empty()) detail = error.what();
-    return VIBEQC_STATUS_NUMERICAL_FAILURE;
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
@@ -1608,4 +1608,4 @@ CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   }
   return out;
 }
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

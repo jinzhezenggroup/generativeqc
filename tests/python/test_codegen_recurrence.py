@@ -12,7 +12,7 @@ from codegen_fixtures import (
     factored_dppp_variables,
     sample_variables,
 )
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DDDD_SPEC,
     FDDD_SPEC,
     FFPS_SPEC,
@@ -29,7 +29,7 @@ from vibeqc_compiler.integral import (
     evaluate_fused_shell_component,
     evaluate_fused_shell_value,
 )
-from vibeqc_compiler.integral.shell_class import AXES, CENTERS
+from generativeqc_compiler.integral.shell_class import AXES, CENTERS
 
 
 @pytest.mark.parametrize(

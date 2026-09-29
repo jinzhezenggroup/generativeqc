@@ -3,14 +3,14 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc.accuracy import (
+from generativeqc.accuracy import (
     ErrorEvidence,
     EvidenceKind,
     ObservableTarget,
     ResolvedModel,
     TargetAccuracy,
 )
-from vibeqc.progressive_controller import (
+from generativeqc.progressive_controller import (
     ArithmeticPolicy,
     HFConvergence,
     StagePlan,
@@ -18,7 +18,10 @@ from vibeqc.progressive_controller import (
     TargetProblem,
     TransferOperation,
 )
-from vibeqc.progressive_policy import decide_refinement, rank_refinement_candidates
+from generativeqc.progressive_policy import (
+    decide_refinement,
+    rank_refinement_candidates,
+)
 
 TARGET_MODEL = ResolvedModel("rhf", "g" * 64, "b" * 64, 2)
 SOURCE_MODEL = ResolvedModel("rhf", "g" * 64, "s" * 64, 2)

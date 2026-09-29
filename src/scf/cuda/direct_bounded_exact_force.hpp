@@ -9,7 +9,7 @@
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Forward the native route and optional final-density work ledger. */
 void launch_contract_bounded_exact_low_order_force_page_kernel_scaled(
@@ -32,4 +32,4 @@ void launch_contract_bounded_exact_low_order_force_page_kernel(
     const double* density, double* forces, std::uint32_t* bra_head,
     DeviceShellClassProfileEntry* profile);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

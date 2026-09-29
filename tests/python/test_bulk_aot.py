@@ -12,9 +12,9 @@ from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from vibeqc_compiler.common.compiler_process import CompileResult
-from vibeqc_compiler.common.compiler_work import charge_symbolic_intern
-from vibeqc_compiler.xc import bulk_aot
+from generativeqc_compiler.common.compiler_process import CompileResult
+from generativeqc_compiler.common.compiler_work import charge_symbolic_intern
+from generativeqc_compiler.xc import bulk_aot
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -377,7 +377,7 @@ def test_deferred_groups_are_never_loaded() -> None:
 @pytest.fixture
 def synthetic_catalog(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
     """Control importer inputs; no alternative scientific formula implementation."""
-    from vibeqc_compiler import xc
+    from generativeqc_compiler import xc
 
     catalog = {
         "registrations": [
@@ -391,7 +391,7 @@ def synthetic_catalog(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         ],
         "source_files": {},
     }
-    fake = ModuleType("vibeqc_compiler.xc.libxc_bulk")
+    fake = ModuleType("generativeqc_compiler.xc.libxc_bulk")
     fake.CATALOG_PATH = tmp_path / "catalog.json"
     fake.BULK_SEMANTICS = "interior-test/v1"
     fake.SOURCE_ASSET = "unused"
@@ -413,9 +413,9 @@ def synthetic_catalog(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         )
 
     fake.build_record = build
-    maple = ModuleType("vibeqc_compiler.xc.libxc_maple")
+    maple = ModuleType("generativeqc_compiler.xc.libxc_maple")
     maple.MapleImportError = ValueError
-    paths = ModuleType("vibeqc_compiler.common.paths")
+    paths = ModuleType("generativeqc_compiler.common.paths")
     paths.asset_path = lambda _: tmp_path
     monkeypatch.setitem(sys.modules, fake.__name__, fake)
     monkeypatch.setitem(sys.modules, maple.__name__, maple)

@@ -12,8 +12,8 @@
 #include "scf/mean_field.hpp"
 
 namespace {
-using namespace vibeqc::scf;
-using vibeqc::core::System;
+using namespace generativeqc::scf;
+using generativeqc::core::System;
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -42,13 +42,14 @@ System fixture(bool polarized = false) {
   if (polarized) out.shells.push_back({1, 1, {{0.4, 1.0}}});
   out.electron_count = 2;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(out, detail) == VIBEQC_STATUS_SUCCESS,
-          detail.c_str());
+  require(
+      generativeqc::molecule::validate_and_normalize(out, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
   return out;
 }
 DensityFittingScfData oracle(const System& orbital, const System& aux, double cutoff) {
   DensityFittingScfData out;
-  out.raw = vibeqc::integrals::build_density_fitting_integrals(orbital, aux);
+  out.raw = generativeqc::integrals::build_density_fitting_integrals(orbital, aux);
   out.metric_relative_threshold = cutoff;
   out.three_center = orthonormalize_density_fitting_three_center(
       out.raw.three_center, out.raw.nbf,
@@ -70,8 +71,8 @@ void composed_items() {
   aux1.shells.push_back(first.shells[0]);
   aux2.shells.push_back(second.shells[0]);
   constexpr double cutoff = 1e-8;
-  const auto exact1 = vibeqc::integrals::build_integrals(first);
-  const auto exact2 = vibeqc::integrals::build_integrals(second);
+  const auto exact1 = generativeqc::integrals::build_integrals(first);
+  const auto exact2 = generativeqc::integrals::build_integrals(second);
   const std::vector<DensityFittingScfData> data{oracle(first, aux1, cutoff),
                                                 oracle(second, aux2, cutoff)};
   const auto n = exact1.nbf, m = n * n;
@@ -79,7 +80,7 @@ void composed_items() {
   CudaDirectJkDiagnostic info;
   std::string detail;
   require(create_cuda_direct_jk_plan(0, {first, second}, 1, 0.0, 8U * 1024U * 1024U, &raw, info,
-                                     detail) == VIBEQC_STATUS_SUCCESS,
+                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> direct(
       raw, &destroy_cuda_direct_jk_plan);
@@ -103,12 +104,12 @@ void composed_items() {
       std::size_t nbf{}, naux{};
       require(create_cuda_density_fitting_integral_source(0, {first, second}, {aux1, aux2}, &source,
                                                           metrics, nbf, naux,
-                                                          detail) == VIBEQC_STATUS_SUCCESS,
+                                                          detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       const auto status = create_cuda_density_fitting_jk_plan_from_source(
           0, &source, 2, nbf, naux, metrics, cutoff, 2, 3, &raw_df, diagnostics, detail);
       destroy_cuda_density_fitting_integral_source(source);
-      require(status == VIBEQC_STATUS_SUCCESS, detail.c_str());
+      require(status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
     } else {
       auto metrics = data[0].raw.metric, tensors = data[0].raw.three_center;
       metrics.insert(metrics.end(), data[1].raw.metric.begin(), data[1].raw.metric.end());
@@ -116,7 +117,7 @@ void composed_items() {
                      data[1].raw.three_center.end());
       require(create_cuda_density_fitting_jk_plan(0, 2, n, data[0].raw.naux, metrics, tensors,
                                                   cutoff, 0, &raw_df, diagnostics,
-                                                  detail) == VIBEQC_STATUS_SUCCESS,
+                                                  detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
     }
     std::unique_ptr<CudaDensityFittingJkPlan, decltype(&destroy_cuda_density_fitting_jk_plan)> df(
@@ -243,24 +244,25 @@ void ragged_replay() {
   spec.coulomb.approximation = FockApproximation::DensityFitted;
   ScfOptions options;
   options.resolved_fock_build = resolve_fock_build(spec, FockBackend::Cuda);
-  FleetPlan fleet({system, helium, system}, VIBEQC_METHOD_RHF, options, true, true, false, false,
-                  0);
+  FleetPlan fleet({system, helium, system}, GENERATIVEQC_METHOD_RHF, options, true, true, false,
+                  false, 0);
   const auto first = fleet.execute({});
   for (const auto& item : first)
-    require(item.status == VIBEQC_STATUS_SUCCESS && item.executed_backend == VIBEQC_BACKEND_CUDA,
+    require(item.status == GENERATIVEQC_STATUS_SUCCESS &&
+                item.executed_backend == GENERATIVEQC_BACKEND_CUDA,
             "independent ragged CUDA execution failed");
   std::vector<std::optional<std::vector<double>>> coordinates(3);
   coordinates[1] = std::vector<double>{0.0};
   const auto isolated = fleet.execute(coordinates);
-  require(isolated[1].status == VIBEQC_STATUS_INVALID_ARGUMENT,
+  require(isolated[1].status == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "malformed CUDA fleet item accepted");
   for (std::size_t i : {0U, 2U}) {
-    require(isolated[i].status == VIBEQC_STATUS_SUCCESS && isolated[i].warm_start_used,
+    require(isolated[i].status == GENERATIVEQC_STATUS_SUCCESS && isolated[i].warm_start_used,
             "malformed CUDA neighbor changed warm state");
     close(isolated[i].scf.energy, first[i].scf.energy, 2e-9, "ragged CUDA replay energy");
   }
   const auto recovered = fleet.execute({});
-  require(recovered[1].status == VIBEQC_STATUS_SUCCESS && recovered[1].warm_start_used,
+  require(recovered[1].status == GENERATIVEQC_STATUS_SUCCESS && recovered[1].warm_start_used,
           "CUDA rejected coordinates replaced the previous warm state");
 }
 
@@ -319,8 +321,8 @@ void retained_direct_derivative_reuse() {
   std::size_t primitives = 0;
   for (const auto& shell : system.shells) primitives += shell.primitives.size();
   const auto budget =
-      cuda_direct_coulomb_device_bytes(1, vibeqc::molecule::ao_count(system), system.atoms.size(),
-                                       system.shells.size(), primitives, 1);
+      cuda_direct_coulomb_device_bytes(1, generativeqc::molecule::ao_count(system),
+                                       system.atoms.size(), system.shells.size(), primitives, 1);
   PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
   require(plan.strategy().spec.derivative_order == 0,
           "retained derivative capability changed value-side Fock identity");
@@ -339,13 +341,13 @@ void retained_direct_derivative_reuse() {
               derivative.coordinates_per_item == 3 * system.atoms.size(),
           "prepared derivative binding reported the wrong capability");
 
-  const auto n = vibeqc::molecule::ao_count(system);
+  const auto n = generativeqc::molecule::ao_count(system);
   std::vector<double> density(n * n);
   for (std::size_t i = 0; i < n; ++i) density[i * n + i] = 1.0;
   std::vector<double> response;
   std::string detail;
   require(execute_prepared_cuda_direct_rsh_energy_derivatives(
-              plan, correction, density, {}, response, detail) == VIBEQC_STATUS_SUCCESS,
+              plan, correction, density, {}, response, detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   require(response.size() == 3 * derivative.coordinates_per_item,
           "prepared fused RSH derivative returned the wrong shape");
@@ -371,7 +373,7 @@ void retained_direct_derivative_reuse() {
   std::vector<double> resident_response;
   require(execute_prepared_cuda_direct_rsh_energy_derivatives_device(
               plan, correction, device_density, nullptr, density.size(), resident_response,
-              detail) == VIBEQC_STATUS_SUCCESS,
+              detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   int current_device = -1;
   require(cudaGetDevice(&current_device) == cudaSuccess && current_device == derivative.device_id,

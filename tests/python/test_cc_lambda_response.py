@@ -8,31 +8,31 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.solver_region import RegionDerivative
+from generativeqc_compiler.tensor import PackedLayout, Program, execute
 from test_cc_solver import fixture_problem
-from vibeqc_compiler.common.solver_region import RegionDerivative
-from vibeqc_compiler.tensor import PackedLayout, Program, execute
 
 from tools.cc_endpoint_fixtures import load, source_arguments
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     BoundCCSDLambda,
     BoundCCSDResponse,
     PreparedCCSD,
     SolverOptions,
     solve,
 )
-from tools.vibeqc_cc import solver as solver_module
-from tools.vibeqc_cc.lambda_equations import (
+from tools.generativeqc_cc import solver as solver_module
+from tools.generativeqc_cc.lambda_equations import (
     PARAMETERS,
     build_lambda_programs,
     build_parameter_vjp,
 )
-from tools.vibeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
-from tools.vibeqc_posthf import MOBlock
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response.implicit import ImplicitSolveError
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
+from tools.generativeqc_posthf import MOBlock
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response.implicit import ImplicitSolveError
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 _STRICT = SolverOptions(
     max_iterations=120, residual_tolerance=1e-12, energy_tolerance=1e-14
@@ -369,7 +369,7 @@ def test_state_budget_rejects_before_numeric_execution(
     monkeypatch: typing.Any,
 ) -> None:
     _, _, _, bound, lam, response, _ = _state()
-    from tools.vibeqc_cc import lambda_solver
+    from tools.generativeqc_cc import lambda_solver
 
     monkeypatch.setattr(
         lambda_solver,
@@ -598,7 +598,7 @@ def test_native_weight_stream_prewarms_one_additional_bundle(
     snapshot, provider, _, _ = fixture_problem("h2")
     cc = solve(snapshot, provider, options=_STRICT)
     assert cc.converged
-    monkeypatch.setenv("VIBEQC_TENSOR_CACHE", str(tmp_path))
+    monkeypatch.setenv("GENERATIVEQC_TENSOR_CACHE", str(tmp_path))
 
     native = BoundCCSDLambda(snapshot, cc, backend="native-cpu")
     lam = native.solve(reference_identity=snapshot.identity)

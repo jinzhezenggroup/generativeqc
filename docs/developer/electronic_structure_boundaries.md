@@ -1,6 +1,6 @@
 # Electronic-structure architecture boundaries
 
-VibeQC shares native infrastructure across HF, DFT, post-HF and coupled-cluster
+GenerativeQC shares native infrastructure across HF, DFT, post-HF and coupled-cluster
 methods. This document records the top-level dependency direction protected by
 `tools/check_electronic_structure_boundaries.py`.
 
@@ -70,7 +70,7 @@ The current Infrastructure A--F boundary mapping is:
 | A: iteration / DIIS | `src/solver/` | directory cannot depend on a concrete method; CC and SCF remain include-graph consumers |
 | B: electronic reference | `src/core/electronic_reference.hpp` | `src/core/` cannot depend on a concrete method; SCF and DFT remain consumers |
 | C: interaction provider | `src/integrals/electron_interaction_source.hpp` | the individual provider contract cannot depend on a concrete method; SCF and post-HF remain consumers |
-| D: MethodIR / ExecutionIR | `python/vibeqc_compiler/method/` | `tools/check_compiler_structure.py` enforces compiler-package directions |
+| D: MethodIR / ExecutionIR | `python/generativeqc_compiler/method/` | `tools/check_compiler_structure.py` enforces compiler-package directions |
 | E: linear response | `src/response/` | directory cannot depend on a concrete method; post-HF remains a transitive consumer |
 | F: runtime / workspace | `src/runtime/` | directory cannot acquire new concrete-method edges; the two existing reverse edges remain explicit debt |
 

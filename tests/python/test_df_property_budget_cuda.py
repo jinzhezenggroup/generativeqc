@@ -5,14 +5,14 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, _native
+from generativeqc import Calculator, _native
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace, read_trace
 from benchmarks.df_progress_ledger import read_progress
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 
@@ -48,7 +48,7 @@ def test_property_replay_replans_value_storage_with_complete_forces(
     assert os.environ.get("SLURM_JOB_ID")
     case, energy, forces = tetramer_reference
     calc = Calculator(
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
@@ -67,8 +67,8 @@ def test_property_replay_replans_value_storage_with_complete_forces(
         ):
             progress = tmp_path / f"policy-{index}.jsonl"
             trace = tmp_path / f"device-{index}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(progress))
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(progress))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             item = batch.execute(strict=True, properties=properties).items[0]
             assert item.energy == pytest.approx(energy, abs=1e-9, rel=0)
             policies = [
@@ -105,7 +105,7 @@ def test_resident_response_budget_replans_without_reference_factors(
     assert os.environ.get("SLURM_JOB_ID")
     case, energy, forces = tetramer_reference
     calc = Calculator(
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation="spherical",
         device="cuda",
         density_fitting="cuda",
@@ -125,10 +125,10 @@ def test_resident_response_budget_replans_without_reference_factors(
             trace = tmp_path / f"response-{index}.jsonl"
             host = tmp_path / f"host-{index}.jsonl"
             progress = tmp_path / f"policy-{index}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", str(budget))
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
-            monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(host))
-            monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(progress))
+            monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(budget))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(host))
+            monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(progress))
             item = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             assert item.energy == pytest.approx(energy, abs=1e-9, rel=0)
             np.testing.assert_allclose(item.forces, forces, atol=1e-8, rtol=0)
@@ -151,9 +151,9 @@ def test_resident_response_budget_replans_without_reference_factors(
         tight_budget = 512 << 10
         tight_trace = tmp_path / "response-tight.jsonl"
         tight_progress = tmp_path / "policy-tight.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", str(tight_budget))
-        monkeypatch.setenv("VIBEQC_DF_TRACE", str(tight_trace))
-        monkeypatch.setenv("VIBEQC_DF_PROGRESS_TRACE", str(tight_progress))
+        monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", str(tight_budget))
+        monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(tight_trace))
+        monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(tight_progress))
         tight = batch.execute(strict=False, properties=("energy", "forces")).items[0]
         policies = [
             {value["key"]: value["value"] for value in scope["values"]}
@@ -183,7 +183,7 @@ def test_response_override_cannot_be_invalid_or_enlarge_public_budget(
 ) -> None:
     """The diagnostic selector cannot turn a bounded caller into an unbounded one."""
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("VIBEQC_DF_RESPONSE_BUDGET_BYTES", override)
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES", override)
     calc = Calculator(
         device="cuda",
         density_fitting="cuda",

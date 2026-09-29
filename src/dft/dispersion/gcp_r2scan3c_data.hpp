@@ -5,7 +5,7 @@
 
 #include <array>
 
-namespace vibeqc::dft::dispersion::gcp_data {
+namespace generativeqc::dft::dispersion::gcp_data {
 struct Element {
   double emiss;
   double slater;
@@ -50,4 +50,4 @@ inline constexpr std::array<double, 171> kVdwAngstrom{{
     3.0352, 2.973,  2.9148,
 }};
 inline constexpr char kSimpleDftd3Revision[] = "41d5a07b98ce15e97bec7a1815869725f6c7b0c2";
-}  // namespace vibeqc::dft::dispersion::gcp_data
+}  // namespace generativeqc::dft::dispersion::gcp_data

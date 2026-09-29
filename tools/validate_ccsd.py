@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.evidence import (
+from generativeqc_compiler.common.evidence import (
     block_error,
     canonical_hash,
     file_hash,
@@ -24,11 +24,11 @@ from vibeqc_compiler.common.evidence import (
     outcome,
     write_evidence,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
+from tools.generativeqc_cc.doubles import DEFINITIONS, build_ccsd_program
+from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 from tools.validate_cc import load_references
-from tools.vibeqc_cc.doubles import DEFINITIONS, build_ccsd_program
-from tools.vibeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,8 +60,8 @@ def run(output: typing.Any) -> typing.Any:
     sources = {
         str(p.relative_to(ROOT)).replace("\\", "/"): file_hash(p)
         for p in [
-            *sorted((ROOT / "tools/vibeqc_cc").glob("*.py")),
-            *sorted((ROOT / "python/vibeqc_compiler/tensor").glob("*.py")),
+            *sorted((ROOT / "tools/generativeqc_cc").glob("*.py")),
+            *sorted((ROOT / "python/generativeqc_compiler/tensor").glob("*.py")),
             ROOT / "tools/generate_cc_references.py",
             Path(__file__).resolve(),
         ]

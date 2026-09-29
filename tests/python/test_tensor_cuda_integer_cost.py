@@ -4,15 +4,19 @@ import typing
 from types import SimpleNamespace
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.tensor.cuda_plan import plan_cuda
-from vibeqc_compiler.tensor.cuda_search import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_search import (
     _fp64_accumulation_terms,
     estimate_schedule,
 )
-from vibeqc_compiler.tensor.ir import input_tensor, reduce_sum, runtime_indexed_select
-from vibeqc_compiler.tensor.program import Program
-from vibeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
+from generativeqc_compiler.tensor.ir import (
+    input_tensor,
+    reduce_sum,
+    runtime_indexed_select,
+)
+from generativeqc_compiler.tensor.program import Program
+from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 
 
 @pytest.mark.parametrize("dtype", ("float32", "float64"))

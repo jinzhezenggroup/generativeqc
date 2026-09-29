@@ -47,7 +47,7 @@ def test_all_infeasible_budgets_fail_qualification(
     qualification_args: typing.Any, monkeypatch: typing.Any, compile_only: typing.Any
 ) -> None:
     """An empty set of executed plans cannot satisfy the requested gates."""
-    from vibeqc_compiler.tensor import cuda_plan
+    from generativeqc_compiler.tensor import cuda_plan
 
     def reject(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         raise ValueError("infeasible: test budget is below the plan peak")

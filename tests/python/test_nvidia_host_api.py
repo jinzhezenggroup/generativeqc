@@ -25,7 +25,7 @@ def test_provider_free_sgemm_declarations_and_imports(
     source = tmp_path / "abi.cpp"
     source.write_text(r"""
 #include <type_traits>
-#include "vibeqc_nvidia_host_api.h"
+#include "generativeqc_nvidia_host_api.h"
 using Gemm = cublasStatus_t (*)(cublasHandle_t,cublasOperation_t,cublasOperation_t,
  int,int,int,const float*,const float*,int,const float*,int,const float*,float*,int);
 using Batch = cublasStatus_t (*)(cublasHandle_t,cublasOperation_t,cublasOperation_t,
@@ -51,8 +51,10 @@ static_assert(std::is_same_v<decltype(&cublasSgemmStridedBatched), Batch>);
         text=True,
         timeout=30,
     )
-    cmake = (ROOT / "cmake/VibeQCCudaImplib.cmake").read_text()
-    symbols = cmake.split("set(VIBEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
+    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
+    symbols = (
+        cmake.split("set(GENERATIVEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
+    )
     assert "cublasSgemm_v2" in symbols
     assert "cublasSgemmStridedBatched" in symbols
 
@@ -85,8 +87,10 @@ def test_sgemm_trampolines_link_without_providers_and_forward_abi(
         "#pragma once\nenum libraryPropertyType { MAJOR_VERSION=0 };\n"
     )
     includes = ["-I", str(tmp_path), "-I", str(ROOT / "src/runtime/nvidia_host_api")]
-    cmake = (ROOT / "cmake/VibeQCCudaImplib.cmake").read_text()
-    symbols = cmake.split("set(VIBEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
+    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
+    symbols = (
+        cmake.split("set(GENERATIVEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
+    )
     provider = tmp_path / "mock-cublas.so"
     generate(
         "libcublas.so",

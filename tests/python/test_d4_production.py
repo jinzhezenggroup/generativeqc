@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, D4CorrectionBatch, ResourceBudget, evaluate_d4_correction
+from generativeqc import (
+    Calculator,
+    D4CorrectionBatch,
+    ResourceBudget,
+    evaluate_d4_correction,
+)
 
 _NUMBERS = np.array([6, 8, 7, 1], dtype=np.int32)
 _POSITIONS = np.array(
@@ -61,7 +66,7 @@ def test_production_replay_identity_resources_and_changed_geometry() -> None:
         assert before.workspace_slots == 1
         assert before.workspace_bytes > 0
         assert before.peak_host_bytes >= before.plan_host_bytes
-        assert before.provider_identity == "vibeqc-native-d4-bj-eeq-v1"
+        assert before.provider_identity == "generativeqc-native-d4-bj-eeq-v1"
         assert (
             before.scheduler_identity
             == "bounded-eeq-workers-cooperative-fixed-charge-v1"

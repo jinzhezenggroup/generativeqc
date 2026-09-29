@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_FOCK_PREPARED_HPP
-#define VIBEQC_SCF_FOCK_PREPARED_HPP
+#ifndef GENERATIVEQC_SCF_FOCK_PREPARED_HPP
+#define GENERATIVEQC_SCF_FOCK_PREPARED_HPP
 
 #include <memory>
 
@@ -7,7 +7,7 @@
 #include "scf/cuda_fock_provider.hpp"
 #include "scf/initial_guess/eigen_operation.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 namespace initial_guess {
 class OverlapOrthogonalizer;
 }
@@ -108,5 +108,5 @@ class PreparedFockPlan {
   std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

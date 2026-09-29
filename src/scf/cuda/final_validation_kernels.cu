@@ -2,7 +2,7 @@
 
 #include "scf/cuda/final_validation_kernels.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 constexpr unsigned threads = validation_threads;
 __device__ void add(double value, double& sum, double& correction) {
@@ -165,4 +165,4 @@ void launch_validation_columns(cudaStream_t s, std::size_t n, std::size_t occupi
                                const double* values, double weight, double* out) {
   columns_kernel<<<validation_block_count(n), threads, 0, s>>>(n, occupied, c, values, weight, out);
 }
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

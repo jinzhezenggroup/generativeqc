@@ -8,12 +8,12 @@
 #include "dft/dispersion/d3_bj.hpp"
 
 #if defined(__CUDACC__)
-#define VIBEQC_D3_ATM_HD __host__ __device__
+#define GENERATIVEQC_D3_ATM_HD __host__ __device__
 #else
-#define VIBEQC_D3_ATM_HD
+#define GENERATIVEQC_D3_ATM_HD
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 // Standalone molecular D3(BJ)-ATM reference parameters. The BJ three-body term
 // uses the upstream zero-damping ATM contract with rs9=4/3 and effective
@@ -27,13 +27,13 @@ struct D3ATMParameters {
 inline constexpr double kD3BjAtmRs9 = 4.0 / 3.0;
 inline constexpr double kD3BjAtmAlpha = 16.0;
 
-VIBEQC_D3_ATM_HD inline std::size_t d3_atm_workspace_elements(std::size_t atoms) {
+GENERATIVEQC_D3_ATM_HD inline std::size_t d3_atm_workspace_elements(std::size_t atoms) {
   return d3_workspace_elements(atoms);
 }
 
 namespace d3_atm_detail {
 
-VIBEQC_D3_ATM_HD inline bool valid_parameters(const D3ATMParameters& p) {
+GENERATIVEQC_D3_ATM_HD inline bool valid_parameters(const D3ATMParameters& p) {
   using d3_detail::finite;
   const bool cn = p.cn_cutoff == 0.0 || (finite(p.cn_cutoff) && p.cn_cutoff > 0.0);
   const bool atm = p.atm_cutoff == 0.0 || (finite(p.atm_cutoff) && p.atm_cutoff > 0.0);
@@ -42,8 +42,9 @@ VIBEQC_D3_ATM_HD inline bool valid_parameters(const D3ATMParameters& p) {
          (p.atm_switch_width == 0.0 || (p.atm_cutoff > 0.0 && p.atm_switch_width < p.atm_cutoff));
 }
 
-VIBEQC_D3_ATM_HD inline double atm_radial(double x, double y, double z, double r5, double damping,
-                                          double angle, double damping_derivative, double c9) {
+GENERATIVEQC_D3_ATM_HD inline double atm_radial(double x, double y, double z, double r5,
+                                                double damping, double angle,
+                                                double damping_derivative, double c9) {
   const double angle_derivative =
       -0.375 *
       (x * x * x + x * x * (y + z) + x * (3.0 * y * y + 2.0 * y * z + 3.0 * z * z) -
@@ -59,12 +60,10 @@ VIBEQC_D3_ATM_HD inline double atm_radial(double x, double y, double z, double r
 // standalone mode clears its output. Production composition may request
 // accumulation after a separately evaluated two-body D3(BJ) contribution.
 // Workspace is exactly 16*n doubles, matching evaluate_d3_bj.
-VIBEQC_D3_ATM_HD inline D3Status evaluate_d3_bj_atm(std::size_t n, const std::int32_t* z,
-                                                    const double* xyz,
-                                                    const D3ATMParameters& parameters,
-                                                    D3Tables tables, double* workspace,
-                                                    std::size_t workspace_elements, double* energy,
-                                                    double* gradient, bool accumulate = false) {
+GENERATIVEQC_D3_ATM_HD inline D3Status evaluate_d3_bj_atm(
+    std::size_t n, const std::int32_t* z, const double* xyz, const D3ATMParameters& parameters,
+    D3Tables tables, double* workspace, std::size_t workspace_elements, double* energy,
+    double* gradient, bool accumulate = false) {
   using namespace d3_detail;
   using namespace d3_atm_detail;
   if (!z || !xyz || !workspace || !energy || n == 0 || n > kD3MaximumAtomsPerSystem ||
@@ -217,6 +216,6 @@ VIBEQC_D3_ATM_HD inline D3Status evaluate_d3_bj_atm(std::size_t n, const std::in
   return D3Status::success;
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion
 
-#undef VIBEQC_D3_ATM_HD
+#undef GENERATIVEQC_D3_ATM_HD

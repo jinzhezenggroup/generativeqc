@@ -6,8 +6,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from vibeqc_compiler.common import paths
-from vibeqc_compiler.tensor.cuda_execute import tensor_source_identity
+from generativeqc_compiler.common import paths
+from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 HEADER = "src/runtime/compiled_execution_region.hpp"
@@ -32,7 +32,7 @@ def test_wheel_staged_lifecycle_header_compiles(
     source.write_text(
         '#include "runtime/compiled_execution_region.hpp"\n'
         "int main() {\n"
-        "  vibeqc::runtime::CompiledExecutionRegion region;\n"
+        "  generativeqc::runtime::CompiledExecutionRegion region;\n"
         '  region.bind({"installed-lifecycle"});\n'
         "  region.mark_success();\n"
         '  region.mark_failure("injected");\n'
@@ -52,7 +52,7 @@ def test_wheel_staged_lifecycle_header_compiles(
         [
             compiler,
             "-std=c++17",
-            "-I" + str(tmp_path / "vibeqc_compiler/assets/src"),
+            "-I" + str(tmp_path / "generativeqc_compiler/assets/src"),
             str(source),
             "-o",
             str(binary),

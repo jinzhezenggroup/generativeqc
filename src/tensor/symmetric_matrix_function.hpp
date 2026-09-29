@@ -1,12 +1,12 @@
-#ifndef VIBEQC_TENSOR_SYMMETRIC_MATRIX_FUNCTION_HPP
-#define VIBEQC_TENSOR_SYMMETRIC_MATRIX_FUNCTION_HPP
+#ifndef GENERATIVEQC_TENSOR_SYMMETRIC_MATRIX_FUNCTION_HPP
+#define GENERATIVEQC_TENSOR_SYMMETRIC_MATRIX_FUNCTION_HPP
 
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
 
-namespace vibeqc::tensor {
+namespace generativeqc::tensor {
 
 enum class SymmetricMatrixFunction : std::uint8_t { inverse_sqrt, pseudoinverse };
 
@@ -21,5 +21,5 @@ enum class SymmetricMatrixFunction : std::uint8_t { inverse_sqrt, pseudoinverse 
     std::span<const std::uint8_t> retained, std::span<const double> response,
     SymmetricMatrixFunction function, double resolution);
 
-}  // namespace vibeqc::tensor
+}  // namespace generativeqc::tensor
 #endif

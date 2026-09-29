@@ -18,10 +18,10 @@ from pathlib import Path
 from .freeze_contract import REPO, ROOT, build, canonical, digest, source_digest
 from .precision import require_public_precision
 
-OFFICIAL_UPSTREAM_URL = "https://github.com/jinzhezenggroup/vibeqc.git"
+OFFICIAL_UPSTREAM_URL = "https://github.com/jinzhezenggroup/generativeqc.git"
 OFFICIAL_UPSTREAM_MASTER_REF = "refs/heads/master"
 FINAL_REVIEW_URL_PATTERN = (
-    r"^https://github\.com/jinzhezenggroup/vibeqc/issues/1190"
+    r"^https://github\.com/jinzhezenggroup/generativeqc/issues/1190"
     r"#issuecomment-[1-9][0-9]*$"
 )
 
@@ -196,7 +196,7 @@ def manifest() -> dict:
         "basis/domain drift",
     )
     require(
-        source_digest((REPO / "python/vibeqc/data/basis_pack.json").read_bytes())
+        source_digest((REPO / "python/generativeqc/data/basis_pack.json").read_bytes())
         == value["basis"]["basis_pack_sha256"],
         "basis pack drift requires a new contract",
     )
@@ -354,7 +354,7 @@ def _check_run(
     require(
         type(oracle_provider) is str
         and bool(oracle_provider)
-        and oracle_provider not in ("vibeqc", "native-dft"),
+        and oracle_provider not in ("generativeqc", "native-dft"),
         "independent oracle provider missing or not independent",
     )
     checked_file(base, oracle.get("raw"))

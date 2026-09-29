@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 using ComponentDerivativeDispatch = int (*)(unsigned, const double*, std::size_t, double*);
 
 // Scheduling only: every component/primitive weight visits an existing generated
@@ -17,20 +17,20 @@ inline bool component_index(double value, std::size_t limit, std::size_t& out) {
   out = static_cast<std::size_t>(value);
   return true;
 }
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals
 
-#ifndef VIBEQC_COMPONENT_RUNTIME_API
-#define VIBEQC_COMPONENT_RUNTIME_API
+#ifndef GENERATIVEQC_COMPONENT_RUNTIME_API
+#define GENERATIVEQC_COMPONENT_RUNTIME_API
 #endif
 
-extern "C" VIBEQC_COMPONENT_RUNTIME_API int vibeqc_component_contract_cpu(
+extern "C" GENERATIVEQC_COMPONENT_RUNTIME_API int generativeqc_component_contract_cpu(
     const double* centers, std::size_t atoms, const double* primitives, std::size_t nprimitive,
     const double* aos, std::size_t nao, const std::int64_t* labels, const std::int64_t* bindings,
     std::size_t binding_rows, std::size_t label_count,
-    const vibeqc::integrals::ComponentDerivativeDispatch* dispatch, std::size_t libraries,
+    const generativeqc::integrals::ComponentDerivativeDispatch* dispatch, std::size_t libraries,
     unsigned op, const std::int64_t* indices, double weight, std::int64_t nucleus, double* records,
     std::size_t capacity, double* output, std::uint64_t* work) {
-  using vibeqc::integrals::component_index;
+  using generativeqc::integrals::component_index;
   if (!centers || !primitives || !aos || !labels || !bindings || !dispatch || !indices ||
       !records || !output || !work || !atoms || !nprimitive || !nao || !libraries || !capacity ||
       capacity > 4096 || op > 3 || !std::isfinite(weight) || !label_count || label_count > 10)

@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 from test_force_aware_scf import policy
 
-from tools.vibeqc_numerics import scf_effort_geomopt_benchmark as bench
+from tools.generativeqc_numerics import scf_effort_geomopt_benchmark as bench
 
 if TYPE_CHECKING:
     import pytest
+    from generativeqc.force_aware_scf import ScfEffortLevel
     from typing_extensions import Self
-    from vibeqc.force_aware_scf import ScfEffortLevel
 
 
 def test_complete_policy_time_includes_failed_solve_and_owner_lifecycle(

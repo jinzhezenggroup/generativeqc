@@ -8,7 +8,7 @@
 
 #include "scf/reference/observation.hpp"
 
-namespace vibeqc::scf::reference {
+namespace generativeqc::scf::reference {
 
 Matrix identity(std::size_t n) {
   Matrix result(n * n, 0.0);
@@ -156,4 +156,4 @@ double dot(const Matrix& a, const Matrix& b) {
   return result;
 }
 
-}  // namespace vibeqc::scf::reference
+}  // namespace generativeqc::scf::reference

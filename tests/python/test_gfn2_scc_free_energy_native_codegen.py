@@ -7,11 +7,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.gfn2_scc_free_energy_runtime import (
+from generativeqc_compiler.method.gfn2_scc_free_energy_runtime import (
     build_gfn2_scc_free_energy_program,
     build_gfn2_scc_internal_energy_program,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "src/xtb/native"
@@ -101,7 +101,7 @@ def test_generated_scc_energy_host_rounding_contract(tmp_path: Path) -> None:
 #include "generated_gfn2_scc_free_energy_native.hpp"
 
 int main() {
-  using namespace vibeqc::xtb::generated;
+  using namespace generativeqc::xtb::generated;
   double internal = 0.0;
   if (!compose_gfn2_scc_internal_energy(
           1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, internal)) return 1;

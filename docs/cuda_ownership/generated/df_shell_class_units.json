@@ -5,5 +5,5 @@
     "generated/df_shells/*.cuh",
     "generated/df_shells/*.hpp"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_shell_units.py"
+  "owner": "python/generativeqc_compiler/integral/df_shell_units.py"
 }

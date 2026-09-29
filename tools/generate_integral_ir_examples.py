@@ -12,7 +12,7 @@ import argparse
 import json
 from pathlib import Path
 
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     BasisShell,
     CenterBinding,
     IntegralIR,

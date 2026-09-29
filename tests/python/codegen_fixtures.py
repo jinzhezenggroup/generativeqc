@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import typing
 
-from vibeqc_compiler.integral.shell_class import AXES
+from generativeqc_compiler.integral.shell_class import AXES
 
 
 def boys_values(argument: float, count: int = 3) -> list[float]:

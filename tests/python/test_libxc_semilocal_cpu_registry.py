@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from vibeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
-from vibeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from tools import generate_libxc_semilocal_cpu_registry as registry
 

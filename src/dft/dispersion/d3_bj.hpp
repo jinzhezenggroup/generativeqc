@@ -8,12 +8,12 @@
 #include "d3_data.hpp"
 
 #if defined(__CUDACC__)
-#define VIBEQC_D3_HD __host__ __device__
+#define GENERATIVEQC_D3_HD __host__ __device__
 #else
-#define VIBEQC_D3_HD
+#define GENERATIVEQC_D3_HD
 #endif
 
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 
 inline constexpr std::size_t kD3MaximumAtomsPerSystem = 4096;
 
@@ -42,15 +42,15 @@ inline D3Tables d3_host_tables() {
           d3_data::kReferenceC6.data()};
 }
 
-VIBEQC_D3_HD inline std::size_t d3_workspace_elements(std::size_t atoms) {
+GENERATIVEQC_D3_HD inline std::size_t d3_workspace_elements(std::size_t atoms) {
   return atoms <= kD3MaximumAtomsPerSystem ? 16 * atoms : 0;
 }
 
 namespace d3_detail {
 
-VIBEQC_D3_HD inline bool finite(double x) { return x == x && x <= DBL_MAX && x >= -DBL_MAX; }
+GENERATIVEQC_D3_HD inline bool finite(double x) { return x == x && x <= DBL_MAX && x >= -DBL_MAX; }
 
-VIBEQC_D3_HD inline bool valid_parameters(const D3Parameters& p) {
+GENERATIVEQC_D3_HD inline bool valid_parameters(const D3Parameters& p) {
   const bool cn = p.cn_cutoff == 0.0 || (finite(p.cn_cutoff) && p.cn_cutoff > 0.0);
   const bool pair = p.pair_cutoff == 0.0 || (finite(p.pair_cutoff) && p.pair_cutoff > 0.0);
   return finite(p.s6) && finite(p.s8) && finite(p.a1) && finite(p.a2) && finite(p.s9) &&
@@ -60,12 +60,12 @@ VIBEQC_D3_HD inline bool valid_parameters(const D3Parameters& p) {
           (p.pair_cutoff > 0.0 && p.pair_switch_width < p.pair_cutoff));
 }
 
-VIBEQC_D3_HD inline double logistic(double argument) {
+GENERATIVEQC_D3_HD inline double logistic(double argument) {
   const double e = exp(-fabs(argument));
   return argument >= 0.0 ? 1.0 / (1.0 + e) : e / (1.0 + e);
 }
 
-VIBEQC_D3_HD inline double smooth_cutoff(double r, double cutoff, double width, double& dr) {
+GENERATIVEQC_D3_HD inline double smooth_cutoff(double r, double cutoff, double width, double& dr) {
   dr = 0.0;
   if (cutoff == 0.0 || width == 0.0 || r <= cutoff - width) return 1.0;
   if (r >= cutoff) return 0.0;
@@ -74,13 +74,13 @@ VIBEQC_D3_HD inline double smooth_cutoff(double r, double cutoff, double width, 
   return x * x * x * (10.0 + x * (-15.0 + 6.0 * x));
 }
 
-VIBEQC_D3_HD inline std::size_t pair_index(int z_first, int z_second) {
+GENERATIVEQC_D3_HD inline std::size_t pair_index(int z_first, int z_second) {
   const int lo = z_first < z_second ? z_first : z_second;
   const int hi = z_first < z_second ? z_second : z_first;
   return static_cast<std::size_t>(lo - 1 + hi * (hi - 1) / 2);
 }
 
-VIBEQC_D3_HD inline double reference_c6(D3Tables tables, int zi, int zj, int ri, int rj) {
+GENERATIVEQC_D3_HD inline double reference_c6(D3Tables tables, int zi, int zj, int ri, int rj) {
   const auto pair = tables.pairs[pair_index(zi, zj)];
   if (zi <= zj) {
     return tables.reference_c6[pair.c6_offset +
@@ -94,9 +94,9 @@ struct Coefficient {
   double c6{}, first_cn{}, second_cn{};
 };
 
-VIBEQC_D3_HD inline bool prepare_atom_weights(std::size_t atom, const std::int32_t* z,
-                                              const double* cn, D3Tables tables, double* weights,
-                                              double* derivatives) {
+GENERATIVEQC_D3_HD inline bool prepare_atom_weights(std::size_t atom, const std::int32_t* z,
+                                                    const double* cn, D3Tables tables,
+                                                    double* weights, double* derivatives) {
   const auto element = tables.elements[z[atom] - 1];
   if (element.reference_count == 0 || element.reference_count > 7 || !finite(cn[atom]))
     return false;
@@ -132,17 +132,19 @@ VIBEQC_D3_HD inline bool prepare_atom_weights(std::size_t atom, const std::int32
   return true;
 }
 
-VIBEQC_D3_HD inline bool prepare_weights(std::size_t n, const std::int32_t* z, const double* cn,
-                                         D3Tables tables, double* weights, double* derivatives) {
+GENERATIVEQC_D3_HD inline bool prepare_weights(std::size_t n, const std::int32_t* z,
+                                               const double* cn, D3Tables tables, double* weights,
+                                               double* derivatives) {
   for (std::size_t atom = 0; atom < n; ++atom) {
     if (!prepare_atom_weights(atom, z, cn, tables, weights, derivatives)) return false;
   }
   return true;
 }
 
-VIBEQC_D3_HD inline Coefficient coefficient(std::size_t first, std::size_t second,
-                                            const std::int32_t* z, D3Tables tables,
-                                            const double* weights, const double* derivatives) {
+GENERATIVEQC_D3_HD inline Coefficient coefficient(std::size_t first, std::size_t second,
+                                                  const std::int32_t* z, D3Tables tables,
+                                                  const double* weights,
+                                                  const double* derivatives) {
   const auto first_element = tables.elements[z[first] - 1];
   const auto second_element = tables.elements[z[second] - 1];
   Coefficient out{};
@@ -158,8 +160,9 @@ VIBEQC_D3_HD inline Coefficient coefficient(std::size_t first, std::size_t secon
   return out;
 }
 
-VIBEQC_D3_HD inline void add_pair_gradient(std::size_t first, std::size_t second, double dx,
-                                           double dy, double dz, double scale, double* gradient) {
+GENERATIVEQC_D3_HD inline void add_pair_gradient(std::size_t first, std::size_t second, double dx,
+                                                 double dy, double dz, double scale,
+                                                 double* gradient) {
   gradient[3 * first] += scale * dx;
   gradient[3 * first + 1] += scale * dy;
   gradient[3 * first + 2] += scale * dz;
@@ -172,10 +175,11 @@ VIBEQC_D3_HD inline void add_pair_gradient(std::size_t first, std::size_t second
 
 // Complete two-body D3(BJ) dE/dR including coordination-number response.
 // Workspace is exactly 16*n doubles: weights[7n], dweight/dCN[7n], adjoints[n], CN[n].
-VIBEQC_D3_HD inline D3Status evaluate_d3_bj(std::size_t n, const std::int32_t* z, const double* xyz,
-                                            const D3Parameters& parameters, D3Tables tables,
-                                            double* workspace, std::size_t workspace_elements,
-                                            double* energy, double* gradient) {
+GENERATIVEQC_D3_HD inline D3Status evaluate_d3_bj(std::size_t n, const std::int32_t* z,
+                                                  const double* xyz, const D3Parameters& parameters,
+                                                  D3Tables tables, double* workspace,
+                                                  std::size_t workspace_elements, double* energy,
+                                                  double* gradient) {
   using namespace d3_detail;
   if (!z || !xyz || !workspace || !energy || n == 0 || n > kD3MaximumAtomsPerSystem ||
       workspace_elements < d3_workspace_elements(n) || !valid_parameters(parameters))
@@ -282,6 +286,6 @@ VIBEQC_D3_HD inline D3Status evaluate_d3_bj(std::size_t n, const std::int32_t* z
   return D3Status::success;
 }
 
-}  // namespace vibeqc::dft::dispersion
+}  // namespace generativeqc::dft::dispersion
 
-#undef VIBEQC_D3_HD
+#undef GENERATIVEQC_D3_HD

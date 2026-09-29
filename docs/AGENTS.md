@@ -4,7 +4,7 @@ These rules apply to files under `docs/`.
 
 ## Organize documentation by audience
 
-- `learn/`: the minimum quantum-chemistry concepts needed to use VibeQC correctly.
+- `learn/`: the minimum quantum-chemistry concepts needed to use GenerativeQC correctly.
 - `user/`: task-oriented public behavior and workflows.
 - `reference/`: authoritative lookup material such as units, names, options, and generated capabilities.
 - `developer/`: architecture, numerical algorithms, compiler/code generation, implementation contracts, and extension interfaces.

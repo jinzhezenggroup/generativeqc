@@ -3,8 +3,8 @@
 import typing
 
 import numpy as np
-from vibeqc_compiler.method import ImplicitSolveSpec
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.method import ImplicitSolveSpec
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     Program,

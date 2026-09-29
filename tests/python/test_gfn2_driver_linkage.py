@@ -36,8 +36,8 @@ extern "C" int cuMemGetAddressRange_v2(unsigned long long* base,std::size_t* siz
     (tmp_path / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\nproject(DriverProbe LANGUAGES CXX)\nenable_language(C ASM)\n"
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
-        f'include("{ROOT / "cmake/VibeQCCudaImplib.cmake"}")\n'
-        "add_library(probe SHARED probe.cpp)\nvibeqc_attach_cuda_driver_implib(probe)\n"
+        f'include("{ROOT / "cmake/GenerativeQCCudaImplib.cmake"}")\n'
+        "add_library(probe SHARED probe.cpp)\ngenerativeqc_attach_cuda_driver_implib(probe)\n"
         'target_link_options(probe PRIVATE "LINKER:-z,defs")\n'
         "add_library(cuda SHARED driver.cpp)\nset_target_properties(cuda PROPERTIES SOVERSION 1)\n"
     )

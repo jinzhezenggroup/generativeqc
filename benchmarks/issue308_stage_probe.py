@@ -72,7 +72,7 @@ def prepare(case_name: str, output: Path, checkpoint: Path | None) -> None:
     metric = df.addons.make_auxmol(mol, case.pyscf_basis).intor("int2c2e")
     eigenvalues = np.linalg.eigvalsh(metric)
     # This fixture uses the same full positive metric space for PySCF Cholesky
-    # and VibeQC's relative 1e-10 spectral policy. Reject a rank-policy mismatch.
+    # and GenerativeQC's relative 1e-10 spectral policy. Reject a rank-policy mismatch.
     rank = int(np.count_nonzero(eigenvalues > 1e-10 * eigenvalues[-1]))
     if rank != len(eigenvalues):
         raise ValueError(
@@ -102,7 +102,7 @@ def prepare(case_name: str, output: Path, checkpoint: Path | None) -> None:
                 shells.append((atom, angular, [(r[0], r[contraction]) for r in rows]))
     with (output / "input.txt").open("x") as stream:
         stream.write(
-            f"vibeqc-stage-v1 {mol.natm} {len(shells)} 1 {coefficients.shape[1]}\n"
+            f"generativeqc-stage-v1 {mol.natm} {len(shells)} 1 {coefficients.shape[1]}\n"
         )
         for z, xyz in zip(mol.atom_charges(), mol.atom_coords(), strict=True):
             stream.write(f"{z} " + " ".join(format(v, ".17g") for v in xyz) + "\n")
@@ -116,7 +116,7 @@ def prepare(case_name: str, output: Path, checkpoint: Path | None) -> None:
         output / "reference.npz", density=density, j=j, k=k, overlap=overlap
     )
     record = {
-        "schema": "vibeqc.issue308.fixed-density-input.v1",
+        "schema": "generativeqc.issue308.fixed-density-input.v1",
         "case": case_name,
         "nbf": mol.nao,
         "naux": len(eigenvalues),
@@ -165,27 +165,31 @@ def run(args: argparse.Namespace) -> None:
         if sha256(fixture / name) != metadata[key]:
             raise ValueError("input identity mismatch")
     native = ctypes.CDLL(str(library))
-    native.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    from vibeqc.autotune import source_identity
+    native.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    from generativeqc.autotune import source_identity
 
-    identity = native.vibeqc_get_source_identity().decode()
+    identity = native.generativeqc_get_source_identity().decode()
     if identity != source_identity(Path(__file__).resolve().parents[1]):
         raise ValueError("loaded library does not match the current native source")
     cuda_version = ctypes.c_int()
     if native.cudaRuntimeGetVersion(ctypes.byref(cuda_version)) != 0:
         raise RuntimeError("cannot identify the loaded CUDA runtime")
     env = dict(os.environ)
-    ambient = {k: v for k, v in env.items() if k.startswith("VIBEQC_DF_")}
+    ambient = {k: v for k, v in env.items() if k.startswith("GENERATIVEQC_DF_")}
     if any(
         ambient.get(k)
-        for k in ("VIBEQC_DF_TRACE", "VIBEQC_DF_HOST_TRACE", "VIBEQC_DF_PROGRESS_TRACE")
+        for k in (
+            "GENERATIVEQC_DF_TRACE",
+            "GENERATIVEQC_DF_HOST_TRACE",
+            "GENERATIVEQC_DF_PROGRESS_TRACE",
+        )
     ):
         raise ValueError("trace paths must be owned by this fresh probe")
     if args.progress:
-        env["VIBEQC_DF_PROGRESS_TRACE"] = str(output / "progress.jsonl")
-        env["VIBEQC_DF_TRACE"] = str(output / "cuda.jsonl")
+        env["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(output / "progress.jsonl")
+        env["GENERATIVEQC_DF_TRACE"] = str(output / "cuda.jsonl")
         if args.scf_mode:
-            env["VIBEQC_DF_HOST_TRACE"] = str(output / "host.jsonl")
+            env["GENERATIVEQC_DF_HOST_TRACE"] = str(output / "host.jsonl")
     env["LD_LIBRARY_PATH"] = str(library.parent) + ":" + env.get("LD_LIBRARY_PATH", "")
     command = [
         str(probe),
@@ -211,7 +215,7 @@ def run(args: argparse.Namespace) -> None:
     elif args.retain_b:
         command.append("1")
     record = {
-        "schema": "vibeqc.issue308.stage-probe.v1",
+        "schema": "generativeqc.issue308.stage-probe.v1",
         "status": "running",
         "command": command,
         "input": metadata,
@@ -222,7 +226,7 @@ def run(args: argparse.Namespace) -> None:
         "slurm_job": os.environ["SLURM_JOB_ID"],
         "cuda_visible_devices": env["CUDA_VISIBLE_DEVICES"],
         "diagnostic_environment": {
-            k: v for k, v in env.items() if k.startswith("VIBEQC_DF_")
+            k: v for k, v in env.items() if k.startswith("GENERATIVEQC_DF_")
         },
         "driver": subprocess.check_output(
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"],
@@ -290,7 +294,7 @@ def run(args: argparse.Namespace) -> None:
                     {
                         line.split()[-1]
                         for line in (procdir / "maps").read_text().splitlines()
-                        if "libvibeqc.so" in line
+                        if "libgenerativeqc.so" in line
                     }
                 )
                 save()

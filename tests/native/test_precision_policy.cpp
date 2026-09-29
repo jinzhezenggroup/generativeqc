@@ -12,12 +12,12 @@
 #include <vector>
 
 #include "api/precision.hpp"
+#include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/direct_task_layout.hpp"
 #include "scf/generated_shell_task.hpp"
 #include "scf/mean_field.hpp"
-#include "vibeqc/vibeqc.h"
 
 namespace {
 void require(bool condition, const char* message) {
@@ -48,17 +48,17 @@ class ScopedEnv {
 };
 
 using Threshold = std::optional<double>;
-using Admission = vibeqc::scf::cuda_policy::AutoMixedPrecisionAdmission;
+using Admission = generativeqc::scf::cuda_policy::AutoMixedPrecisionAdmission;
 /** Binary32 unit roundoff, mirrored from the policy constant. */
 constexpr double kTestFloat32UnitRoundoff = 5.9604644775390625e-08;
 
 void verify_direct_jk_target_policy() {
-  using vibeqc::runtime::CudaTargetInfo;
-  using vibeqc::scf::cuda_policy::bounded_direct_primary_streaming_fock_mask_requested;
-  using vibeqc::scf::cuda_policy::direct_jk_bounded_streaming_task_capacity_limit;
-  using vibeqc::scf::cuda_policy::DirectJkTuningProfile;
-  using vibeqc::scf::cuda_policy::resolve_direct_jk_schedule_policy;
-  using vibeqc::scf::detail::GeneratedShellTask;
+  using generativeqc::runtime::CudaTargetInfo;
+  using generativeqc::scf::cuda_policy::bounded_direct_primary_streaming_fock_mask_requested;
+  using generativeqc::scf::cuda_policy::direct_jk_bounded_streaming_task_capacity_limit;
+  using generativeqc::scf::cuda_policy::DirectJkTuningProfile;
+  using generativeqc::scf::cuda_policy::resolve_direct_jk_schedule_policy;
+  using generativeqc::scf::detail::GeneratedShellTask;
 
   CudaTargetInfo qualified;
   qualified.warp_size = 32;
@@ -108,14 +108,14 @@ void verify_direct_jk_target_policy() {
           "unknown occupancy uses the conservative four-worker fallback");
 
   for (const char* value : {"0x15", "21", "025"}) {
-    ScopedEnv mask("VIBEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", value);
+    ScopedEnv mask("GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", value);
     errno = ERANGE;  // A previous conversion must not poison a valid selection.
     const auto selected_mask = bounded_direct_primary_streaming_fock_mask_requested();
     require(selected_mask.has_value() && *selected_mask == 0x15U,
             "primary streaming diagnostic accepts an explicit class mask");
   }
   for (const char* value : {"all", "18446744073709551615", "0xffffffffffffffff"}) {
-    ScopedEnv mask("VIBEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", value);
+    ScopedEnv mask("GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", value);
     const auto selected_mask = bounded_direct_primary_streaming_fock_mask_requested();
     require(
         selected_mask.has_value() && *selected_mask == std::numeric_limits<std::uint64_t>::max(),
@@ -124,7 +124,7 @@ void verify_direct_jk_target_policy() {
   for (const char* value :
        {static_cast<const char*>(nullptr), "", "0", "0x0", "none", "invalid", "-1", " -1", "\t-2",
         "+1", " 1", "1 ", "0x", "21junk", "18446744073709551616", "0x10000000000000000"}) {
-    ScopedEnv mask("VIBEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", value);
+    ScopedEnv mask("GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", value);
     require(!bounded_direct_primary_streaming_fock_mask_requested().has_value(),
             "malformed primary streaming masks fail closed");
   }
@@ -153,10 +153,10 @@ void verify_direct_jk_target_policy() {
           (std::size_t{96} << 20) / sizeof(GeneratedShellTask),
       "bounded streaming remains independently tunable");
 
-  using vibeqc::scf::cuda_policy::estimate_small_hf_workload;
-  using vibeqc::scf::cuda_policy::resolve_small_hf_profitability;
-  using vibeqc::scf::cuda_policy::SmallHfProfitabilityProfile;
-  using vibeqc::scf::cuda_policy::SmallHfWorkload;
+  using generativeqc::scf::cuda_policy::estimate_small_hf_workload;
+  using generativeqc::scf::cuda_policy::resolve_small_hf_profitability;
+  using generativeqc::scf::cuda_policy::SmallHfProfitabilityProfile;
+  using generativeqc::scf::cuda_policy::SmallHfWorkload;
 
   const SmallHfWorkload small16{16U, 1U, 1U, 1U};
   const auto estimate16 = estimate_small_hf_workload(qualified, small16);
@@ -219,14 +219,14 @@ void verify_auto_budget_admission() {
   // Small census: the legacy measured anchor is tighter than the budget, so it
   // still bounds the cutoff.
   const Admission small =
-      vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, 100.0);
+      generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, 100.0);
   require(small.admitted, "a 100-tile mixed-capable census fits the budget");
   require_close(small.threshold, 1.0e-6, 1.0e-18, "the anchor caps a small census");
   require_close(small.reserved_error, reserved, 1.0e-24, "the admission reports its budget");
   // Budget-dominated census: many individually eligible tiles collectively
   // exceed the per-tile anchor, so the certified cutoff must shrink.
   const Admission crowded =
-      vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, 1000.0);
+      generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, 1000.0);
   require(crowded.admitted, "a budget-dominated census is still admissible");
   require_close(crowded.threshold, reserved / (kTestFloat32UnitRoundoff * 1000.0), 1.0e-18,
                 "the budget resolves the cutoff for the actual census");
@@ -241,26 +241,28 @@ void verify_auto_budget_admission() {
   // certified cutoff falls to the screening floor and the mixed route is
   // refused, leaving the FP64 operator rather than an unbounded accumulation.
   const double floor_census = reserved / (kTestFloat32UnitRoundoff * screen);
-  require(
-      !vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, floor_census * 2.0)
-           .admitted,
-      "a census past the budget floor refuses the mixed route");
-  require(!vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen,
-                                                                     floor_census * 10.0)
+  require(!generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen,
+                                                                           floor_census * 2.0)
+               .admitted,
+          "a census past the budget floor refuses the mixed route");
+  require(!generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen,
+                                                                           floor_census * 10.0)
                .admitted,
           "further past the budget floor the mixed route stays refused");
   // An absent census cannot be bounded, so it is never admitted by default.
-  require(!vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, 0.0).admitted,
+  require(!generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(energy, screen, 0.0)
+               .admitted,
           "an unknown census is refused");
-  require(!vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(0.0, screen, 100.0).admitted,
-          "a non-positive target is refused");
-  require(!vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(
+  require(
+      !generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(0.0, screen, 100.0).admitted,
+      "a non-positive target is refused");
+  require(!generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(
                std::numeric_limits<double>::infinity(), screen, 100.0)
                .admitted,
           "a non-finite target is refused");
   // A looser target both raises the anchor and enlarges the reserved budget.
   const Admission looser =
-      vibeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(1.0e-6, screen, 100.0);
+      generativeqc::scf::cuda_policy::admit_auto_mixed_precision_fock(1.0e-6, screen, 100.0);
   require(looser.admitted && looser.threshold > small.threshold,
           "a looser target certifies a larger cutoff");
   require_close(looser.threshold, 1.0e-2, 1.0e-14, "1e-6 target anchors a 1e-2 cutoff");
@@ -269,16 +271,18 @@ void verify_auto_budget_admission() {
 void verify_fp64_strict() {
   const double screen = 1.0e-12;
   const double energy = 1.0e-10;
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy clean =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_FP64), energy, screen, 100.0);
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy clean =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_FP64), energy, screen,
+          100.0);
   require(!clean.threshold.has_value(), "explicit FP64 resolves to the pure double path");
   require(!clean.budget_certified, "explicit FP64 certifies no mixed budget");
   // A numeric diagnostic override is present but FP64 must ignore it.
-  ScopedEnv override("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "5e-7");
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy with_override =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_FP64), energy, screen, 100.0);
+  ScopedEnv override("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "5e-7");
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy with_override =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_FP64), energy, screen,
+          100.0);
   require(!with_override.threshold.has_value(),
           "FP64 is not relaxed by the legacy diagnostic override");
 }
@@ -287,10 +291,11 @@ void verify_auto_with_legacy_override() {
   const double screen = 1.0e-12;
   const double energy = 1.0e-10;
 
-  ScopedEnv numeric("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "2e-7");
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy overridden =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_AUTO), energy, screen, 100.0);
+  ScopedEnv numeric("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "2e-7");
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy overridden =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_AUTO), energy, screen,
+          100.0);
   require(overridden.threshold.has_value(), "AUTO with a numeric override resolves a mixed route");
   require_close(*overridden.threshold, 2.0e-7, 1.0e-14,
                 "numeric override wins over the derived value");
@@ -299,26 +304,28 @@ void verify_auto_with_legacy_override() {
 
   // The 'auto' / '0' / 'none' spellings are not numeric overrides; they fall back
   // to the derived threshold.
-  ScopedEnv auto_spelling("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "auto");
+  ScopedEnv auto_spelling("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "auto");
   // The 'auto' spelling is not a numeric override: the budget decides again.
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy derived =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_AUTO), energy, screen, 100.0);
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy derived =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_AUTO), energy, screen,
+          100.0);
   require(derived.threshold.has_value() && std::abs(*derived.threshold - 1.0e-6) <= 1.0e-12,
           "AUTO with the 'auto' spelling derives from the budget");
   require(derived.budget_certified, "the derived cutoff is reported as budget-certified");
-  ScopedEnv below_floor("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "5e-13");
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy below =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_AUTO), energy, screen, 100.0);
+  ScopedEnv below_floor("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "5e-13");
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy below =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_AUTO), energy, screen,
+          100.0);
   require(below.threshold.has_value() && std::abs(*below.threshold - 1.0e-6) <= 1.0e-12,
           "a sub-floor numeric override falls back to the budgeted cutoff");
   require(below.budget_certified, "the budgeted fallback is certified");
   // A diagnostic cutoff is deliberately item agnostic: it is not a budget, so
   // an item without a census and without a validated warm state still runs the
   // same diagnostic route instead of silently dropping out of it.
-  const vibeqc::scf::cuda_policy::MixedPrecisionItemPolicy diagnostic_item =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_item(overridden, false, 0, screen);
+  const generativeqc::scf::cuda_policy::MixedPrecisionItemPolicy diagnostic_item =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_item(overridden, false, 0, screen);
   require(diagnostic_item.admitted && diagnostic_item.census == 1U,
           "a diagnostic cutoff stays item agnostic");
 }
@@ -337,11 +344,11 @@ void verify_per_item_budget() {
   const std::vector<std::int64_t> system_shell_pair_offsets{0, 3, 9};
   const std::vector<std::int32_t> shell_pair_first{0, 0, 1, 2, 2, 2, 3, 3, 4};
   const std::vector<std::int32_t> shell_pair_second{0, 1, 1, 2, 3, 4, 3, 4, 4};
-  vibeqc::scf::detail::DirectQuartetTaskLayout layout;
-  require(vibeqc::scf::detail::make_direct_quartet_task_layout(
+  generativeqc::scf::detail::DirectQuartetTaskLayout layout;
+  require(generativeqc::scf::detail::make_direct_quartet_task_layout(
               shell_ao_offsets, shell_angular, system_shell_pair_offsets, shell_pair_first,
-              shell_pair_second, vibeqc::scf::detail::kDirectQuartetMixedFockMinimumAngularOrder,
-              layout),
+              shell_pair_second,
+              generativeqc::scf::detail::kDirectQuartetMixedFockMinimumAngularOrder, layout),
           "per-item census topology was rejected");
   require(layout.system_mixed_capable_tile_counts.size() == 2,
           "the layout must keep one mixed-capable census per system");
@@ -353,23 +360,23 @@ void verify_per_item_budget() {
   const double energy = 1.0e-10;
   const std::size_t ceiling = std::max(layout.system_mixed_capable_tile_counts[0],
                                        layout.system_mixed_capable_tile_counts[1]);
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy policy =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_AUTO), energy, screen,
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy policy =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_AUTO), energy, screen,
           static_cast<double>(ceiling));
   require(policy.threshold.has_value() && policy.budget_certified,
           "the batch ceiling must certify the route");
   // One batch, three legitimate resolutions: cold, census-free and warm.
-  require(!vibeqc::scf::cuda_policy::resolve_mixed_precision_item(
+  require(!generativeqc::scf::cuda_policy::resolve_mixed_precision_item(
                policy, false, layout.system_mixed_capable_tile_counts[1], screen)
                .admitted,
           "a cold item must keep the exact FP64 operator");
-  require(!vibeqc::scf::cuda_policy::resolve_mixed_precision_item(
+  require(!generativeqc::scf::cuda_policy::resolve_mixed_precision_item(
                policy, true, layout.system_mixed_capable_tile_counts[0], screen)
                .admitted,
           "an item without mixed-capable tiles must keep the exact operator");
-  const vibeqc::scf::cuda_policy::MixedPrecisionItemPolicy warm =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_item(
+  const generativeqc::scf::cuda_policy::MixedPrecisionItemPolicy warm =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_item(
           policy, true, layout.system_mixed_capable_tile_counts[1], screen);
   require(warm.admitted, "a warm mixed-capable item must be admitted");
   require(warm.census == layout.system_mixed_capable_tile_counts[1],
@@ -377,12 +384,12 @@ void verify_per_item_budget() {
   // The item cutoff is the per-item accumulated bound: an item whose census
   // makes that bound the binding term resolves a tighter cutoff than the
   // tolerance anchor, while a small census keeps the anchor.
-  const vibeqc::scf::cuda_policy::MixedPrecisionItemPolicy crowded =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_item(policy, true, 1000U, screen);
-  const vibeqc::scf::cuda_policy::MixedPrecisionItemPolicy tight =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_item(policy, true, 200U, screen);
-  const vibeqc::scf::cuda_policy::MixedPrecisionItemPolicy anchored =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_item(policy, true, 4U, screen);
+  const generativeqc::scf::cuda_policy::MixedPrecisionItemPolicy crowded =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_item(policy, true, 1000U, screen);
+  const generativeqc::scf::cuda_policy::MixedPrecisionItemPolicy tight =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_item(policy, true, 200U, screen);
+  const generativeqc::scf::cuda_policy::MixedPrecisionItemPolicy anchored =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_item(policy, true, 4U, screen);
   require(crowded.admitted && tight.admitted && anchored.admitted,
           "budget-certified items must be admitted");
   require_close(anchored.threshold, *policy.threshold, 1.0e-18,
@@ -395,16 +402,18 @@ void verify_per_item_budget() {
                 "the item cutoff is the per-item accumulated bound");
   // An item past the budget floor keeps the exact operator instead of
   // accumulating rounding the requested accuracy cannot certify.
-  require(!vibeqc::scf::cuda_policy::resolve_mixed_precision_item(
+  require(!generativeqc::scf::cuda_policy::resolve_mixed_precision_item(
                policy, true, static_cast<std::size_t>(1.0e9), screen)
                .admitted,
           "an item past the budget floor must be refused");
   // An uncertified batch policy admits no item at all.
-  const vibeqc::scf::cuda_policy::MixedPrecisionFockPolicy refused =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
-          std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_AUTO), energy, screen, 0.0);
+  const generativeqc::scf::cuda_policy::MixedPrecisionFockPolicy refused =
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(
+          std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_AUTO), energy, screen,
+          0.0);
   require(!refused.threshold.has_value() &&
-              !vibeqc::scf::cuda_policy::resolve_mixed_precision_item(refused, true, 1000U, screen)
+              !generativeqc::scf::cuda_policy::resolve_mixed_precision_item(refused, true, 1000U,
+                                                                            screen)
                    .admitted,
           "an uncertified batch policy must admit no item");
 }
@@ -412,72 +421,75 @@ void verify_per_item_budget() {
 void verify_nullopt_legacy_parity() {
   const double screen = 1.0e-12;
   const double energy = 1.0e-10;
-  std::optional<vibeqc_precision_mode> nullopt;
+  std::optional<generativeqc_precision_mode> nullopt;
 
-  ScopedEnv absent("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "0");
-  require(
-      !vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen, 100.0)
-           .threshold.has_value(),
-      "absent/0 legacy switch keeps the default FP64 path");
-  ScopedEnv legacy_auto("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "auto");
+  ScopedEnv absent("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "0");
+  require(!generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy,
+                                                                               screen, 100.0)
+               .threshold.has_value(),
+          "absent/0 legacy switch keeps the default FP64 path");
+  ScopedEnv legacy_auto("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "auto");
   const Threshold legacy_auto_threshold =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen, 100.0)
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen,
+                                                                          100.0)
           .threshold;
   require(legacy_auto_threshold.has_value(), "'auto' legacy switch enables the mixed route");
   require_close(*legacy_auto_threshold, 1.0e-6, 1.0e-12,
                 "'auto' legacy switch uses the default 1e-6");
-  ScopedEnv legacy_numeric("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "3e-7");
+  ScopedEnv legacy_numeric("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "3e-7");
   const Threshold legacy_numeric_threshold =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen, 100.0)
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen,
+                                                                          100.0)
           .threshold;
   require(legacy_numeric_threshold.has_value() &&
               std::abs(*legacy_numeric_threshold - 3.0e-7) <= 1.0e-14,
           "numeric legacy switch passes through verbatim");
 
-  ScopedEnv legacy_too_small("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "5e-13");
-  require(
-      !vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen, 100.0)
-           .threshold.has_value(),
-      "a numeric legacy switch at or below the floor keeps the FP64 path");
-  ScopedEnv legacy_garbage("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "bogus");
-  require(
-      !vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen, 100.0)
-           .threshold.has_value(),
-      "an invalid legacy switch keeps the FP64 path rather than relaxing it");
+  ScopedEnv legacy_too_small("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "5e-13");
+  require(!generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy,
+                                                                               screen, 100.0)
+               .threshold.has_value(),
+          "a numeric legacy switch at or below the floor keeps the FP64 path");
+  ScopedEnv legacy_garbage("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "bogus");
+  require(!generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy,
+                                                                               screen, 100.0)
+               .threshold.has_value(),
+          "an invalid legacy switch keeps the FP64 path rather than relaxing it");
   // The legacy diagnostic switch is unchanged by the budget: it keeps resolving
   // its own numeric cutoff even when the census would refuse an auto request.
-  ScopedEnv legacy_only("VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1e-7");
+  ScopedEnv legacy_only("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1e-7");
   const Threshold legacy_only_threshold =
-      vibeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen, 0.0)
+      generativeqc::scf::cuda_policy::resolve_mixed_precision_fock_policy(nullopt, energy, screen,
+                                                                          0.0)
           .threshold;
   require(legacy_only_threshold.has_value() && std::abs(*legacy_only_threshold - 1.0e-7) <= 1.0e-19,
           "the legacy diagnostic switch does not consult the budget census");
 }
 /** AOT class filters are diagnostics; the full registry is production. */
 void verify_aot_shell_class_selection_override() {
-  using vibeqc::scf::cuda_policy::aot_shell_class_selection_override_requested;
+  using generativeqc::scf::cuda_policy::aot_shell_class_selection_override_requested;
   {
-    ScopedEnv selection("VIBEQC_AOT_SHELL_CLASSES", nullptr);
+    ScopedEnv selection("GENERATIVEQC_AOT_SHELL_CLASSES", nullptr);
     require(!aot_shell_class_selection_override_requested(),
             "an absent AOT class filter keeps the full production registry");
   }
   {
-    ScopedEnv selection("VIBEQC_AOT_SHELL_CLASSES", "");
+    ScopedEnv selection("GENERATIVEQC_AOT_SHELL_CLASSES", "");
     require(!aot_shell_class_selection_override_requested(),
             "an empty AOT class filter keeps the full production registry");
   }
   {
-    ScopedEnv selection("VIBEQC_AOT_SHELL_CLASSES", "all");
+    ScopedEnv selection("GENERATIVEQC_AOT_SHELL_CLASSES", "all");
     require(!aot_shell_class_selection_override_requested(),
             "the all spelling keeps the full production registry");
   }
   {
-    ScopedEnv selection("VIBEQC_AOT_SHELL_CLASSES", "dppp,ppps");
+    ScopedEnv selection("GENERATIVEQC_AOT_SHELL_CLASSES", "dppp,ppps");
     require(aot_shell_class_selection_override_requested(),
             "an explicit class subset is a diagnostic override");
   }
   {
-    ScopedEnv selection("VIBEQC_AOT_SHELL_CLASSES", "none");
+    ScopedEnv selection("GENERATIVEQC_AOT_SHELL_CLASSES", "none");
     require(aot_shell_class_selection_override_requested(),
             "disabling AOT classes is an explicit diagnostic override");
   }
@@ -485,15 +497,15 @@ void verify_aot_shell_class_selection_override() {
 
 /** A converged-fock reuse RMS scales with the density tolerance. */
 void verify_converged_fock_reuse_rms() {
-  require_close(vibeqc::scf::cuda_policy::converged_fock_reuse_density_rms(1.0e-12), 1.0e-12,
+  require_close(generativeqc::scf::cuda_policy::converged_fock_reuse_density_rms(1.0e-12), 1.0e-12,
                 1.0e-16, "tight density tolerance keeps the tight reuse RMS");
-  require_close(vibeqc::scf::cuda_policy::converged_fock_reuse_density_rms(1.0e-9), 2.0e-9, 1.0e-16,
-                "expanded density tolerance widens the reuse RMS");
+  require_close(generativeqc::scf::cuda_policy::converged_fock_reuse_density_rms(1.0e-9), 2.0e-9,
+                1.0e-16, "expanded density tolerance widens the reuse RMS");
 }
 
 /** Minimal closed-shell H2 used to pin CPU provenance end to end. */
-vibeqc::core::System h2_system() {
-  vibeqc::core::System system;
+generativeqc::core::System h2_system() {
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {
       {0, 0, {{1.5, 1.0}, {0.4, 0.5}}},
@@ -501,10 +513,11 @@ vibeqc::core::System h2_system() {
   };
   system.charge = 0;
   system.multiplicity = 1;
-  system.basis_representation = VIBEQC_BASIS_SPHERICAL;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          ("H2 system normalization failed: " + detail).c_str());
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      ("H2 system normalization failed: " + detail).c_str());
   return system;
 }
 
@@ -514,45 +527,46 @@ vibeqc::core::System h2_system() {
  * at the native level: an \p auto request that collapses to FP64 on CPU must still
  * say it was asked for \p auto.
  */
-vibeqc::scf::ScfResult run_cpu_rhf(std::optional<vibeqc_precision_mode> precision_mode) {
-  const vibeqc::core::System system = h2_system();
-  vibeqc::scf::ScfOptions options;
+generativeqc::scf::ScfResult run_cpu_rhf(
+    std::optional<generativeqc_precision_mode> precision_mode) {
+  const generativeqc::core::System system = h2_system();
+  generativeqc::scf::ScfOptions options;
   options.max_iterations = 100;
   options.energy_tolerance = 1.0e-10;
   options.density_tolerance = 1.0e-8;
   options.screening_tolerance = 1.0e-12;
   options.precision_mode = precision_mode;
-  return vibeqc::scf::run_rhf(system, options, nullptr);
+  return generativeqc::scf::run_rhf(system, options, nullptr);
 }
 
 void verify_one_electron_provider_policy() {
-  using vibeqc::runtime::cuda_provider_capabilities;
-  using vibeqc::runtime::CudaProviderKind;
-  using vibeqc::scf::cuda_policy::resolve_one_electron_value_policy;
+  using generativeqc::runtime::cuda_provider_capabilities;
+  using generativeqc::runtime::CudaProviderKind;
+  using generativeqc::scf::cuda_policy::resolve_one_electron_value_policy;
 
   const auto nvidia = cuda_provider_capabilities(CudaProviderKind::Nvidia);
   const auto cumetal = cuda_provider_capabilities(CudaProviderKind::CuMetal);
   {
-    ScopedEnv mapping("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", nullptr);
+    ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", nullptr);
     ScopedEnv configured_cumetal("CUMETAL_ROOT", "/configured-but-inactive");
     const auto policy = resolve_one_electron_value_policy(nvidia);
     require(policy.mapping == 1U && !policy.diagnostic_override && !policy.capability_fallback,
             "configured-but-inactive CuMetal must not change NVIDIA auto selection");
   }
   {
-    ScopedEnv mapping("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", nullptr);
+    ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", nullptr);
     const auto policy = resolve_one_electron_value_policy(cumetal);
     require(policy.mapping == 0U && !policy.diagnostic_override && !policy.capability_fallback,
             "CuMetal without shell-warp capability must select the safe pair-thread default");
   }
   {
-    ScopedEnv mapping("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", "shell_warp");
+    ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "shell_warp");
     const auto policy = resolve_one_electron_value_policy(cumetal);
     require(policy.mapping == 0U && policy.diagnostic_override && policy.capability_fallback,
             "unsupported CuMetal shell-warp override must fall back safely and visibly");
   }
   {
-    ScopedEnv mapping("VIBEQC_ONE_ELECTRON_VALUE_MAPPING", "thread");
+    ScopedEnv mapping("GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING", "thread");
     const auto policy = resolve_one_electron_value_policy(nvidia);
     require(policy.mapping == 0U && policy.diagnostic_override && !policy.capability_fallback,
             "explicit pair-thread diagnostic override must remain deterministic");
@@ -560,49 +574,49 @@ void verify_one_electron_provider_policy() {
 }
 
 void verify_direct_tile_validation_policy() {
-  using vibeqc::scf::cuda_policy::direct_tile_validation_requested;
-  using vibeqc::scf::cuda_policy::resolve_direct_tile_validation_policy;
+  using generativeqc::scf::cuda_policy::direct_tile_validation_requested;
+  using generativeqc::scf::cuda_policy::resolve_direct_tile_validation_policy;
 
   {
-    ScopedEnv validation("VIBEQC_DIRECT_TILE_VALIDATION", nullptr);
+    ScopedEnv validation("GENERATIVEQC_DIRECT_TILE_VALIDATION", nullptr);
     const auto policy = resolve_direct_tile_validation_policy();
     require(!policy.requested && policy.produces_numerical_endpoint &&
-                policy.endpoint_status == VIBEQC_STATUS_SUCCESS,
+                policy.endpoint_status == GENERATIVEQC_STATUS_SUCCESS,
             "ordinary CUDA execution keeps its numerical endpoint");
     require(!direct_tile_validation_requested(),
             "absent tile-validation diagnostic remains disabled");
   }
   {
-    ScopedEnv validation("VIBEQC_DIRECT_TILE_VALIDATION", "validate");
+    ScopedEnv validation("GENERATIVEQC_DIRECT_TILE_VALIDATION", "validate");
     const auto policy = resolve_direct_tile_validation_policy();
     require(policy.requested && !policy.produces_numerical_endpoint,
             "tile validation is explicitly structural-only");
-    require(policy.endpoint_status == VIBEQC_STATUS_NOT_IMPLEMENTED,
+    require(policy.endpoint_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
             "structural validation cannot report a successful numerical endpoint");
     require(direct_tile_validation_requested(),
             "the compatibility selector follows the explicit validation policy");
   }
   {
-    ScopedEnv validation("VIBEQC_DIRECT_TILE_VALIDATION", "1");
+    ScopedEnv validation("GENERATIVEQC_DIRECT_TILE_VALIDATION", "1");
     const auto policy = resolve_direct_tile_validation_policy();
     require(policy.requested && !policy.produces_numerical_endpoint &&
-                policy.endpoint_status == VIBEQC_STATUS_NOT_IMPLEMENTED,
+                policy.endpoint_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
             "legacy truthy tile-validation selector preserves diagnostic semantics");
   }
   {
-    ScopedEnv validation("VIBEQC_DIRECT_TILE_VALIDATION", "unexpected");
+    ScopedEnv validation("GENERATIVEQC_DIRECT_TILE_VALIDATION", "unexpected");
     const auto policy = resolve_direct_tile_validation_policy();
     require(!policy.requested && policy.produces_numerical_endpoint &&
-                policy.endpoint_status == VIBEQC_STATUS_SUCCESS,
+                policy.endpoint_status == GENERATIVEQC_STATUS_SUCCESS,
             "unknown tile-validation spellings do not silently enter diagnostic mode");
   }
 }
 
 void verify_cpu_provenance() {
-  const vibeqc::scf::ScfResult fp64 =
-      run_cpu_rhf(std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_FP64));
+  const generativeqc::scf::ScfResult fp64 =
+      run_cpu_rhf(std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_FP64));
   require(fp64.converged, "CPU FP64 RHF should converge");
-  require(fp64.precision.requested_mode == VIBEQC_PRECISION_FP64,
+  require(fp64.precision.requested_mode == GENERATIVEQC_PRECISION_FP64,
           "explicit FP64 reports FP64 as the requested mode");
   require(fp64.precision.effective_bits == 64, "CPU FP64 runs at 64 bits");
   require(!fp64.precision.strict_refinement_applied, "CPU FP64 applies no mixed refinement");
@@ -610,10 +624,10 @@ void verify_cpu_provenance() {
               fp64.precision.mixed_precision_reserved_error == 0.0,
           "CPU FP64 reports no mixed budget and no refinement iterations");
 
-  const vibeqc::scf::ScfResult auto_result =
-      run_cpu_rhf(std::optional<vibeqc_precision_mode>(VIBEQC_PRECISION_AUTO));
+  const generativeqc::scf::ScfResult auto_result =
+      run_cpu_rhf(std::optional<generativeqc_precision_mode>(GENERATIVEQC_PRECISION_AUTO));
   require(auto_result.converged, "CPU auto RHF should converge");
-  require(auto_result.precision.requested_mode == VIBEQC_PRECISION_AUTO,
+  require(auto_result.precision.requested_mode == GENERATIVEQC_PRECISION_AUTO,
           "CPU auto reports the requested auto policy (not the collapsed FP64)");
   require(auto_result.precision.effective_bits == 64,
           "CPU auto still runs the FP64 Fock (mixed route is CUDA-only)");
@@ -625,9 +639,9 @@ void verify_cpu_provenance() {
           "provenance distinguishes the explicit fp64 from an auto request");
 
   // A nullopt mode keeps the struct default (fp64) on the host path.
-  const vibeqc::scf::ScfResult nullopt_result = run_cpu_rhf(std::nullopt);
+  const generativeqc::scf::ScfResult nullopt_result = run_cpu_rhf(std::nullopt);
   require(nullopt_result.converged, "CPU nullopt RHF should converge");
-  require(nullopt_result.precision.requested_mode == VIBEQC_PRECISION_FP64,
+  require(nullopt_result.precision.requested_mode == GENERATIVEQC_PRECISION_FP64,
           "absent precision mode keeps the FP64 requested-mode default");
 }
 
@@ -635,12 +649,12 @@ template <typename T>
 T descriptor() {
   T value{};
   value.struct_size = sizeof(T);
-  value.abi_version = VIBEQC_ABI_VERSION;
+  value.abi_version = GENERATIVEQC_ABI_VERSION;
   return value;
 }
 
 void verify_precision_work_query_contract() {
-  using namespace vibeqc::scf;
+  using namespace generativeqc::scf;
 
   // Serialization fixtures only: no execution evidence is claimed here.
   PrecisionWork source;
@@ -656,66 +670,70 @@ void verify_precision_work_query_contract() {
                        PrecisionDtype::Fp64, PrecisionDtype::Fp64, PrecisionArithmeticMode::Strict,
                        1}};
 
-  auto summary = descriptor<vibeqc_precision_work_detail>();
-  std::array<vibeqc_precision_work_event, 2> events{descriptor<vibeqc_precision_work_event>(),
-                                                    descriptor<vibeqc_precision_work_event>()};
-  std::array<vibeqc_precision_operator_record, 1> operators{
-      descriptor<vibeqc_precision_operator_record>()};
+  auto summary = descriptor<generativeqc_precision_work_detail>();
+  std::array<generativeqc_precision_work_event, 2> events{
+      descriptor<generativeqc_precision_work_event>(),
+      descriptor<generativeqc_precision_work_event>()};
+  std::array<generativeqc_precision_operator_record, 1> operators{
+      descriptor<generativeqc_precision_operator_record>()};
   const auto copy = [&](std::uint32_t version, std::uint32_t event_capacity) {
-    return vibeqc::api::copy_precision_work(source, version, &summary, events.data(),
-                                            event_capacity, operators.data(), operators.size());
+    return generativeqc::api::copy_precision_work(source, version, &summary, events.data(),
+                                                  event_capacity, operators.data(),
+                                                  operators.size());
   };
   const auto untouched_summary = summary;
   const auto untouched_events = events;
   const auto untouched_operators = operators;
 
-  require(copy(2, events.size()) == VIBEQC_STATUS_NOT_IMPLEMENTED,
+  require(copy(2, events.size()) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "unknown precision-work version accepted");
-  require(copy(1, 1) == VIBEQC_STATUS_INVALID_ARGUMENT,
+  require(copy(1, 1) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "short precision-work event buffer accepted");
   events.back().abi_version++;
-  require(copy(1, events.size()) == VIBEQC_STATUS_ABI_MISMATCH,
+  require(copy(1, events.size()) == GENERATIVEQC_STATUS_ABI_MISMATCH,
           "malformed precision-work event descriptor accepted");
   events = untouched_events;
   operators.back().abi_version++;
   const auto malformed_operators = operators;
-  require(copy(1, events.size()) == VIBEQC_STATUS_ABI_MISMATCH,
+  require(copy(1, events.size()) == GENERATIVEQC_STATUS_ABI_MISMATCH,
           "malformed precision-work operator descriptor accepted");
   require(std::memcmp(&summary, &untouched_summary, sizeof(summary)) == 0 &&
               std::memcmp(events.data(), untouched_events.data(), sizeof(events)) == 0 &&
               std::memcmp(operators.data(), malformed_operators.data(), sizeof(operators)) == 0,
           "rejected precision-work query modified an earlier output");
   operators = untouched_operators;
-  require(vibeqc::api::copy_precision_work(source, 1, &summary, nullptr, 1, nullptr, 0) ==
-              VIBEQC_STATUS_INVALID_ARGUMENT,
+  require(generativeqc::api::copy_precision_work(source, 1, &summary, nullptr, 1, nullptr, 0) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "nonzero precision-work capacity accepted with a null buffer");
-  require(copy(1, events.size()) == VIBEQC_STATUS_SUCCESS, "valid precision-work copy failed");
+  require(copy(1, events.size()) == GENERATIVEQC_STATUS_SUCCESS,
+          "valid precision-work copy failed");
   require(summary.complete && summary.operator_inventory_complete && summary.event_count == 2 &&
               summary.operator_count == 1 && summary.owner_id == 17 &&
               summary.returned_solve_epoch == 3 && summary.returned_state_generation == 6,
           "precision-work summary changed native identity or completeness");
   require(events[1].sequence == 1 && events[1].owner_id == 17 && events[1].solve_epoch == 3 &&
-              events[1].kind == VIBEQC_PRECISION_EVENT_FINAL_AUDIT &&
-              operators[0].kind == VIBEQC_PRECISION_OPERATOR_EXCHANGE_K && operators[0].count == 1,
+              events[1].kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
+              operators[0].kind == GENERATIVEQC_PRECISION_OPERATOR_EXCHANGE_K &&
+              operators[0].count == 1,
           "precision-work rows changed execution-owned values");
 
   PrecisionProvenance aggregate_source;
   aggregate_source.strict_stage_fock_builds = 1;
   aggregate_source.final_residual_audits = 1;
-  auto aggregate = descriptor<vibeqc_precision_provenance>();
-  require(vibeqc::api::copy_precision_provenance(aggregate_source, &aggregate) ==
-                  VIBEQC_STATUS_SUCCESS &&
+  auto aggregate = descriptor<generativeqc_precision_provenance>();
+  require(generativeqc::api::copy_precision_provenance(aggregate_source, &aggregate) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
               aggregate.strict_stage_fock_builds == 1 && aggregate.final_residual_audits == 1,
           "legacy aggregate precision ABI changed");
   if constexpr (sizeof(void*) == 8) {
     require(sizeof(aggregate) == 120 &&
-                offsetof(vibeqc_precision_provenance, mixed_stage_fock_builds) == 56,
+                offsetof(generativeqc_precision_provenance, mixed_stage_fock_builds) == 56,
             "64-bit aggregate precision layout changed");
   }
 
   source = {};
-  require(vibeqc::api::copy_precision_work(source, 1, &summary, nullptr, 0, nullptr, 0) ==
-                  VIBEQC_STATUS_SUCCESS &&
+  require(generativeqc::api::copy_precision_work(source, 1, &summary, nullptr, 0, nullptr, 0) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
               !summary.complete && !summary.operator_inventory_complete &&
               summary.event_count == 0 && summary.operator_count == 0 && summary.owner_id == 0,
           "uninstrumented execution manufactured complete precision work");

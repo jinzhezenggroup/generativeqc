@@ -12,9 +12,9 @@ from time import perf_counter
 
 import numpy as np
 import pyscf
-from vibeqc import Calculator, ResourceBudget
-from vibeqc.ecp import ecp_integrals
-from vibeqc.profiles import file_hash
+from generativeqc import Calculator, ResourceBudget
+from generativeqc.ecp import ecp_integrals
+from generativeqc.profiles import file_hash
 
 
 def maximum(value: typing.Any) -> typing.Any:
@@ -37,7 +37,7 @@ def main() -> None:
         "python": platform.python_version(),
         "pyscf": pyscf.__version__,
         "numpy": np.__version__,
-        "library_sha256": file_hash(Path(os.environ["VIBEQC_LIBRARY"])),
+        "library_sha256": file_hash(Path(os.environ["GENERATIVEQC_LIBRARY"])),
         "fixture_sha256": file_hash(fixture_path),
         "driver_sha256": file_hash(Path(__file__)),
         "thread_environment": {

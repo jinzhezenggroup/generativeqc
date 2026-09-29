@@ -7,12 +7,12 @@ import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.integral.lowering.dispatch import emit_shell_class_fused_cuda
-from vibeqc_compiler.integral.lowering.fock_accumulation import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.integral.lowering.dispatch import emit_shell_class_fused_cuda
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_force_density_coefficient,
 )
-from vibeqc_compiler.integral.shell_spec import DPPP_SPEC
+from generativeqc_compiler.integral.shell_spec import DPPP_SPEC
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -13,8 +13,8 @@
 #include "scf/proposals.hpp"
 
 namespace {
-using namespace vibeqc::scf;
-using vibeqc::integrals::IntegralData;
+using namespace generativeqc::scf;
+using generativeqc::integrals::IntegralData;
 
 void require(bool value, const char* message) {
   if (!value) throw std::runtime_error(message);
@@ -226,15 +226,16 @@ void preflight() {
 }
 
 void molecular_endpoints() {
-  vibeqc::core::System system;
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {
       {0, 0, {{3.42525091, 0.15432897}, {0.62391373, 0.53532814}, {0.16885540, 0.44463454}}},
       {1, 0, {{3.42525091, 0.15432897}, {0.62391373, 0.53532814}, {0.16885540, 0.44463454}}}};
   system.electron_count = 2;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "molecular basis validation failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "molecular basis validation failed");
   for (bool uhf : {false, true})
     for (bool j_df : {false, true})
       for (bool k_df : {false, true}) {
@@ -284,7 +285,7 @@ void molecular_endpoints() {
       probe_options.max_iterations = 1;
       probe_options.compute_forces = false;
       probe_options.incremental_direct_jk = enabled;
-      auto& observation = vibeqc::runtime::cpu_resource_observation;
+      auto& observation = generativeqc::runtime::cpu_resource_observation;
       const auto saved = observation;
       observation = {};
       observation.active = true;
@@ -297,7 +298,7 @@ void molecular_endpoints() {
     };
     const auto ordinary_peak = observed_peak(false);
     const auto incremental_peak = observed_peak(true);
-    const auto n = vibeqc::molecule::ao_count(system);
+    const auto n = generativeqc::molecule::ao_count(system);
     const auto anchor_bytes = (uhf ? 5U : 3U) * n * n * sizeof(double);
     require(incremental_peak >= ordinary_peak + anchor_bytes,
             "incremental density/J/K anchors missing from simultaneous CPU observation");
@@ -404,40 +405,42 @@ void molecular_endpoints() {
   auto spec = make_hf_fock_spec(FockSpin::Restricted);
   spec.coulomb.approximation = FockApproximation::DensityFitted;
   options.resolved_fock_build = resolve_fock_build(spec, FockBackend::Cpu);
-  FleetPlan fleet({system, helium, system}, VIBEQC_METHOD_RHF, options, true, false, false, false,
-                  0);
+  FleetPlan fleet({system, helium, system}, GENERATIVEQC_METHOD_RHF, options, true, false, false,
+                  false, 0);
   const auto first = fleet.execute({});
   for (const auto& item : first)
-    require(item.status == VIBEQC_STATUS_SUCCESS, "mixed ragged fleet failed");
+    require(item.status == GENERATIVEQC_STATUS_SUCCESS, "mixed ragged fleet failed");
   std::vector<std::optional<std::vector<double>>> bad(3);
   bad[1] = std::vector<double>{0.0};
   const auto isolated = fleet.execute(bad);
-  require(isolated[1].status == VIBEQC_STATUS_INVALID_ARGUMENT, "malformed fleet item accepted");
+  require(isolated[1].status == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "malformed fleet item accepted");
   for (std::size_t i : {0U, 2U}) {
-    require(isolated[i].status == VIBEQC_STATUS_SUCCESS && isolated[i].warm_start_used,
+    require(isolated[i].status == GENERATIVEQC_STATUS_SUCCESS && isolated[i].warm_start_used,
             "failed neighbor damaged mixed-provider warm state");
     close(isolated[i].scf.energy, first[i].scf.energy, 1e-10, "ragged replay energy drift");
   }
   const auto recovered = fleet.execute({});
-  require(recovered[1].status == VIBEQC_STATUS_SUCCESS && recovered[1].warm_start_used,
+  require(recovered[1].status == GENERATIVEQC_STATUS_SUCCESS && recovered[1].warm_start_used,
           "rejected coordinates replaced previous warm state");
 }
 
 void range_exchange_provider() {
-  vibeqc::core::System system;
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
   system.electron_count = 2;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "range Fock fixture failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "range Fock fixture failed");
 
   constexpr double omega = 0.33;
-  const auto full = vibeqc::integrals::build_integrals(system, false, true).eri;
-  const auto lr =
-      vibeqc::integrals::build_range_eri(system, vibeqc::integrals::CoulombRange::Long, omega);
-  const auto sr =
-      vibeqc::integrals::build_range_eri(system, vibeqc::integrals::CoulombRange::Short, omega);
+  const auto full = generativeqc::integrals::build_integrals(system, false, true).eri;
+  const auto lr = generativeqc::integrals::build_range_eri(
+      system, generativeqc::integrals::CoulombRange::Long, omega);
+  const auto sr = generativeqc::integrals::build_range_eri(
+      system, generativeqc::integrals::CoulombRange::Short, omega);
   require(full.size() == lr.size() && full.size() == sr.size(), "range ERI shape mismatch");
   for (std::size_t i = 0; i < full.size(); ++i)
     close(sr[i] + lr[i], full[i], 2e-12, "direct SR+LR identity");
@@ -475,13 +478,14 @@ void range_exchange_provider() {
 }
 
 void prepared_identity() {
-  vibeqc::core::System system;
+  generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
   system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
   system.electron_count = 2;
   std::string detail;
-  require(vibeqc::molecule::validate_and_normalize(system, detail) == VIBEQC_STATUS_SUCCESS,
-          "prepared identity fixture failed");
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "prepared identity fixture failed");
   const auto exact = resolve_fock_build(make_hf_fock_spec(FockSpin::Restricted), FockBackend::Cpu);
   PreparedFockPlan plan(system, nullptr, exact);
   const std::vector<double> density{0.8, 0.1, 0.1, 0.6};

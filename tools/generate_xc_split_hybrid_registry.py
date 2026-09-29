@@ -11,8 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from vibeqc_compiler.xc import libxc_bulk
-from vibeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.xc import libxc_bulk
+from generativeqc_compiler.xc.libxc_maple import MapleImportError
 
 from tools.generate_xc_split_hybrid_cuda import emit_split_hybrid_device_body
 from tools.libxc_split_hybrid import build_split_global_hybrid
@@ -21,14 +21,14 @@ MANIFEST = ROOT / "manifests" / "cuda_split_hybrids.json"
 GGA_CODE_BASE = 0x10000
 MGGA_CODE_BASE = 0x20000
 PYTHON_OUTPUT = (
-    ROOT / "python" / "vibeqc_compiler" / "xc" / "_generated_split_hybrids.py"
+    ROOT / "python" / "generativeqc_compiler" / "xc" / "_generated_split_hybrids.py"
 )
 
 
 def _manifest_methods(path: Path = MANIFEST) -> tuple[str, ...]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if (
-        payload.get("schema") != "vibeqc.cuda-split-global-hybrids"
+        payload.get("schema") != "generativeqc.cuda-split-global-hybrids"
         or payload.get("schema_version") != 1
     ):
         raise MapleImportError("split-hybrid CUDA manifest has unsupported schema")
@@ -174,11 +174,11 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "#endif",
             "#if defined(__CUDACC__)",
             "#include <cmath>",
-            "#define VIBEQC_SPLIT_HYBRID_HD __host__ __device__",
+            "#define GENERATIVEQC_SPLIT_HYBRID_HD __host__ __device__",
             "#else",
-            "#define VIBEQC_SPLIT_HYBRID_HD",
+            "#define GENERATIVEQC_SPLIT_HYBRID_HD",
             "#endif",
-            "namespace vibeqc::dft::generated {",
+            "namespace generativeqc::dft::generated {",
             "inline constexpr std::uint32_t kSplitHybridGgaCodeBase = 0x10000U;",
             "inline constexpr std::uint32_t kSplitHybridMggaCodeBase = 0x20000U;",
             "inline constexpr std::uint32_t kSplitHybridFamilyMask = 0xf0000U;",
@@ -190,7 +190,7 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "  return 0U;",
             "}",
             "#endif",
-            "VIBEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_registered(",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_registered(",
             "    std::uint32_t functional) noexcept {",
             "  switch (functional) {",
             registration_cases,
@@ -199,7 +199,7 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "      return false;",
             "  }",
             "}",
-            "VIBEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_is_mgga(",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_is_mgga(",
             "    std::uint32_t functional) noexcept {",
             "  switch (functional) {",
             mgga_cases,
@@ -213,7 +213,7 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "  std::uint32_t exact_exchange_denominator{};",
             "  bool matched{};",
             "};",
-            "VIBEQC_SPLIT_HYBRID_HD inline constexpr SplitHybridComposition",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr SplitHybridComposition",
             "split_hybrid_composition(std::uint32_t functional) noexcept {",
             "  switch (functional) {",
             *composition_cases,
@@ -240,8 +240,8 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "  }",
             "}",
             "#endif",
-            "}  // namespace vibeqc::dft::generated",
-            "#undef VIBEQC_SPLIT_HYBRID_HD",
+            "}  // namespace generativeqc::dft::generated",
+            "#undef GENERATIVEQC_SPLIT_HYBRID_HD",
             "",
         ]
     )

@@ -5,21 +5,27 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.integral.blocks import (
+from generativeqc_compiler.integral.blocks import (
     BlockRequest,
     ShellTile,
     TensorLayout,
     WeightTile,
 )
-from vibeqc_compiler.integral.capabilities import query_integral_capability
-from vibeqc_compiler.integral.ir import ContractionOutput, four_center_eri_operator
-from vibeqc_compiler.integral.range_separation import CoulombKernel
-from vibeqc_compiler.integral.shell_signature import BasisConvention, CenterBinding
-from vibeqc_compiler.integral.weighted_eri import (
+from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.ir import (
+    ContractionOutput,
+    four_center_eri_operator,
+)
+from generativeqc_compiler.integral.range_separation import CoulombKernel
+from generativeqc_compiler.integral.shell_signature import (
+    BasisConvention,
+    CenterBinding,
+)
+from generativeqc_compiler.integral.weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
-from vibeqc_compiler.integral.weighted_eri_inputs import (
+from generativeqc_compiler.integral.weighted_eri_inputs import (
     PRIMITIVE_RANGE_RECORD,
     PRIMITIVE_RECORD,
     prepare_weighted_eri_stream,

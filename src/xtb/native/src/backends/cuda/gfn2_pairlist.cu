@@ -9,7 +9,7 @@
 #include "backends/cuda/gfn2_pairlist.cuh"
 #include "generated_gfn2_pair_native.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 namespace {
 
 constexpr int kThreadsPerBlock = 256;
@@ -129,8 +129,8 @@ __device__ bool evaluate_pair(double dx, double dy, double dz, double radius, Pa
   if (isfinite(radius) && radius > 0.0 && distance_squared <= kCutoffSquaredBohr) {
     // The preprocessing gate requires bitwise agreement with dense geometry.
     // Both routes must consume the same compiler-owned primal and adjoint.
-    vibeqc::xtb::generated::Gfn2CoordinationPairResult pair{};
-    if (!vibeqc::xtb::generated::evaluate_gfn2_coordination_pair(values->distance, radius, pair))
+    generativeqc::xtb::generated::Gfn2CoordinationPairResult pair{};
+    if (!generativeqc::xtb::generated::evaluate_gfn2_coordination_pair(values->distance, radius, pair))
       return false;
     values->count = pair.value;
     values->derivative_over_distance = pair.distance_derivative * values->inverse_distance;
@@ -1954,4 +1954,4 @@ bool gfn2_pairlist_use_sparse_for(std::int64_t atoms_per_system) noexcept {
   return atoms_per_system > kSparseCrossoverAtoms;
 }
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda

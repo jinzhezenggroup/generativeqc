@@ -22,7 +22,7 @@
 #include "scf/df_exchange_policy.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 
-namespace vibeqc::scf::cuda_df {
+namespace generativeqc::scf::cuda_df {
 namespace {
 /** Apply Q diag(lambda^-1/2) Q^T to one public raw panel in factor order.
  * Forming the explicit inverse root first loses weak-direction cancellation
@@ -31,10 +31,10 @@ namespace {
  * the already charged exchange panel before any SCF consumer exists; raw
  * values and their immutable caches remain intact.
  */
-vibeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::size_t system,
-                                  std::size_t pairs, const double* raw, double* output,
-                                  const double* eigenvectors, const double* scaled_eigenvectors,
-                                  std::string& detail) {
+generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::size_t system,
+                                        std::size_t pairs, const double* raw, double* output,
+                                        const double* eigenvectors,
+                                        const double* scaled_eigenvectors, std::string& detail) {
   const auto a = static_cast<int>(plan.naux), rows = static_cast<int>(pairs);
   const auto offset = system * plan.naux * plan.naux;
   const double one = 1, zero = 0;
@@ -57,7 +57,7 @@ vibeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::size_t sy
   runtime::cuda_trace::trace_counter("resident_whitening_factor_flops",
                                      4 * pairs * plan.naux * plan.naux);
   runtime::cuda_trace::trace_counter("resident_whitening_projection_elements", pairs * plan.naux);
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 /** Materialize a fixed-geometry source once, reusing bounded resident K staging.
@@ -67,9 +67,10 @@ vibeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::size_t sy
  * regenerate raw values from the immutable physical source in that variant.
  * The caller handles failure after the plan's stream is drained.
  */
-vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const double* inverse,
-                                           const double* eigenvectors,
-                                           const double* scaled_eigenvectors, std::string& detail) {
+generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
+                                                 const double* inverse, const double* eigenvectors,
+                                                 const double* scaled_eigenvectors,
+                                                 std::string& detail) {
   runtime::cuda_trace::TraceOperation trace("resident_three_center_materialization", plan.stream,
                                             {plan.batch_size, plan.nbf, plan.naux, true, false});
   const double one = 1.0, zero = 0.0;
@@ -86,20 +87,20 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
           const auto status = generate_cuda_density_fitting_raw_tile(
               plan.integral_source, system, mu * plan.nbf, mu + 1, 0, plan.naux, -1,
               reinterpret_cast<void*>(plan.stream), raw + mu * (mu + 1) / 2 * plan.naux, detail);
-          if (status != VIBEQC_STATUS_SUCCESS) return status;
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
           ++generated_panels;
           continue;
         }
         const auto pair_capacity =
             std::min(plan.projection_capacity, plan.panel_capacity) / plan.naux;
-        if (!pair_capacity) return VIBEQC_STATUS_OUT_OF_MEMORY;
+        if (!pair_capacity) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
         for (std::size_t nu = 0; nu <= mu; nu += pair_capacity) {
           const auto count = std::min(pair_capacity, mu + 1 - nu);
           auto* panel = plan.auxiliary_tile_values;
           const auto status = generate_cuda_density_fitting_raw_tile(
               plan.integral_source, system, mu * plan.nbf + nu, count, 0, plan.naux, -1,
               reinterpret_cast<void*>(plan.stream), panel, detail);
-          if (status != VIBEQC_STATUS_SUCCESS) return status;
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
           ++generated_panels;
           auto* output = plan.three_center +
                          (system * plan.stored_pair_count + mu * (mu + 1) / 2 + nu) * plan.naux;
@@ -107,8 +108,8 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
               plan.metric_full_rank[system]
                   ? whiten_factor_panel(plan, system, count, panel, output, eigenvectors,
                                         scaled_eigenvectors, detail)
-                  : VIBEQC_STATUS_SUCCESS;
-          if (transform != VIBEQC_STATUS_SUCCESS) return transform;
+                  : GENERATIVEQC_STATUS_SUCCESS;
+          if (transform != GENERATIVEQC_STATUS_SUCCESS) return transform;
           if (!plan.metric_full_rank[system]) {
             const auto blas_status =
                 runtime::cuda_trace::trace_call("resident_metric_transform", plan.stream, [&] {
@@ -133,7 +134,7 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
               plan.three_center + system * plan.stored_tensor_elements_per_system +
                   pair * plan.naux,
               eigenvectors, scaled_eigenvectors, detail);
-          if (status != VIBEQC_STATUS_SUCCESS) return status;
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         }
         continue;
       }
@@ -160,7 +161,7 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
     runtime::cuda_trace::trace_counter(
         "resident_transformed_bytes",
         plan.batch_size * plan.stored_tensor_elements_per_system * sizeof(double));
-    return VIBEQC_STATUS_SUCCESS;
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   const auto capacity = plan.row_tile * plan.nbf * plan.auxiliary_tile;
   const auto pair_tile =
@@ -184,7 +185,7 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
         auto status = generate_cuda_density_fitting_raw_tile(
             plan.integral_source, system, pair, pairs, 0, plan.naux, -1,
             reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
-        if (status != VIBEQC_STATUS_SUCCESS) return status;
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         if (retain_raw) {
           launch_gather_auxiliary_tile_kernel(blocks_for(pairs * plan.naux), kThreads, 0,
                                               plan.stream, plan.matrix_elements, plan.naux, system,
@@ -198,7 +199,7 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
             plan, system, pairs, plan.auxiliary_tile_values,
             plan.three_center + system * plan.tensor_elements_per_system + pair * plan.naux,
             eigenvectors, scaled_eigenvectors, detail);
-        if (status != VIBEQC_STATUS_SUCCESS) return status;
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         runtime::cuda_trace::trace_tile(system, pair, pairs, 0, plan.naux, -1, true);
         continue;
       }
@@ -208,7 +209,7 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
         const auto status = generate_cuda_density_fitting_raw_tile(
             plan.integral_source, system, pair, pairs, begin, count, -1,
             reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
-        if (status != VIBEQC_STATUS_SUCCESS) return status;
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         if (retain_raw) {
           launch_gather_auxiliary_tile_kernel(blocks_for(pairs * plan.naux), kThreads, 0,
                                               plan.stream, plan.matrix_elements, plan.naux, system,
@@ -243,14 +244,14 @@ vibeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan, const
   runtime::cuda_trace::trace_counter(
       "resident_transformed_bytes",
       plan.batch_size * plan.tensor_elements_per_system * sizeof(double));
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 }  // namespace
 
 // Keep setup as one transaction: validate, allocate, factor, account, then
 // publish. Error exits and final stream drain preserve the original lifetime.
 
-vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
+generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     int device_id, std::size_t batch_size, std::size_t nbf, std::size_t naux,
     const std::vector<double>& metrics, const std::vector<double>& three_center,
     double relative_threshold, std::size_t auxiliary_tile, std::size_t ao_pair_tile,
@@ -265,17 +266,17 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   // after `candidate` has taken ownership; this makes the transfer atomic
   // from the caller's perspective and prevents a double free in callers that
   // unconditionally clean up their local handle.
-  const auto fail_before_plan = [&](vibeqc_status status) {
+  const auto fail_before_plan = [&](generativeqc_status status) {
     destroy_cuda_density_fitting_integral_source(integral_source);
     return status;
   };
   detail.clear();
   diagnostics.clear();
-  if (plan == nullptr) return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+  if (plan == nullptr) return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   if (integral_source != nullptr && !cuda_density_fitting_integral_source_matches(
                                         integral_source, device_id, batch_size, nbf, naux)) {
     detail = "CUDA DF source dimensions or device do not match the plan";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   *plan = nullptr;
   const bool packed = df_packed_pairs(storage.pairs);
@@ -284,7 +285,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       (packed && (!integral_source || !retain_three_center))) {
     detail =
         "packed DF values require an explicit retained physical source and valid rank capacity";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   if (device_id < 0 || batch_size == 0 || nbf == 0 || naux == 0 || !(relative_threshold > 0.0) ||
       !(relative_threshold < 1.0) ||
@@ -292,7 +293,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       batch_size > 65535 || nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       naux > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     detail = "CUDA DF plan dimensions or metric threshold are invalid";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
 
   std::size_t matrix_elements = 0;
@@ -312,22 +313,22 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       ((integral_source == nullptr) &&
        (three_center.size() != all_tensor_elements || !finite_values(three_center)))) {
     detail = "CUDA DF plan buffers have invalid dimensions or values";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   auxiliary_tile = auxiliary_tile == 0 ? std::min<std::size_t>(naux, 32) : auxiliary_tile;
   if (auxiliary_tile > naux ||
       auxiliary_tile > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     detail = "CUDA DF auxiliary tile is invalid";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   ao_pair_tile = ao_pair_tile == 0 ? matrix_elements : ao_pair_tile;
   if (ao_pair_tile > matrix_elements || ao_pair_tile == 0) {
     detail = "CUDA DF AO-pair tile is invalid";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   if (retain_three_center && (!integral_source || ao_pair_tile != matrix_elements)) {
     detail = "retained generated DF storage requires a source and complete AO rows";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
 
   std::size_t matrix_bytes = 0;
@@ -360,7 +361,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       !checked_multiply(auxiliary_tile, staged_pair_capacity, tile_elements) ||
       !checked_bytes(tile_elements, tile_bytes)) {
     detail = "CUDA DF plan storage overflows size_t";
-    return fail_before_plan(VIBEQC_STATUS_OUT_OF_MEMORY);
+    return fail_before_plan(GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
 
   DfPackedValueCapacity packed_capacity;
@@ -372,12 +373,12 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                                    df_retains_packed_raw(storage.pairs));
     } catch (const std::exception& error) {
       detail = error.what();
-      return fail_before_plan(VIBEQC_STATUS_OUT_OF_MEMORY);
+      return fail_before_plan(GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
     tensor_bytes = packed_capacity.factor_bytes;
     if (!checked_bytes(packed_capacity.projection_elements, projection_bytes)) {
       detail = "packed DF projection byte capacity overflows size_t";
-      return fail_before_plan(VIBEQC_STATUS_OUT_OF_MEMORY);
+      return fail_before_plan(GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
   }
 
@@ -397,25 +398,25 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     automatic_rhf_rank = 0;
   const bool occupied_scf_reserved =
       df_occupied_exchange_requested(nbf, naux, batch_size, automatic_rhf_rank);
-  const char* diis_policy = std::getenv("VIBEQC_DF_DIIS_DOTS");
+  const char* diis_policy = std::getenv("GENERATIVEQC_DF_DIIS_DOTS");
   if (diis_policy && std::strcmp(diis_policy, "auto") != 0 &&
       std::strcmp(diis_policy, "serial") != 0) {
-    detail = "VIBEQC_DF_DIIS_DOTS must be auto or serial";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    detail = "GENERATIVEQC_DF_DIIS_DOTS must be auto or serial";
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
-  const char* resident_policy = std::getenv("VIBEQC_DF_RESIDENT_EXCHANGE");
+  const char* resident_policy = std::getenv("GENERATIVEQC_DF_RESIDENT_EXCHANGE");
   if (resident_policy && std::strcmp(resident_policy, "auto") != 0 &&
       std::strcmp(resident_policy, "full") != 0 && std::strcmp(resident_policy, "flat") != 0 &&
       std::strcmp(resident_policy, "legacy") != 0) {
-    detail = "VIBEQC_DF_RESIDENT_EXCHANGE must be auto, full, flat or legacy";
-    return fail_before_plan(VIBEQC_STATUS_INVALID_ARGUMENT);
+    detail = "GENERATIVEQC_DF_RESIDENT_EXCHANGE must be auto, full, flat or legacy";
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   cudaError_t cuda_error = cudaSetDevice(device_id);
   if (cuda_error != cudaSuccess) {
     return fail_before_plan(cuda_failure(cuda_error, "select CUDA DF device", detail));
   }
   auto* candidate = new (std::nothrow) CudaDensityFittingJkPlan{};
-  if (candidate == nullptr) return fail_before_plan(VIBEQC_STATUS_OUT_OF_MEMORY);
+  if (candidate == nullptr) return fail_before_plan(GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   candidate->device_id = device_id;
   candidate->occupied_scf_reserved = occupied_scf_reserved;
   candidate->automatic_rhf_rank = automatic_rhf_rank;
@@ -444,7 +445,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     try {
       candidate->streamed_raw_three_center = three_center;
     } catch (const std::bad_alloc&) {
-      return fail_plan(candidate, VIBEQC_STATUS_OUT_OF_MEMORY);
+      return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
   }
 
@@ -477,64 +478,64 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   auto allocate_permanent = [&](double** pointer, std::size_t bytes, const char* description) {
     return allocate_device(reinterpret_cast<void**>(pointer), bytes, description, detail);
   };
-  vibeqc_status status = VIBEQC_STATUS_SUCCESS;
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   if (!candidate->streamed) {
     status = allocate_permanent(&candidate->three_center, tensor_bytes,
                                 "allocate transformed CUDA DF tensor");
   }
-  if (status == VIBEQC_STATUS_SUCCESS && df_retains_packed_raw(storage.pairs)) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS && df_retains_packed_raw(storage.pairs)) {
     status = allocate_permanent(&candidate->packed_raw, tensor_bytes,
                                 "allocate immutable packed raw CUDA DF tensor");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->primary_density, matrix_bytes,
                                 "allocate primary CUDA DF density");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->secondary_density, matrix_bytes,
                                 "allocate secondary CUDA DF density");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->total_density, matrix_bytes,
                                 "allocate total CUDA DF density");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->auxiliary_density, auxiliary_bytes,
                                 "allocate CUDA DF auxiliary density");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status =
         allocate_permanent(&candidate->coulomb, matrix_bytes, "allocate CUDA DF Coulomb matrices");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->alpha_exchange, matrix_bytes,
                                 "allocate CUDA DF alpha exchange matrices");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->beta_exchange, matrix_bytes,
                                 "allocate CUDA DF beta exchange matrices");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->auxiliary_tile_values, projection_bytes,
                                 "allocate CUDA DF auxiliary tile");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->exchange_intermediate, tile_bytes,
                                 "allocate CUDA DF exchange intermediate");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->exchange_contributions, tile_bytes,
                                 "allocate CUDA DF exchange contributions");
   }
-  if (status == VIBEQC_STATUS_SUCCESS && candidate->streamed) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS && candidate->streamed) {
     status = allocate_permanent(&candidate->exchange_tile_output, tile_bytes,
                                 "allocate CUDA DF exchange tile output");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_permanent(&candidate->exchange_density_column_major, matrix_bytes,
                                 "allocate CUDA DF exchange density transpose");
   }
-  if (status != VIBEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
 
   SetupBuffers setup;
   auto allocate_setup = [&](void** pointer, std::size_t bytes, const char* description) {
@@ -542,31 +543,32 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   };
   status = allocate_setup(reinterpret_cast<void**>(&setup.metrics), metric_bytes,
                           "allocate CUDA DF metric eigensystem");
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_setup(reinterpret_cast<void**>(&setup.eigenvalues), auxiliary_vector_bytes,
                             "allocate CUDA DF metric eigenvalues");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_setup(reinterpret_cast<void**>(&setup.scales), auxiliary_vector_bytes,
                             "allocate CUDA DF metric eigenvalue scales");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_setup(reinterpret_cast<void**>(&setup.scaled_eigenvectors), metric_bytes,
                             "allocate scaled CUDA DF metric eigenvectors");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_setup(reinterpret_cast<void**>(&setup.inverse_square_roots), metric_bytes,
                             "allocate CUDA DF metric inverse square roots");
   }
-  if (status == VIBEQC_STATUS_SUCCESS && !candidate->streamed && !candidate->integral_source) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS && !candidate->streamed &&
+      !candidate->integral_source) {
     status = allocate_setup(reinterpret_cast<void**>(&setup.raw_three_center), tensor_bytes,
                             "allocate raw CUDA DF three-center tensor");
   }
-  if (status == VIBEQC_STATUS_SUCCESS) {
+  if (status == GENERATIVEQC_STATUS_SUCCESS) {
     status = allocate_setup(reinterpret_cast<void**>(&setup.solver_info), solver_info_bytes,
                             "allocate CUDA DF solver status");
   }
-  if (status != VIBEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
 
   cuda_error = cudaMemcpyAsync(setup.metrics, metrics.data(), metric_bytes, cudaMemcpyHostToDevice,
                                candidate->stream);
@@ -604,18 +606,18 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   }
   if (solver_device_workspace_bytes > df_eigen_workspace_allowance(naux)) {
     detail = "CUDA DF metric eigensolver query exceeds its planned workspace";
-    return fail_plan(candidate, VIBEQC_STATUS_OUT_OF_MEMORY);
+    return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
   if (solver_device_workspace_bytes != 0) {
     status = allocate_setup(&setup.solver_workspace, solver_device_workspace_bytes,
                             "allocate CUDA DF metric solver workspace");
-    if (status != VIBEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
   }
   try {
     setup.solver_host_workspace.resize(solver_host_workspace_bytes);
   } catch (const std::bad_alloc&) {
     detail = "host allocation for CUDA DF metric solver workspace failed";
-    return fail_plan(candidate, VIBEQC_STATUS_OUT_OF_MEMORY);
+    return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
   for (std::size_t system = 0; system < batch_size; ++system) {
     solver_status = cusolverDnXsyevd(
@@ -644,7 +646,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     candidate->metric_full_rank.assign(batch_size, 0);
   } catch (const std::bad_alloc&) {
     detail = "host allocation for CUDA DF metric diagnostics failed";
-    return fail_plan(candidate, VIBEQC_STATUS_OUT_OF_MEMORY);
+    return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
   cuda_error =
       cudaMemcpyAsync(eigenvalues.data(), setup.eigenvalues, eigenvalues.size() * sizeof(double),
@@ -664,14 +666,14 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   for (std::size_t system = 0; system < batch_size; ++system) {
     if (solver_info[system] != 0) {
       detail = "CUDA DF metric eigensolver did not converge for system " + std::to_string(system);
-      return fail_plan(candidate, VIBEQC_STATUS_CUDA_ERROR);
+      return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
     }
     const std::size_t offset = system * naux;
     const double largest = eigenvalues[offset + naux - 1];
     if (!(largest > 0.0) || !std::isfinite(largest)) {
       detail =
           "CUDA DF metric has no finite positive eigenspace for system " + std::to_string(system);
-      return fail_plan(candidate, VIBEQC_STATUS_INVALID_ARGUMENT);
+      return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     auto& diagnostic = diagnostics[system];
     diagnostic.system_index = system;
@@ -683,7 +685,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       const double value = eigenvalues[offset + item];
       if (!std::isfinite(value)) {
         detail = "CUDA DF metric eigensolver returned a non-finite eigenvalue";
-        return fail_plan(candidate, VIBEQC_STATUS_CUDA_ERROR);
+        return fail_plan(candidate, GENERATIVEQC_STATUS_CUDA_ERROR);
       }
       if (std::abs(value - diagnostic.absolute_threshold) <=
           128 * std::numeric_limits<double>::epsilon() * largest)
@@ -695,7 +697,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     }
     if (diagnostic.effective_rank == 0) {
       detail = "CUDA DF metric threshold removed every auxiliary direction";
-      return fail_plan(candidate, VIBEQC_STATUS_INVALID_ARGUMENT);
+      return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
     candidate->metric_full_rank[system] = diagnostic.effective_rank == naux;
     diagnostic.condition_number = largest / smallest_retained;
@@ -740,14 +742,14 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   if (!candidate->streamed && candidate->integral_source) {
     status = materialize_generated_tensor(*candidate, setup.inverse_square_roots, setup.metrics,
                                           setup.scaled_eigenvectors, detail);
-    if (status != VIBEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
   } else if (candidate->streamed) {
     if (!candidate->integral_source) {
       try {
         candidate->streamed_inverse_square_roots.resize(batch_size * metric_elements);
       } catch (const std::bad_alloc&) {
         detail = "host allocation for streamed CUDA DF metric inverse failed";
-        return fail_plan(candidate, VIBEQC_STATUS_OUT_OF_MEMORY);
+        return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       }
       cuda_error = cudaMemcpyAsync(candidate->streamed_inverse_square_roots.data(),
                                    setup.inverse_square_roots,
@@ -761,7 +763,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   } else {
     // End the trace (and its pending stream reads) before failure destroys
     // the plan's stream and allocations.
-    const auto materialization_status = [&]() -> vibeqc_status {
+    const auto materialization_status = [&]() -> generativeqc_status {
       runtime::cuda_trace::TraceOperation trace("resident_three_center_materialization",
                                                 candidate->stream,
                                                 {batch_size, nbf, naux, false, false});
@@ -772,7 +774,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                                   setup.raw_three_center + system * tensor_elements_per_system,
                                   candidate->three_center + system * tensor_elements_per_system,
                                   setup.metrics, setup.scaled_eigenvectors, detail);
-          if (status != VIBEQC_STATUS_SUCCESS) return status;
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         } else {
           // Preserve the original truncated-space preparation and its response.
           blas_status = cublasDgemm(
@@ -801,9 +803,9 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
           return cuda_failure(cuda_error, "retain raw DF tensor", detail);
         candidate->resident_raw_valid = true;
       }
-      return VIBEQC_STATUS_SUCCESS;
+      return GENERATIVEQC_STATUS_SUCCESS;
     }();
-    if (materialization_status != VIBEQC_STATUS_SUCCESS)
+    if (materialization_status != GENERATIVEQC_STATUS_SUCCESS)
       return fail_plan(candidate, materialization_status);
   }
   // Source force replay borrows these original device factors. Transfer them
@@ -911,7 +913,7 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   candidate->metric_eigenvectors = std::exchange(setup.metrics, nullptr);
   candidate->metric_eigenvalues = std::exchange(setup.eigenvalues, nullptr);
   *plan = candidate;
-  return VIBEQC_STATUS_SUCCESS;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-}  // namespace vibeqc::scf::cuda_df
+}  // namespace generativeqc::scf::cuda_df

@@ -344,7 +344,7 @@ def main() -> None:
         if value is not None and value < 0:
             parser.error(f"--{name.replace('_', '-')} must be non-negative")
     payload = {
-        "schema": "vibeqc.issue206.resident_sentinel",
+        "schema": "generativeqc.issue206.resident_sentinel",
         "version": 1,
         "expected_policy": args.expected_policy,
         "traces": [

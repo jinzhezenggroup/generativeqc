@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.method.gfn2_es2_runtime import (
+from generativeqc_compiler.method.gfn2_es2_runtime import (
     build_gfn2_es2_arithmetic_hardness_program,
     build_gfn2_es2_cached_gradient_weight_program,
     build_gfn2_es2_energy_update_program,
@@ -18,7 +18,7 @@ from vibeqc_compiler.method.gfn2_es2_runtime import (
     build_gfn2_es2_pair_vjp,
     build_gfn2_es2_potential_update_program,
 )
-from vibeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor import Program, execute
 
 ROOT = Path(__file__).resolve().parents[2]
 

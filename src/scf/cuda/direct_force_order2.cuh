@@ -26,7 +26,7 @@
 // Retained direct force order2 contraction helpers.
 // Borrow immutable metadata and density/output views; host plans own lifetime.
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Contract one canonical order-two shell class through compiler-owned Weighted IntegralIR math.
@@ -422,4 +422,4 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
       generated_shell_class_mask, 1.0, exchange_coefficient);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

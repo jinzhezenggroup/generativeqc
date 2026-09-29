@@ -42,7 +42,7 @@ def test_sweep_records_exact_probe_identity(monkeypatch: pytest.MonkeyPatch) -> 
         size = int(command[1])
         provider = command[3]
         payload = {
-            "schema": "vibeqc.cpu-linalg-probe.v1",
+            "schema": "generativeqc.cpu-linalg-probe.v1",
             "operation": "gemm",
             "m": size,
             "n": size,
@@ -64,7 +64,7 @@ def test_sweep_records_exact_probe_identity(monkeypatch: pytest.MonkeyPatch) -> 
     result = cpu_linalg_sweep.run_sweep(
         Path("probe"), sizes=(16, 64, 256), providers=("auto",), repeats=3
     )
-    assert result["schema"] == "vibeqc.cpu-linalg-sweep.v1"
+    assert result["schema"] == "generativeqc.cpu-linalg-sweep.v1"
     assert [record["m"] for record in result["records"]] == [16, 64, 256]
     assert calls == [
         ["probe", "16", "3", "auto", "1"],
@@ -75,7 +75,7 @@ def test_sweep_records_exact_probe_identity(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_sweep_rejects_probe_identity_drift(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {
-        "schema": "vibeqc.cpu-linalg-probe.v1",
+        "schema": "generativeqc.cpu-linalg-probe.v1",
         "operation": "gemm",
         "m": 15,
         "n": 16,
@@ -119,7 +119,7 @@ def test_sweep_rejects_transpose_or_thread_ownership_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     base = {
-        "schema": "vibeqc.cpu-linalg-probe.v1",
+        "schema": "generativeqc.cpu-linalg-probe.v1",
         "operation": "gemm",
         "m": 16,
         "n": 16,
@@ -159,7 +159,7 @@ def test_multithread_probe_requires_provider_owned_parallelism(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = {
-        "schema": "vibeqc.cpu-linalg-probe.v1",
+        "schema": "generativeqc.cpu-linalg-probe.v1",
         "operation": "gemm",
         "m": 16,
         "n": 16,

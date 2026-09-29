@@ -18,13 +18,13 @@
   ],
   "assets": [
     {
-      "path": "python/vibeqc_compiler/periodic.py",
+      "path": "python/generativeqc_compiler/periodic.py",
       "classification": "generic-lattice",
       "role": "Backend-neutral internal PeriodicCell lattice contract and coordinate transforms.",
       "cpu": "backend-neutral",
       "cuda": "backend-neutral",
       "evidence": [
-        "python/vibeqc_compiler/periodic.py"
+        "python/generativeqc_compiler/periodic.py"
       ]
     },
     {

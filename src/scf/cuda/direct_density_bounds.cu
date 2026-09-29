@@ -5,7 +5,7 @@
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /**
  * Reduce the current AO density to the shell-block magnitudes used by J/K.
@@ -219,4 +219,4 @@ void launch_reduce_bounded_system_density_bounds_kernel(
       batch, shell_pair_density_bounds, system_density_bounds, system_pair_density_bounds);
 }
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

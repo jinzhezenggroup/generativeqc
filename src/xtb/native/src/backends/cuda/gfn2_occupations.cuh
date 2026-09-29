@@ -1,7 +1,7 @@
-#ifndef VIBEQC_XTB_BACKENDS_CUDA_GFN2_OCCUPATIONS_CUH
+#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_OCCUPATIONS_CUH
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
-#define VIBEQC_XTB_BACKENDS_CUDA_GFN2_OCCUPATIONS_CUH
+#define GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_OCCUPATIONS_CUH
 
 #include <cuda_runtime_api.h>
 
@@ -10,7 +10,7 @@
 
 #include "backends/common/gfn2_plan_schema.hpp"
 
-namespace vibeqc::xtb::detail::cuda {
+namespace generativeqc::xtb::detail::cuda {
 
 /* Semantic or arithmetic failure reported per system and by canonical lowest index. */
 enum class Gfn2OccupationsDeviceError : std::uint32_t {
@@ -138,6 +138,6 @@ cudaError_t evaluate_gfn2_occupations_cuda(
     std::uint32_t* system_errors, std::uint32_t* device_error,
     cudaStream_t stream = nullptr) noexcept;
 
-}  // namespace vibeqc::xtb::detail::cuda
+}  // namespace generativeqc::xtb::detail::cuda
 
-#endif  // VIBEQC_XTB_BACKENDS_CUDA_GFN2_OCCUPATIONS_CUH
+#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_GFN2_OCCUPATIONS_CUH

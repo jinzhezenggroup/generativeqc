@@ -3,10 +3,10 @@
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.tensor import scf_cuda
-from vibeqc_compiler.tensor.ir import einsum, input_tensor, multiply
-from vibeqc_compiler.tensor.program import Program
-from vibeqc_compiler.tensor.scf import (
+from generativeqc_compiler.tensor import scf_cuda
+from generativeqc_compiler.tensor.ir import einsum, input_tensor, multiply
+from generativeqc_compiler.tensor.program import Program
+from generativeqc_compiler.tensor.scf import (
     density_input_specs,
     weighted_density_input_specs,
 )

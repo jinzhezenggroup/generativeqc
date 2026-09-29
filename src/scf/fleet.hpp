@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_FLEET_HPP
-#define VIBEQC_SCF_FLEET_HPP
+#ifndef GENERATIVEQC_SCF_FLEET_HPP
+#define GENERATIVEQC_SCF_FLEET_HPP
 
 #include <cstddef>
 #include <memory>
@@ -14,18 +14,18 @@
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 struct CudaRhfBucketPlan;
 class PreparedFockPlan;
 
 struct FleetItemResult {
-  vibeqc_status status{VIBEQC_STATUS_INTERNAL_ERROR};
+  generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
   ScfResult scf;
   std::size_t bucket_id{};
   bool warm_start_used{};
   bool warm_start_fallback{};
-  vibeqc_backend executed_backend{VIBEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
 };
 
 /**
@@ -38,7 +38,7 @@ struct FleetItemResult {
  */
 class FleetPlan {
  public:
-  FleetPlan(std::vector<core::System> systems, vibeqc_method method, ScfOptions options,
+  FleetPlan(std::vector<core::System> systems, generativeqc_method method, ScfOptions options,
             bool warm_starts_enabled, bool cuda_fock_enabled, bool shell_class_profiling_enabled,
             bool inactive_eigensolver_profiling_enabled, int device_id,
             std::optional<core::System> auxiliary_template = std::nullopt,
@@ -101,7 +101,7 @@ class FleetPlan {
 
  private:
   std::vector<core::System> systems_;
-  vibeqc_method method_{VIBEQC_METHOD_RHF};
+  generativeqc_method method_{GENERATIVEQC_METHOD_RHF};
   ScfOptions options_;
   bool warm_starts_enabled_{};
   bool warm_start_updates_enabled_{true};
@@ -150,6 +150,6 @@ class FleetPlan {
   std::vector<std::vector<CudaDensityFittingMetricDiagnostic>> cuda_density_fitting_diagnostics_;
 };
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

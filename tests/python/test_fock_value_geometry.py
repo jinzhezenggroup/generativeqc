@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     FUSED_SHELL_SPEC_BY_NAME,
     PSSS_SPEC,
     KernelConsumer,
@@ -10,14 +10,16 @@ from vibeqc_compiler.integral import (
     cuda_target_info,
     emit_shell_class_fused_cuda,
 )
-from vibeqc_compiler.integral.capabilities import CAPABILITY_MIXED_FOCK
-from vibeqc_compiler.integral.production import load_production_kernel_selections
+from generativeqc_compiler.integral.capabilities import CAPABILITY_MIXED_FOCK
+from generativeqc_compiler.integral.production import load_production_kernel_selections
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_psss_fock_geometry_prunes_force_only_state() -> None:
-    manifest = ROOT / "python/vibeqc_compiler/integral/production_shell_classes.json"
+    manifest = (
+        ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
     selection = next(
         item
         for item in load_production_kernel_selections(manifest, "sm_120")

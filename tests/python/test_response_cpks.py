@@ -6,13 +6,13 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.xc import FixedDensityXC, UnsupportedXC, functional
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.xc import FixedDensityXC, UnsupportedXC, functional
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
 
-from tools.vibeqc_posthf.fixtures import fixture_snapshot, load_fixture
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
+from tools.generativeqc_response import (
     CPKSResponseOperator,
     DenseAOResponseBackend,
     FixedDensityXCDerivativeKernel,

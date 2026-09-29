@@ -5,7 +5,7 @@ import typing
 from dataclasses import replace
 
 import pytest
-from vibeqc_compiler.common.resources import (
+from generativeqc_compiler.common.resources import (
     MAX_BYTES,
     ResourceBudget,
     ResourceCandidate,
@@ -277,7 +277,7 @@ def test_scientific_and_schedule_changes_invalidate_plan_identity() -> None:
 
 
 def test_portable_plan_rechecks_derived_bytes_even_after_rehashed_tampering() -> None:
-    from vibeqc.profiles import canonical_hash
+    from generativeqc.profiles import canonical_hash
 
     r = request(
         "a", [ResourceCandidate("one", "resident", (allocation("x", 20, 0, 0),))]
@@ -312,7 +312,7 @@ def test_allocation_retry_only_returns_enumerated_lower_memory_candidates() -> N
 
 
 def test_session_releases_failed_group_before_retry_and_enforces_lifetimes() -> None:
-    from vibeqc_compiler.common.resources import (
+    from generativeqc_compiler.common.resources import (
         ResourceAllocationError,
         ResourceSession,
     )
@@ -376,7 +376,7 @@ def test_session_releases_failed_group_before_retry_and_enforces_lifetimes() -> 
 
 
 def test_session_never_retries_numerical_errors_or_changes_live_owners() -> None:
-    from vibeqc_compiler.common.resources import (
+    from generativeqc_compiler.common.resources import (
         ResourceAllocationError,
         ResourceSession,
     )
@@ -427,7 +427,7 @@ def test_session_never_retries_numerical_errors_or_changes_live_owners() -> None
 
 
 def test_resource_session_rejects_internal_phases_it_cannot_enforce() -> None:
-    from vibeqc_compiler.common.resources import ResourceSession
+    from generativeqc_compiler.common.resources import ResourceSession
 
     r = request(
         "a",
@@ -447,7 +447,7 @@ def test_resource_session_rejects_internal_phases_it_cannot_enforce() -> None:
 
 
 def test_session_exhausts_alternating_host_device_failures_without_cycling() -> None:
-    from vibeqc_compiler.common.resources import (
+    from generativeqc_compiler.common.resources import (
         ResourceAllocationError,
         ResourceSession,
     )
@@ -498,9 +498,9 @@ def test_session_exhausts_alternating_host_device_failures_without_cycling() -> 
 def test_native_ledger_metadata_needs_no_gpu_and_rejects_concurrent_binding() -> None:
     from concurrent.futures import ThreadPoolExecutor
 
-    from vibeqc import Calculator
-    from vibeqc.resources_native import NativeDeviceLedger
-    from vibeqc_compiler.common.resources import CpuResourceObservation
+    from generativeqc import Calculator
+    from generativeqc.resources_native import NativeDeviceLedger
+    from generativeqc_compiler.common.resources import CpuResourceObservation
 
     library = Calculator()._library
     r = request(

@@ -11,7 +11,7 @@ import pytest
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
-from vibeqc_compiler.integral import (
+from generativeqc_compiler.integral import (
     DDPS_SPEC,
     DPDS_SPEC,
     DPPP_SPEC,
@@ -31,7 +31,7 @@ from vibeqc_compiler.integral import (
     emit_shell_class_fused_cuda,
     nvrtc_cache_key,
 )
-from vibeqc_compiler.integral.shell_class import (
+from generativeqc_compiler.integral.shell_class import (
     emit_dppp_component_cuda,
     emit_dppp_contraction_cuda,
     emit_psss_cuda,

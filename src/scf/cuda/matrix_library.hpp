@@ -5,9 +5,9 @@
 
 #include <cstdint>
 
-#include "vibeqc/vibeqc.h"
+#include "generativeqc/generativeqc.h"
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Non-owning matrix-library execution context, independent of provider/plan storage. */
 struct MatrixLibraryResources {
@@ -21,16 +21,16 @@ struct MatrixLibraryResources {
  * The optional scale is applied by both the native and cuBLAS routes, allowing
  * occupation normalization without a separate matrix pass.
  */
-vibeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
-                                    const double* left, bool transpose_left, const double* right,
-                                    const std::uint8_t* active, double* output, bool use_cublas,
-                                    double scale = 1.0);
+generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
+                                          const double* left, bool transpose_left,
+                                          const double* right, const std::uint8_t* active,
+                                          double* output, bool use_cublas, double scale = 1.0);
 
-vibeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int batch_size,
-                                         int spin_count, int nbf, const double* left,
-                                         bool left_is_spin, bool transpose_left,
-                                         const double* right, bool right_is_spin,
-                                         const std::uint8_t* active, double* output,
-                                         bool use_cublas);
+generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int batch_size,
+                                               int spin_count, int nbf, const double* left,
+                                               bool left_is_spin, bool transpose_left,
+                                               const double* right, bool right_is_spin,
+                                               const std::uint8_t* active, double* output,
+                                               bool use_cublas);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

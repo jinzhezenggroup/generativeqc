@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DRIVER = r"""
 }
 int main(int argc,char** argv) {
- using namespace vibeqc::dft::nlc;
+ using namespace generativeqc::dft::nlc;
  if(argc!=2)return 99;
  const int test=std::atoi(argv[1]);
  Vv10Parameters parameters;

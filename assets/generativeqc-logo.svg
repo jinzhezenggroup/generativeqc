@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">GenerativeQC logo</title>
+  <desc id="description">A gradient orbital G beside clear Q and C letters.</desc>
+  <defs>
+    <linearGradient id="orbital" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.55" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+
+  <!-- The G and stacked QC use paths so the monogram does not depend on fonts. -->
+  <path d="M318 155A150 150 0 1 0 333 290H225M333 290v48" fill="none" stroke="url(#orbital)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="421" cy="181" r="45" fill="none" stroke="#22d3ee" stroke-width="19"/>
+  <path d="M448 208l25 26" fill="none" stroke="#22d3ee" stroke-width="19" stroke-linecap="round"/>
+  <path d="M455 295A45 45 0 1 0 455 359" fill="none" stroke="#c084fc" stroke-width="19" stroke-linecap="round"/>
+</svg>

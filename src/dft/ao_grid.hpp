@@ -5,7 +5,7 @@
 
 #include "core/types.hpp"
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Owned, normalized through-f basis for spatial AO jets on explicit points.
  *
@@ -32,4 +32,4 @@ class AoBasis {
                 std::size_t ao_count, double* output, std::size_t elements,
                 const std::size_t* ao_ids = nullptr) const;
 };
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

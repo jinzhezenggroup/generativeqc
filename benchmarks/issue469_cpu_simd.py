@@ -14,17 +14,17 @@ import typing
 from pathlib import Path
 
 import numpy as np
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.cpu_target import (
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.cpu_target import (
     AVX2_FMA_TARGET,
     AVX512F_FMA_TARGET,
     GENERIC_CPU_TARGET,
 )
-from vibeqc_compiler.integral.cpu_lane_execute import (
+from generativeqc_compiler.integral.cpu_lane_execute import (
     compile_first_derivative_cpu_lane,
 )
-from vibeqc_compiler.integral.cpu_schedule import default_cpu_schedule
-from vibeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
+from generativeqc_compiler.integral.cpu_schedule import default_cpu_schedule
+from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 
 
 def _flags() -> set[str]:
@@ -49,7 +49,7 @@ def _angular(value: str) -> tuple[int, int, int, int]:
 
 def _native_function(artifact: typing.Any) -> typing.Any:
     owner = ctypes.CDLL(str(artifact.native.library))
-    function = owner.vibeqc_first_sum_cpu_lane_v1
+    function = owner.generativeqc_first_sum_cpu_lane_v1
     function.argtypes = [
         ctypes.c_void_p,
         ctypes.c_size_t,
@@ -104,7 +104,7 @@ def main() -> None:
     executable = shutil.which("c++")
     if executable is None:
         raise RuntimeError("a C++ compiler is required")
-    cache = (args.cache or Path(tempfile.mkdtemp(prefix="vibeqc469-"))).resolve()
+    cache = (args.cache or Path(tempfile.mkdtemp(prefix="generativeqc469-"))).resolve()
     cache.mkdir(parents=True, exist_ok=True)
     ir = build_weighted_eri_ir(args.shell)
     compiler = CppCompilerAdapter(Path(executable))
@@ -174,7 +174,7 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "schema": "vibeqc.issue469.cpu-simd.v1",
+                "schema": "generativeqc.issue469.cpu-simd.v1",
                 "shell": args.shell,
                 "component_index": 0,
                 "records": args.records,

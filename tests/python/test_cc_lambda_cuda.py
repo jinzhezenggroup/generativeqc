@@ -7,21 +7,21 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc.profiles import find_nvcc
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.tensor import execute as cpu_execute
 from test_cc_api import fixture_problem
-from vibeqc.profiles import find_nvcc
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.tensor import execute as cpu_execute
 
-from tools.vibeqc_cc import (
+from tools.generativeqc_cc import (
     BoundCCSDLambda,
     BoundCCSDResponse,
     PreparedCUDALambda,
     solve,
 )
-from tools.vibeqc_cc.solver import SolverOptions
-from tools.vibeqc_response.problem import ResponseCompatibilityError
+from tools.generativeqc_cc.solver import SolverOptions
+from tools.generativeqc_response.problem import ResponseCompatibilityError
 
 
 class _Choice:
@@ -120,7 +120,7 @@ class _ResidentProvider:
 def _fake_cuda_runtime(
     monkeypatch: typing.Any, *, bad_stage: str | None = None
 ) -> None:
-    import tools.vibeqc_cc.lambda_cuda as module
+    import tools.generativeqc_cc.lambda_cuda as module
 
     programs = {}
 
@@ -253,7 +253,7 @@ def test_cuda_lambda_requires_explicit_two_sided_budget(
         )
 
 
-_REAL = os.environ.get("VIBEQC_CC_LAMBDA_CUDA_TEST") == "1"
+_REAL = os.environ.get("GENERATIVEQC_CC_LAMBDA_CUDA_TEST") == "1"
 
 
 @pytest.mark.skipif(
@@ -268,9 +268,9 @@ def test_real_cuda_lambda_water_matches_cpu_and_reports_resources(
     nvcc = find_nvcc()
     assert nvcc is not None
     compiler = CudaCompilerAdapter(
-        nvcc, cuda_target_info(os.environ.get("VIBEQC_TENSOR_ARCH", "sm_120"))
+        nvcc, cuda_target_info(os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"))
     )
-    cache = Path(os.environ.get("VIBEQC_TENSOR_CACHE", tmp_path / "lambda-cuda"))
+    cache = Path(os.environ.get("GENERATIVEQC_TENSOR_CACHE", tmp_path / "lambda-cuda"))
     with PreparedCUDALambda(
         snapshot,
         cc,

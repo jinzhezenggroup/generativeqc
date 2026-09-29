@@ -16,25 +16,25 @@ def test_gcp_c_api_rejects_wrapped_and_signed_coordinate_extents(
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
     headers = {
-        "vibeqc/vibeqc.h": """
+        "generativeqc/generativeqc.h": """
 #pragma once
 #include <cstdint>
-using vibeqc_status = int;
-constexpr int VIBEQC_STATUS_SUCCESS=0, VIBEQC_STATUS_INVALID_ARGUMENT=1;
-constexpr int VIBEQC_STATUS_NOT_IMPLEMENTED=2, VIBEQC_STATUS_NUMERICAL_FAILURE=3;
-constexpr int VIBEQC_STATUS_INTERNAL_ERROR=4;
+using generativeqc_status = int;
+constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_INVALID_ARGUMENT=1;
+constexpr int GENERATIVEQC_STATUS_NOT_IMPLEMENTED=2, GENERATIVEQC_STATUS_NUMERICAL_FAILURE=3;
+constexpr int GENERATIVEQC_STATUS_INTERNAL_ERROR=4;
 """,
         "api/error.hpp": """
 #pragma once
-#include "vibeqc/vibeqc.h"
-namespace vibeqc::api {
-inline vibeqc_status map_exception() { return VIBEQC_STATUS_INTERNAL_ERROR; }
+#include "generativeqc/generativeqc.h"
+namespace generativeqc::api {
+inline generativeqc_status map_exception() { return GENERATIVEQC_STATUS_INTERNAL_ERROR; }
 }
 """,
         "dft/dispersion/gcp_r2scan3c.hpp": """
 #pragma once
 #include <cstdint>
-namespace vibeqc::dft::dispersion {
+namespace generativeqc::dft::dispersion {
 enum class GCPStatus { success, invalid_argument, unsupported_element,
                        coincident_atoms, numerical_failure };
 inline unsigned calls=0;
@@ -79,11 +79,11 @@ int main() {
     {1, 4, 4, true, false}, {1, 3, 2, true, false}, {0, 0, 0, false, false},
   };
   for (const auto& c : cases) {
-    vibeqc::dft::dispersion::calls=0;
-    const int status=vibeqc_r2scan3c_gcp_evaluate(
+    generativeqc::dft::dispersion::calls=0;
+    const int status=generativeqc_r2scan3c_gcp_evaluate(
         &z,c.n,&xyz,c.coordinates,&energy,c.want_gradient?&gradient:nullptr,c.gradients);
-    if (status != (c.valid?VIBEQC_STATUS_SUCCESS:VIBEQC_STATUS_INVALID_ARGUMENT) ||
-        vibeqc::dft::dispersion::calls != (c.valid?1u:0u)) {
+    if (status != (c.valid?GENERATIVEQC_STATUS_SUCCESS:GENERATIVEQC_STATUS_INVALID_ARGUMENT) ||
+        generativeqc::dft::dispersion::calls != (c.valid?1u:0u)) {
       std::cerr << "invalid admission: n=" << c.n << " count=" << c.coordinates << '\n';
       return 1;
     }

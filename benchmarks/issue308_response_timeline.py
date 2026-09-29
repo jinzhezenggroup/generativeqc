@@ -28,8 +28,8 @@ try:
     from benchmarks._retention import raw_output_path
 except ModuleNotFoundError:
     from _retention import raw_output_path
-from vibeqc import Calculator, _native
-from vibeqc.autotune import source_identity
+from generativeqc import Calculator, _native
+from generativeqc.autotune import source_identity
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.compare_gpu4pyscf_batch import convergence_payload, scaled_geometries
@@ -60,10 +60,10 @@ CANDIDATES = {
     "combined-compact": ("shell", "compact", "blas", "pinned-panels"),
 }
 CANDIDATE_CONTROLS = (
-    "VIBEQC_DF_WEIGHTED_EXECUTION",
-    "VIBEQC_DF_SHELL_SCHEDULE",
-    "VIBEQC_DF_RESPONSE_ALGEBRA",
-    "VIBEQC_DF_RAW_STAGING",
+    "GENERATIVEQC_DF_WEIGHTED_EXECUTION",
+    "GENERATIVEQC_DF_SHELL_SCHEDULE",
+    "GENERATIVEQC_DF_RESPONSE_ALGEBRA",
+    "GENERATIVEQC_DF_RAW_STAGING",
 )
 
 
@@ -202,10 +202,10 @@ def main() -> None:
             parser.error(
                 "response override requires positive bytes and a zero public DF allowance"
             )
-        os.environ["VIBEQC_DF_RESPONSE_BUDGET_BYTES"] = str(
+        os.environ["GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES"] = str(
             args.response_memory_budget_bytes
         )
-    elif os.environ.get("VIBEQC_DF_RESPONSE_BUDGET_BYTES"):
+    elif os.environ.get("GENERATIVEQC_DF_RESPONSE_BUDGET_BYTES"):
         parser.error(
             "select the response override explicitly with --response-memory-budget-bytes"
         )
@@ -225,15 +225,19 @@ def main() -> None:
         parser.error("capture one candidate per profiler invocation")
     if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
         parser.error("run inside a finite Slurm GPU allocation")
-    for key in ("VIBEQC_DF_TRACE", "VIBEQC_DF_HOST_TRACE", "VIBEQC_DF_PROGRESS_TRACE"):
+    for key in (
+        "GENERATIVEQC_DF_TRACE",
+        "GENERATIVEQC_DF_HOST_TRACE",
+        "GENERATIVEQC_DF_PROGRESS_TRACE",
+    ):
         if os.environ.get(key):
             parser.error(f"unset ambient {key}; select instrumentation explicitly")
     if args.candidate:
         if any(
             os.environ.get(k)
             for k in (
-                "VIBEQC_DF_RESPONSE_UPLOAD_PROBE",
-                "VIBEQC_DF_RESPONSE_SCATTER_PROBE",
+                "GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE",
+                "GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE",
             )
         ):
             parser.error("candidate sweeps cannot be combined with attribution probes")
@@ -242,10 +246,10 @@ def main() -> None:
         )
     args.output.mkdir(parents=True, exist_ok=False)
     library_path = args.library.resolve()
-    os.environ["VIBEQC_LIBRARY"] = str(library_path)
+    os.environ["GENERATIVEQC_LIBRARY"] = str(library_path)
     library = _native.load_library()
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
-    identity = library.vibeqc_get_source_identity().decode()
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+    identity = library.generativeqc_get_source_identity().decode()
     if identity != source_identity(ROOT):
         raise RuntimeError(
             "native library does not match the current scientific source"
@@ -284,7 +288,7 @@ def main() -> None:
         "density_tolerance": 1e-10,
         "energy_tolerance": 1e-12,
         "max_iterations": 100,
-        "vibeqc_screening_tolerance": 1e-12,
+        "generativeqc_screening_tolerance": 1e-12,
     }
     if any(inputs[key] != value for key, value in expected_settings.items()):
         raise RuntimeError(
@@ -310,7 +314,9 @@ def main() -> None:
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
         "process_id": os.getpid(),
         "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
-        "controls": {k: v for k, v in os.environ.items() if k.startswith("VIBEQC_")},
+        "controls": {
+            k: v for k, v in os.environ.items() if k.startswith("GENERATIVEQC_")
+        },
         "reference": str(reference_path),
         "density_fitting_memory_budget_bytes": args.density_fitting_memory_budget_bytes,
         "response_memory_budget_bytes": args.response_memory_budget_bytes,
@@ -335,11 +341,11 @@ def main() -> None:
     save()
     calculator = Calculator(
         method=case.method,
-        basis=case.vibeqc_basis,
+        basis=case.generativeqc_basis,
         basis_representation=case.basis_representation,
         device="cuda",
         density_fitting="cuda",
-        auxiliary_basis=case.vibeqc_basis,
+        auxiliary_basis=case.generativeqc_basis,
         density_fitting_memory_budget_bytes=args.density_fitting_memory_budget_bytes,
         screening_tolerance=1e-12,
         energy_tolerance=1e-12,
@@ -388,8 +394,8 @@ def main() -> None:
             trace_path = args.output / f"{prefix}warm-{repeat}.cuda.jsonl"
             host_path = args.output / f"{prefix}warm-{repeat}.host.jsonl"
             if args.component_trace:
-                os.environ["VIBEQC_DF_TRACE"] = str(trace_path.resolve())
-                os.environ["VIBEQC_DF_HOST_TRACE"] = str(host_path.resolve())
+                os.environ["GENERATIVEQC_DF_TRACE"] = str(trace_path.resolve())
+                os.environ["GENERATIVEQC_DF_HOST_TRACE"] = str(host_path.resolve())
             if cudart:
                 payload["capture_start_monotonic_ns"] = time.monotonic_ns()
                 if cudart.cudaProfilerStart() != 0:
@@ -403,8 +409,8 @@ def main() -> None:
                     if cudart.cudaProfilerStop() != 0:
                         raise RuntimeError("cudaProfilerStop failed")
                     payload["capture_end_monotonic_ns"] = time.monotonic_ns()
-                os.environ.pop("VIBEQC_DF_TRACE", None)
-                os.environ.pop("VIBEQC_DF_HOST_TRACE", None)
+                os.environ.pop("GENERATIVEQC_DF_TRACE", None)
+                os.environ.pop("GENERATIVEQC_DF_HOST_TRACE", None)
             energies = np.array([item.energy for item in result.items])
             forces = np.array([item.forces for item in result.items])
             ref = reference["gpu4pyscf"]
@@ -444,8 +450,10 @@ def main() -> None:
                 responses = [r for r in records if r["operation"] == "force_response"]
                 if len(responses) != args.batch:
                     raise RuntimeError("missing per-item force response trace")
-                probe = os.environ.get("VIBEQC_DF_RESPONSE_UPLOAD_PROBE", "")
-                scatter_probe = os.environ.get("VIBEQC_DF_RESPONSE_SCATTER_PROBE", "")
+                probe = os.environ.get("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE", "")
+                scatter_probe = os.environ.get(
+                    "GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE", ""
+                )
                 sample["response_plans"] = []
                 for response in responses:
                     structural = validate_response_record(

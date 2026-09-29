@@ -9,15 +9,15 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, _native
-from vibeqc_compiler.tensor import execute
+from generativeqc import Calculator, _native
+from generativeqc_compiler.tensor import execute
 
-from tools.vibeqc_mp2.complete_gradient import (
+from tools.generativeqc_mp2.complete_gradient import (
     _tiled_correlation_energy,
     complete_gradient_validation,
 )
-from tools.vibeqc_mp2.equations import energy_program
-from tools.vibeqc_mp2.gradient import (
+from tools.generativeqc_mp2.equations import energy_program
+from tools.generativeqc_mp2.gradient import (
     _ri_gradient_tile_ranges,
     ao_lagrangian_weights,
     canonical_energy_adjoint,
@@ -33,15 +33,15 @@ from tools.vibeqc_mp2.gradient import (
     solve_canonical_orbital_response,
     tile_energy_adjoint,
 )
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
+from tools.generativeqc_response import (
     DenseAOResponseBackend,
     GMRESOptions,
     ResponseSolveError,
@@ -129,7 +129,7 @@ def test_weighted_eri_rejects_invalid_shell_indices_before_allocation(
 
 
 def test_inverse_sqrt_metric_response_is_included_in_ri_gradient() -> None:
-    from tools.vibeqc_mp2.gradient import _inverse_sqrt_metric_response
+    from tools.generativeqc_mp2.gradient import _inverse_sqrt_metric_response
 
     metric = np.array([[2.0, 0.2], [0.2, 1.1]])
     bar = np.array([[0.3, -0.4], [0.2, 0.7]])
@@ -149,7 +149,7 @@ def test_inverse_sqrt_metric_response_is_included_in_ri_gradient() -> None:
 
 
 def test_nuclear_repulsion_gradient_matches_independent_oracle_block() -> None:
-    from tools.vibeqc_mp2.gradient import _nuclear_repulsion_gradient
+    from tools.generativeqc_mp2.gradient import _nuclear_repulsion_gradient
 
     meta, _ = load_fixture("water")
     arguments = source_arguments(meta)
@@ -161,8 +161,8 @@ def test_nuclear_repulsion_gradient_matches_independent_oracle_block() -> None:
 
 
 def test_gradient_validation_helpers_route_explicit_device() -> None:
-    from tools.vibeqc_validation.df_gradient import execute_df_gradient
-    from tools.vibeqc_validation.one_electron_gradient import execute_gradient
+    from tools.generativeqc_validation.df_gradient import execute_df_gradient
+    from tools.generativeqc_validation.one_electron_gradient import execute_gradient
 
     captured = []
 
@@ -179,9 +179,9 @@ def test_gradient_validation_helpers_route_explicit_device() -> None:
         raise RuntimeError("captured device")
 
     library = SimpleNamespace(
-        vibeqc_system_one_electron_gradient_cuda=Function(),
-        vibeqc_system_df_gradient_cuda=Function(),
-        vibeqc_context_create=Function(capture),
+        generativeqc_system_one_electron_gradient_cuda=Function(),
+        generativeqc_system_df_gradient_cuda=Function(),
+        generativeqc_context_create=Function(capture),
     )
     calculator = SimpleNamespace(_library=library)
     atoms = [("H", (0.0, 0.0, 0.0))]
@@ -321,7 +321,7 @@ def test_complete_gradient_facade_publishes_native_total_on_cpu(
     response, relaxed weights and result assembly still execute. The separate
     GPU endpoint test checks the actual derivative consumers.
     """
-    import tools.vibeqc_mp2.complete_gradient as facade
+    import tools.generativeqc_mp2.complete_gradient as facade
 
     meta, arrays = load_fixture("h2")
     arguments = source_arguments(meta)
@@ -389,7 +389,7 @@ def test_complete_gradient_facade_publishes_native_total_on_cpu(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="requires explicitly allocated CUDA device and native library",
 )
 def test_weighted_eri_cuda_spherical_pullback_matches_dense_oracle(
@@ -425,7 +425,7 @@ def test_weighted_eri_cuda_spherical_pullback_matches_dense_oracle(
 
 
 @pytest.mark.skipif(
-    os.environ.get("VIBEQC_MP2_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
     reason="requires explicitly allocated CUDA device and native library",
 )
 @pytest.mark.parametrize("density_fitted", [False, True])
@@ -879,7 +879,7 @@ def test_dense_complete_gradient_matches_fully_resolved_finite_differences(
                     fitted_weights,
                     cpu_calculator,
                 )
-        if os.environ.get("VIBEQC_MP2_CUDA_TEST") == "1":
+        if os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") == "1":
             calculator_cuda = Calculator(
                 basis=arguments["basis"],
                 basis_representation=arguments["representation"],
@@ -1027,7 +1027,7 @@ def test_complete_conventional_gradient_matches_libcint_derivative_contraction()
     from pyscf import scf
 
     from tools.generate_validation_references import pyscf_molecule
-    from tools.vibeqc_validation.one_electron_gradient import reference_matrices
+    from tools.generativeqc_validation.one_electron_gradient import reference_matrices
 
     meta, arrays = load_fixture("water")
     arguments = source_arguments(meta)
@@ -1129,7 +1129,7 @@ def test_dense_complete_ri_gradient_matches_fully_resolved_finite_differences(
         analytic = dense_ri_molecular_gradient_oracle(
             reference, source, metric, weights
         )
-        if os.environ.get("VIBEQC_MP2_CUDA_TEST") == "1":
+        if os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") == "1":
             orbital_calculator = Calculator(
                 basis=arguments["basis"],
                 basis_representation=arguments["representation"],
@@ -1266,8 +1266,8 @@ def test_complete_ri_gradient_matches_independent_libcint_derivative_contraction
     from pyscf import scf
 
     from tools.generate_validation_references import pyscf_molecule
-    from tools.vibeqc_validation.df_gradient import reference_df_matrices
-    from tools.vibeqc_validation.one_electron_gradient import reference_matrices
+    from tools.generativeqc_validation.df_gradient import reference_df_matrices
+    from tools.generativeqc_validation.one_electron_gradient import reference_matrices
 
     meta, arrays = load_fixture("water")
     arguments = source_arguments(meta)

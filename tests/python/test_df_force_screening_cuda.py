@@ -5,12 +5,12 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc import Calculator
+from generativeqc import Calculator
 
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires a finite Slurm GPU allocation",
 )
 
@@ -47,16 +47,16 @@ def test_screening_force_budget(
     assert ref.converged
     expected = -ref.nuc_grad_method().kernel()
     for key, value in {
-        "VIBEQC_DF_RESPONSE_STORAGE": "jk-scratch",
-        "VIBEQC_DF_RESIDENT_EXCHANGE": "full",
-        "VIBEQC_DF_RESPONSE_SPACE": "occupied",
-        "VIBEQC_DF_EXCHANGE": "occupied",
-        "VIBEQC_DF_FINAL_EXCHANGE": "occupied",
-        "VIBEQC_DF_WEIGHTED_EXECUTION": "shell",
-        "VIBEQC_DF_PRIMITIVE_BUCKETS": "packet",
-        "VIBEQC_DF_SHELL_POLICY": "candidate",
-        "VIBEQC_DF_DERIVATIVE_PAIRS": pairs,
-        "VIBEQC_DF_SHELL_COUNTERS": "1",
+        "GENERATIVEQC_DF_RESPONSE_STORAGE": "jk-scratch",
+        "GENERATIVEQC_DF_RESIDENT_EXCHANGE": "full",
+        "GENERATIVEQC_DF_RESPONSE_SPACE": "occupied",
+        "GENERATIVEQC_DF_EXCHANGE": "occupied",
+        "GENERATIVEQC_DF_FINAL_EXCHANGE": "occupied",
+        "GENERATIVEQC_DF_WEIGHTED_EXECUTION": "shell",
+        "GENERATIVEQC_DF_PRIMITIVE_BUCKETS": "packet",
+        "GENERATIVEQC_DF_SHELL_POLICY": "candidate",
+        "GENERATIVEQC_DF_DERIVATIVE_PAIRS": pairs,
+        "GENERATIVEQC_DF_SHELL_COUNTERS": "1",
     }.items():
         monkeypatch.setenv(key, value)
     calc = Calculator(
@@ -73,9 +73,9 @@ def test_screening_force_budget(
         answers = []
         counts = []
         for index, budget in enumerate((0, 1e-8, 1e-6, 1e-4, 0)):
-            monkeypatch.setenv("VIBEQC_DF_FORCE_SCREEN_ABS", str(budget))
+            monkeypatch.setenv("GENERATIVEQC_DF_FORCE_SCREEN_ABS", str(budget))
             trace = tmp_path / f"screen-{index}.jsonl"
-            monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+            monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
             result = owner.execute(strict=True).items[0]
             assert result.energy == pytest.approx(ref.e_tot, abs=1e-9, rel=0)
             np.testing.assert_allclose(
@@ -107,8 +107,8 @@ def test_screened_force_matches_energy_finite_differences(
     """Screening changes force work only; compare two independent energy steps."""
     assert os.environ.get("SLURM_JOB_ID")
     atoms = [("O", (0, 0, 0)), ("H", (0, 0, 1.8)), ("H", (1.7, 0, -0.6))]
-    monkeypatch.setenv("VIBEQC_DF_FORCE_SCREEN_ABS", "1e-6")
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "shell")
+    monkeypatch.setenv("GENERATIVEQC_DF_FORCE_SCREEN_ABS", "1e-6")
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell")
     calc = Calculator(
         basis="def2-svp",
         device="cuda",
@@ -134,18 +134,18 @@ def test_invalid_screening_budget_is_rejected_on_strict_fallback(
 ) -> None:
     """A generic path cannot silently ignore an invalid requested force policy."""
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("VIBEQC_DF_WEIGHTED_EXECUTION", "generic")
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "generic")
     calc = Calculator(basis="sto-3g", device="cuda", density_fitting="cuda")
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     with calc.prepare_batch([atoms]) as owner:
         expected = owner.execute(strict=True).items[0]
         for value in ("-1", "nan", "1e309", "invalid"):
-            monkeypatch.setenv("VIBEQC_DF_FORCE_SCREEN_ABS", value)
+            monkeypatch.setenv("GENERATIVEQC_DF_FORCE_SCREEN_ABS", value)
             # Batch errors expose the item status; native detail is not part of
             # this public exception contract.
             with pytest.raises(RuntimeError, match="batched item failures"):
                 owner.execute(strict=True)
-        monkeypatch.setenv("VIBEQC_DF_FORCE_SCREEN_ABS", "off")
+        monkeypatch.setenv("GENERATIVEQC_DF_FORCE_SCREEN_ABS", "off")
         recovered = owner.execute(strict=True).items[0]
         np.testing.assert_allclose(recovered.forces, expected.forces, atol=1e-9, rtol=0)
 
@@ -158,17 +158,17 @@ def test_screening_feature_histogram_matches_device_work(
     assert os.environ.get("SLURM_JOB_ID")
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     for key, value in {
-        "VIBEQC_DF_WEIGHTED_EXECUTION": "shell",
-        "VIBEQC_DF_PRIMITIVE_BUCKETS": "packet",
-        "VIBEQC_DF_SHELL_POLICY": "candidate",
-        "VIBEQC_DF_DERIVATIVE_PAIRS": "symmetric",
-        "VIBEQC_DF_SHELL_WORK": "1",
-        "VIBEQC_DF_SCREENING_FEATURES": "1",
-        "VIBEQC_DF_FORCE_SCREEN_ABS": "off",
+        "GENERATIVEQC_DF_WEIGHTED_EXECUTION": "shell",
+        "GENERATIVEQC_DF_PRIMITIVE_BUCKETS": "packet",
+        "GENERATIVEQC_DF_SHELL_POLICY": "candidate",
+        "GENERATIVEQC_DF_DERIVATIVE_PAIRS": "symmetric",
+        "GENERATIVEQC_DF_SHELL_WORK": "1",
+        "GENERATIVEQC_DF_SCREENING_FEATURES": "1",
+        "GENERATIVEQC_DF_FORCE_SCREEN_ABS": "off",
     }.items():
         monkeypatch.setenv(key, value)
     trace = tmp_path / "screening-features.jsonl"
-    monkeypatch.setenv("VIBEQC_DF_TRACE", str(trace))
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     result = Calculator(
         basis="sto-3g",
         device="cuda",

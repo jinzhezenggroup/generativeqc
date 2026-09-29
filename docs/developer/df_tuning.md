@@ -46,7 +46,7 @@ python tools/benchmark_df_derivatives.py \
   --profile benchmarks/results/issue395-df-work/work/768.json --pair-mode packed \
   --directory .artifacts/df-derivatives --nvcc /path/to/cuda/bin/nvcc \
   --generated build/cuda-release-sm120/generated \
-  --oracle-library build/cpu/libvibeqc.so --compile-jobs 2
+  --oracle-library build/cpu/libgenerativeqc.so --compile-jobs 2
 python tools/benchmark_df_values.py \
   --directory .artifacts/df-values --nvcc /path/to/cuda/bin/nvcc \
   --generated build/cuda-release-sm120/generated --compile-jobs 2
@@ -56,12 +56,12 @@ python tools/benchmark_df_values.py \
 
 | Control | Automatic behavior | Diagnostic overrides |
 | --- | --- | --- |
-| `VIBEQC_DF_SHELL_POLICY` | Qualified architecture/class mapping, without an AO-size or auxiliary-equality filter | `legacy`, `candidate` |
-| `VIBEQC_DF_SHELL_SCHEDULE` | Class-specific manifest schedule | `warp`, `packed`, `compact` |
-| `VIBEQC_DF_VALUE_MATH` | Existing generic Rys | `generic`, `polynomial`, `rys`, `candidate` |
-| `VIBEQC_DF_VALUE_RAW_MAPPING` | Existing scalar raw export | `scalar`, `subgroup`, `warp`, `candidate` |
-| `VIBEQC_DF_FORCE_SCREEN_ABS` | Off | Nonnegative finite absolute force budget, or `off` |
-| `VIBEQC_DF_FINAL_PROJECTION` | Reuse under the shared resident RHF work/capacity policy | `off`, `reuse` |
+| `GENERATIVEQC_DF_SHELL_POLICY` | Qualified architecture/class mapping, without an AO-size or auxiliary-equality filter | `legacy`, `candidate` |
+| `GENERATIVEQC_DF_SHELL_SCHEDULE` | Class-specific manifest schedule | `warp`, `packed`, `compact` |
+| `GENERATIVEQC_DF_VALUE_MATH` | Existing generic Rys | `generic`, `polynomial`, `rys`, `candidate` |
+| `GENERATIVEQC_DF_VALUE_RAW_MAPPING` | Existing scalar raw export | `scalar`, `subgroup`, `warp`, `candidate` |
+| `GENERATIVEQC_DF_FORCE_SCREEN_ABS` | Off | Nonnegative finite absolute force budget, or `off` |
+| `GENERATIVEQC_DF_FINAL_PROJECTION` | Reuse under the shared resident RHF work/capacity policy | `off`, `reuse` |
 
 The qualified sm_120 derivative manifest chooses cooperative Rys/compact for
 its 18 s/p/d entries and auxiliary-f `003/103/113/203/213`. These five

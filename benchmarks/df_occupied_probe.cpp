@@ -23,14 +23,14 @@ using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
 }
-void check(vibeqc_status status, const std::string& detail) {
-  if (status != VIBEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+void check(generativeqc_status status, const std::string& detail) {
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
-    using namespace vibeqc::scf;
+    using namespace generativeqc::scf;
     if (!std::getenv("SLURM_JOB_ID") || argc != 6)
       throw std::runtime_error("usage inside Slurm: probe INPUT REPEATS AUX_TILE AO_ROWS ARRAYS");
     const auto repeats = std::stoul(argv[2]);
@@ -40,10 +40,10 @@ int main(int argc, char** argv) {
     std::size_t atoms = 0, shells = 0, rank = 0;
     int representation = 0;
     input >> magic >> atoms >> shells >> representation >> rank;
-    if (magic != "vibeqc-occupied-v1" || !atoms || !shells)
+    if (magic != "generativeqc-occupied-v1" || !atoms || !shells)
       throw std::runtime_error("invalid occupied probe input");
-    vibeqc::core::System system;
-    system.basis_representation = static_cast<vibeqc_basis_representation>(representation);
+    generativeqc::core::System system;
+    system.basis_representation = static_cast<generativeqc_basis_representation>(representation);
     system.atoms.resize(atoms);
     system.shells.resize(shells);
     for (auto& atom : system.atoms)
@@ -55,8 +55,8 @@ int main(int argc, char** argv) {
       for (auto& primitive : shell.primitives) input >> primitive.exponent >> primitive.coefficient;
     }
     std::string detail;
-    check(vibeqc::molecule::validate_and_normalize(system, detail), detail);
-    const auto nbf = vibeqc::molecule::ao_count(system);
+    check(generativeqc::molecule::validate_and_normalize(system, detail), detail);
+    const auto nbf = generativeqc::molecule::ao_count(system);
     if (rank > nbf) throw std::runtime_error("occupied rank exceeds AO dimension");
     std::vector<double> coefficients(nbf * rank), occupations(rank, 2.0);
     for (auto& value : coefficients) input >> value;

@@ -24,7 +24,7 @@ mkdir -p "${OUTPUT_DIR}"
 export CUDA_HOME="${CUDA_ROOT}"
 export PATH="${CUDA_ROOT}/bin:${PATH}"
 export LD_LIBRARY_PATH="${CUDA_ROOT}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-export VIBEQC_LIBRARY="${ROOT}/build/cuda-dev-fast/libvibeqc.so"
+export GENERATIVEQC_LIBRARY="${ROOT}/build/cuda-dev-fast/libgenerativeqc.so"
 export PYTHONPATH="${ROOT}/python${PYTHONPATH:+:${PYTHONPATH}}"
 
 cd "${ROOT}"
@@ -32,5 +32,5 @@ cd "${ROOT}"
   --run \
   --repeats "${ISSUE206_REPEATS:-5}" \
   --python "${PYTHON_BIN}" \
-  --library "${VIBEQC_LIBRARY}" \
+  --library "${GENERATIVEQC_LIBRARY}" \
   --output-dir "${OUTPUT_DIR}"

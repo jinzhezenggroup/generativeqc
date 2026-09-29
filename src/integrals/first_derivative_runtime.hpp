@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstddef>
 
-namespace vibeqc::integrals {
+namespace generativeqc::integrals {
 /** Bounded CPU primitive reduction shared by generated first derivatives.
  * Each record has four exponents, twelve center coordinates, and one fixed
  * external weight (including primitive/component normalization). Mathematical
@@ -28,4 +28,4 @@ int first_derivative_records(const double* records, std::size_t count, double* o
   for (unsigned j = 0; j < 12; ++j) output[j] = sum[j];
   return 0;
 }
-}  // namespace vibeqc::integrals
+}  // namespace generativeqc::integrals

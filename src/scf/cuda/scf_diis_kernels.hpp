@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vibeqc::scf::cuda_execution {
+namespace generativeqc::scf::cuda_execution {
 
 /** Form deterministic block partials for the history including the current
  * residual, before its circular slot is overwritten. The caller lends
@@ -38,4 +38,4 @@ void launch_update_diis_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, 
                                bool normalize_metric = false, bool cooperative_dots = false,
                                const double* dot_partials = nullptr, std::size_t parts = 0);
 
-}  // namespace vibeqc::scf::cuda_execution
+}  // namespace generativeqc::scf::cuda_execution

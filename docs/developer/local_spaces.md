@@ -1,6 +1,6 @@
 # Restricted local occupied and pair spaces
 
-`tools.vibeqc_local_cc` builds experimental local spaces from #147's immutable
+`tools.generativeqc_local_cc` builds experimental local spaces from #147's immutable
 canonical RHF reference and bounded integral providers. It implements Mulliken
 Pipek–Mezey occupied localization, projected AO virtual domains, and restricted
 pair-natural orbitals (PNOs). It does not register local MP2, local CCSD(T), or
@@ -90,9 +90,9 @@ amplitudes remain necessary for this prototype and are budgeted. This is not
 yet a linear-scaling local-correlation implementation.
 
 ```python
-from tools.vibeqc_local_cc.localization import localize_occupied
-from tools.vibeqc_local_cc.spaces import projected_virtual_space
-from tools.vibeqc_local_cc.mp2 import build_local_mp2
+from tools.generativeqc_local_cc.localization import localize_occupied
+from tools.generativeqc_local_cc.spaces import projected_virtual_space
+from tools.generativeqc_local_cc.mp2 import build_local_mp2
 
 # snapshot and source are validated #147 objects for the same Hamiltonian;
 # ao_atoms contains the physical atom owner of every AO, in source order.

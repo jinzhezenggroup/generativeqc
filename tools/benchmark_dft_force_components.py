@@ -139,7 +139,7 @@ def _external_comparison(
         priming_native = payload.get("native_priming", priming_native)
         priming_reference = payload.get("reference_priming", priming_reference)
     return {
-        "schema": "vibeqc.dft-external-comparison.v1",
+        "schema": "generativeqc.dft-external-comparison.v1",
         "boundary": boundary,
         "native": {
             "prepare_seconds": payload.get("native_prepare_seconds"),
@@ -334,13 +334,13 @@ def extract_records(
     """Extract normalized records from one retained benchmark payload."""
 
     schema = str(payload.get("schema", ""))
-    if schema.startswith("vibeqc.stationary-cuda-force-benchmark."):
+    if schema.startswith("generativeqc.stationary-cuda-force-benchmark."):
         return _stationary_records(payload)
-    if schema.startswith("vibeqc.readme-wb97mv."):
+    if schema.startswith("generativeqc.readme-wb97mv."):
         return _wb97mv_records(payload)
-    if schema.startswith("vibeqc.readme-endpoint."):
+    if schema.startswith("generativeqc.readme-endpoint."):
         return _readme_endpoint_records(payload)
-    if schema.startswith("vibeqc.dft-force-matrix."):
+    if schema.startswith("generativeqc.dft-force-matrix."):
         return _matrix_records(payload)
     if "component_seconds" in payload or "timeline" in payload:
         return [
@@ -432,7 +432,7 @@ def main() -> None:
         parser.error("inputs contain no DFT force evidence records")
 
     report = {
-        "schema": "vibeqc.dft-force-component-report.v1",
+        "schema": "generativeqc.dft-force-component-report.v1",
         "sources": sources,
         "records": records,
         "coverage": _coverage(records),

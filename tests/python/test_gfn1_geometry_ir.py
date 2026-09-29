@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc_compiler.geometry import (
+from generativeqc_compiler.geometry import (
     GFN1_CUTOFF_BOHR,
     GFN1_HALOGEN_VERSION,
     GFN1_SHORT_RANGE_PARAMETER_IDENTITY,
@@ -18,12 +18,12 @@ from vibeqc_compiler.geometry import (
     gfn1_element_parameters,
     gfn1_geometry,
 )
-from vibeqc_compiler.geometry._gfn1_data import (
+from generativeqc_compiler.geometry._gfn1_data import (
     GFN1_GEOMETRY_ELEMENT_ROWS,
     GFN1_MINIMUM_DISTANCE_SQUARED_BOHR2,
     GFN1_PARAMETER_JSON_SHA256,
 )
-from vibeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import execute
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -334,9 +334,9 @@ def test_changed_coordinates_crossing_cutoff_require_rebuilt_topology() -> None:
 
 
 def test_gfn1_primal_and_generated_vjps_lower_through_shared_cuda_tensorir() -> None:
-    from vibeqc_compiler.common.cuda_target import CUDA_TARGETS
-    from vibeqc_compiler.tensor.cuda_emit import emit_cuda
-    from vibeqc_compiler.tensor.cuda_plan import plan_cuda
+    from generativeqc_compiler.common.cuda_target import CUDA_TARGETS
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
     geometry = gfn1_geometry((1, 6, 8))
     coordinates = np.array(

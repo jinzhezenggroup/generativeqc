@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 
 /** Native curated semilocal execution identity shared by CPU and CUDA KS.
  *
@@ -28,6 +28,9 @@ struct SemilocalFamilyMetadata {
   const char* scf_domain;
   std::uint32_t domain_version;
   bool cuda_ks;
+  bool requires_gradient;
+  bool requires_tau;
+  bool stationary_ecp_gradient;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
   std::uint32_t component_count;
@@ -41,6 +44,9 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      "semilocal-scaled-v1/pbe-spin-c2-1e-18",
      1U,
      true,
+     false,
+     false,
+     true,
      {"LDA_X", "LDA_C_PW", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
      2U,
@@ -50,6 +56,9 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      "PBE",
      "semilocal-scaled-v1/pbe-spin-c2-1e-18",
      1U,
+     true,
+     true,
+     false,
      true,
      {"GGA_X_PBE", "GGA_C_PBE", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -61,6 +70,9 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      "semilocal-scaled-v1/pbe-spin-c2-1e-18",
      1U,
      true,
+     true,
+     true,
+     false,
      {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
      2U,
@@ -71,6 +83,9 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18",
      2U,
      true,
+     true,
+     false,
+     true,
      {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"},
      {0.08, 0.72, 0.19, 0.81},
      4U,
@@ -80,6 +95,9 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      "WB97M-V",
      "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
      3U,
+     true,
+     true,
+     true,
      true,
      {"MGGA_X_WB97M_V", "MGGA_C_WB97M_V", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -120,6 +138,18 @@ constexpr bool semilocal_family_has_cuda_ks(SemilocalFamily family) noexcept {
   return semilocal_family_metadata(family).cuda_ks;
 }
 
+constexpr bool semilocal_family_requires_gradient(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).requires_gradient;
+}
+
+constexpr bool semilocal_family_requires_tau(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).requires_tau;
+}
+
+constexpr bool semilocal_family_has_stationary_ecp_gradient(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).stationary_ecp_gradient;
+}
+
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {
   if (const auto* metadata = semilocal_family_metadata_from_code(code)) return metadata->family;
   throw std::invalid_argument("unknown native KS semilocal family code");
@@ -129,4 +159,4 @@ static_assert(semilocal_family_code(SemilocalFamily::Lda) == 0U);
 static_assert(semilocal_family_code(SemilocalFamily::Wb97mv) + 1U ==
               kSemilocalFamilyMetadata.size());
 
-}  // namespace vibeqc::dft
+}  // namespace generativeqc::dft

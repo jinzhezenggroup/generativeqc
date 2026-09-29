@@ -16,19 +16,22 @@ if __package__ in (None, ""):
 # Build-time code generation must work with CMake's minimal Python interpreter,
 # which intentionally need not provide NumPy. Avoid tensor.__init__ (and its
 # validation/interpreter imports) while loading only the build-only IR modules.
-if "vibeqc_compiler.tensor" not in sys.modules:
-    import vibeqc_compiler
+if "generativeqc_compiler.tensor" not in sys.modules:
+    import generativeqc_compiler
 
-    tensor_path = ROOT / "python" / "vibeqc_compiler" / "tensor"
-    tensor_package = types.ModuleType("vibeqc_compiler.tensor")
+    tensor_path = ROOT / "python" / "generativeqc_compiler" / "tensor"
+    tensor_package = types.ModuleType("generativeqc_compiler.tensor")
     tensor_package.__path__ = [str(tensor_path)]
-    tensor_package.__package__ = "vibeqc_compiler.tensor"
-    sys.modules["vibeqc_compiler.tensor"] = tensor_package
-    vibeqc_compiler.tensor = tensor_package
+    tensor_package.__package__ = "generativeqc_compiler.tensor"
+    sys.modules["generativeqc_compiler.tensor"] = tensor_package
+    generativeqc_compiler.tensor = tensor_package
 
-from vibeqc_compiler.array_api.scf import density_program, weighted_density_program
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.tensor.scf import (
+from generativeqc_compiler.array_api.scf import (
+    density_program,
+    weighted_density_program,
+)
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.tensor.scf import (
     diis_extrapolation_program,
     diis_gram_program,
     hf_force_program,
@@ -258,7 +261,7 @@ def native_header() -> str:
 #pragma once
 #include <array>
 #include <cstddef>
-namespace vibeqc::scf::generated {{
+namespace generativeqc::scf::generated {{
 inline constexpr const char* density_array_template_hash = "{density_hash}";
 inline constexpr const char* weighted_density_array_template_hash = "{weighted_hash}";
 inline constexpr const char* hf_force_tensor_template_hash = "{force_hash}";
@@ -355,7 +358,7 @@ inline void diis_extrapolate(double* output, const History& fock_history,
     for (std::size_t element = 0; element < vector_size; ++element)
       output[element] += coefficients[i] * fock_history[i][element];
 }}
-}}  // namespace vibeqc::scf::generated
+}}  // namespace generativeqc::scf::generated
 """
 
 

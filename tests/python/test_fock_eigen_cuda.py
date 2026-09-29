@@ -5,13 +5,13 @@ import typing
 
 import numpy as np
 import pytest
-from vibeqc.fock import FockBuildSpec, FockPlan
-from vibeqc_compiler.dft import NativeAO
+from generativeqc.fock import FockBuildSpec, FockPlan
+from generativeqc_compiler.dft import NativeAO
 
 from benchmarks.df_component_ledger import aggregate_host, read_host_trace
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
+    os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
 )
 CONTROLS = {"energy_tolerance": 1e-12, "density_tolerance": 1e-10}
@@ -103,13 +103,13 @@ def test_independent_fitted_scf_providers_and_complete_forces(
             ):
                 reference = name == "diagnostic"
                 monkeypatch.setenv(
-                    "VIBEQC_DF_REFERENCE_SETUP_EIGEN", str(int(reference))
+                    "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN", str(int(reference))
                 )
                 monkeypatch.setenv(
-                    "VIBEQC_DF_REFERENCE_FINAL_EIGEN", str(int(reference))
+                    "GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN", str(int(reference))
                 )
                 path = tmp_path / f"{step}-{name}.jsonl"
-                monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+                monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
                 try:
                     result = owner.solve(
                         initial_density=seeds.get(name),
@@ -117,9 +117,9 @@ def test_independent_fitted_scf_providers_and_complete_forces(
                         **controls,
                     )
                 finally:
-                    monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
-                    monkeypatch.delenv("VIBEQC_DF_REFERENCE_SETUP_EIGEN")
-                    monkeypatch.delenv("VIBEQC_DF_REFERENCE_FINAL_EIGEN")
+                    monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
+                    monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN")
+                    monkeypatch.delenv("GENERATIVEQC_DF_REFERENCE_FINAL_EIGEN")
                 components = aggregate_host(read_host_trace(path))
                 spins = 2 if separate else 1
                 expected = {
@@ -201,9 +201,9 @@ def test_independent_fitted_empty_beta_and_failed_replay(
     ):
         expected = oracle.solve(**CONTROLS)
         path = tmp_path / "empty-beta.jsonl"
-        monkeypatch.setenv("VIBEQC_DF_HOST_TRACE", str(path))
+        monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(path))
         result = device.solve(**CONTROLS)
-        monkeypatch.delenv("VIBEQC_DF_HOST_TRACE")
+        monkeypatch.delenv("GENERATIVEQC_DF_HOST_TRACE")
         components = aggregate_host(read_host_trace(path))
         assert not components["eigensolves_by_reason"]
         assert (

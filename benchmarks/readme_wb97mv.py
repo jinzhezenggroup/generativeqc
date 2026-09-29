@@ -125,11 +125,11 @@ def main() -> None:
             "run through Slurm main with --gres=gpu:5090:1 and finite --time"
         )
     import cupy as cp
-    from vibeqc import Calculator, GridSpec, KsOptions
+    from generativeqc import Calculator, GridSpec, KsOptions
 
     from benchmarks._support import cuda_accelerator_metadata, environment_metadata
     from benchmarks.compare_gpu4pyscf_batch import (
-        _vibeqc_sample,
+        _generativeqc_sample,
         accuracy_gate_summary,
         fixed_warm_start_policy,
         interleaved_engine_order,
@@ -146,7 +146,7 @@ def main() -> None:
         angular_azimuth=args.grid[2],
     )
     record = {
-        "schema": "vibeqc.readme-wb97mv.v1",
+        "schema": "generativeqc.readme-wb97mv.v1",
         "status": "running",
         "atoms": args.atoms,
         "aos": args.atoms * 8,
@@ -195,10 +195,10 @@ def main() -> None:
             record["native_prepare_seconds"] = perf_counter() - started
             record["native_build"] = native_build_metadata(calc)
             save("native/cold")
-            record["native_cold"] = _vibeqc_sample(batch, cp, -2, True)
+            record["native_cold"] = _generativeqc_sample(batch, cp, -2, True)
             batch.set_warm_start_updates(False)
             save("native/priming")
-            record["native_priming"] = _vibeqc_sample(batch, cp, -1, True)
+            record["native_priming"] = _generativeqc_sample(batch, cp, -1, True)
         save("reference/cold")
         record["reference_cold"] = reference_sample(reference, cp)
         dm = reference.make_rdm1().copy()
@@ -206,8 +206,10 @@ def main() -> None:
         record["reference_priming"] = reference_sample(reference, cp, density=dm)
         for index, name in enumerate(interleaved_engine_order(args.repeats)):
             save(f"{name}/repeat/{index}")
-            if name == "vibeqc" and batch is not None:
-                record["native_samples"].append(_vibeqc_sample(batch, cp, index, True))
+            if name == "generativeqc" and batch is not None:
+                record["native_samples"].append(
+                    _generativeqc_sample(batch, cp, index, True)
+                )
             elif name == "gpu4pyscf":
                 record["reference_samples"].append(
                     reference_sample(reference, cp, density=dm)
@@ -247,7 +249,7 @@ def main() -> None:
                 "max_seconds": max(s["seconds"] for s in samples),
             }
             for name, samples in (
-                ("vibeqc", record["native_samples"]),
+                ("generativeqc", record["native_samples"]),
                 ("gpu4pyscf", record["reference_samples"]),
             )
             if samples

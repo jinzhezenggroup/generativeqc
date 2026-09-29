@@ -23,21 +23,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 import numpy as np
-from vibeqc.autotune import source_identity
-from vibeqc_compiler.common.cpp_adapter import CppCompilerAdapter
-from vibeqc_compiler.common.evidence import block_error
-from vibeqc_compiler.common.provenance import canonical_hash, file_hash
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import NativeAO
-from vibeqc_compiler.dft.ao import jet_indices
-from vibeqc_compiler.dft.fixtures import basis_arguments
-from vibeqc_compiler.dft.spatial import SpatialPolicy
-from vibeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
-from vibeqc_compiler.xc import functional
-from vibeqc_compiler.xc.contractions import ContractionProgram
-from vibeqc_compiler.xc.integration_fixtures import load_integration_fixture
-from vibeqc_compiler.xc.native import NativeContractionProgram
-from vibeqc_compiler.xc.prepared import PreparedXCContractions
+from generativeqc.autotune import source_identity
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.common.evidence import block_error
+from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import NativeAO
+from generativeqc_compiler.dft.ao import jet_indices
+from generativeqc_compiler.dft.fixtures import basis_arguments
+from generativeqc_compiler.dft.spatial import SpatialPolicy
+from generativeqc_compiler.dft.spatial_prepared import PreparedSpatialGrid
+from generativeqc_compiler.xc import functional
+from generativeqc_compiler.xc.contractions import ContractionProgram
+from generativeqc_compiler.xc.integration_fixtures import load_integration_fixture
+from generativeqc_compiler.xc.native import NativeContractionProgram
+from generativeqc_compiler.xc.prepared import PreparedXCContractions
 
 from tools.generate_validation_references import pyscf_molecule
 
@@ -108,7 +108,7 @@ def load_case(case: typing.Any) -> typing.Any:
     """Use pinned fixtures plus a reproducible case with genuinely local f masks."""
     if case != "separated_f":
         return load_integration_fixture(case)
-    from vibeqc_compiler.dft import ExplicitGrid
+    from generativeqc_compiler.dft import ExplicitGrid
 
     rng = np.random.default_rng(23640)
     centers = np.array([[8.0 * i, 0.1 * (i % 2), 0] for i in range(4)])
@@ -165,7 +165,7 @@ def independent_derivatives(
     name: typing.Any,
 ) -> typing.Any:
     """Retain raw external finite-difference projections at every declared step."""
-    from tools.vibeqc_posthf.pair_space import PairSpace
+    from tools.generativeqc_posthf.pair_space import PairSpace
 
     density = data["density_spin"]
     rng = np.random.default_rng(23610)
@@ -301,7 +301,7 @@ def diagnostic(
     if observable in ("potential", "response"):
         result[observable] = np.zeros((nspin, basis.nao, basis.nao))
     if observable == "geometry":
-        from vibeqc_compiler.xc.contractions import GeometryPartials
+        from generativeqc_compiler.xc.contractions import GeometryPartials
 
         centers, points, weights = (
             np.zeros((basis.natom, 3)),
@@ -355,11 +355,11 @@ def main() -> None:
         raise FileExistsError("use fresh output and cache paths")
     if args.samples < 3 or capture(["git", "-C", str(ROOT), "status", "--porcelain"]):
         raise ValueError("at least three samples and a clean source checkout required")
-    os.environ["VIBEQC_LIBRARY"] = str(args.library.resolve())
+    os.environ["GENERATIVEQC_LIBRARY"] = str(args.library.resolve())
     library = ctypes.CDLL(str(args.library.resolve()))
-    library.vibeqc_get_source_identity.restype = ctypes.c_char_p
+    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
     identity = source_identity(ROOT)
-    if library.vibeqc_get_source_identity().decode() != identity:
+    if library.generativeqc_get_source_identity().decode() != identity:
         raise ValueError("native library/source identity mismatch")
     import pyscf
     from pyscf.dft import libxc, numint
@@ -367,7 +367,7 @@ def main() -> None:
     if pyscf.__version__ != "2.14.0" or libxc.__version__ != "7.0.0":
         raise RuntimeError("independent oracle requires PySCF 2.14.0 / Libxc 7.0.0")
     report = {
-        "schema": "vibeqc.xc-contraction-benchmark.v1",
+        "schema": "generativeqc.xc-contraction-benchmark.v1",
         "revision": capture(["git", "rev-parse", "HEAD"]),
         "dirty": False,
         "source_identity": identity,

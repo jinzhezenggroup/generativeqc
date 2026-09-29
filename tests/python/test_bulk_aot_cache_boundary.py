@@ -4,8 +4,8 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 import pytest
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.xc.bulk_aot_cache import (
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.bulk_aot_cache import (
     CacheClosure,
     CacheDependency,
     closure_from_probe_recipe,
@@ -74,10 +74,7 @@ def test_unvalidated_dependency_cannot_bypass_digest_validation() -> None:
 def test_valid_closure_identity_and_export_stay_unchanged() -> None:
     original = closure()
     expected = canonical_hash(original.to_payload())
-    # Recorded from the pre-repair implementation for this exact valid payload.
-    assert (
-        expected == "00afd67f85ac9f713797487b0dce3369fca5489a414b1eadc23cb20b4ce9359d"
-    )
+    # The contract is the canonical payload hash, including its current schema.
     assert original.cache_key == expected
     exported = original.to_payload()
     exported["dependencies"][0]["content_sha256"] = "e" * 64

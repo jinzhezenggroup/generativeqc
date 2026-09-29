@@ -28,21 +28,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 import numpy as np
-from vibeqc.profiles import atomic_json, canonical_hash
-from vibeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.evidence import (
+from generativeqc.profiles import atomic_json, canonical_hash
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
     block_error,
     new_evidence,
     outcome,
     validate_evidence,
 )
-from vibeqc_compiler.xc import build_program, functional
-from vibeqc_compiler.xc.capabilities import query_capability
-from vibeqc_compiler.xc.cuda import CudaXC, compile_cuda
-from vibeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
-from vibeqc_compiler.xc.fixtures import load_fixture
-from vibeqc_compiler.xc.spec import CATALOG
+from generativeqc_compiler.xc import build_program, functional
+from generativeqc_compiler.xc.capabilities import query_capability
+from generativeqc_compiler.xc.cuda import CudaXC, compile_cuda
+from generativeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
+from generativeqc_compiler.xc.fixtures import load_fixture
+from generativeqc_compiler.xc.spec import CATALOG
 
 
 def run(

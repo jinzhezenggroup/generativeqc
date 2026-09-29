@@ -21,7 +21,7 @@ STAND_IN = r"""
 #include <cstring>
 #include <mutex>
 #include <stdexcept>
-namespace vibeqc::dft {
+namespace generativeqc::dft {
 struct GridTaskView {
   unsigned version;
   std::uint64_t generation;
@@ -112,17 +112,17 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         + view
         + r"""
 extern "C" int view_status() {
-  vibeqc::dft::GridTaskView view{};
+  generativeqc::dft::GridTaskView view{};
   return grid_cuda_view_v1(&plan, &view, nullptr, 0);
 }
 extern "C" int sections() { return plan.context.sections; }
 extern "C" int view_error() {
-  vibeqc::dft::GridTaskView view{};
+  generativeqc::dft::GridTaskView view{};
   if (grid_cuda_view_v1(&plan, &view, nullptr, 0)) return -1;
   return *view.error;
 }
 extern "C" int view_identity() {
-  vibeqc::dft::GridTaskView view{};
+  generativeqc::dft::GridTaskView view{};
   if (grid_cuda_view_v1(&plan, &view, nullptr, 0)) return -1;
   return view.ao_ids == nullptr;
 }

@@ -8,7 +8,7 @@
 
 #include "molecule/basis.hpp"
 
-namespace vibeqc::testing {
+namespace generativeqc::testing {
 namespace {
 constexpr double pi = std::numbers::pi;
 
@@ -228,4 +228,4 @@ EcpData checked_ecp_integrals(const core::System& system, bool derivatives) {
   return fine;
 }
 
-}  // namespace vibeqc::testing
+}  // namespace generativeqc::testing

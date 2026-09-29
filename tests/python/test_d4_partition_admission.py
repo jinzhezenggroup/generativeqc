@@ -42,7 +42,7 @@ def test_invalid_partition_is_rejected_before_any_member_work(tmp_path: Path) ->
 #include <cstdint>
 #include <vector>
 #include "dft/dispersion/d4_reference.hpp"
-using namespace vibeqc::dft::dispersion;
+using namespace generativeqc::dft::dispersion;
 struct Dim { unsigned x; } blockIdx{0}, blockDim{1}, threadIdx{0};
 void __syncthreads() {}
 int atomicCAS(int* p, int compare, int value) { int old=*p; if (old==compare) *p=value; return old; }
@@ -95,7 +95,7 @@ int main() {
             "python3",
             str(ROOT / "tools/generate_method_parameters.py"),
             "--source",
-            str(ROOT / "python/vibeqc_compiler/method/method_parameters.json"),
+            str(ROOT / "python/generativeqc_compiler/method/method_parameters.json"),
             "--cpp-output",
             str(generated),
         ],

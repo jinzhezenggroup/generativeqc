@@ -1,9 +1,9 @@
-#ifndef VIBEQC_SCF_SOLVER_MEAN_FIELD_DRIVER_HPP
-#define VIBEQC_SCF_SOLVER_MEAN_FIELD_DRIVER_HPP
+#ifndef GENERATIVEQC_SCF_SOLVER_MEAN_FIELD_DRIVER_HPP
+#define GENERATIVEQC_SCF_SOLVER_MEAN_FIELD_DRIVER_HPP
 #include "core/types.hpp"
 #include "integrals/s_integrals.hpp"
 #include "scf/types.hpp"
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 class PreparedFockPlan;
 namespace initial_guess {
 class OverlapOrthogonalizer;
@@ -24,5 +24,5 @@ ScfResult run_uhf_host_plan(const core::System& system, const ScfOptions& option
                             const std::vector<double>* initial_density,
                             initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr);
 }  // namespace solver
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 #endif

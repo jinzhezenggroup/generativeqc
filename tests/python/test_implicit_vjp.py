@@ -8,10 +8,10 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from vibeqc_compiler.common.cuda_target import cuda_target_info
-from vibeqc_compiler.common.provenance import canonical_hash
-from vibeqc_compiler.method import ImplicitSolveSpec, ImplicitVJPPlan
-from vibeqc_compiler.tensor import (
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.method import ImplicitSolveSpec, ImplicitVJPPlan
+from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
     PackedLayout,
@@ -24,10 +24,10 @@ from vibeqc_compiler.tensor import (
     input_tensor,
     multiply,
 )
-from vibeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
-from tools.vibeqc_response import GMRESOptions, ResponseCompatibilityError
-from tools.vibeqc_response.implicit import (
+from tools.generativeqc_response import GMRESOptions, ResponseCompatibilityError
+from tools.generativeqc_response.implicit import (
     BoundImplicitState,
     ImplicitSolveError,
     ReferenceTensorExecutor,
@@ -206,7 +206,7 @@ def test_existing_packed_orbit_metric_is_not_an_unweighted_transpose() -> None:
 
 
 def test_scalar_state_can_have_a_differently_shaped_residual() -> None:
-    from vibeqc_compiler.tensor import reshape
+    from generativeqc_compiler.tensor import reshape
 
     spec, feeds = _scalar()
     axis = Index("a", IndexSpace("residual_coordinate", "batch", 1))
@@ -570,7 +570,7 @@ def test_missing_executor_outputs_fail_without_success() -> None:
 
 
 def test_generated_objective_vjp_composes_without_omitting_the_direct_term() -> None:
-    from vibeqc_compiler.tensor import transpose_program
+    from generativeqc_compiler.tensor import transpose_program
 
     spec, feeds = _scalar()
     x, q = _parameter("x"), _parameter("q")
@@ -613,9 +613,9 @@ def test_matrix_free_derivative_storage_is_linear_and_independent_of_iterations(
 def test_cuda_global_admission_fails_before_any_compilation_or_device_probe(
     tmp_path: typing.Any,
 ) -> None:
-    from vibeqc_compiler.common.resources import ResourceBudget
+    from generativeqc_compiler.common.resources import ResourceBudget
 
-    from tools.vibeqc_response.implicit_cuda import PreparedImplicitCuda
+    from tools.generativeqc_response.implicit_cuda import PreparedImplicitCuda
 
     spec, _ = _scalar()
     compiler = SimpleNamespace(target=cuda_target_info("sm_120"))

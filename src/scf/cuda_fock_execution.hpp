@@ -1,5 +1,5 @@
-#ifndef VIBEQC_SCF_CUDA_FOCK_EXECUTION_HPP
-#define VIBEQC_SCF_CUDA_FOCK_EXECUTION_HPP
+#ifndef GENERATIVEQC_SCF_CUDA_FOCK_EXECUTION_HPP
+#define GENERATIVEQC_SCF_CUDA_FOCK_EXECUTION_HPP
 
 #include <cuda_runtime_api.h>
 
@@ -9,7 +9,7 @@
 
 #include "scf/fock_prepared.hpp"
 
-namespace vibeqc::scf {
+namespace generativeqc::scf {
 
 /** Device-resident execution binding for one prepared Fock owner.
  *
@@ -68,14 +68,14 @@ PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
  * the prepared primary strategy plus a validated long-range correction; callers
  * cannot reinterpret the borrowed source with arbitrary operator parameters.
  */
-vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
+generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const std::vector<double>& density, const std::vector<double>& beta,
     std::vector<double>& derivatives, std::string& detail);
 
 /** Same scientific derivative as above, but borrow a validated native KS
  * density that is already resident on the prepared Direct owner's device. */
-vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
@@ -86,11 +86,11 @@ vibeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
  * fitted execution remains strict FP64. It never changes K, scientific
  * coefficients, screening, or provider selection.
  */
-vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
-                                         const double* beta, std::size_t matrix_elements,
-                                         double* coulomb, double* alpha_exchange,
-                                         double* beta_exchange, int* numerical_error,
-                                         bool mixed_coulomb, std::string& detail);
+generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
+                                               const double* beta, std::size_t matrix_elements,
+                                               double* coulomb, double* alpha_exchange,
+                                               double* beta_exchange, int* numerical_error,
+                                               bool mixed_coulomb, std::string& detail);
 
 /** Enqueue a separately resolved long-range exact-exchange correction through
  * the same resident direct-J/K source as the primary prepared owner. The
@@ -98,11 +98,11 @@ vibeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const dou
  * term. This keeps RSH composition on one stream/source without creating a
  * second CUDA provider owner.
  */
-vibeqc_status enqueue_prepared_cuda_exchange_correction(
+generativeqc_status enqueue_prepared_cuda_exchange_correction(
     const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, std::string& detail);
 
-}  // namespace vibeqc::scf
+}  // namespace generativeqc::scf
 
 #endif

@@ -1,6 +1,6 @@
 """Persistent restart tests use new processes and real native fleet execution.
 
-Set VIBEQC_CHECKPOINT_DEVICE=cuda and select a CUDA build under Slurm to run
+Set GENERATIVEQC_CHECKPOINT_DEVICE=cuda and select a CUDA build under Slurm to run
 these same scientific/robustness contracts on the actual accelerator.
 """
 
@@ -15,11 +15,17 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from vibeqc import Calculator, _native
-from vibeqc.checkpoint import _HEADER, CheckpointError, _json, _read, inspect_checkpoint
-from vibeqc_compiler.common.resources import ResourceBudget
+from generativeqc import Calculator, _native
+from generativeqc.checkpoint import (
+    _HEADER,
+    CheckpointError,
+    _json,
+    _read,
+    inspect_checkpoint,
+)
+from generativeqc_compiler.common.resources import ResourceBudget
 
-DEVICE = os.environ.get("VIBEQC_CHECKPOINT_DEVICE", "cpu")
+DEVICE = os.environ.get("GENERATIVEQC_CHECKPOINT_DEVICE", "cpu")
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 H2_MOVED = [("H", (0.0, 0.0, -0.8)), ("H", (0.0, 0.0, 0.8))]
 HE = [("He", (0.0, 0.0, 0.0))]
@@ -85,7 +91,7 @@ def test_fresh_process_restart_and_independent_reference(
     # Producer and consumer have separate library contexts, streams and heaps.
     script = """
 import json, sys
-from vibeqc import Calculator
+from generativeqc import Calculator
 options=json.loads(sys.argv[1]); systems=json.loads(sys.argv[2]); charge=int(sys.argv[3]); multiplicity=int(sys.argv[4])
 with Calculator(**options).prepare_batch(systems,charges=[charge],multiplicities=[multiplicity]) as b:
     if sys.argv[6]=='read': b.load_checkpoint(sys.argv[5])
@@ -413,7 +419,7 @@ def test_native_abi_checks_dimensions_before_allocation(
         state.density = state.coordinates = data
         state.density_count = 2**64 - 1
         state.coordinate_count = 6
-        status = batch._library.vibeqc_batch_restore_hf_warm_states(
+        status = batch._library.generativeqc_batch_restore_hf_warm_states(
             batch._batch, ctypes.byref(state), 1
         )
         assert status == _native.STATUS_INVALID_ARGUMENT
@@ -425,7 +431,7 @@ def test_native_abi_checks_dimensions_before_allocation(
 def test_custom_higher_angular_basis_roundtrip_and_gauge_independent_seed(
     tmp_path: typing.Any, representation: typing.Any, angular: typing.Any
 ) -> None:
-    from vibeqc import Primitive, Shell
+    from generativeqc import Primitive, Shell
 
     path = tmp_path / "custom"
     basis = (
@@ -488,7 +494,7 @@ def test_no_checkpoint_cold_run_remains_available_after_clear(
     # The other restart cases exercise the default response and retain their
     # independent numerical comparisons. CPU execution is already deterministic.
     if DEVICE == "cuda":
-        monkeypatch.setenv("VIBEQC_ONE_ELECTRON_DERIVATIVE_MAPPING", "serial")
+        monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING", "serial")
     path = tmp_path / "state"
     expected = save(path).items[0]
     with calc().prepare_batch([H2]) as target:
@@ -598,9 +604,9 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
 @pytest.mark.parametrize(
     "variable",
     [
-        "VIBEQC_FINAL_FOCK_REBUILD",
-        "VIBEQC_FORCE_DENSITY_PRODUCT_SCREENING",
-        "VIBEQC_MIXED_PRECISION_FOCK_THRESHOLD",
+        "GENERATIVEQC_FINAL_FOCK_REBUILD",
+        "GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING",
+        "GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD",
     ],
 )
 def test_runtime_numerical_policy_changes_require_explicit_warm_restart(
@@ -626,7 +632,7 @@ def test_retired_control_keeps_checkpoint_source_provenance(
     tmp_path: typing.Any, value: typing.Any
 ) -> None:
     """Retirement accepts old seeds without relabeling their numerical policy."""
-    variable = "VIBEQC_DF_SHELL_MATH_000"
+    variable = "GENERATIVEQC_DF_SHELL_MATH_000"
     path = tmp_path / "older-state"
     expected = save(path).items[0]
     rewrite(
@@ -654,7 +660,7 @@ def test_retired_control_keeps_checkpoint_source_provenance(
 def test_retired_environment_control_does_not_change_checkpoint_identity(
     tmp_path: typing.Any, monkeypatch: typing.Any
 ) -> None:
-    variable = "VIBEQC_DF_SHELL_MATH_000"
+    variable = "GENERATIVEQC_DF_SHELL_MATH_000"
     path = tmp_path / "state"
     monkeypatch.delenv(variable, raising=False)
     save(path)
@@ -673,7 +679,7 @@ def test_older_checkpoint_without_new_df_controls_keeps_source_provenance(
     tmp_path: typing.Any,
 ) -> None:
     """Adding execution controls must not make valid historical seeds corrupt."""
-    from vibeqc.resources_hf import _CUDA_SCHEDULE_EXTENSION_VARIABLES
+    from generativeqc.resources_hf import _CUDA_SCHEDULE_EXTENSION_VARIABLES
 
     path = tmp_path / "older-state"
     expected = save(path).items[0]
@@ -701,7 +707,7 @@ def test_older_checkpoint_without_new_df_controls_keeps_source_provenance(
     rewrite(
         path,
         mutate_manifest=lambda d: d["items"][0]["controls"]["runtime_policy"].pop(
-            "VIBEQC_DF_EXCHANGE"
+            "GENERATIVEQC_DF_EXCHANGE"
         ),
     )
     with pytest.raises(CheckpointError, match="runtime policy"):

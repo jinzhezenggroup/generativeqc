@@ -3,5 +3,5 @@
   "outputs": [
     "generated/generated_df_value_candidates.cuh"
   ],
-  "owner": "python/vibeqc_compiler/integral/df_value_candidates.py"
+  "owner": "python/generativeqc_compiler/integral/df_value_candidates.py"
 }

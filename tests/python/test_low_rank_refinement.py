@@ -6,15 +6,18 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from generativeqc.fock import FockBuildSpec, FockPlan
+from generativeqc_compiler.common.resources import ResourceBudget
+from generativeqc_compiler.dft import NativeAO
 from test_low_rank_source import source_for
-from vibeqc.fock import FockBuildSpec, FockPlan
-from vibeqc_compiler.common.resources import ResourceBudget
-from vibeqc_compiler.dft import NativeAO
 
-from tools.vibeqc_posthf.coulomb_columns import CoulombColumns
-from tools.vibeqc_posthf.low_rank import IncrementalCholesky
-from tools.vibeqc_posthf.low_rank_consumers import LowRankProvider
-from tools.vibeqc_posthf.low_rank_refinement import RefinementStage, solve_refined_rhf
+from tools.generativeqc_posthf.coulomb_columns import CoulombColumns
+from tools.generativeqc_posthf.low_rank import IncrementalCholesky
+from tools.generativeqc_posthf.low_rank_consumers import LowRankProvider
+from tools.generativeqc_posthf.low_rank_refinement import (
+    RefinementStage,
+    solve_refined_rhf,
+)
 
 
 def basis_for(source: typing.Any) -> typing.Any:

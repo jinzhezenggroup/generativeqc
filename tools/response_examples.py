@@ -25,15 +25,15 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import CudaDFSource, NativeSource
-from tools.vibeqc_response import (
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import CudaDFSource, NativeSource
+from tools.generativeqc_response import (
     CudaDFJKBackend,
     GMRESOptions,
     NativeJKBackend,
@@ -196,7 +196,7 @@ def run(args: typing.Any) -> typing.Any:
                 "a direct four-center GPU response backend is not promoted here"
             )
         return {
-            "schema": "vibeqc.response-evidence",
+            "schema": "generativeqc.response-evidence",
             "version": 1,
             "case": args.case,
             "device": args.device,

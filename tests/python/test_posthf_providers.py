@@ -7,17 +7,17 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from tools.vibeqc_posthf.conventions import MOBlock
-from tools.vibeqc_posthf.df import DFProvider, MetricFactor
-from tools.vibeqc_posthf.export import export_rhf
-from tools.vibeqc_posthf.fixtures import (
+from tools.generativeqc_posthf.conventions import MOBlock
+from tools.generativeqc_posthf.df import DFProvider, MetricFactor
+from tools.generativeqc_posthf.export import export_rhf
+from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
     source_arguments,
 )
-from tools.vibeqc_posthf.mp2 import restricted_mp2
-from tools.vibeqc_posthf.providers import ConventionalProvider
-from tools.vibeqc_posthf.sources import NativeSource
+from tools.generativeqc_posthf.mp2 import restricted_mp2
+from tools.generativeqc_posthf.providers import ConventionalProvider
+from tools.generativeqc_posthf.sources import NativeSource
 
 
 @pytest.fixture
@@ -175,7 +175,7 @@ def test_native_direct_density_export_preserves_zero_screening(
     source_factory: typing.Any, backend: typing.Any
 ) -> None:
     """The native export requests screening=0 for its unscreened HF reference."""
-    if backend == "cuda" and os.environ.get("VIBEQC_POSTHF_CUDA_TEST") != "1":
+    if backend == "cuda" and os.environ.get("GENERATIVEQC_POSTHF_CUDA_TEST") != "1":
         pytest.skip("requires explicitly allocated real GPU")
     source, meta, _ = source_factory()
     density, stats = source.rhf_density(backend=backend, df=False)
@@ -249,15 +249,15 @@ def test_stale_metric_geometry_is_rejected(source_factory: typing.Any) -> None:
 def test_valid_but_unsupported_raw_operator_has_explicit_status(
     source_factory: typing.Any,
 ) -> None:
-    from vibeqc_compiler.integral.blocks import (
+    from generativeqc_compiler.integral.blocks import (
         BlockRequest,
         BlockStatus,
         RawBlock,
         ShellTile,
         TensorLayout,
     )
-    from vibeqc_compiler.integral.ir import IntegralIR, OperatorSpec
-    from vibeqc_compiler.integral.shell_signature import (
+    from generativeqc_compiler.integral.ir import IntegralIR, OperatorSpec
+    from generativeqc_compiler.integral.shell_signature import (
         BasisShell,
         CenterBinding,
         ShellSignature,

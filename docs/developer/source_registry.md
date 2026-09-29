@@ -1,6 +1,6 @@
 # Scientific source registry
 
-VibeQC keeps externally maintained scientific definitions and numerical data behind one pinned source registry: `upstream/manifest.json`. The registry is the source of truth for upstream repository, immutable revision, file path, content digest, license, and the checked-in products that depend on those inputs.
+GenerativeQC keeps externally maintained scientific definitions and numerical data behind one pinned source registry: `upstream/manifest.json`. The registry is the source of truth for upstream repository, immutable revision, file path, content digest, license, and the checked-in products that depend on those inputs.
 
 Normal configure, build, runtime, and test paths do not fetch the network. Network access is a maintainer action only.
 
@@ -8,10 +8,10 @@ Normal configure, build, runtime, and test paths do not fetch the network. Netwo
 
 - **Checked-in file sets** keep the audited upstream bytes needed for deterministic regeneration under `upstream/<provider>/<revision>/`. The registry's `local_root` is the only canonical repository location for those bytes.
 - **Checked-in snapshots** keep compact upstream catalogs needed by deterministic generators and runtime provenance, such as the simple-DFTD3 and DFT-D4 parameter TOML files and the pinned xTBloom GFN1/D3 exports.
-- **Remote file sets** pin upstream implementation/qualification sources that are not needed by normal compiler/catalog work. `sync` materializes these under `.cache/vibeqc-sources/` only for maintainer regeneration. Large DFT-D4 reference data, EEQ implementation sources, simple-DFTD3 gCP implementation sources, and the GPU4PySCF Rys source table stay remote-only.
+- **Remote file sets** pin upstream implementation/qualification sources that are not needed by normal compiler/catalog work. `sync` materializes these under `.cache/generativeqc-sources/` only for maintainer regeneration. Large DFT-D4 reference data, EEQ implementation sources, simple-DFTD3 gCP implementation sources, and the GPU4PySCF Rys source table stay remote-only.
 - **Products** record deterministic generators, their hashes, canonical inputs where applicable, and checked-in output hashes. Generated tables are products, not source-of-truth definitions.
 
-The current registry covers Libxc, xTBloom GFN1-xTB and D3 snapshots, DFT-D4 reference inputs, EEQ/mctc-lib inputs, dispersion parameter snapshots, GPU4PySCF Rys tables, r2SCAN-3c gCP data, and VibeQC-generated high-accuracy Rys coefficients. Derived audit/compatibility metadata lives under `manifests/`, never as a second upstream source tree.
+The current registry covers Libxc, xTBloom GFN1-xTB and D3 snapshots, DFT-D4 reference inputs, EEQ/mctc-lib inputs, dispersion parameter snapshots, GPU4PySCF Rys tables, r2SCAN-3c gCP data, and GenerativeQC-generated high-accuracy Rys coefficients. Derived audit/compatibility metadata lives under `manifests/`, never as a second upstream source tree.
 
 ## Commands
 
@@ -65,7 +65,7 @@ python tools/source_registry.py update dftd4-reference \
   --revision <commit-sha> --git-tree <tree-sha>
 ```
 
-Checked-in sources are restored or updated at their registered `upstream/...` `local_root`. Future remote-only source sets are written below `.cache/vibeqc-sources/<source-id>/`. `sync` refuses bytes whose digest differs from the registry. `update` reconstructs URLs from the registered repository and upstream paths, rejects obvious floating refs such as `main`, `master`, and `HEAD`, and records new raw and normalized digests. Neither command is used by a normal build.
+Checked-in sources are restored or updated at their registered `upstream/...` `local_root`. Future remote-only source sets are written below `.cache/generativeqc-sources/<source-id>/`. `sync` refuses bytes whose digest differs from the registry. `update` reconstructs URLs from the registered repository and upstream paths, rejects obvious floating refs such as `main`, `master`, and `HEAD`, and records new raw and normalized digests. Neither command is used by a normal build.
 
 Each generated product also records an input-source identity. Changing an upstream revision or file digest therefore makes `verify` fail until the affected product is deliberately regenerated and its reviewed identity/output hashes are refreshed.
 

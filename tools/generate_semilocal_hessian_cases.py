@@ -1,4 +1,4 @@
-"""Freeze independent LDA/GGA Libxc feature-Hessian cases, without VibeQC imports.
+"""Freeze independent LDA/GGA Libxc feature-Hessian cases, without GenerativeQC imports.
 
 Use PySCF 2.14.0 / Libxc 7.0.0. Repeat --functional NAME=LIBXC_CODE and pass
 --output to a small tests/data/xc JSON fixture. Cartesian gradient vectors define
@@ -63,7 +63,7 @@ def main() -> None:
                 }
             )
     payload = {
-        "schema": "vibeqc.independent-semilocal-hessian.v1",
+        "schema": "generativeqc.independent-semilocal-hessian.v1",
         "pyscf": pyscf.__version__,
         "libxc": libxc.__version__,
         "seed": 609610,

@@ -1,7 +1,6 @@
 """The retained CPU oracle adapter must preserve evidence admission boundaries."""
 
 import gzip
-import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -17,10 +16,27 @@ ADAPTER = (
 
 
 def load_adapter() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("issue949_cpu_oracle", ADAPTER)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    """Exercise the retained algorithm with its retired import translated in memory.
+
+    The archived source remains byte-for-byte original and the old package is
+    never installed as a compatibility alias.
+    """
+    source = ADAPTER.read_text()
+    previous = "from vibeqc_compiler.common.provenance import atomic_json"
+    assert source.count(previous) == 1
+    module = ModuleType("issue949_cpu_oracle")
+    module.__file__ = str(ADAPTER)
+    exec(  # noqa: S102 - checked-in historical source, rewritten only in this test
+        compile(
+            source.replace(
+                previous,
+                "from generativeqc_compiler.common.provenance import atomic_json",
+            ),
+            str(ADAPTER),
+            "exec",
+        ),
+        module.__dict__,
+    )
     return module
 
 
