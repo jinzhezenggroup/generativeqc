@@ -244,6 +244,33 @@ class RKSResponseReference:
         return self.electron_count // 2
 
 
+class _RKSIntegralSourceView:
+    """Borrowed NativeAO topology for pre-cutover Hessian compatibility.
+
+    This is not a post-HF NativeSource and owns no integral provider. It exists
+    only so a stacked intermediate commit can feed the older generated Hessian
+    consumers until their NativeAO-owned production migration lands.
+    """
+
+    def __init__(self, basis: NativeAO) -> None:
+        self.basis = basis
+        self.atoms = tuple(basis.atoms)
+        self.shells = tuple(basis.shells)
+        self.shell_sizes = tuple(
+            (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
+            for shell in basis.shells
+        )
+        if sum(self.shell_sizes) != basis.nao:
+            raise ValueError("RKS integral topology does not match NativeAO")
+        self.nbf = basis.nao
+        self.representation = basis.representation
+        self.auxiliary_shells: tuple[typing.Any, ...] = ()
+
+    def _check_open(self) -> None:
+        if not self.basis._handle:
+            raise RuntimeError("RKS response AO basis is closed")
+
+
 class _PreparedRKSJBackend:
     """Exact J-only response through the installed method-neutral FockPlan."""
 
@@ -573,6 +600,7 @@ class NativeRKSResponse(CPKSResponseOperator):
             result = cls(problem, backend, kernel)
             result.state = state
             result._basis = basis
+            result._source = _RKSIntegralSourceView(basis)
             result._reference_identity = reference.identity
             result._backend_identity = backend.identity
             result._contract = StationaryDerivativeContract(state.identity)
