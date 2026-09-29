@@ -299,40 +299,6 @@ ControlWeights hamiltonian_control_pullback(const ParameterWeights& bar,
           {output.orbital_rhs, output.orbital_rhs + ov}};
 }
 
-ResponseWeights fock_pullback(std::span<const double> bar_fock, const RawHamiltonian& raw,
-                              std::size_t o, std::size_t v, std::size_t max_bytes) {
-  const auto n = checked_add(o, v);
-  if (bar_fock.size() != square(n))
-    throw std::invalid_argument("RCCSD(T) Fock response shape mismatch");
-  const auto arena_elements = generated::fock_weights_arena_elements(o, v);
-  if (bytes(
-          checked_add(arena_elements, checked_add(checked_add(fourth(n), checked_mul(4, square(n))),
-                                                  checked_mul(o, v)))) > max_bytes)
-    throw std::length_error("RCCSD(T) Fock response exceeds host budget");
-  std::vector<double> arena(arena_elements);
-  generated::FockWeightInputs inputs{};
-  inputs.bar_fock = bar_fock.data();
-  inputs.density = raw.density.data();
-  inputs.g = raw.g.data();
-  inputs.h = raw.h.data();
-  inputs.rotation = raw.rotation.data();
-  const auto output = generated::run_fock_weights_cpu(o, v, inputs, arena.data(), arena.size());
-  return copy_hamiltonian_outputs(output, n, o, v);
-}
-
-void add_in_place(ResponseWeights& target, const ResponseWeights& source) {
-  auto add = [](std::vector<double>& a, const std::vector<double>& b) {
-    if (a.size() != b.size()) throw std::invalid_argument("RCCSD(T) response shape mismatch");
-    for (std::size_t i = 0; i < a.size(); ++i) a[i] += b[i];
-  };
-  add(target.hcore, source.hcore);
-  add(target.eri, source.eri);
-  add(target.overlap, source.overlap);
-  add(target.rotation_gradient, source.rotation_gradient);
-  add(target.stationarity, source.stationarity);
-  add(target.orbital_rhs, source.orbital_rhs);
-}
-
 void add_same_space_fock_seed(ParameterWeights& target, std::span<const double> bar_fock,
                               std::size_t o, std::size_t v) {
   const auto n = checked_add(o, v);
@@ -348,39 +314,6 @@ void add_same_space_fock_seed(ParameterWeights& target, std::span<const double> 
   for (std::size_t a = 0; a < v; ++a)
     for (std::size_t b = 0; b < v; ++b)
       target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
-}
-
-void add_parameter_weights(ParameterWeights& target, const ParameterWeights& source) {
-  auto add = [](std::vector<double>& first, const std::vector<double>& second) {
-    if (first.size() != second.size())
-      throw std::invalid_argument("RCCSD(T) parameter response shape mismatch");
-    for (std::size_t i = 0; i < first.size(); ++i) first[i] += second[i];
-  };
-  add(target.foo, source.foo);
-  add(target.fov, source.fov);
-  add(target.fvv, source.fvv);
-  add(target.ovov, source.ovov);
-  add(target.ovvo, source.ovvo);
-  add(target.oovv, source.oovv);
-  add(target.ovvv, source.ovvv);
-  add(target.ovoo, source.ovoo);
-  add(target.oooo, source.oooo);
-  add(target.vvvv, source.vvvv);
-}
-
-ParameterWeights zero_parameters(std::size_t o, std::size_t v) {
-  ParameterWeights z;
-  z.foo.assign(square(o), 0.0);
-  z.fov.assign(checked_mul(o, v), 0.0);
-  z.fvv.assign(square(v), 0.0);
-  z.ovov.assign(checked_mul(square(o), square(v)), 0.0);
-  z.ovvo.assign(checked_mul(square(o), square(v)), 0.0);
-  z.oovv.assign(checked_mul(square(o), square(v)), 0.0);
-  z.ovvv.assign(checked_mul(o, checked_mul(v, square(v))), 0.0);
-  z.ovoo.assign(checked_mul(checked_mul(o, v), square(o)), 0.0);
-  z.oooo.assign(fourth(o), 0.0);
-  z.vvvv.assign(fourth(v), 0.0);
-  return z;
 }
 
 double max_abs(std::span<const double> values) {
