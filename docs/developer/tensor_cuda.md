@@ -525,3 +525,24 @@ rather than the derivative of bit-level rounding; see the
 
 The shared topology layout and admission boundary are recorded in the
 [ragged batch scheduling decision](../../.agents/notes/implemented/architecture/2026-09-20-ragged-batch-schedule-ownership.md).
+
+
+## Symbolic contraction reassociation
+
+CUDA planning can explicitly run the compiler-owned symbolic contraction-tree rewrite before
+storage, layout, and provider admission:
+
+```python
+plan = plan_cuda(program, target, reassociate_contractions=True)
+```
+
+This option is intentionally separate from `TensorSchedule`: it changes the floating-point
+reduction tree of the logical equation rather than only choosing an execution schedule. The
+default remains `False`. When enabled, only contractions with a provably lower symbolic degree
+are rewritten; retained high-order outputs are diagnosed rather than approximated away.
+
+The rewritten `Program` is stored on `TensorPlan.program`, so plan identity, emitted CUDA,
+resource accounting, and cuBLAS admission all bind to the same lowered equation. In particular,
+the rank-2 congruence `C^T h C` can lower from one three-operand O(N^4) einsum to two O(N^3)
+binary contractions, each eligible for the existing CUDA GEMM lowerer.
+
