@@ -1544,8 +1544,8 @@ class KsPreparedBatch final : public PreparedBatch {
                                                  const double*& gradient, std::size_t& point_count,
                                                  void*& source_stream, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
-      return items_[index].plan->resident_nonlocal_features(
-          expected, device, density, gradient, point_count, source_stream, detail);
+      return items_[index].plan->resident_nonlocal_features(expected, device, density, gradient,
+                                                            point_count, source_stream, detail);
     device = -1;
     density = nullptr;
     gradient = nullptr;
@@ -1725,8 +1725,7 @@ generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, st
                                                         int& device, const double*& density,
                                                         const double*& gradient,
                                                         std::size_t& point_count,
-                                                        void*& source_stream,
-                                                        std::string& detail) {
+                                                        void*& source_stream, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->resident_nonlocal_features(index, expected, device, density, gradient, point_count,

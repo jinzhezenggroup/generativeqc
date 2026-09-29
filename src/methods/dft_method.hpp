@@ -55,8 +55,7 @@ generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, st
                                                         int& device, const double*& density,
                                                         const double*& gradient,
                                                         std::size_t& point_count,
-                                                        void*& source_stream,
-                                                        std::string& detail);
+                                                        void*& source_stream, std::string& detail);
 
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
                                         std::string& detail);
