@@ -653,6 +653,8 @@ def _cpu_function(
             outputs["stationarity"],
             outputs["orbital_rhs"],
         ]
+    elif output_type == "HamiltonianControlOutputs":
+        returned = [outputs["stationarity"], outputs["orbital_rhs"]]
     elif output_type == "HamiltonianSmallOutputs":
         returned = [
             outputs["hcore"],
@@ -722,6 +724,19 @@ def cpu_header() -> str:
     hamiltonian = build_hamiltonian_programs(
         *REPRESENTATIVE, explicit_density_input=True
     )
+    hamiltonian_control = _prepare_production(
+        Program(
+            {
+                name: hamiltonian.weights.outputs[name]
+                for name in ("stationarity", "orbital_rhs")
+            },
+            provenance={
+                "parent": hamiltonian.weights.logical_hash,
+                "scope": "orbital-control response without retained ERI cotangent",
+            },
+        ),
+        "cpu",
+    )
     hamiltonian_weights = _prepare_production(hamiltonian.weights, "cpu")
     hamiltonian_small_weights = _prepare_production(
         build_hamiltonian_small_weight_program(
@@ -747,6 +762,11 @@ def cpu_header() -> str:
     hamiltonian_input_names = tuple(
         sorted(
             n.attrs["name"] for n in hamiltonian_weights.live_nodes if n.op == "input"
+        )
+    )
+    hamiltonian_control_input_names = tuple(
+        sorted(
+            n.attrs["name"] for n in hamiltonian_control.live_nodes if n.op == "input"
         )
     )
     orbital_jvp_input_names = tuple(
@@ -816,6 +836,7 @@ def cpu_header() -> str:
             ],
             "};",
             "struct HamiltonianOutputs { const double* hcore{}; const double* eri{}; const double* overlap{}; const double* rotation_gradient{}; const double* stationarity{}; const double* orbital_rhs{}; };",
+            "struct HamiltonianControlOutputs { const double* stationarity{}; const double* orbital_rhs{}; };",
             "struct HamiltonianSmallOutputs { const double* hcore{}; const double* overlap{}; const double* rotation_gradient{}; const double* stationarity{}; const double* orbital_rhs{}; };",
             "struct EriWeightOutput { const double* eri{}; };",
             "struct OrbitalJvpOutput { const double* d_fov{}; };",
@@ -834,6 +855,7 @@ def cpu_header() -> str:
                 for parameter, program in parameter_vjps.items()
             ],
             f'inline constexpr const char* hamiltonian_weights_program_hash="{hamiltonian_weights.logical_hash}";',
+            f'inline constexpr const char* hamiltonian_control_program_hash="{hamiltonian_control.logical_hash}";',
             f'inline constexpr const char* hamiltonian_small_weights_program_hash="{hamiltonian_small_weights.logical_hash}";',
             f'inline constexpr const char* hamiltonian_eri_weights_program_hash="{hamiltonian_eri_weights.logical_hash}";',
             f'inline constexpr const char* orbital_jvp_program_hash="{orbital_jvp.logical_hash}";',
@@ -856,6 +878,9 @@ def cpu_header() -> str:
             ],
             _required_function(
                 hamiltonian_weights, "hamiltonian_weights_arena_elements"
+            ),
+            _required_function(
+                hamiltonian_control, "hamiltonian_control_arena_elements"
             ),
             _required_function(
                 hamiltonian_small_weights, "hamiltonian_small_weights_arena_elements"
@@ -928,6 +953,15 @@ def cpu_header() -> str:
                 signature="const HamiltonianWeightInputs& inputs",
                 input_overrides={
                     name: f"inputs.{name}" for name in hamiltonian_input_names
+                },
+            ),
+            _cpu_function(
+                hamiltonian_control,
+                "run_hamiltonian_control_cpu",
+                "HamiltonianControlOutputs",
+                signature="const HamiltonianWeightInputs& inputs",
+                input_overrides={
+                    name: f"inputs.{name}" for name in hamiltonian_control_input_names
                 },
             ),
             _cpu_function(

@@ -309,12 +309,12 @@ __global__ void task_reduce(const double* input, const int64_t* tasks, size_t co
   }
   output[slot] = finite(output[slot] + sum, error, 0);
 }
-__global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
-                               const double* centers, size_t na, double* output, int* error) {
+__device__ bool nuclear_pair(unsigned kind, int64_t a, int64_t b, double za, double zb,
+                             const double* centers, size_t na, double* output, int* error) {
   if (a < 0 || b < 0 || a >= int64_t(na) || b >= int64_t(na) || a == b ||
       !isfinite(za) || !isfinite(zb) || !(za > 0) || !(zb > 0)) {
     atomicExch(error, 1);
-    return;
+    return false;
   }
   double r[record_stride];
   for (size_t j = 0; j < record_stride; ++j) r[j] = 1.0;
@@ -327,7 +327,7 @@ __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, d
   double v[12]{};
   if (!first_derivative(kind, r, r + 4, v)) {
     atomicExch(error, 1);
-    return;
+    return false;
   }
   for (size_t k = 0; k < 3; ++k) {
     output[3 * stationary_nuclear_source * na + 3 * a + k] =
@@ -335,6 +335,20 @@ __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, d
     output[3 * stationary_nuclear_source * na + 3 * b + k] =
         finite(output[3 * stationary_nuclear_source * na + 3 * b + k] + v[3 + k], error, 0);
   }
+  return !*error;
+}
+__global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
+                               const double* centers, size_t na, double* output, int* error) {
+  nuclear_pair(kind, a, b, za, zb, centers, na, output, error);
+}
+__global__ void nuclear_all_kernel(unsigned kind, const double* charges, const double* centers,
+                                   size_t na, double* output, int* error) {
+  if (blockIdx.x != 0 || threadIdx.x != 0) return;
+  for (size_t a = 0; a < na; ++a)
+    for (size_t b = 0; b < a; ++b)
+      if (!nuclear_pair(kind, int64_t(a), int64_t(b), charges[a], charges[b], centers, na, output,
+                        error))
+        return;
 }
 __global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error) {
   bool valid = true;
@@ -350,6 +364,7 @@ __global__ void validate_centers(const double* centers, size_t na, double tolera
 }
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
+                                size_t owner_offset, size_t points_per_atom,
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external,
                                 size_t external_stride, size_t external_offset,
@@ -370,7 +385,10 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
   auto* distances = reinterpret_cast<std::array<double, 4>*>(ws + 5 * na);
   auto* zeros = reinterpret_cast<size_t*>(ws + 4 * na);
   for (size_t p = lane; p < np; p += workers) {
-    if (owners[p] < 0 || owners[p] >= int64_t(na) || !isfinite(weights[p]) || !isfinite(raw[p])) {
+    const int64_t owner =
+        owners ? owners[p]
+               : (points_per_atom ? int64_t((owner_offset + p) / points_per_atom) : int64_t{-1});
+    if (owner < 0 || owner >= int64_t(na) || !isfinite(weights[p]) || !isfinite(raw[p])) {
       atomicExch(error, 1);
       return;
     }
@@ -408,7 +426,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
           xc.gradient[s][k] = 2.0 * seed[1] * (g[0][k] + g[1][k]);
       }
       for (size_t k = 0; k < 3; ++k)
-        grad[3 * na + 3 * owners[p] + k] += seed[2 + k];
+        grad[3 * na + 3 * owner + k] += seed[2 + k];
     } else {
       xc = stationary_evaluate_point(rho, g, tau);
     }
@@ -444,10 +462,10 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
         for (size_t j = 0; j < stationary_jets; ++j)
           value += pullback[j] * view.ao[stationary_shift[j][k] * stride + p * n + mu];
         grad[3 * atom + k] -= value;
-        grad[3 * na + 3 * owners[p] + k] += value;
+        grad[3 * na + 3 * owner + k] += value;
       }
     }
-    if (!generativeqc_grid_adjoint::contract_point(view.points + 3 * p, centers, na, owners[p],
+    if (!generativeqc_grid_adjoint::contract_point(view.points + 3 * p, centers, na, owner,
                                              xc.energy * raw[p], grad + 6 * na, ws, ws + na,
                                              ws + 2 * na, ws + 3 * na, zeros, distances, local_norm,
                                              local_ratio, local_log, local_becke)) {

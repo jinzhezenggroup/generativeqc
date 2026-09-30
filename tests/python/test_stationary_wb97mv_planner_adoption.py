@@ -60,12 +60,13 @@ def test_planner_adoption_preserves_resident_owner_and_per_call_work_budget() ->
     assert len(_calls("resident_nonlocal_geometry")) == 1
     calls = _calls("_CudaSources")
     assert len(calls) == 2
-    for call in calls:
-        keywords = {keyword.arg: keyword.value for keyword in call.keywords}
-        budget = keywords["page_work_budget"]
-        assert isinstance(budget, ast.Constant)
-        assert budget.value == 1
-        assert "work_budget" not in keywords
+    first = {keyword.arg: keyword.value for keyword in calls[0].keywords}
+    second = {keyword.arg: keyword.value for keyword in calls[1].keywords}
+    assert ast.unparse(first["page_work_budget"]) == "max(1, na * (na - 1) // 2)"
+    assert isinstance(second["page_work_budget"], ast.Constant)
+    assert second["page_work_budget"].value == 1
+    assert "work_budget" not in first
+    assert "work_budget" not in second
     join = _calls("resident_nonlocal_geometry")[0]
     join_keywords = {keyword.arg: keyword.value for keyword in join.keywords}
     assert ast.unparse(join_keywords["sources"]) == "self.sources"

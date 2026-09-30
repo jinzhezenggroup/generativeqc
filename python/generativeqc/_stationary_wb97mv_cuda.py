@@ -248,10 +248,9 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
-                        # This retained owner executes one nuclear primitive per
-                        # native call. Total pair coverage is bounded separately
-                        # by the admitted atom domain and explicit pair loop.
-                        page_work_budget=1,
+                        # The batched nuclear call owns every unordered atom
+                        # pair in one deterministic native page.
+                        page_work_budget=max(1, na * (na - 1) // 2),
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
@@ -375,17 +374,7 @@ class PreparedWb97mvCudaGradient:
         self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
         self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
-        for atom in range(na):
-            for other in range(atom):
-                self.sources._call(
-                    "stationary_nuclear",
-                    self.sources.handle,
-                    0,
-                    atom,
-                    other,
-                    float(charges[atom]),
-                    float(charges[other]),
-                )
+        self.sources.nuclear_all(charges)
         component_seconds["density_and_nuclear_setup"] = (
             perf_counter() - component_start
         )
