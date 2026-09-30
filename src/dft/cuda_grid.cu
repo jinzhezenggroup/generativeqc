@@ -333,7 +333,7 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
 
     const auto enqueue_copy = [&] {
       if (spins == 1) {
-        split_restricted_density<<<blocks(matrix_elements), 128, 0, producer>>>(
+        split_restricted_density<<<blocks(matrix_elements, 128), 128, 0, producer>>>(
             alpha, matrix_elements, p.density);
         cuda_check(cudaGetLastError());
       } else {
