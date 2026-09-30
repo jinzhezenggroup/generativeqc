@@ -23,7 +23,7 @@ def _maximum_abs_difference(first: Any, second: Any) -> float:
 
     if isinstance(first, list) or isinstance(second, list):
         if not isinstance(first, list) or not isinstance(second, list):
-            raise TypeError("baseline/incremental result shapes differ")
+            raise ValueError("baseline/incremental result shapes differ")
         if len(first) != len(second):
             raise ValueError("baseline/incremental result shapes differ")
         if not first:
