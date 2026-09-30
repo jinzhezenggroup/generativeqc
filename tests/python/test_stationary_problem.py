@@ -578,13 +578,40 @@ def test_generated_fragments_reuse_cuda_planning_without_device_or_runtime() -> 
     from generativeqc_compiler.common.cuda_target import cuda_target_info
     from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
-    problem, _ = _nonsymmetric()
+    problem, feeds = _nonsymmetric()
     generated = problem.compile()
-    for program in (generated.rhs, generated.partials):
-        plan = plan_cuda(program, cuda_target_info("sm_80"))
-        assert plan.peak_bytes > 0
-        assert plan.program.logical_hash == program.logical_hash
-    # This is planning, NOT native/GPU execution qualification.
+    multiplier = np.linalg.solve(feeds["A"].T, -feeds["x"])
+    cases = (
+        (generated.rhs, feeds, {"x": -feeds["x"]}),
+        (
+            generated.partials,
+            {**feeds, generated.multiplier_inputs["x"]: multiplier},
+            {
+                generated.stationarity_outputs["x"]: np.zeros_like(feeds["x"]),
+                generated.weight_outputs["q"]: feeds["c"] - multiplier,
+                generated.weight_outputs["A"]: np.outer(multiplier, feeds["x"]),
+            },
+        ),
+    )
+    for program, inputs, expected in cases:
+        serialized = program.dumps()
+        for reassociate in (True, False):
+            plan = plan_cuda(
+                program,
+                cuda_target_info("sm_80"),
+                reassociate_contractions=reassociate,
+            )
+            assert plan.peak_bytes > 0
+            assert set(plan.program.outputs) == set(program.outputs)
+            assert program.dumps() == serialized
+            # Exact preparation can change the DAG even when contraction order
+            # is preserved. Validate against the independent dense adjoint, not
+            # against object identity or a second invocation of the optimizer.
+            actual = execute(plan.program, inputs).outputs
+            assert set(actual) == set(expected)
+            for name, value in expected.items():
+                np.testing.assert_allclose(actual[name], value, rtol=1e-13, atol=1e-13)
+    # This interprets prepared programs, NOT native/GPU execution qualification.
 
 
 @pytest.mark.parametrize(
