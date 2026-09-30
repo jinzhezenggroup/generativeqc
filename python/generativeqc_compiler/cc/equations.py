@@ -29,7 +29,7 @@ def amplitude_specs(nocc: typing.Any, nvir: typing.Any) -> typing.Any:
     o = IndexSpace("occupied", "occupied", nocc)
     v = IndexSpace("virtual", "virtual", nvir)
     i, j, a, b = Index("i", o), Index("j", o), Index("a", v), Index("b", v)
-    common = {
+    common: dict[str, typing.Any] = {
         "representation": "restricted_spatial",
         "role": "parameter",
         "differentiable": True,
