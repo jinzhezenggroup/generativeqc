@@ -20,7 +20,9 @@ _TYPE = (
 )
 _FOR = re.compile(r"\bfor\s*\(")
 _LOOP_VAR = re.compile(_TYPE + r"\s+([A-Za-z_]\w*)\s*=")
-_CONSTANT_BOUND = re.compile(r"\b(?P<variable>[A-Za-z_]\w*)\s*(?P<op><=|<)\s*(?P<bound>\d+)\b")
+_CONSTANT_BOUND = re.compile(
+    r"\b(?P<variable>[A-Za-z_]\w*)\s*(?P<op><=|<)\s*(?P<bound>\d+)\b"
+)
 _ALIAS = re.compile(_TYPE + r"\s+([A-Za-z_]\w*)\s*=\s*([^;]+);")
 _ACCESS = re.compile(r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*)*\s*\[([^\[\]]+)\]")
 _REDUCTION = re.compile(
