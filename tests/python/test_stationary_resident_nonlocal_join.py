@@ -24,7 +24,11 @@ def fixture(
     stream: int = 31, seed_stream: int = 31
 ) -> tuple[dict[str, typing.Any], list[tuple[typing.Any, ...]]]:
     events: list[tuple[typing.Any, ...]] = []
-    source = SimpleNamespace(grid_spec=SimpleNamespace(coincident_tolerance=1e-12))
+    resident_grid = SimpleNamespace(device=0, points=8192, weights=12288, point_count=6)
+    source = SimpleNamespace(
+        grid_spec=SimpleNamespace(coincident_tolerance=1e-12),
+        cuda_resident_grid=lambda: resident_grid,
+    )
     state = SimpleNamespace(
         grid=SimpleNamespace(
             points=np.arange(18, dtype=float).reshape(6, 3),
@@ -37,29 +41,36 @@ def fixture(
     )
 
     class Grid:
+        device_id = 0
+
         @contextmanager
-        def feature_task(
+        def feature_task_device_points(
             self,
-            points: np.ndarray,
+            pointer: int,
+            point_count: int,
             ids: typing.Any,
             ingredients: tuple[str, ...],
-            *,
-            defer_error_to_consumer: bool = False,
         ) -> typing.Iterator[SimpleNamespace]:
             assert ids is None
             assert ingredients == ("rho", "gradient", "tau")
-            assert defer_error_to_consumer
+            begin = (pointer - resident_grid.points) // (3 * 8)
+            assert pointer == resident_grid.points + 3 * begin * 8
+            assert begin in range(0, resident_grid.point_count, 2)
             lease = SimpleNamespace(
                 alive=True,
                 view=SimpleNamespace(stream=stream),
                 _owner=SimpleNamespace(device_id=0),
             )
-            events.append(("borrow", len(points)))
+            events.append(("borrow", point_count))
+            events.append(("point_pointer", begin))
             try:
                 yield lease
             finally:
                 lease.alive = False
-                events.append(("release", len(points)))
+                events.append(("release", point_count))
+
+        def feature_task(self, *args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+            raise AssertionError("host point upload reintroduced")
 
         def feature_task_with_features(self, *args: typing.Any) -> typing.NoReturn:
             raise AssertionError("host feature export reintroduced")
@@ -207,6 +218,9 @@ def test_complete_join_collocates_each_grid_tile_once() -> None:
     assert work["nonlocal_feature_d2h_bytes"] == work["nonlocal_seed_h2d_bytes"] == 0
     assert work["grid_owner_source"] == "implicit-atom-major-index"
     assert work["grid_owner_h2d_bytes"] == 0
+    assert work["grid_point_source"] == "exact-native-resident-grid"
+    assert work["grid_point_h2d_bytes"] == 0
+    assert [event[1] for event in events if event[0] == "point_pointer"] == [0, 2, 4]
     assert work["ao_collocation_point_visits"] == 6
     assert work["geometry_point_visits"] == 12
     assert work["nonlocal_dense_pair_capacity"] == 36
@@ -269,7 +283,8 @@ def test_production_driver_uses_shared_pass_accumulators() -> None:
     assert "nonlocal_sources=self.nonlocal_sources" in driver
     assert "_ResidentNonlocalForceOwner(" in driver
     assert "seed_from_snapshot(state._source, task)" in join
-    assert join.count("with grid.feature_task(") == 1
+    assert join.count("with grid.feature_task_device_points(") == 1
+    assert "with grid.feature_task(" not in join
     assert "except NotImplementedError:" in join
     assert join.count("nonlocal_owner.collect(") == 1
     assert "state.grid.owners" not in join
