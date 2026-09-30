@@ -528,6 +528,12 @@ class _CudaSources:
             ct.c_double,
             *tail,
         ]
+        lib.stationary_geometry_reset.argtypes = [
+            ct.c_void_p,
+            _DOUBLE,
+            ct.c_double,
+            *tail,
+        ]
         lib.stationary_tasks.argtypes = [
             ct.c_void_p,
             _INT,
@@ -659,6 +665,23 @@ class _CudaSources:
             _ptr(self.centers),
             _ptr(density),
             _ptr(weighted_density),
+            tolerance,
+        )
+
+    def reset_geometry(self, tolerance: typing.Any) -> None:
+        """Reset only geometry accumulators without uploading unused D/W matrices."""
+        self.used = 0
+        self.pending_primitive_records = 0
+        self.primitive_pages = 0
+        self.primitive_page_peak_records = 0
+        self.bulk_pack_chunks = 0
+        self.bulk_packed_descriptors = 0
+        self.scalar_packed_descriptors = 0
+        self.borrowed_streams.clear()
+        self._call(
+            "stationary_geometry_reset",
+            self.handle,
+            _ptr(self.centers),
             tolerance,
         )
 

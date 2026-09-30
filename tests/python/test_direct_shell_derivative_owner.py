@@ -91,3 +91,19 @@ def test_generic_stationary_cuda_adopts_prepared_full_range_shell_source() -> No
     assert "records -= ao_quartet_primitive_records" in stationary
     assert "if native_shell_full_range" in stationary
     assert "task_sources =" in stationary
+
+
+def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
+    direct = _source("src/scf/cuda/direct_jk.cpp")
+    generated = _source("src/scf/cuda/direct_coulomb.cpp")
+    bridge = _source("src/scf/cuda/one_electron_gradient_bridge.cu")
+    method = _source("src/methods/dft_method.cpp")
+
+    assert "F(atomic_numbers)" in direct
+    assert "F(shell_ao_offsets)" in generated
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in bridge
+    assert "cuda_execution::one_electron_view(shared.batch)" in bridge
+    assert "constexpr unsigned schedule = 1" in bridge
+    assert "auto* output = exchange->force" in bridge
+    assert 'trace_counter("host_to_device_bytes", 0)' in bridge
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in method

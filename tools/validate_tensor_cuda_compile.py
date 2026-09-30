@@ -14,6 +14,7 @@ from generativeqc_compiler.tensor import (
     Program,
     TensorSpec,
     constant,
+    einsum,
     input_tensor,
     multiply,
     reduce_sum,
@@ -40,6 +41,30 @@ def _program() -> Program:
     weighted = multiply(values, weights)
     reduced = scatter_add(weighted, 0, (0, 0, 1, 2, 2), target)
     return Program({"result": reduced})
+
+
+def _rank2_program() -> Program:
+    ao_space = IndexSpace("compile_ao", "ao", 7)
+    mo_space = IndexSpace("compile_mo", "orbital", 7)
+    coefficients = input_tensor(
+        "rank2_coefficients",
+        TensorSpec(
+            (Index("mu", ao_space), Index("p", mo_space)),
+            dtype="float64",
+            role="input",
+        ),
+    )
+    hcore = input_tensor(
+        "rank2_hcore",
+        TensorSpec(
+            (Index("mu_h", ao_space), Index("nu", ao_space)),
+            dtype="float64",
+            role="input",
+        ),
+    )
+    return Program(
+        {"rank2_hcore_mo": einsum("mp,mn,nq->pq", coefficients, hcore, coefficients)}
+    )
 
 
 def _reduction_program() -> Program:
@@ -78,6 +103,19 @@ def main() -> None:
     plan = plan_cuda(_program(), compiler.target)
     ordinary = compile_cuda(plan, compiler, args.cache / "ordinary")
     resident = compile_resident(plan, compiler, args.cache / "resident")
+
+    rank2_plan = plan_cuda(_rank2_program(), compiler.target)
+    rank2_gemms = [step for step in rank2_plan.steps if step.gemm != "none"]
+    if len(rank2_gemms) != 2:
+        raise RuntimeError(
+            "rank-2 CUDA reassociation did not produce exactly two GEMMs"
+        )
+    rank2 = compile_cuda(rank2_plan, compiler, args.cache / "rank2-reassociated")
+    rank2_source = (rank2.library.parent / "program.cu").read_text()
+    if rank2_source.count("gemm(ctx,") != 2:
+        raise RuntimeError(
+            "rank-2 CUDA source does not contain exactly two GEMM launches"
+        )
 
     reduction = _reduction_program()
     generated_reduction_plan = plan_cuda(
@@ -137,6 +175,10 @@ def main() -> None:
                 "ordinary_source_bytes": ordinary.metadata["generated_source_bytes"],
                 "ordinary_compile_seconds": ordinary.metadata["compile_seconds"],
                 "resident_compile_seconds": resident.metadata["compile_seconds"],
+                "rank2_plan": rank2_plan.identity,
+                "rank2_source_bytes": rank2.metadata["generated_source_bytes"],
+                "rank2_compile_seconds": rank2.metadata["compile_seconds"],
+                "rank2_resources": rank2.metadata["resources"],
                 "generated_reduction_plan": generated_reduction_plan.identity,
                 "generated_reduction_source_bytes": generated_reduction.metadata[
                     "generated_source_bytes"
