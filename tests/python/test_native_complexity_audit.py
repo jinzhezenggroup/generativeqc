@@ -72,9 +72,7 @@ void primitive_sum(std::size_t n, const double* first, const double* second, dou
     for source in sources:
         findings = audit_text(source, path="synthetic.cpp")
         assert findings
-        assert all(
-            finding.classification == "high-order-loop" for finding in findings
-        )
+        assert all(finding.classification == "high-order-loop" for finding in findings)
 
 
 def test_production_has_no_avoidable_rank2_quartic_scalar_reduction() -> None:
