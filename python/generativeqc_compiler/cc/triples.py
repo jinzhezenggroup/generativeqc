@@ -571,7 +571,7 @@ def build_triples_program(nocc: typing.Any, nvir: typing.Any) -> typing.Any:
     def V(name: typing.Any) -> typing.Any:
         return Index(name, vir)
 
-    common = {
+    common: dict[str, typing.Any] = {
         "role": "parameter",
         "differentiable": True,
         "representation": "restricted_spatial",
