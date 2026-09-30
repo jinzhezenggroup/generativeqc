@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fail-closed audit for #1598 default-promotion controls."""
 
 from __future__ import annotations

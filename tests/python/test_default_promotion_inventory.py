@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import shutil
+from pathlib import Path
 
 from tools.check_default_promotion_inventory import (
     DEFAULT_INVENTORY,
@@ -60,7 +61,7 @@ def test_inventory_rejects_missing_audited_control() -> None:
     assert any(target in error and "unregistered" in error for error in errors)
 
 
-def test_new_tensor_schedule_opt_in_must_be_registered(tmp_path) -> None:
+def test_new_tensor_schedule_opt_in_must_be_registered(tmp_path: Path) -> None:
     payload = _payload()
     audited = payload["scope"]["audited_sources"]
     for relative in audited:
