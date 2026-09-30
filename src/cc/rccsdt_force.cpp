@@ -168,13 +168,45 @@ void add_projected_triples(ParameterWeights& target, const TriplesResponseResult
         }
 }
 
+// A borrowed interaction source must describe the same nuclear Hamiltonian.
+// Compare metadata before memory admission or reads, without allocating a second
+// identity vector or accepting equal AO counts as proof of source equivalence.
+bool force_source_matches_system(const core::System& a, const core::System& b) noexcept {
+  if (a.basis_representation != b.basis_representation || a.charge != b.charge ||
+      a.multiplicity != b.multiplicity || a.electron_count != b.electron_count ||
+      a.atoms.size() != b.atoms.size() || a.shells.size() != b.shells.size() ||
+      a.ecp_terms != b.ecp_terms)
+    return false;
+  for (std::size_t i = 0; i < a.atoms.size(); ++i) {
+    const auto& left = a.atoms[i];
+    const auto& right = b.atoms[i];
+    if (left.atomic_number != right.atomic_number || left.ecp_core != right.ecp_core ||
+        left.position != right.position)
+      return false;
+  }
+  for (std::size_t i = 0; i < a.shells.size(); ++i) {
+    const auto& left = a.shells[i];
+    const auto& right = b.shells[i];
+    if (left.atom_index != right.atom_index || left.angular_momentum != right.angular_momentum ||
+        left.primitives.size() != right.primitives.size())
+      return false;
+    for (std::size_t j = 0; j < left.primitives.size(); ++j)
+      if (left.primitives[j].exponent != right.primitives[j].exponent ||
+          left.primitives[j].coefficient != right.primitives[j].coefficient)
+        return false;
+  }
+  return true;
+}
+
 struct RawHamiltonian {
   std::vector<double> h, g, density, rotation;
 };
 
-RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalReference& ref,
-                               std::size_t max_bytes) {
+RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& source,
+                               const hf::PhysicalReference& ref, std::size_t max_bytes) {
   const auto n = ref.nbf;
+  if (source.nbf() != n || !source.supports(integrals::ElectronInteractionOperator::eri))
+    throw std::invalid_argument("RCCSD(T) raw Hamiltonian source/reference mismatch");
   const auto n2 = square(n), n4 = fourth(n);
   const auto retained_required = bytes(checked_add(checked_mul(3, n2), n4));
   const auto transform_required = bytes(checked_mul(2, n2));
@@ -189,7 +221,6 @@ RawHamiltonian raw_hamiltonian(const core::System& system, const hf::PhysicalRef
     tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
                            workspace.data());
   }
-  posthf::RawSource source(system);
   posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
   const auto all = range(n);
   out.g = provider.get({all, all, all, all}, false, 0);
@@ -381,7 +412,8 @@ double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
 static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                                     const hf::PhysicalReference& reference,
                                                     const Problem& p, const SolverResult& cc,
-                                                    std::size_t max_bytes, bool include_triples) {
+                                                    std::size_t max_bytes, bool include_triples,
+                                                    std::size_t source_bytes) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
   if (!o || !v || n > 12 || reference.nbf != n || reference.nocc != o ||
       molecule::ao_count(system) != n || !max_bytes)
@@ -405,8 +437,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                     bytes(cc.t1.capacity()), bytes(cc.t2.capacity())});
   plan.retained_input_bytes =
       sum({std::max(reference_bytes, p.reference_retained_bytes), problem_host_bytes(p),
-           bytes(cc.t1.capacity()), bytes(cc.t2.capacity()), bytes(n),
-           posthf::source_capacity(system)});
+           bytes(cc.t1.capacity()), bytes(cc.t2.capacity()), bytes(n), source_bytes});
   const auto triples_retained =
       include_triples
           ? bytes(sum({checked_mul(o, checked_mul(v, square(v))), checked_mul(ov, square(o)),
@@ -453,8 +484,10 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // The generated MO provider plan supplies its source/recurrence, coefficient,
   // full output and cyclic transform bounds. Its borrowed reference is already
   // in retained_input_bytes, so request only its additional buffers here.
-  const auto provider = posthf::numeric_block_plan(n, 0, posthf::source_capacity(system),
-                                                   {n, n, n, n}, {tile, tile, tile, tile}, false);
+  // The source is borrowed and already charged in retained_input_bytes.
+  // Ask the generated provider plan only for its additional staging/output buffers.
+  const auto provider =
+      posthf::numeric_block_plan(n, 0, 0, {n, n, n, n}, {tile, tile, tile, tile}, false);
   const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
   const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
                                    checked_mul(checked_mul(13, n), sizeof(std::size_t))});
@@ -509,22 +542,49 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
 }
 
 RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
+                                     const integrals::ElectronInteractionSource& source,
                                      const hf::PhysicalReference& reference, const Problem& p,
                                      const SolverResult& cc, std::size_t max_bytes) {
-  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false);
+  if (source.nbf() != reference.nbf ||
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
+    throw std::invalid_argument("RCCSD force interaction source/reference mismatch");
+  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false,
+                                      source.retained_numeric_bytes());
+}
+
+RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
+                                     const hf::PhysicalReference& reference, const Problem& p,
+                                     const SolverResult& cc, std::size_t max_bytes) {
+  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false,
+                                      posthf::source_capacity(system));
+}
+
+RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
+                                      const integrals::ElectronInteractionSource& source,
+                                      const hf::PhysicalReference& reference, const Problem& p,
+                                      const SolverResult& cc, std::size_t max_bytes) {
+  if (source.nbf() != reference.nbf ||
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
+    throw std::invalid_argument("RCCSD(T) force interaction source/reference mismatch");
+  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true,
+                                      source.retained_numeric_bytes());
 }
 
 RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
                                       const hf::PhysicalReference& reference, const Problem& p,
                                       const SolverResult& cc, std::size_t max_bytes) {
-  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true);
+  return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true,
+                                      posthf::source_capacity(system));
 }
 
 static RccsdtForceResult relaxed_rccsd_force_impl(
-    const core::System& system, const hf::PhysicalReference& reference, const Problem& problem,
-    const SolverResult& cc_result, std::span<const double> eps_o, std::span<const double> eps_v,
-    std::size_t max_bytes, bool include_triples, bool cuda_derivative, int device_id,
-    std::size_t derivative_stage_budget, double denominator_threshold) {
+    const core::System& system, const integrals::ElectronInteractionSource& source,
+    const hf::PhysicalReference& reference, const Problem& problem, const SolverResult& cc_result,
+    std::span<const double> eps_o, std::span<const double> eps_v, std::size_t max_bytes,
+    bool include_triples, bool cuda_derivative, int device_id, std::size_t derivative_stage_budget,
+    double denominator_threshold) {
   validate_problem(problem);
 #if !GENERATIVEQC_HAS_CUDA
   if (cuda_derivative) throw std::runtime_error("RCCSD(T) CUDA force is unavailable in this build");
@@ -541,8 +601,9 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   if (reference.orbital_energies.size() != n || !finite(reference.orbital_energies))
     throw std::invalid_argument("RCCSD(T) force requires finite canonical orbital energies");
   const auto resources =
-      include_triples ? plan_rccsdt_force_cpu(system, reference, problem, cc_result, max_bytes)
-                      : plan_rccsd_force_cpu(system, reference, problem, cc_result, max_bytes);
+      include_triples
+          ? plan_rccsdt_force_cpu(system, source, reference, problem, cc_result, max_bytes)
+          : plan_rccsd_force_cpu(system, source, reference, problem, cc_result, max_bytes);
 
   std::optional<TriplesResponseResult> triples;
   if (include_triples) {
@@ -588,7 +649,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
   if (triples) add_projected_triples(parameters, *triples, o, v);
-  auto raw = raw_hamiltonian(system, reference, max_bytes);
+  auto raw = raw_hamiltonian(source, reference, max_bytes);
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)
@@ -782,11 +843,31 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 }
 
 RccsdtForceResult rccsd_force_cpu(const core::System& system,
+                                  const integrals::ElectronInteractionSource& source,
                                   const hf::PhysicalReference& reference, const Problem& problem,
                                   const SolverResult& cc_result, std::span<const double> eps_o,
                                   std::span<const double> eps_v, std::size_t max_bytes) {
-  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                                  false, false, 0, 0, 1e-10);
+  return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
+                                  max_bytes, false, false, 0, 0, 1e-10);
+}
+
+RccsdtForceResult rccsd_force_cpu(const core::System& system,
+                                  const hf::PhysicalReference& reference, const Problem& problem,
+                                  const SolverResult& cc_result, std::span<const double> eps_o,
+                                  std::span<const double> eps_v, std::size_t max_bytes) {
+  posthf::RawSource source(system);
+  return rccsd_force_cpu(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes);
+}
+
+RccsdtForceResult rccsd_force_cuda(const core::System& system,
+                                   const integrals::ElectronInteractionSource& source,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
+                                   const SolverResult& cc_result, std::span<const double> eps_o,
+                                   std::span<const double> eps_v, std::size_t max_bytes,
+                                   int device_id, std::size_t derivative_stage_budget) {
+  return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
+                                  max_bytes, false, true, device_id, derivative_stage_budget,
+                                  1e-10);
 }
 
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
@@ -794,8 +875,19 @@ RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    int device_id, std::size_t derivative_stage_budget) {
-  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                                  false, true, device_id, derivative_stage_budget, 1e-10);
+  posthf::RawSource source(system);
+  return rccsd_force_cuda(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                          device_id, derivative_stage_budget);
+}
+
+RccsdtForceResult rccsdt_force_cpu(const core::System& system,
+                                   const integrals::ElectronInteractionSource& source,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
+                                   const SolverResult& cc_result, std::span<const double> eps_o,
+                                   std::span<const double> eps_v, std::size_t max_bytes,
+                                   double denominator_threshold) {
+  return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
+                                  max_bytes, true, false, 0, 0, denominator_threshold);
 }
 
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
@@ -803,8 +895,21 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    double denominator_threshold) {
-  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                                  true, false, 0, 0, denominator_threshold);
+  posthf::RawSource source(system);
+  return rccsdt_force_cpu(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                          denominator_threshold);
+}
+
+RccsdtForceResult rccsdt_force_cuda(const core::System& system,
+                                    const integrals::ElectronInteractionSource& source,
+                                    const hf::PhysicalReference& reference, const Problem& problem,
+                                    const SolverResult& cc_result, std::span<const double> eps_o,
+                                    std::span<const double> eps_v, std::size_t max_bytes,
+                                    int device_id, std::size_t derivative_stage_budget,
+                                    double denominator_threshold) {
+  return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
+                                  max_bytes, true, true, device_id, derivative_stage_budget,
+                                  denominator_threshold);
 }
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
@@ -813,9 +918,9 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
                                     double denominator_threshold) {
-  return relaxed_rccsd_force_impl(system, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                                  true, true, device_id, derivative_stage_budget,
-                                  denominator_threshold);
+  posthf::RawSource source(system);
+  return rccsdt_force_cuda(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
+                           device_id, derivative_stage_budget, denominator_threshold);
 }
 
 }  // namespace generativeqc::cc
