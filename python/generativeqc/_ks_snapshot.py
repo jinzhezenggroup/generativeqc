@@ -367,6 +367,71 @@ class NativeKsSnapshot:
         self.check_current()
         return immutable(output)
 
+    def cuda_integral_derivatives(
+        self,
+        atom_count: int,
+        maximum_bytes: int,
+        *,
+        range_exchange: bool,
+    ) -> typing.Any:
+        """Execute all prepared stationary integral sources without host D/W upload."""
+        if self.backend != "cuda":
+            return None
+        if type(atom_count) is not int or atom_count < 1:
+            raise ValueError("stationary derivative atom count must be positive")
+        if type(maximum_bytes) is not int or maximum_bytes < 1:
+            raise ValueError("stationary derivative budget must be positive")
+        if type(range_exchange) is not bool:
+            raise TypeError("range_exchange must be bool")
+        self.check_current()
+        evaluate = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_cuda_integral_gradient_v1",
+            None,
+        )
+        if evaluate is None:
+            return None
+        evaluate.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_double),
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        evaluate.restype = ct.c_int
+        source_count = 5 if range_exchange else 4
+        output = np.empty((source_count, atom_count, 3), dtype=np.float64)
+        usage = np.zeros(9, dtype=np.uint64)
+        status = evaluate(
+            self._batch._batch,
+            self._handle,
+            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            output.size,
+            maximum_bytes,
+            usage.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            usage.size,
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        names = (
+            "retained_device_bytes",
+            "source_host_preparation_bytes",
+            "one_electron_device_peak_bytes",
+            "one_electron_host_peak_bytes",
+            "one_electron_h2d_bytes",
+            "one_electron_d2h_bytes",
+            "final_state_export_d2h_bytes",
+            "final_state_export_reads",
+            "final_state_export_synchronizations",
+        )
+        return immutable(output), MappingProxyType(
+            dict(zip(names, map(int, usage), strict=True))
+        )
+
     def decode(self, basis: typing.Any, grid: typing.Any) -> typing.Any:
         """Verify actual AO/grid sources before deriving any Python identities."""
         from generativeqc_compiler.dft.grid import ExplicitGrid
