@@ -16,6 +16,7 @@ from generativeqc_compiler.method.mp2_schedule import (
     native_header as mp2_schedule_header,
 )
 from generativeqc_compiler.tensor.cpu_emit import emit_cpu
+from generativeqc_compiler.tensor.prepare import prepare_for_backend
 
 from tools.generativeqc_mp2.equations import cpu_capacity, energy_program
 from tools.generativeqc_posthf.plan_spec import native_header as block_capacity_header
@@ -36,7 +37,10 @@ def cpu_header() -> typing.Any:
     ]
     plans = []
     for tile in (1, 2, 4, 8):
-        program = energy_program((1, 1, tile, tile))
+        program = prepare_for_backend(
+            energy_program((1, 1, tile, tile)),
+            backend="cpu",
+        )
         lines.append(emit_cpu(program, function_name=f"tile_{tile}"))
         feeds = {"g": "g", "x": "x", "ei": "&ei", "ej": "&ej", "ea": "ea", "eb": "eb"}
         inputs = ",".join(
@@ -121,8 +125,16 @@ def cuda_sources(directory: typing.Any, architectures: typing.Any) -> None:
     choices = []
     for arch in archs:
         for tile in (1, 2, 4, 8):
-            program = energy_program((1, 1, tile, tile))
-            plan = plan_cuda(program, cuda_target_info(f"sm_{arch}"), max_bytes=1 << 20)
+            program = prepare_for_backend(
+                energy_program((1, 1, tile, tile)),
+                backend="cuda",
+            )
+            plan = plan_cuda(
+                program,
+                cuda_target_info(f"sm_{arch}"),
+                max_bytes=1 << 20,
+                reassociate_contractions=False,
+            )
             prefix = f"mp2_sm{arch}_t{tile}_"
             source = emit_cuda(plan, symbol_prefix=prefix)
             feeds = {
