@@ -7,6 +7,8 @@ or AD occurs here. The original Program remains the mathematical reference.
 from __future__ import annotations
 
 import hashlib
+import math
+import struct
 import typing
 from dataclasses import replace
 from fractions import Fraction
@@ -80,16 +82,54 @@ def _fold(node: Node) -> Node:
         ),
     )
     # Exact rational algebra alone is insufficient for floating-point folding:
-    # e.g. 1e16 + 1 - 1e16 must not become 1 in an FP64 interpreter. Fold only
-    # when the rounded literal agrees bit-for-bit with the original scalar DAG.
-    from .interpreter import execute
+    # e.g. 1e16 + 1 - 1e16 must not become 1. Keep this validation build-time
+    # dependency-free: RCCSD/other AOT generators run under python -S and cannot
+    # import the NumPy-backed reference interpreter.
+    #
+    # Production scientific AOT is currently FP64. Preserve float32 constants
+    # rather than emulate binary32 arithmetic through a binary64 host and risk
+    # a double-rounding discrepancy.
+    if node.spec.dtype != "float64":
+        return node
+
+    def rounded(value: Fraction) -> float:
+        result = float(value)
+        if not math.isfinite(result):
+            raise OverflowError
+        return result
 
     try:
-        before = execute(Program({"value": node}), {}).outputs["value"]
-        after = execute(Program({"value": candidate}), {}).outputs["value"]
-    except ValueError:
+        original: list[float] = []
+        if node.op == "add":
+            coefficients = tuple(
+                rounded(Fraction(*pair)) for pair in node.attrs["coefficients"]
+            )
+            for index in range(node.spec.size):
+                value = 0.0
+                for coefficient, column in zip(
+                    coefficients, columns, strict=True
+                ):
+                    value += coefficient * rounded(column[index])
+                original.append(value)
+        elif node.op == "multiply":
+            original = [
+                rounded(columns[0][index]) * rounded(columns[1][index])
+                for index in range(node.spec.size)
+            ]
+        else:
+            original = [
+                rounded(columns[0][index]) / rounded(columns[1][index])
+                for index in range(node.spec.size)
+            ]
+        folded = [rounded(value) for value in result]
+    except (OverflowError, ZeroDivisionError):
         return node
-    return candidate if before.tobytes() == after.tobytes() else node
+
+    bits = lambda value: struct.pack("!d", value)
+    return candidate if all(
+        bits(before) == bits(after)
+        for before, after in zip(original, folded, strict=True)
+    ) else node
 
 
 def _is_literal_one(node: Node) -> bool:
