@@ -40,7 +40,7 @@ repos:
         always_run: true
       - id: native-complexity-audit
         name: Check native high-order scalar contraction regressions
-        entry: python3 tools/audit_native_complexity.py --fail-on-matrix-chain
+        entry: python3 tools/audit_native_complexity.py --fail-on-matrix-chain --summary-only
         language: system
         pass_filenames: false
         always_run: true
