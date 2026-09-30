@@ -1,0 +1,223 @@
+name: One-shot reviewed PR repairs
+
+on:
+  push:
+    branches: [agent/review-fixed-owner-repairs]
+    paths: [.github/workflows/review-fixed-owner-repairs.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: one-shot-reviewed-pr-repairs
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.repository == 'jinzhezenggroup/generativeqc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Apply exact-head repairs and run regression probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          ROOT = Path.cwd()
+          REPORT = Path(os.environ['RUNNER_TEMP']) / 'review-repairs.json'
+          RESULTS = []
+          TARGETS = (
+              ('perf/1611-stationary-implicit-grid-owners', 'e0896ed9d839cbff30bb8b44023ea90c66f19065', 'owner'),
+              ('perf/1612-wb97mv-resident-grid-points', '0a7b32c2616bd104e0563ff9120b088c14ddc05f', 'owner'),
+              ('perf/1613-stationary-resident-grid-weights', 'e32f71bb71a2fe8afb030efccfa872f90453aff8', 'owner'),
+              ('perf/1479-fuse-geometry-reduction', 'bb4e9c9468a05faf1ae2b2ec15fd64dbd6b867fe', 'capacity-format'),
+              ('agent/dft-xc-native-resource-producer', '3c0f298112f46a8a81c9ff68c3510914da74bf62', 'resource-format'),
+          )
+          TEST = r'''"""Compile the emitted owner expression and compare geometry ABI signatures."""
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+          import unittest
+          from pathlib import Path
+
+          ROOT = Path(__file__).resolve().parents[2]
+          COMPILER = ROOT / "python/generativeqc_compiler/method/stationary_cuda.py"
+          HEADER = ROOT / "src/dft/stationary_gradient_cuda.cuh"
+
+
+          class StationaryOwnerKernelTests(unittest.TestCase):
+              def test_geometry_kernel_declaration_matches_definition(self):
+                  prototype = re.search(
+                      r"__global__ void geometry_kernel\((.*?)\)\s*;",
+                      HEADER.read_text(), re.S,
+                  )
+                  definition = re.search(
+                      r"__global__ void geometry_kernel\((.*?)\)\s*\{",
+                      COMPILER.read_text(), re.S,
+                  )
+                  self.assertIsNotNone(prototype)
+                  self.assertIsNotNone(definition)
+                  arguments = lambda match: [
+                      " ".join(item.split()) for item in match.group(1).split(",")
+                  ]
+                  self.assertEqual(arguments(prototype), arguments(definition))
+                  self.assertEqual(len(arguments(definition)), 16)
+
+              def test_emitted_explicit_and_implicit_owner_expression(self):
+                  compiler = shutil.which("c++")
+                  if compiler is None:
+                      self.skipTest("host C++ compiler is required for the owner probe")
+                  match = re.search(
+                      r"const int64_t owner\s*=.*?;", COMPILER.read_text(), re.S
+                  )
+                  self.assertIsNotNone(match)
+                  program = r"""
+          #include <cstddef>
+          #include <cstdint>
+          int64_t select_owner(const int64_t* owners, size_t owner_offset,
+                               size_t points_per_atom, size_t p) {
+            OWNER_STATEMENT
+            return owner;
+          }
+          int main() {
+            const int64_t explicit_owners[]{2, 0, 1};
+            for (size_t p = 0; p != 3; ++p) {
+              if (select_owner(explicit_owners, 17, 4, p) != explicit_owners[p]) return 1;
+            }
+            for (size_t offset = 0; offset != 12; ++offset) {
+              for (size_t p = 0; p != 7; ++p) {
+                if (select_owner(nullptr, offset, 4, p) != int64_t((offset + p) / 4))
+                  return 2;
+              }
+            }
+            if (select_owner(nullptr, 0, 0, 0) != -1) return 3;
+            return 0;
+          }
+          """.replace("OWNER_STATEMENT", match.group(0))
+                  with tempfile.TemporaryDirectory() as temporary:
+                      source = Path(temporary) / "owners.cpp"
+                      binary = Path(temporary) / "owners"
+                      source.write_text(program)
+                      subprocess.run(
+                          [compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
+                           "-Werror=uninitialized", str(source), "-o", str(binary)],
+                          check=True, capture_output=True, text=True,
+                      )
+                      subprocess.run([str(binary)], check=True, timeout=10)
+          '''
+          TEST_PATH = 'tests/python/test_stationary_owner_kernel_abi.py'
+          SOURCE_PATH = 'python/generativeqc_compiler/method/stationary_cuda.py'
+          HEADER_PATH = 'src/dft/stationary_gradient_cuda.cuh'
+
+          def run(*args, cwd=ROOT, check=True):
+              result = subprocess.run(args, cwd=cwd, check=False,
+                                      capture_output=True, text=True)
+              if check and result.returncode:
+                  raise RuntimeError(f'{args[0]} failed: {result.stderr or result.stdout}')
+              return result
+
+          def replace_once(path, old, new):
+              text = path.read_text()
+              if text.count(old) != 1:
+                  raise RuntimeError(f'expected one reviewed match in {path.name}')
+              path.write_text(text.replace(old, new, 1))
+
+          for branch, expected, kind in TARGETS:
+              record = {'branch': branch, 'expected_head': expected, 'kind': kind}
+              try:
+                  remote = run('git', 'ls-remote', 'origin', f'refs/heads/{branch}').stdout.split()
+                  if not remote or remote[0] != expected:
+                      raise RuntimeError('remote head moved; no changes made')
+                  with tempfile.TemporaryDirectory(prefix='review-fix-') as temporary:
+                      work = Path(temporary) / 'checkout'
+                      run('git', 'worktree', 'add', '--detach', str(work), expected)
+                      try:
+                          if kind == 'owner':
+                              test = work / TEST_PATH
+                              if test.exists():
+                                  raise RuntimeError('regression-test path already exists')
+                              test.write_text(TEST)
+                              command = ('python3', '-m', 'unittest', 'discover',
+                                         '-s', 'tests/python', '-p', Path(TEST_PATH).name)
+                              before = run(*command, cwd=work, check=False)
+                              record['before_returncode'] = before.returncode
+                              if before.returncode == 0:
+                                  raise RuntimeError('regression did not reproduce')
+                              replace_once(work / SOURCE_PATH,
+                                           'owners ? owner\n', 'owners ? owners[p]\n')
+                              old = ('const int64_t* ao_atoms, const int64_t* owners,\n'
+                                     '                                const double* centers')
+                              new = ('const int64_t* ao_atoms, const int64_t* owners,\n'
+                                     '                                size_t owner_offset, size_t points_per_atom,\n'
+                                     '                                const double* centers')
+                              replace_once(work / HEADER_PATH, old, new)
+                              ast.parse((work / SOURCE_PATH).read_text())
+                              ast.parse(test.read_text())
+                              after = run(*command, cwd=work)
+                              record['after_output'] = after.stdout + after.stderr
+                              allowed = {SOURCE_PATH, HEADER_PATH, TEST_PATH}
+                              title = 'fix(dft): repair explicit grid owners and geometry kernel ABI'
+                          elif kind == 'capacity-format':
+                              filename = 'tests/python/test_dft_mp_v1_capacity.py'
+                              target = work / filename
+                              replace_once(target,
+                                  '        assert cases[sentinel]["admission"]["first_blocker"] is None\n    # Losing',
+                                  '        assert cases[sentinel]["admission"]["first_blocker"] is None\n\n    # Losing')
+                              replace_once(target, '        )\n    git("init")',
+                                           '        )\n\n    git("init")')
+                              target.write_text(target.read_text().rstrip('\n') + '\n')
+                              ast.parse(target.read_text())
+                              allowed = {filename}
+                              title = 'style(tests): retain capacity-test spacing and final newline'
+                          else:
+                              allowed = {
+                                  'tests/python/test_dft_xc_program_region.py',
+                                  'tests/python/test_dft_xc_schedule.py',
+                              }
+                              for filename in allowed:
+                                  target = work / filename
+                                  target.write_text(target.read_text().rstrip('\n') + '\n')
+                                  ast.parse(target.read_text())
+                              title = 'style(tests): restore compiled-resource fixture final newlines'
+                          run('git', 'diff', '--check', cwd=work)
+                          run('git', 'add', '--', *sorted(allowed), cwd=work)
+                          changed = set(run('git', 'diff', '--cached', '--name-only', cwd=work).stdout.splitlines())
+                          if not changed or not changed <= allowed:
+                              raise RuntimeError('unexpected changed-file set')
+                          message = title + '\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                          run('git', '-c', 'user.name=ChatGPT',
+                              '-c', 'user.email=chatgpt@users.noreply.github.com',
+                              'commit', '-m', message, cwd=work)
+                          record['commit'] = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
+                          run('git', 'push', 'origin', f'HEAD:refs/heads/{branch}', cwd=work)
+                          record['pushed'] = True
+                      finally:
+                          run('git', 'worktree', 'remove', '--force', str(work), check=False)
+              except Exception as error:
+                  record['error'] = str(error)
+              RESULTS.append(record)
+              REPORT.write_text(json.dumps(RESULTS, indent=2) + '\n')
+              print(json.dumps(record), flush=True)
+          if any('error' in result for result in RESULTS):
+              raise SystemExit(1)
+          PY
+      - name: Retain the bounded repair report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: one-shot-review-repairs
+          path: ${{ runner.temp }}/review-repairs.json
+          retention-days: 1
