@@ -70,7 +70,8 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
 generativeqc_status dft_cuda_resident_grid(PreparedBatch& batch, std::size_t index,
                                            const dft::CudaKsFinalStateToken& expected, int& device,
                                            const double*& points, const double*& weights,
-                                           std::size_t& point_count, std::string& detail);
+                                           const double*& atomic_weights, std::size_t& point_count,
+                                           std::string& detail);
 
 generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, std::size_t index,
                                                         const dft::CudaKsFinalStateToken& expected,

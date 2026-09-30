@@ -22,7 +22,7 @@ def test_snapshot_resident_grid_is_token_checked() -> None:
     end = SNAPSHOT.index("    def cuda_resident_density(", begin)
     body = SNAPSHOT[begin:end]
     assert body.count("self.check_current()") == 2
-    assert "generativeqc_ks_snapshot_cuda_resident_grid_v1" in body
+    assert "generativeqc_ks_snapshot_cuda_resident_grid_v2" in body
 
 
 def test_cuda_grid_device_point_route_skips_host_copy() -> None:

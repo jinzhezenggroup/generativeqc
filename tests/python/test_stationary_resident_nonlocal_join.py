@@ -24,7 +24,9 @@ def fixture(
     stream: int = 31, seed_stream: int = 31
 ) -> tuple[dict[str, typing.Any], list[tuple[typing.Any, ...]]]:
     events: list[tuple[typing.Any, ...]] = []
-    resident_grid = SimpleNamespace(device=0, points=8192, weights=12288, point_count=6)
+    resident_grid = SimpleNamespace(
+        device=0, points=8192, weights=12288, atomic_weights=16384, point_count=6
+    )
     source = SimpleNamespace(
         grid_spec=SimpleNamespace(coincident_tolerance=1e-12),
         cuda_resident_grid=lambda: resident_grid,
@@ -130,7 +132,8 @@ def fixture(
             points_per_atom: int,
             device_weights: int,
             weights: np.ndarray,
-            raw: np.ndarray,
+            device_raw: int,
+            host_raw: np.ndarray | None,
             *,
             functional: int,
         ) -> None:
@@ -138,10 +141,13 @@ def fixture(
             assert task.alive and functional == 4
             assert points_per_atom == 3
             assert device_weights == resident_grid.weights + begin * 8
+            assert device_raw == resident_grid.atomic_weights + begin * 8
+            assert host_raw is None
             np.testing.assert_array_equal(
                 weights, state.grid.weights[begin : begin + len(weights)]
             )
             events.append(("weight_pointer", begin))
+            events.append(("raw_pointer", begin))
             events.append(("local", len(weights)))
 
         def geometry_external_device_molecular_resident_weights(
@@ -151,7 +157,8 @@ def fixture(
             points_per_atom: int,
             device_weights: int,
             weights: np.ndarray,
-            raw: np.ndarray,
+            device_raw: int,
+            host_raw: np.ndarray | None,
             pointer: int,
             stride: int,
             seed_begin: int,
@@ -160,10 +167,13 @@ def fixture(
             assert task.alive and points_per_atom == 3 and seed_begin == begin
             assert (pointer, stride) == (4096, 6)
             assert device_weights == resident_grid.weights + begin * 8
+            assert device_raw == resident_grid.atomic_weights + begin * 8
+            assert host_raw is None
             np.testing.assert_array_equal(
                 weights, state.grid.weights[begin : begin + len(weights)]
             )
             events.append(("weight_pointer", begin))
+            events.append(("raw_pointer", begin))
             events.append(("external", begin))
 
         def finish(self) -> dict[str, np.ndarray]:
@@ -230,8 +240,18 @@ def test_complete_join_collocates_each_grid_tile_once() -> None:
     assert work["grid_point_h2d_bytes"] == 0
     assert work["grid_weight_source"] == "exact-native-resident-grid"
     assert work["grid_weight_h2d_bytes"] == 0
+    assert work["grid_atomic_measure_source"] == "exact-native-resident-grid"
+    assert work["grid_atomic_measure_h2d_bytes"] == 0
     assert [event[1] for event in events if event[0] == "point_pointer"] == [0, 2, 4]
     assert [event[1] for event in events if event[0] == "weight_pointer"] == [
+        0,
+        0,
+        2,
+        2,
+        4,
+        4,
+    ]
+    assert [event[1] for event in events if event[0] == "raw_pointer"] == [
         0,
         0,
         2,
@@ -378,6 +398,8 @@ def test_missing_resident_features_preserves_bounded_device_fallback(
     assert work["grid_owner_h2d_bytes"] == 0
     assert work["grid_weight_source"] == "exact-native-resident-grid"
     assert work["grid_weight_h2d_bytes"] == 0
+    assert work["grid_atomic_measure_source"] == "exact-native-resident-grid"
+    assert work["grid_atomic_measure_h2d_bytes"] == 0
     assert "two_pass_geometry_and_pair_drain" in seconds
     assert "single_pass_geometry_and_pair_drain" not in seconds
     np.testing.assert_array_equal(components["xc_ao"], np.full((2, 3), 1.0))

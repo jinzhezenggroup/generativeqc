@@ -591,15 +591,15 @@ int stationary_geometry_external_device_molecular_enqueue(
 
 int stationary_geometry_external_device_molecular_resident_weights_enqueue(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
-    size_t owner_offset, size_t points_per_atom, const double* device_weights, const double* raw,
-    const double* external_device, size_t external_stride, size_t external_offset, char* error,
-    size_t size) {
+    size_t owner_offset, size_t points_per_atom, const double* device_weights,
+    const double* device_raw, const double* external_device, size_t external_stride,
+    size_t external_offset, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao || !view->points || !device_weights || !raw || !external_device ||
+        !view->ao || !view->points || !device_weights || !device_raw || !external_device ||
         !points_per_atom || points_per_atom > SIZE_MAX / p->atoms ||
         owner_offset > p->atoms * points_per_atom ||
         view->npoint > p->atoms * points_per_atom - owner_offset ||
@@ -613,10 +613,9 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
       p->geometry_stream = stream;
       p->geometry_pending = true;
     }
-    upload(*p, p->raw, raw, view->npoint, stream);
     geometry_kernel<<<1, workers, 0, stream>>>(
         *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        device_weights, p->raw, external_device, external_stride, external_offset, p->partial,
+        device_weights, device_raw, external_device, external_stride, external_offset, p->partial,
         p->scratch, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
@@ -630,14 +629,14 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
 
 int stationary_geometry_molecular_resident_weights_enqueue(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
-    size_t owner_offset, size_t points_per_atom, const double* device_weights, const double* raw,
-    char* error, size_t size) {
+    size_t owner_offset, size_t points_per_atom, const double* device_weights,
+    const double* device_raw, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao || !view->points || !device_weights || !raw || !points_per_atom ||
+        !view->ao || !view->points || !device_weights || !device_raw || !points_per_atom ||
         points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
         view->npoint > p->atoms * points_per_atom - owner_offset)
       throw std::invalid_argument("invalid resident-weight geometry task lease");
@@ -649,10 +648,9 @@ int stationary_geometry_molecular_resident_weights_enqueue(
       p->geometry_stream = stream;
       p->geometry_pending = true;
     }
-    upload(*p, p->raw, raw, view->npoint, stream);
     geometry_kernel<<<1, workers, 0, stream>>>(
         *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        device_weights, p->raw, nullptr, 0, 0, p->partial, p->scratch, p->context.error);
+        device_weights, device_raw, nullptr, 0, 0, p->partial, p->scratch, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
