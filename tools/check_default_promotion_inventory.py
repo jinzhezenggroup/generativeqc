@@ -63,7 +63,9 @@ def _string_tuple(assignments: dict[str, ast.AST], name: str) -> tuple[str, ...]
         if isinstance(node, (ast.Tuple, ast.List)):
             values: list[str] = []
             for item in node.elts:
-                values.extend(resolve(item.value if isinstance(item, ast.Starred) else item))
+                values.extend(
+                    resolve(item.value if isinstance(item, ast.Starred) else item)
+                )
             return values
         if isinstance(node, ast.Name):
             if node.id in visiting:
@@ -105,7 +107,11 @@ def _discover_runtime_controls(root: Path) -> dict[str, str]:
 def _literal_default(node: ast.AST | None) -> object:
     if isinstance(node, ast.Constant):
         return node.value
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "field":
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "field"
+    ):
         for keyword in node.keywords:
             if keyword.arg == "default":
                 return _literal_default(keyword.value)
@@ -135,11 +141,15 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
         if isinstance(annotation, ast.Name) and annotation.id == "bool":
             default = _literal_default(node.value)
             if not isinstance(default, bool):
-                raise ValueError(f"TensorSchedule.{name} has a non-literal boolean default")
+                raise ValueError(
+                    f"TensorSchedule.{name} has a non-literal boolean default"
+                )
             result[f"tensor-schedule:{name}"] = relative.as_posix()
         elif name == "reduction_provider":
             if _literal_default(node.value) != "generated":
-                raise ValueError("TensorSchedule.reduction_provider default drifted from generated")
+                raise ValueError(
+                    "TensorSchedule.reduction_provider default drifted from generated"
+                )
             reduction_provider_seen = True
             result["tensor-schedule:reduction_provider"] = relative.as_posix()
     if not reduction_provider_seen:
@@ -178,7 +188,9 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
     ):
         overlap = set(result) & set(discovered)
         if overlap:
-            raise ValueError(f"control discovered by multiple audits: {sorted(overlap)}")
+            raise ValueError(
+                f"control discovered by multiple audits: {sorted(overlap)}"
+            )
         result.update(discovered)
     return result
 
@@ -227,7 +239,9 @@ def validate_inventory(
             or not owners
             or any(type(issue) is not int or issue <= 0 for issue in owners)
         ):
-            errors.append(f"{entry_id}: owner_issues must contain positive issue numbers")
+            errors.append(
+                f"{entry_id}: owner_issues must contain positive issue numbers"
+            )
         for field in ("rationale", "revisit_condition"):
             if not _nonempty_string(entry.get(field)):
                 errors.append(f"{entry_id}: {field} must be a non-empty string")
@@ -237,7 +251,9 @@ def validate_inventory(
             or not sources
             or any(not _nonempty_string(source) for source in sources)
         ):
-            errors.append(f"{entry_id}: sources must be non-empty repository-relative paths")
+            errors.append(
+                f"{entry_id}: sources must be non-empty repository-relative paths"
+            )
             source_set: set[str] = set()
         else:
             source_set = set(sources)
