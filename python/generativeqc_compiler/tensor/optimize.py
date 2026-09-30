@@ -125,7 +125,9 @@ def _fold(node: Node) -> Node:
     except (OverflowError, ZeroDivisionError):
         return node
 
-    bits = lambda value: struct.pack("!d", value)
+    def bits(value: float) -> bytes:
+        return struct.pack("!d", value)
+
     return candidate if all(
         bits(before) == bits(after)
         for before, after in zip(original, folded, strict=True)
