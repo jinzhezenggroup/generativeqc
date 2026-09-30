@@ -39,9 +39,22 @@ pre-commit `native-complexity-audit` hook runs
 and must move to TensorIR or the shared dense-linear-algebra owner.
 
 The source audit is deliberately conservative: unclassified high-order loops are
-reported, not automatically rewritten. TensorIR symbolic complexity remains the
-proof-carrying path for legal contraction reassociation; native findings are
-review prompts for code that still sits outside that IR.
+reported, not automatically rewritten. Reports include both lexical loop depth and
+an effective depth that removes simple fixed extents such as spin=2 or xyz=3. The
+action classes are:
+
+- `matrix-chain-candidate`: proven rank-2 scalar matrix chain; CI-blocking;
+- `high-rank-output-materialization`: high-rank permutation/symmetrization pass;
+  inspect producer/consumer fusion to remove a complete traversal/materialization;
+- `high-rank-source-contraction`: genuine high-rank source access; inspect
+  provider/factorization or fuse-consume ownership without assuming lower formal scaling;
+- `fixed-extent-inner-loop`: lexical depth inflated by bounded constant dimensions;
+  consider unrolling/fusion but do not label it O(N^depth);
+- `high-order-loop`: report-only fallback requiring algebra/profile review.
+
+TensorIR symbolic complexity remains the proof-carrying path for legal contraction
+reassociation; native findings are review prompts for code that still sits outside
+that IR.
 
 ## Prefer source-driven reuse
 
