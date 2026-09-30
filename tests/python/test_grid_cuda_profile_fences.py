@@ -48,9 +48,9 @@ def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
     host_wrapper = source.split("int grid_cuda_run_selected_deferred_v1", 1)[1].split(
         "int grid_cuda_run_selected_device_deferred_v1", 1
     )[0]
-    device_wrapper = source.split(
-        "int grid_cuda_run_selected_device_deferred_v1", 1
-    )[1].split("int grid_cuda_run_v1", 1)[0]
+    device_wrapper = source.split("int grid_cuda_run_selected_device_deferred_v1", 1)[
+        1
+    ].split("int grid_cuda_run_v1", 1)[0]
     assert "grid_cuda_run_selected_impl" in host_wrapper
     assert "feature_output, jet_output, 1, 0, error, size" in host_wrapper
     assert "grid_cuda_run_selected_impl" in device_wrapper
