@@ -604,6 +604,35 @@ class _CudaSources:
         lib.stationary_geometry_external_device_molecular_enqueue.argtypes = (
             resident_molecular_args
         )
+        molecular_resident_weight_args = [
+            ct.c_void_p,
+            ct.POINTER(GridTaskView),
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.c_void_p,
+            _DOUBLE,
+            *tail,
+        ]
+        lib.stationary_geometry_molecular_resident_weights_enqueue.argtypes = (
+            molecular_resident_weight_args
+        )
+        resident_molecular_resident_weight_args = [
+            ct.c_void_p,
+            ct.POINTER(GridTaskView),
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.c_void_p,
+            _DOUBLE,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            *tail,
+        ]
+        lib.stationary_geometry_external_device_molecular_resident_weights_enqueue.argtypes = (
+            resident_molecular_resident_weight_args
+        )
         lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
         lib.stationary_finish_reduced.argtypes = [
@@ -1038,6 +1067,151 @@ class _CudaSources:
             points_per_atom,
             _ptr(weights),
             _ptr(raw),
+        )
+
+    @staticmethod
+    def _device_pointer(value: typing.Any, label: str) -> ct.c_void_p:
+        if isinstance(value, int):
+            pointer = ct.c_void_p(value)
+        elif isinstance(value, ct.c_void_p):
+            pointer = value
+        else:
+            try:
+                pointer = ct.cast(value, ct.c_void_p)
+            except (TypeError, ValueError) as error:
+                raise TypeError(f"{label} requires a device pointer") from error
+        if not pointer.value:
+            raise ValueError(f"{label} device pointer is null")
+        return pointer
+
+    def geometry_molecular_resident_weights(
+        self,
+        task: typing.Any,
+        owner_offset: typing.Any,
+        points_per_atom: typing.Any,
+        device_weights: typing.Any,
+        host_weights: typing.Any,
+        raw: typing.Any,
+        *,
+        functional: typing.Any = None,
+        pbe: typing.Any = None,
+    ) -> None:
+        """Consume resident partition weights and implicit molecular-grid owners."""
+        view = task.view
+        if task._owner.device_id != self.device:
+            raise ValueError("stationary/grid current owner device mismatch")
+        if (
+            type(owner_offset) is not int
+            or owner_offset < 0
+            or type(points_per_atom) is not int
+            or points_per_atom <= 0
+        ):
+            raise ValueError("invalid molecular-grid owner interval")
+        self.borrowed_streams.add(view.stream)
+        raw = _checked(raw, (view.npoint,))
+        device_weights = self._device_pointer(
+            device_weights, "resident molecular-grid weights"
+        )
+        if functional is None:
+            if type(pbe) is not bool:
+                raise TypeError(
+                    "stationary geometry requires a registered functional code or pbe bool"
+                )
+            functional = int(pbe)
+        elif pbe is not None:
+            raise ValueError("specify functional or pbe, not both")
+        if (
+            type(functional) is not int
+            or functional not in _REGISTERED_STATIONARY_CODES
+        ):
+            raise ValueError("unsupported stationary semilocal functional")
+        if self.profile_device:
+            self.geometry_molecular(
+                task,
+                owner_offset,
+                points_per_atom,
+                _checked(host_weights, (view.npoint,)),
+                raw,
+                functional=functional,
+            )
+            return
+        work = task.density_jets(_stationary_density_jet_count(functional))
+        self._call(
+            "stationary_geometry_molecular_resident_weights_enqueue",
+            self.handle,
+            ct.byref(view),
+            work,
+            owner_offset,
+            points_per_atom,
+            device_weights,
+            _ptr(raw),
+        )
+
+    def geometry_external_device_molecular_resident_weights(
+        self,
+        task: typing.Any,
+        owner_offset: typing.Any,
+        points_per_atom: typing.Any,
+        device_weights: typing.Any,
+        host_weights: typing.Any,
+        raw: typing.Any,
+        external_device: typing.Any,
+        external_stride: typing.Any,
+        external_offset: typing.Any = 0,
+    ) -> None:
+        """Borrow resident partition weights and resident nonlocal force seeds."""
+        view = task.view
+        if task._owner.device_id != self.device:
+            raise ValueError("stationary/grid current owner device mismatch")
+        if (
+            type(owner_offset) is not int
+            or owner_offset < 0
+            or type(points_per_atom) is not int
+            or points_per_atom <= 0
+        ):
+            raise ValueError("invalid molecular-grid owner interval")
+        self.borrowed_streams.add(view.stream)
+        raw = _checked(raw, (view.npoint,))
+        device_weights = self._device_pointer(
+            device_weights, "resident molecular-grid weights"
+        )
+        external_device = self._device_pointer(
+            external_device, "resident nonlocal seeds"
+        )
+        if type(external_stride) is not int or type(external_offset) is not int:
+            raise TypeError("resident nonlocal seed stride/offset must be integers")
+        if (
+            external_stride <= 0
+            or external_offset < 0
+            or external_offset > external_stride
+            or view.npoint > external_stride - external_offset
+        ):
+            raise ValueError("resident nonlocal seed tile exceeds its strided owner")
+        if self.profile_device:
+            self.geometry_external_device_molecular(
+                task,
+                owner_offset,
+                points_per_atom,
+                _checked(host_weights, (view.npoint,)),
+                raw,
+                external_device,
+                external_stride,
+                external_offset,
+            )
+            return
+        work = task.density_jets(4)
+        self._call(
+            "stationary_geometry_external_device_molecular_resident_weights_enqueue",
+            self.handle,
+            ct.byref(view),
+            work,
+            owner_offset,
+            points_per_atom,
+            device_weights,
+            _ptr(raw),
+            external_device,
+            external_stride,
+            external_offset,
         )
 
     def geometry_external_device_molecular(
