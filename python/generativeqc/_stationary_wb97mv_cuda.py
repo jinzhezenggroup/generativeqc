@@ -353,8 +353,22 @@ class PreparedWb97mvCudaGradient:
         components = dict(zip(names, integral, strict=True))
         component_seconds["integral_derivatives"] = perf_counter() - component_start
         component_start = perf_counter()
-        density = state.density if plan.spin_blocks == 2 else state.density[0]
-        self.grid.set_density(density)
+        resident_density = source.cuda_resident_density()
+        if resident_density is None:
+            raise NotImplementedError(
+                "WB97M-V CUDA force requires the resident final-density bridge"
+            )
+        self.grid.set_density_device(
+            device_id=resident_density.device,
+            alpha=resident_density.alpha,
+            beta=resident_density.beta,
+            matrix_elements=resident_density.matrix_elements,
+            spins=resident_density.spins,
+            source_stream=resident_density.source_stream,
+        )
+        # A concurrent replacement can only occur before the producer-stream
+        # copy is enqueued; reject it before any stationary source publication.
+        source.check_current()
         # Integral derivatives already come from the token-bound native prepared
         # owner above. These retained CUDA accumulators execute only nuclear and
         # grid-geometry sources, so uploading detached host D/W here is redundant.
@@ -406,6 +420,8 @@ class PreparedWb97mvCudaGradient:
             "retained_grid_features": list(feature_plan.retained_features),
             "source_names": list(plan.source_names),
             "grid_points": npnt,
+            "grid_density_source": "exact-final-scf-device-binding",
+            "grid_density_h2d_bytes": 0,
             **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
             # The native v1 result does not identify whether optional shell
