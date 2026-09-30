@@ -31,6 +31,7 @@ from generativeqc_compiler.array_api.scf import (
     weighted_density_program,
 )
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.tensor.prepare import prepare_for_backend
 from generativeqc_compiler.tensor.scf import (
     diis_extrapolation_program,
     diis_gram_program,
@@ -238,12 +239,30 @@ def _validate_diis_extrapolation(program: typing.Any) -> None:
 
 
 def native_header() -> str:
-    density = density_program(1, 3, orbital_count=2)
-    weighted = weighted_density_program(1, 3, orbital_count=2)
-    restricted_force = hf_force_program(1, 2, spin_count=1, coordinate_count=3)
-    unrestricted_force = hf_force_program(1, 2, spin_count=2, coordinate_count=3)
-    diis_gram = diis_gram_program(1, 3, 2, spin_count=2)
-    diis_extrapolation = diis_extrapolation_program(1, 3, 2, spin_count=2)
+    density = prepare_for_backend(
+        density_program(1, 3, orbital_count=2),
+        backend="cpu",
+    )
+    weighted = prepare_for_backend(
+        weighted_density_program(1, 3, orbital_count=2),
+        backend="cpu",
+    )
+    restricted_force = prepare_for_backend(
+        hf_force_program(1, 2, spin_count=1, coordinate_count=3),
+        backend="cpu",
+    )
+    unrestricted_force = prepare_for_backend(
+        hf_force_program(1, 2, spin_count=2, coordinate_count=3),
+        backend="cpu",
+    )
+    diis_gram = prepare_for_backend(
+        diis_gram_program(1, 3, 2, spin_count=2),
+        backend="cpu",
+    )
+    diis_extrapolation = prepare_for_backend(
+        diis_extrapolation_program(1, 3, 2, spin_count=2),
+        backend="cpu",
+    )
     _validate_density(density)
     _validate_weighted(weighted)
     _validate_hf_force(restricted_force, 1)
