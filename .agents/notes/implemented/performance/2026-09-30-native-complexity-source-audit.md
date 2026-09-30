@@ -19,9 +19,13 @@ conservative matrix-chain classifier. CI fails only when a high-order reduction
 writes a rank-2 target from at least three pairwise-indexed inputs spanning four
 loop indices and no three-/four-index source access is present.
 
-All other high-order nests remain report-only. They are review prompts, not proof
-that the method scaling can be reduced. The generic compiler remains the owner
-for proof-carrying TensorIR reassociation.
+All other high-order nests remain report-only. The inventory distinguishes
+high-rank output materialization/permutation passes, genuine high-rank source
+contractions, fixed-extent inner loops, and an unclassified fallback. It also
+reports an effective depth with simple fixed extents removed, so constant spin or
+Cartesian/component loops do not masquerade as additional asymptotic powers.
+These classes are review prompts, not proof that method scaling can be reduced.
+The generic compiler remains the owner for proof-carrying TensorIR reassociation.
 
 ## Rejected alternatives
 
