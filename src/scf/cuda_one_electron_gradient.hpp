@@ -58,6 +58,15 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
     OneElectronGradientResources* resources = nullptr);
 
+/** Enqueue the same prepared hcore/Pulay derivatives directly into caller-owned
+ * device outputs on the Direct owner stream. No host result is allocated or
+ * downloaded; the caller must keep both sinks live until that stream is drained. */
+generativeqc_status enqueue_prepared_cuda_stationary_one_electron_pair_device(
+    CudaDirectJkPlan* source, const double* resident_density,
+    const double* resident_weighted_density, std::size_t matrix_elements, double* hcore_device,
+    double* pulay_device, std::size_t output_elements, std::string& detail,
+    OneElectronGradientResources* resources = nullptr);
+
 }  // namespace generativeqc::scf
 
 #endif
