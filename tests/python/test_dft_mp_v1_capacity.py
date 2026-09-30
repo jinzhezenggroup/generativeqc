@@ -295,7 +295,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
         "sources_owner_sha256": (
-            "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
+            "54cc3b5a2b77747710e211f076ef8ab11cb72aed6fb7a45f29c978eec0b8cac8"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "29e6eb566b8b3c9f41339b3e896216d2ebf481a92810e18bbd77778d56de86d0"
+            "a030bcb9a6a7fd982c1f0d4b9b99ef909da2a5d760a66320432cbbac8377b3d6"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (

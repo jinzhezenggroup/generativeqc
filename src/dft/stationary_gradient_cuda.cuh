@@ -775,6 +775,36 @@ int stationary_finish(void* pointer, double* output, size_t count, char* error, 
     std::copy(candidate.begin(), candidate.end(), output);
   });
 }
+int stationary_finish_span(void* pointer, size_t source_begin, size_t source_count, double* output,
+                           size_t count, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !output || !source_count || source_begin >= stationary_source_count ||
+        source_count > stationary_source_count - source_begin ||
+        count != 3 * source_count * p->atoms)
+      throw std::invalid_argument("invalid source span output");
+    check(*p);
+    drain_geometry(*p);
+    finished(*p, p->context.stream);
+    std::vector<double> candidate(count);
+    auto d2h_begin = std::chrono::steady_clock::time_point{};
+    if (p->profile) d2h_begin = std::chrono::steady_clock::now();
+    const auto offset = 3 * source_begin * p->atoms;
+    cuda_check(
+        cudaMemcpy(candidate.data(), p->sources + offset, count * 8, cudaMemcpyDeviceToHost));
+    if (p->profile) {
+      p->final_d2h_wall_ms +=
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - d2h_begin)
+              .count();
+    }
+    ++p->d2h_calls;
+    p->downloads += count * 8;
+    for (double v : candidate)
+      if (!std::isfinite(v)) throw std::runtime_error("nonfinite gradient source span");
+    std::copy(candidate.begin(), candidate.end(), output);
+  });
+}
 int stationary_finish_reduced(void* pointer, double* output, size_t count, char* error,
                               size_t size) {
   using namespace generativeqc_stationary_cuda;

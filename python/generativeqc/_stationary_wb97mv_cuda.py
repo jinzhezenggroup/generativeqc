@@ -460,7 +460,7 @@ class PreparedWb97mvCudaGradient:
             "prepared_execution_reused": reused,
             "execution_index": self.executions,
             "snapshot_export_work": dict(source.export_work),
-            "host_scope": "snapshot validation and bounded tile scheduling",
+            "host_scope": "snapshot validation, bounded tile scheduling, and canonical host source sum",
             "endpoint_seconds": perf_counter() - started,
             "component_seconds": component_seconds,
         }
