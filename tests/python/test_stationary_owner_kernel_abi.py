@@ -17,12 +17,12 @@ class StationaryOwnerKernelTests(unittest.TestCase):
         prototype = re.search(
             r"__global__ void geometry_kernel\((.*?)\)\s*;",
             HEADER.read_text(),
-            re.S,
+            re.DOTALL,
         )
         definition = re.search(
             r"__global__ void geometry_kernel\((.*?)\)\s*\{",
             COMPILER.read_text(),
-            re.S,
+            re.DOTALL,
         )
         self.assertIsNotNone(prototype)
         self.assertIsNotNone(definition)
@@ -38,7 +38,9 @@ class StationaryOwnerKernelTests(unittest.TestCase):
         compiler = shutil.which("c++")
         if compiler is None:
             self.skipTest("host C++ compiler is required for the owner probe")
-        match = re.search(r"const int64_t owner\s*=.*?;", COMPILER.read_text(), re.S)
+        match = re.search(
+            r"const int64_t owner\s*=.*?;", COMPILER.read_text(), re.DOTALL
+        )
         self.assertIsNotNone(match)
         assert match is not None
         program = r"""
