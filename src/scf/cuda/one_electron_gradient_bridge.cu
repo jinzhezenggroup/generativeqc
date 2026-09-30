@@ -407,6 +407,84 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
   }
 }
 
+generativeqc_status enqueue_prepared_cuda_stationary_one_electron_pair_device(
+    CudaDirectJkPlan* source, const double* resident_density,
+    const double* resident_weighted_density, std::size_t matrix_elements, double* hcore_device,
+    double* pulay_device, std::size_t output_elements, std::string& detail,
+    OneElectronGradientResources* resources) {
+  if (resources) *resources = {};
+  detail.clear();
+  if (!source || source->device_id < 0 || source->derivative_order < 1 || !source->stream ||
+      !resident_density || !resident_weighted_density || !hcore_device || !pulay_device) {
+    detail = "prepared one-electron device sinks require resident D/W and Direct ownership";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto n = source->diagnostic.nbf;
+  const auto atoms = source->coordinates_per_item / 3;
+  if (!n || n > std::numeric_limits<std::size_t>::max() / n || matrix_elements != n * n ||
+      source->diagnostic.batch_size != 1 || source->coordinates_per_item != 3 * atoms ||
+      output_elements != 3 * atoms) {
+    detail = "prepared one-electron device sinks have incompatible dimensions";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto* exchange = source->generated_exchange.get();
+  if (!exchange || !exchange->force_capability || !exchange->shared || !exchange->force) {
+    detail = "prepared Direct owner has no retained shell-force scratch";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  auto& shared = *exchange->shared;
+  const auto view = cuda_execution::one_electron_view(shared.batch);
+  if (shared.stream != source->stream || view.batch_size != 1 ||
+      static_cast<std::size_t>(view.nbf) != n || view.shell_pair_count == 0 || !view.atom_offsets ||
+      !view.atomic_numbers || !view.positions || !view.shell_atoms || !view.shell_ao_offsets ||
+      !view.shell_primitive_offsets || !view.shell_pair_first || !view.shell_pair_second ||
+      !view.ao_shells || !view.ao_term_counts || !view.ao_term_angular ||
+      !view.ao_term_coefficients || !view.primitive_exponents || !view.primitive_coefficients) {
+    detail = "prepared Direct owner lacks resident one-electron shell metadata";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  try {
+    DeviceGuard device_guard;
+    check(cudaSetDevice(source->device_id));
+    for (auto* pointer : {hcore_device, pulay_device}) {
+      cudaPointerAttributes attributes{};
+      check(cudaPointerGetAttributes(&attributes, pointer));
+      if (attributes.type != cudaMemoryTypeDevice || attributes.device != source->device_id) {
+        detail = "prepared one-electron sink is on the wrong CUDA device";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+    }
+    OneElectronWeightView hcore_weights{nullptr, resident_density, resident_density};
+    OneElectronWeightView pulay_weights{resident_weighted_density, nullptr, nullptr};
+    pulay_weights.overlap_scale = -1.0;
+    constexpr unsigned schedule = 1;
+    auto* scratch = exchange->force;
+    const auto output_bytes = output_elements * sizeof(double);
+    check(cudaMemsetAsync(scratch, 0, output_bytes, source->stream));
+    check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, hcore_weights, nullptr,
+                                                 schedule, 1.0, scratch, source->stream));
+    check(cudaMemcpyAsync(hcore_device, scratch, output_bytes, cudaMemcpyDeviceToDevice,
+                          source->stream));
+    check(cudaMemsetAsync(scratch, 0, output_bytes, source->stream));
+    check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, pulay_weights, nullptr,
+                                                 schedule, 1.0, scratch, source->stream));
+    check(cudaMemcpyAsync(pulay_device, scratch, output_bytes, cudaMemcpyDeviceToDevice,
+                          source->stream));
+    if (resources) {
+      resources->host_numeric_bytes = 0;
+      resources->host_to_device_bytes = 0;
+      resources->device_to_host_bytes = 0;
+      resources->stream_synchronizations = 0;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const CudaFailure& failure) {
+    detail = std::string("prepared one-electron device-sink CUDA failure: ") +
+             cudaGetErrorString(failure.status);
+    return failure.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                       : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
 generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     CudaDirectJkPlan* source, const double* resident_density,
     const double* resident_weighted_density, std::size_t matrix_elements, std::size_t maximum_bytes,
