@@ -6,13 +6,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.doubles import build_ccsd_program
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import execute
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
 from tools.generativeqc_cc.cuda import PreparedRCCSDResidual, rccsd_program
-from tools.generativeqc_cc.doubles import build_ccsd_program
 from tools.generativeqc_cc.oracle import dense_feeds, random_case
 
 

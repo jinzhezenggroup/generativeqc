@@ -79,23 +79,28 @@ vector. This is an executable source-level algebra slice for both RKS and UKS;
 native shell/center recovery, shared CPKS execution, XC/grid/partition motion
 and molecular assembly remain owned by their qualified consumers.
 
-The closed-shell nuclear-perturbation consumer follows the same rule. It
-depends on a response operator's method-specific `induced_fock(delta_density)`
-contract instead of spelling out RHF `J - K/2`. RHF and semilocal CPKS
-therefore share metric-density RHS construction, occupied-orbital response,
-density reconstruction and multi-RHS solving. The operator owns whether the
-density direction produces exchange and/or XC response. Existing
-`solve_rhf_nuclear_perturbation[s]` names remain strict compatibility wrappers;
-the method-neutral entry points are `solve_stationary_nuclear_perturbation[s]`.
-This boundary alone does not supply DFT AO/grid/partition geometric derivatives.
+The closed-shell nuclear-perturbation consumer follows the same rule. Its
+canonical installed owner is now `generativeqc.stationary_nuclear`: metric-density
+RHS construction, occupied-orbital/density reconstruction and the single-/multi-
+RHS consumer contract live there without importing repository `tools.*`.
+Method-specific Fock physics remains injected through the response operator's
+`induced_fock(delta_density)` contract, while the existing #179 GMRES
+implementation is still supplied by the response adapter rather than copied
+into production. `tools.generativeqc_hessian.response` is a pure algebra
+compatibility re-export and `tools.generativeqc_hessian.perturbation` only
+binds the existing solver. Existing `solve_rhf_nuclear_perturbation[s]` names
+remain strict RHF compatibility wrappers. This boundary alone does not supply
+DFT AO/grid/partition geometric derivatives.
 
 The CPU direct all-electron Cartesian LDA/PBE RKS tools path now has native
 geometric directional consumers, complete seven-source molecular HVPs, shared
 multi-RHS CPKS, raw full-Hessian assembly, finite-difference validation and
 resource-gated execution beyond the historical 12-AO validation boundary.
-Public Calculator DFT Hessian/HVP capability remains off because the
-method-specific RKS response/provider adapters are still repository tools rather
-than installed production owners, and no public Hessian capability/resource
+The closed-shell response problem/operator/XC stack, bounded GMRES solver and
+live NativeRKS state/J binding are now installed production owners. Public
+Calculator DFT Hessian/HVP capability remains off because the method-specific
+RKS nuclear-direction, integral-response and molecular HVP/full-Hessian
+consumers are still repository tools, and no public Hessian capability/resource
 contract has been promoted.
 
 ## Scope of this slice

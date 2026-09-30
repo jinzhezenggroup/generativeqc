@@ -7,6 +7,7 @@
 #include "molecule/basis.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_fock_provider.hpp"
+#include "scf/cuda_one_electron_gradient.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
@@ -355,13 +356,21 @@ void retained_direct_derivative_reuse() {
                       [](double value) { return std::isfinite(value); }),
           "prepared fused RSH derivative returned nonfinite values");
 
-  double* device_density = nullptr;
+  std::vector<double> weighted_density = density;
+  for (std::size_t i = 0; i < weighted_density.size(); ++i)
+    weighted_density[i] *= 0.7 + 0.01 * static_cast<double>(i);
+  double *device_density = nullptr, *device_weighted_density = nullptr;
   require(cudaMalloc(reinterpret_cast<void**>(&device_density), density.size() * sizeof(double)) ==
-              cudaSuccess,
-          "device density allocation failed");
+                  cudaSuccess &&
+              cudaMalloc(reinterpret_cast<void**>(&device_weighted_density),
+                         weighted_density.size() * sizeof(double)) == cudaSuccess,
+          "device stationary D/W allocation failed");
   require(cudaMemcpyAsync(device_density, density.data(), density.size() * sizeof(double),
-                          cudaMemcpyHostToDevice, derivative.stream) == cudaSuccess,
-          "device density upload failed");
+                          cudaMemcpyHostToDevice, derivative.stream) == cudaSuccess &&
+              cudaMemcpyAsync(device_weighted_density, weighted_density.data(),
+                              weighted_density.size() * sizeof(double), cudaMemcpyHostToDevice,
+                              derivative.stream) == cudaSuccess,
+          "device stationary D/W upload failed");
   int device_count = 0;
   require(cudaGetDeviceCount(&device_count) == cudaSuccess && device_count > 0,
           "CUDA device count query failed");
@@ -407,7 +416,28 @@ void retained_direct_derivative_reuse() {
   int current_device = -1;
   require(cudaGetDevice(&current_device) == cudaSuccess && current_device == derivative.device_id,
           "resident prepared fused RSH derivative did not select the owning device");
-  require(cudaFree(device_density) == cudaSuccess, "device density free failed");
+
+  std::vector<double> expected_hcore, expected_pulay, prepared_hcore, prepared_pulay;
+  OneElectronGradientResources generic_resources, prepared_resources;
+  require(execute_cuda_stationary_one_electron_pair(
+              derivative.device_id, system, density, weighted_density, 1, 8U << 20, expected_hcore,
+              expected_pulay, detail, &generic_resources) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  require(execute_prepared_cuda_stationary_one_electron_pair(
+              plan.cuda_direct_source(), device_density, device_weighted_density, density.size(),
+              8U << 20, prepared_hcore, prepared_pulay, detail,
+              &prepared_resources) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  matrix(prepared_hcore, expected_hcore, "resident prepared hcore derivative");
+  matrix(prepared_pulay, expected_pulay, "resident prepared Pulay derivative");
+  require(prepared_resources.device_bytes == 0 && prepared_resources.host_to_device_bytes == 0 &&
+              prepared_resources.device_to_host_bytes == 6 * system.atoms.size() * sizeof(double) &&
+              prepared_resources.stream_synchronizations == 1,
+          "resident prepared one-electron force staged unexpected device data");
+
+  require(
+      cudaFree(device_density) == cudaSuccess && cudaFree(device_weighted_density) == cudaSuccess,
+      "device stationary D/W free failed");
   matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 

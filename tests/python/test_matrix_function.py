@@ -380,8 +380,12 @@ def test_response_graph_can_be_planned_for_cuda_without_a_device() -> None:
 
     program = SymmetricMatrixFunctionSpec(3, "lowering", 0.1).response_program()
     plan = plan_cuda(program, cuda_target_info("sm_80"))
-    assert plan.program is program
+    assert plan.program.logical_hash
     assert plan.peak_bytes > 0
+    unreassociated = plan_cuda(
+        program, cuda_target_info("sm_80"), reassociate_contractions=False
+    )
+    assert unreassociated.program is program
     # Planning is not GPU execution or a native eigensolver capability claim.
 
 

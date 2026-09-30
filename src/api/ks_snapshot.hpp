@@ -10,6 +10,10 @@
  * Reads/checks require a live batch and compare its current #162 token. */
 struct generativeqc_ks_snapshot;
 struct generativeqc_ks_xc_response;
+struct generativeqc_nonlocal_cuda_force;
+namespace generativeqc::dft {
+struct GridTaskView;
+}
 
 extern "C" {
 generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch, std::size_t index,
@@ -22,9 +26,18 @@ generativeqc_status generativeqc_ks_snapshot_copy_v1(const generativeqc_batch* b
                                                      const generativeqc_ks_snapshot* snapshot,
                                                      double* values, std::size_t count);
 void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
+generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count);
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+/** Seed the resident nonlocal force owner directly from the exact current
+ * CUDA KS rho/grad-rho binding on the borrowed grid task stream. No pointer is
+ * published to Python and no host transfer or synchronization occurs. */
+generativeqc_status generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    generativeqc_nonlocal_cuda_force* owner, const generativeqc::dft::GridTaskView* view);
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy);

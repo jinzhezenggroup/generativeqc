@@ -23,7 +23,7 @@ def test_cpu_conventional_mp2_actual_path_anchors_are_explicit() -> None:
     assert row["backend"] == "cpu"
     assert row["domain"] == "canonical-conventional-mp2"
     assert row["status"] == "production"
-    assert row["scientific_owner"] == "tools/generativeqc_mp2/equations.py"
+    assert row["scientific_owner"] == "python/generativeqc_compiler/mp2/equations.py"
     assert row["provider_owner"] == "src/posthf/native_provider.cpp"
     assert row["execution_owner"] == "src/methods/mp2_method.cpp"
     assert row["selector"] == "src/methods/registry.cpp"

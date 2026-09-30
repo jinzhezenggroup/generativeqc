@@ -543,14 +543,28 @@ class RccsdPrepared final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                         "RCCSD force owner lost the converged RHF reference");
 
+    // Reuse the exact interaction owner already retained for the CPU reference/problem.
+    // CUDA keeps the existing RawSource compatibility path until #1500 publishes a
+    // device-native prepared source through the same method-neutral contract.
+    std::unique_ptr<posthf::RawSource> force_raw_source;
+    std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
+    const integrals::ElectronInteractionSource* force_source = nullptr;
+    if (!execution_.cuda_requested() && cpu_exact_plan_) {
+      force_prepared_source.emplace(*cpu_exact_plan_);
+      force_source = &*force_prepared_source;
+    } else {
+      force_raw_source = std::make_unique<posthf::RawSource>(system_);
+      force_source = force_raw_source.get();
+    }
+
     constexpr std::size_t kCudaDerivativeStageBudget = 64ULL << 20;
-    auto force =
-        execution_.cuda_requested()
-            ? cc::rccsd_force_cuda(system_, *state.reference, state.problem, state.solved,
-                                   state.eps_o, state.eps_v, state.budget, execution_.device_id(),
-                                   std::min(state.budget, kCudaDerivativeStageBudget))
-            : cc::rccsd_force_cpu(system_, *state.reference, state.problem, state.solved,
-                                  state.eps_o, state.eps_v, state.budget);
+    auto force = execution_.cuda_requested()
+                     ? cc::rccsd_force_cuda(system_, *force_source, *state.reference, state.problem,
+                                            state.solved, state.eps_o, state.eps_v, state.budget,
+                                            execution_.device_id(),
+                                            std::min(state.budget, kCudaDerivativeStageBudget))
+                     : cc::rccsd_force_cpu(system_, *force_source, *state.reference, state.problem,
+                                           state.solved, state.eps_o, state.eps_v, state.budget);
     auto diagnostic = state.diagnostic;
     if (execution_.cuda_requested()) {
       if (!force.lambda.cuda_actions || !force.lambda.owned_device_bytes)
