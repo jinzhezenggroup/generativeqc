@@ -1,4 +1,4 @@
-"""Compare the exact split-response planner against its still-live owners."""
+"""Compare the exact split-response planner against its conservative owner bound."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _probe(fragment: str) -> str:
 #include <iostream>
 #include <limits>
 #include <stdexcept>
-std::size_t hs=1,he=1,fs=1,oj=1;
+std::size_t hs=1,he=1,hc=1,oj=1;
 std::size_t checked_add(std::size_t a,std::size_t b) {
   if(b>std::numeric_limits<std::size_t>::max()-a) throw std::length_error("overflow");
   return a+b;
@@ -42,7 +42,7 @@ std::size_t sum(std::initializer_list<std::size_t> values) {
 namespace generated {
 std::size_t hamiltonian_small_weights_arena_elements(std::size_t,std::size_t) {return hs;}
 std::size_t hamiltonian_eri_weights_arena_elements(std::size_t,std::size_t) {return he;}
-std::size_t fock_small_weights_arena_elements(std::size_t,std::size_t) {return fs;}
+std::size_t hamiltonian_control_arena_elements(std::size_t,std::size_t) {return hc;}
 std::size_t orbital_jvp_arena_elements(std::size_t,std::size_t) {return oj;}
 }
 namespace response {
@@ -56,18 +56,19 @@ int main() {
     const std::size_t before_raw=12345,raw_retained=8*(n4+3*n2);
     const auto max_bytes=std::numeric_limits<std::size_t>::max();
     for(unsigned dominant=0;dominant<4;++dominant) {
-      hs=he=fs=oj=1;
+      hs=he=hc=oj=1;
       if(dominant==0) hs=100000;
       if(dominant==1) he=100000;
-      if(dominant==2) fs=100000;
+      if(dominant==2) hc=100000;
       if(dominant==3) oj=100000;
       struct {std::size_t response_phase_bytes{};} plan;
 """
         + fragment
         + r"""
-      // Independent inventory at the final calls: correlation/canonicalization,
-      // two Fock seeds, d_rotation, the retained orbital arena, dense response
-      // matrix, basis/action vectors, Z solution, and independent residual.
+      // Preserve the conservative pre-pruning envelope: control owners,
+      // Fock seeds, d_rotation, orbital arena, dense response matrix,
+      // basis/action vectors, Z solution, and independent residual.
+      // Early release in the runtime must not relax this admission bound.
       const auto input=before_raw+raw_retained;
       const auto compact=8*(4*n2+ov);
       const auto final_inputs=input+2*compact+8*(2*n2+n2+oj+ov*ov+4*ov);
@@ -77,7 +78,7 @@ int main() {
       }
       if(plan.response_phase_bytes<final_inputs+compact+8*hs ||
          plan.response_phase_bytes<final_inputs+compact+8*n4+8*he ||
-         plan.response_phase_bytes<input+2*compact+8*(2*n2+fs)) {
+         plan.response_phase_bytes<input+2*compact+8*(2*n2+hc)) {
         std::cerr<<"response peak omits a live owner\n"; return 2;
       }
     }
@@ -96,13 +97,14 @@ def test_split_response_budget_covers_final_live_owners(tmp_path: Path) -> None:
     source = tmp_path / "budget.cpp"
     source.write_text(_probe(_fragment(text)))
     executable = tmp_path / "budget"
-    subprocess.run(
+    compiled = subprocess.run(
         [compiler, "-std=c++20", "-O0", str(source), "-o", str(executable)],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
         timeout=60,
     )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     result = subprocess.run(
         [str(executable)], check=False, capture_output=True, text=True, timeout=10
     )
