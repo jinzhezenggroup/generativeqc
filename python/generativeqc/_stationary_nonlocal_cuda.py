@@ -102,7 +102,12 @@ def resident_nonlocal_geometry(
             ) as task:
                 weights = state.grid.weights[begin:end]
                 device_weights = resident_grid.weights + begin * 8
-                raw = raw_weights[begin:end]
+                device_raw = resident_grid.atomic_weights + begin * 8
+                host_raw = (
+                    raw_weights[begin:end]
+                    if sources.profile_device or nonlocal_sources.profile_device
+                    else None
+                )
                 if phase == 0:
                     sources.geometry_molecular_resident_weights(
                         task,
@@ -110,7 +115,8 @@ def resident_nonlocal_geometry(
                         points_per_atom,
                         device_weights,
                         weights,
-                        raw,
+                        device_raw,
+                        host_raw,
                         functional=functional,
                     )
                     if begin == 0:
@@ -157,7 +163,8 @@ def resident_nonlocal_geometry(
                     points_per_atom,
                     device_weights,
                     weights,
-                    raw,
+                    device_raw,
+                    host_raw,
                     seeds.pointer,
                     seeds.stride,
                     begin,
@@ -210,6 +217,8 @@ def resident_nonlocal_geometry(
         "grid_point_h2d_bytes": 0,
         "grid_weight_source": "exact-native-resident-grid",
         "grid_weight_h2d_bytes": 0,
+        "grid_atomic_measure_source": "exact-native-resident-grid",
+        "grid_atomic_measure_h2d_bytes": 0,
         "nonlocal_dense_pair_capacity": count * count,
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
