@@ -483,6 +483,15 @@ __global__ void geometry_reduce(const double* partial, size_t na, double* output
   for (size_t lane = 0; lane < workers; ++lane) sum += partial[lane * 9 * na + i];
   output[i] = finite(output[i] + sum, error, 0);
 }
+__global__ void external_source_reduce(const double* const* components, size_t source_count,
+                                       size_t coordinates, double* output, int* error) {
+  if (*error) return;
+  const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= coordinates) return;
+  double sum = 0.0;
+  for (size_t source = 0; source < source_count; ++source) sum += components[source][i];
+  output[i] = finite(sum, error, 0);
+}
 
 }  // namespace generativeqc_stationary_cuda
 """
