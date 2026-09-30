@@ -18,10 +18,10 @@ jobs:
         run: |
           set -euo pipefail
           refs=("+refs/heads/master:refs/remotes/origin/master")
-          for pr in 1510 1566 1572 1573 1578 1582 1584 1586 1588 1590 1592 1594 1595 1596; do
+          for pr in 1510 1573 1582 1584 1586 1588 1590 1591 1592 1594 1595 1596 1597 1600 1602 1603 1604 1605 1606; do
             refs+=("+refs/pull/${pr}/head:refs/remotes/origin/review-${pr}")
           done
-          git fetch --no-tags --depth=128 origin "${refs[@]}"
+          git fetch --no-tags --depth=256 origin "${refs[@]}"
           git for-each-ref --format='%(refname) %(objectname)' refs/remotes/origin
           # No credentials are persisted by checkout. Keep only the source object
           # database and refs so the local review can use real three-way merges.
