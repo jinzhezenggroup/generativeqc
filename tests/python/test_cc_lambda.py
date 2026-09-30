@@ -5,11 +5,11 @@ from functools import lru_cache
 
 import numpy as np
 import pytest
+from generativeqc_compiler.cc.equations import amplitude_layouts
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import Program, execute
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
-from tools.generativeqc_cc.equations import amplitude_layouts
 from tools.generativeqc_cc.lambda_equations import build_lambda_programs
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
 
