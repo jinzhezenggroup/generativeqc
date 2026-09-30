@@ -49,12 +49,40 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         calls.append("pairs")
         return SimpleNamespace(pointer=4096, stride=1, stream=31, generation=1)
 
+    def geometry(
+        task: Any,
+        begin: int,
+        points_per_atom: int,
+        weights: Any,
+        raw: Any,
+        **kwargs: Any,
+    ) -> None:
+        assert task.view.stream == 31
+        assert (begin, points_per_atom) == (0, 1)
+        np.testing.assert_array_equal(weights, np.ones(1))
+        np.testing.assert_array_equal(raw, np.ones(1))
+        assert kwargs == {"functional": 4}
+
+    def nonlocal_geometry(
+        task: Any,
+        begin: int,
+        points_per_atom: int,
+        weights: Any,
+        raw: Any,
+        pointer: int,
+        stride: int,
+        offset: int,
+    ) -> None:
+        geometry(task, begin, points_per_atom, weights, raw, functional=4)
+        assert (pointer, stride, offset) == (4096, 1, 0)
+
     parts = {
         name: np.zeros((1, 3)) for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
     }
     sink = SimpleNamespace(
-        geometry=lambda *args, **kwargs: None,
-        geometry_external_device=lambda *args: None,
+        geometry_molecular=geometry,
+        geometry_external_device_molecular=nonlocal_geometry,
+        natom=1,
         finish=lambda: parts,
     )
     state = SimpleNamespace(
