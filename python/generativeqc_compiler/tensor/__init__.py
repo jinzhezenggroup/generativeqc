@@ -70,8 +70,8 @@ from .precision import (
     describe_precision,
     lower_precision,
 )
-from .program import Program
 from .prepare import prepare_for_backend
+from .program import Program
 from .scf import (
     SCF_TENSOR_VERSION,
     density_program,

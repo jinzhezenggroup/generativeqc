@@ -122,6 +122,8 @@ from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_progr
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)
+
+
 def _production_program(program: Program, backend: str) -> Program:
     return prepare_for_backend(program, backend=backend)
 
@@ -683,12 +685,8 @@ def cpu_header() -> str:
     lambda_programs = build_lambda_programs(*REPRESENTATIVE, form="shared")
     lambda_independent = build_lambda_programs(*REPRESENTATIVE, form="expanded")
     lambda_rhs = _production_program(lambda_programs.energy_vjp.program, "cpu")
-    lambda_transpose = _production_program(
-        lambda_programs.residual_vjp.program, "cpu"
-    )
-    independent_rhs = _production_program(
-        lambda_independent.energy_vjp.program, "cpu"
-    )
+    lambda_transpose = _production_program(lambda_programs.residual_vjp.program, "cpu")
+    independent_rhs = _production_program(lambda_independent.energy_vjp.program, "cpu")
     independent_transpose = _production_program(
         lambda_independent.residual_vjp.program, "cpu"
     )
@@ -705,9 +703,7 @@ def cpu_header() -> str:
     hamiltonian_weights = _production_program(hamiltonian.weights, "cpu")
     orbital_jvp = _production_program(hamiltonian.orbital_jvp.program, "cpu")
     fock_weights = _production_program(
-        build_fock_weight_program(
-            *REPRESENTATIVE, explicit_density_input=True
-        ),
+        build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
         "cpu",
     )
     hamiltonian_input_names = tuple(
@@ -1167,12 +1163,8 @@ def cuda_source() -> str:
     lambda_programs = build_lambda_programs(*REPRESENTATIVE, form="shared")
     lambda_independent = build_lambda_programs(*REPRESENTATIVE, form="expanded")
     lambda_rhs = _production_program(lambda_programs.energy_vjp.program, "cuda")
-    lambda_transpose = _production_program(
-        lambda_programs.residual_vjp.program, "cuda"
-    )
-    independent_rhs = _production_program(
-        lambda_independent.energy_vjp.program, "cuda"
-    )
+    lambda_transpose = _production_program(lambda_programs.residual_vjp.program, "cuda")
+    independent_rhs = _production_program(lambda_independent.energy_vjp.program, "cuda")
     independent_transpose = _production_program(
         lambda_independent.residual_vjp.program, "cuda"
     )
@@ -1189,9 +1181,7 @@ def cuda_source() -> str:
     hamiltonian_weights = _production_program(hamiltonian.weights, "cuda")
     orbital_jvp = _production_program(hamiltonian.orbital_jvp.program, "cuda")
     fock_weights = _production_program(
-        build_fock_weight_program(
-            *REPRESENTATIVE, explicit_density_input=True
-        ),
+        build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
         "cuda",
     )
     hamiltonian_input_names = tuple(

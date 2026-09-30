@@ -66,7 +66,7 @@ def test_rccsd_generator_has_no_identity_optimizer_escape_hatch() -> None:
     source = (ROOT / "tools/generate_rccsd_native.py").read_text()
     assert '"optimize": lambda program: program' not in source
     assert '"optimize": tensor_optimize' in source
-    assert source.count('_production_program(') >= 20
+    assert source.count("_production_program(") >= 20
     assert '_production_program(iteration_program(*REPRESENTATIVE), "cpu")' in source
     assert '_production_program(iteration_program(*REPRESENTATIVE), "cuda")' in source
 

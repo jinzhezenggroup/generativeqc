@@ -106,9 +106,7 @@ def _fold(node: Node) -> Node:
             )
             for index in range(node.spec.size):
                 value = 0.0
-                for coefficient, column in zip(
-                    coefficients, columns, strict=True
-                ):
+                for coefficient, column in zip(coefficients, columns, strict=True):
                     value += coefficient * rounded(column[index])
                 original.append(value)
         elif node.op == "multiply":
@@ -128,10 +126,14 @@ def _fold(node: Node) -> Node:
     def bits(value: float) -> bytes:
         return struct.pack("!d", value)
 
-    return candidate if all(
-        bits(before) == bits(after)
-        for before, after in zip(original, folded, strict=True)
-    ) else node
+    return (
+        candidate
+        if all(
+            bits(before) == bits(after)
+            for before, after in zip(original, folded, strict=True)
+        )
+        else node
+    )
 
 
 def _is_literal_one(node: Node) -> bool:
