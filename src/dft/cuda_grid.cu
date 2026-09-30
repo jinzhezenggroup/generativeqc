@@ -87,6 +87,24 @@ __global__ void gather_factor(const double* global, const size_t* ids, I active,
   }
 }
 
+__global__ void split_restricted_density(const double* total, size_t count,
+                                         double* spin_density) {
+  for (size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
+       i += size_t(blockDim.x) * gridDim.x) {
+    const double value = 0.5 * total[i];
+    spin_density[i] = value;
+    spin_density[count + i] = value;
+  }
+}
+
+void require_device_pointer(const void* pointer, int device) {
+  if (!pointer) throw std::invalid_argument("null CUDA grid resident-density pointer");
+  cudaPointerAttributes attributes{};
+  cuda_check(cudaPointerGetAttributes(&attributes, pointer));
+  if (attributes.type != cudaMemoryTypeDevice || attributes.device != device)
+    throw std::invalid_argument("CUDA grid resident density is on the wrong device");
+}
+
 // Tasks execute serially on the owner's stream, and each map is unique. Thus
 // each global element has one writer in a launch and needs no floating atomics.
 __global__ void scatter_matrix(const double* local, const size_t* ids, I nao, I active,
@@ -291,6 +309,73 @@ int grid_cuda_density_v1(void* pointer, const double* density, size_t elements, 
  * content/generation validation; upload D and its checked B snapshots together.
  * This ABI does not infer compatibility from dimensions or diagonalize D.
  */
+int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double* beta,
+                                size_t matrix_elements, unsigned spins, void* source_stream,
+                                char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !alpha || !source_stream || (spins != 1 && spins != 2) ||
+        (spins == 2 && !beta))
+      throw std::invalid_argument("invalid CUDA grid resident density binding");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (matrix_elements != p.nao * p.nao)
+      throw std::invalid_argument("CUDA grid resident density shape mismatch");
+    require_device_pointer(alpha, ctx.device);
+    if (spins == 2) require_device_pointer(beta, ctx.device);
+    auto producer = reinterpret_cast<cudaStream_t>(source_stream);
+    unsigned producer_flags = 0;
+    cuda_check(cudaStreamGetFlags(producer, &producer_flags));
+
+    p.view_ready = p.density_jets_ready = false;
+    ++p.generation;
+    p.density_ready = p.orbital_ready = p.use_orbitals = false;
+
+    const auto enqueue_copy = [&] {
+      if (spins == 1) {
+        split_restricted_density<<<blocks(matrix_elements), 128, 0, producer>>>(
+            alpha, matrix_elements, p.density);
+        cuda_check(cudaGetLastError());
+      } else {
+        cuda_check(cudaMemcpyAsync(p.density, alpha, matrix_elements * sizeof(double),
+                                   cudaMemcpyDeviceToDevice, producer));
+        cuda_check(cudaMemcpyAsync(p.density + matrix_elements, beta,
+                                   matrix_elements * sizeof(double),
+                                   cudaMemcpyDeviceToDevice, producer));
+      }
+    };
+
+    if (producer == ctx.stream) {
+      enqueue_copy();
+    } else {
+      cudaEvent_t destination_ready{}, source_copied{};
+      cuda_check(cudaEventCreateWithFlags(&destination_ready, cudaEventDisableTiming));
+      try {
+        cuda_check(cudaEventCreateWithFlags(&source_copied, cudaEventDisableTiming));
+        try {
+          cuda_check(cudaEventRecord(destination_ready, ctx.stream));
+          cuda_check(cudaStreamWaitEvent(producer, destination_ready, 0));
+          enqueue_copy();
+          cuda_check(cudaEventRecord(source_copied, producer));
+          cuda_check(cudaStreamWaitEvent(ctx.stream, source_copied, 0));
+        } catch (...) {
+          cudaEventDestroy(source_copied);
+          throw;
+        }
+        cuda_check(cudaEventDestroy(source_copied));
+      } catch (...) {
+        cudaEventDestroy(destination_ready);
+        throw;
+      }
+      cuda_check(cudaEventDestroy(destination_ready));
+    }
+    if (p.local)
+      cuda_check(cudaMemsetAsync(p.potential, 0, 2 * matrix_elements * sizeof(double), ctx.stream));
+    p.density_ready = true;
+  });
+}
+
 int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, const double* alpha,
                         const double* beta, const size_t* counts, int use_orbitals, char* error,
                         size_t size) {
