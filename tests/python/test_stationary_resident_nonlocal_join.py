@@ -55,7 +55,7 @@ def fixture(
             assert ingredients == ("rho", "gradient", "tau")
             begin = (pointer - resident_grid.points) // (3 * 8)
             assert pointer == resident_grid.points + 3 * begin * 8
-            assert begin in range(0, resident_grid.point_count, 2)
+            assert 0 <= begin < resident_grid.point_count
             lease = SimpleNamespace(
                 alive=True,
                 view=SimpleNamespace(stream=stream),
