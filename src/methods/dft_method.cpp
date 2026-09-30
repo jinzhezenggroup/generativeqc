@@ -864,10 +864,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   generativeqc_status resident_grid(const dft::CudaKsFinalStateToken& expected, int& device,
                                     const double*& points, const double*& weights,
-                                    std::size_t& point_count, std::string& detail) {
+                                    const double*& atomic_weights, std::size_t& point_count,
+                                    std::string& detail) {
     device = -1;
     points = nullptr;
     weights = nullptr;
+    atomic_weights = nullptr;
     point_count = 0;
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_) {
@@ -887,6 +889,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     device = grid.device;
     points = grid.points;
     weights = grid.weights;
+    atomic_weights = grid.atomic_weights;
     point_count = grid.point_count;
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
@@ -1677,13 +1680,15 @@ class KsPreparedBatch final : public PreparedBatch {
 
   generativeqc_status resident_grid(std::size_t index, const dft::CudaKsFinalStateToken& expected,
                                     int& device, const double*& points, const double*& weights,
-                                    std::size_t& point_count, std::string& detail) {
+                                    const double*& atomic_weights, std::size_t& point_count,
+                                    std::string& detail) {
     if (index < items_.size() && items_[index].plan)
-      return items_[index].plan->resident_grid(expected, device, points, weights, point_count,
-                                               detail);
+      return items_[index].plan->resident_grid(expected, device, points, weights, atomic_weights,
+                                               point_count, detail);
     device = -1;
     points = nullptr;
     weights = nullptr;
+    atomic_weights = nullptr;
     point_count = 0;
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -1911,15 +1916,18 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-generativeqc_status dft_cuda_resident_grid(PreparedBatch& batch, std::size_t index,
-                                           const dft::CudaKsFinalStateToken& expected, int& device,
-                                           const double*& points, const double*& weights,
-                                           std::size_t& point_count, std::string& detail) {
+generativeqc_status dft_cuda_resident_grid(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    int& device, const double*& points, const double*& weights, const double*& atomic_weights,
+    std::size_t& point_count, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
-  if (ks) return ks->resident_grid(index, expected, device, points, weights, point_count, detail);
+  if (ks)
+    return ks->resident_grid(index, expected, device, points, weights, atomic_weights, point_count,
+                             detail);
   device = -1;
   points = nullptr;
   weights = nullptr;
+  atomic_weights = nullptr;
   point_count = 0;
   detail = "resident molecular grid requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
