@@ -13,9 +13,7 @@ def _selected_execution() -> str:
 
 
 def _impl_call_arguments(wrapper: str) -> list[str]:
-    call = wrapper.split("return grid_cuda_run_selected_impl(", 1)[1].split(
-        ");", 1
-    )[0]
+    call = wrapper.split("return grid_cuda_run_selected_impl(", 1)[1].split(");", 1)[0]
     return [" ".join(argument.split()) for argument in call.split(",")]
 
 
