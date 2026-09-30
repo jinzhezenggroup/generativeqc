@@ -73,8 +73,7 @@ void primitive_sum(std::size_t n, const double* first, const double* second, dou
         findings = audit_text(source, path="synthetic.cpp")
         assert findings
         assert all(
-            finding.classification == "fixed-extent-inner-loop"
-            for finding in findings
+            finding.classification == "fixed-extent-inner-loop" for finding in findings
         )
         assert all(finding.effective_depth < finding.depth for finding in findings)
 
