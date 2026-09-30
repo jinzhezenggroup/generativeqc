@@ -44,7 +44,11 @@ def resident_nonlocal_geometry(
     if type(tile_points) is not int or tile_points <= 0:
         raise ValueError("resident nonlocal tile_points must be a positive integer")
     if not callable(
-        getattr(nonlocal_sources, "geometry_external_device_molecular", None)
+        getattr(
+            nonlocal_sources,
+            "geometry_external_device_molecular_resident_weights",
+            None,
+        )
     ):
         raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
     if not callable(getattr(nonlocal_owner, "seed_from_snapshot", None)):
@@ -97,12 +101,14 @@ def resident_nonlocal_geometry(
                 ingredients,
             ) as task:
                 weights = state.grid.weights[begin:end]
+                device_weights = resident_grid.weights + begin * 8
                 raw = raw_weights[begin:end]
                 if phase == 0:
-                    sources.geometry_molecular(
+                    sources.geometry_molecular_resident_weights(
                         task,
                         begin,
                         points_per_atom,
+                        device_weights,
                         weights,
                         raw,
                         functional=functional,
@@ -145,10 +151,11 @@ def resident_nonlocal_geometry(
                     )
                 # Inactive MolecularV1 rows have all six seeds zeroed by the
                 # native producer, so no host active mask is needed.
-                nonlocal_sources.geometry_external_device_molecular(
+                nonlocal_sources.geometry_external_device_molecular_resident_weights(
                     task,
                     begin,
                     points_per_atom,
+                    device_weights,
                     weights,
                     raw,
                     seeds.pointer,
@@ -201,6 +208,8 @@ def resident_nonlocal_geometry(
         "grid_owner_h2d_bytes": 0,
         "grid_point_source": "exact-native-resident-grid",
         "grid_point_h2d_bytes": 0,
+        "grid_weight_source": "exact-native-resident-grid",
+        "grid_weight_h2d_bytes": 0,
         "nonlocal_dense_pair_capacity": count * count,
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
