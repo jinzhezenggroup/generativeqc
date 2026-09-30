@@ -309,12 +309,12 @@ __global__ void task_reduce(const double* input, const int64_t* tasks, size_t co
   }
   output[slot] = finite(output[slot] + sum, error, 0);
 }
-__global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
-                               const double* centers, size_t na, double* output, int* error) {
+__device__ bool nuclear_pair(unsigned kind, int64_t a, int64_t b, double za, double zb,
+                             const double* centers, size_t na, double* output, int* error) {
   if (a < 0 || b < 0 || a >= int64_t(na) || b >= int64_t(na) || a == b ||
       !isfinite(za) || !isfinite(zb) || !(za > 0) || !(zb > 0)) {
     atomicExch(error, 1);
-    return;
+    return false;
   }
   double r[record_stride];
   for (size_t j = 0; j < record_stride; ++j) r[j] = 1.0;
@@ -327,7 +327,7 @@ __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, d
   double v[12]{};
   if (!first_derivative(kind, r, r + 4, v)) {
     atomicExch(error, 1);
-    return;
+    return false;
   }
   for (size_t k = 0; k < 3; ++k) {
     output[3 * stationary_nuclear_source * na + 3 * a + k] =
@@ -335,6 +335,20 @@ __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, d
     output[3 * stationary_nuclear_source * na + 3 * b + k] =
         finite(output[3 * stationary_nuclear_source * na + 3 * b + k] + v[3 + k], error, 0);
   }
+  return !*error;
+}
+__global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
+                               const double* centers, size_t na, double* output, int* error) {
+  nuclear_pair(kind, a, b, za, zb, centers, na, output, error);
+}
+__global__ void nuclear_all_kernel(unsigned kind, const double* charges, const double* centers,
+                                   size_t na, double* output, int* error) {
+  if (blockIdx.x != 0 || threadIdx.x != 0) return;
+  for (size_t a = 0; a < na; ++a)
+    for (size_t b = 0; b < a; ++b)
+      if (!nuclear_pair(kind, int64_t(a), int64_t(b), charges[a], charges[b], centers, na, output,
+                        error))
+        return;
 }
 __global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error) {
   bool valid = true;
