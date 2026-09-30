@@ -39,7 +39,11 @@ from generativeqc_compiler.common.evidence import (
 )
 from generativeqc_compiler.xc import build_program, functional
 from generativeqc_compiler.xc.capabilities import query_capability
-from generativeqc_compiler.xc.cuda import CudaXC, compile_cuda
+from generativeqc_compiler.xc.cuda import (
+    CudaXC,
+    compile_cuda,
+    compiled_xc_profitability,
+)
 from generativeqc_compiler.xc.cuda_emit import XCSchedule, emit_cuda
 from generativeqc_compiler.xc.fixtures import load_fixture
 from generativeqc_compiler.xc.spec import CATALOG
@@ -115,6 +119,10 @@ def run(
             "reason": None,
         }
         record["resources"] = artifact.runtime.metadata["resources"]
+        record["compiled_profitability"] = {
+            "scope": "xc-expression-only",
+            "record": compiled_xc_profitability(artifact).to_payload(),
+        }
         record["stages"]["compilation"] = outcome("pass")
         record["spill_free"] = all(
             r["spill_load_bytes"] == r["spill_store_bytes"] == r["stack_bytes"] == 0
