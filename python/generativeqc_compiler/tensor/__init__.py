@@ -71,6 +71,7 @@ from .precision import (
     lower_precision,
 )
 from .program import Program
+from .prepare import prepare_for_backend
 from .scf import (
     SCF_TENSOR_VERSION,
     density_program,
@@ -194,6 +195,7 @@ __all__ = [
     "node_complexity",
     "optimize",
     "power",
+    "prepare_for_backend",
     "reassociate_einsums",
     "reduce_sum",
     "reshape",
