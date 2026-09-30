@@ -426,7 +426,8 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
       profile_record(*p, p->stage1, stream);
       geometry_kernel<<<1, workers, 0, stream>>>(
           *view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers, p->atoms, p->weights, p->raw,
-          seeds.get(), view->npoint, 0, p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+          seeds.get(), view->npoint, 0, p->partial, p->scratch,
+          p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
       profile_record(*p, p->stage2, stream);
       p->launches += 1;
       p->point_count += view->npoint;
@@ -476,10 +477,10 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
       upload(*p, p->weights, weights, view->npoint, stream);
       upload(*p, p->raw, raw, view->npoint, stream);
       profile_record(*p, p->stage1, stream);
-      geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0,
-                                                 p->centers, p->atoms, p->weights, p->raw,
-                                                 external_device, external_stride, external_offset,
-                                                 p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+      geometry_kernel<<<1, workers, 0, stream>>>(
+          *view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers, p->atoms, p->weights, p->raw,
+          external_device, external_stride, external_offset, p->partial, p->scratch,
+          p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
       profile_record(*p, p->stage2, stream);
       p->launches += 1;
       p->point_count += view->npoint;
@@ -527,10 +528,10 @@ int stationary_geometry_external_device_enqueue(
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0,
-                                               p->centers, p->atoms, p->weights, p->raw,
-                                               external_device, external_stride, external_offset,
-                                               p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+    geometry_kernel<<<1, workers, 0, stream>>>(
+        *view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers, p->atoms, p->weights, p->raw,
+        external_device, external_stride, external_offset, p->partial, p->scratch,
+        p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 1;
     p->point_count += view->npoint;
@@ -635,7 +636,8 @@ int stationary_geometry_molecular_resident_weights_enqueue(
     }
     geometry_kernel<<<1, workers, 0, stream>>>(
         *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        device_weights, device_raw, nullptr, 0, 0, p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        device_weights, device_raw, nullptr, 0, 0, p->partial, p->scratch,
+        p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 1;
     p->point_count += view->npoint;
@@ -670,7 +672,8 @@ int stationary_geometry_molecular_enqueue(void* pointer,
     upload(*p, p->raw, raw, view->npoint, stream);
     geometry_kernel<<<1, workers, 0, stream>>>(
         *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        p->weights, p->raw, nullptr, 0, 0, p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->weights, p->raw, nullptr, 0, 0, p->partial, p->scratch,
+        p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 1;
     p->point_count += view->npoint;
@@ -703,9 +706,10 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0,
-                                               p->centers, p->atoms, p->weights, p->raw, nullptr, 0,
-                                               0, p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+    geometry_kernel<<<1, workers, 0, stream>>>(
+        *view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers, p->atoms, p->weights, p->raw,
+        nullptr, 0, 0, p->partial, p->scratch, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 1;
     p->point_count += view->npoint;
