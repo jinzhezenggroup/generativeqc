@@ -392,6 +392,7 @@ macro(generativeqc_register_host_generated_sources target)
     COMMENT "Generating compiler-owned GFN2 CPU electronic kernels")
 
   file(GLOB GENERATIVEQC_RCCSD_GENERATOR_INPUTS CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/*.py")
   set(GENERATIVEQC_GFN2_SDQ_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_sdq_native.hpp")
@@ -911,6 +912,7 @@ macro(generativeqc_register_cuda_generated_sources target)
        "python/generativeqc_compiler/common/cuda_target.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/source_reuse.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/mp2_schedule.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/mp2/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_mp2/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_posthf/*.py")
   generativeqc_register_generated_sources(

@@ -97,30 +97,24 @@ for _name, _value in {
 }.items():
     setattr(_tensor_package, _name, _value)
 
-# CC equation modules import the real canonical evidence module. Its numerical
+# Compiler-owned CC equation modules import the real canonical evidence module. Its numerical
 # comparison routines load NumPy only when executed; no module replacement is
 # required for immutable AOT equation construction.
 
-_cc_path = Path(__file__).resolve().parent / "generativeqc_cc"
-_cc_package = types.ModuleType("tools.generativeqc_cc")
-_cc_package.__path__ = [str(_cc_path)]
-_cc_package.__package__ = "tools.generativeqc_cc"
-sys.modules.setdefault("tools.generativeqc_cc", _cc_package)
-
-from tools.generativeqc_cc.doubles import build_ccsd_program
-from tools.generativeqc_cc.gradient_equations import (
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.gradient_equations import (
     build_fock_small_weight_program,
     build_fock_weight_program,
     build_hamiltonian_eri_weight_program,
     build_hamiltonian_programs,
     build_hamiltonian_small_weight_program,
 )
-from tools.generativeqc_cc.lambda_equations import (
+from generativeqc_compiler.cc.lambda_equations import (
     PARAMETERS,
     build_lambda_programs,
     build_parameter_vjp,
 )
-from tools.generativeqc_cc.triples_tiles import build_runtime_tile_triples_program
+from generativeqc_compiler.cc.triples_tiles import build_runtime_tile_triples_program
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)

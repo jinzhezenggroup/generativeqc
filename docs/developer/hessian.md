@@ -96,12 +96,12 @@ The CPU direct all-electron Cartesian LDA/PBE RKS tools path now has native
 geometric directional consumers, complete seven-source molecular HVPs, shared
 multi-RHS CPKS, raw full-Hessian assembly, finite-difference validation and
 resource-gated execution beyond the historical 12-AO validation boundary.
-The closed-shell response problem/layout, RHF/CPKS operator equations and
-fixed-density semilocal XC response kernel are now installed production owners.
-Public Calculator DFT Hessian/HVP capability remains off because the remaining
-live NativeRKS state/provider adapter, J provider and GMRES binding are still
-repository tools, and no public Hessian capability/resource contract has been
-promoted.
+The closed-shell response problem/operator/XC stack, bounded GMRES solver and
+live NativeRKS state/J binding are now installed production owners. Public
+Calculator DFT Hessian/HVP capability remains off because the method-specific
+RKS nuclear-direction, integral-response and molecular HVP/full-Hessian
+consumers are still repository tools, and no public Hessian capability/resource
+contract has been promoted.
 
 ## Scope of this slice
 

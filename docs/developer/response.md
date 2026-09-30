@@ -1,14 +1,18 @@
 # Shared orbital response and bounded Krylov solves
 
-The installed runtime now owns the shared closed-shell response mathematics:
+The installed runtime now owns the shared closed-shell response stack:
 `generativeqc.response_problem` owns problem/layout compatibility,
-`generativeqc.response_operator` owns RHF/CPKS matrix-free equations, and
-`generativeqc.response_xc` owns the fixed-density semilocal XC response kernel.
-`tools/generativeqc_response` retains solver/backend/live-state adapters and
-compatibility re-exports. Its Krylov controller is Python/host-controlled; the
-operator backends include native J/K execution. This split lets downstream
-property, Hessian, and correlated-gradient code reuse one scientific owner
-without making installed runtime code depend on repository `tools.*`.
+`generativeqc.response_operator` owns RHF/CPKS matrix-free equations,
+`generativeqc.response_xc` owns the fixed-density semilocal XC response kernel,
+and `generativeqc.response_solver` owns bounded true-residual GMRES plus
+blocked/recycled multi-RHS execution. `generativeqc.rks_response` binds a live
+native LDA/PBE RKS state to those owners using an exact J-only `FockPlan`.
+`tools/generativeqc_response` retains compatibility exports, UKS/spin-specific
+adapters and response backends not yet migrated. The Krylov controller remains
+Python/host-controlled; selected operator backends execute native J/K. This split
+lets downstream property, Hessian, and correlated-gradient code reuse one
+scientific owner without making installed runtime code depend on repository
+`tools.*`.
 This slice is partial: the RHF response layer and the direct-CPU UHF response
 layer (including `export_uhf`), host-orchestrated spin CUDA exact/DF J/K, and
 native CPU/CUDA LDA/PBE RKS/UKS CPKS handoffs are delivered. Exact-RHF resident
@@ -19,9 +23,10 @@ endpoints, not an automatic execution selector.
 This internal tooling is not a new public electronic-structure method. It
 consumes the converged native HF/KS endpoints rather than implementing SCF.
 
-The [generated implicit-response adapter](implicit_response.md) reuses this
-solver through an explicit callback. It generates transposed operators and source
-weights from TensorIR rather than introducing a method-specific adjoint solver.
+The [generated implicit-response adapter](implicit_response.md) reuses the
+same installed solver through an explicit callback. It generates transposed
+operators and source weights from TensorIR rather than introducing a
+method-specific adjoint solver.
 
 ## Problem snapshot
 

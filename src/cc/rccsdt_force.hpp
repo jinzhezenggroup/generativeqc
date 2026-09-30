@@ -15,6 +15,9 @@ struct System;
 namespace generativeqc::hf {
 struct PhysicalReference;
 }
+namespace generativeqc::integrals {
+class ElectronInteractionSource;
+}
 
 namespace generativeqc::cc {
 
@@ -34,8 +37,17 @@ struct RccsdtForcePlan {
  * max_bytes is the complete endpoint allowance, including borrowed inputs.
  */
 RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
+                                     const integrals::ElectronInteractionSource& source,
                                      const hf::PhysicalReference& reference, const Problem& problem,
                                      const SolverResult& cc_result, std::size_t max_bytes);
+RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
+                                     const hf::PhysicalReference& reference, const Problem& problem,
+                                     const SolverResult& cc_result, std::size_t max_bytes);
+RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
+                                      const integrals::ElectronInteractionSource& source,
+                                      const hf::PhysicalReference& reference,
+                                      const Problem& problem, const SolverResult& cc_result,
+                                      std::size_t max_bytes);
 RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
                                       const hf::PhysicalReference& reference,
                                       const Problem& problem, const SolverResult& cc_result,
@@ -74,9 +86,22 @@ struct RccsdtForceResult {
  * and occupied/virtual energy vectors, as in plan_rccsdt_force_cpu.
  */
 RccsdtForceResult rccsd_force_cpu(const core::System& system,
+                                  const integrals::ElectronInteractionSource& source,
                                   const hf::PhysicalReference& reference, const Problem& problem,
                                   const SolverResult& cc_result, std::span<const double> eps_o,
                                   std::span<const double> eps_v, std::size_t max_bytes);
+
+RccsdtForceResult rccsd_force_cpu(const core::System& system,
+                                  const hf::PhysicalReference& reference, const Problem& problem,
+                                  const SolverResult& cc_result, std::span<const double> eps_o,
+                                  std::span<const double> eps_v, std::size_t max_bytes);
+
+RccsdtForceResult rccsdt_force_cpu(const core::System& system,
+                                   const integrals::ElectronInteractionSource& source,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
+                                   const SolverResult& cc_result, std::span<const double> eps_o,
+                                   std::span<const double> eps_v, std::size_t max_bytes,
+                                   double denominator_threshold = 1e-10);
 
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
@@ -93,10 +118,25 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
  * consumer without authorizing a CPU fallback.
  */
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
+                                   const integrals::ElectronInteractionSource& source,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
                                    int device_id, std::size_t derivative_stage_budget);
+
+RccsdtForceResult rccsd_force_cuda(const core::System& system,
+                                   const hf::PhysicalReference& reference, const Problem& problem,
+                                   const SolverResult& cc_result, std::span<const double> eps_o,
+                                   std::span<const double> eps_v, std::size_t max_bytes,
+                                   int device_id, std::size_t derivative_stage_budget);
+
+RccsdtForceResult rccsdt_force_cuda(const core::System& system,
+                                    const integrals::ElectronInteractionSource& source,
+                                    const hf::PhysicalReference& reference, const Problem& problem,
+                                    const SolverResult& cc_result, std::span<const double> eps_o,
+                                    std::span<const double> eps_v, std::size_t max_bytes,
+                                    int device_id, std::size_t derivative_stage_budget,
+                                    double denominator_threshold = 1e-10);
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const hf::PhysicalReference& reference, const Problem& problem,

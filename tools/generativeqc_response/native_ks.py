@@ -11,11 +11,11 @@ import typing
 from time import perf_counter
 
 import numpy as np
+from generativeqc import rks_response as _rks_response
 from generativeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
 from generativeqc.fock import FockBuildSpec, FockTerm
 from generativeqc.ks import resolve_ks_method
 from generativeqc.profiles import canonical_hash
-from generativeqc.response_operator import CPKSResponseOperator, cpks_operator_identity
 from generativeqc.response_problem import ResponseUnsupported
 from generativeqc.response_xc import FixedDensityXCDerivativeKernel
 from generativeqc_compiler.dft.features import density_features, spin_densities
@@ -27,6 +27,8 @@ from tools.generativeqc_posthf.sources import NativeSource
 from .backends import NativeJKBackend, _checked_density
 from .spin_cuda import CudaSpinJKBackend
 from .uhf import UHFReferenceSnapshot, UKSResponseOperator, uks_operator_identity
+
+NativeRKSResponse = _rks_response.NativeRKSResponse
 
 
 class _NativeCudaJBackend(CudaSpinJKBackend):
@@ -408,36 +410,6 @@ class _NativeKSLease:
 
     def __del__(self) -> None:
         self.close()
-
-
-class NativeRKSResponse(_NativeKSLease, CPKSResponseOperator):
-    """Owned CPU/CUDA LDA/PBE RKS adapter for shared ``solve``/``solve_many``.
-
-    Construct with ``from_native`` after successful SCF. Keep the borrowed
-    batch and NativeAO open; this object owns its snapshot lease and integrals.
-    The exact native state/grid/provider identity gates every action and solve.
-    AO/MO transforms and Krylov remain on the host.
-    """
-
-    _spin_blocks = 1
-    _response_identity = staticmethod(cpks_operator_identity)
-
-    def induced_fock(
-        self, delta_density: typing.Any, *, transpose: bool = False
-    ) -> typing.Any:
-        """Apply the live native KS density-response map with lease validation."""
-        self.validate_current()
-        result = super().induced_fock(delta_density, transpose=transpose)
-        self.validate_current()
-        return result
-
-    def _base_action(
-        self, vector: typing.Any, *, transpose: bool = False
-    ) -> typing.Any:
-        self.validate_current()
-        result = super()._base_action(vector, transpose=transpose)
-        self.validate_current()
-        return result
 
 
 class NativeUKSResponse(_NativeKSLease, UKSResponseOperator):

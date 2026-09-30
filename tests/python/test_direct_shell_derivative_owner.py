@@ -68,6 +68,31 @@ def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
     assert "full_range[coordinates + coordinate]" not in body
 
 
+def test_generic_stationary_cuda_adopts_prepared_full_range_shell_source() -> None:
+    methods = _source("src/methods/dft_method.cpp")
+    api = _source("src/api/c_api_ks_snapshot.cpp")
+    snapshot = _source("python/generativeqc/_ks_snapshot.py")
+    stationary = _source("python/generativeqc/_stationary_cuda.py")
+
+    begin = methods.index("cuda_full_range_integral_derivatives(")
+    end = methods.index("generativeqc_status cuda_integral_gradient(", begin)
+    body = methods[begin:end]
+    assert "resident_final_density(" in body
+    assert "execute_prepared_cuda_direct_shell_full_range_derivatives_device(" in body
+    assert "range_strategy_" in body
+
+    assert "dft_cuda_full_range_integral_derivatives(" in api
+    assert "generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(" in api
+    assert "def cuda_full_range_derivatives(" in snapshot
+    assert "_native.STATUS_NOT_IMPLEMENTED" in snapshot
+
+    assert "full_range_derivative_route=(" in stationary
+    assert '"prepared-direct-shell" if native_shell_full_range' in stationary
+    assert "records -= ao_quartet_primitive_records" in stationary
+    assert "if native_shell_full_range" in stationary
+    assert "task_sources =" in stationary
+
+
 def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
     generated = _source("src/scf/cuda/direct_coulomb.cpp")
