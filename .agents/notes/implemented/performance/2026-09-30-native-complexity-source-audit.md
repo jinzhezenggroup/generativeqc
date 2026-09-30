@@ -1,4 +1,4 @@
-# Decision: native high-order source audit fails only proven rank-2 matrix chains
+# Decision: native high-order source audit fails only structural rank-2 matrix-chain matches
 
 Status: implemented
 Date: 2026-09-30
@@ -15,7 +15,7 @@ reintroduction but could not discover the same algebra elsewhere.
 
 Add a repository-wide native source audit over non-vendored `src/` code. The
 audit inventories leaf loop nests of depth four or greater and applies a
-conservative matrix-chain classifier. CI fails only when a high-order reduction
+conservative matrix-chain classifier. CI fails only when a pure-algebra high-order reduction
 writes a rank-2 target from at least three pairwise-indexed inputs spanning four
 loop indices and no three-/four-index source access is present.
 
