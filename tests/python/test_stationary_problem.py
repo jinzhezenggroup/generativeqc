@@ -583,7 +583,12 @@ def test_generated_fragments_reuse_cuda_planning_without_device_or_runtime() -> 
     for program in (generated.rhs, generated.partials):
         plan = plan_cuda(program, cuda_target_info("sm_80"))
         assert plan.peak_bytes > 0
-        assert plan.program.logical_hash == program.logical_hash
+        unreassociated = plan_cuda(
+            program,
+            cuda_target_info("sm_80"),
+            reassociate_contractions=False,
+        )
+        assert unreassociated.program is program
     # This is planning, NOT native/GPU execution qualification.
 
 
