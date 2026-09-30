@@ -1,0 +1,91 @@
+"""The atomic-measure lease must not call the older six-argument native ABI."""
+
+from __future__ import annotations
+
+import ctypes as ct
+import typing
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+from generativeqc import _ks_snapshot as snapshot
+
+
+def source(library: SimpleNamespace) -> SimpleNamespace:
+    return SimpleNamespace(
+        backend="cuda",
+        _library=library,
+        _batch=SimpleNamespace(_batch=17, _context=19),
+        _handle=23,
+        check_current=Mock(),
+    )
+
+
+def test_six_argument_resident_grid_abi_is_never_called() -> None:
+    old = Mock(side_effect=AssertionError("incompatible v1 ABI must not be called"))
+    state = source(SimpleNamespace(generativeqc_ks_snapshot_cuda_resident_grid_v1=old))
+    assert snapshot.NativeKsSnapshot.cuda_resident_grid(state) is None
+    old.assert_not_called()
+    state.check_current.assert_called_once_with()
+
+
+@pytest.mark.parametrize("status", [0, snapshot._native.STATUS_NOT_IMPLEMENTED, 1])
+@pytest.mark.parametrize("missing_raw", [False, True])
+def test_v2_publishes_all_pointers_and_propagates_status(
+    monkeypatch: pytest.MonkeyPatch, status: int, missing_raw: bool
+) -> None:
+    calls = []
+
+    def binding(
+        batch: int,
+        handle: int,
+        device: typing.Any,
+        points: typing.Any,
+        weights: typing.Any,
+        raw: typing.Any,
+        count: typing.Any,
+    ) -> int:
+        calls.append((batch, handle))
+        ct.cast(device, ct.POINTER(ct.c_int))[0] = 2
+        for destination, value in (
+            (points, 4096),
+            (weights, 8192),
+            (raw, 0 if missing_raw else 12288),
+        ):
+            ct.cast(destination, ct.POINTER(ct.c_void_p))[0] = value
+        ct.cast(count, ct.POINTER(ct.c_size_t))[0] = 31
+        return status
+
+    def check(library: typing.Any, result: int, **kwargs: typing.Any) -> None:
+        if result:
+            raise RuntimeError(f"native failure {result}")
+
+    monkeypatch.setattr(snapshot._native, "check", check)
+    old = Mock(side_effect=AssertionError("do not fall back to an incompatible ABI"))
+    state = source(
+        SimpleNamespace(
+            generativeqc_ks_snapshot_cuda_resident_grid_v1=old,
+            generativeqc_ks_snapshot_cuda_resident_grid_v2=binding,
+        )
+    )
+    if status == snapshot._native.STATUS_NOT_IMPLEMENTED:
+        assert snapshot.NativeKsSnapshot.cuda_resident_grid(state) is None
+    elif status:
+        with pytest.raises(RuntimeError, match="native failure"):
+            snapshot.NativeKsSnapshot.cuda_resident_grid(state)
+    elif missing_raw:
+        with pytest.raises(RuntimeError, match="invalid resident-grid lease"):
+            snapshot.NativeKsSnapshot.cuda_resident_grid(state)
+    else:
+        lease = snapshot.NativeKsSnapshot.cuda_resident_grid(state)
+        assert (
+            lease.device,
+            lease.points,
+            lease.weights,
+            lease.atomic_weights,
+            lease.point_count,
+        ) == (2, 4096, 8192, 12288, 31)
+        assert state.check_current.call_count == 2
+    assert calls == [(17, 23)]
+    assert len(binding.argtypes) == 7
+    old.assert_not_called()

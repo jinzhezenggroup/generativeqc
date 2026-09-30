@@ -510,7 +510,7 @@ generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
 
 // A private, token-checked stationary consumer. Publish all integral sources
 // together only after the current CUDA owner has completed successfully.
-generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v1(
+generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v2(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** points, const double** weights, const double** atomic_weights,
     std::size_t* point_count) {
