@@ -327,14 +327,19 @@ def aggregate_grid_xc_compiled_evidence(
             "grid/XC compiled region evidence requires exact stages; "
             f"missing={missing}, extra={extra}"
         )
+    if any(not isinstance(stages[name], GpuProfitability) for name in expected):
+        raise TypeError("grid/XC compiled region stages require GpuProfitability")
     compiled = {
         name: _compiled_profitability_fields(stages[name])
         for name in GRID_XC_COMPILED_REGION_STAGES
     }
 
     def maximum(field: str) -> int | None:
-        values = [row[field] for row in compiled.values() if row[field] is not None]
-        return max(values) if values else None
+        values = [row[field] for row in compiled.values()]
+        # A partial maximum cannot certify the whole region's resource pressure.
+        if any(value is None for value in values):
+            return None
+        return max(typing.cast("list[int]", values))
 
     occupancies = [row["compiled_occupancy_upper_bound"] for row in compiled.values()]
     occupancy = (
