@@ -432,6 +432,22 @@ void launch_bounded_shell_range_exchange_derivative(
       radial_operator, omega, exchange_coefficient);
 }
 
+void launch_bounded_shell_rsh_derivatives(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* source_forces, unsigned long long* cursor, double omega,
+    double coulomb_coefficient, double short_exchange_coefficient,
+    double long_exchange_coefficient) {
+  launch_bounded_direct_rsh_force_kernel(
+      unrestricted, worker_blocks, kBoundedDirectThreads, 0, stream, batch, screening,
+      shell_pair_bounds, shell_pair_density_bounds, pair_order, shell_pair_block_bounds,
+      system_density_bounds, class_state, schwarz_bounds, density, active, source_forces, cursor,
+      omega, coulomb_coefficient, short_exchange_coefficient, long_exchange_coefficient);
+}
+
 }  // namespace cuda_execution
 
 }  // namespace generativeqc::scf

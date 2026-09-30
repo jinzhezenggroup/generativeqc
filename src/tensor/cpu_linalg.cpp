@@ -857,6 +857,32 @@ void cpu_gemm(char a_trans, char b_trans, std::size_t m, std::size_t n, std::siz
   scalar_gemm(ta, tb, m, n, k, a, b, c, alpha, beta);
 }
 
+void cpu_congruence(char coefficient_transpose, std::size_t n, const double* coefficients,
+                    const double* matrix, double* result, double* workspace,
+                    const CpuLinalgPlan& plan) {
+  bool transposed = false;
+  if (coefficient_transpose == 'T' || coefficient_transpose == 't')
+    transposed = true;
+  else if (coefficient_transpose != 'N' && coefficient_transpose != 'n')
+    throw std::invalid_argument("CPU congruence transpose must be N or T");
+  validate_plan(plan);
+  if (!n) return;
+  checked_matrix_elements(n, n);
+  if (!coefficients || !matrix || !result || !workspace)
+    throw std::invalid_argument("CPU congruence received null storage");
+  if (workspace == coefficients || workspace == matrix || workspace == result ||
+      result == coefficients || result == matrix)
+    throw std::invalid_argument("CPU congruence requires non-aliasing input/output/workspace");
+
+  if (transposed) {
+    cpu_gemm('N', 'N', n, n, n, matrix, coefficients, workspace, 1.0, 0.0, plan);
+    cpu_gemm('T', 'N', n, n, n, coefficients, workspace, result, 1.0, 0.0, plan);
+  } else {
+    cpu_gemm('N', 'N', n, n, n, coefficients, matrix, workspace, 1.0, 0.0, plan);
+    cpu_gemm('N', 'T', n, n, n, workspace, coefficients, result, 1.0, 0.0, plan);
+  }
+}
+
 void cpu_gemv(char trans, std::size_t m, std::size_t n, const double* a, const double* x, double* y,
               double alpha, double beta, const CpuLinalgPlan& plan) {
   const bool transposed = gemv_transpose(trans);

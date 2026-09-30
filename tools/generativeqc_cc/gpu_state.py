@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 import numpy as np
+from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.equations import amplitude_specs
 from generativeqc_compiler.tensor import Program, add, divide, execute, input_tensor
 from generativeqc_compiler.tensor.cuda_plan import (
     INT_MAX,
@@ -21,8 +23,6 @@ from generativeqc_compiler.tensor.types import checked_size
 
 from tools.generativeqc_posthf.reference import ReferenceSnapshot, immutable
 
-from .doubles import build_ccsd_program
-from .equations import amplitude_specs
 from .solver import SolverOptions
 
 

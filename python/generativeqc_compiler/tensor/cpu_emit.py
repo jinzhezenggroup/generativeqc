@@ -10,8 +10,11 @@ import typing
 from fractions import Fraction
 from math import prod
 
+from .optimize import prepare_for_backend
+
 
 def emit_cpu(program: typing.Any, *, function_name: typing.Any) -> typing.Any:
+    program = prepare_for_backend(program, "cpu")
     if not re.fullmatch(r"[A-Za-z_]\w*", function_name, flags=re.ASCII):
         raise ValueError("invalid native CPU function name")
     nodes = program.live_nodes

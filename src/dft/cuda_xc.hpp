@@ -48,13 +48,17 @@ struct CudaXcLayout {
   double exchange_scale{1.0}, correlation_scale{1.0};
   bool response{};
   CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};
+  /** Full-grid points/weights are borrowed from an immutable MolecularGrid
+   * device owner instead of occupying this arena. */
+  bool borrowed_grid{};
 };
 
 CudaXcLayout cuda_xc_layout(const AoBasis& basis, const MolecularGrid& grid,
                             std::uint32_t functional, bool unrestricted,
                             std::size_t tile_points = 256,
                             CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64,
-                            double exchange_scale = 1.0, double correlation_scale = 1.0);
+                            double exchange_scale = 1.0, double correlation_scale = 1.0,
+                            bool borrow_resident_grid = false);
 
 /** Metadata-only counterpart of the same layout: does not construct a grid,
  * normalize basis data, initialize CUDA or allocate any numerical buffer. */
@@ -62,7 +66,8 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
                                   std::size_t points, std::uint32_t functional, bool unrestricted,
                                   std::size_t tile_points = 256, bool response = false,
                                   CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64,
-                                  double exchange_scale = 1.0, double correlation_scale = 1.0);
+                                  double exchange_scale = 1.0, double correlation_scale = 1.0,
+                                  bool borrow_resident_grid = false);
 
 struct CudaXcTransfers {
   std::uint64_t setup_h2d_bytes{}, output_d2h_bytes{}, synchronizations{}, evaluations{};
@@ -103,13 +108,15 @@ class CudaXcPlan {
   CudaXcPlan(const AoBasis& basis, const MolecularGrid& grid, std::uint32_t functional,
              bool unrestricted, std::size_t tile_points, void* arena, std::size_t arena_bytes,
              cudaStream_t stream, CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64,
-             double exchange_scale = 1.0, double correlation_scale = 1.0);
+             double exchange_scale = 1.0, double correlation_scale = 1.0,
+             bool borrow_resident_grid = false);
   /** Private explicit-source constructor for a validated native snapshot.
    * The caller proves packed basis/quadrature identity; setup copies them into
    * the same bounded arena used by SCF. No grid is regenerated for response. */
   CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_basis,
              const std::vector<double>& points, const std::vector<double>& weights, void* arena,
-             std::size_t arena_bytes, cudaStream_t stream);
+             std::size_t arena_bytes, cudaStream_t stream,
+             CudaMolecularGridView borrowed_grid = {});
   ~CudaXcPlan();
   CudaXcPlan(const CudaXcPlan&) = delete;
   CudaXcPlan& operator=(const CudaXcPlan&) = delete;
@@ -161,6 +168,7 @@ class CudaXcPlan {
   int device_{};
   void* arena_{};
   cudaStream_t stream_{};
+  std::shared_ptr<const void> grid_lifetime_;
   generativeqc::runtime::AsyncGeneration generations_;
   double *basis_{}, *points_{}, *weights_{}, *ao_{}, *work_{}, *features_{}, *coefficients_{},
       *point_totals_{}, *potential_{}, *totals_{}, *delta_features_{};

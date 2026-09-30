@@ -49,22 +49,24 @@ void device_pointer(const void* pointer, int device) {
 CudaXcLayout cuda_xc_layout(const AoBasis& basis, const MolecularGrid& grid,
                             std::uint32_t functional, bool unrestricted, std::size_t tile_points,
                             CudaXcAoPrecision ao_precision, double exchange_scale,
-                            double correlation_scale) {
+                            double correlation_scale, bool borrow_resident_grid) {
   // Equal dimensions alone cannot bind a grid to its current geometry/basis.
   const AoBasis grid_basis(grid.system());
   if (basis.nao != grid_basis.nao || basis.natom != grid_basis.natom ||
       basis.nprimitive != grid_basis.nprimitive || basis.packed != grid_basis.packed)
     throw std::invalid_argument("CUDA XC grid/basis identity mismatch");
+  if (borrow_resident_grid && !grid.cuda_view())
+    throw std::invalid_argument("CUDA XC requested a resident grid from a host-only owner");
   return cuda_xc_layout_shape(basis.natom, basis.nprimitive, basis.nao, grid.point_count(),
                               functional, unrestricted, tile_points, false, ao_precision,
-                              exchange_scale, correlation_scale);
+                              exchange_scale, correlation_scale, borrow_resident_grid);
 }
 
 CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std::size_t nao,
                                   std::size_t points, std::uint32_t functional, bool unrestricted,
                                   std::size_t tile_points, bool response,
                                   CudaXcAoPrecision ao_precision, double exchange_scale,
-                                  double correlation_scale) {
+                                  double correlation_scale, bool borrow_resident_grid) {
   const bool generated_split_hybrid = generated::split_hybrid_registered(functional);
   const bool supported_functional = functional <= 4U || generated_split_hybrid;
   if (!atoms || !primitives || !nao || !points || !tile_points || tile_points > INT_MAX ||
@@ -111,7 +113,10 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
                    correlation_scale,
                    response,
                    ao_precision};
-  std::size_t elements = size_add(out.packed_elements, size_mul(4, out.npoint, overflow), overflow);
+  out.borrowed_grid = borrow_resident_grid;
+  std::size_t elements = out.packed_elements;
+  if (!out.borrowed_grid)
+    elements = size_add(elements, size_mul(4, out.npoint, overflow), overflow);
   const auto panel = size_mul(out.tile_points, out.nao, overflow);
   const auto panel_terms =
       size_add(out.jets, size_mul(out.spins, out.work_jets, overflow), overflow);
@@ -132,18 +137,20 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
 CudaXcPlan::CudaXcPlan(const AoBasis& basis, const MolecularGrid& grid, std::uint32_t functional,
                        bool unrestricted, std::size_t tile_points, void* arena,
                        std::size_t arena_bytes, cudaStream_t stream, CudaXcAoPrecision ao_precision,
-                       double exchange_scale, double correlation_scale)
+                       double exchange_scale, double correlation_scale, bool borrow_resident_grid)
     : CudaXcPlan(cuda_xc_layout(basis, grid, functional, unrestricted, tile_points, ao_precision,
-                                exchange_scale, correlation_scale),
-                 basis.packed, grid.points(), grid.weights(), arena, arena_bytes, stream) {}
+                                exchange_scale, correlation_scale, borrow_resident_grid),
+                 basis.packed, grid.points(), grid.weights(), arena, arena_bytes, stream,
+                 borrow_resident_grid ? grid.cuda_view() : CudaMolecularGridView{}) {}
 
 CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_basis,
                        const std::vector<double>& points, const std::vector<double>& weights,
-                       void* arena, std::size_t arena_bytes, cudaStream_t stream)
+                       void* arena, std::size_t arena_bytes, cudaStream_t stream,
+                       CudaMolecularGridView borrowed_grid)
     : layout_(cuda_xc_layout_shape(layout.natom, layout.nprimitive, layout.nao, layout.npoint,
                                    layout.functional, layout.spins == 2, layout.tile_points,
                                    layout.response, layout.ao_precision, layout.exchange_scale,
-                                   layout.correlation_scale)),
+                                   layout.correlation_scale, layout.borrowed_grid)),
       point_launcher_(cuda_xc_detail::resolve_point_launcher(layout_.functional, layout_.response)),
       arena_(arena),
       stream_(stream) {
@@ -152,11 +159,21 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   if (packed_basis.size() != layout_.packed_elements || points.size() != 3 * layout_.npoint ||
       weights.size() != layout_.npoint)
     throw std::invalid_argument("CUDA XC explicit source shape mismatch");
+  if (layout_.borrowed_grid != static_cast<bool>(borrowed_grid))
+    throw std::invalid_argument("CUDA XC resident-grid layout/source mismatch");
   if (arena_bytes < layout_.device_bytes ||
       reinterpret_cast<std::uintptr_t>(arena) % alignof(double))
     throw std::invalid_argument("CUDA XC arena is too small or misaligned");
   check(cudaGetDevice(&device_));
   device_pointer(arena, device_);
+  if (borrowed_grid) {
+    if (borrowed_grid.device != device_ || borrowed_grid.point_count != layout_.npoint ||
+        borrowed_grid.device_bytes != cuda_resident_grid_bytes(layout_.npoint))
+      throw std::invalid_argument("CUDA XC resident grid has incompatible device or shape");
+    device_pointer(borrowed_grid.points, device_);
+    device_pointer(borrowed_grid.weights, device_);
+    grid_lifetime_ = borrowed_grid.lifetime;
+  }
   const auto& l = layout_;
   generativeqc::runtime::BorrowedWorkspace arena_view(arena, arena_bytes);
   generativeqc::runtime::WorkspaceLayout workspace;
@@ -167,8 +184,16 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
     return arena_view.view<double>(offset, count).data;
   };
   basis_ = take_double(l.packed_elements);
-  points_ = take_double(size_mul(3, l.npoint, "CUDA XC workspace layout overflow"));
-  weights_ = take_double(l.npoint);
+  double *owned_points = nullptr, *owned_weights = nullptr;
+  if (l.borrowed_grid) {
+    points_ = const_cast<double*>(borrowed_grid.points);
+    weights_ = const_cast<double*>(borrowed_grid.weights);
+  } else {
+    owned_points = take_double(size_mul(3, l.npoint, "CUDA XC workspace layout overflow"));
+    owned_weights = take_double(l.npoint);
+    points_ = owned_points;
+    weights_ = owned_weights;
+  }
   const auto panel = size_mul(l.tile_points, l.nao, "CUDA XC workspace layout overflow");
   ao_ = take_double(size_mul(l.jets, panel, "CUDA XC workspace layout overflow"));
   work_ = take_double(size_mul(size_mul(l.spins, l.work_jets, "CUDA XC workspace layout overflow"),
@@ -193,20 +218,25 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   try {
     check(cudaMemcpyAsync(basis_, packed_basis.data(), l.packed_elements * sizeof(double),
                           cudaMemcpyHostToDevice, stream_));
-    check(cudaMemcpyAsync(points_, points.data(), 3 * l.npoint * sizeof(double),
-                          cudaMemcpyHostToDevice, stream_));
-    check(cudaMemcpyAsync(weights_, weights.data(), l.npoint * sizeof(double),
-                          cudaMemcpyHostToDevice, stream_));
+    if (!l.borrowed_grid) {
+      check(cudaMemcpyAsync(owned_points, points.data(), 3 * l.npoint * sizeof(double),
+                            cudaMemcpyHostToDevice, stream_));
+      check(cudaMemcpyAsync(owned_weights, weights.data(), l.npoint * sizeof(double),
+                            cudaMemcpyHostToDevice, stream_));
+    }
     // Complete setup before releasing borrowed host quadrature/basis inputs.
     check(cudaStreamSynchronize(stream_));
   } catch (...) {
     cudaStreamSynchronize(stream_);
     throw;
   }
+  const auto setup_elements =
+      l.borrowed_grid
+          ? l.packed_elements
+          : size_add(l.packed_elements, size_mul(4, l.npoint, "CUDA XC transfer size overflow"),
+                     "CUDA XC transfer size overflow");
   transfers_.setup_h2d_bytes =
-      size_mul(size_add(l.packed_elements, size_mul(4, l.npoint, "CUDA XC transfer size overflow"),
-                        "CUDA XC transfer size overflow"),
-               sizeof(double), "CUDA XC transfer size overflow");
+      size_mul(setup_elements, sizeof(double), "CUDA XC transfer size overflow");
   transfers_.synchronizations = 1;
 }
 

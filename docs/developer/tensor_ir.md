@@ -259,8 +259,18 @@ or imply native/GPU factorization or a complete molecular force capability.
 and a final duplicate/dead cleanup, returning a new program with source-hash
 provenance. It never overwrites the original DAG. CSE includes spaces, ranges,
 spins, dtype, symmetry, representation, input identity/role, and differentiability.
-No floating-point reassociation, contraction-tree search, or implied symmetry
-rewrite is performed.
+Default optimization still performs no floating-point reassociation or implied
+symmetry rewrite.  Symbolic complexity analysis is available through
+`analyze_complexity(program)`, which reports shape-derived storage/work orders
+such as `O(N^4)` without assuming sparsity, density fitting, or low rank.
+`reassociate_einsums(program)` and
+`optimize(..., reassociate_contractions=True)` are explicit opt-ins: bounded
+n-ary einsums are searched for a binary tree with a strictly lower symbolic
+degree, then existing GEMM recognition can lower eligible binary contractions.
+The opt-in is required because an equivalent contraction tree changes
+floating-point reduction order. Programs carrying an explicit
+`precision_execution` contract currently fail closed under reassociation until
+intermediate-node precision propagation is defined.
 
 Constant folding is deliberately limited to scalar rational add/multiply/divide
 subgraphs. The replacement must reproduce the original dtype result bit for

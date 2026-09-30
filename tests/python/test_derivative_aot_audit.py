@@ -82,4 +82,27 @@ def test_audit_schema_keeps_radial_identity_and_provenance(
     )
     assert result["range"]["radials"] == [radial.to_payload()]
     assert result["range"]["programs"][0]["identity"] == "program-id"
+    assert result["cuda_shell"] is None
     assert result["package_library"] is None
+
+
+def test_repository_audit_reports_cuda_shell_package_inventory() -> None:
+    root = Path(__file__).resolve().parents[2]
+    result = audit.audit(
+        radial_manifest=root / "manifests/derivative_aot_radials.json",
+        production_manifest=(
+            root / "python/generativeqc_compiler/integral/production_shell_classes.json"
+        ),
+    )
+    cuda = result["cuda_shell"]
+    assert cuda is not None
+    assert cuda["target"] == "sm_120"
+    assert cuda["generated_header_bytes"] > 0
+    assert len(cuda["generated_header_sha256"]) == 64
+    packages = cuda["packages"]
+    assert packages
+    assert {
+        package["scientific_identity_payload"]["radial"]["family"]
+        for package in packages
+    } == {"full_range", "short_range", "long_range"}
+    assert cuda["provenance"]["production_manifest_sha256"]

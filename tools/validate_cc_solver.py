@@ -56,6 +56,7 @@ def run(output: typing.Any) -> typing.Any:
         str(p.relative_to(ROOT)).replace("\\", "/"): file_hash(p)
         for folder in (
             "tools/generativeqc_cc",
+            "python/generativeqc_compiler/cc",
             "python/generativeqc_compiler/tensor",
             "tools/generativeqc_posthf",
         )

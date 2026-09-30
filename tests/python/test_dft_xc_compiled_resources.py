@@ -233,9 +233,7 @@ def test_point_specialization_tracks_feature_width_not_functional_code(
     assert evidence.profitability.spill_bytes == spill_bytes
 
 
-@pytest.mark.parametrize(
-    "inactive", ["1, false", "4, true", "40, false", "5, false"]
-)
+@pytest.mark.parametrize("inactive", ["1, false", "4, true", "40, false", "5, false"])
 def test_missing_pbe_width_cannot_be_replaced_by_an_inactive_kernel(
     inactive: str,
 ) -> None:

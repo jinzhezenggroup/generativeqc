@@ -8,6 +8,7 @@ import pytest
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.tensor import PackedLayout, execute
 from generativeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 from tools.generativeqc_cc.gradient_equations import build_hamiltonian_programs
 from tools.generativeqc_cc.lambda_equations import build_lambda_programs
@@ -105,17 +106,19 @@ def test_production_shape_response_graphs_are_native_cpu_lowerable() -> None:
 def test_qualified_nh3_triples_tile_uses_explicit_extended_node_budget() -> None:
     program = build_tile_triples_vjp(5, 3, vir_chunk=(2, 3)).program
     assert 4096 < len(program.live_nodes) <= 8192
+    prepared = prepare_for_backend(program, "cpu")
+    assert len(prepared.live_nodes) <= 4096
     with pytest.raises(ValueError, match="node budget"):
         emit_cpu(
             program,
             max_bytes=2 << 30,
             max_work=100_000_000_000,
+            max_nodes=len(prepared.live_nodes) - 1,
         )
     source, resources = emit_cpu(
         program,
         max_bytes=2 << 30,
         max_work=100_000_000_000,
-        max_nodes=8192,
     )
     assert "tensor_cpu" in source
     assert resources["required_bytes"] > 0

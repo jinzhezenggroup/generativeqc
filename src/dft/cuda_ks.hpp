@@ -22,7 +22,7 @@ namespace generativeqc::dft {
  * overhead and host quadrature preparation remain distinct from the native
  * iteration arena. No independent user-level memory allowance is introduced. */
 struct CudaKsResources {
-  std::size_t state_device_bytes{}, xc_device_bytes{}, provider_device_bytes{};
+  std::size_t state_device_bytes{}, xc_device_bytes{}, grid_device_bytes{}, provider_device_bytes{};
   std::size_t retained_host_numeric_bytes{};
 };
 
@@ -53,6 +53,10 @@ struct CudaKsTransfers {
   std::uint64_t execution_region_fallbacks{};
   /** Explicit host-unfused XC staging, separate from ordinary setup/seed movement. */
   std::uint64_t xc_host_d2h_bytes{}, xc_host_h2d_bytes{}, xc_host_synchronizations{};
+  /** Full-range density-fitted exchange provenance. Dense includes the first
+   * cold/warm-seed build where no canonical factor is available; occupied
+   * counts only builds whose Cocc generated the exact current device density. */
+  std::uint64_t fitted_dense_exchange_builds{}, fitted_occupied_exchange_builds{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The
@@ -79,6 +83,26 @@ struct CudaKsResidentDensityBinding {
   }
 };
 
+/** Borrowed total stationary D/W for one-electron force consumers.
+ * W is formed from the exact accepted final C/epsilon/occupation frame on the
+ * KS stream and published only after the final-state validation drain. For UKS,
+ * density is the alpha+beta total. The storage is phase-local scratch owned by
+ * CudaKsPlan and is valid only while the exact token remains current. */
+struct CudaKsResidentStationaryWeightsBinding {
+  int device_id{-1};
+  const double* density{};
+  const double* weighted_density{};
+  std::size_t matrix_elements{};
+  unsigned spins{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && density != nullptr && weighted_density != nullptr &&
+           matrix_elements != 0 && (spins == 1 || spins == 2) && owner != 0 && solve_epoch != 0 &&
+           generation != 0;
+  }
+};
+
 /** Borrowed full-grid total rho/grad-rho retained by the device-fused
  * nonlocal KS owner for its successful final generation. These arrays are
  * read-only inputs for downstream resident nonlocal force composition; the
@@ -89,11 +113,14 @@ struct CudaKsResidentNonlocalFeaturesBinding {
   const double* density{};
   const double* gradient{};
   std::size_t point_count{};
+  /** Producer stream that owns the final feature generation. Downstream
+   * cross-stream copies must order against this stream before source reuse. */
+  void* stream{};
   std::uint64_t owner{}, solve_epoch{}, generation{};
 
   explicit operator bool() const noexcept {
     return device_id >= 0 && density != nullptr && gradient != nullptr && point_count != 0 &&
-           owner != 0 && solve_epoch != 0 && generation != 0;
+           stream != nullptr && owner != 0 && solve_epoch != 0 && generation != 0;
   }
 };
 
@@ -157,6 +184,11 @@ class CudaKsPlan {
   generativeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
                                              CudaKsResidentDensityBinding& binding,
                                              std::string& detail) const;
+  /** Borrow total stationary D/W already staged by a successful weighted
+   * final-state read. This performs no CUDA launch, transfer, or synchronization. */
+  generativeqc_status resident_final_stationary_weights(
+      const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+      std::string& detail) const;
   /** Borrow final total rho/grad-rho already produced by device-fused
    * nonlocal XC. The binding is available only for the exact current token
    * and performs no transfer, synchronization or numerical launch. */

@@ -7,6 +7,7 @@ or density source look like the same candidate.
 
 from __future__ import annotations
 
+import collections.abc
 import typing
 from dataclasses import asdict, dataclass, replace
 
@@ -300,6 +301,95 @@ def grid_xc_domain_identity(shape: GridXcCandidateShape) -> str:
     )
 
 
+GRID_XC_COMPILED_REGION_STAGES = (
+    "ao_collocation",
+    "density_features",
+    "xc_expression",
+    "vxc_contraction",
+)
+
+
+def aggregate_grid_xc_compiled_evidence(
+    stages: collections.abc.Mapping[str, GpuProfitability],
+) -> GpuProfitability:
+    """Combine complete device-fused stage pressure into one region record.
+
+    Every native stage must be present. This unbound pressure summary is
+    not a substitute for the source-bound native evidence used by candidates. Kernel pressure uses the worst reported value;
+    occupancy uses the most constrained stage. Artifact bytes and compile time
+    are deliberately left unset because several stages may share one native
+    library and summing per-stage values would double-count that artifact.
+    """
+
+    if not isinstance(stages, collections.abc.Mapping):
+        raise TypeError("grid/XC compiled region evidence requires a stage mapping")
+    expected = set(GRID_XC_COMPILED_REGION_STAGES)
+    actual = set(stages)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise ValueError(
+            "grid/XC compiled region evidence requires exact stages; "
+            f"missing={missing}, extra={extra}"
+        )
+    if any(not isinstance(stages[name], GpuProfitability) for name in expected):
+        raise TypeError("grid/XC compiled region stages require GpuProfitability")
+    compiled = {
+        name: _compiled_fact_fields(stages[name])
+        for name in GRID_XC_COMPILED_REGION_STAGES
+    }
+
+    def maximum(field: str) -> int | None:
+        values = [row[field] for row in compiled.values()]
+        # A partial maximum cannot certify the whole region's resource pressure.
+        if any(value is None for value in values):
+            return None
+        return max(typing.cast("list[int]", values))
+
+    occupancies = [row["compiled_occupancy_upper_bound"] for row in compiled.values()]
+    occupancy = (
+        None
+        if any(value is None for value in occupancies)
+        else min(typing.cast("list[float]", occupancies))
+    )
+    local_values = [row["local_bytes"] for row in compiled.values()]
+    local_bytes = (
+        None
+        if any(value is None for value in local_values)
+        else max(typing.cast("list[int]", local_values))
+    )
+    return GpuProfitability(
+        compiled_registers_per_thread=maximum("compiled_registers_per_thread"),
+        spill_store_bytes=maximum("spill_store_bytes"),
+        spill_load_bytes=maximum("spill_load_bytes"),
+        local_bytes=local_bytes,
+        shared_bytes=maximum("shared_bytes"),
+        compiled_occupancy_upper_bound=occupancy,
+    )
+
+
+def _compiled_fact_fields(
+    evidence: GpuProfitability | None,
+) -> dict[str, typing.Any]:
+    """Validate compiled GPU evidence without duplicating static/endpoint facts."""
+
+    if evidence is None:
+        return {}
+    if not isinstance(evidence, GpuProfitability):
+        raise TypeError("grid/XC compiled evidence requires GpuProfitability")
+    payload = evidence.to_payload()
+    static = typing.cast("dict[str, typing.Any]", payload["static"])
+    compiled = typing.cast("dict[str, typing.Any]", payload["compiled"])
+    if (
+        any(value is not None for value in static.values())
+        or payload["endpoint_seconds"] is not None
+    ):
+        raise ValueError(
+            "grid/XC compiled evidence must contain only compiled GPU profitability facts"
+        )
+    return dict(compiled)
+
+
 def _compiled_profitability_fields(
     evidence: GridXcCompiledRegionEvidence | None,
     *,
@@ -334,8 +424,7 @@ def _compiled_profitability_fields(
         or evidence.source_identity != scientific.source_identity
     ):
         raise ValueError("compiled grid/XC evidence target/source identity differs")
-    payload = evidence.profitability.to_payload()
-    return typing.cast("dict[str, typing.Any]", payload["compiled"])
+    return _compiled_fact_fields(evidence.profitability)
 
 
 @dataclass(frozen=True)
@@ -357,6 +446,12 @@ class GridXcScheduleCandidate:
             raise TypeError("grid/XC schedule candidate requires a typed schedule")
         if not isinstance(self.shape, GridXcCandidateShape):
             raise TypeError("grid/XC schedule candidate requires a candidate shape")
+        if self.compiled_evidence is not None and not isinstance(
+            self.compiled_evidence, GridXcCompiledRegionEvidence
+        ):
+            raise TypeError(
+                "grid/XC compiled evidence requires GridXcCompiledRegionEvidence"
+            )
         if self.compiled_evidence is not None and self.schedule.name != "device_fused":
             raise ValueError(
                 "compiled grid/XC region evidence belongs to device_fused only"

@@ -10,6 +10,8 @@
 
 namespace generativeqc::scf {
 
+struct CudaDirectJkPlan;
+
 /** Explicit staging boundary of the standalone generic gradient operation. */
 struct OneElectronGradientResources {
   std::size_t device_bytes{}, host_numeric_bytes{}, host_to_device_bytes{}, device_to_host_bytes{};
@@ -35,10 +37,24 @@ generativeqc_status execute_cuda_one_electron_gradient(
 
 /** Evaluate the stationary hcore and overlap/Pulay sources under one prepared
  * topology/metadata upload and one stream drain. The two scientific outputs
- * remain separate: hcore uses D for T/V, while Pulay uses -W for S. */
+ * remain separate: hcore uses D for T/V, while Pulay uses -W for S.
+ * Prepared native callers may pass a matched pair of resident device pointers
+ * with empty host spans; those weights are borrowed and never copied H2D. */
 generativeqc_status execute_cuda_stationary_one_electron_pair(
     int device_id, const core::System& system, std::span<const double> density,
     std::span<const double> weighted_density, unsigned schedule, std::size_t maximum_bytes,
+    std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    OneElectronGradientResources* resources = nullptr, const double* resident_density = nullptr,
+    const double* resident_weighted_density = nullptr);
+
+/** Evaluate stationary hcore/Pulay by borrowing a derivative-capable Direct
+ * owner's normalized device metadata, ordinary stream and force scratch.
+ * The prepared path performs no allocation, packing or H2D transfer. It uses
+ * the resident shell-pair schedule and copies only the two 3*Natom results to
+ * host before one stream drain. The Direct owner must outlive this call. */
+generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
+    CudaDirectJkPlan* source, const double* resident_density,
+    const double* resident_weighted_density, std::size_t matrix_elements, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
     OneElectronGradientResources* resources = nullptr);
 
