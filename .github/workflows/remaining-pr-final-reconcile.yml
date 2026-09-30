@@ -1,0 +1,126 @@
+name: Reconcile remaining PR heads
+on:
+  push:
+    branches: [ci/remaining-pr-repair-20260930-astra]
+    paths: [.github/workflows/remaining-pr-final-reconcile.yml, repair-scripts/resolve_1573.py]
+permissions:
+  contents: write
+jobs:
+  wb-stack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: '0.10.7'
+          python-version: '3.11'
+          enable-cache: false
+      - name: Reconcile verified parent ancestry without losing stage-specific fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name njzjz-bot
+          git config user.email 48687836+njzjz-bot@users.noreply.github.com
+          uv venv /tmp/repair-venv
+          uv pip install --python /tmp/repair-venv/bin/python numpy pytest
+          parent=27894055553259e87607acb733280464b4f21d81
+          for entry in '1612 0229240c1bc849eaece30cb1626da8993c697a69' '1613 4ab2fd038dd0d146fd2b607e57043fb97476b98e'; do
+            read -r number head <<< "$entry"
+            git checkout --detach "$head"
+            git merge --no-commit --no-ff "$parent" || {
+              conflicts="$(git diff --name-only --diff-filter=U)"
+              test -n "$conflicts"
+              while IFS= read -r file; do
+                case "$file" in
+                  tests/python/test_stationary_nonlocal_timing.py|tests/python/test_grid_view_publication.py|tests/python/test_stationary_cuda_merge_boundary.py)
+                    git checkout --ours -- "$file"; git add "$file" ;;
+                  *) echo "Unexpected conflict: $file"; exit 1 ;;
+                esac
+              done <<< "$conflicts"
+            }
+            git diff --check
+            PYTHONPATH=python /tmp/repair-venv/bin/python -m pytest -q --tb=short tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py tests/python/test_dft_mp_v1_capacity.py tests/python/test_stationary_resident_nonlocal_join.py
+            git commit -m "merge: retain verified parent repairs with stage-specific residency fixtures"
+            git merge-base --is-ancestor "$head" HEAD
+            git merge-base --is-ancestor "$parent" HEAD
+            auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push origin "HEAD:refs/heads/ci/restacked-wb-${number}-20260930"
+            parent="$(git rev-parse HEAD)"
+            echo "VERIFIED_PR=$number VERIFIED_HEAD=$parent"
+          done
+  shell-join:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: '0.10.7'
+          python-version: '3.11'
+          enable-cache: false
+      - name: Apply reviewed semantic conflict resolution
+        run: |
+          set -euo pipefail
+          cp repair-scripts/resolve_1573.py /tmp/resolve_1573.py
+          test "$(git rev-parse origin/perf/1477-stationary-fullrange-shell-join)" = e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+          git config user.name njzjz-bot
+          git config user.email 48687836+njzjz-bot@users.noreply.github.com
+          git checkout --detach e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+          git merge --no-commit --no-ff c8886146a77a115681eb5b90ef6c11cef022fdea || {
+            test "$(git diff --name-only --diff-filter=U | wc -l)" = 7
+          }
+          python /tmp/resolve_1573.py .
+          uv venv /tmp/repair-venv
+          uv pip install --python /tmp/repair-venv/bin/python numpy pytest ruff==0.16.9 clang-format==23.1.1
+          /tmp/repair-venv/bin/ruff format python/generativeqc/_stationary_cuda.py tests/python/test_direct_shell_derivative_owner.py tests/python/test_stationary_geometry_reset.py
+          /tmp/repair-venv/bin/ruff check python/generativeqc/_stationary_cuda.py tests/python/test_direct_shell_derivative_owner.py tests/python/test_stationary_geometry_reset.py
+          /tmp/repair-venv/bin/clang-format -i src/api/c_api_ks_snapshot.cpp src/api/ks_snapshot.hpp src/methods/dft_method.cpp src/dft/stationary_gradient_cuda.cuh
+          python - <<'PY'
+          import ast, hashlib, re
+          from pathlib import Path
+          source=Path('python/generativeqc/_stationary_cuda.py').read_text()
+          owner=next(n for n in ast.parse(source).body if isinstance(n,ast.FunctionDef) and n.name=='_complete_rks_cuda_gradient_diagnostic')
+          contracts=[('STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256','endpoint_owner_sha256',hashlib.sha256(ast.get_source_segment(source,owner).encode()).hexdigest()),('NATIVE_STATIONARY_HEADER_CONTRACT_SHA256','native_header_sha256',hashlib.sha256(Path('src/dft/stationary_gradient_cuda.cuh').read_bytes().replace(b'\r\n',b'\n')).hexdigest())]
+          for key,label,value in contracts:
+              p=Path('tools/dft_mp_v1/qualify_capacity.py');text=p.read_text()
+              text,count=re.subn(r'('+key+r' = \(\n    ")[0-9a-f]{64}',lambda m:m.group(1)+value,text)
+              assert count==1; p.write_text(text)
+              p=Path('tests/python/test_dft_mp_v1_capacity.py');text=p.read_text()
+              text,count=re.subn(r'("'+label+r'": \(\n            ")[0-9a-f]{64}',lambda m:m.group(1)+value,text)
+              assert count==1;p.write_text(text)
+              print('REVIEWED_CONTRACT',key,value)
+          note=Path('.agents/notes/implemented/compatibility/2026-09-30-shell-source-merge-reconciliation.md')
+          note.parent.mkdir(parents=True,exist_ok=True)
+          note.write_text('''# Decision: retain one stationary shell-source reduction\n\nStatus: implemented\nDate: 2026-09-30\n\n## Problem\nPR #1573 and the landed full-range producer overlap in the ordinary stationary driver. Combining source seeding with the older host addition would count J/K twice. Resident nonlocal and geometry-only-reset additions must also survive reconciliation.\n\n## Decision and invariants\nUse the checked, one-shot source-seed join and the existing final device reduction. Retain the published full-range compatibility producer, resident density and nonlocal seed APIs. Do not reconstruct exchange coefficients or integral mathematics. Preserve missing-capability/NOT_IMPLEMENTED fallback, token checks, bounded work admission, and failure isolation. A geometry-only reset closes the source-seed gate; only a full density reset opens it.\n\n## Evidence\nRun the prepared-shell adapter/driver tests, native seed probe, direct-owner guards, geometry reset, bounded executor, merge-boundary and all capacity mutation gates. Update only the inspected endpoint-owner and whole-native-header fingerprints; all numerical limits and individual source-block contracts remain unchanged. No NVIDIA numerical or performance qualification is claimed.\n\n## References\nPR #1573; issues #1477 and #1423.\n''')
+          PY
+          git add python/generativeqc/_stationary_cuda.py src/api/c_api_ks_snapshot.cpp src/api/ks_snapshot.hpp src/dft/stationary_gradient_cuda.cuh src/methods/dft_method.cpp tests/python/test_dft_mp_v1_capacity.py tools/dft_mp_v1/qualify_capacity.py tests/python/test_direct_shell_derivative_owner.py tests/python/test_stationary_geometry_reset.py .agents/notes/implemented/compatibility/2026-09-30-shell-source-merge-reconciliation.md
+          test -z "$(git diff --name-only --diff-filter=U)"
+          git diff --cached --check
+      - name: Validate joined source routing and resource contracts
+        env:
+          PYTHONPATH: python
+        run: |
+          set -euo pipefail
+          /tmp/repair-venv/bin/python -m pytest -q --tb=short tests/python/test_stationary_shell_cuda.py tests/python/test_direct_shell_derivative_owner.py tests/python/test_stationary_geometry_reset.py tests/python/test_stationary_bounded_task_executor.py tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_dft_mp_v1_capacity.py
+          /tmp/repair-venv/bin/python tools/check_compiler_structure.py
+          /tmp/repair-venv/bin/python tools/check_scf_structure.py
+          /tmp/repair-venv/bin/python tools/check_electronic_structure_boundaries.py
+      - name: Commit verified merge on a staging ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/perf/1477-stationary-fullrange-shell-join | cut -f1)" = e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+          git commit -m 'merge: reconcile prepared shell source seeding with resident master owners'
+          git merge-base --is-ancestor e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4 HEAD
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push origin HEAD:refs/heads/ci/verified-shell-1573-20260930
+          echo "VERIFIED_PR=1573 VERIFIED_HEAD=$(git rev-parse HEAD)"
