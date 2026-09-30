@@ -506,6 +506,32 @@ class PrecisionProvenance(ctypes.Structure):
     ]
 
 
+class IncrementalDirectJkDiagnostic(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("policy_version", ctypes.c_uint32),
+        ("requested", ctypes.c_int32),
+        ("active", ctypes.c_int32),
+        ("quartet_work_counters_valid", ctypes.c_int32),
+        ("anchor_full_builds", ctypes.c_uint64),
+        ("delta_builds", ctypes.c_uint64),
+        ("periodic_rebuilds", ctypes.c_uint64),
+        ("bypass_full_builds", ctypes.c_uint64),
+        ("post_scf_full_builds", ctypes.c_uint64),
+        ("anchor_updates", ctypes.c_uint64),
+        ("max_abs_delta_density", ctypes.c_double),
+        ("full_candidate_shell_quartets", ctypes.c_uint64),
+        ("full_rejected_shell_quartets", ctypes.c_uint64),
+        ("full_admitted_shell_quartets", ctypes.c_uint64),
+        ("full_admitted_quartet_tiles", ctypes.c_uint64),
+        ("delta_candidate_shell_quartets", ctypes.c_uint64),
+        ("delta_rejected_shell_quartets", ctypes.c_uint64),
+        ("delta_admitted_shell_quartets", ctypes.c_uint64),
+        ("delta_admitted_quartet_tiles", ctypes.c_uint64),
+    ]
+
+
 class PrecisionWorkDetail(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -1049,6 +1075,23 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         getter = getattr(library, name)
         getter.argtypes = [*arguments, ctypes.POINTER(PrecisionProvenance)]
         getter.restype = ctypes.c_int
+    for name, arguments in (
+        (
+            "generativeqc_calculation_get_incremental_direct_jk_diagnostic",
+            [ctypes.c_void_p],
+        ),
+        (
+            "generativeqc_batch_get_incremental_direct_jk_diagnostic",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+    ):
+        getter = getattr(library, name, None)
+        if getter is not None:
+            getter.argtypes = [
+                *arguments,
+                ctypes.POINTER(IncrementalDirectJkDiagnostic),
+            ]
+            getter.restype = ctypes.c_int
     for name, arguments in (
         ("generativeqc_calculation_get_precision_work", [ctypes.c_void_p]),
         ("generativeqc_batch_get_precision_work", [ctypes.c_void_p, ctypes.c_uint32]),

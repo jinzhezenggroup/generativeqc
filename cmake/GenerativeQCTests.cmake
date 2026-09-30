@@ -24,6 +24,9 @@ macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_hf_resource_layout_tests tests/native/test_hf_resource_layout.cpp)
+    generativeqc_native_test(generativeqc_incremental_direct_jk_cuda_tests
+                       tests/native/test_incremental_direct_jk_cuda.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_mean_field_setup_cuda_tests tests/native/test_mean_field_setup_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_cuda_quadrature_tests tests/native/test_cuda_quadrature.cpp
