@@ -1102,6 +1102,47 @@ class Calculator:
             ),
         }
 
+    def _incremental_direct_jk_diagnostic(
+        self, calculation: ctypes.c_void_p, index: int | None = None
+    ) -> dict | None:
+        name = (
+            "generativeqc_calculation_get_incremental_direct_jk_diagnostic"
+            if index is None
+            else "generativeqc_batch_get_incremental_direct_jk_diagnostic"
+        )
+        getter = getattr(self._library, name, None)
+        if getter is None:
+            return None
+        value = _native.IncrementalDirectJkDiagnostic(
+            ctypes.sizeof(_native.IncrementalDirectJkDiagnostic), _native.ABI_VERSION
+        )
+        arguments = (calculation,) if index is None else (calculation, index)
+        status = getter(*arguments, ctypes.byref(value))
+        if status == _native.STATUS_PRECISION_UNAVAILABLE:
+            return None
+        _native.check(self._library, status)
+        return {
+            "policy_version": value.policy_version,
+            "requested": bool(value.requested),
+            "active": bool(value.active),
+            "quartet_work_counters_valid": bool(value.quartet_work_counters_valid),
+            "anchor_full_builds": value.anchor_full_builds,
+            "delta_builds": value.delta_builds,
+            "periodic_rebuilds": value.periodic_rebuilds,
+            "bypass_full_builds": value.bypass_full_builds,
+            "post_scf_full_builds": value.post_scf_full_builds,
+            "anchor_updates": value.anchor_updates,
+            "max_abs_delta_density": value.max_abs_delta_density,
+            "full_candidate_shell_quartets": value.full_candidate_shell_quartets,
+            "full_rejected_shell_quartets": value.full_rejected_shell_quartets,
+            "full_admitted_shell_quartets": value.full_admitted_shell_quartets,
+            "full_admitted_quartet_tiles": value.full_admitted_quartet_tiles,
+            "delta_candidate_shell_quartets": value.delta_candidate_shell_quartets,
+            "delta_rejected_shell_quartets": value.delta_rejected_shell_quartets,
+            "delta_admitted_shell_quartets": value.delta_admitted_shell_quartets,
+            "delta_admitted_quartet_tiles": value.delta_admitted_quartet_tiles,
+        }
+
     def _shells_for_atoms(
         self,
         atoms: Sequence[Atom],
@@ -2061,6 +2102,9 @@ class Calculator:
                 executed_backend=backend,
                 resource_diagnostics=resource_diagnostics,
                 precision=self._precision_provenance(calculation),
+                incremental_direct_jk=self._incremental_direct_jk_diagnostic(
+                    calculation
+                ),
                 basis_metadata=self.basis_metadata(
                     native_atoms, charge=charge, multiplicity=multiplicity
                 ),
