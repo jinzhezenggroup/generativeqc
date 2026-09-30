@@ -1387,6 +1387,80 @@ class _CudaSources:
         """Complete all queued semilocal geometry tiles with one error/sync gate."""
         self._call("stationary_geometry_drain", self.handle)
 
+    def device_source(self, name: str) -> int:
+        """Borrow one drained source vector without crossing the host boundary."""
+        if name not in self.source_names:
+            raise ValueError("unknown stationary source")
+        output = ct.c_void_p()
+        tail = [ct.c_char_p, ct.c_size_t]
+        self.library.stationary_source_device.argtypes = [
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.POINTER(ct.c_void_p),
+            *tail,
+        ]
+        self._call(
+            "stationary_source_device",
+            self.handle,
+            self.source_names.index(name),
+            ct.byref(output),
+        )
+        if not output.value:
+            raise RuntimeError("stationary device source pointer is null")
+        return int(output.value)
+
+    def device_workspace(self, count: int, *, offset: int = 0) -> int:
+        """Borrow drained transient workspace for downstream device producers."""
+        if type(count) is not int or count <= 0 or type(offset) is not int or offset < 0:
+            raise ValueError("invalid stationary workspace interval")
+        output = ct.c_void_p()
+        tail = [ct.c_char_p, ct.c_size_t]
+        self.library.stationary_workspace_device.argtypes = [
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.POINTER(ct.c_void_p),
+            *tail,
+        ]
+        self._call(
+            "stationary_workspace_device",
+            self.handle,
+            offset,
+            count,
+            ct.byref(output),
+        )
+        if not output.value:
+            raise RuntimeError("stationary device workspace pointer is null")
+        return int(output.value)
+
+    def finish_external_device(self, components: typing.Iterable[int]) -> typing.Any:
+        """Reduce canonical device component pointers and publish only 3*Natom values."""
+        self.flush()
+        pointers = tuple(components)
+        if not pointers or any(type(pointer) is not int or pointer <= 0 for pointer in pointers):
+            raise ValueError("stationary external reduction requires device pointers")
+        table_type = ct.c_void_p * len(pointers)
+        table = table_type(*(ct.c_void_p(pointer) for pointer in pointers))
+        output = np.empty((self.natom, 3))
+        tail = [ct.c_char_p, ct.c_size_t]
+        self.library.stationary_finish_external_device.argtypes = [
+            ct.c_void_p,
+            ct.POINTER(ct.c_void_p),
+            ct.c_size_t,
+            _DOUBLE,
+            ct.c_size_t,
+            *tail,
+        ]
+        self._call(
+            "stationary_finish_external_device",
+            self.handle,
+            table,
+            len(pointers),
+            _ptr(output),
+            output.size,
+        )
+        return output
+
     def finish(self) -> typing.Any:
         self.flush()
         out = np.empty((len(self.source_names), self.natom, 3))
