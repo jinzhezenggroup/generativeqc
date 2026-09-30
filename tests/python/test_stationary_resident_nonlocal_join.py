@@ -27,9 +27,9 @@ def fixture(
     source = SimpleNamespace(grid_spec=SimpleNamespace(coincident_tolerance=1e-12))
     state = SimpleNamespace(
         grid=SimpleNamespace(
-            points=np.arange(15, dtype=float).reshape(5, 3),
-            weights=np.arange(5, dtype=float) + 0.5,
-            owners=np.array([0, 1, 0, 1, 0]),
+            points=np.arange(18, dtype=float).reshape(6, 3),
+            weights=np.arange(6, dtype=float) + 0.5,
+            owners=np.array([0, 0, 0, 1, 1, 1]),
         ),
         density=np.eye(2)[None, ...],
         weighted_density=np.eye(2)[None, ...],
@@ -68,11 +68,11 @@ def fixture(
             raise AssertionError("functional-name dispatch reintroduced")
 
     class Nonlocal:
-        point_count = 5
+        point_count = 6
         executed = False
         collected_points = 0
         seeds = SimpleNamespace(
-            pointer=4096, stride=5, stream=seed_stream, generation=7
+            pointer=4096, stride=6, stream=seed_stream, generation=7
         )
 
         def diagnostic(self) -> SimpleNamespace:
@@ -103,15 +103,18 @@ def fixture(
             return self.seeds
 
     class Sources:
+        natom = 2
+
         def __init__(self, label: str, base: float) -> None:
             self.label = label
             self.base = base
             self.finishes = 0
 
-        def geometry(
+        def geometry_molecular(
             self,
             task: SimpleNamespace,
-            owners: np.ndarray,
+            begin: int,
+            points_per_atom: int,
             weights: np.ndarray,
             raw: np.ndarray,
             *,
@@ -119,23 +122,28 @@ def fixture(
         ) -> None:
             assert self.label == "local"
             assert task.alive and functional == 4
-            events.append(("local", len(owners)))
+            assert points_per_atom == 3
+            np.testing.assert_array_equal(
+                weights, state.grid.weights[begin : begin + len(weights)]
+            )
+            events.append(("local", len(weights)))
 
-        def geometry_external_device(
+        def geometry_external_device_molecular(
             self,
             task: SimpleNamespace,
-            owners: np.ndarray,
+            begin: int,
+            points_per_atom: int,
             weights: np.ndarray,
             raw: np.ndarray,
             pointer: int,
             stride: int,
-            begin: int,
+            seed_begin: int,
         ) -> None:
             assert self.label == "nonlocal"
-            assert task.alive
-            assert (pointer, stride) == (4096, 5)
+            assert task.alive and points_per_atom == 3 and seed_begin == begin
+            assert (pointer, stride) == (4096, 6)
             np.testing.assert_array_equal(
-                weights, state.grid.weights[begin : begin + len(owners)]
+                weights, state.grid.weights[begin : begin + len(weights)]
             )
             events.append(("external", begin))
 
@@ -155,7 +163,7 @@ def fixture(
         "nonlocal_sources": Sources("nonlocal", 10.0),
         "nonlocal_owner": Nonlocal(),
         "state": state,
-        "raw_weights": np.ones(5),
+        "raw_weights": np.ones(6),
         "tile_points": 2,
         "ao_count": 2,
         "functional": 4,
@@ -179,12 +187,12 @@ def test_complete_join_collocates_each_grid_tile_once() -> None:
     assert [event for event in events if event[0] == "borrow"] == [
         ("borrow", 2),
         ("borrow", 2),
-        ("borrow", 1),
+        ("borrow", 2),
     ]
     assert [event for event in events if event[0] == "local"] == [
         ("local", 2),
         ("local", 2),
-        ("local", 1),
+        ("local", 2),
     ]
     assert [event for event in events if event[0] == "external"] == [
         ("external", 0),
@@ -195,11 +203,13 @@ def test_complete_join_collocates_each_grid_tile_once() -> None:
     assert events.index(("resident_seed",)) < events.index(("pairs",))
     assert events.index(("pairs",)) < events.index(("external", 0))
     assert work["nonlocal_feature_source"] == "exact-final-scf-device-binding"
-    assert work["nonlocal_feature_d2d_bytes"] == 160
+    assert work["nonlocal_feature_d2d_bytes"] == 192
     assert work["nonlocal_feature_d2h_bytes"] == work["nonlocal_seed_h2d_bytes"] == 0
-    assert work["ao_collocation_point_visits"] == 5
-    assert work["geometry_point_visits"] == 10
-    assert work["nonlocal_dense_pair_capacity"] == 25
+    assert work["grid_owner_source"] == "implicit-atom-major-index"
+    assert work["grid_owner_h2d_bytes"] == 0
+    assert work["ao_collocation_point_visits"] == 6
+    assert work["geometry_point_visits"] == 12
+    assert work["nonlocal_dense_pair_capacity"] == 36
     assert "nonlocal_pair_evaluations" not in work
     assert "resident_feature_seed_enqueue" in seconds
     assert "single_pass_geometry_and_pair_drain" in seconds
@@ -229,7 +239,7 @@ def test_cross_stream_seed_is_rejected_before_consumption() -> None:
 
 def test_join_refuses_missing_consumer_dependency() -> None:
     args, events = fixture()
-    args["nonlocal_sources"].geometry_external_device = None
+    args["nonlocal_sources"].geometry_external_device_molecular = None
     with pytest.raises(TypeError, match="lacks the resident"):
         MODULE.resident_nonlocal_geometry(**args)
     assert not events
@@ -250,7 +260,7 @@ def test_join_replays_complete_grid_after_reset() -> None:
     assert events.count(("nlc_reset",)) == 1
     assert events.count(("resident_seed",)) == 2
     assert events.count(("borrow", 2)) == 4
-    assert events.count(("borrow", 1)) == 2
+    assert events.count(("borrow", 2)) == 6
 
 
 def test_production_driver_uses_shared_pass_accumulators() -> None:
@@ -263,6 +273,9 @@ def test_production_driver_uses_shared_pass_accumulators() -> None:
     assert join.count("with grid.feature_task(") == 1
     assert "except NotImplementedError:" in join
     assert join.count("nonlocal_owner.collect(") == 1
+    assert "state.grid.owners" not in join
+    assert "geometry_molecular(" in join
+    assert "geometry_external_device_molecular(" in join
     for retired in (
         "NonlocalFixedGridPlan",
         "feature_task_with_features(",
@@ -313,21 +326,21 @@ def test_missing_resident_features_preserves_bounded_device_fallback(
     args, events = fallback_fixture()
     args["tile_points"] = tile_points
     components, seconds, work = MODULE.resident_nonlocal_geometry(**args)
-    offsets = list(range(0, 5, tile_points))
+    offsets = list(range(0, 6, tile_points))
     assert [event[1] for event in events if event[0] == "collect"] == offsets
     assert [event[1] for event in events if event[0] == "external"] == offsets
-    assert sum(event[1] for event in events if event[0] == "borrow") == 10
-    assert sum(event[1] for event in events if event[0] == "local") == 5
+    assert sum(event[1] for event in events if event[0] == "borrow") == 12
+    assert sum(event[1] for event in events if event[0] == "local") == 6
     assert events.count(("resident_unavailable",)) == 1
     assert events.index(("collect", offsets[-1])) < events.index(("pairs",))
     assert events.index(("local_finish",)) < events.index(("pairs",))
     assert events.index(("pairs",)) < events.index(("external", 0))
     assert args["sources"].finishes == args["nonlocal_sources"].finishes == 1
-    assert work["ao_collocation_point_visits"] == 10
-    assert work["geometry_point_visits"] == 10
+    assert work["ao_collocation_point_visits"] == 12
+    assert work["geometry_point_visits"] == 12
     assert work["nonlocal_feature_source"] == "bounded-grid-feature-collection"
     assert work["nonlocal_feature_d2d_bytes"] == 0
-    assert work["nonlocal_feature_collection_point_visits"] == 5
+    assert work["nonlocal_feature_collection_point_visits"] == 6
     assert work["nonlocal_feature_d2h_bytes"] == work["nonlocal_seed_h2d_bytes"] == 0
     assert "two_pass_geometry_and_pair_drain" in seconds
     assert "single_pass_geometry_and_pair_drain" not in seconds
@@ -342,7 +355,7 @@ def test_fallback_replays_from_an_empty_collection() -> None:
     assert events.count(("nlc_reset",)) == 1
     assert events.count(("collect", 0)) == 2
     assert events.count(("pairs",)) == 2
-    assert args["nonlocal_owner"].collected_points == 5
+    assert args["nonlocal_owner"].collected_points == 6
 
 
 @pytest.mark.parametrize("error_type", [ValueError, RuntimeError, MemoryError])
