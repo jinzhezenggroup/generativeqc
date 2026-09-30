@@ -3,7 +3,7 @@ on:
   push:
     branches: [ci/remaining-pr-repair-20260930-astra]
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
   actions: read
 jobs:
@@ -14,77 +14,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - name: Capture live failure excerpts and merge conflicts
-        env:
-          GH_TOKEN: ${{ github.token }}
+          persist-credentials: false
+      - name: Bundle exact repair inputs without runtime credentials
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os, pathlib, re, subprocess, urllib.request, urllib.error
-          root = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY']
-          report = pathlib.Path('repair-reports'); report.mkdir(exist_ok=True)
-          class NoRedirect(urllib.request.HTTPRedirectHandler):
-              def redirect_request(self, req, fp, code, msg, headers, newurl): return None
-          opener=urllib.request.build_opener(NoRedirect)
-          def get(path, text=False):
-              req=urllib.request.Request(root+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-              try:
-                  with opener.open(req,timeout=60) as r: data=r.read()
-              except urllib.error.HTTPError as e:
-                  if e.code not in (301,302,303,307,308): raise
-                  with urllib.request.urlopen(e.headers['Location'],timeout=60) as r: data=r.read()
-              textdata=data.decode('utf-8-sig')
-              return textdata if text else json.loads(textdata)
-          def git(*args):
-              return subprocess.run(['git',*args],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-          base=git('rev-parse','origin/master').stdout.strip()
-          results=['MASTER '+base]
-          for p in sorted(get('/pulls?state=open&per_page=100'),key=lambda p:p['number']):
-              n=p['number']; h=p['head']['sha']; b=p['base']['sha']
-              detail=get('/pulls/'+str(n))
-              row={'number':n,'title':p['title'],'head':p['head']['ref'],'sha':h,'base':p['base']['ref'],'base_sha':b,'draft':p['draft'],'mergeable':detail.get('mergeable'),'state':detail.get('mergeable_state')}
-              results.append(json.dumps(row)); print(json.dumps(row),flush=True)
-              out=[json.dumps(row),p.get('body') or '']
-              for target,label in ((b,'base'),(base,'master')):
-                  r=git('merge-tree','--write-tree',h,target)
-                  out+=['MERGE '+label+' RC '+str(r.returncode),r.stdout]
-                  if r.returncode==1:
-                      tree=r.stdout.splitlines()[0]
-                      paths=sorted(set(line.split('\t',1)[1] for line in r.stdout.splitlines() if '\t' in line and re.match(r'^\d{6} ',line)))
-                      for path in paths:
-                          lines=git('show',tree+':'+path).stdout.splitlines()
-                          out.append('CONFLICT FILE '+path)
-                          for i,line in enumerate(lines):
-                              if line.startswith('<<<<<<<'):
-                                  end=next((j for j in range(i+1,len(lines)) if lines[j].startswith('>>>>>>>')),len(lines)-1)
-                                  out+=['\n'.join(f'{k+1}: {lines[k]}' for k in range(max(0,i-6),min(len(lines),end+7)))]
-              runs=get('/actions/runs?head_sha='+h+'&event=pull_request&per_page=50')['workflow_runs']; seen=set()
-              for run in runs:
-                  if run['workflow_id'] in seen: continue
-                  seen.add(run['workflow_id'])
-                  out.append('WORKFLOW '+json.dumps({k:run.get(k) for k in ('id','name','status','conclusion')}))
-                  if run['conclusion']!='failure': continue
-                  for job in get('/actions/runs/'+str(run['id'])+'/jobs?per_page=100')['jobs']:
-                      if job['conclusion']!='failure' or job['name']=='Pass CI checks': continue
-                      out.append('FAILED JOB '+str(job['id'])+' '+job['name'])
-                      try:
-                          log=get('/actions/jobs/'+str(job['id'])+'/logs',text=True)
-                          log=re.sub(r'^\d{4}-\d{2}-\d{2}T[^ ]+ ','',log,flags=re.M)
-                          lines=log.splitlines(); selected=set()
-                          for i,line in enumerate(lines):
-                              if re.search(r'^FAILED |^ERROR |^E\s|FAILURES|short test summary|::error|##\[error\]|curl:|HTTP.*(403|429|502|503)',line):
-                                  selected.update(range(max(0,i-12),min(len(lines),i+20)))
-                          excerpt='\n'.join(lines[i] for i in sorted(selected))
-                          if not excerpt: excerpt='\n'.join(lines[-100:])
-                          (report/f'job-{job["id"]}.txt').write_text(excerpt[:100000])
-                          out.append(excerpt[:25000])
-                      except Exception as e: out.append('LOG ERROR '+str(e))
-              (report/f'pr-{n}.txt').write_text('\n'.join(out))
-          (report/'index.txt').write_text('\n'.join(results)+'\n')
-          PY
-          git config user.name 'njzjz-bot'
-          git config user.email '48687836+njzjz-bot@users.noreply.github.com'
-          git add repair-reports
-          git commit -m 'ci: record current failure and conflict diagnosis'
-          git push origin HEAD:ci/remaining-pr-repair-20260930-astra
+          mkdir -p /tmp/repair-inputs
+          git bundle create /tmp/repair-inputs/repair.bundle \
+            origin/master origin/agent/1575-control-vjp \
+            origin/perf/1479-fuse-geometry-reduction \
+            origin/perf/1477-stationary-fullrange-shell-join \
+            origin/perf/1611-stationary-implicit-grid-owners \
+            origin/perf/1612-wb97mv-resident-grid-points \
+            origin/perf/1613-stationary-resident-grid-weights \
+            origin/agent/review-wb-residency-master
+          cp -r repair-reports /tmp/repair-inputs/
+          git for-each-ref --format='%(refname) %(objectname)' refs/remotes/origin > /tmp/repair-inputs/refs.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: remaining-pr-repair-inputs
+          path: /tmp/repair-inputs/
+          retention-days: 1
