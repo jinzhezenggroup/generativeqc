@@ -36,7 +36,7 @@ generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
     void** source_stream);
-generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v1(
+generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v2(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** points, const double** weights, const double** atomic_weights,
     std::size_t* point_count);

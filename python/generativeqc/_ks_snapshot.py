@@ -291,7 +291,7 @@ class NativeKsSnapshot:
         self.check_current()
         binding = getattr(
             self._library,
-            "generativeqc_ks_snapshot_cuda_resident_grid_v1",
+            "generativeqc_ks_snapshot_cuda_resident_grid_v2",
             None,
         )
         if binding is None:
