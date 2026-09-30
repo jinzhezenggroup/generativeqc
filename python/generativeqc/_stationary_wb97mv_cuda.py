@@ -375,17 +375,7 @@ class PreparedWb97mvCudaGradient:
         self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
         self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
-        for atom in range(na):
-            for other in range(atom):
-                self.sources._call(
-                    "stationary_nuclear",
-                    self.sources.handle,
-                    0,
-                    atom,
-                    other,
-                    float(charges[atom]),
-                    float(charges[other]),
-                )
+        self.sources.nuclear_all(charges)
         component_seconds["density_and_nuclear_setup"] = (
             perf_counter() - component_start
         )
