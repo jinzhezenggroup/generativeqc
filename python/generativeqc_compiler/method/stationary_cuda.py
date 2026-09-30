@@ -372,7 +372,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
   auto* zeros = reinterpret_cast<size_t*>(ws + 4 * na);
   for (size_t p = lane; p < np; p += workers) {
     const int64_t owner =
-        owners ? owner
+        owners ? owners[p]
                : (points_per_atom ? int64_t((owner_offset + p) / points_per_atom) : int64_t{-1});
     if (owner < 0 || owner >= int64_t(na) || !isfinite(weights[p]) || !isfinite(raw[p])) {
       atomicExch(error, 1);
