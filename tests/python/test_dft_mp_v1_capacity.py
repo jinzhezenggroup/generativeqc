@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "7ecf3d82ee66dfc41023f44b44acc1985d3bcdb039a7e676cf5dac4118adb116"
+            "88bc2b774dc5439adf2731f75a0dc3272fc4264008707209156037fbe115c35b"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
