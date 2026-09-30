@@ -211,6 +211,63 @@ def build_fock_weight_program(
     )
 
 
+_HAMILTONIAN_SMALL_OUTPUTS = (
+    "hcore",
+    "overlap",
+    "rotation_gradient",
+    "stationarity",
+    "orbital_rhs",
+)
+
+
+def _select_weight_outputs(
+    parent: Program, outputs: tuple[str, ...], *, scope: str
+) -> Program:
+    """Keep one generated response publication boundary without changing its AD math."""
+    return Program(
+        {name: parent.outputs[name] for name in outputs},
+        provenance={
+            "operation": "split Hamiltonian response publication",
+            "scope": scope,
+            "parent": parent.logical_hash,
+        },
+    )
+
+
+def build_hamiltonian_small_weight_program(
+    nocc: int, nvir: int, *, explicit_density_input: bool = False
+) -> Program:
+    """Hamiltonian VJP without the dense four-index ERI cotangent output."""
+    parent = build_hamiltonian_programs(
+        nocc, nvir, explicit_density_input=explicit_density_input
+    ).weights
+    return _select_weight_outputs(
+        parent, _HAMILTONIAN_SMALL_OUTPUTS, scope="small-response"
+    )
+
+
+def build_hamiltonian_eri_weight_program(
+    nocc: int, nvir: int, *, explicit_density_input: bool = False
+) -> Program:
+    """ERI-only Hamiltonian VJP, isolated for bounded/streamed downstream ownership."""
+    parent = build_hamiltonian_programs(
+        nocc, nvir, explicit_density_input=explicit_density_input
+    ).weights
+    return _select_weight_outputs(parent, ("eri",), scope="eri-only")
+
+
+def build_fock_small_weight_program(
+    nocc: int, nvir: int, *, explicit_density_input: bool = False
+) -> Program:
+    """Full-Fock VJP without publishing a dense four-index ERI cotangent."""
+    parent = build_fock_weight_program(
+        nocc, nvir, explicit_density_input=explicit_density_input
+    )
+    return _select_weight_outputs(
+        parent, _HAMILTONIAN_SMALL_OUTPUTS, scope="fock-small-response"
+    )
+
+
 def build_ao_weight_program(n: int) -> Program:
     """Generate staged MO -> AO cotangent transforms (no new AD formula)."""
     if type(n) is not int or not 2 <= n <= 12:

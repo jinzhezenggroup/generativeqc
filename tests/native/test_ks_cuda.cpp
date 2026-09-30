@@ -538,7 +538,7 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
     if (schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       require(feature_status == GENERATIVEQC_STATUS_SUCCESS, detail);
       require(features && features.device_id == token.identity.model.device &&
-                  features.point_count == grid.point_count() &&
+                  features.point_count == grid.point_count() && features.stream != nullptr &&
                   features.owner == token.identity.model.owner &&
                   features.solve_epoch == token.identity.determinant.solve_epoch &&
                   features.generation == token.identity.determinant.factor.density_generation,
