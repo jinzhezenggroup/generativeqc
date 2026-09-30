@@ -8,7 +8,7 @@ snapshots. Export is explicit and may transfer the final CUDA matrices.
 import ctypes as ct
 import threading
 import typing
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from types import MappingProxyType
 
@@ -123,6 +123,18 @@ def _scf_xc_points(
         # the raw feature derivative dE/dtau.
         "kinetic": immutable(output[:, 9:11].T),
     }
+
+
+@dataclass(frozen=True)
+class CudaResidentDensity:
+    """Private token-bound CUDA density lease; pointers stay native-owned."""
+
+    device: int
+    alpha: int
+    beta: int | None
+    matrix_elements: int
+    spins: int
+    source_stream: int
 
 
 class NativeKsSnapshot:
@@ -260,6 +272,66 @@ class NativeKsSnapshot:
             raise ValueError(
                 "stationary KS snapshot is stale or has no current native owner"
             )
+
+    def cuda_resident_density(self) -> CudaResidentDensity | None:
+        """Borrow the exact accepted CUDA density without copying it to host."""
+        if self.backend != "cuda":
+            return None
+        self.check_current()
+        binding = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_cuda_resident_density_v1",
+            None,
+        )
+        if binding is None:
+            return None
+        binding.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_int),
+            ct.POINTER(ct.c_void_p),
+            ct.POINTER(ct.c_void_p),
+            ct.POINTER(ct.c_size_t),
+            ct.POINTER(ct.c_uint),
+            ct.POINTER(ct.c_void_p),
+        ]
+        binding.restype = ct.c_int
+        device = ct.c_int(-1)
+        alpha, beta = ct.c_void_p(), ct.c_void_p()
+        matrix_elements = ct.c_size_t()
+        spins = ct.c_uint()
+        source_stream = ct.c_void_p()
+        status = binding(
+            self._batch._batch,
+            self._handle,
+            ct.byref(device),
+            ct.byref(alpha),
+            ct.byref(beta),
+            ct.byref(matrix_elements),
+            ct.byref(spins),
+            ct.byref(source_stream),
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        if (
+            device.value < 0
+            or not alpha.value
+            or not matrix_elements.value
+            or spins.value not in (1, 2)
+            or (spins.value == 2 and not beta.value)
+            or not source_stream.value
+        ):
+            raise RuntimeError("native KS returned an invalid resident-density lease")
+        return CudaResidentDensity(
+            device.value,
+            int(alpha.value),
+            None if not beta.value else int(beta.value),
+            matrix_elements.value,
+            spins.value,
+            int(source_stream.value),
+        )
 
     def cuda_full_range_derivatives(self, atom_count: int) -> typing.Any:
         """Execute prepared Direct shell J'/K' or return None when unavailable."""

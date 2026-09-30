@@ -32,6 +32,10 @@ generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
+    void** source_stream);
 /** Seed the resident nonlocal force owner directly from the exact current
  * CUDA KS rho/grad-rho binding on the borrowed grid task stream. No pointer is
  * published to Python and no host transfer or synchronization occurs. */

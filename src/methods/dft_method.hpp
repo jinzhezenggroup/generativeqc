@@ -50,6 +50,17 @@ generativeqc_status dft_cuda_full_range_integral_derivatives(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::vector<double>& output, std::string& detail);
 
+/** Borrow the accepted spin density directly from the exact CUDA KS
+ * final-state owner. No transfer or synchronization is performed. source_stream
+ * owns the accepted density generation; downstream device consumers must order
+ * any cross-stream copy/read against it before the source can be reused. */
+generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              int& device, const double*& alpha,
+                                              const double*& beta, std::size_t& matrix_elements,
+                                              unsigned& spins, void*& source_stream,
+                                              std::string& detail);
+
 /** Borrow the final device-resident total rho/grad-rho for the exact KS
  * token. Pointers remain owned by the prepared CUDA KS plan and are valid only
  * while that owner and token remain current. source_stream identifies the CUDA
