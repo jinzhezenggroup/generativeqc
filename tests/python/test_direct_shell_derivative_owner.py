@@ -107,3 +107,31 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
     assert "auto* output = exchange->force" in bridge
     assert 'trace_counter("host_to_device_bytes", 0)' in bridge
     assert "execute_prepared_cuda_stationary_one_electron_pair(" in method
+
+
+def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> None:
+    methods = _source("src/methods/dft_method.cpp")
+    api = _source("src/api/c_api_ks_snapshot.cpp")
+    snapshot = _source("python/generativeqc/_ks_snapshot.py")
+    stationary = _source("python/generativeqc/_stationary_cuda.py")
+
+    begin = methods.index("generativeqc_status cuda_integral_gradient(")
+    end = methods.index("Result execute(bool compute_forces)", begin)
+    body = methods[begin:end]
+    assert "const bool range_exchange = execution_plan_.range_exchange;" in body
+    assert "candidate.reserve((range_exchange ? 5 : 4) * nc)" in body
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in body
+    assert "execute_prepared_cuda_direct_rsh_energy_derivatives_device(" in body
+    assert "execute_prepared_cuda_direct_shell_full_range_derivatives_device(" in body
+    assert "SemilocalFamily::" not in body
+
+    assert "snapshot->token.identity.model.range_correction ? 5U : 4U" in api
+    assert "def cuda_integral_derivatives(" in snapshot
+    assert '"generativeqc_ks_snapshot_cuda_integral_gradient_v1"' in snapshot
+
+    assert 'stationary_integral_derivative_route=(' in stationary
+    assert '"prepared-native-complete"' in stationary
+    assert "sources.reset_geometry(spec.coincident_tolerance)" in stationary
+    assert "ao.set_density_device(" in stationary
+    assert "if native_complete_integrals" in stationary
+    assert "records -= ao_integral_primitive_records" in stationary
