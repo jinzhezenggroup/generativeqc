@@ -355,9 +355,10 @@ class PreparedWb97mvCudaGradient:
         component_start = perf_counter()
         density = state.density if plan.spin_blocks == 2 else state.density[0]
         self.grid.set_density(density)
-        self.sources.reset(
-            source.grid_spec.coincident_tolerance, state.density, state.weighted_density
-        )
+        # Integral derivatives already come from the token-bound native prepared
+        # owner above. These retained CUDA accumulators execute only nuclear and
+        # grid-geometry sources, so uploading detached host D/W here is redundant.
+        self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
         self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
         for atom in range(na):
