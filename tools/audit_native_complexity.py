@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -472,6 +473,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=("text", "json"), default="text")
     parser.add_argument("--include-vendored", action="store_true")
     parser.add_argument("--fail-on-matrix-chain", action="store_true")
+    parser.add_argument("--summary-only", action="store_true")
     return parser
 
 
@@ -486,26 +488,35 @@ def main(argv: list[str] | None = None) -> int:
     candidates = tuple(
         item for item in findings if item.classification == "matrix-chain-candidate"
     )
+    classification_counts = dict(
+        sorted(Counter(item.classification for item in findings).items())
+    )
     payload = {
         "schema": "generativeqc.native-complexity-audit.v2",
         "scanned_files": scanned,
+        "classification_counts": classification_counts,
         "high_order_loops": [asdict(item) for item in findings],
         "matrix_chain_candidates": [asdict(item) for item in candidates],
     }
     if args.format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
+        counts = ", ".join(
+            f"{name}={count}" for name, count in classification_counts.items()
+        )
         print(
             f"native complexity audit: {scanned} files, "
             f"{len(findings)} high-order loop nests"
+            + (f"; {counts}" if counts else "")
         )
-        for item in findings:
-            suffix = f" -> {item.lhs}" if item.lhs is not None else ""
-            print(
-                f"{item.path}:{item.line}: depth={item.depth} "
-                f"effective_depth={item.effective_depth} "
-                f"{item.classification}{suffix}"
-            )
+        if not args.summary_only:
+            for item in findings:
+                suffix = f" -> {item.lhs}" if item.lhs is not None else ""
+                print(
+                    f"{item.path}:{item.line}: depth={item.depth} "
+                    f"effective_depth={item.effective_depth} "
+                    f"{item.classification}{suffix}"
+                )
         if not findings:
             print("no high-order native loop nests found")
     if args.fail_on_matrix_chain and candidates:
