@@ -145,7 +145,6 @@ def test_gfn2_electronic_cpu_cuda_generators_use_shared_preparation() -> None:
     assert 'backend="cuda"' in cuda_source
 
 
-
 def test_gfn2_shared_host_device_generators_use_portable_preparation() -> None:
     pair_source = (ROOT / "tools/generate_gfn2_pair_native.py").read_text()
     es2_source = (ROOT / "tools/generate_gfn2_es2_native.py").read_text()

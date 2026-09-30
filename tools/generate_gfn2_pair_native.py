@@ -77,9 +77,7 @@ def native_header() -> str:
         backend="portable",
     )
     repulsion = prepare_for_backend(
-        _subprogram(
-            kernel, REPULSION_OUTPUT_ORDER, "gfn2-runtime-repulsion-pair"
-        ),
+        _subprogram(kernel, REPULSION_OUTPUT_ORDER, "gfn2-runtime-repulsion-pair"),
         backend="portable",
     )
     # Production GFN2 validates finite parameters and 0 < r <= 25 bohr before
