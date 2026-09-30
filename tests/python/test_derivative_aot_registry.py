@@ -7,10 +7,12 @@ from pathlib import Path
 
 from generativeqc_compiler.integral.derivative_aot_registry import (
     DerivativeAotKey,
+    DerivativeShellAotKey,
     component_group,
     component_groups,
     entry_prefix_for_key,
     make_key,
+    make_shell_key,
     radial_inventory_from_payload,
     select_packaged_component_derivative_aot,
     select_packaged_derivative_aot,
@@ -20,8 +22,10 @@ from generativeqc_compiler.integral.first_derivative_schedule import (
     CPU_AOT_SHARDS,
     cpu_aot_symbol,
 )
+from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.integral.rsh_cpu_aot import entry_prefix as legacy_rsh_prefix
+from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -267,3 +271,19 @@ def test_cuda_radial_manifest_matches_native_compile_time_specializations() -> N
     assert "CoulombRange::Short, 300" in bounded
     assert "omega == 0.3" in bounded
     assert "wb97" not in bounded.lower()
+
+
+def test_exact_shell_package_identity_uses_canonical_shell_abi() -> None:
+    spec = FUSED_SHELL_SPEC_BY_NAME["dppp"]
+    key = make_shell_key(CoulombKernel("long_range", 0.3), spec, backend="cuda")
+    payload = key.to_payload()
+    assert isinstance(key, DerivativeShellAotKey)
+    assert payload["shell_name"] == "dppp"
+    assert payload["angular"] == list(spec.angular)
+    assert payload["shell_class"] == shell_class_index(spec)
+    assert payload["radial"] == {
+        "version": 1,
+        "family": "long_range",
+        "omega": 0.3,
+    }
+    assert payload["output_contract"] == "direct-shell-force-center-gradient-v1"

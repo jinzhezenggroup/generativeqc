@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from generativeqc_compiler.common.provenance import canonical_hash
 
 from .ir import four_center_eri_operator
+from .production_cost import shell_class_index
 from .range_separation import CoulombKernel, CoulombKernelFamily
 from .shell_spec import ShellClassSpec
 from .weighted_eri import build_weighted_eri_ir, build_weighted_eri_kernel
@@ -28,6 +29,8 @@ AOT_WEIGHTED_OUTPUT_CONTRACT = "weighted-eri-value-center-gradient-v2"
 AOT_WEIGHTED_CONTRACTION_CONTRACT = "packed-component-weights-v1"
 AOT_COMPONENT_OUTPUT_CONTRACT = "primitive-center-gradient-v1"
 AOT_COMPONENT_CONTRACTION_CONTRACT = "record-scalar-weight-v1"
+AOT_DIRECT_OUTPUT_CONTRACT = "direct-shell-force-center-gradient-v1"
+AOT_DIRECT_CONTRACTION_CONTRACT = "direct-density-exchange-v1"
 
 
 DERIVATIVE_AOT_RADIAL_MANIFEST_SCHEMA = "generativeqc.derivative-aot.radials.v1"
@@ -150,6 +153,84 @@ class DerivativeAotKey:
     @property
     def identity(self) -> str:
         return canonical_hash(self.to_payload())
+
+
+@dataclass(frozen=True, slots=True)
+class DerivativeShellAotKey:
+    """Scientific identity for one exact Direct first-derivative shell package."""
+
+    backend: str
+    radial: CoulombKernel
+    angular: tuple[int, int, int, int]
+    shell_class: int
+    derivative_order: int = AOT_DERIVATIVE_ORDER
+
+    def __post_init__(self) -> None:
+        if self.backend not in ("cpu", "cuda"):
+            raise ValueError("derivative shell AOT backend must be cpu or cuda")
+        if not isinstance(self.radial, CoulombKernel):
+            raise TypeError("derivative shell AOT requires an explicit CoulombKernel")
+        if (
+            not isinstance(self.angular, tuple)
+            or len(self.angular) != 4
+            or any(
+                type(value) is not int or not 0 <= value <= 3 for value in self.angular
+            )
+        ):
+            raise ValueError(
+                "derivative shell AOT requires one canonical s/p/d/f quartet"
+            )
+        spec = ShellClassSpec(
+            "".join("spdf"[value] for value in self.angular), self.angular
+        )
+
+        if type(self.shell_class) is not int or self.shell_class != shell_class_index(
+            spec
+        ):
+            raise ValueError("derivative shell AOT class index is not canonical")
+        if self.derivative_order != AOT_DERIVATIVE_ORDER:
+            raise ValueError(
+                "derivative shell AOT currently packages first derivatives only"
+            )
+
+    @property
+    def shell_name(self) -> str:
+        return "".join("spdf"[value] for value in self.angular)
+
+    def to_payload(self) -> dict[str, typing.Any]:
+        return {
+            "version": 1,
+            "backend": self.backend,
+            "generator_abi": AOT_GENERATOR_ABI,
+            "derivative_order": self.derivative_order,
+            "output_contract": AOT_DIRECT_OUTPUT_CONTRACT,
+            "spin_contract": AOT_SPIN_CONTRACT,
+            "contraction_contract": AOT_DIRECT_CONTRACTION_CONTRACT,
+            "radial": self.radial.to_payload(),
+            "shell_name": self.shell_name,
+            "angular": list(self.angular),
+            "shell_class": self.shell_class,
+        }
+
+    @property
+    def identity(self) -> str:
+        return canonical_hash(self.to_payload())
+
+
+def make_shell_key(
+    radial: CoulombKernel,
+    spec: ShellClassSpec,
+    *,
+    backend: str,
+) -> DerivativeShellAotKey:
+    """Build an exact-shell derivative identity from the canonical shell ABI."""
+
+    return DerivativeShellAotKey(
+        backend=backend,
+        radial=radial,
+        angular=spec.angular,
+        shell_class=shell_class_index(spec),
+    )
 
 
 @dataclass(frozen=True, slots=True)

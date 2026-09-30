@@ -705,6 +705,31 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
 
+  set(GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_derivative_cuda_shell_aot.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_derivative_shell_aot_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_derivative_cuda_shell_aot.py"
+    OUTPUTS "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_derivative_cuda_shell_aot.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/manifests/derivative_aot_radials.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/derivative_aot_registry.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/derivative_cuda_shell_aot.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_cost.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_profile.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_selection.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
+    ARGS
+      --output "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
+      --radial-manifest "${CMAKE_CURRENT_SOURCE_DIR}/manifests/derivative_aot_radials.json"
+      --production-manifest "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_shell_classes.json"
+      --target-architecture "sm_120"
+    COMMENT "Generating method-neutral CUDA exact-shell derivative AOT package registry")
+
   set(GENERATIVEQC_DIRECT_RECURRENCE_HEADERS
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_order2.cuh"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_order3.cuh"
