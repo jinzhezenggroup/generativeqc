@@ -27,6 +27,21 @@ void transform(std::size_t n, const double* c, const double* a, double* out) {
     assert findings[0].lhs == "out[p * n + q]"
 
 
+def test_audit_does_not_reassociate_nonlinear_pairwise_expression() -> None:
+    source = r"""
+void nonlinear(std::size_t n, const double* a, const double* b, const double* c, double* out) {
+  for (std::size_t p = 0; p < n; ++p)
+    for (std::size_t q = 0; q < n; ++q)
+      for (std::size_t k = 0; k < n; ++k)
+        for (std::size_t l = 0; l < n; ++l)
+          out[p * n + q] += std::exp(a[p * n + k]) * b[k * n + l] * c[l * n + q];
+}
+"""
+    findings = audit_text(source, path="synthetic.cpp")
+    assert len(findings) == 1
+    assert findings[0].classification != "matrix-chain-candidate"
+
+
 def test_audit_does_not_call_true_four_index_source_reducible() -> None:
     source = r"""
 void contract(std::size_t n, const double* eri, const double* d, double* fock) {
