@@ -1,0 +1,62 @@
+name: Finish final PR review repair
+on:
+  push:
+    branches: [agent/review-all-20260930]
+    paths: [.github/workflows/agent-review-final.yml]
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          show-progress: false
+      - name: Prepare validated test
+        run: |
+          cp tools/review_20260930_final_test.txt /tmp/final-test.py
+          python -m pip install -q numpy pytest ruff==0.16.9
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('/tmp/final-test.py')
+          source=path.read_text()
+          source=source.replace('for name in values:\n        np.testing.assert_array_equal(values[name], original[name])\n        assert not np.shares_memory(actual, values[name])', 'for name, value in values.items():\n        np.testing.assert_array_equal(value, original[name])\n        assert not np.shares_memory(actual, value)')
+          path.write_text(source)
+          PY
+      - name: Validate and publish isolated final candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name njzjz-bot
+          git config user.email 48687836+njzjz-bot@users.noreply.github.com
+          git checkout --detach f7f7b94a45f4e5a31e892aa3b0799b748486330d
+          git merge --no-ff --no-edit 22503da1492e828bbdb6c80b7583fb7482fdb5d5
+          cp /tmp/final-test.py tests/python/test_wb97mv_final_reduction_contract.py
+          ruff check --fix tests/python/test_wb97mv_final_reduction_contract.py
+          ruff format tests/python/test_wb97mv_final_reduction_contract.py
+          git add tests/python/test_wb97mv_final_reduction_contract.py
+          git diff --cached --check
+          PYTHONPATH=.:python python -m pytest -q \
+            tests/python/test_dft_mp_v1_capacity.py \
+            tests/python/test_stationary_resident_nonlocal_join.py \
+            tests/python/test_stationary_nonlocal_timing.py \
+            tests/python/test_wb97mv_resident_grid_points.py \
+            tests/python/test_wb97mv_resident_grid_weights.py \
+            tests/python/test_stationary_geometry_kernel_host.py \
+            tests/python/test_grid_cuda_publication.py \
+            tests/python/test_grid_view_publication.py \
+            tests/python/test_stationary_owner_kernel_abi.py \
+            tests/python/test_stationary_nuclear_batch.py \
+            tests/python/test_stationary_nuclear_batch_host.py \
+            tests/python/test_stationary_wb97mv_planner_adoption.py \
+            tests/python/test_ks_resident_grid_abi.py \
+            tests/python/test_wb97mv_final_reduction.py \
+            tests/python/test_wb97mv_final_reduction_contract.py \
+            tests/python/test_production_tensor_preparation.py
+          python tools/check_compiler_structure.py
+          python tools/check_scf_structure.py
+          git commit -m 'test(review): verify final gradient against actual stationary plan'
+          git push origin HEAD:refs/heads/agent/review-result-1620-20260930
+          echo REVIEW_RESULT_1620=$(git rev-parse HEAD)
