@@ -261,6 +261,40 @@ class NativeKsSnapshot:
                 "stationary KS snapshot is stale or has no current native owner"
             )
 
+    def cuda_full_range_derivatives(self, atom_count: int) -> typing.Any:
+        """Execute prepared Direct shell J'/K' or return None when unavailable."""
+        if self.backend != "cuda":
+            return None
+        if type(atom_count) is not int or atom_count < 1:
+            raise ValueError("full-range derivative atom count must be positive")
+        self.check_current()
+        evaluate = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_cuda_full_range_derivatives_v1",
+            None,
+        )
+        if evaluate is None:
+            return None
+        evaluate.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_double),
+            ct.c_size_t,
+        ]
+        evaluate.restype = ct.c_int
+        output = np.empty((2, atom_count, 3), dtype=np.float64)
+        status = evaluate(
+            self._batch._batch,
+            self._handle,
+            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            output.size,
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        return immutable(output)
+
     def decode(self, basis: typing.Any, grid: typing.Any) -> typing.Any:
         """Verify actual AO/grid sources before deriving any Python identities."""
         from generativeqc_compiler.dft.grid import ExplicitGrid
