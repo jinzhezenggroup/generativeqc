@@ -35,6 +35,7 @@ from .batch_schedule import (
     index_table_length,
     index_table_values,
 )
+from .complexity import reassociate_einsums
 from .cuda_dtype import program_precision, scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
@@ -717,16 +718,32 @@ def plan_cuda(
     reservations: Reservations = NO_RESERVATIONS,
     library_bytes: int = 4 * 1024**2,
     provider_bytes: int = MIN_PROVIDER_BYTES,
+    reassociate_contractions: bool = True,
 ) -> TensorPlan:
     """Plan all allocations before preparation; shrink packing tiles to fit.
 
     Outputs are indivisible resident tensors. An infeasible minimum fails on
     the CPU, before compiling or touching a device. User data is never needed
-    for shape/schedule selection. The baseline shares existing SSA nodes but
-    neither rewrites the equation nor uses an external chemistry program.
+    for shape/schedule selection. After compiler-owned strict-degree
+    preprocessing, the execution schedule shares the resulting SSA nodes and
+    never uses an external chemistry program.
+
+    Symbolic contraction reassociation is enabled by default before CUDA
+    storage/layout planning. It rewrites only when the compiler proves a
+    strictly lower symbolic degree. Set `reassociate_contractions=False` to
+    preserve the original contraction tree. Programs carrying an explicit
+    precision-execution contract keep their original tree until intermediate
+    precision propagation through reassociation is defined.
     """
     if not isinstance(program, Program) or not isinstance(target, CudaTargetInfo):
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
+    if type(reassociate_contractions) is not bool:
+        raise TypeError("reassociate_contractions must be a Boolean")
+    if (
+        reassociate_contractions
+        and program.provenance.get("precision_execution") is None
+    ):
+        program = reassociate_einsums(program)
     checked_size(max_bytes, "tensor byte budget")
     checked_size(library_bytes, "library workspace")
     checked_size(provider_bytes, "provider allowance")

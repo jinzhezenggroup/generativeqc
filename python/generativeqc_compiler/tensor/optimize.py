@@ -18,6 +18,7 @@ from generativeqc_compiler.common.value_numbering import (
     ValueNumberTable,
 )
 
+from .complexity import analyze_complexity, reassociate_einsums
 from .ir import PRIMITIVES, Node, _infer, constant
 from .precision import precision_execution_contracts, remap_precision_execution
 from .program import Program, hash_node
@@ -453,20 +454,45 @@ def _optimizer(
     )
 
 
-def optimize(program: Program, *, requested_outputs: typing.Any = None) -> Program:
-    """Run the initial TensorIR pipeline through the shared pass manager."""
-    specialized = _project_requested_outputs(program, requested_outputs)
+def optimize(
+    program: Program,
+    *,
+    requested_outputs: typing.Any = None,
+    reassociate_contractions: bool = False,
+) -> Program:
+    """Run the TensorIR pipeline, with explicit opt-in contraction reassociation."""
+    if type(reassociate_contractions) is not bool:
+        raise TypeError("reassociate_contractions must be a Boolean")
+    requested = _project_requested_outputs(program, requested_outputs)
     value_numbering_diagnostics: list[ValueNumberingDiagnostics] = []
-    run = _optimizer(value_numbering_diagnostics).run(specialized)
-    result = run.value
-    pruning = _pruning_diagnostics(program, specialized, result)
+    run = _optimizer(value_numbering_diagnostics).run(requested)
+    baseline = run.value
+    pruning = _pruning_diagnostics(program, requested, baseline)
+    result = reassociate_einsums(baseline) if reassociate_contractions else baseline
+    complexity_diagnostics = None
+    if reassociate_contractions:
+        complexity_diagnostics = {
+            "requested": analyze_complexity(requested).summary_payload(),
+            "reassociated": analyze_complexity(result).summary_payload(),
+            "optimized": analyze_complexity(result).summary_payload(),
+            "reassociation": {
+                "enabled": True,
+                "changed": baseline.logical_hash != result.logical_hash,
+                "logical_hash": result.logical_hash,
+            },
+        }
     return Program(
         result.outputs,
         provenance={
             **result.provenance,
             "original_logical_hash": program.logical_hash,
-            "specialized_logical_hash": specialized.logical_hash,
+            "specialized_logical_hash": requested.logical_hash,
             "pruning_diagnostics": pruning,
+            **(
+                {"complexity_diagnostics": complexity_diagnostics}
+                if complexity_diagnostics is not None
+                else {}
+            ),
             # Keep the established rewrite inventory for compatibility.
             "rewrites": list(PASSES) + ["exact_cse", "dead_nodes"],
             "optimizer_identity": run.pipeline_identity,
