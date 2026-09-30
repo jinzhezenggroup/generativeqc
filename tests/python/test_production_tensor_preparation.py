@@ -73,3 +73,22 @@ def test_production_generators_cannot_restore_private_optimizer_bypasses() -> No
     wb97mv = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
     assert "plan_cuda(" in stationary
     assert "plan_cuda(" in wb97mv
+
+
+def test_gfn2_generators_use_shared_production_preparation() -> None:
+    cpu = (ROOT / "tools/generate_gfn2_electronic_native.py").read_text()
+    cuda = (ROOT / "tools/generate_gfn2_electronic_cuda.py").read_text()
+    pair = (ROOT / "tools/generate_gfn2_pair_native.py").read_text()
+    es2 = (ROOT / "tools/generate_gfn2_es2_native.py").read_text()
+
+    assert cpu.count("prepare_for_backend(") >= 6
+    assert 'backend="cpu"' in cpu
+    assert cuda.count("prepare_for_backend(") >= 3
+    assert 'backend="cuda"' in cuda
+
+    # Pair/ES2 emit one source shared by host and device, so use the
+    # backend-neutral scalar preparation domain rather than a CUDA-only route.
+    assert pair.count("prepare_for_backend(") >= 2
+    assert 'backend="scalar"' in pair
+    assert es2.count("prepare_for_backend(") >= 4
+    assert 'backend="scalar"' in es2
