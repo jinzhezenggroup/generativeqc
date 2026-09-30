@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import typing
 from dataclasses import asdict, dataclass
 
@@ -20,7 +21,9 @@ GRID_XC_COMPILED_SCOPES = (
     "xc_points",
     "vxc_contraction",
 )
-_FUNCTIONAL_CODES = {"LDA_XC_PW": 0, "PBE": 1}
+# ao_cuda.launch_points specializes evaluate_points by feature_terms, not the
+# runtime functional code. LDA consumes rho; PBE consumes rho and its gradient.
+_POINT_FEATURE_TERMS = {"LDA_XC_PW": 1, "PBE": 4}
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +65,7 @@ class GridXcCompiledRegionEvidence:
             raise ValueError("compiled grid/XC evidence requires an sm_* architecture")
         if type(self.source_identity) is not str or not self.source_identity:
             raise ValueError("compiled grid/XC evidence requires a source identity")
-        if self.functional not in _FUNCTIONAL_CODES:
+        if self.functional not in _POINT_FEATURE_TERMS:
             raise ValueError("compiled grid/XC evidence supports only LDA/PBE")
         if not isinstance(self.shape, GridXcCompiledResourceShape):
             raise TypeError("compiled grid/XC evidence requires a typed resource shape")
@@ -142,7 +145,7 @@ def _active_scopes(
     functional: str,
     target: CudaTargetInfo,
 ) -> tuple[tuple[str, tuple[KernelResources, ...]], ...]:
-    code = _FUNCTIONAL_CODES[functional]
+    feature_terms = _POINT_FEATURE_TERMS[functional]
     counts = {min(shape.npoint, shape.tile_points)}
     remainder = shape.npoint % shape.tile_points
     if shape.npoint > shape.tile_points and remainder:
@@ -161,7 +164,7 @@ def _active_scopes(
     feature_token = (
         "density_features<true>" if shape.nao >= 32 else "density_features<false>"
     )
-    point_token = f"evaluate_points<{code}"
+    point_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false>"
 
     validation = _matching(
         resources,
@@ -206,7 +209,7 @@ def _active_scopes(
     )
     points = _matching(
         resources,
-        lambda name: name.startswith(point_token) and name.endswith(",false>"),
+        lambda name: re.fullmatch(point_pattern, name) is not None,
         "functional-specific XC point kernel",
     )
 
@@ -337,7 +340,7 @@ def native_grid_xc_compiled_region_evidence(
         )
     if not isinstance(target, CudaTargetInfo):
         raise TypeError("native grid/XC compiled evidence requires CudaTargetInfo")
-    if functional not in _FUNCTIONAL_CODES:
+    if functional not in _POINT_FEATURE_TERMS:
         raise ValueError("native grid/XC compiled evidence supports only LDA/PBE")
     scopes = _active_scopes(materialized, shape, functional, target)
     scope_profitability = tuple(
