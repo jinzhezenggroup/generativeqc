@@ -38,14 +38,14 @@ void validate_grid_spec(const GridSpec& spec);
  * backend-neutral header. A view is valid only on its recorded device. */
 struct CudaMolecularGridView {
   int device{-1};
-  const double *points{}, *weights{};
+  const double *points{}, *weights{}, *atomic_weights{};
   std::size_t point_count{}, device_bytes{};
   std::uint64_t owner{};
   std::shared_ptr<const void> lifetime;
 
   explicit operator bool() const noexcept {
-    return device >= 0 && points != nullptr && weights != nullptr && point_count != 0 &&
-           device_bytes != 0 && owner != 0 && lifetime != nullptr;
+    return device >= 0 && points != nullptr && weights != nullptr && atomic_weights != nullptr &&
+           point_count != 0 && device_bytes != 0 && owner != 0 && lifetime != nullptr;
   }
 };
 
@@ -68,12 +68,13 @@ class MolecularGrid {
   const std::vector<double>& points() const noexcept { return points_; }
   const std::vector<double>& weights() const noexcept { return weights_; }
   const std::vector<std::uint32_t>& owners() const noexcept { return owners_; }
-  /** Borrow the exact CUDA-generated points/weights when this grid originated
-   * from from_cuda(). CPU grids return an empty view. */
+  /** Borrow the exact CUDA-generated points, partition weights and pre-partition
+   * atomic measures when this grid originated from from_cuda(). CPU grids return
+   * an empty view. */
   CudaMolecularGridView cuda_view() const noexcept {
     if (!cuda_storage_) return {};
-    return {cuda_device_,       cuda_points_, cuda_weights_, point_count(),
-            cuda_device_bytes_, cuda_owner_,  cuda_storage_};
+    return {cuda_device_,       cuda_points_,       cuda_weights_, cuda_atomic_weights_,
+            point_count(),      cuda_device_bytes_, cuda_owner_,   cuda_storage_};
   }
   /** Explicit derivative export of the atomic measure before partitioning.
    * Reconstruct only quadrature rules, not Becke weights, on request; energy
@@ -95,13 +96,13 @@ class MolecularGrid {
   std::vector<double> weights_;
   std::vector<std::uint32_t> owners_;
   std::shared_ptr<const void> cuda_storage_;
-  const double *cuda_points_{}, *cuda_weights_{};
+  const double *cuda_points_{}, *cuda_weights_{}, *cuda_atomic_weights_{};
   std::size_t cuda_device_bytes_{};
   std::uint64_t cuda_owner_{};
   int cuda_device_{-1};
 };
 
-/** Pure shape query for the retained full-grid CUDA points/weights allocation. */
+/** Pure shape query for retained points/partition weights/atomic measures. */
 std::size_t cuda_resident_grid_bytes(std::size_t points);
 
 /** Pure shape query for peak CUDA quadrature preparation. The peak includes
