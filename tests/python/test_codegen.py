@@ -1936,7 +1936,7 @@ def test_batched_finalization_reuses_each_converged_raw_fock() -> None:
     assert "kExpandedConvergedFockReuseDensityRms = 2.0e-9" in source
     assert "converged_fock_reuse_density_rms(options.density_tolerance)" in source
     assert "copy_selected_matrices_kernel" in source
-    assert "launch_direct_quartet_metadata(density, false)" in source
+    assert "launch_direct_quartet_metadata(density, false, false)" in source
     # A resident dm0 is already normalized for its cached overlap matrix, so a
     # geometry change must re-run the warm-density normalization path.
     assert "plan.resident_warm_positions == host.positions" in source
@@ -2452,7 +2452,7 @@ def test_mixed_precision_is_budgeted_per_item_on_the_prepared_census() -> None:
     assert "resolve_mixed_precision_item" in policy
     assert "allow_mixed_precision && mixed_precision_fock" in source
     # The finalization path must explicitly disable the iterative mixed route.
-    assert "launch_fock_builder(density, false)" in source
+    assert "launch_fock_builder(density, false, false)" in source
 
 
 def test_bounded_streaming_uses_monotonic_system_density_tail() -> None:

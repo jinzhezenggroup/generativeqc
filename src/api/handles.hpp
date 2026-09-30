@@ -30,6 +30,7 @@ struct generativeqc_calculation {
   generativeqc::scf::PrecisionProvenance precision{};
   /** True only after a run completes and populates \p precision. */
   bool precision_available{false};
+  generativeqc::scf::IncrementalDirectJkDiagnostic incremental_direct_jk{};
   /** Versioned detailed record for the same completed run. */
   std::optional<generativeqc::scf::PrecisionWork> precision_work;
   /** Completed-run SCF measures; cleared before a new backend execution. */
@@ -45,6 +46,8 @@ struct generativeqc_batch {
   std::vector<std::uint64_t> last_fock_builds;
   /** Input-ordered completed-run records; invalid/throwing items stay unavailable. */
   std::vector<std::optional<generativeqc::scf::PrecisionProvenance>> precision;
+  std::vector<std::optional<generativeqc::scf::IncrementalDirectJkDiagnostic>>
+      incremental_direct_jk;
   std::vector<std::optional<generativeqc::scf::PrecisionWork>> precision_work;
   /** Separate from the fixed-stride legacy batch output array. */
   std::vector<std::optional<generativeqc_scf_diagnostic>> scf_diagnostics;
