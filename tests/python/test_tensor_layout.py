@@ -231,8 +231,13 @@ def test_layout_descriptors_do_not_retain_mutable_sequences() -> None:
 def test_producer_layout_removes_packing(kind: typing.Any) -> None:
     program, _, producer = producer_case(kind)
     logical_hash, serialized = program.logical_hash, program.dumps()
-    baseline = plan_cuda(program, TARGET)
-    plan = plan_cuda(program, TARGET, schedule=TensorSchedule(layouts=True))
+    baseline = plan_cuda(program, TARGET, reassociate_contractions=False)
+    plan = plan_cuda(
+        program,
+        TARGET,
+        schedule=TensorSchedule(layouts=True),
+        reassociate_contractions=False,
+    )
     assert baseline.steps[-1].gemm == "packed"
     assert plan.steps[-1].gemm.startswith("direct-")
     assert baseline.panel_bytes > 0 and plan.panel_bytes == 0
@@ -242,7 +247,12 @@ def test_producer_layout_removes_packing(kind: typing.Any) -> None:
     assert program.logical_hash == logical_hash and program.dumps() == serialized
     assert baseline.layout_identity != plan.layout_identity
     assert baseline.identity != plan.identity
-    assert plan.identity == plan_cuda(program, TARGET, schedule=plan.schedule).identity
+    assert plan.identity == plan_cuda(
+        program,
+        TARGET,
+        schedule=plan.schedule,
+        reassociate_contractions=False,
+    ).identity
     assert (
         plan.layout_decision.selected_cost
         < plan.layout_decision.baseline_conversion_bytes
