@@ -1,0 +1,31 @@
+name: Isolated PR review source snapshots
+on:
+  push:
+    branches: [agent/review-all-20260930]
+    paths: [.github/workflows/agent-review-source-export.yml]
+permissions:
+  contents: read
+jobs:
+  snapshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export reviewed commit snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir snapshots
+          git archive --format=tar.gz --prefix=pr1620/ f7f7b94a45f4e5a31e892aa3b0799b748486330d > snapshots/pr1620.tar.gz
+          git archive --format=tar.gz --prefix=pr1616/ cae802548450038e52d510412b50959bc2be7ca0 > snapshots/pr1616.tar.gz
+          git archive --format=tar.gz --prefix=pr1510/ 85b226cabf0c3ac8471d07a1f125a1b95e134891 > snapshots/pr1510.tar.gz
+          git archive --format=tar.gz --prefix=pr1573/ 440cc8c2a0041f96880f10fc0682501b6e617e4a > snapshots/pr1573.tar.gz
+          sha256sum snapshots/* > snapshots/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: exact-pr-review-sources
+          path: snapshots/
+          retention-days: 1
