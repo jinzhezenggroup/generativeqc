@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 from tools.generativeqc_cc.lambda_equations import build_lambda_programs
@@ -44,9 +43,7 @@ def test_generated_response_arena_with_default_compiler_depth(
         pytest.skip(f"{compiler_name} is unavailable")
     program = build_lambda_programs(2, 3).residual_vjp.program
     prepared = prepare_for_backend(program, "cpu")
-    expected = sum(
-        node.spec.size for node in prepared.live_nodes if node.op != "input"
-    )
+    expected = sum(node.spec.size for node in prepared.live_nodes if node.op != "input")
     source = tmp_path / "check.cpp"
     source.write_text(
         '#include "generated.hpp"\n'

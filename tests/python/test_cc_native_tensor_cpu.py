@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.tensor import PackedLayout, execute
-from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.cpu import NativeTensorProgram, emit_cpu
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 from tools.generativeqc_cc.gradient_equations import build_hamiltonian_programs
 from tools.generativeqc_cc.lambda_equations import build_lambda_programs

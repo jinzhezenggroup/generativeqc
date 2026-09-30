@@ -247,12 +247,15 @@ def test_producer_layout_removes_packing(kind: typing.Any) -> None:
     assert program.logical_hash == logical_hash and program.dumps() == serialized
     assert baseline.layout_identity != plan.layout_identity
     assert baseline.identity != plan.identity
-    assert plan.identity == plan_cuda(
-        program,
-        TARGET,
-        schedule=plan.schedule,
-        reassociate_contractions=False,
-    ).identity
+    assert (
+        plan.identity
+        == plan_cuda(
+            program,
+            TARGET,
+            schedule=plan.schedule,
+            reassociate_contractions=False,
+        ).identity
+    )
     assert (
         plan.layout_decision.selected_cost
         < plan.layout_decision.baseline_conversion_bytes
