@@ -373,6 +373,18 @@ class CudaGrid:
         ]
         lib.grid_cuda_run_selected_v1.argtypes = selected_run_args
         lib.grid_cuda_run_selected_deferred_v1.argtypes = selected_run_args
+        lib.grid_cuda_run_selected_device_deferred_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_int,
+            SIZE,
+            ct.c_size_t,
+            DOUBLE,
+            DOUBLE,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
         lib.grid_cuda_view_v1.argtypes = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -859,6 +871,62 @@ class CudaGrid:
             required.remove("sigma")
             required.add("gradient")
         return published, required
+
+    @contextmanager
+    def feature_task_device_points(
+        self,
+        device_points: typing.Any,
+        point_count: typing.Any,
+        ao_ids: typing.Any,
+        ingredients: typing.Iterable[str],
+        *,
+        stamp: typing.Any = None,
+    ) -> typing.Any:
+        """Lend AO/features from immutable resident CUDA point coordinates.
+
+        This device-only path is deliberately deferred: the downstream same-stream
+        consumer propagates the grid error before reading AO/features. The point
+        allocation remains caller-owned and must outlive the lease.
+        """
+        _, required = self._normalize_task_ingredients(ingredients)
+        with self._lock:
+            self._check_open()
+            if self.plan.active_ao_capacity is None:
+                raise ValueError("native CUDA XC requires a local CUDA plan")
+            if not required.issubset(self.ingredients):
+                raise ValueError("prepared CUDA features do not cover native XC")
+            if ao_ids is not None:
+                raise ValueError(
+                    "resident device-point tasks currently require the full identity AO map"
+                )
+            point_count = checked_int(
+                point_count, "resident grid point count", low=1
+            )
+            if point_count > self.plan.tile_points:
+                raise ValueError("resident grid points exceed the prepared tile shape")
+            if (
+                type(device_points) is not int
+                or device_points <= 0
+                or self.plan.active_ao_capacity < self.plan.nao
+            ):
+                raise ValueError("invalid resident CUDA point binding")
+            if not self._density_ready:
+                raise ValueError("resident grid features require supplied density")
+            if self.source_stamp is not None and stamp != self.source_stamp:
+                raise ValueError("stale or missing current CUDA density source stamp")
+            self._call(
+                "grid_cuda_run_selected_device_deferred_v1",
+                self._handle,
+                ct.c_void_p(device_points),
+                point_count,
+                1,
+                None,
+                self.plan.nao,
+                None,
+                None,
+            )
+            with self._borrow_current_task() as lease:
+                yield lease
 
     @contextmanager
     def feature_task(
