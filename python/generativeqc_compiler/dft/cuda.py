@@ -328,6 +328,16 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        lib.grid_cuda_density_device_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_uint,
+            ct.c_void_p,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
         lib.grid_cuda_source_v1.argtypes = [
             ct.c_void_p,
             DOUBLE,
@@ -363,6 +373,18 @@ class CudaGrid:
         ]
         lib.grid_cuda_run_selected_v1.argtypes = selected_run_args
         lib.grid_cuda_run_selected_deferred_v1.argtypes = selected_run_args
+        lib.grid_cuda_run_selected_device_deferred_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_int,
+            SIZE,
+            ct.c_size_t,
+            DOUBLE,
+            DOUBLE,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
         lib.grid_cuda_view_v1.argtypes = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -469,6 +491,68 @@ class CudaGrid:
             self._fallback_reason = "missing_orbitals"
             self._source_statistics = {}
             self._call("grid_cuda_density_v1", self._handle, pointer(d), d.size)
+            self._density_ready = True
+
+    def set_density_device(
+        self,
+        *,
+        device_id: typing.Any,
+        alpha: typing.Any,
+        beta: typing.Any,
+        matrix_elements: typing.Any,
+        spins: typing.Any,
+        source_stream: typing.Any,
+    ) -> None:
+        """Borrow a token-checked resident KS density without host staging.
+
+        Native execution copies/splits on the producer stream and establishes
+        device-side ordering with this grid owner's stream. The external source
+        allocation remains owned by the KS plan.
+        """
+        with self._lock:
+            self._check_open()
+            device_id = checked_int(device_id, "resident density device", low=0)
+            matrix_elements = checked_int(
+                matrix_elements, "resident density matrix elements", low=1
+            )
+            spins = checked_int(spins, "resident density spins", low=1)
+            if (
+                device_id != self.device_id
+                or matrix_elements != self.plan.nao * self.plan.nao
+                or spins not in (1, 2)
+                or type(alpha) is not int
+                or alpha <= 0
+                or (spins == 2 and (type(beta) is not int or beta <= 0))
+                or (spins == 1 and beta not in (None, 0))
+                or type(source_stream) is not int
+                or source_stream <= 0
+            ):
+                raise ValueError("incompatible resident CUDA density binding")
+            self._density_ready = False
+            self._source_stamp = None
+            self._source_kind = "density_matrix"
+            self._fallback_reason = "missing_orbitals"
+            self._source_statistics = {}
+            before = perf_counter()
+            self._call(
+                "grid_cuda_density_device_v1",
+                self._handle,
+                ct.c_void_p(alpha),
+                ct.c_void_p(0 if beta is None else beta),
+                matrix_elements,
+                spins,
+                ct.c_void_p(source_stream),
+            )
+            self._source_kind = "resident_density"
+            self._fallback_reason = None
+            self._source_statistics = {
+                "source_kind": self._source_kind,
+                "source_upload_seconds": perf_counter() - before,
+                "source_upload_bytes": 0,
+                "source_device_copy_bytes": matrix_elements
+                * 8
+                * (2 if spins == 2 else 1),
+            }
             self._density_ready = True
 
     def set_source(
@@ -787,6 +871,60 @@ class CudaGrid:
             required.remove("sigma")
             required.add("gradient")
         return published, required
+
+    @contextmanager
+    def feature_task_device_points(
+        self,
+        device_points: typing.Any,
+        point_count: typing.Any,
+        ao_ids: typing.Any,
+        ingredients: typing.Iterable[str],
+        *,
+        stamp: typing.Any = None,
+    ) -> typing.Any:
+        """Lend AO/features from immutable resident CUDA point coordinates.
+
+        This device-only path is deliberately deferred: the downstream same-stream
+        consumer propagates the grid error before reading AO/features. The point
+        allocation remains caller-owned and must outlive the lease.
+        """
+        _, required = self._normalize_task_ingredients(ingredients)
+        with self._lock:
+            self._check_open()
+            if self.plan.active_ao_capacity is None:
+                raise ValueError("native CUDA XC requires a local CUDA plan")
+            if not required.issubset(self.ingredients):
+                raise ValueError("prepared CUDA features do not cover native XC")
+            if ao_ids is not None:
+                raise ValueError(
+                    "resident device-point tasks currently require the full identity AO map"
+                )
+            point_count = checked_int(point_count, "resident grid point count", low=1)
+            if point_count > self.plan.tile_points:
+                raise ValueError("resident grid points exceed the prepared tile shape")
+            if (
+                type(device_points) is not int
+                or device_points <= 0
+                or self.plan.active_ao_capacity < self.plan.nao
+            ):
+                raise ValueError("invalid resident CUDA point binding")
+            if not self._density_ready:
+                raise ValueError("resident grid features require supplied density")
+            if self.source_stamp is not None and stamp != self.source_stamp:
+                raise ValueError("stale or missing current CUDA density source stamp")
+            self._call(
+                "grid_cuda_run_selected_device_deferred_v1",
+                self._handle,
+                ct.c_void_p(device_points),
+                point_count,
+                1,
+                None,
+                self.plan.nao,
+                None,
+                None,
+            )
+            with self._borrow_current_task() as lease:
+                yield lease
 
     @contextmanager
     def feature_task(

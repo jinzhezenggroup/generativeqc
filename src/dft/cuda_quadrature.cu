@@ -26,7 +26,7 @@ std::uint64_t next_grid_owner() noexcept {
 
 std::size_t cuda_resident_grid_bytes(std::size_t points) {
   if (!points) throw std::invalid_argument("invalid CUDA resident-grid shape");
-  return q::product(q::product(4, points), sizeof(double));
+  return q::product(q::product(5, points), sizeof(double));
 }
 
 std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points) {
@@ -67,11 +67,13 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   // Its lifetime is independent of this private preparation stream: all writes
   // are ordered before the final stream drain below.
   std::shared_ptr<runtime::OwnedCudaBuffer<double>> resident;
-  double *resident_points = nullptr, *resident_weights = nullptr;
+  double *resident_points = nullptr, *resident_weights = nullptr,
+         *resident_atomic_weights = nullptr;
   if (retain_device) {
-    resident = std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(4, l.points));
+    resident = std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(5, l.points));
     resident_points = resident->get();
     resident_weights = resident_points + q::product(3, l.points);
+    resident_atomic_weights = resident_weights + l.points;
   }
   runtime::OwnedCudaBuffer<double> storage(device, l.doubles, stream.get());
   runtime::OwnedCudaBuffer<int> invalid(device, 1, stream.get());
@@ -105,6 +107,12 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
     q::launch_partition(spec.partition_iterations, count, l.atoms, data + l.distances,
                         data + l.geometry, data + l.logs, stream.get());
     check(cudaGetLastError());
+    // points_kernel publishes the owner-local radial/angular measure before
+    // Becke normalization overwrites data+l.weights. Preserve that exact raw
+    // measure in the immutable resident owner for moving-grid force consumers.
+    if (resident)
+      check(cudaMemcpyAsync(resident_atomic_weights + begin, data + l.weights,
+                            count * sizeof(double), cudaMemcpyDeviceToDevice, stream.get()));
     q::normalize_kernel<<<q::blocks(count), 128, 0, stream.get()>>>(
         begin, count, per_atom, l.atoms, data + l.logs, data + l.weights, invalid.get());
     check(cudaGetLastError());
@@ -133,6 +141,7 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
     result.cuda_storage_ = resident;
     result.cuda_points_ = resident_points;
     result.cuda_weights_ = resident_weights;
+    result.cuda_atomic_weights_ = resident_atomic_weights;
     result.cuda_device_bytes_ = cuda_resident_grid_bytes(l.points);
     result.cuda_owner_ = owner;
     result.cuda_device_ = device;

@@ -28,6 +28,7 @@ struct GridPlan {
   size_t orbital_capacity[2]{}, orbital_count[2]{}, orbital_tile{};
   unsigned feature_mask = 15;
   double *basis{}, *density{}, *points{}, *ao{}, *work{}, *features{};
+  const double* current_points{};
   double *local_density{}, *local_potential{}, *potential{};
   double *factors[2]{}, *factor_panel{}, *psi{};
   size_t* ao_ids{};
@@ -85,6 +86,23 @@ __global__ void gather_factor(const double* global, const size_t* ids, I active,
     const I row = i / width, column = i % width;
     packed[i] = global[(ids ? ids[row] : row) * rank + begin + column];
   }
+}
+
+__global__ void split_restricted_density(const double* total, size_t count, double* spin_density) {
+  for (size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
+       i += size_t(blockDim.x) * gridDim.x) {
+    const double value = 0.5 * total[i];
+    spin_density[i] = value;
+    spin_density[count + i] = value;
+  }
+}
+
+void require_device_pointer(const void* pointer, int device) {
+  if (!pointer) throw std::invalid_argument("null CUDA grid device pointer");
+  cudaPointerAttributes attributes{};
+  cuda_check(cudaPointerGetAttributes(&attributes, pointer));
+  if (attributes.type != cudaMemoryTypeDevice || attributes.device != device)
+    throw std::invalid_argument("CUDA grid device pointer is on the wrong device");
 }
 
 // Tasks execute serially on the owner's stream, and each map is unique. Thus
@@ -291,6 +309,72 @@ int grid_cuda_density_v1(void* pointer, const double* density, size_t elements, 
  * content/generation validation; upload D and its checked B snapshots together.
  * This ABI does not infer compatibility from dimensions or diagonalize D.
  */
+int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double* beta,
+                                size_t matrix_elements, unsigned spins, void* source_stream,
+                                char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
+      throw std::invalid_argument("invalid CUDA grid resident density binding");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (matrix_elements != p.nao * p.nao)
+      throw std::invalid_argument("CUDA grid resident density shape mismatch");
+    require_device_pointer(alpha, ctx.device);
+    if (spins == 2) require_device_pointer(beta, ctx.device);
+    auto producer = reinterpret_cast<cudaStream_t>(source_stream);
+    unsigned producer_flags = 0;
+    cuda_check(cudaStreamGetFlags(producer, &producer_flags));
+
+    p.view_ready = p.density_jets_ready = false;
+    ++p.generation;
+    p.density_ready = p.orbital_ready = p.use_orbitals = false;
+
+    const auto enqueue_copy = [&] {
+      if (spins == 1) {
+        split_restricted_density<<<blocks(matrix_elements, 128), 128, 0, producer>>>(
+            alpha, matrix_elements, p.density);
+        cuda_check(cudaGetLastError());
+      } else {
+        cuda_check(cudaMemcpyAsync(p.density, alpha, matrix_elements * sizeof(double),
+                                   cudaMemcpyDeviceToDevice, producer));
+        cuda_check(cudaMemcpyAsync(p.density + matrix_elements, beta,
+                                   matrix_elements * sizeof(double), cudaMemcpyDeviceToDevice,
+                                   producer));
+      }
+    };
+
+    if (producer == ctx.stream) {
+      enqueue_copy();
+    } else {
+      cudaEvent_t destination_ready{}, source_copied{};
+      cuda_check(cudaEventCreateWithFlags(&destination_ready, cudaEventDisableTiming));
+      try {
+        cuda_check(cudaEventCreateWithFlags(&source_copied, cudaEventDisableTiming));
+        try {
+          cuda_check(cudaEventRecord(destination_ready, ctx.stream));
+          cuda_check(cudaStreamWaitEvent(producer, destination_ready, 0));
+          enqueue_copy();
+          cuda_check(cudaEventRecord(source_copied, producer));
+          cuda_check(cudaStreamWaitEvent(ctx.stream, source_copied, 0));
+        } catch (...) {
+          cudaEventDestroy(source_copied);
+          throw;
+        }
+        cuda_check(cudaEventDestroy(source_copied));
+      } catch (...) {
+        cudaEventDestroy(destination_ready);
+        throw;
+      }
+      cuda_check(cudaEventDestroy(destination_ready));
+    }
+    if (p.local)
+      cuda_check(cudaMemsetAsync(p.potential, 0, 2 * matrix_elements * sizeof(double), ctx.stream));
+    p.density_ready = true;
+  });
+}
+
 int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, const double* alpha,
                         const double* beta, const size_t* counts, int use_orbitals, char* error,
                         size_t size) {
@@ -333,10 +417,12 @@ int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, c
 static int grid_cuda_run_selected_impl(void* pointer, const double* points, size_t npoint,
                                        int features, const size_t* ao_ids, size_t active,
                                        double* feature_output, double* jet_output,
-                                       int defer_error_to_consumer, char* error, size_t size) {
+                                       int defer_error_to_consumer, int points_on_device,
+                                       char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || (features != 0 && features != 1) ||
-        (defer_error_to_consumer != 0 && defer_error_to_consumer != 1))
+        (defer_error_to_consumer != 0 && defer_error_to_consumer != 1) ||
+        (points_on_device != 0 && points_on_device != 1))
       throw std::invalid_argument("invalid CUDA grid execution");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
@@ -378,17 +464,25 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     // section timing.
     const bool detailed_profile =
         !defer_error_to_consumer && !(npoint && features && !feature_output && !jet_output);
-    for (size_t i = 0; i < 3 * npoint; ++i)
-      if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
+    const double* task_points = p.points;
+    if (points_on_device) {
+      if (npoint) require_device_pointer(points, ctx.device);
+      task_points = points;
+    } else {
+      for (size_t i = 0; i < 3 * npoint; ++i)
+        if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
+    }
     ctx.section(detailed_profile, ctx.metrics.input_ms, [&] {
-      cuda_check(
-          cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
+      if (!points_on_device && npoint)
+        cuda_check(
+            cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
       cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
       if (features) cuda_check(cudaMemsetAsync(p.features, 0, 13 * npoint * 8, ctx.stream));
       if (p.local && active && !identity_map)
         cuda_check(cudaMemcpyAsync(p.ao_ids, ao_ids, active * sizeof(size_t),
                                    cudaMemcpyHostToDevice, ctx.stream));
     });
+    p.current_points = task_points;
     // Even an empty point tile publishes its new map and clears prior errors;
     // a borrowed view must never expose the previous task's AO labels.
     if (!npoint) {
@@ -398,7 +492,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     if (active)
       ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
         ao_kernel<<<blocks(p.jets * npoint * active, 128), 128, 0, ctx.stream>>>(
-            p.basis, p.natom, p.nprimitive, active, p.points, npoint, p.jets, p.ao, ctx.error,
+            p.basis, p.natom, p.nprimitive, active, task_points, npoint, p.jets, p.ao, ctx.error,
             p.local && !identity_map ? p.ao_ids : nullptr);
         cuda_check(cudaGetLastError());
       });
@@ -486,7 +580,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
                               const size_t* ao_ids, size_t active, double* feature_output,
                               double* jet_output, char* error, size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
-                                     feature_output, jet_output, 0, error, size);
+                                     feature_output, jet_output, 0, 0, error, size);
 }
 
 int grid_cuda_run_selected_deferred_v1(void* pointer, const double* points, size_t npoint,
@@ -494,7 +588,14 @@ int grid_cuda_run_selected_deferred_v1(void* pointer, const double* points, size
                                        double* feature_output, double* jet_output, char* error,
                                        size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
-                                     feature_output, jet_output, 1, error, size);
+                                     feature_output, jet_output, 1, 0, error, size);
+}
+int grid_cuda_run_selected_device_deferred_v1(void* pointer, const double* points, size_t npoint,
+                                              int features, const size_t* ao_ids, size_t active,
+                                              double* feature_output, double* jet_output,
+                                              char* error, size_t size) {
+  return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
+                                     feature_output, jet_output, 1, 1, error, size);
 }
 int grid_cuda_run_v1(void* pointer, const double* points, size_t npoint, int features,
                      double* feature_output, double* jet_output, char* error, size_t size) {
@@ -517,7 +618,7 @@ int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, ch
                p.last_active,
                p.jets,
                p.last_identity_map ? nullptr : p.ao_ids,
-               p.points,
+               p.current_points,
                p.ao,
                p.features_ready ? p.features : nullptr,
                p.local_potential,

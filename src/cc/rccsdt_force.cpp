@@ -238,6 +238,10 @@ struct SmallResponseWeights {
   std::vector<double> hcore, overlap, rotation_gradient, stationarity, orbital_rhs;
 };
 
+struct ControlWeights {
+  std::vector<double> stationarity, orbital_rhs;
+};
+
 #if GENERATIVEQC_HAS_CUDA
 CudaParameterResponseView cuda_parameter_view(const ParameterWeights& bar) {
   return {std::span<const double>{bar.foo},  std::span<const double>{bar.fov},
@@ -314,53 +318,47 @@ std::vector<double> hamiltonian_eri_pullback(const ParameterWeights& bar, double
   return {output.eri, output.eri + n4};
 }
 
-SmallResponseWeights fock_small_pullback(std::span<const double> bar_fock,
-                                         const RawHamiltonian& raw, std::size_t o, std::size_t v,
-                                         std::size_t max_bytes) {
-  const auto n = checked_add(o, v);
-  if (bar_fock.size() != square(n))
-    throw std::invalid_argument("RCCSD(T) Fock response shape mismatch");
-  const auto arena_elements = generated::fock_small_weights_arena_elements(o, v);
-  const auto retained_elements = checked_add(checked_mul(4, square(n)), checked_mul(o, v));
-  if (checked_add(bytes(arena_elements), bytes(retained_elements)) > max_bytes)
-    throw std::length_error("RCCSD(T) small Fock response exceeds host budget");
+ControlWeights hamiltonian_control_pullback(const ParameterWeights& bar, double reference_seed,
+                                            const RawHamiltonian& raw, std::size_t o, std::size_t v,
+                                            std::size_t max_bytes) {
+  const auto n = checked_add(o, v), ov = checked_mul(o, v);
+  const auto arena_elements = generated::hamiltonian_control_arena_elements(o, v);
+  if (checked_add(bytes(arena_elements), bytes(checked_add(square(n), ov))) > max_bytes)
+    throw std::length_error("RCCSD(T) Hamiltonian control response exceeds host budget");
   std::vector<double> arena(arena_elements);
-  generated::FockWeightInputs inputs{};
-  inputs.bar_fock = bar_fock.data();
+  generated::HamiltonianWeightInputs inputs{};
+  inputs.bar_foo = bar.foo.data();
+  inputs.bar_fov = bar.fov.data();
+  inputs.bar_fvv = bar.fvv.data();
+  inputs.bar_ovov = bar.ovov.data();
+  inputs.bar_ovvo = bar.ovvo.data();
+  inputs.bar_oovv = bar.oovv.data();
+  inputs.bar_ovvv = bar.ovvv.data();
+  inputs.bar_ovoo = bar.ovoo.data();
+  inputs.bar_oooo = bar.oooo.data();
+  inputs.bar_vvvv = bar.vvvv.data();
+  inputs.bar_reference_electronic_energy = &reference_seed;
   inputs.density = raw.density.data();
   inputs.g = raw.g.data();
   inputs.h = raw.h.data();
   inputs.rotation = raw.rotation.data();
   const auto output =
-      generated::run_fock_small_weights_cpu(o, v, inputs, arena.data(), arena.size());
-  return copy_small_hamiltonian_outputs(output, n, o, v);
+      generated::run_hamiltonian_control_cpu(o, v, inputs, arena.data(), arena.size());
+  return {{output.stationarity, output.stationarity + square(n)},
+          {output.orbital_rhs, output.orbital_rhs + ov}};
 }
 
-void add_in_place(SmallResponseWeights& target, const SmallResponseWeights& source) {
-  auto add = [](std::vector<double>& a, const std::vector<double>& b) {
-    if (a.size() != b.size()) throw std::invalid_argument("RCCSD(T) response shape mismatch");
-    for (std::size_t i = 0; i < a.size(); ++i) a[i] += b[i];
-  };
-  add(target.hcore, source.hcore);
-  add(target.overlap, source.overlap);
-  add(target.rotation_gradient, source.rotation_gradient);
-  add(target.stationarity, source.stationarity);
-  add(target.orbital_rhs, source.orbital_rhs);
-}
-
-void add_fock_seed(ParameterWeights& target, std::span<const double> bar_fock, std::size_t o,
-                   std::size_t v) {
+void add_same_space_fock_seed(ParameterWeights& target, std::span<const double> bar_fock,
+                              std::size_t o, std::size_t v) {
   const auto n = checked_add(o, v);
   if (bar_fock.size() != square(n))
-    throw std::invalid_argument("RCCSD(T) accumulated Fock seed shape mismatch");
-  for (std::size_t a = 0; a < v; ++a)
-    for (std::size_t i = 0; i < o; ++i)
-      if (bar_fock[(o + a) * n + i] != 0.0)
-        throw std::logic_error("RCCSD(T) accumulated Fock seed contains unsupported vo weight");
-  for (std::size_t i = 0; i < o; ++i) {
+    throw std::invalid_argument("RCCSD(T) Fock seed shape mismatch");
+  for (std::size_t i = 0; i < o; ++i)
+    for (std::size_t a = 0; a < v; ++a)
+      if (bar_fock[i * n + o + a] != 0.0 || bar_fock[(o + a) * n + i] != 0.0)
+        throw std::logic_error("RCCSD(T) control folding accepts same-space Fock seeds only");
+  for (std::size_t i = 0; i < o; ++i)
     for (std::size_t j = 0; j < o; ++j) target.foo[i * o + j] += bar_fock[i * n + j];
-    for (std::size_t a = 0; a < v; ++a) target.fov[i * v + a] += bar_fock[i * n + o + a];
-  }
   for (std::size_t a = 0; a < v; ++a)
     for (std::size_t b = 0; b < v; ++b) target.fvv[a * v + b] += bar_fock[(o + a) * n + o + b];
 }
@@ -498,10 +496,11 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   const auto hamiltonian_small_arena =
       bytes(generated::hamiltonian_small_weights_arena_elements(o, v));
   const auto hamiltonian_eri_arena = bytes(generated::hamiltonian_eri_weights_arena_elements(o, v));
-  const auto fock_small_arena = bytes(generated::fock_small_weights_arena_elements(o, v));
+  const auto control_arena = bytes(generated::hamiltonian_control_arena_elements(o, v));
   const auto core = checked_add(before_raw, raw_retained);
-  // Correlation and canonicalization both remain live through the final
-  // pullbacks. The ERI cotangent is isolated, but the response owners are not freed.
+  // Retain the conservative split-response envelope while introducing the
+  // control-only CPU arena. The control owner is smaller than this bound and
+  // is released before final small/ERI publication; no admission cap is relaxed.
   const auto response_base =
       sum({core, checked_mul(2, small_response_retained),
            bytes(generated::orbital_jvp_arena_elements(o, v)),
@@ -510,13 +509,13 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   z_options.restart = 30;
   z_options.max_workspace_bytes = max_bytes;
   const auto gmres = response::prepare_gmres(ov, z_options);
-  // Z solution and independent residual survive the solve; basis/action are
-  // already included in response_base. Moving final weights does not free them.
+  // This remains an upper bound after early control-workspace release.
+  // Moving final weights into the derivative consumer does not free their data.
   const auto final_response_base = checked_add(response_base, bytes(checked_mul(2, ov)));
   plan.response_phase_bytes =
       std::max({sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
                 sum({core, checked_mul(2, small_response_retained), bytes(checked_mul(2, n2)),
-                     fock_small_arena}),
+                     control_arena}),
                 checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
                 checked_add(response_base, gmres.workspace_bytes),
                 sum({final_response_base, small_response_retained, hamiltonian_small_arena}),
@@ -673,25 +672,29 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 #endif
     return hamiltonian_eri_pullback(bar, reference_seed, raw, o, v, max_bytes);
   };
-  auto fock_dispatch = [&](std::span<const double> bar_fock) -> SmallResponseWeights {
+  auto control_dispatch = [&](const ParameterWeights& bar,
+                              double reference_seed) -> ControlWeights {
 #if GENERATIVEQC_HAS_CUDA
-    if (cuda_response) return detach_cuda_small(cuda_response->fock_small(bar_fock));
+    if (cuda_response) {
+      auto full = detach_cuda_small(
+          cuda_response->hamiltonian_small(cuda_parameter_view(bar), reference_seed));
+      return {std::move(full.stationarity), std::move(full.orbital_rhs)};
+    }
 #endif
-    return fock_small_pullback(bar_fock, raw, o, v, max_bytes);
+    return hamiltonian_control_pullback(bar, reference_seed, raw, o, v, max_bytes);
   };
-  auto correlation = hamiltonian_dispatch(parameters, 0.0);
 
+  // Canonical-orbital denominator sources are same-space Fock cotangents.
+  // Fold them into the already-declared foo/fvv parameter seeds so every
+  // intermediate orbital-control query can use the pruned Hamiltonian VJP.
   std::vector<double> bar_fock(square(n), 0.0);
-  std::vector<double> accumulated_fock_seed(square(n), 0.0);
   if (triples) {
     for (std::size_t i = 0; i < o; ++i) bar_fock[i * n + i] = triples->eps_o[i];
     for (std::size_t a = 0; a < v; ++a) bar_fock[(o + a) * n + o + a] = triples->eps_v[a];
-    for (std::size_t index = 0; index < bar_fock.size(); ++index)
-      accumulated_fock_seed[index] += bar_fock[index];
-    const auto denominator = fock_dispatch(bar_fock);
-    add_in_place(correlation, denominator);
+    add_same_space_fock_seed(parameters, bar_fock, o, v);
     std::fill(bar_fock.begin(), bar_fock.end(), 0.0);
   }
+  auto correlation = control_dispatch(parameters, 0.0);
 
   double minimum_same_space_gap = std::numeric_limits<double>::infinity();
   for (const auto& bounds :
@@ -707,10 +710,10 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
         bar_fock[q * n + p] = value;
       }
   }
-  for (std::size_t index = 0; index < bar_fock.size(); ++index)
-    accumulated_fock_seed[index] += bar_fock[index];
-  const auto canonicalization = fock_dispatch(bar_fock);
-  add_in_place(correlation, canonicalization);
+  add_same_space_fock_seed(parameters, bar_fock, o, v);
+  correlation = ControlWeights{};
+  correlation = control_dispatch(parameters, 0.0);
+  std::vector<double>().swap(bar_fock);
   double same_space_stationarity = 0.0;
   for (const auto& bounds :
        {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}})
@@ -796,7 +799,16 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   if (std::max(z.residual_norm, independent_residual) > kOrbitalResidualTolerance)
     throw std::runtime_error("independent RCCSD(T) physical Z-vector residual failed");
 
-  add_fock_seed(parameters, accumulated_fock_seed, o, v);
+  // The control response and dense curvature oracle are dead after the checked
+  // physical Z solve. Release them before the one complete derivative VJP.
+  correlation = ControlWeights{};
+  std::vector<double>().swap(independent);
+  std::vector<double>().swap(response_matrix);
+  std::vector<double>().swap(basis);
+  std::vector<double>().swap(action);
+  std::vector<double>().swap(d_rotation);
+  std::vector<double>().swap(orbital_arena);
+
   for (std::size_t index = 0; index < dimension; ++index)
     parameters.fov[index] -= z.solution[index];
   auto total = hamiltonian_dispatch(parameters, 1.0);

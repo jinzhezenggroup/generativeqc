@@ -1627,6 +1627,7 @@ generativeqc_status CudaKsPlan::resident_final_density(const CudaKsFinalStateTok
                impl_->spins == 2 ? impl_->density + impl_->matrix : nullptr,
                impl_->matrix,
                impl_->spins,
+               reinterpret_cast<void*>(impl_->stream),
                impl_->owner,
                impl_->solve_epoch,
                impl_->final_generation};

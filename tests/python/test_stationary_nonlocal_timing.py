@@ -37,7 +37,8 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
 
     @contextmanager
     def feature_task(*args: Any, **kwargs: Any) -> Iterator[SimpleNamespace]:
-        assert args[1] is None and kwargs["defer_error_to_consumer"]
+        assert args == (8192, 1, None, ("rho", "gradient", "tau"))
+        assert not kwargs
         calls.append("borrow")
         yield SimpleNamespace(view=SimpleNamespace(stream=31))
         calls.append("release")
@@ -49,22 +50,73 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         calls.append("pairs")
         return SimpleNamespace(pointer=4096, stride=1, stream=31, generation=1)
 
+    def geometry(
+        task: Any,
+        begin: int,
+        points_per_atom: int,
+        device_weights: int,
+        weights: Any,
+        device_raw: int,
+        host_raw: Any,
+        **kwargs: Any,
+    ) -> None:
+        assert task.view.stream == 31
+        assert (begin, points_per_atom) == (0, 1)
+        assert device_weights == 16384
+        assert device_raw == 24576
+        np.testing.assert_array_equal(weights, np.ones(1))
+        assert host_raw is None
+        assert kwargs == {"functional": 4}
+
+    def nonlocal_geometry(
+        task: Any,
+        begin: int,
+        points_per_atom: int,
+        device_weights: int,
+        weights: Any,
+        device_raw: int,
+        host_raw: Any,
+        pointer: int,
+        stride: int,
+        offset: int,
+    ) -> None:
+        geometry(
+            task,
+            begin,
+            points_per_atom,
+            device_weights,
+            weights,
+            device_raw,
+            host_raw,
+            functional=4,
+        )
+        assert (pointer, stride, offset) == (4096, 1, 0)
+
     parts = {
         name: np.zeros((1, 3)) for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
     }
     sink = SimpleNamespace(
-        geometry=lambda *args, **kwargs: None,
-        geometry_external_device=lambda *args: None,
+        geometry_molecular_resident_weights=geometry,
+        geometry_external_device_molecular_resident_weights=nonlocal_geometry,
+        natom=1,
         finish=lambda: parts,
     )
     state = SimpleNamespace(
         grid=SimpleNamespace(
             points=np.zeros((1, 3)), owners=np.zeros(1), weights=np.ones(1)
         ),
-        _source=object(),
+        _source=SimpleNamespace(
+            cuda_resident_grid=lambda: SimpleNamespace(
+                device=0,
+                point_count=1,
+                points=8192,
+                weights=16384,
+                atomic_weights=24576,
+            )
+        ),
     )
     components, seconds, work = MODULE.resident_nonlocal_geometry(
-        grid=SimpleNamespace(feature_task=feature_task),
+        grid=SimpleNamespace(feature_task_device_points=feature_task, device_id=0),
         sources=sink,
         nonlocal_sources=sink,
         nonlocal_owner=SimpleNamespace(
