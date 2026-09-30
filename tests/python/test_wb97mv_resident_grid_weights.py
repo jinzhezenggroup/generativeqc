@@ -20,26 +20,28 @@ def test_wb97mv_join_uses_resident_weight_slices() -> None:
     assert "geometry_external_device_molecular_resident_weights(" in JOIN
     assert '"grid_weight_source": "exact-native-resident-grid"' in JOIN
     assert '"grid_weight_h2d_bytes": 0' in JOIN
+    assert "device_raw = resident_grid.atomic_weights + begin * 8" in JOIN
+    assert '"grid_atomic_measure_h2d_bytes": 0' in JOIN
 
 
-def test_semilocal_resident_weight_enqueue_uploads_only_raw_measure() -> None:
+def test_semilocal_resident_grid_enqueue_uploads_no_grid_measure() -> None:
     body = _native_block(
         "int stationary_geometry_molecular_resident_weights_enqueue(",
         "int stationary_geometry_molecular_enqueue(",
     )
     assert "upload(*p, p->weights" not in body
-    assert "upload(*p, p->raw, raw" in body
-    assert "device_weights, p->raw" in body
+    assert "upload(*p, p->raw" not in body
+    assert "device_weights, device_raw" in body
 
 
-def test_nonlocal_resident_weight_enqueue_uploads_only_raw_measure() -> None:
+def test_nonlocal_resident_grid_enqueue_uploads_no_grid_measure() -> None:
     body = _native_block(
         "int stationary_geometry_external_device_molecular_resident_weights_enqueue(",
         "int stationary_geometry_molecular_resident_weights_enqueue(",
     )
     assert "upload(*p, p->weights" not in body
-    assert "upload(*p, p->raw, raw" in body
-    assert "device_weights, p->raw, external_device" in body
+    assert "upload(*p, p->raw" not in body
+    assert "device_weights, device_raw, external_device" in body
 
 
 def test_python_scheduler_passes_device_weights_without_host_pointer_conversion() -> (
@@ -52,4 +54,6 @@ def test_python_scheduler_passes_device_weights_without_host_pointer_conversion(
     body = SCHEDULER[begin:end]
     assert '"stationary_geometry_molecular_resident_weights_enqueue"' in body
     assert "_ptr(host_weights)" not in body
+    assert "_ptr(host_raw)" not in body
     assert "device_weights," in body
+    assert "ct.cast(device_raw, _DOUBLE)" in body
