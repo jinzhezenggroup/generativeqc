@@ -124,8 +124,8 @@ __global__ void task_reduce(const double* input, const int64_t* tasks, size_t co
                             const int64_t* ao_atoms, size_t na, double* output, int* error);
 __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
                                const double* centers, size_t na, double* output, int* error);
-__global__ void nuclear_all_kernel(unsigned kind, const double* charges,
-                                   const double* centers, size_t na, double* output, int* error);
+__global__ void nuclear_all_kernel(unsigned kind, const double* charges, const double* centers,
+                                   size_t na, double* output, int* error);
 __global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error);
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners, size_t owner_offset,
