@@ -1,0 +1,196 @@
+name: Stage reviewed compiler repairs v4
+on:
+  push:
+    branches: [agent/even-pr-repair-20260930]
+    paths: [.github/workflows/even-pr-reviewed-objects-v4.yml]
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GIT_AUTHOR_NAME: ChatGPT
+      GIT_AUTHOR_EMAIL: noreply@openai.com
+      GIT_COMMITTER_NAME: ChatGPT
+      GIT_COMMITTER_EMAIL: noreply@openai.com
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+      - name: Reproduce checked compiler trees on scratch refs only
+        run: |
+          python3 - <<'PY'
+          import json,re,subprocess
+          from pathlib import Path
+          MASTER='10913929dc78e73ec203d553b6f2040f9ff41c21'
+          ROWS=[
+           (1600,'9a9dea2b1039323a8c1a0ac7a78bc819059ef93a','f6be2a91361bc1c3f26f6b85ecc450a202e7fa5a','81c40922796083e2ec4175ca4dc352c9c81b061c'),
+           (1602,'025df79f95024943aa1cb5c96d917ddaf41f5826','b9c50a1a1919c92c136158e980a0a29975918ae7','8c13efbf6838d2ee4e9816478bf3d9f3dba0ca46'),
+          ]
+          def git(*args,input=None,check=True):
+           return subprocess.run(['git',*args],input=input,text=True,capture_output=True,check=check)
+          def replace(path,old,new,count=1):
+           p=Path(path);s=p.read_text()
+           if s.count(old)!=count: raise RuntimeError('unexpected replacement count: '+path)
+           p.write_text(s.replace(old,new))
+          def resolve(path,operation,count=1):
+           p=Path(path);pattern=re.compile(r'^<<<<<<< HEAD\n(.*?)^=======\n(.*?)^>>>>>>> origin/master\n',re.M|re.S)
+           text,n=pattern.subn(lambda m:operation(m[1],m[2]),p.read_text())
+           if n!=count:raise RuntimeError('unexpected conflict count: '+path+' '+str(n))
+           p.write_text(text)
+          def repair(pr):
+           if pr==1600:
+            for path in ['python/generativeqc_compiler/tensor/__init__.py','python/generativeqc_compiler/tensor/cuda_plan.py','tests/python/test_tensor_ad_program.py']:
+             resolve(path,lambda a,b:a,2 if path.endswith('cuda_plan.py') else 1)
+            def cc(a,b):
+             backend='cuda' if '"cuda"' in a else 'cpu'
+             return f'''    hamiltonian_weights = _prepare_production(hamiltonian.weights, "{backend}")
+              hamiltonian_small_weights = _prepare_production(
+                  build_hamiltonian_small_weight_program(
+                      *REPRESENTATIVE, explicit_density_input=True
+                  ),
+                  "{backend}",
+              )
+              hamiltonian_eri_weights = _prepare_production(
+                  build_hamiltonian_eri_weight_program(
+                      *REPRESENTATIVE, explicit_density_input=True
+                  ),
+                  "{backend}",
+              )
+              orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "{backend}")
+              fock_weights = _prepare_production(
+                  build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
+                  "{backend}",
+          '''
+            resolve('tools/generate_rccsd_native.py',cc,2)
+            p=Path('tools/generate_rccsd_native.py');s=p.read_text()
+            old='''    fock_small_weights = build_fock_small_weight_program(
+                  *REPRESENTATIVE, explicit_density_input=True
+              )'''
+            if s.count(old)!=2:raise RuntimeError('unexpected Fock program count')
+            for backend in ['cpu','cuda']:
+             s=s.replace(old,f'''    fock_small_weights = _prepare_production(
+                  build_fock_small_weight_program(*REPRESENTATIVE, explicit_density_input=True),
+                  "{backend}",
+              )''',1)
+            p.write_text(s)
+            replace('tests/python/test_tensor_layout.py','''    elif kind == "reshape":
+                  value = reshape(x, x.spec.indices)''','''    elif kind == "reshape":
+                  # Exercise a real producer, not an identity view removed by preparation.
+                  axes = x.spec.indices
+                  x = operand("x", "q", {"q": dims["i"] * dims["b"] * dims["k"]})
+                  value = reshape(x, axes)''')
+            p=Path('tests/python/test_stationary_problem.py');s=p.read_text()
+            a=s.index('    problem, _ = _nonsymmetric()',s.index('def test_generated_fragments_reuse_cuda_planning'))
+            b=s.index('\n\n@pytest.mark.parametrize(',a)
+            s=s[:a]+'''    problem, feeds = _nonsymmetric()
+              generated = problem.compile()
+              multiplier = np.linalg.solve(feeds["A"].T, -feeds["x"])
+              cases = (
+                  (generated.rhs, feeds, {"x": -feeds["x"]}),
+                  (
+                      generated.partials,
+                      {**feeds, generated.multiplier_inputs["x"]: multiplier},
+                      {
+                          generated.stationarity_outputs["x"]: np.zeros_like(feeds["x"]),
+                          generated.weight_outputs["q"]: feeds["c"] - multiplier,
+                          generated.weight_outputs["A"]: np.outer(multiplier, feeds["x"]),
+                      },
+                  ),
+              )
+              for program, inputs, expected in cases:
+                  serialized = program.dumps()
+                  for reassociate in (True, False):
+                      plan = plan_cuda(
+                          program,
+                          cuda_target_info("sm_80"),
+                          reassociate_contractions=reassociate,
+                      )
+                      assert plan.peak_bytes > 0
+                      assert set(plan.program.outputs) == set(program.outputs)
+                      assert program.dumps() == serialized
+                      # Exact preparation can change the DAG even when contraction order
+                      # is preserved. Validate against the independent dense adjoint, not
+                      # against object identity or a second invocation of the optimizer.
+                      actual = execute(plan.program, inputs).outputs
+                      assert set(actual) == set(expected)
+                      for name, value in expected.items():
+                          np.testing.assert_allclose(actual[name], value, rtol=1e-13, atol=1e-13)
+              # This interprets prepared programs, NOT native/GPU execution qualification.
+          '''+s[b:]
+            p.write_text(s)
+           else:
+            resolve('tools/generativeqc_cc/gradient_equations.py',lambda a,b:a)
+            master=git('show',MASTER+':tools/generativeqc_cc/gradient_equations.py').stdout
+            master=master.replace('from dataclasses import dataclass','import typing\nfrom dataclasses import dataclass',1).replace('    common = {','    common: dict[str, typing.Any] = {',1)
+            Path('python/generativeqc_compiler/cc/gradient_equations.py').write_text(master)
+            p=Path('tools/generate_rccsd_native.py');s=p.read_text()
+            a=s.index('_cc_path = ');b=s.index('from generativeqc_compiler.cc.doubles',a)
+            s=s[:a]+s[b:]
+            s=s.replace('from tools.generativeqc_cc.','from generativeqc_compiler.cc.')
+            s=s.replace('from generativeqc_compiler.cc.doubles import build_ccsd_program\n\n','from generativeqc_compiler.cc.doubles import build_ccsd_program\n')
+            p.write_text(s)
+            p=Path('tests/python/test_compiler_structure.py');s=p.read_text()
+            needle='        ("tools.generativeqc_cc.doubles", "generativeqc_compiler.cc.doubles"),'
+            additions=''
+            for module in ['gradient_equations','lambda_equations','triples','triples_tiles','triples_response']:
+             if module=='triples':additions+=f'\n        ("tools.generativeqc_cc.{module}", "generativeqc_compiler.cc.{module}"),'
+             else:additions+=f'\n        (\n            "tools.generativeqc_cc.{module}",\n            "generativeqc_compiler.cc.{module}",\n        ),'
+            if s.count(needle)!=1:raise RuntimeError('alias test anchor changed')
+            s=s.replace(needle,needle+additions)
+            s+='''\n\ndef test_rccsd_generator_imports_canonical_equations_without_tools_package() -> None:
+              import ast
+
+              source = (ROOT / "tools/generate_rccsd_native.py").read_text()
+              imports = {
+                  node.module
+                  for node in ast.walk(ast.parse(source))
+                  if isinstance(node, ast.ImportFrom) and node.module is not None
+              }
+              assert {
+                  "generativeqc_compiler.cc.doubles",
+                  "generativeqc_compiler.cc.gradient_equations",
+                  "generativeqc_compiler.cc.lambda_equations",
+                  "generativeqc_compiler.cc.triples_tiles",
+              } <= imports
+              assert not any(name.startswith("tools.generativeqc_cc") for name in imports)
+              assert 'types.ModuleType("tools.generativeqc_cc")' not in source
+          '''
+            p.write_text(s)
+          git('fetch','--no-tags','--depth=256','origin',MASTER,*[r[1] for r in ROWS])
+          git('config','merge.conflictStyle','merge')
+          git('config','core.autocrlf','false')
+          git('update-ref','refs/remotes/origin/master',MASTER)
+          results=[]
+          for pr,head,pre,expected in ROWS:
+           try:
+            git('reset','--hard');git('checkout','--detach',head)
+            merged=git('merge','--no-commit','--no-ff','origin/master',check=False)
+            if merged.returncode not in (0,1):raise RuntimeError(merged.stderr)
+            git('add','-A')
+            if git('write-tree').stdout.strip()!=pre:raise RuntimeError('pre-merge tree mismatch')
+            repair(pr);git('add','-A')
+            tree=git('write-tree').stdout.strip()
+            if tree!=expected:raise RuntimeError('final tree mismatch: '+tree)
+            git('diff','--cached','--check')
+            message=(f'fix(review): reconcile compiler PR #{pr} and retain checked production paths\n\n'
+                     'Exact locally tested before/after trees reproduced. Preserve shared\n'
+                     'preparation, current CC response programs and independent regressions.\n'
+                     'No NVIDIA execution or complete endpoint speedup is claimed.\n\n'
+                     'Agent: ChatGPT\nModel: GPT-6 Astra Pro\n')
+            commit=git('commit-tree',tree,'-p',head,'-p',MASTER,input=message).stdout.strip()
+            ref=f'agent/even-pr-v4-{pr}-{head[:8]}'
+            git('push','origin',f'{commit}:refs/heads/{ref}')
+            result={'pr':pr,'head':head,'tree':tree,'commit':commit,'scratch_ref':ref}
+           except Exception as e:result={'pr':pr,'error':str(e)}
+           results.append(result);print('REVIEW_RESULT '+json.dumps(result),flush=True)
+          Path('/tmp/review-round4.json').write_text(json.dumps(results,indent=2))
+          if any('error' in row for row in results):raise SystemExit('failed closed; original PR refs unchanged')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: reviewed-even-pr-round4
+          path: /tmp/review-round4.json
+          retention-days: 1
