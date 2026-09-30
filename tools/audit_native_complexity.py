@@ -20,6 +20,7 @@ _TYPE = (
 )
 _FOR = re.compile(r"\bfor\s*\(")
 _LOOP_VAR = re.compile(_TYPE + r"\s+([A-Za-z_]\w*)\s*=")
+_CONSTANT_BOUND = re.compile(r"\b(?P<variable>[A-Za-z_]\w*)\s*(?P<op><=|<)\s*(?P<bound>\d+)\b")
 _ALIAS = re.compile(_TYPE + r"\s+([A-Za-z_]\w*)\s*=\s*([^;]+);")
 _ACCESS = re.compile(r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*)*\s*\[([^\[\]]+)\]")
 _REDUCTION = re.compile(
@@ -34,6 +35,7 @@ class LoopSpan:
     body_start: int
     body_end: int
     variable: str | None
+    constant_extent: int | None = None
     depth: int = 1
 
 
@@ -43,7 +45,10 @@ class LoopFinding:
     line: int
     depth: int
     variables: tuple[str, ...]
+    effective_depth: int
+    constant_variables: tuple[str, ...]
     classification: str
+    recommendation: str
     lhs: str | None = None
 
 
@@ -177,6 +182,19 @@ def _statement_end(text: str, index: int) -> int:
     return len(text)
 
 
+def _constant_extent(header: str, variable: str | None) -> int | None:
+    if variable is None:
+        return None
+    init = re.search(rf"\b{re.escape(variable)}\s*=\s*(\d+)\b", header)
+    condition = _CONSTANT_BOUND.search(header)
+    if init is None or condition is None or condition.group("variable") != variable:
+        return None
+    start = int(init.group(1))
+    bound = int(condition.group("bound"))
+    extent = bound - start + (1 if condition.group("op") == "<=" else 0)
+    return extent if 0 <= extent <= 64 else None
+
+
 def _loop_spans(text: str) -> tuple[str, list[LoopSpan]]:
     clean = _mask_comments_and_literals(text)
     loops: list[LoopSpan] = []
@@ -187,14 +205,17 @@ def _loop_spans(text: str) -> tuple[str, list[LoopSpan]]:
             continue
         body_start = _skip_space(clean, closing + 1)
         body_end = _statement_end(clean, body_start)
-        variable_match = _LOOP_VAR.search(clean[opening + 1 : closing])
+        header = clean[opening + 1 : closing]
+        variable_match = _LOOP_VAR.search(header)
+        variable = variable_match.group(1) if variable_match else None
         loops.append(
             LoopSpan(
                 match.start(),
                 body_end,
                 body_start,
                 body_end,
-                variable_match.group(1) if variable_match else None,
+                variable,
+                _constant_extent(header, variable),
             )
         )
     resolved: list[LoopSpan] = []
@@ -211,6 +232,7 @@ def _loop_spans(text: str) -> tuple[str, list[LoopSpan]]:
                 loop.body_start,
                 loop.body_end,
                 loop.variable,
+                loop.constant_extent,
                 depth,
             )
         )
