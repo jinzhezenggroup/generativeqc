@@ -512,12 +512,14 @@ generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
 // together only after the current CUDA owner has completed successfully.
 generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
-    const double** points, const double** weights, std::size_t* point_count) {
-  if (!batch || !snapshot || !device || !points || !weights || !point_count)
+    const double** points, const double** weights, const double** atomic_weights,
+    std::size_t* point_count) {
+  if (!batch || !snapshot || !device || !points || !weights || !atomic_weights || !point_count)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   *device = -1;
   *points = nullptr;
   *weights = nullptr;
+  *atomic_weights = nullptr;
   *point_count = 0;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
@@ -525,13 +527,14 @@ generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v1(
     if (current != GENERATIVEQC_STATUS_SUCCESS) return current;
     std::string detail;
     const auto status = generativeqc::methods::detail::dft_cuda_resident_grid(
-        *batch->plan, snapshot->index, snapshot->token, *device, *points, *weights, *point_count,
-        detail);
+        *batch->plan, snapshot->index, snapshot->token, *device, *points, *weights,
+        *atomic_weights, *point_count, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       *device = -1;
       *points = nullptr;
       *weights = nullptr;
+      *atomic_weights = nullptr;
       *point_count = 0;
       return status;
     }
