@@ -183,7 +183,7 @@ def convergence_payload(result: typing.Any) -> list[dict[str, object]]:
                 "used": item.warm_start_used,
                 "fallback": item.warm_start_fallback,
             },
-            "incremental_direct_jk": item.incremental_direct_jk,
+            "incremental_direct_jk": getattr(item, "incremental_direct_jk", None),
         }
         for item in result.items
     ]
