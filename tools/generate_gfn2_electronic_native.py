@@ -34,6 +34,7 @@ from generativeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_scalar_hamiltonian_update_program,
     build_gfn2_scalar_integral_vjp_program,
 )
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 POPULATION_INPUTS = ("density", "integral", "accumulator")
@@ -58,12 +59,22 @@ MULTIPOLE_VJP_INPUTS = ("row_potential", "column_potential", "bar_updated")
 
 
 def native_header() -> str:
-    population = build_gfn2_population_update_program()
-    core_energy = build_gfn2_core_energy_update_program()
-    scalar_h = build_gfn2_scalar_hamiltonian_update_program()
-    multipole_h = build_gfn2_multipole_hamiltonian_update_program()
+    population = prepare_for_backend(
+        build_gfn2_population_update_program(), backend="cpu"
+    )
+    core_energy = prepare_for_backend(
+        build_gfn2_core_energy_update_program(), backend="cpu"
+    )
+    scalar_h = prepare_for_backend(
+        build_gfn2_scalar_hamiltonian_update_program(), backend="cpu"
+    )
+    multipole_h = prepare_for_backend(
+        build_gfn2_multipole_hamiltonian_update_program(), backend="cpu"
+    )
     scalar_vjp = build_gfn2_scalar_integral_vjp_program()
+    scalar_vjp_program = prepare_for_backend(scalar_vjp.program, backend="cpu")
     multipole_vjp = build_gfn2_multipole_integral_vjp_program()
+    multipole_vjp_program = prepare_for_backend(multipole_vjp.program, backend="cpu")
 
     bodies = (
         emit_scalar_cpp(
@@ -95,14 +106,14 @@ def native_header() -> str:
             output_order=("updated",),
         ),
         emit_scalar_cpp(
-            scalar_vjp.program,
+            scalar_vjp_program,
             fused_accumulation=True,
             function_name="gfn2_scalar_integral_vjp_tensor",
             input_order=SCALAR_VJP_INPUTS,
             output_order=("bar_overlap",),
         ),
         emit_scalar_cpp(
-            multipole_vjp.program,
+            multipole_vjp_program,
             fused_accumulation=True,
             function_name="gfn2_multipole_integral_vjp_tensor",
             input_order=MULTIPOLE_VJP_INPUTS,
@@ -130,6 +141,10 @@ inline constexpr const char* gfn2_scalar_integral_vjp_hash =
     "{scalar_vjp.derivative_hash}";
 inline constexpr const char* gfn2_multipole_integral_vjp_hash =
     "{multipole_vjp.derivative_hash}";
+inline constexpr const char* gfn2_scalar_integral_vjp_program_hash =
+    "{scalar_vjp_program.logical_hash}";
+inline constexpr const char* gfn2_multipole_integral_vjp_program_hash =
+    "{multipole_vjp_program.logical_hash}";
 
 {"".join(bodies)}
 }}  // namespace generativeqc::xtb::generated
