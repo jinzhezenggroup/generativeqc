@@ -24,20 +24,49 @@ struct EnergyAdjoint {
   const char* equation_hash{};
 };
 
+/** Structured relaxed two-electron MP2 cotangent.
+ *
+ * The complete N^4 MO tensor is intentionally not owned here.  The canonical
+ * MP2 correlation adjoint retains its natural ijab block, while every
+ * reference/orbital-energy/Z-vector contribution is represented by the
+ * Fock-like rank-2 multiplier f[p,q]:
+ *
+ *   W[p,q,r,s] = 2 f[p,q] delta_occ(r,s)
+ *              - f[p,s] delta_occ(q,r)
+ *              + G[p,q,r,s]_(iajb only).
+ *
+ * Versioning keeps the producer/consumer contract explicit as additional
+ * factorized terms are introduced.
+ */
+struct FactorizedTwoElectronWeights {
+  static constexpr unsigned current_version = 1;
+  unsigned version{current_version};
+  std::size_t orbitals{};
+  std::size_t occupied{};
+  std::vector<double> fock;
+  std::vector<double> correlation_iajb;
+};
+
 struct OrbitalRhs {
   std::size_t orbitals{};
   std::size_t occupied{};
   std::vector<double> energy_gradient;
   std::vector<double> response_rhs;
   std::vector<double> one_electron;
+  // Dense oracle-only representation. Streamed production leaves this empty
+  // and retains only the O(N^2) Fock-like multiplier below.
   std::vector<double> two_electron;
+  std::vector<double> fock_weights;
 };
 
 struct LagrangianWeights {
   std::size_t orbitals{};
   std::size_t occupied{};
   std::vector<double> one_electron;
+  // Dense oracle/legacy consumer representation. Production MP2 force paths
+  // leave this empty and use two_electron_factors.
   std::vector<double> two_electron;
+  FactorizedTwoElectronWeights two_electron_factors;
   std::vector<double> overlap;
   double stationarity_residual{};
 };
@@ -97,10 +126,16 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
 LagrangianWeights canonical_lagrangian_weights_streamed(const hf::PhysicalReference& reference,
                                                         std::span<const double> hcore_mo,
                                                         const posthf::MOBlockProvider& provider,
-                                                        const EnergyAdjoint& adjoint,
+                                                        EnergyAdjoint adjoint, OrbitalRhs orbital,
                                                         std::span<const double> response,
                                                         double same_space_threshold,
                                                         bool cuda = false, int device_id = 0);
+
+bool valid_factorized_two_electron_weights(const FactorizedTwoElectronWeights& weights);
+double factorized_two_electron_weight(const FactorizedTwoElectronWeights& weights, std::size_t p,
+                                      std::size_t q, std::size_t r, std::size_t s);
+double two_electron_weight(const LagrangianWeights& weights, std::size_t p, std::size_t q,
+                           std::size_t r, std::size_t s);
 /** Reverse relaxed MO-basis MP2 weights through the RI factorization.
  *
  * This is the C2 producer boundary: it returns AO one-/overlap weights and

@@ -243,8 +243,11 @@ def _cuda_item_inventory(
     quadrature = ctypes.c_uint64()
     if quadrature_query(a, item["grid_points"], ctypes.byref(quadrature)):
         raise NotImplementedError("invalid CUDA quadrature resource shape/build")
-    # Quadrature is built after the Coulomb provider, before KS/XC buffers.
-    # Count the coexistence explicitly, including changed-geometry rebuilds.
+    # Quadrature is built after the Coulomb provider. The native v1 query
+    # includes bounded generation scratch plus the resident full-grid buffer.
+    # The legacy XC slot remains a combined persistent XC+grid reservation, so
+    # its unchanged byte count is intentional even though production XC borrows
+    # the grid and owns a correspondingly smaller private arena.
     setup = max(setup, checked_bytes(int(output[2]) + quadrature.value))
     return {
         "state": checked_bytes(int(output[0])),

@@ -47,6 +47,8 @@ struct Result {
   std::size_t fock_builds{};
   /** How the requested precision policy resolved in the executed backend. */
   scf::PrecisionProvenance precision{};
+  /** #990 Direct-J/K execution/work record; zeroed for unrelated methods. */
+  scf::IncrementalDirectJkDiagnostic incremental_direct_jk{};
   /** Ordered work remains explicitly incomplete until an execution owner
    * instruments every event/operator for the returned attempt. */
   scf::PrecisionWork precision_work{};

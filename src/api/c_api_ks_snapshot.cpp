@@ -17,7 +17,13 @@
 #include "methods/dft_method.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
+#include "dft/grid_task_view.cuh"
 #include "runtime/cuda_resources.cuh"
+
+extern "C" generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+    generativeqc_nonlocal_cuda_force* owner, generativeqc_context* expected_context, int device,
+    const double* density, const double* gradient, std::size_t point_count, void* source_stream,
+    const generativeqc::dft::GridTaskView* view);
 #endif
 
 struct generativeqc_ks_snapshot {
@@ -471,6 +477,37 @@ generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
   }
 }
 
+/** Private all-electron full-range derivative source. The native prepared
+ * Direct owner supplies shell topology/screening/compaction and borrows the
+ * exact live KS density; unsupported providers return NOT_IMPLEMENTED so the
+ * generic bounded AO producer can remain a capability fallback. */
+generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count) {
+  if (!batch || !snapshot || !values || count != 6 * snapshot->atoms)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::vector<double> candidate;
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_full_range_integral_derivatives(
+        *batch->plan, snapshot->index, snapshot->token, candidate, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      if (!detail.empty()) batch->context->last_detail = detail;
+      return status;
+    }
+    if (candidate.size() != count) return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy(candidate.begin(), candidate.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 // A private, token-checked stationary consumer. Publish all integral sources
 // together only after the current CUDA owner has completed successfully.
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
@@ -502,6 +539,40 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    generativeqc_nonlocal_cuda_force* owner, const generativeqc::dft::GridTaskView* view) {
+  if (!batch || !snapshot || !owner || !view) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    int device = -1;
+    const double* density = nullptr;
+    const double* gradient = nullptr;
+    std::size_t point_count = 0;
+    void* source_stream = nullptr;
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_resident_nonlocal_features(
+        *batch->plan, snapshot->index, snapshot->token, device, density, gradient, point_count,
+        source_stream, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    status = generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+        owner, batch->context, device, density, gradient, point_count, source_stream, view);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    return check_current(*batch, *snapshot);
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+#else
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
 }
 
 generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,

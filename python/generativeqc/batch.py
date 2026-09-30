@@ -14,7 +14,7 @@ from typing import Self
 import numpy as np
 
 from . import _native
-from ._api_types import Atom
+from ._api_types import Atom, MethodCapabilities
 from ._batch_diagnostics import (
     DensityFittingMetricDiagnostic,
     EigensolverDiagnostic,
@@ -75,6 +75,7 @@ class BatchItemResult:
     fock_builds: int | None = None
     # None means this item did not complete a solve, or the library predates the query.
     precision: dict | None = None
+    incremental_direct_jk: dict | None = None
     # Physical commutator at the returned density; absent for unsupported methods.
     physical_residual_rms: float | None = None
     ks_diagnostic: KsDiagnostic | None = None
@@ -126,6 +127,11 @@ class PreparedBatch:
     concurrent callers. Warm-start updates can be frozen after an initial
     execution when reproducible replays from one fixed dm0 are required.
     """
+
+    @property
+    def capabilities(self) -> MethodCapabilities:
+        """Report execution-context capabilities inherited from the calculator."""
+        return self._calculator.capabilities
 
     # Compatibility views preserve the private attributes used by checkpoint
     # and progressive helpers while making WarmStartState their single owner.
@@ -1213,6 +1219,9 @@ class PreparedBatch:
                     warm_start_fallback=bool(output.warm_start_fallback),
                     basis_metadata=deepcopy(self._basis_metadata[index]),
                     precision=self._calculator._precision_provenance(
+                        self._batch, index
+                    ),
+                    incremental_direct_jk=self._calculator._incremental_direct_jk_diagnostic(
                         self._batch, index
                     ),
                     accuracy=accuracy,

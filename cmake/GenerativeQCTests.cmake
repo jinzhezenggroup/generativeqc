@@ -24,6 +24,9 @@ macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_hf_resource_layout_tests tests/native/test_hf_resource_layout.cpp)
+    generativeqc_native_test(generativeqc_incremental_direct_jk_cuda_tests
+                       tests/native/test_incremental_direct_jk_cuda.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_mean_field_setup_cuda_tests tests/native/test_mean_field_setup_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_cuda_quadrature_tests tests/native/test_cuda_quadrature.cpp
@@ -71,6 +74,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
     generativeqc_native_test(generativeqc_mp2_gradient_tests tests/native/test_mp2_gradient.cpp)
+    generativeqc_native_test(generativeqc_posthf_rank2_tests tests/native/test_posthf_rank2_transform.cpp)
   endif()
 
   if(GENERATIVEQC_ENABLE_CUDA AND NOT WIN32)

@@ -77,7 +77,10 @@ def producer_case(
         axes = operand("unused", "ibk", dims).spec.indices
         value = broadcast(x, axes, (0, 2))
     elif kind == "reshape":
-        value = reshape(x, x.spec.indices)
+        # Exercise a real producer, not an identity view removed by preparation.
+        axes = x.spec.indices
+        x = operand("x", "q", {"q": dims["i"] * dims["b"] * dims["k"]})
+        value = reshape(x, axes)
     elif kind == "reduce":
         x = operand("x", "ibkr", {**dims, "r": 3})
         value = reduce_sum(x, (3,))
@@ -231,8 +234,13 @@ def test_layout_descriptors_do_not_retain_mutable_sequences() -> None:
 def test_producer_layout_removes_packing(kind: typing.Any) -> None:
     program, _, producer = producer_case(kind)
     logical_hash, serialized = program.logical_hash, program.dumps()
-    baseline = plan_cuda(program, TARGET)
-    plan = plan_cuda(program, TARGET, schedule=TensorSchedule(layouts=True))
+    baseline = plan_cuda(program, TARGET, reassociate_contractions=False)
+    plan = plan_cuda(
+        program,
+        TARGET,
+        schedule=TensorSchedule(layouts=True),
+        reassociate_contractions=False,
+    )
     assert baseline.steps[-1].gemm == "packed"
     assert plan.steps[-1].gemm.startswith("direct-")
     assert baseline.panel_bytes > 0 and plan.panel_bytes == 0
@@ -242,7 +250,15 @@ def test_producer_layout_removes_packing(kind: typing.Any) -> None:
     assert program.logical_hash == logical_hash and program.dumps() == serialized
     assert baseline.layout_identity != plan.layout_identity
     assert baseline.identity != plan.identity
-    assert plan.identity == plan_cuda(program, TARGET, schedule=plan.schedule).identity
+    assert (
+        plan.identity
+        == plan_cuda(
+            program,
+            TARGET,
+            schedule=plan.schedule,
+            reassociate_contractions=False,
+        ).identity
+    )
     assert (
         plan.layout_decision.selected_cost
         < plan.layout_decision.baseline_conversion_bytes
