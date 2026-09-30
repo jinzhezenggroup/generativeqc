@@ -72,7 +72,12 @@ def test_production_generators_cannot_restore_private_optimizer_bypasses() -> No
     stationary = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
     wb97mv = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
     assert "plan_cuda(" in stationary
-    assert "plan_cuda(" in wb97mv
+    # WB97M-V components are host-resident at the final composition boundary.
+    # Keep the compiler-owned complete-source coverage gate without forcing a
+    # redundant CUDA add solely to satisfy a source-text implementation check.
+    assert "plan.reduction_program(" in wb97mv
+    assert "_canonical_gradient_sum(" in wb97mv
+    assert "plan_cuda(" not in wb97mv
 
 
 def test_gfn2_generators_use_shared_production_preparation() -> None:

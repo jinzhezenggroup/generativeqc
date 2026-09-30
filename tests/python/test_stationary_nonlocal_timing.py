@@ -56,14 +56,16 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         points_per_atom: int,
         device_weights: int,
         weights: Any,
-        raw: Any,
+        device_raw: int,
+        host_raw: Any,
         **kwargs: Any,
     ) -> None:
         assert task.view.stream == 31
         assert (begin, points_per_atom) == (0, 1)
         assert device_weights == 16384
+        assert device_raw == 24576
         np.testing.assert_array_equal(weights, np.ones(1))
-        np.testing.assert_array_equal(raw, np.ones(1))
+        assert host_raw is None
         assert kwargs == {"functional": 4}
 
     def nonlocal_geometry(
@@ -72,13 +74,21 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         points_per_atom: int,
         device_weights: int,
         weights: Any,
-        raw: Any,
+        device_raw: int,
+        host_raw: Any,
         pointer: int,
         stride: int,
         offset: int,
     ) -> None:
         geometry(
-            task, begin, points_per_atom, device_weights, weights, raw, functional=4
+            task,
+            begin,
+            points_per_atom,
+            device_weights,
+            weights,
+            device_raw,
+            host_raw,
+            functional=4,
         )
         assert (pointer, stride, offset) == (4096, 1, 0)
 
@@ -97,7 +107,11 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         ),
         _source=SimpleNamespace(
             cuda_resident_grid=lambda: SimpleNamespace(
-                device=0, point_count=1, points=8192, weights=16384
+                device=0,
+                point_count=1,
+                points=8192,
+                weights=16384,
+                atomic_weights=24576,
             )
         ),
     )

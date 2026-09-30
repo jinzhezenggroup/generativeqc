@@ -105,7 +105,8 @@ def resident_nonlocal_geometry(
                 device_raw = resident_grid.atomic_weights + begin * 8
                 host_raw = (
                     raw_weights[begin:end]
-                    if sources.profile_device or nonlocal_sources.profile_device
+                    if getattr(sources, "profile_device", False)
+                    or getattr(nonlocal_sources, "profile_device", False)
                     else None
                 )
                 if phase == 0:
