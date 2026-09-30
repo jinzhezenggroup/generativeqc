@@ -7,10 +7,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HESSIAN = ROOT / "tools/generativeqc_hessian"
+INSTALLED = ROOT / "python/generativeqc"
+_INSTALLED_OWNER = {
+    "rks_directional": "rks_hessian_directional",
+    "rks_molecular": "rks_hessian",
+}
 
 
 def _tree(module: str) -> ast.Module:
-    return ast.parse((HESSIAN / f"{module}.py").read_text(encoding="utf-8"))
+    owner = _INSTALLED_OWNER.get(module)
+    path = (INSTALLED / f"{owner}.py") if owner is not None else (HESSIAN / f"{module}.py")
+    return ast.parse(path.read_text(encoding="utf-8"))
 
 
 def test_molecular_directional_imports_have_definitions() -> None:
@@ -25,7 +32,7 @@ def test_molecular_directional_imports_have_definitions() -> None:
         for node in _tree("rks_molecular").body
         if isinstance(node, ast.ImportFrom)
         and node.level == 1
-        and node.module == "rks_directional"
+        and node.module == "rks_hessian_directional"
         for alias in node.names
     }
     assert requested, "molecular RKS lost its directional provider binding"
