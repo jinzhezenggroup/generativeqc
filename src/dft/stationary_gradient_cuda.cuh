@@ -127,6 +127,7 @@ __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, d
 __global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error);
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
+                                size_t owner_offset, size_t points_per_atom,
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external, size_t external_stride,
                                 size_t external_offset, double* partial, double* scratch,
