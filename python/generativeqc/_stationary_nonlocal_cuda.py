@@ -216,4 +216,32 @@ def resident_nonlocal_geometry(
         "ao_collocation_point_visits": geometry_passes * count,
         "geometry_point_visits": 2 * count,
     }
+    # Detailed profiling deliberately uses the retained explicit-owner / host
+    # weight route. Each geometry consumer visits the complete grid exactly once,
+    # including the two-pass feature fallback; count transfers per consumer, not
+    # per collocation pass. Points and nonlocal seeds remain resident either way.
+    profiled = sum(
+        bool(getattr(owner, "profile_device", False))
+        for owner in (sources, nonlocal_sources)
+    )
+    if profiled:
+        work["grid_owner_source"] = (
+            "profile-host-explicit-owners"
+            if profiled == 2
+            else "mixed-implicit-and-profile-host-owners"
+        )
+        work["grid_weight_source"] = (
+            "profile-host-partition-weights"
+            if profiled == 2
+            else "mixed-resident-and-profile-host-weights"
+        )
+        work["grid_owner_h2d_bytes"] = profiled * count * 8
+        work["grid_weight_h2d_bytes"] = profiled * count * 8
+        if "grid_atomic_measure_source" in work:
+            work["grid_atomic_measure_source"] = (
+                "profile-host-atomic-measures"
+                if profiled == 2
+                else "mixed-resident-and-profile-host-atomic-measures"
+            )
+            work["grid_atomic_measure_h2d_bytes"] = profiled * count * 8
     return components, seconds, work
