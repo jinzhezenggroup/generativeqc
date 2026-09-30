@@ -126,6 +126,16 @@ def _scf_xc_points(
 
 
 @dataclass(frozen=True)
+class CudaResidentGrid:
+    """Private token-bound immutable CUDA molecular-grid lease."""
+
+    device: int
+    points: int
+    weights: int
+    point_count: int
+
+
+@dataclass(frozen=True)
 class CudaResidentDensity:
     """Private token-bound CUDA density lease; pointers stay native-owned."""
 
@@ -272,6 +282,51 @@ class NativeKsSnapshot:
             raise ValueError(
                 "stationary KS snapshot is stale or has no current native owner"
             )
+
+    def cuda_resident_grid(self) -> CudaResidentGrid | None:
+        """Borrow exact CUDA-generated molecular-grid pointers without host staging."""
+        if self.backend != "cuda":
+            return None
+        self.check_current()
+        binding = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_cuda_resident_grid_v1",
+            None,
+        )
+        if binding is None:
+            return None
+        binding.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_int),
+            ct.POINTER(ct.c_void_p),
+            ct.POINTER(ct.c_void_p),
+            ct.POINTER(ct.c_size_t),
+        ]
+        binding.restype = ct.c_int
+        device = ct.c_int(-1)
+        points, weights = ct.c_void_p(), ct.c_void_p()
+        point_count = ct.c_size_t()
+        status = binding(
+            self._batch._batch,
+            self._handle,
+            ct.byref(device),
+            ct.byref(points),
+            ct.byref(weights),
+            ct.byref(point_count),
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        if device.value < 0 or not points.value or not weights.value or not point_count.value:
+            raise RuntimeError("native KS returned an invalid resident-grid lease")
+        return CudaResidentGrid(
+            device.value,
+            int(points.value),
+            int(weights.value),
+            point_count.value,
+        )
 
     def cuda_resident_density(self) -> CudaResidentDensity | None:
         """Borrow the exact accepted CUDA density without copying it to host."""
