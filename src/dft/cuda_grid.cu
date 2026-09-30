@@ -590,9 +590,10 @@ int grid_cuda_run_selected_deferred_v1(void* pointer, const double* points, size
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
                                      feature_output, jet_output, 1, 0, error, size);
 }
-int grid_cuda_run_selected_device_deferred_v1(
-    void* pointer, const double* points, size_t npoint, int features, const size_t* ao_ids,
-    size_t active, double* feature_output, double* jet_output, char* error, size_t size) {
+int grid_cuda_run_selected_device_deferred_v1(void* pointer, const double* points, size_t npoint,
+                                              int features, const size_t* ao_ids, size_t active,
+                                              double* feature_output, double* jet_output,
+                                              char* error, size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
                                      feature_output, jet_output, 1, 1, error, size);
 }

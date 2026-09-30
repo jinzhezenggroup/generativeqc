@@ -899,9 +899,7 @@ class CudaGrid:
                 raise ValueError(
                     "resident device-point tasks currently require the full identity AO map"
                 )
-            point_count = checked_int(
-                point_count, "resident grid point count", low=1
-            )
+            point_count = checked_int(point_count, "resident grid point count", low=1)
             if point_count > self.plan.tile_points:
                 raise ValueError("resident grid points exceed the prepared tile shape")
             if (

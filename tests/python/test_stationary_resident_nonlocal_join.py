@@ -69,7 +69,9 @@ def fixture(
                 lease.alive = False
                 events.append(("release", point_count))
 
-        def feature_task(self, *args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        def feature_task(
+            self, *args: typing.Any, **kwargs: typing.Any
+        ) -> typing.NoReturn:
             raise AssertionError("host point upload reintroduced")
 
         def feature_task_with_features(self, *args: typing.Any) -> typing.NoReturn:

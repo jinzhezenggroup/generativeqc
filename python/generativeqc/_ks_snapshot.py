@@ -319,7 +319,12 @@ class NativeKsSnapshot:
             return None
         _native.check(self._library, status, context=self._batch._context)
         self.check_current()
-        if device.value < 0 or not points.value or not weights.value or not point_count.value:
+        if (
+            device.value < 0
+            or not points.value
+            or not weights.value
+            or not point_count.value
+        ):
             raise RuntimeError("native KS returned an invalid resident-grid lease")
         return CudaResidentGrid(
             device.value,
