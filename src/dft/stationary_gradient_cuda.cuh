@@ -377,7 +377,8 @@ int stationary_nuclear_all(void* pointer, unsigned kind, const double* charges, 
       throw std::invalid_argument("invalid stationary nuclear batch");
     check(*p);
     drain_geometry(*p);
-    p->check_page_primitive_work(1);
+    const auto pair_work = p->atoms * (p->atoms - 1) / 2;
+    p->check_page_primitive_work(pair_work);
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     upload(*p, p->scratch, charges, p->atoms, stream);
@@ -386,7 +387,7 @@ int stationary_nuclear_all(void* pointer, unsigned kind, const double* charges, 
                                             p->context.error);
     profile_record(*p, p->stage2, stream);
     ++p->launches;
-    p->count_primitive_work(p->atoms * (p->atoms - 1) / 2);
+    p->count_primitive_work(pair_work);
     finished(*p, stream);
     profile_elapsed(*p, p->primitive_h2d_ms, p->stage0, p->stage1);
     profile_elapsed(*p, p->primitive_kernel_ms, p->stage1, p->stage2);
