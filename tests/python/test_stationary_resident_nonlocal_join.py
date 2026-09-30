@@ -271,9 +271,7 @@ def test_cross_stream_seed_is_rejected_before_consumption() -> None:
 
 def test_join_refuses_missing_consumer_dependency() -> None:
     args, events = fixture()
-    args[
-        "nonlocal_sources"
-    ].geometry_external_device_molecular_resident_weights = None
+    args["nonlocal_sources"].geometry_external_device_molecular_resident_weights = None
     with pytest.raises(TypeError, match="lacks the resident"):
         MODULE.resident_nonlocal_geometry(**args)
     assert not events

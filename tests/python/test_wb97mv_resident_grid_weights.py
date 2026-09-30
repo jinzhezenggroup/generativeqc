@@ -42,12 +42,14 @@ def test_nonlocal_resident_weight_enqueue_uploads_only_raw_measure() -> None:
     assert "device_weights, p->raw, external_device" in body
 
 
-def test_python_scheduler_passes_device_weights_without_host_pointer_conversion() -> None:
+def test_python_scheduler_passes_device_weights_without_host_pointer_conversion() -> (
+    None
+):
     begin = SCHEDULER.index("    def geometry_molecular_resident_weights(")
     end = SCHEDULER.index(
         "    def geometry_external_device_molecular_resident_weights(", begin
     )
     body = SCHEDULER[begin:end]
     assert '"stationary_geometry_molecular_resident_weights_enqueue"' in body
-    assert '_ptr(host_weights)' not in body
+    assert "_ptr(host_weights)" not in body
     assert "device_weights," in body

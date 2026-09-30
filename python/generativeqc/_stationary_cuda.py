@@ -630,9 +630,7 @@ class _CudaSources:
             ct.c_size_t,
             *tail,
         ]
-        lib.stationary_geometry_external_device_molecular_resident_weights_enqueue.argtypes = (
-            resident_molecular_resident_weight_args
-        )
+        lib.stationary_geometry_external_device_molecular_resident_weights_enqueue.argtypes = resident_molecular_resident_weight_args
         lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
         lib.stationary_finish_reduced.argtypes = [
