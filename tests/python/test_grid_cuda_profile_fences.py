@@ -50,12 +50,15 @@ def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
     assert (
         "deferred CUDA grid errors require a device-only local feature lease" in block
     )
-    wrapper = source.split("int grid_cuda_run_selected_deferred_v1", 1)[1].split(
-        "int grid_cuda_run_v1", 1
+    host_wrapper = source.split("int grid_cuda_run_selected_deferred_v1", 1)[1].split(
+        "int grid_cuda_run_selected_device_deferred_v1", 1
     )[0]
-    assert "grid_cuda_run_selected_impl" in wrapper
-    arguments = _impl_call_arguments(wrapper)
-    assert arguments[:8] == [
+    device_wrapper = source.split("int grid_cuda_run_selected_device_deferred_v1", 1)[
+        1
+    ].split("int grid_cuda_run_v1", 1)[0]
+    assert "grid_cuda_run_selected_impl" in host_wrapper
+    assert "grid_cuda_run_selected_impl" in device_wrapper
+    expected_prefix = [
         "pointer",
         "points",
         "npoint",
@@ -65,8 +68,14 @@ def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
         "feature_output",
         "jet_output",
     ]
-    assert arguments[8] == "1"
-    assert arguments[-2:] == ["error", "size"]
+    host_arguments = _impl_call_arguments(host_wrapper)
+    device_arguments = _impl_call_arguments(device_wrapper)
+    assert host_arguments[:8] == expected_prefix
+    assert device_arguments[:8] == expected_prefix
+    assert host_arguments[8:10] == ["1", "0"]
+    assert device_arguments[8:10] == ["1", "1"]
+    assert host_arguments[-2:] == ["error", "size"]
+    assert device_arguments[-2:] == ["error", "size"]
 
 
 def test_stationary_consumer_explicitly_owns_deferred_error_gate() -> None:

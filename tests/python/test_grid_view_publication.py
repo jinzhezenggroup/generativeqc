@@ -58,6 +58,7 @@ struct GridPlan {
   std::size_t* ao_ids = &id;
   double storage[32]{};
   double *points = storage, *ao = storage, *features = storage;
+  const double* current_points = storage + 16;
   double *local_potential = storage, *potential = storage;
 };
 static GridPlan plan;
@@ -115,6 +116,11 @@ extern "C" int view_status() {
   generativeqc::dft::GridTaskView view{};
   return grid_cuda_view_v1(&plan, &view, nullptr, 0);
 }
+extern "C" int view_uses_selected_points() {
+  generativeqc::dft::GridTaskView view{};
+  if (grid_cuda_view_v1(&plan, &view, nullptr, 0)) return -1;
+  return view.points == plan.current_points && view.points != plan.points;
+}
 extern "C" int sections() { return plan.context.sections; }
 extern "C" int view_error() {
   generativeqc::dft::GridTaskView view{};
@@ -129,7 +135,7 @@ extern "C" int view_identity() {
 """,
         encoding="utf-8",
     )
-    subprocess.run(
+    compiled = subprocess.run(
         [
             compiler,
             "-std=c++17",
@@ -142,9 +148,10 @@ extern "C" int view_identity() {
         ],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
         timeout=30,
     )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     native = ct.CDLL(str(library))
     native.run.argtypes = [ct.c_int] * 4
     native.run.restype = ct.c_int
@@ -178,3 +185,11 @@ def test_deferred_view_retains_error_for_qualified_consumer(
     assert publication.view_status() == 0
     assert publication.view_error() == 7
     assert publication.view_identity() == identity
+
+
+@pytest.mark.parametrize("deferred", [0, 1])
+def test_view_exports_selected_points_not_owned_scratch(
+    publication: ct.CDLL, deferred: int
+) -> None:
+    assert publication.run(deferred, 0, 0, 0) == 0
+    assert publication.view_uses_selected_points() == 1

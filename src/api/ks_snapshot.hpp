@@ -36,6 +36,9 @@ generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
     void** source_stream);
+generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** points, const double** weights, std::size_t* point_count);
 /** Seed the resident nonlocal force owner directly from the exact current
  * CUDA KS rho/grad-rho binding on the borrowed grid task stream. No pointer is
  * published to Python and no host transfer or synchronization occurs. */
