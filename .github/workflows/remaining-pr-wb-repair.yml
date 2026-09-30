@@ -53,6 +53,8 @@ jobs:
           git checkout --detach "${EXPECTED_HEAD}"
           git merge --no-edit c8886146a77a115681eb5b90ef6c11cef022fdea
           python /tmp/fix_wb_fixtures.py . "${STAGE}"
+          # Workflow-file edits require the authorized connector, not this token.
+          git restore .github/workflows/ci.yml
           uv venv /tmp/repair-venv
           uv pip install --python /tmp/repair-venv/bin/python numpy pytest ruff==0.16.9
           /tmp/repair-venv/bin/ruff format tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py
@@ -78,8 +80,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git ls-remote origin "refs/heads/${PR_BRANCH}" | cut -f1)" = "${EXPECTED_HEAD}"
-          git add tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py .github/workflows/ci.yml
-          git commit -m "test(dft): synchronize residency fixtures and retry transient cache downloads"
+          git add tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py
+          git commit -m "test(dft): synchronize resident owner, point and weight fixtures"
           git merge-base --is-ancestor "${EXPECTED_HEAD}" HEAD
           auth="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push origin "HEAD:refs/heads/ci/verified-wb-${PR_NUMBER}-20260930"
