@@ -1,0 +1,28 @@
+name: Admit reviewed PR 1616 to normal merge queue
+on:
+  push:
+    branches: [agent/review-all-20260930]
+    paths: [.github/workflows/agent-review-enqueue.yml]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  enqueue-reviewed-head:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check exact reviewed head and request queue admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=702c526ae52eb0a3e6b87781de26f6c18a80f5fe
+          gh api repos/jinzhezenggroup/generativeqc/pulls/1616 --jq '{id: .node_id, head: .head.sha, base: .base.ref, state, draft, merged}' > /tmp/pr.json
+          cat /tmp/pr.json
+          jq -e --arg expected "$expected" '.head == $expected and .base == "master" and .state == "open" and .draft == false and .merged == false' /tmp/pr.json
+          id=$(jq -r .id /tmp/pr.json)
+          # Normal queue admission only: no jump, protection change, direct ref
+          # update, auto-merge enablement or later retry/merging of child PRs.
+          gh api graphql -f query='mutation($id:ID!,$sha:GitObjectID!){enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$sha}){clientMutationId}}' -f id="$id" -f sha="$expected"
+          gh api graphql -f query='query($id:ID!){node(id:$id){... on PullRequest{number headRefOid merged mergeQueueEntry{id}}}}' -f id="$id"
