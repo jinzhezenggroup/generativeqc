@@ -550,13 +550,6 @@ class _CudaSources:
             ct.c_double,
             *tail,
         ]
-        lib.stationary_nuclear_all.argtypes = [
-            ct.c_void_p,
-            ct.c_uint,
-            _DOUBLE,
-            ct.c_size_t,
-            *tail,
-        ]
         geometry_args = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -980,6 +973,14 @@ class _CudaSources:
                 rank=2,
                 has_nucleus=False,
             )
+        tail = [ct.c_char_p, ct.c_size_t]
+        self.library.stationary_nuclear_all.argtypes = [
+            ct.c_void_p,
+            ct.c_uint,
+            _DOUBLE,
+            ct.c_size_t,
+            *tail,
+        ]
         self._call(
             "stationary_nuclear_all",
             self.handle,
