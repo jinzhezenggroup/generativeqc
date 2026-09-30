@@ -1,4 +1,4 @@
-name: One-shot WB97M-V child restack
+name: One-shot WB97M-V capacity repair
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  restack:
+  capacity:
     if: github.repository == 'jinzhezenggroup/generativeqc'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -23,8 +23,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml
-      - name: Clean parent merges without discarding concurrent commits
+      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9
+      - name: Rebind only audited source contracts and run every capacity guard
         shell: bash
         run: |
           set -euo pipefail
@@ -36,12 +36,15 @@ jobs:
           from pathlib import Path
 
           ROOT = Path.cwd()
-          OUT = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-children'
+          OUT = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-capacity'
           OUT.mkdir()
+          HELPER = ROOT / '.github/review-wb-capacity.py'
           targets = (
-              (1612, 'perf/1612-wb97mv-resident-grid-points', '23e42ece2ae7e261fa442bd1a7209a0f6c4b939d', '077f6b3554ab140c638dc25d48a5e141461180a3'),
-              (1613, 'perf/1613-stationary-resident-grid-weights', '26abeb90ff12bcf2a2532af25be9a7a50e802818', 1612),
+              (1611, 'perf/1611-stationary-implicit-grid-owners', '077f6b3554ab140c638dc25d48a5e141461180a3', None),
+              (1612, 'perf/1612-wb97mv-resident-grid-points', 'e707a2bc262cd0821b6656c7c6af0cb18b86146d', 1611),
+              (1613, 'perf/1613-stationary-resident-grid-weights', '6bf8b8a3b79b9843305aed7c86a183a5241bb2bf', 1612),
           )
+          files = ['tools/dft_mp_v1/qualify_capacity.py', 'tests/python/test_dft_mp_v1_capacity.py']
           reports = []
           completed = {}
 
@@ -51,27 +54,33 @@ jobs:
                   raise RuntimeError(result.stderr or result.stdout)
               return result
 
-          for number, branch, minimum, parent in targets:
-              record = {'pr': number, 'branch': branch, 'minimum_ancestor': minimum}
+          for number, branch, expected, parent in targets:
+              record = {'pr': number, 'branch': branch, 'expected_head': expected}
               directory = OUT / str(number)
               directory.mkdir()
               try:
-                  target = completed[parent] if isinstance(parent, int) else parent
+                  target = completed[parent] if parent is not None else None
                   record['target'] = target
                   remote = run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.split()
-                  if not remote:
-                      raise RuntimeError('branch is unavailable')
-                  head = remote[0]
-                  record['starting_head'] = head
-                  run('git', 'fetch', '--no-tags', 'origin', head)
-                  run('git', 'merge-base', '--is-ancestor', minimum, head)
-                  (directory / 'concurrent-commits.patch').write_text(run('git', 'diff', minimum, head).stdout)
-                  with tempfile.TemporaryDirectory(prefix='wb97mv-child-') as temporary:
+                  if not remote or remote[0] != expected:
+                      raise RuntimeError('remote head moved; no changes made')
+                  with tempfile.TemporaryDirectory(prefix='wb97mv-capacity-') as temporary:
                       work = Path(temporary) / 'checkout'
-                      run('git', 'worktree', 'add', '--detach', str(work), head)
+                      run('git', 'worktree', 'add', '--detach', str(work), expected)
                       try:
-                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', target, cwd=work)
-                          tests = ['test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py']
+                          if target is not None:
+                              run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', target, cwd=work)
+                          result = run('python3', str(HELPER), str(work))
+                          (directory / 'hash-audit.json').write_text(result.stdout)
+                          record['updated_contracts'] = json.loads(result.stdout)
+                          unstaged = set(run('git', 'diff', '--name-only', cwd=work).stdout.splitlines())
+                          if not unstaged <= set(files):
+                              raise RuntimeError('unexpected source changes from fingerprint repair')
+                          run('python3', '-m', 'ruff', 'check', *files, cwd=work)
+                          run('python3', '-m', 'ruff', 'format', '--check', *files, cwd=work)
+                          tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py']
+                          if number >= 1612:
+                              tests += ['test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py']
                           if number == 1613:
                               tests.append('test_wb97mv_resident_grid_weights.py')
                           env = dict(os.environ)
@@ -81,22 +90,23 @@ jobs:
                           result = run(*command, cwd=work, check=False, env=env)
                           (directory / 'tests.log').write_text(result.stdout + result.stderr)
                           record['test_returncode'] = result.returncode
-                          record['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-12:])
+                          record['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-15:])
                           if result.returncode:
-                              raise RuntimeError('focused tests failed; no push')
+                              raise RuntimeError('capacity or owner tests failed; no push')
+                          run('git', 'add', '--', *files, cwd=work)
                           run('git', 'diff', '--cached', '--check', cwd=work)
-                          message = (f'fix(review): cleanly restack WB97M-V child #{number}\n\n'
-                                     'Preserve all concurrent descendant commits and both histories.\n'
-                                     'Selected regressions passed; full PR CI is still required.\n\n'
+                          message = (f'fix(dft): audit grid-owner capacity contracts for PR #{number}\n\n'
+                                     'Rebind the initializer, source owner, two existing geometry consumers\n'
+                                     'and full native header only. Keep all work, allocation and mutation\n'
+                                     'guards unchanged; full capacity and selected owner tests passed.\n\n'
                                      'Agent: ChatGPT\nModel: GPT-6 Astra Pro')
-                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '--allow-empty', '-m', message, cwd=work)
-                          new_head = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
-                          record['commit'] = new_head
+                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
+                          head = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
+                          record['commit'] = head
                           record['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
-                          (directory / 'integration.patch').write_text(run('git', 'diff', head, new_head, cwd=work).stdout)
-                          (directory / 'parent-relative.patch').write_text(run('git', 'diff', target, new_head, cwd=work).stdout)
+                          (directory / 'repair.patch').write_text(run('git', 'diff', expected, head, cwd=work).stdout)
                           run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
-                          completed[number] = new_head
+                          completed[number] = head
                           record['pushed'] = True
                       finally:
                           run('git', 'worktree', 'remove', '--force', str(work), check=False)
@@ -108,10 +118,10 @@ jobs:
           if any('error' in report for report in reports):
               raise SystemExit(1)
           PY
-      - name: Retain child validation and concurrent changes
+      - name: Retain capacity audit and regression evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: wb97mv-child-restack
-          path: ${{ runner.temp }}/wb97mv-children/
+          name: wb97mv-capacity-repair
+          path: ${{ runner.temp }}/wb97mv-capacity/
           retention-days: 1
