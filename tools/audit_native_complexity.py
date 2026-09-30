@@ -314,6 +314,7 @@ def _classify_high_order(
     variables: tuple[str, ...],
     dynamic_variables: tuple[str, ...],
     constant_variables: tuple[str, ...],
+    minimum_depth: int,
 ) -> tuple[str, str, str | None]:
     matrix_lhs = _matrix_chain_lhs(body, context, dynamic_variables)
     if matrix_lhs is not None:
@@ -351,7 +352,7 @@ def _classify_high_order(
                 lhs,
             )
 
-    if constant_variables and len(dynamic_variables) < len(variables):
+    if constant_variables and len(set(dynamic_variables)) < minimum_depth:
         return (
             "fixed-extent-inner-loop",
             "treat fixed small dimensions as constant factors; consider unrolling/fusion before calling this a scaling hotspot",
@@ -414,6 +415,7 @@ def audit_text(
             variables,
             dynamic_variables,
             constant_variables,
+            minimum_depth,
         )
         findings.append(
             LoopFinding(
