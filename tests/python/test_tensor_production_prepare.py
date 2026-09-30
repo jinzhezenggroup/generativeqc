@@ -99,12 +99,9 @@ assert "numpy" not in sys.modules
     )
 
 
-
 def test_hf_scf_generators_use_shared_production_preparation() -> None:
     cpu_source = (ROOT / "tools/generate_scf_array_native.py").read_text()
-    cuda_source = (
-        ROOT / "python/generativeqc_compiler/tensor/scf_cuda.py"
-    ).read_text()
+    cuda_source = (ROOT / "python/generativeqc_compiler/tensor/scf_cuda.py").read_text()
 
     assert cpu_source.count("prepare_for_backend(") >= 6
     assert 'backend="cpu"' in cpu_source
@@ -128,9 +125,7 @@ def test_hf_scf_cuda_validated_program_records_shared_preparation() -> None:
 
 
 def test_dft_stationary_inline_cuda_uses_shared_production_preparation() -> None:
-    source = (
-        ROOT / "python/generativeqc_compiler/tensor/cuda_inline.py"
-    ).read_text()
+    source = (ROOT / "python/generativeqc_compiler/tensor/cuda_inline.py").read_text()
     assert "from .prepare import prepare_for_backend" in source
     assert "specialized = prepare_for_backend(" in source
     assert 'backend="cuda"' in source
