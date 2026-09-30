@@ -81,8 +81,8 @@ struct CudaKsResidentDensityBinding {
 
   explicit operator bool() const noexcept {
     return device_id >= 0 && alpha != nullptr && matrix_elements != 0 &&
-           (spins == 1 || (spins == 2 && beta != nullptr)) && stream != nullptr &&
-           owner != 0 && solve_epoch != 0 && generation != 0;
+           (spins == 1 || (spins == 2 && beta != nullptr)) && stream != nullptr && owner != 0 &&
+           solve_epoch != 0 && generation != 0;
   }
 };
 

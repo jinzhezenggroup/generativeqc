@@ -87,8 +87,7 @@ __global__ void gather_factor(const double* global, const size_t* ids, I active,
   }
 }
 
-__global__ void split_restricted_density(const double* total, size_t count,
-                                         double* spin_density) {
+__global__ void split_restricted_density(const double* total, size_t count, double* spin_density) {
   for (size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += size_t(blockDim.x) * gridDim.x) {
     const double value = 0.5 * total[i];
@@ -313,8 +312,7 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
                                 size_t matrix_elements, unsigned spins, void* source_stream,
                                 char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !alpha || !source_stream || (spins != 1 && spins != 2) ||
-        (spins == 2 && !beta))
+    if (!pointer || !alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
       throw std::invalid_argument("invalid CUDA grid resident density binding");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
@@ -341,8 +339,8 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
         cuda_check(cudaMemcpyAsync(p.density, alpha, matrix_elements * sizeof(double),
                                    cudaMemcpyDeviceToDevice, producer));
         cuda_check(cudaMemcpyAsync(p.density + matrix_elements, beta,
-                                   matrix_elements * sizeof(double),
-                                   cudaMemcpyDeviceToDevice, producer));
+                                   matrix_elements * sizeof(double), cudaMemcpyDeviceToDevice,
+                                   producer));
       }
     };
 

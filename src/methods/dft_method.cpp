@@ -827,8 +827,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  generativeqc_status resident_density(const dft::CudaKsFinalStateToken& expected,
-                                       int& device, const double*& alpha, const double*& beta,
+  generativeqc_status resident_density(const dft::CudaKsFinalStateToken& expected, int& device,
+                                       const double*& alpha, const double*& beta,
                                        std::size_t& matrix_elements, unsigned& spins,
                                        void*& source_stream, std::string& detail) {
     device = -1;
@@ -1625,8 +1625,8 @@ class KsPreparedBatch final : public PreparedBatch {
   }
 
   generativeqc_status resident_density(std::size_t index,
-                                       const dft::CudaKsFinalStateToken& expected,
-                                       int& device, const double*& alpha, const double*& beta,
+                                       const dft::CudaKsFinalStateToken& expected, int& device,
+                                       const double*& alpha, const double*& beta,
                                        std::size_t& matrix_elements, unsigned& spins,
                                        void*& source_stream, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
@@ -1844,10 +1844,12 @@ generativeqc_status dft_cuda_integral_gradient_cached(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-generativeqc_status dft_cuda_resident_density(
-    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
-    int& device, const double*& alpha, const double*& beta, std::size_t& matrix_elements,
-    unsigned& spins, void*& source_stream, std::string& detail) {
+generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              int& device, const double*& alpha,
+                                              const double*& beta, std::size_t& matrix_elements,
+                                              unsigned& spins, void*& source_stream,
+                                              std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->resident_density(index, expected, device, alpha, beta, matrix_elements, spins,

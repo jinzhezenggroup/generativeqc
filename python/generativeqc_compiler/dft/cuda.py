@@ -537,7 +537,9 @@ class CudaGrid:
                 "source_kind": self._source_kind,
                 "source_upload_seconds": perf_counter() - before,
                 "source_upload_bytes": 0,
-                "source_device_copy_bytes": matrix_elements * 8 * (2 if spins == 2 else 1),
+                "source_device_copy_bytes": matrix_elements
+                * 8
+                * (2 if spins == 2 else 1),
             }
             self._density_ready = True
 
