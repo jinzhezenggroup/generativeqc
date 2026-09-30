@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from generativeqc._stationary_wb97mv_cuda import _canonical_gradient_sum
 
 ROOT = Path(__file__).resolve().parents[2]

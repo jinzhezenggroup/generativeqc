@@ -39,6 +39,7 @@ from generativeqc_compiler.method.stationary_gradient import (
 from generativeqc_compiler.method.stationary_prepared import (
     compile_stationary_prepared_plan,
 )
+
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
 from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
