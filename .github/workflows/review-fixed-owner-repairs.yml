@@ -1,4 +1,4 @@
-name: One-shot WB97M-V master integration
+name: One-shot final reviewed integrations
 
 on:
   push:
@@ -13,15 +13,21 @@ jobs:
   integrate:
     if: github.repository == 'jinzhezenggroup/generativeqc'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [wb, cc]
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml
-      - name: Prepare a clean single-parent master landing
+      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9 cmake ninja clang-format==23.1.1
+      - name: Validate the exact reviewed integration
+        env:
+          REPAIR_KIND: ${{ matrix.kind }}
         shell: bash
         run: |
           set -euo pipefail
@@ -32,29 +38,53 @@ jobs:
           import tempfile
           from pathlib import Path
           root = Path.cwd()
-          out = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-master'
+          kind = os.environ['REPAIR_KIND']
+          out = Path(os.environ['RUNNER_TEMP']) / ('final-integration-' + kind)
           out.mkdir()
-          head = 'd3b8fb51d74aaf84f41a09e3d6fa0a29959336c6'
           master = '268e7112ebb81db46755054ac1cc42374379040c'
-          branch = 'agent/review-wb-residency-master'
-          report = {'source_head': head, 'master': master, 'branch': branch}
-          def run(*args, cwd=root, check=True, env=None):
-              result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env)
+          head = 'd3b8fb51d74aaf84f41a09e3d6fa0a29959336c6' if kind == 'wb' else '0e77a96aec26a93b4d3707c13182e1b7165718bb'
+          branch = 'agent/review-wb-residency-master' if kind == 'wb' else 'agent/1575-control-vjp'
+          report = {'kind': kind, 'source_head': head, 'master': master, 'branch': branch}
+          def run(*args, cwd=root, check=True, env=None, input=None):
+              result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env, input=input)
               if check and result.returncode:
-                  raise RuntimeError(result.stderr or result.stdout)
+                  raise RuntimeError((result.stderr + result.stdout)[-12000:])
               return result
           try:
-              if run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.strip():
-                  raise RuntimeError('replacement ref already exists; no overwrite')
-              with tempfile.TemporaryDirectory(prefix='wb-master-') as temporary:
+              remote = run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.split()
+              if kind == 'wb' and remote:
+                  raise RuntimeError('replacement branch exists; no overwrite')
+              if kind == 'cc' and (not remote or remote[0] != head):
+                  raise RuntimeError('CC head moved; no changes made')
+              with tempfile.TemporaryDirectory(prefix='review-final-') as temporary:
                   work = Path(temporary) / 'checkout'
-                  run('git', 'worktree', 'add', '--detach', str(work), head)
+                  run('git', 'worktree', 'add', '--detach', str(work), master if kind == 'wb' else head)
                   try:
-                      merge = run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', master, cwd=work, check=False)
-                      if merge.returncode:
-                          (out / 'conflicts.patch').write_text(run('git', 'diff', '--cc', cwd=work).stdout)
-                          raise RuntimeError('clean master integration failed; no branch created')
-                      tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py', 'test_wb97mv_resident_grid_weights.py', 'test_production_tensor_preparation.py']
+                      if kind == 'wb':
+                          before = '489d0f68adec513de9ea4e6b4d273a5b69f9db4e'
+                          upstream = set(run('git', 'diff', '--name-only', before, master).stdout.splitlines())
+                          changed = set(run('git', 'diff', '--name-only', before, head).stdout.splitlines())
+                          if upstream & changed:
+                              raise RuntimeError('unreviewed before-image overlap')
+                          report['upstream_files'] = sorted(upstream)
+                          report['reviewed_files'] = sorted(changed)
+                          patch = run('git', 'diff', '--binary', before, head).stdout
+                          run('git', 'apply', '--index', '-', cwd=work, input=patch)
+                          tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py', 'test_wb97mv_resident_grid_weights.py', 'test_production_tensor_preparation.py']
+                          title = 'perf(dft): land reviewed WB97M owner/point/weight residency'
+                      else:
+                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', '-c', 'merge.conflictStyle=zdiff3', 'merge', '--no-commit', '--no-ff', master, cwd=work, check=False)
+                          expected = {'src/cc/rccsdt_force.cpp', 'tools/generate_rccsd_native.py', 'tests/python/test_rccsd_native_hamiltonian_codegen.py'}
+                          conflicts = set(run('git', 'diff', '--name-only', '--diff-filter=U', cwd=work).stdout.splitlines())
+                          if conflicts != expected:
+                              raise RuntimeError('unexpected CC conflict set: ' + repr(conflicts))
+                          run('python3', str(root / '.github/review-cc-control-merge.py'), str(work))
+                          run('python3', '-m', 'ruff', 'check', '--fix', 'tools/generate_rccsd_native.py', 'tests/python/test_rccsd_native_hamiltonian_codegen.py', cwd=work)
+                          run('python3', '-m', 'ruff', 'format', 'tools/generate_rccsd_native.py', 'tests/python/test_rccsd_native_hamiltonian_codegen.py', cwd=work)
+                          run('clang-format', '-i', 'src/cc/rccsdt_force.cpp', cwd=work)
+                          run('git', 'add', '-u', cwd=work)
+                          tests = ['test_rccsd_native_hamiltonian_codegen.py']
+                          title = 'fix(cc): compose pruned control VJP with split small/ERI responses'
                       env = dict(os.environ)
                       env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
                       result = run('python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--import-mode=importlib', *['tests/python/' + name for name in tests], cwd=work, env=env, check=False)
@@ -62,16 +92,31 @@ jobs:
                       report['test_returncode'] = result.returncode
                       report['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-15:])
                       if result.returncode:
-                          raise RuntimeError('integrated tests failed; no branch created')
+                          raise RuntimeError('selected regressions failed; no push')
+                      if kind == 'cc':
+                          configure = run('cmake', '-S', '.', '-B', 'build', '-G', 'Ninja', '-DGENERATIVEQC_ENABLE_CUDA=OFF', '-DCMAKE_BUILD_TYPE=Release', cwd=work, env=env, check=False)
+                          (out / 'configure.log').write_text(configure.stdout + configure.stderr)
+                          if configure.returncode:
+                              raise RuntimeError('CPU configuration failed; no push')
+                          build = run('cmake', '--build', 'build', '--parallel', '4', cwd=work, env=env, check=False)
+                          (out / 'build.log').write_text(build.stdout + build.stderr)
+                          if build.returncode:
+                              raise RuntimeError('CPU build failed; no push')
+                          native = run('python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--import-mode=importlib', 'tests/python/test_rccsdt_force_resources.py', cwd=work, env=env, check=False)
+                          (out / 'native-force-tests.log').write_text(native.stdout + native.stderr)
+                          report['native_returncode'] = native.returncode
+                          report['native_summary'] = '\n'.join((native.stdout + native.stderr).splitlines()[-15:])
+                          if native.returncode:
+                              raise RuntimeError('native force allocation tests failed; no push')
                       run('git', 'diff', '--cached', '--check', cwd=work)
-                      tree = run('git', 'write-tree', cwd=work).stdout.strip()
-                      message = 'perf(dft): land reviewed WB97M-V owner/point/weight residency\n\nIntegrate the repaired #1611/#1612/#1613 slices on master after GitHub\nrefused native-stack retargeting. Preserve the P1 owner/ABI repairs, all\ncapacity mutation guards and concurrent publication/kernel regressions.\nFocused integrated tests pass; normal PR CI and review remain required.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
-                      commit = run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit-tree', tree, '-p', master, '-m', message, cwd=work).stdout.strip()
+                      message = title + '\n\nPreserve inspected source deltas, upstream safeguards and all scientific\nacceptance tests. Focused validation passed; full protected-branch CI and\nnormal merge queue remain required. No CUDA timing claim.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                      run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
+                      commit = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
                       report['commit'] = commit
-                      report['tree'] = tree
+                      report['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
                       (out / 'master-relative.patch').write_text(run('git', 'diff', master, commit, cwd=work).stdout)
                       (out / 'source-integration.patch').write_text(run('git', 'diff', head, commit, cwd=work).stdout)
-                      run('git', 'push', 'origin', commit + ':refs/heads/' + branch, cwd=work)
+                      run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
                       report['pushed'] = True
                   finally:
                       run('git', 'worktree', 'remove', '--force', str(work), check=False)
@@ -85,6 +130,6 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: wb97mv-master-integration
-          path: ${{ runner.temp }}/wb97mv-master/
+          name: final-reviewed-${{ matrix.kind }}
+          path: ${{ runner.temp }}/final-integration-${{ matrix.kind }}/
           retention-days: 1
