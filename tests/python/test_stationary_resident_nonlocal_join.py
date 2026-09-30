@@ -259,7 +259,6 @@ def test_join_replays_complete_grid_after_reset() -> None:
     MODULE.resident_nonlocal_geometry(**args)
     assert events.count(("nlc_reset",)) == 1
     assert events.count(("resident_seed",)) == 2
-    assert events.count(("borrow", 2)) == 4
     assert events.count(("borrow", 2)) == 6
 
 
@@ -342,6 +341,8 @@ def test_missing_resident_features_preserves_bounded_device_fallback(
     assert work["nonlocal_feature_d2d_bytes"] == 0
     assert work["nonlocal_feature_collection_point_visits"] == 6
     assert work["nonlocal_feature_d2h_bytes"] == work["nonlocal_seed_h2d_bytes"] == 0
+    assert work["grid_owner_source"] == "implicit-atom-major-index"
+    assert work["grid_owner_h2d_bytes"] == 0
     assert "two_pass_geometry_and_pair_drain" in seconds
     assert "single_pass_geometry_and_pair_drain" not in seconds
     np.testing.assert_array_equal(components["xc_ao"], np.full((2, 3), 1.0))
