@@ -12,6 +12,11 @@ def _selected_execution() -> str:
     )[0]
 
 
+def _impl_call_arguments(wrapper: str) -> list[str]:
+    call = wrapper.split("return grid_cuda_run_selected_impl(", 1)[1].split(");", 1)[0]
+    return [" ".join(argument.split()) for argument in call.split(",")]
+
+
 def test_device_feature_lease_skips_detailed_section_fences() -> None:
     block = _selected_execution()
     assert (
@@ -49,7 +54,19 @@ def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
         "int grid_cuda_run_v1", 1
     )[0]
     assert "grid_cuda_run_selected_impl" in wrapper
-    assert "jet_output, 1, error, size" in wrapper
+    arguments = _impl_call_arguments(wrapper)
+    assert arguments[:8] == [
+        "pointer",
+        "points",
+        "npoint",
+        "features",
+        "ao_ids",
+        "active",
+        "feature_output",
+        "jet_output",
+    ]
+    assert arguments[8] == "1"
+    assert arguments[-2:] == ["error", "size"]
 
 
 def test_stationary_consumer_explicitly_owns_deferred_error_gate() -> None:
