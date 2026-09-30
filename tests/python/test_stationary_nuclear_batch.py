@@ -36,7 +36,9 @@ def test_native_nuclear_batch_has_one_upload_launch_and_final_gate() -> None:
     assert body.count("upload(*p, p->scratch, charges") == 1
     assert body.count("nuclear_all_kernel<<<1, 1") == 1
     assert body.count("finished(*p, stream)") == 1
-    assert "p->count_primitive_work(p->atoms * (p->atoms - 1) / 2)" in body
+    assert "const auto pair_work = p->atoms * (p->atoms - 1) / 2;" in body
+    assert "p->check_page_primitive_work(pair_work)" in body
+    assert "p->count_primitive_work(pair_work)" in body
 
 
 def test_python_batch_preserves_legacy_single_pair_api() -> None:
