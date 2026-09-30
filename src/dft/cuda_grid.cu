@@ -28,6 +28,7 @@ struct GridPlan {
   size_t orbital_capacity[2]{}, orbital_count[2]{}, orbital_tile{};
   unsigned feature_mask = 15;
   double *basis{}, *density{}, *points{}, *ao{}, *work{}, *features{};
+  const double* current_points{};
   double *local_density{}, *local_potential{}, *potential{};
   double *factors[2]{}, *factor_panel{}, *psi{};
   size_t* ao_ids{};
@@ -97,11 +98,11 @@ __global__ void split_restricted_density(const double* total, size_t count, doub
 }
 
 void require_device_pointer(const void* pointer, int device) {
-  if (!pointer) throw std::invalid_argument("null CUDA grid resident-density pointer");
+  if (!pointer) throw std::invalid_argument("null CUDA grid device pointer");
   cudaPointerAttributes attributes{};
   cuda_check(cudaPointerGetAttributes(&attributes, pointer));
   if (attributes.type != cudaMemoryTypeDevice || attributes.device != device)
-    throw std::invalid_argument("CUDA grid resident density is on the wrong device");
+    throw std::invalid_argument("CUDA grid device pointer is on the wrong device");
 }
 
 // Tasks execute serially on the owner's stream, and each map is unique. Thus
@@ -416,10 +417,12 @@ int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, c
 static int grid_cuda_run_selected_impl(void* pointer, const double* points, size_t npoint,
                                        int features, const size_t* ao_ids, size_t active,
                                        double* feature_output, double* jet_output,
-                                       int defer_error_to_consumer, char* error, size_t size) {
+                                       int defer_error_to_consumer, int points_on_device,
+                                       char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || (features != 0 && features != 1) ||
-        (defer_error_to_consumer != 0 && defer_error_to_consumer != 1))
+        (defer_error_to_consumer != 0 && defer_error_to_consumer != 1) ||
+        (points_on_device != 0 && points_on_device != 1))
       throw std::invalid_argument("invalid CUDA grid execution");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
@@ -461,17 +464,25 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     // section timing.
     const bool detailed_profile =
         !defer_error_to_consumer && !(npoint && features && !feature_output && !jet_output);
-    for (size_t i = 0; i < 3 * npoint; ++i)
-      if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
+    const double* task_points = p.points;
+    if (points_on_device) {
+      if (npoint) require_device_pointer(points, ctx.device);
+      task_points = points;
+    } else {
+      for (size_t i = 0; i < 3 * npoint; ++i)
+        if (!std::isfinite(points[i])) throw std::invalid_argument("nonfinite grid point");
+    }
     ctx.section(detailed_profile, ctx.metrics.input_ms, [&] {
-      cuda_check(
-          cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
+      if (!points_on_device && npoint)
+        cuda_check(
+            cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
       cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
       if (features) cuda_check(cudaMemsetAsync(p.features, 0, 13 * npoint * 8, ctx.stream));
       if (p.local && active && !identity_map)
         cuda_check(cudaMemcpyAsync(p.ao_ids, ao_ids, active * sizeof(size_t),
                                    cudaMemcpyHostToDevice, ctx.stream));
     });
+    p.current_points = task_points;
     // Even an empty point tile publishes its new map and clears prior errors;
     // a borrowed view must never expose the previous task's AO labels.
     if (!npoint) {
@@ -481,7 +492,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     if (active)
       ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
         ao_kernel<<<blocks(p.jets * npoint * active, 128), 128, 0, ctx.stream>>>(
-            p.basis, p.natom, p.nprimitive, active, p.points, npoint, p.jets, p.ao, ctx.error,
+            p.basis, p.natom, p.nprimitive, active, task_points, npoint, p.jets, p.ao, ctx.error,
             p.local && !identity_map ? p.ao_ids : nullptr);
         cuda_check(cudaGetLastError());
       });
@@ -569,7 +580,7 @@ int grid_cuda_run_selected_v1(void* pointer, const double* points, size_t npoint
                               const size_t* ao_ids, size_t active, double* feature_output,
                               double* jet_output, char* error, size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
-                                     feature_output, jet_output, 0, error, size);
+                                     feature_output, jet_output, 0, 0, error, size);
 }
 
 int grid_cuda_run_selected_deferred_v1(void* pointer, const double* points, size_t npoint,
@@ -577,7 +588,13 @@ int grid_cuda_run_selected_deferred_v1(void* pointer, const double* points, size
                                        double* feature_output, double* jet_output, char* error,
                                        size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
-                                     feature_output, jet_output, 1, error, size);
+                                     feature_output, jet_output, 1, 0, error, size);
+}
+int grid_cuda_run_selected_device_deferred_v1(
+    void* pointer, const double* points, size_t npoint, int features, const size_t* ao_ids,
+    size_t active, double* feature_output, double* jet_output, char* error, size_t size) {
+  return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
+                                     feature_output, jet_output, 1, 1, error, size);
 }
 int grid_cuda_run_v1(void* pointer, const double* points, size_t npoint, int features,
                      double* feature_output, double* jet_output, char* error, size_t size) {
@@ -600,7 +617,7 @@ int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, ch
                p.last_active,
                p.jets,
                p.last_identity_map ? nullptr : p.ao_ids,
-               p.points,
+               p.current_points,
                p.ao,
                p.features_ready ? p.features : nullptr,
                p.local_potential,
