@@ -1070,14 +1070,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     work[5] += one.device_to_host_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
-    status =
-        range_exchange
-            ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
-                  fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
-                  resident_density.matrix_elements, value, detail)
-            : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
-                  fock_, resident_density.alpha, resident_density.beta,
-                  resident_density.matrix_elements, value, detail);
+    status = range_exchange
+                 ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+                       fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
+                       resident_density.matrix_elements, value, detail)
+                 : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+                       fock_, resident_density.alpha, resident_density.beta,
+                       resident_density.matrix_elements, value, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     candidate.insert(candidate.end(), value.begin(), value.end());
     output = std::move(candidate);

@@ -2005,11 +2005,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
         integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
         native_integral_budget = max_device_bytes - peak
-        if (
-            not ecp
-            and native_integral_budget > 0
-            and callable(integral_provider)
-        ):
+        if not ecp and native_integral_budget > 0 and callable(integral_provider):
             with timeline.phase("prepared_stationary_integral_derivatives"):
                 native_integral = integral_provider(
                     na,
@@ -2054,11 +2050,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 ao.set_density(density)
         shell_full_range = None
         shell_provider = getattr(state._source, "cuda_full_range_derivatives", None)
-        if (
-            not native_complete_integrals
-            and not ecp
-            and callable(shell_provider)
-        ):
+        if not native_complete_integrals and not ecp and callable(shell_provider):
             with timeline.phase("direct_shell_integral_derivatives"):
                 shell_full_range = shell_provider(na)
         native_shell_full_range = shell_full_range is not None
@@ -2172,9 +2164,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             components["overlap_pulay"] = np.ascontiguousarray(
                 native_integral_components[1]
             )
-            components["coulomb"] = np.ascontiguousarray(
-                native_integral_components[2]
-            )
+            components["coulomb"] = np.ascontiguousarray(native_integral_components[2])
             if has_exchange:
                 components["exact_exchange"] = np.ascontiguousarray(
                     native_integral_components[3]
@@ -2336,7 +2326,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "one_electron",
                 "overlap_pulay",
                 "coulomb",
-                *((("exact_exchange",) if has_exchange else ())),
+                *(("exact_exchange",) if has_exchange else ()),
             )
             if native_complete_integrals
             else ()

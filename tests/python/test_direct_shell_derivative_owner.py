@@ -129,7 +129,7 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     assert "def cuda_integral_derivatives(" in snapshot
     assert '"generativeqc_ks_snapshot_cuda_integral_gradient_v1"' in snapshot
 
-    assert 'stationary_integral_derivative_route=(' in stationary
+    assert "stationary_integral_derivative_route=(" in stationary
     assert '"prepared-native-complete"' in stationary
     assert "sources.reset_geometry(spec.coincident_tolerance)" in stationary
     assert "ao.set_density_device(" in stationary
