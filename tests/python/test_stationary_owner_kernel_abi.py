@@ -1,4 +1,5 @@
 """Compile the emitted owner expression and compare geometry ABI signatures."""
+
 import re
 import shutil
 import subprocess
@@ -12,31 +13,34 @@ HEADER = ROOT / "src/dft/stationary_gradient_cuda.cuh"
 
 
 class StationaryOwnerKernelTests(unittest.TestCase):
-    def test_geometry_kernel_declaration_matches_definition(self):
+    def test_geometry_kernel_declaration_matches_definition(self) -> None:
         prototype = re.search(
             r"__global__ void geometry_kernel\((.*?)\)\s*;",
-            HEADER.read_text(), re.S,
+            HEADER.read_text(),
+            re.S,
         )
         definition = re.search(
             r"__global__ void geometry_kernel\((.*?)\)\s*\{",
-            COMPILER.read_text(), re.S,
+            COMPILER.read_text(),
+            re.S,
         )
         self.assertIsNotNone(prototype)
         self.assertIsNotNone(definition)
-        arguments = lambda match: [
-            " ".join(item.split()) for item in match.group(1).split(",")
-        ]
+
+        def arguments(match: re.Match[str] | None) -> list[str]:
+            assert match is not None
+            return [" ".join(item.split()) for item in match.group(1).split(",")]
+
         self.assertEqual(arguments(prototype), arguments(definition))
         self.assertEqual(len(arguments(definition)), 16)
 
-    def test_emitted_explicit_and_implicit_owner_expression(self):
+    def test_emitted_explicit_and_implicit_owner_expression(self) -> None:
         compiler = shutil.which("c++")
         if compiler is None:
             self.skipTest("host C++ compiler is required for the owner probe")
-        match = re.search(
-            r"const int64_t owner\s*=.*?;", COMPILER.read_text(), re.S
-        )
+        match = re.search(r"const int64_t owner\s*=.*?;", COMPILER.read_text(), re.S)
         self.assertIsNotNone(match)
+        assert match is not None
         program = r"""
 #include <cstddef>
 #include <cstdint>
@@ -65,8 +69,20 @@ int main() {
             binary = Path(temporary) / "owners"
             source.write_text(program)
             subprocess.run(
-                [compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
-                 "-Werror=uninitialized", str(source), "-o", str(binary)],
-                check=True, capture_output=True, text=True,
+                [
+                    compiler,
+                    "-std=c++17",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror=uninitialized",
+                    str(source),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             subprocess.run([str(binary)], check=True, timeout=10)
