@@ -447,6 +447,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "passes_static_stationary_caps"
         )
         assert cases[sentinel]["admission"]["first_blocker"] is None
+
     # Losing gates remain visible after the first failure; the report is not a
     # pass/fail truncation that hides the production-scale work.
     water32_gates = [item["gate"] for item in cases["water32"]["admission"]["failures"]]
@@ -746,6 +747,7 @@ def test_clean_git_sha_rejects_hidden_index_paths(
             capture_output=True,
             text=True,
         )
+
     git("init")
     git("config", "user.name", "Capacity Test")
     git("config", "user.email", "capacity@example.invalid")
