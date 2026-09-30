@@ -16,7 +16,9 @@ _INSTALLED_OWNER = {
 
 def _tree(module: str) -> ast.Module:
     owner = _INSTALLED_OWNER.get(module)
-    path = (INSTALLED / f"{owner}.py") if owner is not None else (HESSIAN / f"{module}.py")
+    path = (
+        (INSTALLED / f"{owner}.py") if owner is not None else (HESSIAN / f"{module}.py")
+    )
     return ast.parse(path.read_text(encoding="utf-8"))
 
 
