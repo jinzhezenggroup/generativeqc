@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -55,7 +56,7 @@ class _ZeroRHSOperator:
         return np.asarray(value, dtype=np.float64)
 
 
-def _solve_zero(operator: _ZeroRHSOperator, strategy: str):
+def _solve_zero(operator: _ZeroRHSOperator, strategy: str) -> Any:
     if strategy == "scalar":
         return solve(operator, np.zeros(1))
     return solve_many(operator, np.zeros((1, 2)), strategy=strategy)
