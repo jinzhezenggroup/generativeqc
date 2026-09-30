@@ -195,6 +195,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   const MolecularGrid& grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
+  scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
   cudaStream_t stream{};
   int device{};
   std::size_t n{}, matrix{}, elements{};
@@ -224,7 +225,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
-  bool fitted_coulomb{};
+  bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
   bool mixed_j{}, strict_refinement{}, pending_mixed_j{}, mixed_j_executed{}, device_nonlocal{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
@@ -422,16 +423,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
       range_exchange_coefficient = range_correction->spec.exchange.coefficient;
     }
     fitted_coulomb = strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+    fitted_exchange = has_exchange &&
+                      strategy.spec.exchange.approximation == scf::FockApproximation::DensityFitted;
     fock_binding = scf::prepared_cuda_fock_binding(provider);
+    occupied_fock_binding = scf::prepared_cuda_occupied_fock_binding(provider);
     if (!owner || strategy.backend != scf::FockBackend::Cuda ||
         strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
         strategy.spec.coulomb.coefficient != 1.0 ||
         (strategy.spec.coulomb.approximation != scf::FockApproximation::Exact && !fitted_coulomb) ||
-        (has_exchange && (strategy.spec.exchange.approximation != scf::FockApproximation::Exact ||
-                          strategy.spec.exchange.op != scf::FockOperator::FullRange)) ||
-        (has_exchange && fitted_coulomb) || !fock_binding)
+        (has_exchange && (strategy.spec.exchange.op != scf::FockOperator::FullRange ||
+                          (fitted_coulomb ? !fitted_exchange
+                                          : strategy.spec.exchange.approximation !=
+                                                scf::FockApproximation::Exact))) ||
+        !fock_binding || (fitted_exchange && !occupied_fock_binding))
       throw std::invalid_argument(
-          "CUDA KS requires one prepared Coulomb provider and optional exact full-range exchange");
+          "CUDA KS requires one prepared Coulomb provider and matching full-range exchange");
     if (has_range_correction) {
       const auto& correction = *range_correction;
       const auto& spec = correction.spec;
@@ -618,6 +624,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
     final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
     final_generation = 0;
+    occupied_fitted_factor_ready = false;
     // #991's first KS slice is deliberately intra-trajectory only. A changed
     // geometry may reuse the last-good density, but its previous orthonormal
     // orbital frame is not projected across metrics until that route is
@@ -939,6 +946,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       else
         enqueue_legacy();
     } catch (...) {
+      occupied_fitted_factor_ready = false;
       invalidate_warm_orbitals();
       throw;
     }
@@ -948,9 +956,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // intermediate frame. Preserve the independent last-good warm density.
     try {
       const bool active = device_chunk_mode ? finish_device() : finish_legacy();
-      if (is_failed) invalidate_warm_orbitals();
+      if (is_failed) {
+        occupied_fitted_factor_ready = false;
+        invalidate_warm_orbitals();
+      }
       return active;
     } catch (...) {
+      occupied_fitted_factor_ready = false;
       invalidate_warm_orbitals();
       throw;
     }
@@ -1069,14 +1081,34 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       std::string detail;
       pending_mixed_j = mixed_j && !strict_refinement;
-      // Provider selection stays inside the prepared Fock facade: KS supplies
-      // resident densities and raw output buffers without knowing whether J is
-      // exact or density fitted.
-      const auto jk_status = scf::enqueue_prepared_cuda_fock(
-          provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
-          has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
-          detail);
+      // Provider selection stays inside the prepared Fock facade. For a fitted
+      // hybrid, the first cold/warm-seed build has no trusted canonical factor
+      // and stays dense. After a successful proposal becomes the current density,
+      // tmp1 still owns the exact AO canonical C that generated that proposal;
+      // borrow it on the next iteration without a host round trip.
+      const bool use_occupied_fitted =
+          fitted_exchange && occupied_fitted_factor_ready && occupied_fock_binding;
+      generativeqc_status jk_status;
+      if (use_occupied_fitted) {
+        const scf::PreparedCudaOccupiedFockInput occupied{
+            tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
+            spins == 2 ? occupations[1] : 0};
+        jk_status = scf::enqueue_prepared_cuda_occupied_fock(
+            provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
+            exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
+      } else {
+        jk_status = scf::enqueue_prepared_cuda_fock(
+            provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
+            has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
+            detail);
+      }
       check(jk_status, detail);
+      if (fitted_exchange) {
+        if (use_occupied_fitted)
+          ++movement.fitted_occupied_exchange_builds;
+        else
+          ++movement.fitted_dense_exchange_builds;
+      }
       if (has_range_correction)
         check(scf::enqueue_prepared_cuda_exchange_correction(
                   provider, *range_correction, density, spins == 2 ? density + matrix : nullptr,
@@ -1223,6 +1255,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         return true;
       }
       is_active = false;
+      occupied_fitted_factor_ready = false;
       return false;
     }
     // A stationary physical state can still alternate integer occupations.
@@ -1285,6 +1318,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               stream));
         warm_ready = true;
         warm_energy = output.energy;
+        occupied_fitted_factor_ready = false;
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
@@ -1296,7 +1330,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               cudaMemcpyDeviceToDevice, stream));
         warm_orbitals_ready = true;
         ++movement.warm_orbital_frames_retained;
+        occupied_fitted_factor_ready = fitted_exchange;
       } else {
+        occupied_fitted_factor_ready = false;
         invalidate_warm_orbitals();
       }
       if (output.converged) {
@@ -1308,6 +1344,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = false;
       is_failed = true;
       output.converged = false;
+      occupied_fitted_factor_ready = false;
       throw;
     }
     previous_energy = output.energy;
@@ -1649,6 +1686,7 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
                impl_->nonlocal_raw_density,
                impl_->nonlocal_raw_gradient,
                impl_->xc_layout.npoint,
+               reinterpret_cast<void*>(impl_->stream),
                impl_->owner,
                impl_->solve_epoch,
                impl_->final_generation};

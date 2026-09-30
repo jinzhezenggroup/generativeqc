@@ -93,6 +93,35 @@ def test_dependency_directions() -> None:
     assert audit_structure()["errors"] == []
 
 
+def test_correlated_equation_compatibility_aliases_are_canonical() -> None:
+    import importlib
+
+    for legacy, canonical in (
+        ("tools.generativeqc_cc.inventory", "generativeqc_compiler.cc.inventory"),
+        ("tools.generativeqc_cc.equations", "generativeqc_compiler.cc.equations"),
+        ("tools.generativeqc_cc.doubles", "generativeqc_compiler.cc.doubles"),
+        (
+            "tools.generativeqc_cc.gradient_equations",
+            "generativeqc_compiler.cc.gradient_equations",
+        ),
+        (
+            "tools.generativeqc_cc.lambda_equations",
+            "generativeqc_compiler.cc.lambda_equations",
+        ),
+        ("tools.generativeqc_cc.triples", "generativeqc_compiler.cc.triples"),
+        (
+            "tools.generativeqc_cc.triples_tiles",
+            "generativeqc_compiler.cc.triples_tiles",
+        ),
+        (
+            "tools.generativeqc_cc.triples_response",
+            "generativeqc_compiler.cc.triples_response",
+        ),
+        ("tools.generativeqc_mp2.equations", "generativeqc_compiler.mp2.equations"),
+    ):
+        assert importlib.import_module(legacy) is importlib.import_module(canonical)
+
+
 def test_method_composition_is_above_xc_and_dft(tmp_path: typing.Any) -> None:
     method = tmp_path / "method"
     method.mkdir()
@@ -235,3 +264,22 @@ def test_method_custom_derivatives_may_emit_tensor_graphs_but_not_the_reverse(
         "forbidden tensor -> method import" in e
         for e in audit_structure(tmp_path)["errors"]
     )
+
+
+def test_rccsd_generator_imports_canonical_equations_without_tools_package() -> None:
+    import ast
+
+    source = (ROOT / "tools/generate_rccsd_native.py").read_text()
+    imports = {
+        node.module
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+    assert {
+        "generativeqc_compiler.cc.doubles",
+        "generativeqc_compiler.cc.gradient_equations",
+        "generativeqc_compiler.cc.lambda_equations",
+        "generativeqc_compiler.cc.triples_tiles",
+    } <= imports
+    assert not any(name.startswith("tools.generativeqc_cc") for name in imports)
+    assert 'types.ModuleType("tools.generativeqc_cc")' not in source

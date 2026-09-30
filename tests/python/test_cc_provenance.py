@@ -48,8 +48,18 @@ def test_shared_evidence_schema_and_replay_exports(tmp_path: typing.Any) -> None
 
 
 def test_production_facade_does_not_import_reference_or_pyscf() -> None:
-    for name in ("__init__.py", "evaluate.py", "equations.py", "inventory.py"):
-        tree = ast.parse((ROOT / "tools/generativeqc_cc" / name).read_text())
+    sources = [
+        *(
+            ROOT / "tools/generativeqc_cc" / name
+            for name in ("__init__.py", "evaluate.py")
+        ),
+        *(
+            ROOT / "python/generativeqc_compiler/cc" / name
+            for name in ("inventory.py", "equations.py", "doubles.py")
+        ),
+    ]
+    for source in sources:
+        tree = ast.parse(source.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = [n.name for n in node.names]

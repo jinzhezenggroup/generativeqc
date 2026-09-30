@@ -144,14 +144,13 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
             ]
         np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
         assert batch._stationary_cuda_execution._lease.executions == 2
-        # Work contains a complete second quartet traversal for exact exchange;
-        # the bounded implementation makes no fused-J/K performance claim.
+        # Full-range J'/K' is now owned by the prepared Direct shell source;
+        # the stationary AO descriptor owner retains only one-electron/Pulay
+        # and nuclear work. Exact exchange remains a logical source slot.
         assert "exact_exchange" in batch._stationary_cuda_execution.sources.source_names
-        per_execution = (
-            2 * primitive_count**4
-            + (len(atoms) + 2) * primitive_count**2
-            + len(atoms) * (len(atoms) - 1) // 2
-        )
+        per_execution = (len(atoms) + 2) * primitive_count**2 + len(atoms) * (
+            len(atoms) - 1
+        ) // 2
         assert (
             batch._stationary_cuda_execution.sources.metrics()["primitive_records"]
             == 2 * per_execution
