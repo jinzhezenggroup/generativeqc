@@ -153,7 +153,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
         ),
         "native_cuda_grid_sha256": (
-            "4d0a0bf35754c18f6025c800c6a96b230cd553c278290764f6437a8a791f9fbb"
+            "a5a623bd062f7d1b76891bd37701ea63cdf27ac3f1151636b14fb7e09ed6bd09"
         ),
         "native_cuda_grid_route_sha256": (
             "98b6763435fcd84c6306ea034c330a9864ecf4d33d0009031230f7b64e77b71e"
@@ -295,7 +295,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
         "sources_owner_sha256": (
-            "c3be77f3713e6b34cf6b6eaa0bc00b5f310dced06105891bed184e76276f3091"
+            "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "7ecf3d82ee66dfc41023f44b44acc1985d3bcdb039a7e676cf5dac4118adb116"
+            "2fe7c4a2daff3bebd2a1437f32bdc4a608a72beda043f78509965ce5f30305fc"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
