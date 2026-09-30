@@ -135,6 +135,8 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 double* scratch, int* error);
 __global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
+__global__ void external_source_reduce(const double* const* components, size_t source_count,
+                                       size_t coordinates, double* output, int* error);
 }  // namespace generativeqc_stationary_cuda
 
 extern "C" {
@@ -747,6 +749,74 @@ int stationary_geometry_drain(void* pointer, char* error, size_t size) {
     if (!p) throw std::invalid_argument("invalid stationary owner");
     check(*p);
     drain_geometry(*p);
+  });
+}
+int stationary_source_device(void* pointer, size_t source, const double** output,
+                            char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !output || source >= stationary_source_count)
+      throw std::invalid_argument("invalid stationary device source request");
+    check(*p);
+    drain_geometry(*p);
+    *output = p->sources + 3 * source * p->atoms;
+  });
+}
+int stationary_workspace_device(void* pointer, size_t offset, size_t count, double** output,
+                               char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    const size_t capacity = workers * 9 * p->atoms;
+    if (!p || !output || offset > capacity || count > capacity - offset)
+      throw std::invalid_argument("invalid stationary device workspace request");
+    check(*p);
+    drain_geometry(*p);
+    *output = p->partial + offset;
+  });
+}
+int stationary_finish_external_device(void* pointer, const double* const* components,
+                                      size_t source_count, double* output, size_t count,
+                                      char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !components || !output || !source_count || source_count > workers ||
+        count != 3 * p->atoms)
+      throw std::invalid_argument("invalid stationary external reduction request");
+    check(*p);
+    drain_geometry(*p);
+    for (size_t source = 0; source < source_count; ++source) {
+      if (!components[source]) throw std::invalid_argument("null stationary device component");
+      cudaPointerAttributes attributes{};
+      cuda_check(cudaPointerGetAttributes(&attributes, components[source]));
+      if (attributes.type != cudaMemoryTypeDevice || attributes.device != p->context.device)
+        throw std::invalid_argument("stationary component is on the wrong CUDA device");
+    }
+    const size_t pointer_bytes = source_count * sizeof(double*);
+    const size_t pointer_doubles = (pointer_bytes + sizeof(double) - 1) / sizeof(double);
+    if (pointer_doubles + count > workers * 9 * p->atoms)
+      throw std::invalid_argument("stationary external reduction scratch is too small");
+    auto stream = p->context.stream;
+    cuda_check(cudaMemcpyAsync(p->scratch, components, pointer_bytes, cudaMemcpyHostToDevice,
+                               stream));
+    ++p->h2d_calls;
+    p->uploads += pointer_bytes;
+    auto* reduced = p->scratch + pointer_doubles;
+    external_source_reduce<<<blocks(count, 64), 64, 0, stream>>>(
+        reinterpret_cast<const double* const*>(p->scratch), source_count, count, reduced,
+        p->context.error);
+    cuda_check(cudaGetLastError());
+    ++p->launches;
+    finished(*p, stream);
+    std::vector<double> candidate(count);
+    cuda_check(cudaMemcpy(candidate.data(), reduced, count * sizeof(double), cudaMemcpyDeviceToHost));
+    ++p->d2h_calls;
+    p->downloads += count * sizeof(double);
+    for (double value : candidate)
+      if (!std::isfinite(value)) throw std::runtime_error("nonfinite external gradient");
+    std::copy(candidate.begin(), candidate.end(), output);
   });
 }
 int stationary_finish(void* pointer, double* output, size_t count, char* error, size_t size) {
