@@ -332,7 +332,7 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract(
         KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0, 0),
         KernelResources("tiled_density_product<false>(double*)", 64, 0, 0, 0, 4352, 0),
         KernelResources("density_features<true>(double*)", 56, 0, 0, 0, 0, 0),
-        KernelResources("evaluate_points<1, false>(double*)", 72, 0, 16, 8, 0, 32),
+        KernelResources("evaluate_points<4, false>(double*)", 72, 0, 16, 8, 0, 32),
         KernelResources("compact_potential_panels(double*)", 40, 0, 0, 0, 0, 0),
         KernelResources("tiled_potential(double*)", 68, 0, 0, 0, 2048, 0),
     )
