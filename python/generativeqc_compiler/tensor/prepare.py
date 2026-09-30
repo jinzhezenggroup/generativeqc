@@ -12,7 +12,7 @@ import typing
 from .optimize import optimize
 from .program import Program
 
-_BACKENDS = frozenset(("cpu", "cuda"))
+_BACKENDS = frozenset(("cpu", "cuda", "portable"))
 SCHEMA = "generativeqc.tensor.production-preparation.v1"
 
 
@@ -23,10 +23,12 @@ def prepare_for_backend(
     requested_outputs: typing.Any = None,
     preserve_contraction_order: bool = False,
 ) -> Program:
-    """Prepare one production TensorIR program for CPU or CUDA lowering.
+    """Prepare one production TensorIR program for one declared lowering domain.
 
-    Exact canonical optimization always runs. Strict symbolic-degree contraction
-    reassociation runs by default for both production backends when no explicit
+    ``portable`` denotes one generated scientific source compiled for both CPU
+    and CUDA; it permits only the same backend-neutral whole-program rewrites as
+    the individual production backends. Exact canonical optimization always runs.
+    Strict symbolic-degree contraction reassociation runs by default when no explicit
     precision-execution contract is attached. Callers may preserve the original
     contraction order for bitwise/order-sensitive auditing.
 
@@ -37,7 +39,9 @@ def prepare_for_backend(
     if not isinstance(program, Program):
         raise TypeError("production preparation requires a TensorIR Program")
     if backend not in _BACKENDS:
-        raise ValueError("production preparation backend must be cpu or cuda")
+        raise ValueError(
+            "production preparation backend must be cpu, cuda, or portable"
+        )
     if type(preserve_contraction_order) is not bool:
         raise TypeError("preserve_contraction_order must be a Boolean")
 

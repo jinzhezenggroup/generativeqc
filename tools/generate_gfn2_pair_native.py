@@ -32,6 +32,7 @@ from generativeqc_compiler.geometry.gfn2_pair import (
     build_gfn2_runtime_pair_primal,
 )
 from generativeqc_compiler.tensor.ad_program import linearize
+from generativeqc_compiler.tensor.prepare import prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -69,11 +70,15 @@ def native_header() -> str:
         outputs=("coordination", "repulsion_energy"),
     )
     kernel = build_gfn2_runtime_pair_kernel()
-    coordination = _subprogram(
-        kernel, COORDINATION_OUTPUT_ORDER, "gfn2-runtime-coordination-pair"
+    coordination = prepare_for_backend(
+        _subprogram(
+            kernel, COORDINATION_OUTPUT_ORDER, "gfn2-runtime-coordination-pair"
+        ),
+        backend="portable",
     )
-    repulsion = _subprogram(
-        kernel, REPULSION_OUTPUT_ORDER, "gfn2-runtime-repulsion-pair"
+    repulsion = prepare_for_backend(
+        _subprogram(kernel, REPULSION_OUTPUT_ORDER, "gfn2-runtime-repulsion-pair"),
+        backend="portable",
     )
     # Production GFN2 validates finite parameters and 0 < r <= 25 bohr before
     # entering these helpers. In that bounded domain the AD quotient products

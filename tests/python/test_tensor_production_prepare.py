@@ -38,7 +38,7 @@ def test_production_prepare_strictly_lowers_rank2_chain_on_both_backends() -> No
     source = _rank2_chain()
     assert analyze_complexity(source).max_work_degree == 4
 
-    for backend in ("cpu", "cuda"):
+    for backend in ("cpu", "cuda", "portable"):
         prepared = prepare_for_backend(source, backend=backend)
         assert analyze_complexity(prepared).max_work_degree == 3
         record = prepared.provenance["production_preparation"]
@@ -143,3 +143,13 @@ def test_gfn2_electronic_cpu_cuda_generators_use_shared_preparation() -> None:
 
     assert cuda_source.count("prepare_for_backend(") >= 3
     assert 'backend="cuda"' in cuda_source
+
+
+def test_gfn2_shared_host_device_generators_use_portable_preparation() -> None:
+    pair_source = (ROOT / "tools/generate_gfn2_pair_native.py").read_text()
+    es2_source = (ROOT / "tools/generate_gfn2_es2_native.py").read_text()
+
+    assert pair_source.count("prepare_for_backend(") >= 2
+    assert 'backend="portable"' in pair_source
+    assert es2_source.count("prepare_for_backend(") >= 4
+    assert 'backend="portable"' in es2_source

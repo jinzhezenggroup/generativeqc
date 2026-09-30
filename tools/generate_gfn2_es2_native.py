@@ -36,6 +36,7 @@ from generativeqc_compiler.method.gfn2_es2_runtime import (
     build_gfn2_es2_pair_vjp,
     build_gfn2_es2_potential_update_program,
 )
+from generativeqc_compiler.tensor.prepare import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
@@ -49,10 +50,18 @@ def native_header() -> str:
     hardness = build_gfn2_es2_arithmetic_hardness_program()
     primal = build_gfn2_es2_pair_primal()
     vjp = build_gfn2_es2_pair_vjp()
-    potential = build_gfn2_es2_potential_update_program()
-    energy = build_gfn2_es2_energy_update_program()
-    weight = build_gfn2_es2_cached_gradient_weight_program()
-    projection = build_gfn2_es2_gradient_projection_program()
+    potential = prepare_for_backend(
+        build_gfn2_es2_potential_update_program(), backend="portable"
+    )
+    energy = prepare_for_backend(
+        build_gfn2_es2_energy_update_program(), backend="portable"
+    )
+    weight = prepare_for_backend(
+        build_gfn2_es2_cached_gradient_weight_program(), backend="portable"
+    )
+    projection = prepare_for_backend(
+        build_gfn2_es2_gradient_projection_program(), backend="portable"
+    )
 
     potential_body = _host_device(
         emit_scalar_cpp(
