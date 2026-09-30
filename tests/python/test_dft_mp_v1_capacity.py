@@ -331,10 +331,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "8090ded22d15a0be0f3fd591a7e9ffc1f52e899eb0813942ca6b5fd9f9f89219"
+            "fb5f52ff3c1101b2e80f5a96bea0593a492d5076a29f741e2c732e49b555d903"
         ),
         "native_geometry_enqueue_sha256": (
-            "6333b07540ae8b28f8cc04cdfbe2d11a2faa0c8abf5fd9f47a53848d09478724"
+            "4514e127b81a0e68ca3608c1be34cd4e78d3a003dca10db3ab9c81c52b048927"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "a216fe7c0b2425360a207eeaf46ab3dafe28aa249089ad360fcb42ad77a1b274"
+            "c4327728312261019983a95120ef3f34a0910a0f134068c596c2bb8a91b30f0b"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -447,7 +447,6 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "passes_static_stationary_caps"
         )
         assert cases[sentinel]["admission"]["first_blocker"] is None
-
     # Losing gates remain visible after the first failure; the report is not a
     # pass/fail truncation that hides the production-scale work.
     water32_gates = [item["gate"] for item in cases["water32"]["admission"]["failures"]]
@@ -747,7 +746,6 @@ def test_clean_git_sha_rejects_hidden_index_paths(
             capture_output=True,
             text=True,
         )
-
     git("init")
     git("config", "user.name", "Capacity Test")
     git("config", "user.email", "capacity@example.invalid")
