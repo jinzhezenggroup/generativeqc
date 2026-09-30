@@ -41,7 +41,7 @@ void contract(std::size_t n, const double* eri, const double* d, double* fock) {
 """
     findings = audit_text(source, path="synthetic.cpp")
     assert len(findings) == 1
-    assert findings[0].classification == "high-order-loop"
+    assert findings[0].classification == "high-rank-source-contraction"
 
 
 def test_audit_does_not_promote_scalar_or_vector_accumulators() -> None:
@@ -72,7 +72,31 @@ void primitive_sum(std::size_t n, const double* first, const double* second, dou
     for source in sources:
         findings = audit_text(source, path="synthetic.cpp")
         assert findings
-        assert all(finding.classification == "high-order-loop" for finding in findings)
+        assert all(
+            finding.classification == "fixed-extent-inner-loop"
+            for finding in findings
+        )
+        assert all(finding.effective_depth < finding.depth for finding in findings)
+
+
+def test_audit_surfaces_high_rank_materialization_pass() -> None:
+    source = r"""
+void symmetrize(std::size_t o, std::size_t v, double* target, const double* source) {
+  for (std::size_t i = 0; i < o; ++i)
+    for (std::size_t a = 0; a < v; ++a)
+      for (std::size_t j = 0; j < o; ++j)
+        for (std::size_t b = 0; b < v; ++b) {
+          const auto first = ((i * v + a) * o + j) * v + b;
+          const auto second = ((j * v + b) * o + i) * v + a;
+          target[first] += 0.5 * (source[first] + source[second]);
+        }
+}
+"""
+    findings = audit_text(source, path="synthetic.cpp")
+    assert len(findings) == 1
+    assert findings[0].classification == "high-rank-output-materialization"
+    assert findings[0].effective_depth == 4
+    assert "fusion" in findings[0].recommendation
 
 
 def test_production_has_no_avoidable_rank2_quartic_scalar_reduction() -> None:
