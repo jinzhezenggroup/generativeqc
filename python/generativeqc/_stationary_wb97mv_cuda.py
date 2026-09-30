@@ -46,6 +46,26 @@ from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
 
+def _canonical_gradient_sum(
+    plan: StationaryGradientPlan,
+    components: typing.Mapping[str, typing.Any],
+    natom: int,
+) -> np.ndarray:
+    """Validate complete source coverage and sum already-host-resident gradients."""
+    plan.reduction_program(atoms=natom, sources=components)
+    gradient = np.zeros((natom, 3), dtype=np.float64)
+    for name in plan.source_names:
+        component = np.asarray(components[name])
+        if component.dtype != np.float64 or component.shape != (natom, 3):
+            raise ValueError("WB97M-V gradient component shape/dtype mismatch")
+        if not np.all(np.isfinite(component)):
+            raise ValueError("WB97M-V gradient component is nonfinite")
+        np.add(gradient, component, out=gradient)
+    if not np.all(np.isfinite(gradient)):
+        raise ValueError("WB97M-V final gradient is nonfinite")
+    return gradient
+
+
 class PreparedWb97mvCudaGradient:
     """Retain geometry-bound CUDA owners, rebuilding explicitly on geometry change.
 
@@ -376,21 +396,10 @@ class PreparedWb97mvCudaGradient:
         components.update(resident_parts)
         component_seconds.update(resident_seconds)
         component_start = perf_counter()
-        # The plan gate remains authoritative for complete source coverage.
-        # Every component is already a host FP64 array at this boundary, so a
-        # CUDA add would only upload those arrays and download the same 3*Natom
-        # sum again. Accumulate in canonical plan order with identical +1 weights.
-        plan.reduction_program(atoms=na, sources=components)
-        gradient = np.zeros((na, 3), dtype=np.float64)
-        for name in plan.source_names:
-            component = np.asarray(components[name])
-            if component.dtype != np.float64 or component.shape != (na, 3):
-                raise ValueError("WB97M-V gradient component shape/dtype mismatch")
-            if not np.all(np.isfinite(component)):
-                raise ValueError("WB97M-V gradient component is nonfinite")
-            np.add(gradient, component, out=gradient)
-        if not np.all(np.isfinite(gradient)):
-            raise ValueError("WB97M-V final gradient is nonfinite")
+        # Every component is already host-resident at this boundary. Keep the
+        # compiler coverage gate, but do not upload them solely to add and
+        # download the same 3*Natom result again.
+        gradient = _canonical_gradient_sum(plan, components, na)
         contract.validate(state)
         component_seconds["reduction_and_validation"] = perf_counter() - component_start
         self.executions += 1
