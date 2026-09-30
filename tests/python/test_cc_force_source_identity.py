@@ -137,5 +137,7 @@ int main() {
         text=True,
         timeout=60,
     )
-    result = subprocess.run([str(exe)], check=False, capture_output=True, text=True, timeout=10)
+    result = subprocess.run(
+        [str(exe)], check=False, capture_output=True, text=True, timeout=10
+    )
     assert result.returncode == 0, result.stdout + result.stderr
