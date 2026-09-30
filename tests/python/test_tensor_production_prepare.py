@@ -1,6 +1,8 @@
 """Production TensorIR preparation shared by CPU/CUDA generators."""
 
 from pathlib import Path
+import subprocess
+import sys
 
 from generativeqc_compiler.tensor import (
     Index,
@@ -77,3 +79,21 @@ def test_mp2_cpu_and_cuda_generation_share_production_preparation() -> None:
     # CUDA planning must not run a second private contraction rewrite after the
     # shared production boundary has already fixed the prepared equation.
     assert "reassociate_contractions=False" in source
+
+
+def test_production_prepare_is_numpy_free_under_python_s() -> None:
+    script = r"""
+import sys
+sys.path.insert(0, "python")
+from generativeqc_compiler.tensor import Program, add, constant, prepare_for_backend
+
+program = Program({"out": add(constant(2), constant(3))})
+prepared = prepare_for_backend(program, backend="cpu")
+assert prepared.outputs["out"].op == "constant"
+assert "numpy" not in sys.modules
+"""
+    subprocess.run(
+        [sys.executable, "-S", "-c", script],
+        cwd=ROOT,
+        check=True,
+    )
