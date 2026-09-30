@@ -227,8 +227,10 @@ def test_generated_programs_are_cpu_plannable_for_cuda_lowering() -> None:
     reverse = transpose_program(program, list(cotangents))
     for generated in (forward.program, reverse.program):
         plan = plan_cuda(generated, TARGET)
-        assert plan.program is generated
+        assert plan.program.logical_hash
         assert plan.peak_bytes > 0
+        unreassociated = plan_cuda(generated, TARGET, reassociate_contractions=False)
+        assert unreassociated.program is generated
 
 
 def test_generated_reverse_plan_supports_bounded_recomputation() -> None:
