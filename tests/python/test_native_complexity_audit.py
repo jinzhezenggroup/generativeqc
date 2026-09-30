@@ -44,6 +44,39 @@ void contract(std::size_t n, const double* eri, const double* d, double* fock) {
     assert findings[0].classification == "high-order-loop"
 
 
+def test_audit_does_not_promote_scalar_or_vector_accumulators() -> None:
+    sources = (
+        r"""
+void xc(std::size_t n, const double* phi, const double* jets, double* out) {
+  for (std::size_t point = 0; point < n; ++point)
+    for (std::size_t spin = 0; spin < 2; ++spin)
+      for (std::size_t mu = 0; mu < n; ++mu)
+        for (std::size_t nu = 0; nu < n; ++nu)
+          for (unsigned axis = 0; axis < 3; ++axis) {
+            double value = 0.0;
+            value += phi[mu] * phi[nu] * jets[axis * n + mu] * jets[axis * n + nu];
+          }
+}
+""",
+        r"""
+void primitive_sum(std::size_t n, const double* first, const double* second, double* gradient) {
+  for (std::size_t pa = 0; pa < n; ++pa)
+    for (std::size_t pb = 0; pb < n; ++pb)
+      for (unsigned ti = 0; ti < 4; ++ti)
+        for (unsigned tj = 0; tj < 4; ++tj)
+          for (unsigned axis = 0; axis < 3; ++axis)
+            gradient[axis] += first[pa * 4 + ti] * second[pb * 4 + tj];
+}
+""",
+    )
+    for source in sources:
+        findings = audit_text(source, path="synthetic.cpp")
+        assert findings
+        assert all(
+            finding.classification == "high-order-loop" for finding in findings
+        )
+
+
 def test_production_has_no_avoidable_rank2_quartic_scalar_reduction() -> None:
     scanned, findings = audit_tree(ROOT / "src", excludes=DEFAULT_EXCLUDES)
     assert scanned > 0
