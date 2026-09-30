@@ -67,6 +67,11 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
  * stream that owns the final feature generation so a downstream D2D handoff can
  * establish a device-side dependency before source reuse. This helper performs
  * no transfer or synchronization. */
+generativeqc_status dft_cuda_resident_grid(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    int& device, const double*& points, const double*& weights, std::size_t& point_count,
+    std::string& detail);
+
 generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, std::size_t index,
                                                         const dft::CudaKsFinalStateToken& expected,
                                                         int& device, const double*& density,
