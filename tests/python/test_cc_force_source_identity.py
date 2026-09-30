@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _function(source, signature):
+def _function(source: str, signature: str) -> str:
     start = source.index(signature)
     end = source.index("{", start) + 1
     depth = 1
@@ -19,7 +19,7 @@ def _function(source, signature):
     return source[start:end]
 
 
-def test_force_source_identity_precedes_admission_and_reads(tmp_path):
+def test_force_source_identity_precedes_admission_and_reads(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
     if not compiler:
         pytest.skip("C++ compiler unavailable")
@@ -137,5 +137,5 @@ int main() {
         text=True,
         timeout=60,
     )
-    result = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10)
+    result = subprocess.run([str(exe)], check=False, capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr
