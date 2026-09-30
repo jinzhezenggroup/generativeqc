@@ -32,6 +32,11 @@ from generativeqc_compiler.common.storage import (
     analyze_storage,
 )
 
+from .xc_compiled_resources import (
+    GridXcCompiledRegionEvidence,
+    GridXcCompiledResourceShape,
+)
+
 
 @dataclass(frozen=True)
 class GridXcExecutionSchedule:
@@ -309,8 +314,8 @@ def aggregate_grid_xc_compiled_evidence(
 ) -> GpuProfitability:
     """Combine complete device-fused stage pressure into one region record.
 
-    Every native stage must be present before the result is eligible for
-    ProgramIR region selection. Kernel pressure uses the worst reported value;
+    Every native stage must be present. This unbound pressure summary is
+    not a substitute for the source-bound native evidence used by candidates. Kernel pressure uses the worst reported value;
     occupancy uses the most constrained stage. Artifact bytes and compile time
     are deliberately left unset because several stages may share one native
     library and summing per-stage values would double-count that artifact.
@@ -330,7 +335,7 @@ def aggregate_grid_xc_compiled_evidence(
     if any(not isinstance(stages[name], GpuProfitability) for name in expected):
         raise TypeError("grid/XC compiled region stages require GpuProfitability")
     compiled = {
-        name: _compiled_profitability_fields(stages[name])
+        name: _compiled_fact_fields(stages[name])
         for name in GRID_XC_COMPILED_REGION_STAGES
     }
 
@@ -363,7 +368,7 @@ def aggregate_grid_xc_compiled_evidence(
     )
 
 
-def _compiled_profitability_fields(
+def _compiled_fact_fields(
     evidence: GpuProfitability | None,
 ) -> dict[str, typing.Any]:
     """Validate compiled GPU evidence without duplicating static/endpoint facts."""
@@ -385,6 +390,43 @@ def _compiled_profitability_fields(
     return dict(compiled)
 
 
+def _compiled_profitability_fields(
+    evidence: GridXcCompiledRegionEvidence | None,
+    *,
+    shape: GridXcCandidateShape,
+    functional: str,
+    scientific: GridXcScientificIdentity | None,
+) -> dict[str, typing.Any]:
+    """Bind complete native-region PTXAS evidence to this exact DFT candidate."""
+
+    if evidence is None:
+        return {}
+    if not isinstance(evidence, GridXcCompiledRegionEvidence):
+        raise TypeError(
+            "grid/XC compiled evidence requires GridXcCompiledRegionEvidence"
+        )
+    if scientific is None:
+        raise ValueError("compiled grid/XC evidence requires scientific identity")
+    expected_shape = GridXcCompiledResourceShape(
+        npoint=shape.npoint,
+        tile_points=shape.tile_points,
+        nao=shape.nao,
+        spins=shape.spins,
+    )
+    if evidence.shape != expected_shape:
+        raise ValueError("compiled grid/XC evidence shape differs from the candidate")
+    if evidence.functional != functional:
+        raise ValueError(
+            "compiled grid/XC evidence functional differs from the candidate"
+        )
+    if (
+        evidence.architecture != scientific.architecture
+        or evidence.source_identity != scientific.source_identity
+    ):
+        raise ValueError("compiled grid/XC evidence target/source identity differs")
+    return _compiled_fact_fields(evidence.profitability)
+
+
 @dataclass(frozen=True)
 class GridXcScheduleCandidate:
     """One executable DFT schedule paired with its own measured/planned shape.
@@ -397,14 +439,23 @@ class GridXcScheduleCandidate:
 
     schedule: GridXcExecutionSchedule
     shape: GridXcCandidateShape
-    compiled_evidence: GpuProfitability | None = None
+    compiled_evidence: GridXcCompiledRegionEvidence | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.schedule, GridXcExecutionSchedule):
             raise TypeError("grid/XC schedule candidate requires a typed schedule")
         if not isinstance(self.shape, GridXcCandidateShape):
             raise TypeError("grid/XC schedule candidate requires a candidate shape")
-        _compiled_profitability_fields(self.compiled_evidence)
+        if self.compiled_evidence is not None and not isinstance(
+            self.compiled_evidence, GridXcCompiledRegionEvidence
+        ):
+            raise TypeError(
+                "grid/XC compiled evidence requires GridXcCompiledRegionEvidence"
+            )
+        if self.compiled_evidence is not None and self.schedule.name != "device_fused":
+            raise ValueError(
+                "compiled grid/XC region evidence belongs to device_fused only"
+            )
         resolved = self.schedule.resolved(self.shape.tile_points)
         object.__setattr__(self, "schedule", resolved)
 
@@ -590,7 +641,7 @@ def assess_grid_xc_schedule(
     functional: str,
     scientific: GridXcScientificIdentity | None = None,
     precision_schedule: ExecutionPrecisionSchedule | None = None,
-    compiled_evidence: GpuProfitability | None = None,
+    compiled_evidence: GridXcCompiledRegionEvidence | None = None,
 ) -> GridXcCandidateAssessment:
     """Reject impossible/incompatible candidates before any timing comparison."""
 
@@ -606,7 +657,16 @@ def assess_grid_xc_schedule(
                 "scientific identity disagrees with admitted grid/XC workload"
             )
     resolved = grid_xc_schedule(schedule).resolved(shape.tile_points)
-    compiled = _compiled_profitability_fields(compiled_evidence)
+    if compiled_evidence is not None and resolved.name != "device_fused":
+        raise ValueError(
+            "compiled grid/XC region evidence belongs to device_fused only"
+        )
+    compiled = _compiled_profitability_fields(
+        compiled_evidence,
+        shape=shape,
+        functional=functional,
+        scientific=scientific,
+    )
     if precision_schedule is None:
         precision_schedule = uniform_precision_schedule("dft.grid_xc")
     if not isinstance(precision_schedule, ExecutionPrecisionSchedule):
@@ -694,7 +754,10 @@ def assess_grid_xc_schedule(
             ("resource_scope", "grid-xc-admission"),
         )
         + (
-            (("compiled_resource_evidence", "common.gpu_profitability"),)
+            (
+                ("compiled_resource_evidence", "dft.grid_xc.compiled_region"),
+                ("compiled_profitability_contract", "common.gpu_profitability"),
+            )
             if compiled_evidence is not None
             else ()
         ),
