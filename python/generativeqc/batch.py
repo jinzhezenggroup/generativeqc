@@ -75,6 +75,7 @@ class BatchItemResult:
     fock_builds: int | None = None
     # None means this item did not complete a solve, or the library predates the query.
     precision: dict | None = None
+    incremental_direct_jk: dict | None = None
     # Physical commutator at the returned density; absent for unsupported methods.
     physical_residual_rms: float | None = None
     ks_diagnostic: KsDiagnostic | None = None
@@ -1218,6 +1219,9 @@ class PreparedBatch:
                     warm_start_fallback=bool(output.warm_start_fallback),
                     basis_metadata=deepcopy(self._basis_metadata[index]),
                     precision=self._calculator._precision_provenance(
+                        self._batch, index
+                    ),
+                    incremental_direct_jk=self._calculator._incremental_direct_jk_diagnostic(
                         self._batch, index
                     ),
                     accuracy=accuracy,

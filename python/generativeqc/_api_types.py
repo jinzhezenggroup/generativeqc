@@ -160,6 +160,7 @@ class Result:
     accuracy: AccuracyAssessment | None = None
     resource_diagnostics: dict | None = None
     precision: dict | None = None
+    incremental_direct_jk: dict | None = None
     correlation: CorrelationResult | None = None
     cc_performance: CcPerformanceResult | None = None
     physical_residual_rms: float | None = None
