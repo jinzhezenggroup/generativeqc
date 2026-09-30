@@ -74,9 +74,7 @@ def native_header() -> str:
     scalar_vjp = build_gfn2_scalar_integral_vjp_program()
     scalar_vjp_program = prepare_for_backend(scalar_vjp.program, backend="cpu")
     multipole_vjp = build_gfn2_multipole_integral_vjp_program()
-    multipole_vjp_program = prepare_for_backend(
-        multipole_vjp.program, backend="cpu"
-    )
+    multipole_vjp_program = prepare_for_backend(multipole_vjp.program, backend="cpu")
 
     bodies = (
         emit_scalar_cpp(

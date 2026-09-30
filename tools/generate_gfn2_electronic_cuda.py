@@ -140,12 +140,8 @@ def cuda_header() -> str:
     primal = prepare_for_backend(
         build_gfn2_runtime_electronic_pair_primal(), backend="cuda"
     )
-    vjp = prepare_for_backend(
-        build_gfn2_runtime_electronic_pair_vjp(), backend="cuda"
-    )
-    overlap_vjp = prepare_for_backend(
-        build_gfn2_runtime_overlap_vjp(), backend="cuda"
-    )
+    vjp = prepare_for_backend(build_gfn2_runtime_electronic_pair_vjp(), backend="cuda")
+    overlap_vjp = prepare_for_backend(build_gfn2_runtime_overlap_vjp(), backend="cuda")
     primal_inputs = _primal_input_order()
     vjp_inputs = _vjp_input_order()
     vjp_outputs = _vjp_output_order()
