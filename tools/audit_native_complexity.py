@@ -28,6 +28,7 @@ _ACCESS = re.compile(r"[A-Za-z_]\w*(?:(?:\.|->)[A-Za-z_]\w*)*\s*\[([^\[\]]+)\]")
 _REDUCTION = re.compile(
     r"(?P<lhs>[A-Za-z_][^;=\n]*?)\s*(?P<op>\+=|-=)\s*(?P<rhs>[^;]+);"
 )
+_CALL = re.compile(r"\b[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*\s*\(")
 
 
 @dataclass(frozen=True)
@@ -286,6 +287,8 @@ def _matrix_chain_lhs(
     for reduction in _REDUCTION.finditer(body):
         lhs = reduction.group("lhs").strip()
         rhs = reduction.group("rhs")
+        if _CALL.search(rhs):
+            continue
         lhs_dependencies = _dependencies(lhs, loop_variables, aliases)
         rhs_dependencies = _dependencies(rhs, loop_variables, aliases)
         access_dependencies = [
