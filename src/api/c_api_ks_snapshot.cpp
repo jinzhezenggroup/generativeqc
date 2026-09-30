@@ -527,8 +527,8 @@ generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v1(
     if (current != GENERATIVEQC_STATUS_SUCCESS) return current;
     std::string detail;
     const auto status = generativeqc::methods::detail::dft_cuda_resident_grid(
-        *batch->plan, snapshot->index, snapshot->token, *device, *points, *weights,
-        *atomic_weights, *point_count, detail);
+        *batch->plan, snapshot->index, snapshot->token, *device, *points, *weights, *atomic_weights,
+        *point_count, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       *device = -1;

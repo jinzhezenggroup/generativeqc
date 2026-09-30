@@ -591,8 +591,8 @@ int stationary_geometry_external_device_molecular_enqueue(
 int stationary_geometry_external_device_molecular_resident_weights_enqueue(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
     size_t owner_offset, size_t points_per_atom, const double* device_weights,
-    const double* device_raw, const double* external_device, size_t external_stride, size_t external_offset, char* error,
-    size_t size) {
+    const double* device_raw, const double* external_device, size_t external_stride,
+    size_t external_offset, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {

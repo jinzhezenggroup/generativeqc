@@ -1916,10 +1916,11 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
-generativeqc_status dft_cuda_resident_grid(
-    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
-    int& device, const double*& points, const double*& weights, const double*& atomic_weights,
-    std::size_t& point_count, std::string& detail) {
+generativeqc_status dft_cuda_resident_grid(PreparedBatch& batch, std::size_t index,
+                                           const dft::CudaKsFinalStateToken& expected, int& device,
+                                           const double*& points, const double*& weights,
+                                           const double*& atomic_weights, std::size_t& point_count,
+                                           std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->resident_grid(index, expected, device, points, weights, atomic_weights, point_count,

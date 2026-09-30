@@ -67,7 +67,8 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   // Its lifetime is independent of this private preparation stream: all writes
   // are ordered before the final stream drain below.
   std::shared_ptr<runtime::OwnedCudaBuffer<double>> resident;
-  double *resident_points = nullptr, *resident_weights = nullptr, *resident_atomic_weights = nullptr;
+  double *resident_points = nullptr, *resident_weights = nullptr,
+         *resident_atomic_weights = nullptr;
   if (retain_device) {
     resident = std::make_shared<runtime::OwnedCudaBuffer<double>>(device, q::product(5, l.points));
     resident_points = resident->get();

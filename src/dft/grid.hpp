@@ -73,8 +73,8 @@ class MolecularGrid {
    * an empty view. */
   CudaMolecularGridView cuda_view() const noexcept {
     if (!cuda_storage_) return {};
-    return {cuda_device_,       cuda_points_,       cuda_weights_, cuda_atomic_weights_,
-            point_count(),      cuda_device_bytes_, cuda_owner_,   cuda_storage_};
+    return {cuda_device_,  cuda_points_,       cuda_weights_, cuda_atomic_weights_,
+            point_count(), cuda_device_bytes_, cuda_owner_,   cuda_storage_};
   }
   /** Explicit derivative export of the atomic measure before partitioning.
    * Reconstruct only quadrature rules, not Becke weights, on request; energy
