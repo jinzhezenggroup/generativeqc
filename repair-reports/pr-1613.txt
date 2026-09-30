@@ -1,0 +1,46 @@
+{"number": 1613, "title": "perf(dft): borrow resident molecular-grid weights in WB97M-V force", "head": "perf/1613-stationary-resident-grid-weights", "sha": "c1e0750e081a2ed8dbecb9bbd44821dd8ff565d7", "base": "perf/1612-wb97mv-resident-grid-points", "base_sha": "048c1cf2fe0a225670e8c49733283c564a534e03", "draft": false, "mergeable": true, "state": "unstable"}
+## Summary
+
+Continue the WB97M-V CUDA stationary residency stack on top of #1612 by removing per-tile partition-weight uploads.
+
+#1581 already retains the exact CUDA-generated molecular-grid points and partition weights. After #1612 borrows resident point coordinates, the stationary geometry consumers still copied `state.grid.weights[begin:end]` from host into a private tile buffer for both semilocal and nonlocal geometry.
+
+This stack:
+- borrows the exact resident partition-weight slice from the native molecular-grid owner;
+- adds semilocal and nonlocal stationary enqueue variants that accept device weights directly;
+- uploads only the still-host-owned raw atomic measure for each tile;
+- retains host weights only for the opt-in detailed profiling fallback;
+- records `grid_weight_source = exact-native-resident-grid` and `grid_weight_h2d_bytes = 0`.
+
+## Correctness boundary
+
+The existing geometry kernel is unchanged. Only the source pointer for the already-materialized partition weights changes.
+
+The new ABIs retain:
+- exact atom-major owner-offset validation from #1611;
+- existing borrowed GridTask stream/lifetime rules;
+- existing nonlocal seed stride/offset validation;
+- unchanged raw atomic measure and moving-grid/Becke response;
+- unchanged synchronous detailed-profile fallback.
+
+Source-level guards require the resident-weight paths to contain no `upload(*p, p->weights, ...)` call and to keep the raw-measure upload explicit.
+
+## Stack
+
+Depends on #1612 -> #1611 -> #1610 -> #1609. Retarget in order after parents land; do not merge out of order.
+
+Refs #1569 #1479 #1482
+Parent #1423
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol
+MERGE base RC 0
+0c9e9dc7b986cd4951d1167a9284c6ddb522e2cb
+
+MERGE master RC 0
+efa7fc95e9ed99a66ae68f10027a0e974ac37456
+
+WORKFLOW {"id": 36703021485, "name": "Pre-commit", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36703021362, "name": "PR overlap", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36703022033, "name": "CuMetal CUDA", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36703021475, "name": "CI", "status": "in_progress", "conclusion": null}

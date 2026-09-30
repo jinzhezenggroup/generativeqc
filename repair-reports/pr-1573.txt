@@ -1,0 +1,617 @@
+{"number": 1573, "title": "perf(dft): route semilocal and global-hybrid force J/K through prepared shells", "head": "perf/1477-stationary-fullrange-shell-join", "sha": "e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4", "base": "master", "base_sha": "8c911c836ad7063bf895383e37f6ac9840768ebe", "draft": true, "mergeable": false, "state": "dirty"}
+Refs #1477
+Parent: #1423
+Builds on merged #1558/#1562. Independent of the RSH fusion, VV10 single-pass, and resident one-electron metadata work.
+
+## Implementation
+
+Connect the **actual ordinary stationary CUDA driver** to the existing prepared Direct shell derivative facade. This is not another unused provider interface.
+
+- Add a token-checked snapshot ABI returning separate full-range J and K gradient vectors from the current resident KS density and existing prepared Direct owner.
+- Keep scientific coefficients, spin normalization, shell topology, density/Schwarz screening, bounded queues and derivative recurrence in the existing native provider. No functional-name selector or duplicate integral mathematics is introduced.
+- Seed the compact contracted gradients into a freshly reset stationary source arena and retain the existing compiler-generated final device reduction.
+- Skip migrated Coulomb/exchange sources **before** constructing their rank-four public-AO task domains. Semilocal plans skip J; global hybrids skip J and K.
+- Keep one-electron, Pulay, nuclear and semilocal geometry sources unchanged, with source-by-source publication preserved.
+- Report the selected native/fallback route explicitly; reconcile descriptor work after removing migrated ERI sources. Old AO counts remain logical capacity, not executed native shell work.
+
+This targets PBE/r2SCAN J and PBE0/B3LYP J/K through the same operator-based boundary, including both spin conventions.
+
+## Compatibility, lifetime and resources
+
+Both producer and seed ABIs are checked before provider execution. Missing ABI or explicit native NOT_IMPLEMENTED retains the bounded AO capability fallback; stale state, allocation, CUDA and numerical failures never silently re-execute a fallback. ECP and RSH/nonlocal compositions retain their existing routes.
+
+The seed operation accepts a finite complete source array exactly once after reset and before any numerical source work. It drains partially submitted transfers on failure before the caller's host arrays can disappear.
+
+No second Direct owner or new persistent matrix is allocated. Compact O(Natom) staging reuses the existing conservative transient host allowance. **This is not a zero-transfer join:** the current native facade downloads compact J/K gradients, and seeding uploads the source array and drains once. Those costs are explicit; eliminating that compact round trip is separate lifetime work.
+
+Native generated/screened/compacted/executed shell counts are unavailable from this ABI and remain null. A zero `public_ao_quartets_submitted` proves the migrated Python task domain was bypassed, not that native integral work is zero.
+
+## Validation completed
+
+Focused device-free suite: **49 passed** (48 on the isolated GitHub runner plus the source-executing native seed test; all 49 also run together locally).
+
+- Real adapter: separate J/K mapping, optional capability rejection, status propagation, nonfinite rejection and seed failure.
+- Actual generic driver with JIT/AOT mocks: migrated rank-four tasks are not constructed/submitted; source ordering and descriptor coverage are preserved.
+- Production C++ seed ABI compiled against a deterministic CUDA queue stub: successful seeding, duplicate/late replacement rejection, invalid data and failure-path drain lifetime.
+- Bounded executor and component-schema regressions.
+- SCF, compiler and electronic-structure dependency checks: all pass.
+- Changed source formatted with repository Ruff/clang-format versions; diff whitespace checks pass before the final added native test.
+
+Added eight opt-in real-device cases in `test_dft_complete_cuda.py`: PBE/r2SCAN/PBE0/B3LYP x RKS/UKS, same-final-state shell vs retained AO source parity, replay and stale-state rejection. Existing independent PySCF/reconverged-force gates remain intact.
+
+## Draft / remaining acceptance
+
+Draft is solely for unexecuted CUDA build and molecular numerical qualification of this new production join, not a dependency on another open PR. The connected NVIDIA node is offline; no new GPU endpoint timing or speedup is claimed. CI and the opt-in numerical gates must qualify the changed route before promotion. This PR does not close the entire #1477 tracker or claim per-shell execution telemetry.
+
+Agent: ChatGPT
+Model: GPT-6 Astra Pro
+MERGE base RC 0
+3e819cecdd9b6f92b282ff2daf1dcff414252d0a
+
+MERGE master RC 1
+3b11736b8a3ef87cb27f53fedd1f18d6584728bc
+100644 37a2e3913b76c985ecb41256634f39bd7a53b7f9 1	python/generativeqc/_stationary_cuda.py
+100644 5391c8de367b9a0f85a22da38e23545e27d1849a 2	python/generativeqc/_stationary_cuda.py
+100644 44fb5b8527f2fc0b64848f0d44d491130701b60a 3	python/generativeqc/_stationary_cuda.py
+100644 e8e3441312d4db5afd07044eede4fd965ed22cec 1	src/api/c_api_ks_snapshot.cpp
+100644 39c62433b30538c98e185bbd6c926b8ad8889f8a 2	src/api/c_api_ks_snapshot.cpp
+100644 2969fa7e4bc8ba6e78852b2d77718ddf02ed53bd 3	src/api/c_api_ks_snapshot.cpp
+100644 148efdbd0d86d2d1061bf50a71379e8a11035e96 1	src/api/ks_snapshot.hpp
+100644 89cbf12c01bf342eef99717a3d7b15869d86075c 2	src/api/ks_snapshot.hpp
+100644 a63f43dc0fbc7df8a3740a7652a5b52e8e7a8367 3	src/api/ks_snapshot.hpp
+100644 1173de84f40c9e4b5aa67cc193595efcad1667a2 1	src/dft/stationary_gradient_cuda.cuh
+100644 db722a02035dbae15d578b8896bccb22cfaf2e27 2	src/dft/stationary_gradient_cuda.cuh
+100644 b12b6ca795a1ea9d5786a026c4cd04cd48ebbe2f 3	src/dft/stationary_gradient_cuda.cuh
+100644 0ea35364a6703ad5260f99983b19e584868b505f 1	src/methods/dft_method.cpp
+100644 fca6276a0459f2df900dfa0ff02ebda7c5e8bc81 2	src/methods/dft_method.cpp
+100644 72c85268641e3a1ee1f871e05a233b1c80382327 3	src/methods/dft_method.cpp
+100644 da52daf3381fb511adc2cd70f7af506538e00157 1	tests/python/test_dft_mp_v1_capacity.py
+100644 39e60abfc4dad307352f4c4216164c47b9ce3119 2	tests/python/test_dft_mp_v1_capacity.py
+100644 d883de17648066416a16df07fa086c7416aa48bb 3	tests/python/test_dft_mp_v1_capacity.py
+100644 ad24b30f11eb8715e952df4ad599be6dc5325d2e 1	tools/dft_mp_v1/qualify_capacity.py
+100644 2e667ca25c277a601fec17afde4e70ecba71c712 2	tools/dft_mp_v1/qualify_capacity.py
+100644 6fa3ab670392d56f74d551075f3b01e9f8f64be1 3	tools/dft_mp_v1/qualify_capacity.py
+
+Auto-merging python/generativeqc/_stationary_cuda.py
+CONFLICT (content): Merge conflict in python/generativeqc/_stationary_cuda.py
+Auto-merging src/api/c_api_ks_snapshot.cpp
+CONFLICT (content): Merge conflict in src/api/c_api_ks_snapshot.cpp
+Auto-merging src/api/ks_snapshot.hpp
+CONFLICT (content): Merge conflict in src/api/ks_snapshot.hpp
+Auto-merging src/dft/stationary_gradient_cuda.cuh
+CONFLICT (content): Merge conflict in src/dft/stationary_gradient_cuda.cuh
+Auto-merging src/methods/dft_method.cpp
+CONFLICT (content): Merge conflict in src/methods/dft_method.cpp
+Auto-merging src/methods/dft_method.hpp
+Auto-merging tests/python/test_dft_complete_cuda.py
+Auto-merging tests/python/test_dft_mp_v1_capacity.py
+CONFLICT (content): Merge conflict in tests/python/test_dft_mp_v1_capacity.py
+Auto-merging tests/python/test_stationary_cuda_merge_boundary.py
+Auto-merging tools/dft_mp_v1/qualify_capacity.py
+CONFLICT (content): Merge conflict in tools/dft_mp_v1/qualify_capacity.py
+
+CONFLICT FILE python/generativeqc/_stationary_cuda.py
+2000:                 source_before, grid_before = sources.metrics(), ao.metrics()
+2001:         with timeline.phase("owner_state_reset"):
+2002:             sources.reset(
+2003:                 spec.coincident_tolerance, state.density, state.weighted_density
+2004:             )
+2005:             ao.set_density(density)
+2006: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+2007:         with timeline.phase("prepared_shell_derivatives"):
+2008:             # This compact O(Natom) staging finishes before source publication.
+2009:             # It reuses the existing 120*Natom-double transient host allowance.
+2010:             shell_sources, shell_work = seed_prepared_shell_sources(
+2011:                 state,
+2012:                 sources,
+2013:                 source_names,
+2014:                 na,
+2015:                 ecp=ecp,
+2016:                 maximum_host_bytes=120 * na * 8,
+2017:             )
+2018:         descriptor_records = records - len(shell_sources) * primitive_sum**4
+2019: =======
+2020:         shell_full_range = None
+2021:         shell_provider = getattr(state._source, "cuda_full_range_derivatives", None)
+2022:         if not ecp and callable(shell_provider):
+2023:             with timeline.phase("direct_shell_integral_derivatives"):
+2024:                 shell_full_range = shell_provider(na)
+2025:         native_shell_full_range = shell_full_range is not None
+2026:         if native_shell_full_range:
+2027:             shell_full_range = np.asarray(shell_full_range)
+2028:             if (
+2029:                 shell_full_range.shape != (2, na, 3)
+2030:                 or not np.isfinite(shell_full_range).all()
+2031:             ):
+2032:                 raise RuntimeError(
+2033:                     "prepared Direct shell derivative source returned invalid output"
+2034:                 )
+2035:             records -= ao_quartet_primitive_records
+2036: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+2037:         timeline.switch("python_packing")
+2038:         # integral_terms and primitive_tile are admitted independently. A fixed
+2039:         # producer must fit both the logical fixed threshold and the resident
+2040:         # native descriptor reservoir.
+2041:         fixed_task_capacity = min(integral_terms, primitive_tile)
+2042:         task_executor = _BoundedStationaryTaskExecutor(
+2045:             page_capacity=primitive_tile,
+2046:         )
+2047:         task_executions: list[dict[str, typing.Any]] = []
+2048:         task_sources = (
+2049:             ("one_electron", 2, "kinetic"),
+2050:             ("overlap_pulay", 2, "overlap"),
+2051: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+2052:             ("coulomb", 4, "four_center_eri"),
+2053:             *((("exact_exchange", 4, "four_center_eri"),) if has_exchange else ()),
+2054:         ):
+2055:             if source in shell_sources:
+2056:                 continue
+2057: =======
+2058:             *(
+2059:                 ()
+2060:                 if native_shell_full_range
+2061:                 else (
+2062:                     ("coulomb", 4, "four_center_eri"),
+2063:                     *(
+2064:                         (("exact_exchange", 4, "four_center_eri"),)
+2065:                         if has_exchange
+2066:                         else ()
+2067:                     ),
+2068:                 )
+2069:             ),
+2070:         )
+2071:         for source, rank, operator in task_sources:
+2072: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+2073:             domain = RuntimeTaskDomain.rectangular((n,) * rank)
+2074:             source_index = source_names.index(source)
+2075: 
+2076:             def submit_page(
+2077:                 page: RuntimeTaskPage,
+2078:                 *,
+CONFLICT FILE src/api/c_api_ks_snapshot.cpp
+575:     return GENERATIVEQC_STATUS_SUCCESS;
+576:   } catch (...) {
+577:     return generativeqc::api::map_exception(&batch->context->last_detail);
+578:   }
+579: }
+580: 
+581: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+582: // Compact two-source handoff for ordinary semilocal/global-hybrid stationary forces.
+583: // This does not reuse the WB97M-V five-source ABI or reinterpret its source order.
+584: generativeqc_status generativeqc_ks_snapshot_cuda_full_range_shell_gradient_v1(
+585:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+586:     std::size_t count, std::size_t maximum_host_bytes, std::uint64_t* retained_bytes) {
+587:   if (!batch || !snapshot || !values || !retained_bytes || !maximum_host_bytes)
+588:     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+589: =======
+590: generativeqc_status generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1(
+591:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+592:     generativeqc_nonlocal_cuda_force* owner, const generativeqc::dft::GridTaskView* view) {
+593:   if (!batch || !snapshot || !owner || !view) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+594: #if GENERATIVEQC_HAS_CUDA
+595: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+596:   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+597:   try {
+598:     auto status = check_current(*batch, *snapshot);
+599:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+600: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+601:     if (!snapshot->all_electron) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+594: #if GENERATIVEQC_HAS_CUDA
+595: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+596:   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+597:   try {
+598:     auto status = check_current(*batch, *snapshot);
+599:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+600: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+601:     if (!snapshot->all_electron) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+602:     if (!snapshot->atoms || snapshot->atoms > 128 || count != 6 * snapshot->atoms)
+603:       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+604:     // Native result/candidate staging is compact O(Natom), not a second SCF owner.
+605:     if (maximum_host_bytes / sizeof(double) / 3 < count) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+606:     std::vector<double> candidate;
+607:     std::uint64_t retained = 0;
+608:     std::string detail;
+609:     status = generativeqc::methods::detail::dft_cuda_full_range_shell_gradient(
+610:         *batch->plan, snapshot->index, snapshot->token, candidate, retained, detail);
+611: =======
+612:     int device = -1;
+613:     const double* density = nullptr;
+614:     const double* gradient = nullptr;
+615:     std::size_t point_count = 0;
+616:     void* source_stream = nullptr;
+617:     std::string detail;
+618:     status = generativeqc::methods::detail::dft_cuda_resident_nonlocal_features(
+619:         *batch->plan, snapshot->index, snapshot->token, device, density, gradient, point_count,
+620:         source_stream, detail);
+621: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+622:     if (status != GENERATIVEQC_STATUS_SUCCESS) {
+623:       batch->context->last_detail = detail;
+624:       return status;
+625:     }
+626: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+627:     if (candidate.size() != count ||
+620:         source_stream, detail);
+621: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+622:     if (status != GENERATIVEQC_STATUS_SUCCESS) {
+623:       batch->context->last_detail = detail;
+624:       return status;
+625:     }
+626: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+627:     if (candidate.size() != count ||
+628:         !std::all_of(candidate.begin(), candidate.end(),
+629:                      [](double value) { return std::isfinite(value); }))
+630:       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+631:     status = check_current(*batch, *snapshot);
+632:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+633:     std::copy(candidate.begin(), candidate.end(), values);
+634:     *retained_bytes = retained;
+635:     return GENERATIVEQC_STATUS_SUCCESS;
+636:   } catch (...) {
+637:     return generativeqc::api::map_exception(&batch->context->last_detail);
+638:   }
+639: =======
+640:     status = generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+641:         owner, batch->context, device, density, gradient, point_count, source_stream, view);
+642:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+643:     return check_current(*batch, *snapshot);
+644:   } catch (...) {
+645:     return generativeqc::api::map_exception(&batch->context->last_detail);
+646:   }
+647: #else
+648:   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+649: #endif
+650: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+651: }
+652: 
+653: generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
+654:                                                        const generativeqc_ks_snapshot* snapshot,
+655:                                                        double* energy) {
+656:   if (!batch || !snapshot || !energy) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+CONFLICT FILE src/api/ks_snapshot.hpp
+29: generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
+30:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+31:     std::size_t count);
+32: generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
+33:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+34:     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+35: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+36: /** Optional prepared-shell J/K handoff. Successful output contains two
+37:  * source-major gradients, with all-zero K for a semilocal model. */
+38: generativeqc_status generativeqc_ks_snapshot_cuda_full_range_shell_gradient_v1(
+39:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+40:     std::size_t count, std::size_t maximum_host_bytes, std::uint64_t* retained_bytes);
+41: =======
+42: generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
+43:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+44:     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
+45:     void** source_stream);
+46: /** Seed the resident nonlocal force owner directly from the exact current
+47:  * CUDA KS rho/grad-rho binding on the borrowed grid task stream. No pointer is
+48:  * published to Python and no host transfer or synchronization occurs. */
+49: generativeqc_status generativeqc_ks_snapshot_cuda_seed_nonlocal_force_v1(
+50:     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+51:     generativeqc_nonlocal_cuda_force* owner, const generativeqc::dft::GridTaskView* view);
+52: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+53: generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch* batch,
+54:                                                        const generativeqc_ks_snapshot* snapshot,
+55:                                                        double* energy);
+56: /** Live native proof: 0=all-electron, 1=ECP; never inferred from electron count. */
+57: /** Current-owner proof of the complete RSH/VV10 model, including its density domain. */
+58: generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
+CONFLICT FILE src/dft/stationary_gradient_cuda.cuh
+275:     profile_elapsed(*p, p->setup_transfer_ms, p->stage0, p->stage1);
+276:     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
+277:     p->source_seed_launch_epoch = p->launches;
+278:     p->source_seed_ready = true;
+279:   });
+280: }
+281: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+282: 
+283: /** Import compact, fully contracted source gradients into a freshly reset owner.
+284:  * The existing compiler-generated source reduction remains the only final sum. */
+285: int stationary_seed_sources_v1(void* pointer, const double* values, size_t count, char* error,
+286:                                size_t size) {
+287:   using namespace generativeqc_stationary_cuda;
+288:   auto* p = static_cast<Owner*>(pointer);
+289:   return guarded(p, error, size, [&] {
+290:     if (!p || !values || count != 3 * stationary_source_count * p->atoms)
+291:       throw std::invalid_argument("invalid stationary source seed shape");
+292:     check(*p);
+293:     if (!p->source_seed_ready || p->geometry_pending || p->launches != p->source_seed_launch_epoch)
+294:       throw std::invalid_argument("stationary source seeds require a fresh reset");
+295:     for (size_t i = 0; i < count; ++i)
+296:       if (!std::isfinite(values[i]))
+297:         throw std::invalid_argument("nonfinite stationary source seed");
+298:     auto stream = p->context.stream;
+299:     try {
+300:       upload(*p, p->sources, values, count, stream);
+301:       cuda_check(cudaStreamSynchronize(stream));
+302:       ++p->synchronizations;
+303:     } catch (...) {
+304:       // The caller's host seed must outlive even a partially submitted upload.
+305:       if (cudaStreamSynchronize(stream) == cudaSuccess) ++p->synchronizations;
+306:       throw;
+307:     }
+308:     p->source_seed_ready = false;
+309:   });
+310: }
+311: 
+312: =======
+313: int stationary_geometry_reset(void* pointer, const double* centers, double tolerance, char* error,
+314:                               size_t size) {
+315:   using namespace generativeqc_stationary_cuda;
+316:   auto* p = static_cast<Owner*>(pointer);
+317:   return guarded(p, error, size, [&] {
+318:     if (!p || !p->topology_ready || !std::isfinite(tolerance) || tolerance < 0)
+319:       throw std::invalid_argument("invalid geometry-only reset");
+320:     p->context.check_device();
+321:     drain_geometry(*p);
+322:     p->failed = false;
+323:     auto stream = p->context.stream;
+324:     profile_record(*p, p->stage0, stream);
+325:     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
+326:     cuda_check(cudaMemsetAsync(p->sources, 0, 3 * stationary_source_count * p->atoms * 8, stream));
+327:     upload(*p, p->centers, centers, 3 * p->atoms, stream);
+328:     profile_record(*p, p->stage1, stream);
+329:     validate_centers<<<1, 1, 0, stream>>>(p->centers, p->atoms, tolerance, p->context.error);
+330:     profile_record(*p, p->stage2, stream);
+331:     ++p->launches;
+332:     p->pair_visits += p->atoms * (p->atoms - 1) / 2;
+333:     finished(*p, stream);
+334:     profile_elapsed(*p, p->setup_transfer_ms, p->stage0, p->stage1);
+335:     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
+336:   });
+337: }
+338: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+339: int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges, size_t count,
+340:                      char* error, size_t size) {
+341:   using namespace generativeqc_stationary_cuda;
+342:   auto* p = static_cast<Owner*>(pointer);
+343:   return guarded(p, error, size, [&] {
+344:     if (!p || !tasks || !charges || !count || count > p->task_capacity)
+CONFLICT FILE src/methods/dft_method.cpp
+924:       output.export_synchronizations = after.synchronizations - before.synchronizations;
+925:     }
+926: #endif
+927:     return GENERATIVEQC_STATUS_SUCCESS;
+928:   }
+929: 
+930: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+931:   generativeqc_status cuda_full_range_shell_gradient(const dft::CudaKsFinalStateToken& expected,
+932:                                                      std::vector<double>& output,
+933:                                                      std::uint64_t& retained_bytes,
+934:                                                      std::string& detail) {
+935:     retained_bytes = 0;
+936: #if GENERATIVEQC_HAS_CUDA
+937:     if (!cuda_ || range_strategy_ || nonlocal_ || !system_.ecp_terms.empty() ||
+938:         std::any_of(system_.atoms.begin(), system_.atoms.end(),
+939:                     [](const auto& atom) { return atom.ecp_core != 0; })) {
+940:       detail = "full-range shell handoff requires an all-electron local/global-hybrid KS owner";
+941:       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+942:     }
+943:     dft::CudaKsResidentDensityBinding density;
+944:     auto status = cuda_->resident_final_density(expected, density, detail);
+945:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+946:     const auto binding = scf::prepared_cuda_direct_derivative_binding(fock_);
+947:     if (!binding) {
+948:       detail = "prepared KS owner has no retained Direct derivative capability";
+949:       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+950:     }
+951:     if (!density || density.device_id != binding.device_id ||
+952:         density.matrix_elements != binding.nbf * binding.nbf ||
+953:         density.spins != expected.identity.model.spins ||
+954:         expected.identity.determinant.model != fock_.strategy()) {
+955:       detail = "resident KS density does not match the prepared full-range derivative owner";
+956:       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+957:     }
+958:     std::vector<double> candidate;
+959:     status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+960:         fock_, density.alpha, density.beta, density.matrix_elements, candidate, detail);
+961:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+962:     if (candidate.size() != 6 * system_.atoms.size() ||
+963:         !std::all_of(candidate.begin(), candidate.end(),
+964:                      [](double value) { return std::isfinite(value); })) {
+965:       detail = "invalid full-range shell derivative source result";
+966:       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+967:     }
+968:     dft::CudaKsFinalStateToken current;
+969:     status = cuda_->final_state_token(current, detail);
+970:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+971:     if (current != expected) {
+972:       detail = "KS final state changed during shell derivative execution";
+973:       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+974:     }
+975:     output.swap(candidate);
+976:     retained_bytes = binding.retained_device_bytes;
+977: =======
+978:   generativeqc_status cuda_full_range_integral_derivatives(
+979:       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+980:       std::string& detail) {
+981: #if GENERATIVEQC_HAS_CUDA
+982:     output.clear();
+983:     if (!cuda_ || !system_.ecp_terms.empty() || range_strategy_ ||
+984:         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+985:       detail = "CUDA full-range stationary shell derivatives require an all-electron Direct owner";
+986:       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+987:     }
+988:     const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
+989:     if (!derivative_source) {
+990:       detail = "prepared CUDA Fock owner has no retained Direct shell derivative lease";
+991:       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+992:     }
+993:     dft::CudaKsResidentDensityBinding resident_density;
+994:     auto status = cuda_->resident_final_density(expected, resident_density, detail);
+995:     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+996:     if (!resident_density || resident_density.device_id != derivative_source.device_id ||
+997:         resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+998:       detail = "CUDA full-range stationary density is incompatible with the Direct shell owner";
+999:       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+1000:     }
+1001:     status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+1002:         fock_, resident_density.alpha, resident_density.beta, resident_density.matrix_elements,
+1003:         output, detail);
+1004:     if (status != GENERATIVEQC_STATUS_SUCCESS) {
+1005:       output.clear();
+1006:       return status;
+1007:     }
+1008:     const auto coordinates = 3 * system_.atoms.size();
+1009:     if (output.size() != 2 * coordinates) {
+1010:       output.clear();
+1011:       detail = "prepared CUDA full-range shell derivative source shape mismatch";
+1012:       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+1013:     }
+1014: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+1015:     return GENERATIVEQC_STATUS_SUCCESS;
+1016: #else
+1017:     (void)expected;
+1018:     (void)output;
+1019: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+1020:     detail = "CUDA full-range shell derivatives are unavailable in this build";
+1013:     }
+1014: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+1015:     return GENERATIVEQC_STATUS_SUCCESS;
+1016: #else
+1017:     (void)expected;
+1018:     (void)output;
+1019: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+1020:     detail = "CUDA full-range shell derivatives are unavailable in this build";
+1021: =======
+1022:     detail = "CUDA full-range stationary shell derivatives are unavailable in this build";
+1023: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+1024:     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+1025: #endif
+1026:   }
+1027: 
+1028:   generativeqc_status cuda_integral_gradient(
+1029:       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+1719:       return items_[index].plan->read_derivative_state(expected, output, detail);
+1720:     output = {};
+1721:     detail = "KS batch item has no prepared final-state owner";
+1722:     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+1723:   }
+1724: 
+1725: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+1726:   generativeqc_status cuda_full_range_shell_gradient(std::size_t index,
+1727:                                                      const dft::CudaKsFinalStateToken& expected,
+1728:                                                      std::vector<double>& output,
+1729:                                                      std::uint64_t& retained_bytes,
+1730:                                                      std::string& detail) {
+1731:     if (index < items_.size() && items_[index].plan)
+1732:       return items_[index].plan->cuda_full_range_shell_gradient(expected, output, retained_bytes,
+1733:                                                                 detail);
+1734: =======
+1735:   generativeqc_status cuda_full_range_integral_derivatives(
+1736:       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+1737:       std::string& detail) {
+1738:     if (index < items_.size() && items_[index].plan)
+1739:       return items_[index].plan->cuda_full_range_integral_derivatives(expected, output, detail);
+1740:     output.clear();
+1741: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+1742:     detail = "KS batch item has no prepared final-state owner";
+1743:     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+1744:   }
+1745: 
+1746:   generativeqc_status cuda_integral_gradient(
+1747:       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+1870:   if (ks) return ks->read_final_state(index, expected, compute_weighted_density, state, detail);
+1871:   state = {};
+1872:   detail = "prepared batch is not a KS final-state owner";
+1873:   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+1874: }
+1875: 
+1876: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+1877: generativeqc_status dft_cuda_full_range_shell_gradient(PreparedBatch& batch, std::size_t index,
+1878:                                                        const dft::CudaKsFinalStateToken& expected,
+1879:                                                        std::vector<double>& output,
+1880:                                                        std::uint64_t& retained_bytes,
+1881:                                                        std::string& detail) {
+1882:   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+1883:   if (ks)
+1884:     return ks->cuda_full_range_shell_gradient(index, expected, output, retained_bytes, detail);
+1885:   retained_bytes = 0;
+1886:   detail = "CUDA full-range shell gradient requires a native KS batch";
+1887: =======
+1888: generativeqc_status dft_cuda_full_range_integral_derivatives(
+1889:     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+1890:     std::vector<double>& output, std::string& detail) {
+1891:   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+1892:   if (ks) return ks->cuda_full_range_integral_derivatives(index, expected, output, detail);
+1893:   output.clear();
+1894:   detail = "CUDA full-range stationary shell derivatives require a native KS batch";
+1895: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+1896:   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+1897: }
+1898: 
+1899: generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
+1900:                                                const dft::CudaKsFinalStateToken& expected,
+1901:                                                std::vector<double>& output,
+CONFLICT FILE tests/python/test_dft_mp_v1_capacity.py
+307:             "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+308:         ),
+309:         "nuclear_pair_loop_sha256": (
+310:             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
+311:         ),
+312:         "endpoint_owner_sha256": (
+313: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+314:             "66548c399d2439070a7f579bc1070bb0298f4971db596ed487ede5822c2bde77"
+315: =======
+316:             "29bbb20f1db0233b102e3b823abf7ee026ab7b9ee50f3628e2ad83f16c6d3e58"
+317: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+318:         ),
+319:         "native_owner_sha256": (
+320:             "03f7469d2b8377cf0a3ba75deca66750ede5723e7d69a53774cdd463ee9540a5"
+321:         ),
+322:         "native_allocation_sha256": (
+323:             "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
+344:             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
+345:         ),
+346:         "native_metrics_sha256": (
+347:             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
+348:         ),
+349:         "native_header_sha256": (
+350: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+351:             "8cfe5ed4fa343ed319307d816857d7bed0dcd787112baf17a1b4a65be62d4dd8"
+352: =======
+353:             "9ec94f61e0acfbb37265c16b1e36a7cf496633a1b52def4d7088e7f3202b8aaf"
+354: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+355:         ),
+356:     }
+357:     assert result["admission_limits"]["primitive_records_definition"] == (
+358:         "(1 + int(has_exchange)) * primitive_sum ** 4 + "
+359:         "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
+360:     )
+CONFLICT FILE tools/dft_mp_v1/qualify_capacity.py
+305:     "2fcd280569106fe3cbcf1256a02693aa3532e7db0fa62f7c97d7319454a62a48"
+306: )
+307: STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
+308:     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
+309: )
+310: STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
+311: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+312:     "66548c399d2439070a7f579bc1070bb0298f4971db596ed487ede5822c2bde77"
+313: =======
+314:     "29bbb20f1db0233b102e3b823abf7ee026ab7b9ee50f3628e2ad83f16c6d3e58"
+315: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+316: )
+317: NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
+318:     "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
+319: )
+320: NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
+321:     "b22d47e054209d55f27ca68c8fbcb37577743835b3c4dffd175dd560d1b79429"
+351:     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
+352: )
+353: NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
+354:     "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
+355: )
+356: NATIVE_STATIONARY_HEADER_CONTRACT_SHA256 = (
+357: <<<<<<< e926a4ff5423b44b071b1bdcfdb1c32e4b5863d4
+358:     "8cfe5ed4fa343ed319307d816857d7bed0dcd787112baf17a1b4a65be62d4dd8"
+359: =======
+360:     "9ec94f61e0acfbb37265c16b1e36a7cf496633a1b52def4d7088e7f3202b8aaf"
+361: >>>>>>> c8886146a77a115681eb5b90ef6c11cef022fdea
+362: )
+363: PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
+364:     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
+365: )
+366: PRIMITIVE_SUM_DEFINITION = (
+367:     "sum((int(row[2]) * len(expansion) for row, expansion in "

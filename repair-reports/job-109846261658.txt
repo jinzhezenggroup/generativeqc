@@ -1,0 +1,33 @@
+shell: /usr/bin/bash -e {0}
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11
+  UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+##[endgroup]
+curl: (35) Recv failure: Connection reset by peer
+##[error]Process completed with exit code 35.
+##[group]Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+with:
+  name: benchmark-debug-36702895895-runtime-heavy
+  path: .artifacts/
+  include-hidden-files: true
+  if-no-files-found: ignore
+  retention-days: 14
+  compression-level: 6
+  overwrite: false
+  archive: true
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11

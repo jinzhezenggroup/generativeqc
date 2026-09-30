@@ -1,0 +1,262 @@
+[36;1m      target_parity=1[0m
+[36;1m    fi[0m
+[36;1m    while IFS= read -r path; do[0m
+[36;1m      if [[ -n "${slow_lookup[${path}]:-}" ]]; then[0m
+[36;1m        continue[0m
+[36;1m      fi[0m
+[36;1m      if (( core_index % 2 == target_parity )); then[0m
+[36;1m        test_targets+=("${path}")[0m
+[36;1m      fi[0m
+[36;1m      ((core_index += 1))[0m
+[36;1m    done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)[0m
+[36;1m    if (( ${#test_targets[@]} == 0 )); then[0m
+[36;1m      echo "::error::core shard selected no tests"[0m
+[36;1m      exit 2[0m
+[36;1m    fi[0m
+[36;1m    ;;[0m
+[36;1m  runtime-heavy)[0m
+[36;1m    # Keep file-scoped/module-scoped expensive fixtures on one worker.[0m
+[36;1m    # worksteal can duplicate those setups across workers and inflate[0m
+[36;1m    # wall time even when the collected test count barely changes.[0m
+[36;1m    dist_mode=loadfile[0m
+[36;1m    test_targets=([0m
+[36;1m      tests/python/test_response_native_rks.py[0m
+[36;1m      tests/python/test_response_native_uks.py[0m
+[36;1m      tests/python/test_mp2_public.py[0m
+[36;1m      tests/python/test_ccsd_t_orbital_response.py[0m
+[36;1m      tests/python/test_hessian_block.py[0m
+[36;1m      tests/python/test_grid_policy_convergence.py[0m
+[36;1m      tests/python/test_cc_triples_response_cuda.py[0m
+[36;1m      tests/python/test_codegen_schedules.py[0m
+[36;1m      tests/python/test_dft_batch.py[0m
+[36;1m      tests/python/test_ecp_multicenter.py[0m
+[36;1m      tests/python/test_codegen.py[0m
+[36;1m      tests/python/test_codegen_autotune.py[0m
+[36;1m      tests/python/test_codegen_profiles.py[0m
+[36;1m      tests/python/test_d3_geometry_ir.py[0m
+[36;1m      tests/python/test_d3_generated_ragged.py[0m
+[36;1m      tests/python/test_high_angular.py[0m
+[36;1m      tests/python/test_one_electron_derivatives.py[0m
+[36;1m      tests/python/test_range_separation.py[0m
+[36;1m      tests/python/test_second_derivatives_inputs.py[0m
+[36;1m    )[0m
+[36;1m    ;;[0m
+[36;1m  *)[0m
+[36;1m    echo "::error::unknown Python shard: core-a"[0m
+[36;1m    exit 2[0m
+[36;1m    ;;[0m
+[36;1mesac[0m
+[36;1m.venv/bin/python -m pytest "${test_targets[@]}" -q \[0m
+[36;1m  -n 4 --dist="$dist_mode" --durations=25 \[0m
+[36;1m  --junitxml=".artifacts/pytest-core-a.xml" \[0m
+[36;1m  "${coverage_args[@]}" \[0m
+[36;1m  "${extra_args[@]}"[0m
+shell: /usr/bin/bash -e {0}
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11
+  UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+ssss.....................................................sssssssssssssss [ 89%]
+ssssssssssss............................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 92%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+....................................................................ss.. [ 99%]
+.....................                                                    [100%]
+=================================== FAILURES ===================================
+________ test_source_owner_validates_spin_storage_and_packs_ao_indices _________
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12f30dd6d0>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw3/test_source_owner_validates_sp0')
+
+    def test_source_owner_validates_spin_storage_and_packs_ao_indices(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from generativeqc import _stationary_cuda as runtime
+    
+        names = (
+            "stationary_create",
+            "stationary_topology",
+            "stationary_reset",
+            "stationary_geometry_reset",
+            "stationary_tasks",
+            "stationary_nuclear",
+            "stationary_geometry",
+        molecular_args = [
+            ct.c_void_p,
+            ct.POINTER(GridTaskView),
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_size_t,
+            _DOUBLE,
+            _DOUBLE,
+            *tail,
+        ]
+>       lib.stationary_geometry_molecular_enqueue.argtypes = molecular_args
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'types.SimpleNamespace' object has no attribute 'stationary_geometry_molecular_enqueue'
+
+python/generativeqc/_stationary_cuda.py:590: AttributeError
+__ test_single_pass_host_intervals_do_not_double_count_enqueues[2.0-3.0-8.0] ___
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12f2a821d0>
+seed = 2.0, pair = 3.0, tail = 8.0
+
+    @pytest.mark.parametrize(
+        "seed,pair,tail", [(2.0, 3.0, 8.0), (0.0, 0.0, 0.0), (0.25, 0.5, 1.0)]
+    )
+    def test_single_pass_host_intervals_do_not_double_count_enqueues(
+        monkeypatch: pytest.MonkeyPatch, seed: float, pair: float, tail: float
+    ) -> None:
+        end = 2.0 + seed + pair + tail
+        ticks = iter((0.0, 1.0, 1.0, 2.0, 2.0 + seed, 2.0 + seed, 2.0 + seed + pair, end))
+        monkeypatch.setattr(MODULE, "perf_counter", lambda: next(ticks))
+        calls: list[str] = []
+    
+        current KS snapshot. Pair seeds are then available before that same lease
+        reaches the nonlocal geometry consumer. A capability miss instead collects
+        features alongside semilocal geometry and consumes pairs in a second pass.
+        Token, device, allocation and numerical errors never select that fallback.
+        No AO jet survives its lease; failed calls publish no component dictionary.
+        """
+        if type(tile_points) is not int or tile_points <= 0:
+            raise ValueError("resident nonlocal tile_points must be a positive integer")
+        if not callable(
+            getattr(nonlocal_sources, "geometry_external_device_molecular", None)
+        ):
+>           raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
+E           TypeError: nonlocal stationary owner lacks the resident seed consumer
+
+python/generativeqc/_stationary_nonlocal_cuda.py:49: TypeError
+__ test_single_pass_host_intervals_do_not_double_count_enqueues[0.0-0.0-0.0] ___
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12f3084310>
+seed = 0.0, pair = 0.0, tail = 0.0
+
+    @pytest.mark.parametrize(
+        "seed,pair,tail", [(2.0, 3.0, 8.0), (0.0, 0.0, 0.0), (0.25, 0.5, 1.0)]
+    )
+    def test_single_pass_host_intervals_do_not_double_count_enqueues(
+        monkeypatch: pytest.MonkeyPatch, seed: float, pair: float, tail: float
+    ) -> None:
+        end = 2.0 + seed + pair + tail
+        ticks = iter((0.0, 1.0, 1.0, 2.0, 2.0 + seed, 2.0 + seed, 2.0 + seed + pair, end))
+        monkeypatch.setattr(MODULE, "perf_counter", lambda: next(ticks))
+        calls: list[str] = []
+    
+        current KS snapshot. Pair seeds are then available before that same lease
+        reaches the nonlocal geometry consumer. A capability miss instead collects
+        features alongside semilocal geometry and consumes pairs in a second pass.
+        Token, device, allocation and numerical errors never select that fallback.
+        No AO jet survives its lease; failed calls publish no component dictionary.
+        """
+        if type(tile_points) is not int or tile_points <= 0:
+            raise ValueError("resident nonlocal tile_points must be a positive integer")
+        if not callable(
+            getattr(nonlocal_sources, "geometry_external_device_molecular", None)
+        ):
+>           raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
+E           TypeError: nonlocal stationary owner lacks the resident seed consumer
+
+python/generativeqc/_stationary_nonlocal_cuda.py:49: TypeError
+__ test_single_pass_host_intervals_do_not_double_count_enqueues[0.25-0.5-1.0] __
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f12f2900250>
+seed = 0.25, pair = 0.5, tail = 1.0
+
+    @pytest.mark.parametrize(
+        "seed,pair,tail", [(2.0, 3.0, 8.0), (0.0, 0.0, 0.0), (0.25, 0.5, 1.0)]
+    )
+    def test_single_pass_host_intervals_do_not_double_count_enqueues(
+        monkeypatch: pytest.MonkeyPatch, seed: float, pair: float, tail: float
+    ) -> None:
+        end = 2.0 + seed + pair + tail
+        ticks = iter((0.0, 1.0, 1.0, 2.0, 2.0 + seed, 2.0 + seed, 2.0 + seed + pair, end))
+        monkeypatch.setattr(MODULE, "perf_counter", lambda: next(ticks))
+        calls: list[str] = []
+    
+        current KS snapshot. Pair seeds are then available before that same lease
+        reaches the nonlocal geometry consumer. A capability miss instead collects
+        features alongside semilocal geometry and consumes pairs in a second pass.
+        Token, device, allocation and numerical errors never select that fallback.
+        No AO jet survives its lease; failed calls publish no component dictionary.
+        """
+        if type(tile_points) is not int or tile_points <= 0:
+            raise ValueError("resident nonlocal tile_points must be a positive integer")
+        if not callable(
+            getattr(nonlocal_sources, "geometry_external_device_molecular", None)
+        ):
+>           raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
+E           TypeError: nonlocal stationary owner lacks the resident seed consumer
+
+python/generativeqc/_stationary_nonlocal_cuda.py:49: TypeError
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.11.14-final-0 _______________
+
+Coverage XML written to file coverage-python-core-a.xml
+============================= slowest 25 durations =============================
+76.17s call     tests/python/test_cc_native_tensor_cpu.py::test_qualified_nh3_triples_tile_uses_explicit_extended_node_budget
+25.06s call     tests/python/test_cc_native_tensor_cpu.py::test_cc_executor_prewarm_aggregates_exact_lambda_lifecycle
+20.90s call     tests/python/test_cc_native_tensor_cpu.py::test_production_shape_response_graphs_are_native_cpu_lowerable
+20.41s call     tests/python/test_rccsd_native_lambda_owner.py::test_native_lambda_owner_fresh_replay_and_budget
+19.81s call     tests/python/test_bulk_representation_admission.py::test_entire_automatic_inventory_reaches_default_energy_lowering[polarized]
+19.23s call     tests/python/test_bulk_representation_admission.py::test_entire_automatic_inventory_reaches_default_energy_lowering[unpolarized]
+18.65s call     tests/python/test_libxc_bulk.py::test_catalog_and_human_report_reproduce_offline
+14.84s call     tests/python/test_rccsdt_native_runtime_response_codegen.py::test_runtime_shape_triples_response_matches_tensorir
+14.48s call     tests/python/test_hessian_reference.py::test_reference_matches_energy_fd[_water_mol-water-0.0005]
+14.30s call     tests/python/test_rccsd_arena_expression_depth.py::test_generated_response_arena_with_default_compiler_depth[clang++]
+13.64s call     tests/python/test_xc_production_policy.py::test_runtime_and_cpu_generator_use_only_the_lightweight_dispatch
+12.96s call     tests/python/test_hessian_reference.py::test_frozen_density_wrong[_water_mol-water-0.005]
+11.73s setup    tests/python/test_one_electron_values.py::test_emitted_arithmetic_all_pairs_and_normalized_contractions
+11.60s call     tests/python/test_rccsd_codegen_no_numpy.py::test_complete_rccsd_response_header_without_site_packages
+11.46s call     tests/python/test_rccsd_codegen_no_numpy.py::test_generated_response_arena_expressions_have_bounded_depth
+10.89s setup    tests/python/test_rccsd_arena_expression_depth.py::test_generated_response_arena_with_default_compiler_depth[c++]
+9.88s setup    tests/python/test_df_shell_derivatives.py::test_boys_diagnostics_preserve_values[0]
+8.50s call     tests/python/test_gfn2_sdq_cpu_codegen.py::test_gfn2_sdq_cpu_emitter_is_deterministic_generated_math
+8.48s call     tests/python/test_cc_triples_tiles.py::test_streamed_generated_reduction_costs_virtual_recomputation
+8.37s call     tests/python/test_rccsd_codegen_no_numpy.py::test_complete_rccsd_cuda_lambda_codegen_without_site_packages
+8.36s call     tests/python/test_wb97mv_complete.py::test_public_wb97mv_live_state_and_complete_gradient[wb97m-v-uks]
+7.99s call     tests/python/test_hessian_rks_directional.py::test_complete_rks_hvp_matches_reconverged_analytic_gradient[pbe-rks]
+7.51s call     tests/python/test_hessian_rks_directional.py::test_complete_rks_hvp_many_reuses_one_multi_rhs_response[lda-rks]
+7.48s call     tests/python/test_hessian_reference.py::test_reference_matches_analytic_hessian_and_gradient_differences[_water_mol]
+=========================== short test summary info ============================
+FAILED tests/python/test_stationary_cuda_merge_boundary.py::test_source_owner_validates_spin_storage_and_packs_ao_indices - AttributeError: 'types.SimpleNamespace' object has no attribute 'stationary_geometry_molecular_enqueue'
+FAILED tests/python/test_stationary_nonlocal_timing.py::test_single_pass_host_intervals_do_not_double_count_enqueues[2.0-3.0-8.0] - TypeError: nonlocal stationary owner lacks the resident seed consumer
+FAILED tests/python/test_stationary_nonlocal_timing.py::test_single_pass_host_intervals_do_not_double_count_enqueues[0.0-0.0-0.0] - TypeError: nonlocal stationary owner lacks the resident seed consumer
+FAILED tests/python/test_stationary_nonlocal_timing.py::test_single_pass_host_intervals_do_not_double_count_enqueues[0.25-0.5-1.0] - TypeError: nonlocal stationary owner lacks the resident seed consumer
+4 failed, 6103 passed, 682 skipped in 390.53s (0:06:30)
+##[error]Process completed with exit code 1.
+##[group]Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+with:
+  name: benchmark-debug-36702895895-core-a
+  path: .artifacts/
+  include-hidden-files: true
+  if-no-files-found: ignore
+  retention-days: 14
+  compression-level: 6
+  overwrite: false
+  archive: true
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11

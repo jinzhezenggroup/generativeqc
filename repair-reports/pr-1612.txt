@@ -1,0 +1,459 @@
+{"number": 1612, "title": "perf(dft): borrow resident molecular-grid points in WB97M-V force", "head": "perf/1612-wb97mv-resident-grid-points", "sha": "048c1cf2fe0a225670e8c49733283c564a534e03", "base": "perf/1611-stationary-implicit-grid-owners", "base_sha": "8e874b38842feaeb45c20dc70510faf598a69dd8", "draft": false, "mergeable": true, "state": "unstable"}
+## Summary
+
+Continue the WB97M-V CUDA stationary residency stack on top of #1611 by removing per-tile coordinate uploads.
+
+#1581 already retains the exact CUDA-generated molecular-grid points/weights in the native KS owner. The force-side compiler `CudaGrid` was still receiving `state.grid.points[begin:end]` from the detached host snapshot and copying those coordinates back to the same device for every AO/grid tile.
+
+This stack:
+- exposes the immutable native resident molecular-grid pointers through the exact KS snapshot token;
+- adds a device-point execution route to the existing CUDA grid owner;
+- reuses the same AO/feature kernels with a borrowed device point pointer;
+- makes `GridTaskView.points` publish the exact point source used by the task;
+- removes `points[begin:end]` from the WB97M-V stationary scheduler;
+- records `grid_point_source = exact-native-resident-grid` and `grid_point_h2d_bytes = 0`.
+
+## Ownership / correctness
+
+No new point/grid mathematics is introduced. Host-point execution remains unchanged for generic callers.
+
+The resident grid bridge:
+- validates the exact current KS token before publication;
+- requires the same CUDA device as the final-state owner;
+- retains native grid lifetime through the prepared KS owner;
+- validates the token again in Python after the private ABI returns.
+
+The device-point CUDA route validates device residency and tile bounds and keeps the existing deferred same-stream error propagation. AO/XC and moving-grid geometry consume the borrowed point pointer directly.
+
+## Stack
+
+Depends on #1611 -> #1610 -> #1609. Retarget in order after parents land; do not merge out of order.
+
+Refs #1569 #1479 #1482
+Parent #1423
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol
+MERGE base RC 0
+49bdcd11fbf76de12767195322dbc43c139a501a
+
+MERGE master RC 0
+9d14a957498fad13e75207ac2c06c89b42cf6ada
+
+WORKFLOW {"id": 36702966362, "name": "PR overlap", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36702966288, "name": "Pre-commit", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36702966307, "name": "CI", "status": "completed", "conclusion": "failure"}
+FAILED JOB 109846486051 python (core-a)
+[36;1m      target_parity=1[0m
+[36;1m    fi[0m
+[36;1m    while IFS= read -r path; do[0m
+[36;1m      if [[ -n "${slow_lookup[${path}]:-}" ]]; then[0m
+[36;1m        continue[0m
+[36;1m      fi[0m
+[36;1m      if (( core_index % 2 == target_parity )); then[0m
+[36;1m        test_targets+=("${path}")[0m
+[36;1m      fi[0m
+[36;1m      ((core_index += 1))[0m
+[36;1m    done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)[0m
+[36;1m    if (( ${#test_targets[@]} == 0 )); then[0m
+[36;1m      echo "::error::core shard selected no tests"[0m
+[36;1m      exit 2[0m
+[36;1m    fi[0m
+[36;1m    ;;[0m
+[36;1m  runtime-heavy)[0m
+[36;1m    # Keep file-scoped/module-scoped expensive fixtures on one worker.[0m
+[36;1m    # worksteal can duplicate those setups across workers and inflate[0m
+[36;1m    # wall time even when the collected test count barely changes.[0m
+[36;1m    dist_mode=loadfile[0m
+[36;1m    test_targets=([0m
+[36;1m      tests/python/test_response_native_rks.py[0m
+[36;1m      tests/python/test_response_native_uks.py[0m
+[36;1m      tests/python/test_mp2_public.py[0m
+[36;1m      tests/python/test_ccsd_t_orbital_response.py[0m
+[36;1m      tests/python/test_hessian_block.py[0m
+[36;1m      tests/python/test_grid_policy_convergence.py[0m
+[36;1m      tests/python/test_cc_triples_response_cuda.py[0m
+[36;1m      tests/python/test_codegen_schedules.py[0m
+[36;1m      tests/python/test_dft_batch.py[0m
+[36;1m      tests/python/test_ecp_multicenter.py[0m
+[36;1m      tests/python/test_codegen.py[0m
+[36;1m      tests/python/test_codegen_autotune.py[0m
+[36;1m      tests/python/test_codegen_profiles.py[0m
+[36;1m      tests/python/test_d3_geometry_ir.py[0m
+[36;1m      tests/python/test_d3_generated_ragged.py[0m
+[36;1m      tests/python/test_high_angular.py[0m
+[36;1m      tests/python/test_one_electron_derivatives.py[0m
+[36;1m      tests/python/test_range_separation.py[0m
+[36;1m      tests/python/test_second_derivatives_inputs.py[0m
+[36;1m    )[0m
+[36;1m    ;;[0m
+[36;1m  *)[0m
+[36;1m    echo "::error::unknown Python shard: core-a"[0m
+[36;1m    exit 2[0m
+[36;1m    ;;[0m
+[36;1mesac[0m
+[36;1m.venv/bin/python -m pytest "${test_targets[@]}" -q \[0m
+[36;1m  -n 4 --dist="$dist_mode" --durations=25 \[0m
+[36;1m  --junitxml=".artifacts/pytest-core-a.xml" \[0m
+[36;1m  "${coverage_args[@]}" \[0m
+[36;1m  "${extra_args[@]}"[0m
+shell: /usr/bin/bash -e {0}
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11
+  UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_failed_sync_revokes_view_then_success_recovers[failure0-1] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_failed_sync_revokes_view_then_success_recovers[failure1-0] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_failed_sync_revokes_view_then_success_recovers[failure1-1] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_failed_sync_revokes_view_then_success_recovers[failure2-0] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_failed_sync_revokes_view_then_success_recovers[failure2-1] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_deferred_view_retains_error_for_qualified_consumer[0] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+_ ERROR at setup of test_deferred_view_retains_error_for_qualified_consumer[1] _
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _trace=<pluggy._tracing.TagTrac...fc73b10>, _basetemp=PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw1'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+        compiler = shutil.which("c++") or shutil.which("clang++")
+        if compiler is None:
+            pytest.skip("host C++ compiler required for publication regression")
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
+        begin = source.index("static int grid_cuda_run_selected_impl(")
+        end = source.index("\nint grid_cuda_run_selected_v1(", begin)
+        implementation = source[begin:end]
+        tail = implementation[implementation.index("    if (defer_error_to_consumer) {") :]
+        view_begin = source.index("int grid_cuda_view_v1(")
+        view_end = source.index("\nint grid_cuda_basis_v1(", view_begin)
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++17', '-O2', '-shared', '-fPIC', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw1/grid-publication0/publication.so']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+=================================== FAILURES ===================================
+_______ test_deferred_feature_lease_hands_error_to_same_stream_consumer ________
+[gw1] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+    def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
+        source = (ROOT / "src/dft/cuda_grid.cu").read_text()
+        block = _selected_execution()
+        deferred = block.split("if (defer_error_to_consumer)", 1)[1].split(
+            "int failure = 0;", 1
+        )[0]
+        assert "return;" in deferred
+        assert "cudaMemcpyDeviceToHost" not in deferred
+        assert (
+            "deferred CUDA grid errors require a device-only local feature lease" in block
+        )
+        wrapper = source.split("int grid_cuda_run_selected_deferred_v1", 1)[1].split(
+            "int grid_cuda_run_v1", 1
+        )[0]
+        assert "grid_cuda_run_selected_impl" in wrapper
+>       assert "jet_output, 1, error, size" in wrapper
+E       AssertionError: assert 'jet_output, 1, error, size' in '(void* pointer, const double* points, size_t npoint,\n                                       int features, const size..., features, ao_ids, active,\n                                     feature_output, jet_output, 1, 1, error, size);\n}\n'
+
+tests/python/test_grid_cuda_profile_fences.py:52: AssertionError
+________ test_source_owner_validates_spin_storage_and_packs_ao_indices _________
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2430918a90>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw3/test_source_owner_validates_sp0')
+
+    def test_source_owner_validates_spin_storage_and_packs_ao_indices(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from generativeqc import _stationary_cuda as runtime
+    
+        names = (
+            "stationary_create",
+            "stationary_topology",
+            "stationary_reset",
+            "stationary_geometry_reset",
+            "stationary_tasks",
+        molecular_args = [
+            ct.c_void_p,
+            ct.POINTER(GridTaskView),
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_size_t,
+            _DOUBLE,
+            _DOUBLE,
+            *tail,
+        ]
+>       lib.stationary_geometry_molecular_enqueue.argtypes = molecular_args
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'types.SimpleNamespace' object has no attribute 'stationary_geometry_molecular_enqueue'
+
+python/generativeqc/_stationary_cuda.py:590: AttributeError
+__ test_single_pass_host_intervals_do_not_double_count_enqueues[2.0-3.0-8.0] ___
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2430917050>
+seed = 2.0, pair = 3.0, tail = 8.0
+
+    @pytest.mark.parametrize(
+        "seed,pair,tail", [(2.0, 3.0, 8.0), (0.0, 0.0, 0.0), (0.25, 0.5, 1.0)]
+    )
+    def test_single_pass_host_intervals_do_not_double_count_enqueues(
+        monkeypatch: pytest.MonkeyPatch, seed: float, pair: float, tail: float
+    ) -> None:
+        end = 2.0 + seed + pair + tail
+        ticks = iter((0.0, 1.0, 1.0, 2.0, 2.0 + seed, 2.0 + seed, 2.0 + seed + pair, end))
+        monkeypatch.setattr(MODULE, "perf_counter", lambda: next(ticks))
+        calls: list[str] = []
+    
+        current KS snapshot. Pair seeds are then available before that same lease
+        reaches the nonlocal geometry consumer. A capability miss instead collects
+        features alongside semilocal geometry and consumes pairs in a second pass.
+        Token, device, allocation and numerical errors never select that fallback.
+        No AO jet survives its lease; failed calls publish no component dictionary.
+        """
+        if type(tile_points) is not int or tile_points <= 0:
+            raise ValueError("resident nonlocal tile_points must be a positive integer")
+        if not callable(
+            getattr(nonlocal_sources, "geometry_external_device_molecular", None)
+        ):
+>           raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
+E           TypeError: nonlocal stationary owner lacks the resident seed consumer
+
+python/generativeqc/_stationary_nonlocal_cuda.py:49: TypeError
+__ test_single_pass_host_intervals_do_not_double_count_enqueues[0.0-0.0-0.0] ___
+[gw3] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2430961410>
+seed = 0.0, pair = 0.0, tail = 0.0
+
+    @pytest.mark.parametrize(
+        "seed,pair,tail", [(2.0, 3.0, 8.0), (0.0, 0.0, 0.0), (0.25, 0.5, 1.0)]
+    )
+    def test_single_pass_host_intervals_do_not_double_count_enqueues(
+        monkeypatch: pytest.MonkeyPatch, seed: float, pair: float, tail: float
+    ) -> None:
+        end = 2.0 + seed + pair + tail
+        ticks = iter((0.0, 1.0, 1.0, 2.0, 2.0 + seed, 2.0 + seed, 2.0 + seed + pair, end))
+        monkeypatch.setattr(MODULE, "perf_counter", lambda: next(ticks))
+        calls: list[str] = []
+    
+        current KS snapshot. Pair seeds are then available before that same lease
+        reaches the nonlocal geometry consumer. A capability miss instead collects
+        features alongside semilocal geometry and consumes pairs in a second pass.
+        Token, device, allocation and numerical errors never select that fallback.
+        No AO jet survives i
+WORKFLOW {"id": 36702966223, "name": "CuMetal CUDA", "status": "completed", "conclusion": "success"}

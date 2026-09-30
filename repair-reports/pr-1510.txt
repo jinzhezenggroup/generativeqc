@@ -1,0 +1,80 @@
+{"number": 1510, "title": "perf(dft): fuse stationary geometry reduction into one kernel", "head": "perf/1479-fuse-geometry-reduction", "sha": "85b226cabf0c3ac8471d07a1f125a1b95e134891", "base": "master", "base_sha": "fbca33876e0a2382ec23f4d00a70b92310961c04", "draft": true, "mergeable": true, "state": "clean"}
+## Summary
+
+- fuse the stationary semilocal geometry worker and its separate `geometry_reduce` launch into one 32-thread block
+- convert worker error exits into lane-local failure state so every worker reaches the publication barrier
+- preserve the former successful reduction order exactly: source lane 0 through 31 for each output coordinate
+- publish no XC geometry source when any worker sets the device error before the barrier
+- use the same fused kernel for ordinary semilocal geometry and external/nonlocal geometry seeds
+- reduce stationary geometry source launches from two to one per tile
+- keep the existing scratch/storage bound unchanged
+- document that fused reduction time is charged to `geometry_kernel` while the retained `geometry_reduction` metric is zero
+
+## Dependency / Draft reason
+
+This remains Draft solely because matched GPU performance qualification is still required before promotion. The stack on #1494 is sequencing only and is not a Draft blocker.
+
+The launch reduction is structurally exact, but the fused reduction tail runs inside the same single 32-thread block. That should reduce launch overhead for small/medium systems, while sufficiently large atom counts could prefer the old separately parallel reduction kernel. This PR must therefore be measured across multiple atom/AO regimes rather than promoted from launch-count reasoning alone.
+
+Base: `perf/1479-deferred-geometry-drain` / #1494.
+
+## Numerical contract
+
+The old reduction performed, for every coordinate:
+
+```text
+sum = partial[0] + partial[1] + ... + partial[31]
+output += sum
+```
+
+The fused kernel performs the same additions in the same lane order. No atomics are introduced.
+
+Worker failures no longer return before reduction. Instead the failing lane sets the shared error flag, marks itself invalid, exits its point loop, and still reaches `__syncthreads()`. After the barrier, any error prevents every worker from publishing the source.
+
+## Expected structural effect
+
+For `T` semilocal geometry tiles:
+
+- stationary geometry kernel launches: `2T -> T`
+- stationary geometry scratch bytes: unchanged
+- scientific point/AO/grid work: unchanged
+- source reduction order: unchanged
+- H2D bytes: unchanged
+
+No endpoint speedup is claimed until matched GPU qualification.
+
+## Qualification before Ready
+
+- existing LDA/PBE/r2SCAN RKS/UKS analytic-gradient gates
+- existing failure-isolation/nonfinite gates
+- WB97M-V semilocal geometry path
+- matched warm timings and launch counters on small, medium and larger atom/AO regimes
+- reject or schedule-gate fusion if larger systems regress materially despite the lower launch count
+
+## Tests
+
+Device-free source guards require:
+- no stationary `geometry_reduce` kernel;
+- one publication `__syncthreads()`;
+- no thread `return` before that barrier;
+- ascending lane-order reduction;
+- one geometry launch in both synchronous and deferred runtime paths.
+
+## Durable rationale
+
+See `.agents/notes/implemented/performance/2026-09-27-stationary-geometry-reduction-fusion.md`.
+
+Refs #1479, #1494, #660 and #1423.
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol
+MERGE base RC 0
+5094a810dcfcc57075b0eeb32bcac1a638deca33
+
+MERGE master RC 0
+7b69fb50bc6168c554438dccbde5113153f288a0
+
+WORKFLOW {"id": 36699976987, "name": "Pre-commit", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36699976973, "name": "CI", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36699977008, "name": "CuMetal CUDA", "status": "completed", "conclusion": "success"}
+WORKFLOW {"id": 36699977002, "name": "PR overlap", "status": "completed", "conclusion": "success"}

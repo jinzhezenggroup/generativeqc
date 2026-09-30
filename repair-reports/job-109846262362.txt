@@ -1,0 +1,163 @@
+[36;1m      target_parity=1[0m
+[36;1m    fi[0m
+[36;1m    while IFS= read -r path; do[0m
+[36;1m      if [[ -n "${slow_lookup[${path}]:-}" ]]; then[0m
+[36;1m        continue[0m
+[36;1m      fi[0m
+[36;1m      if (( core_index % 2 == target_parity )); then[0m
+[36;1m        test_targets+=("${path}")[0m
+[36;1m      fi[0m
+[36;1m      ((core_index += 1))[0m
+[36;1m    done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)[0m
+[36;1m    if (( ${#test_targets[@]} == 0 )); then[0m
+[36;1m      echo "::error::core shard selected no tests"[0m
+[36;1m      exit 2[0m
+[36;1m    fi[0m
+[36;1m    ;;[0m
+[36;1m  runtime-heavy)[0m
+[36;1m    # Keep file-scoped/module-scoped expensive fixtures on one worker.[0m
+[36;1m    # worksteal can duplicate those setups across workers and inflate[0m
+[36;1m    # wall time even when the collected test count barely changes.[0m
+[36;1m    dist_mode=loadfile[0m
+[36;1m    test_targets=([0m
+[36;1m      tests/python/test_response_native_rks.py[0m
+[36;1m      tests/python/test_response_native_uks.py[0m
+[36;1m      tests/python/test_mp2_public.py[0m
+[36;1m      tests/python/test_ccsd_t_orbital_response.py[0m
+[36;1m      tests/python/test_hessian_block.py[0m
+[36;1m      tests/python/test_grid_policy_convergence.py[0m
+[36;1m      tests/python/test_cc_triples_response_cuda.py[0m
+[36;1m      tests/python/test_codegen_schedules.py[0m
+[36;1m      tests/python/test_dft_batch.py[0m
+[36;1m      tests/python/test_ecp_multicenter.py[0m
+[36;1m      tests/python/test_codegen.py[0m
+[36;1m      tests/python/test_codegen_autotune.py[0m
+[36;1m      tests/python/test_codegen_profiles.py[0m
+[36;1m      tests/python/test_d3_geometry_ir.py[0m
+[36;1m      tests/python/test_d3_generated_ragged.py[0m
+[36;1m      tests/python/test_high_angular.py[0m
+[36;1m      tests/python/test_one_electron_derivatives.py[0m
+[36;1m      tests/python/test_range_separation.py[0m
+[36;1m      tests/python/test_second_derivatives_inputs.py[0m
+[36;1m    )[0m
+[36;1m    ;;[0m
+[36;1m  *)[0m
+[36;1m    echo "::error::unknown Python shard: core-b"[0m
+[36;1m    exit 2[0m
+[36;1m    ;;[0m
+[36;1mesac[0m
+[36;1m.venv/bin/python -m pytest "${test_targets[@]}" -q \[0m
+[36;1m  -n 4 --dist="$dist_mode" --durations=25 \[0m
+[36;1m  --junitxml=".artifacts/pytest-core-b.xml" \[0m
+[36;1m  "${coverage_args[@]}" \[0m
+[36;1m  "${extra_args[@]}"[0m
+shell: /usr/bin/bash -e {0}
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11
+  UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+......s.s......ss....................................................... [ 88%]
+.......sssssss...............ssssssssssssssssss....s.........ssssss..... [ 89%]
+........................................................................ [ 90%]
+........................................................................ [ 92%]
+.......s........................................s...........sssssssss... [ 93%]
+.....sssssssssssssssssssssssssssssssssssssss......s..sssssssssssssssssss [ 94%]
+sssss..s................................................................ [ 95%]
+.............................................s.....ss................... [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+................ssssssssssssssss.......s...................ssssssssss... [ 99%]
+...ssssssssss...sss..s.....s..                                           [100%]
+=================================== FAILURES ===================================
+_____________ test_split_response_budget_covers_final_live_owners ______________
+[gw0] linux -- Python 3.11.14 /home/runner/work/generativeqc/generativeqc/.venv/bin/python
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/popen-gw0/test_split_response_budget_cov0')
+
+    def test_split_response_budget_covers_final_live_owners(tmp_path: Path) -> None:
+        compiler = shutil.which("c++")
+        if compiler is None:
+            pytest.skip("C++ compiler unavailable")
+        text = (ROOT / "src/cc/rccsdt_force.cpp").read_text()
+        source = tmp_path / "budget.cpp"
+        source.write_text(_probe(_fragment(text)))
+        executable = tmp_path / "budget"
+>       subprocess.run(
+            [compiler, "-std=c++20", "-O0", str(source), "-o", str(executable)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++20', '-O0', '/tmp/pytest-of-runner/pytest-0/popen-gw0/test_split_response_budget_cov0/budget.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw0/test_split_response_budget_cov0/budget']' returned non-zero exit status 1.
+
+../../_temp/uv-python-dir/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+=============================== warnings summary ===============================
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[lda-uks-cartesian-Br-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[lda-uks-cartesian-I-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[lda-uks-spherical-Br-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[lda-uks-spherical-I-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[pbe-uks-cartesian-Br-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[pbe-uks-cartesian-I-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[pbe-uks-spherical-Br-cpu]
+tests/python/test_ecp_halogen_dft.py::test_halogen_complete_force_analytic_and_fd[pbe-uks-spherical-I-cpu]
+  /home/runner/work/generativeqc/generativeqc/.venv/lib/python3.11/site-packages/pyscf/lib/misc.py:726: DeprecationWarning: remove_linear_dep_ is deprecated and will be removed in a future release. Linear dependency handling is now built into the SCF procedure by default. Linear dependency removal can be controlled using the following settings:
+    pyscf.scf.hf.remove_overlap_zero_eigenvalue = True
+    pyscf.scf.hf.overlap_zero_eigenvalue_threshold = 1e-6
+  
+    return fn(self, *args, **kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+25.38s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-uks-cartesian-Br-cpu]
+25.23s call     tests/python/test_external_basis.py::test_independent_overlap_and_kinetic_from_native_ao_quadrature[water_cartesian]
+25.18s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-rks-cartesian-Br-cpu]
+24.97s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-uks-cartesian-I-cpu]
+24.56s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-uks-spherical-Br-cpu]
+23.96s call     tests/python/test_df_rys_shell.py::test_independent_high_precision_center_differentiation[48.0-angular22]
+23.18s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-uks-spherical-I-cpu]
+23.17s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-rks-spherical-Br-cpu]
+22.77s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-rks-cartesian-I-cpu]
+22.50s call     tests/python/test_ecp_halogen_dft.py::test_halogen_budgeted_replay_and_recovery[pbe-rks-spherical-I-cpu]
+21.94s call     tests/python/test_cuda_ownership.py::test_current_report_is_generated_deterministically_from_source_and_ledger
+21.51s call     tests/python/test_second_derivatives_native.py::test_explicit_fifteenth_moment_native_hvp[cpu]
+=========================== short test summary info ============================
+FAILED tests/python/test_cc_split_response_budget.py::test_split_response_budget_covers_final_live_owners - subprocess.CalledProcessError: Command '['/usr/bin/c++', '-std=c++20', '-O0', '/tmp/pytest-of-runner/pytest-0/popen-gw0/test_split_response_budget_cov0/budget.cpp', '-o', '/tmp/pytest-of-runner/pytest-0/popen-gw0/test_split_response_budget_cov0/budget']' returned non-zero exit status 1.
+1 failed, 5729 passed, 996 skipped, 8 warnings in 891.09s (0:14:51)
+##[error]Process completed with exit code 1.
+##[group]Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+with:
+  name: benchmark-debug-36702897488-core-b
+  path: .artifacts/
+  include-hidden-files: true
+  if-no-files-found: ignore
+  retention-days: 14
+  compression-level: 6
+  overwrite: false
+  archive: true
+env:
+  CCACHE_VERSION: 4.14
+  CCACHE_MAXSIZE: 1G
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  UV_PYTHON_INSTALL_DIR: /home/runner/work/_temp/uv-python-dir
+  UV_PYTHON: 3.11
