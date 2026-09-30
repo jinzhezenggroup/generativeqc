@@ -6,10 +6,17 @@ import copy
 
 import pytest
 from generativeqc.autotune import dft_endpoint_gate
+from generativeqc_compiler.common.cuda_resources import KernelResources
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
 from generativeqc_compiler.dft.grid import (
     GridSpec,
     MolecularGrid,
     molecular_grid_identity,
+)
+from generativeqc_compiler.dft.xc_compiled_resources import (
+    GridXcCompiledResourceShape,
+    native_grid_xc_compiled_region_evidence,
 )
 from generativeqc_compiler.dft.xc_schedule import (
     DEVICE_FUSED,
@@ -18,6 +25,7 @@ from generativeqc_compiler.dft.xc_schedule import (
     GridXcCandidateShape,
     GridXcScheduleCandidate,
     GridXcScientificIdentity,
+    aggregate_grid_xc_compiled_evidence,
     assess_grid_xc_schedule,
     grid_xc_schedule,
     rank_grid_xc_candidates,
@@ -296,6 +304,147 @@ def test_grid_xc_candidate_local_shapes_rank_distinct_point_tiles() -> None:
     )
     assert not rejected_assessment.legal
     assert "device bytes 41943040 exceeds limit 33554432" in rejected_assessment.reasons
+
+
+@pytest.mark.parametrize(
+    ("validation_local_bytes", "expected_local"), [(None, None), (0, 32), (64, 64)]
+)
+def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract(
+    validation_local_bytes: int | None, expected_local: int | None
+) -> None:
+    shape = GridXcCandidateShape(
+        npoint=4096,
+        tile_points=256,
+        nao=96,
+        max_active_ao=48,
+        spins=2,
+        jet_components=4,
+        device_workspace_bytes=8 << 20,
+        generated_source_bytes=180_000,
+    )
+    limits = GridXcCandidateLimits(
+        device_bytes=32 << 20,
+        live_values=2_000_000,
+        source_bytes=300_000,
+    )
+    rows = (
+        KernelResources(
+            "validate_density(double*)", 24, 0, 0, 0, 0, validation_local_bytes
+        ),
+        KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0, 0),
+        KernelResources("tiled_density_product<false>(double*)", 64, 0, 0, 0, 4352, 0),
+        KernelResources("density_features<true>(double*)", 56, 0, 0, 0, 0, 0),
+        KernelResources("evaluate_points<4, false>(double*)", 72, 0, 16, 8, 0, 32),
+        KernelResources("compact_potential_panels(double*)", 40, 0, 0, 0, 0, 0),
+        KernelResources("tiled_potential(double*)", 68, 0, 0, 0, 2048, 0),
+    )
+    compiled = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            npoint=shape.npoint,
+            tile_points=shape.tile_points,
+            nao=shape.nao,
+            spins=shape.spins,
+        ),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity=scientific().source_identity,
+        object_bytes=96_000,
+        compile_seconds=1.25,
+    )
+    (assessment,) = rank_grid_xc_candidates(
+        (GridXcScheduleCandidate(DEVICE_FUSED, shape, compiled),),
+        limits,
+        device_xc_available=True,
+        observable="potential",
+        functional="PBE",
+        scientific=scientific(),
+    )
+    profitability = assessment.schedule_contract.profitability
+    assert profitability.compiled_registers_per_thread == 72
+    assert profitability.spill_bytes == 24
+    assert profitability.local_bytes == expected_local
+    assert profitability.shared_bytes == 4352
+    assert profitability.compiled_occupancy_upper_bound is not None
+    assert profitability.object_bytes == 96_000
+    assert profitability.compile_seconds == 1.25
+    assert assessment.schedule_contract.resources.registers_per_thread == 72
+    assert assessment.schedule_contract.resources.shared_bytes == 4352
+    provenance = dict(assessment.schedule_contract.provenance)
+    assert provenance["compiled_resource_evidence"] == "dft.grid_xc.compiled_region"
+    assert provenance["compiled_profitability_contract"] == "common.gpu_profitability"
+
+    wrong_source = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            npoint=shape.npoint,
+            tile_points=shape.tile_points,
+            nao=shape.nao,
+            spins=shape.spins,
+        ),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity="different-source",
+    )
+    with pytest.raises(ValueError, match="target/source"):
+        assess_grid_xc_schedule(
+            DEVICE_FUSED,
+            shape,
+            limits,
+            device_xc_available=True,
+            observable="potential",
+            functional="PBE",
+            scientific=scientific(),
+            compiled_evidence=wrong_source,
+        )
+
+    with pytest.raises(TypeError, match="GridXcCompiledRegionEvidence"):
+        GridXcScheduleCandidate(DEVICE_FUSED, shape, GpuProfitability())
+
+
+def test_compiled_region_evidence_requires_every_native_device_stage() -> None:
+    def stage(
+        registers: int,
+        spill: int,
+        occupancy: float,
+        *,
+        local: int = 0,
+        shared: int = 0,
+    ) -> GpuProfitability:
+        return GpuProfitability(
+            compiled_registers_per_thread=registers,
+            spill_store_bytes=spill,
+            spill_load_bytes=0,
+            local_bytes=local,
+            shared_bytes=shared,
+            compiled_occupancy_upper_bound=occupancy,
+        )
+
+    evidence = aggregate_grid_xc_compiled_evidence(
+        {
+            "ao_collocation": stage(48, 0, 0.75, shared=1024),
+            "density_features": stage(56, 0, 0.75),
+            "xc_expression": stage(148, 16, 0.25, local=32),
+            "vxc_contraction": stage(64, 0, 0.5, shared=2048),
+        }
+    )
+    assert evidence.compiled_registers_per_thread == 148
+    assert evidence.spill_store_bytes == 16
+    assert evidence.spill_load_bytes == 0
+    assert evidence.local_bytes == 32
+    assert evidence.shared_bytes == 2048
+    assert evidence.compiled_occupancy_upper_bound == 0.25
+    assert evidence.object_bytes is None
+    assert evidence.compile_seconds is None
+
+    with pytest.raises(ValueError, match="exact stages"):
+        aggregate_grid_xc_compiled_evidence(
+            {
+                "ao_collocation": stage(48, 0, 0.75),
+                "density_features": stage(56, 0, 0.75),
+                "xc_expression": stage(148, 0, 0.25),
+            }
+        )
 
 
 def endpoint_sample(

@@ -6,6 +6,13 @@ import typing
 from dataclasses import replace
 
 import pytest
+from generativeqc_compiler.common.cuda_resources import KernelResources
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.dft.xc_compiled_resources import (
+    GridXcCompiledRegionEvidence,
+    GridXcCompiledResourceShape,
+    native_grid_xc_compiled_region_evidence,
+)
 from generativeqc_compiler.dft.xc_program import (
     NativeKsXcSource,
     bind_native_ks_xc_region_candidates,
@@ -73,6 +80,7 @@ def _assessment(
     *,
     device_xc_available: bool = True,
     spins: int = 2,
+    compiled_evidence: GridXcCompiledRegionEvidence | None = None,
 ) -> GridXcCandidateAssessment:
     return assess_grid_xc_schedule(
         schedule,
@@ -82,6 +90,31 @@ def _assessment(
         observable="potential",
         functional="PBE",
         scientific=_scientific(spins=spins),
+        compiled_evidence=compiled_evidence,
+    )
+
+
+def _compiled_evidence(*, spins: int = 2) -> GridXcCompiledRegionEvidence:
+    rows = (
+        KernelResources("validate_density(double*)", 24, 0, 0, 0, 0),
+        KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0),
+        KernelResources("density_product<false>(double*)", 61, 0, 0, 0, 0),
+        KernelResources("density_features<false>(double*)", 62, 0, 0, 0, 0),
+        KernelResources("evaluate_points<4, false>(double*)", 80, 0, 16, 0, 0),
+        KernelResources("assemble_potential(double*)", 64, 0, 0, 0, 0),
+        KernelResources("accumulate_totals(double*)", 8, 0, 0, 0, 0),
+    )
+    return native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            npoint=_shape(spins=spins).npoint,
+            tile_points=_shape(spins=spins).tile_points,
+            nao=_shape(spins=spins).nao,
+            spins=spins,
+        ),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity=_scientific(spins=spins).source_identity,
     )
 
 
@@ -209,6 +242,33 @@ def test_measured_device_fused_route_replaces_complete_host_region() -> None:
     provenance = dict(selected.candidate.schedule.provenance)
     assert provenance["region_source_consumer"] == "dft.grid_xc"
     assert provenance["domain_schedule"] == "device_fused"
+
+
+def test_region_selection_rejects_gpu_pressure_regression_inside_timing_noise() -> None:
+    program = _program()
+    kwargs = {
+        "program": program,
+        "host_unfused": _assessment(HOST_UNFUSED),
+        "device_fused": _assessment(
+            DEVICE_FUSED, compiled_evidence=_compiled_evidence()
+        ),
+        "source": _source(),
+        "device_xc_identity": "cuda-xc-plan-pbe-v1",
+        "minimum_speedup": 1.0,
+    }
+
+    tied = select_native_ks_xc_region_program(
+        endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.995},
+        **kwargs,
+    )
+    assert tied.candidate.name == "host_unfused"
+    assert tied.program is program
+
+    faster = select_native_ks_xc_region_program(
+        endpoint_seconds={"host_unfused": 1.0, "device_fused": 0.97},
+        **kwargs,
+    )
+    assert faster.candidate.name == "device_fused"
 
 
 def test_missing_endpoint_evidence_keeps_exact_host_fallback() -> None:

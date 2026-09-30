@@ -153,10 +153,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
         ),
         "native_cuda_grid_sha256": (
-            "eed5f5bff7c67622c75fd0d21448b66502b581c102637036a748b459a288a41b"
+            "4d0a0bf35754c18f6025c800c6a96b230cd553c278290764f6437a8a791f9fbb"
         ),
         "native_cuda_grid_route_sha256": (
-            "1dc638a529158c28150096a80f8e13ec0dedefeb604eeccbf1270a5456508894"
+            "98b6763435fcd84c6306ea034c330a9864ecf4d33d0009031230f7b64e77b71e"
         ),
         "native_grid_point_count_sha256": (
             "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
@@ -274,7 +274,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "6ae30e757b7dd4d8df4729d3431d5631db0e53434b58cd2c886eefb8190ab2c6"
+            "e529ebefad5e10fd56184b6b36b433f1922ba8432595a80e63af1014dd6bfb5b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -295,7 +295,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
         "sources_owner_sha256": (
-            "674f7c5befe7b844d2c92e75d9f87e74a69b4734191ab466b5a86ac4f205f271"
+            "31286c9474290ba7f86ed359eca8e505c329758052898ce6e90554cc76644a72"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -310,7 +310,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "66548c399d2439070a7f579bc1070bb0298f4971db596ed487ede5822c2bde77"
+            "88bcb4668906e0a6c44467932b4de9d5998e2661364c7631fa0035a690054762"
         ),
         "native_owner_sha256": (
             "03f7469d2b8377cf0a3ba75deca66750ede5723e7d69a53774cdd463ee9540a5"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "8cfe5ed4fa343ed319307d816857d7bed0dcd787112baf17a1b4a65be62d4dd8"
+            "2f612dd0526ec1eab3971e80052a9e9152c2421e9fc2c39222c72896b8a492da"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -1575,7 +1575,7 @@ def test_grid_count_fails_closed_when_native_backend_route_moves(
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
     target = tmp_path / "src/methods/dft_method.cpp"
     source = target.read_text(encoding="utf-8")
-    old = "return dft::MolecularGrid::from_cuda(system, spec, device);"
+    old = "return dft::MolecularGrid::from_cuda(system, spec, device, retain_device);"
     assert old in source
     target.write_text(
         source.replace(old, "return dft::MolecularGrid(system, spec);", 1),
@@ -1747,7 +1747,6 @@ def test_report_rejects_dependencies_preloaded_before_qualifier_import(
         "_PRELOADED_LOCAL_MODULES",
         frozenset({"generativeqc_compiler.dft.plan"}),
     )
-
     with pytest.raises(RuntimeError, match="requires a fresh interpreter"):
         qualify_capacity.build_report(ROOT)
 

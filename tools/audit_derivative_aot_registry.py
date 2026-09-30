@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes as ct
+import hashlib
 import json
 import sys
 from itertools import product
@@ -26,12 +27,17 @@ from generativeqc_compiler.integral.derivative_aot_registry import (
     make_key,
     radial_inventory_from_payload,
 )
+from generativeqc_compiler.integral.derivative_cuda_shell_aot import (
+    emit_cuda_derivative_shell_aot_header,
+    package_inventory_payload,
+)
 from generativeqc_compiler.integral.first_derivative_schedule import (
     CPU_AOT_COMPONENTS,
     CPU_AOT_SHARDS,
     cpu_aot_symbol,
     derivative_cpu_aot_sources,
 )
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.integral.rsh_cpu_aot import program_source
 
@@ -130,11 +136,14 @@ def audit(
     *,
     radial_manifest: Path,
     library: Path | None = None,
+    production_manifest: Path | None = None,
+    cuda_target: str = "sm_120",
 ) -> dict[str, object]:
     payload = json.loads(radial_manifest.read_text(encoding="utf-8"))
     radials = radial_inventory_from_payload(payload, backend="cpu")
     if not radials:
         raise RuntimeError("CPU derivative AOT radial inventory is empty")
+    cuda_radials = radial_inventory_from_payload(payload, backend="cuda")
 
     full_units = derivative_cpu_aot_sources()
     full_sources = tuple(source for _, source in full_units)
@@ -152,6 +161,27 @@ def audit(
         spin_contract=AOT_SPIN_CONTRACT,
         contraction_contract=AOT_COMPONENT_CONTRACTION_CONTRACT,
     )
+    cuda_shell = None
+    if cuda_radials and production_manifest is not None:
+        profile = resolve_production_profile(production_manifest, cuda_target)
+        generated = emit_cuda_derivative_shell_aot_header(profile, cuda_radials)
+        inventory = package_inventory_payload(profile, cuda_radials)
+        cuda_shell = {
+            **inventory,
+            "generated_header_bytes": len(generated.encode("utf-8")),
+            "generated_header_sha256": hashlib.sha256(
+                generated.encode("utf-8")
+            ).hexdigest(),
+            "provenance": {
+                "production_manifest": str(production_manifest),
+                "production_manifest_sha256": file_hash(production_manifest),
+                "package_emitter_sha256": file_hash(
+                    ROOT
+                    / "python/generativeqc_compiler/integral/derivative_cuda_shell_aot.py"
+                ),
+            },
+        }
+
     return {
         "schema": "generativeqc.derivative-aot.audit.v1",
         "provenance": {
@@ -180,6 +210,7 @@ def audit(
             "programs": range_records,
             **_source_statistics(range_sources),
         },
+        "cuda_shell": cuda_shell,
         "package_library": _symbol_status(
             library,
             range_records=range_records,
@@ -195,10 +226,23 @@ def main() -> None:
         default=ROOT / "manifests/derivative_aot_radials.json",
     )
     parser.add_argument("--library", type=Path)
+    parser.add_argument(
+        "--production-manifest",
+        type=Path,
+        default=(
+            ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
+        ),
+    )
+    parser.add_argument("--cuda-target", default="sm_120")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    result = audit(radial_manifest=args.radial_manifest, library=args.library)
+    result = audit(
+        radial_manifest=args.radial_manifest,
+        library=args.library,
+        production_manifest=args.production_manifest,
+        cuda_target=args.cuda_target,
+    )
     encoded = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output is None:
         sys.stdout.write(encoded)

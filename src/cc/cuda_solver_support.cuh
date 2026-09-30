@@ -51,6 +51,16 @@ struct DeviceHamiltonianOutputs {
   double* stationarity{};
   double* orbital_rhs{};
 };
+struct DeviceHamiltonianSmallOutputs {
+  double* hcore{};
+  double* overlap{};
+  double* rotation_gradient{};
+  double* stationarity{};
+  double* orbital_rhs{};
+};
+struct DeviceEriWeightOutput {
+  double* eri{};
+};
 struct DeviceOrbitalJvpOutput {
   double* d_fov{};
 };
@@ -72,7 +82,10 @@ DeviceParameterOutput run_parameter_ovoo_cuda(CudaState& state);
 DeviceParameterOutput run_parameter_oooo_cuda(CudaState& state);
 DeviceParameterOutput run_parameter_vvvv_cuda(CudaState& state);
 DeviceHamiltonianOutputs run_hamiltonian_weights_cuda(CudaState& state);
+DeviceHamiltonianSmallOutputs run_hamiltonian_small_weights_cuda(CudaState& state);
+DeviceEriWeightOutput run_hamiltonian_eri_weights_cuda(CudaState& state);
 DeviceHamiltonianOutputs run_fock_weights_cuda(CudaState& state);
+DeviceHamiltonianSmallOutputs run_fock_small_weights_cuda(CudaState& state);
 DeviceOrbitalJvpOutput run_orbital_jvp_cuda(CudaState& state);
 
 }  // namespace generativeqc::cc::generated

@@ -161,6 +161,56 @@ std::vector<double> density(std::size_t n, unsigned spins) {
   return d;
 }
 
+void resident_grid_borrow_case(const generativeqc::core::System& molecule, const AoBasis& basis) {
+  const auto grid = MolecularGrid::from_cuda(molecule, {1, 2, 2, 4, 3, 1e-12}, 0);
+  const auto resident = grid.cuda_view();
+  require(static_cast<bool>(resident), "CUDA molecular grid lacks a resident lease");
+
+  const auto owned_layout =
+      cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, false);
+  const auto borrowed_layout =
+      cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+  require(borrowed_layout.borrowed_grid &&
+              owned_layout.device_bytes == borrowed_layout.device_bytes + resident.device_bytes,
+          "resident-grid XC layout did not retire duplicate point/weight storage");
+
+  cudaStream_t stream{};
+  void* arena{};
+  try {
+    check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    check(cudaMalloc(&arena, borrowed_layout.device_bytes));
+    {
+      CudaXcPlan plan(basis, grid, 1U, false, 7, arena, borrowed_layout.device_bytes, stream,
+                      CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+      const auto view = plan.grid_view();
+      require(view.points == resident.points && view.weights == resident.weights &&
+                  view.point_count == resident.point_count,
+              "XC plan copied instead of borrowing the resident molecular grid");
+      require(plan.transfers().setup_h2d_bytes == borrowed_layout.packed_elements * sizeof(double),
+              "resident-grid XC setup re-uploaded points or weights");
+
+      const auto host_density = density(basis.nao, 1);
+      generativeqc::runtime::OwnedCudaBuffer<double> device_density(0, host_density.size(), stream);
+      check(cudaMemcpyAsync(device_density.get(), host_density.data(),
+                            host_density.size() * sizeof(double), cudaMemcpyHostToDevice, stream));
+      check(cudaStreamSynchronize(stream));
+      plan.enqueue(device_density.get(), host_density.size(), 1);
+      const auto actual = plan.read_scalars(1);
+      const auto reference = integrate_pbe_rks_with_tail(basis, grid, host_density, 17);
+      require(actual.error == 0, "resident-grid XC execution reported a numerical error");
+      close(actual.energy, reference.energy, "resident-grid PBE energy");
+    }
+    check(cudaFree(arena));
+    arena = nullptr;
+    check(cudaStreamDestroy(stream));
+    stream = nullptr;
+  } catch (...) {
+    if (arena) cudaFree(arena);
+    if (stream) cudaStreamDestroy(stream);
+    throw;
+  }
+}
+
 void compare(Fixture& fixture, const AoBasis& basis, const MolecularGrid& grid,
              const std::vector<double>& d, const std::vector<double>& empty_spin_reference = {}) {
   fixture.submit(d);
@@ -765,6 +815,7 @@ int main(int argc, char** argv) {
     }
     const auto molecule = system();
     const AoBasis basis(molecule);
+    resident_grid_borrow_case(molecule, basis);
     const MolecularGrid grid(molecule, {1, 2, 2, 4, 3, 1e-12});
     for (bool unrestricted : {false, true}) density_feature_capture_case(basis, grid, unrestricted);
     for (bool unrestricted : {false, true}) nonlocal_potential_case(basis, grid, unrestricted);

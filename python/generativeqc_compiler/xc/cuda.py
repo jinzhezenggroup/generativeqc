@@ -8,7 +8,12 @@ from pathlib import Path
 
 import numpy as np
 
+from generativeqc_compiler.common.cuda_resources import (
+    KernelResources,
+    compiled_gpu_profitability,
+)
 from generativeqc_compiler.common.cuda_runtime import _PREPARATION_LOCK, _Metrics
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.native_call import checked_native_call
 from generativeqc_compiler.common.native_runtime import compile_runtime
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
@@ -50,6 +55,47 @@ def compile_cuda(
     # The runtime has no cuBLAS handle/workspace. The common header references
     # cuBLAS symbols, so linking the shared library remains explicit.
     return XCArtifact(runtime, contract)
+
+
+def compiled_xc_profitability(artifact: XCArtifact) -> typing.Any:
+    """Return scoped PTXAS/artifact evidence for one generated XC executable.
+
+    This describes only the generated XC expression runtime compiled by
+    :func:`compile_cuda`. It is not whole-KS or whole-grid/XC region evidence:
+    AO collocation, density-feature formation, and Vxc contraction remain
+    separate native stages and must be composed explicitly before region-level
+    promotion.
+    """
+
+    if not isinstance(artifact, XCArtifact):
+        raise TypeError("XC compiled profitability requires XCArtifact")
+    metadata = getattr(artifact.runtime, "metadata", None)
+    library = getattr(artifact.runtime, "library", None)
+    if not isinstance(metadata, dict) or library is None:
+        raise TypeError("XC artifact runtime lacks compiled metadata")
+    resource_rows = metadata.get("resources")
+    identity = metadata.get("identity")
+    if not isinstance(resource_rows, list) or not isinstance(identity, dict):
+        raise TypeError("XC artifact lacks PTXAS resource identity")
+    target_payload = identity.get("target")
+    if not isinstance(target_payload, dict) or not isinstance(
+        target_payload.get("architecture"), str
+    ):
+        raise TypeError("XC artifact lacks CUDA target identity")
+    resources = tuple(
+        KernelResources(**row)
+        for row in resource_rows
+        if isinstance(row, dict) and "xc_group_" in str(row.get("function", ""))
+    )
+    if not resources:
+        raise ValueError("XC artifact has no generated expression PTXAS rows")
+    return compiled_gpu_profitability(
+        resources,
+        cuda_target_info(target_payload["architecture"]),
+        artifact.contract["threads"],
+        object_bytes=Path(library).stat().st_size,
+        compile_seconds=metadata.get("compile_seconds"),
+    )
 
 
 @dataclass(frozen=True)

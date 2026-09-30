@@ -6,12 +6,11 @@ import typing
 from dataclasses import dataclass
 
 import numpy as np
+from generativeqc_compiler.mp2.equations import cpu_capacity, energy_program
 from generativeqc_compiler.tensor import vjp
 
 from tools.generativeqc_posthf.reference import immutable
 from tools.generativeqc_response import RHFResponseOperator, solve
-
-from .equations import cpu_capacity, energy_program
 
 
 @dataclass(frozen=True)

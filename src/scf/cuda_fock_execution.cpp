@@ -1,5 +1,6 @@
 #include "scf/cuda_fock_execution.hpp"
 
+#include "scf/cuda/df_jk_internal.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -48,6 +49,19 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
   if (!source || !plan.diagnostic().nbf) return {};
   return {cuda_density_fitting_device(source), cuda_density_fitting_stream(source), source,
           plan.diagnostic().nbf};
+}
+
+PreparedCudaOccupiedFockBinding prepared_cuda_occupied_fock_binding(
+    const PreparedFockPlan& plan) noexcept {
+  const auto execution = prepared_cuda_fock_binding(plan);
+  const auto& strategy = plan.strategy();
+  const auto& spec = strategy.spec;
+  if (!execution || strategy.backend != FockBackend::Cuda || spec.derivative_order != 0 ||
+      !spec.coulomb.present || !spec.exchange.present || !fitted_full_range(spec.coulomb) ||
+      !fitted_full_range(spec.exchange) || !plan.cuda_fitted_source())
+    return {};
+  return {execution.device_id, execution.stream, execution.source_identity, execution.nbf,
+          spec.spin == FockSpin::Unrestricted};
 }
 
 PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
@@ -235,6 +249,60 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
              : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, alpha_exchange,
                                                           detail, terms,
                                                           FockMatrixLayout::RowMajor);
+}
+
+generativeqc_status enqueue_prepared_cuda_occupied_fock(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, const PreparedCudaOccupiedFockInput& occupied, double* coulomb,
+    double* alpha_exchange, double* beta_exchange, int* numerical_error, std::string& detail) {
+  const auto binding = prepared_cuda_occupied_fock_binding(plan);
+  auto* fitted = plan.cuda_fitted_source();
+  if (!binding || !fitted) {
+    detail = "prepared CUDA Fock owner has no occupied-factor fitted execution";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const bool unrestricted = binding.unrestricted;
+  const bool valid_factors =
+      occupied.alpha_rank <= binding.nbf &&
+      (!occupied.alpha_rank || occupied.alpha_coefficients != nullptr) &&
+      (unrestricted ? occupied.beta_rank <= binding.nbf &&
+                          (!occupied.beta_rank || occupied.beta_coefficients != nullptr)
+                    : occupied.beta_rank == 0 && occupied.beta_coefficients == nullptr);
+  const bool valid_buffers = matrix_elements == binding.nbf * binding.nbf && density != nullptr &&
+                             coulomb != nullptr && alpha_exchange != nullptr &&
+                             numerical_error != nullptr &&
+                             (unrestricted ? beta != nullptr && beta_exchange != nullptr
+                                           : beta == nullptr && beta_exchange == nullptr);
+  if (!valid_factors || !valid_buffers) {
+    detail = "prepared occupied fitted Fock buffers, factors, spin or dimensions are invalid";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  const auto reset = cudaMemsetAsync(numerical_error, 0, sizeof(*numerical_error), binding.stream);
+  if (reset != cudaSuccess) {
+    detail = std::string("reset prepared occupied fitted CUDA Fock status: ") +
+             cudaGetErrorString(reset);
+    return cuda_execution::source_cuda_status(reset);
+  }
+
+  const JkTermSelection coulomb_only{true, false};
+  auto status =
+      unrestricted
+          ? execute_cuda_density_fitting_uhf_jk_device(fitted, density, beta, coulomb, nullptr,
+                                                       nullptr, detail, coulomb_only,
+                                                       FockMatrixLayout::RowMajor)
+          : execute_cuda_density_fitting_rhf_jk_device(fitted, density, coulomb, nullptr, detail,
+                                                       coulomb_only, FockMatrixLayout::RowMajor);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+
+  status =
+      cuda_df::build_occupied_exchange(*fitted, 0, occupied.alpha_coefficients, occupied.alpha_rank,
+                                       true, unrestricted ? 1.0 : 2.0, alpha_exchange, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  if (unrestricted)
+    status = cuda_df::build_occupied_exchange(*fitted, 0, occupied.beta_coefficients,
+                                              occupied.beta_rank, true, 1.0, beta_exchange, detail);
+  return status;
 }
 
 generativeqc_status enqueue_prepared_cuda_exchange_correction(

@@ -1,8 +1,11 @@
 #include "methods/hf_method.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <iterator>
 #include <memory>
 #include <numeric>
@@ -59,6 +62,32 @@ std::optional<generativeqc_precision_mode> precision_mode(
   return mode;
 }
 
+/** Benchmark-only #990 selector. It is intentionally not a public method ABI. */
+bool incremental_direct_jk_benchmark_requested() {
+  const char* value = std::getenv("GENERATIVEQC_INCREMENTAL_DIRECT_JK");
+  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0) {
+    return false;
+  }
+  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
+  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "GENERATIVEQC_INCREMENTAL_DIRECT_JK must be 0/off or 1/on");
+}
+
+/** Parse the optional #990 accepted-update interval without weakening fail-closed policy. */
+std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval() {
+  const char* value = std::getenv("GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+  if (value == nullptr) return std::nullopt;
+  unsigned parsed = 0U;
+  const char* end = value + std::strlen(value);
+  const auto result = std::from_chars(value, end, parsed);
+  if (result.ec != std::errc{} || result.ptr != end) {
+    throw MethodError(
+        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL must be an unsigned integer");
+  }
+  return parsed;
+}
+
 scf::ScfOptions scf_options(const generativeqc_method_descriptor& descriptor) {
   scf::ScfOptions options;
   options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
@@ -97,6 +126,17 @@ void resolve_hf_options(scf::ScfOptions& options, generativeqc_method method,
                                             : scf::FockSpin::Restricted,
           fitted ? scf::FockApproximation::DensityFitted : scf::FockApproximation::Exact),
       backend, options.screening_tolerance, options.density_fitting_relative_threshold);
+
+  if (incremental_direct_jk_benchmark_requested()) {
+    if (backend != scf::FockBackend::Cuda || fitted) {
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "incremental Direct-J/K benchmark mode requires exact CUDA HF");
+    }
+    options.incremental_direct_jk = true;
+    if (const auto interval = incremental_direct_jk_benchmark_rebuild_interval()) {
+      options.incremental_direct_jk_rebuild_interval = *interval;
+    }
+  }
 }
 
 void validate_density_fitting_auxiliary(const core::System& orbital,
@@ -139,6 +179,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.incremental_direct_jk = native.incremental_direct_jk;
   return result;
 }
 

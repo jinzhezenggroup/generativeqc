@@ -14,6 +14,7 @@ from fractions import Fraction
 from math import isfinite
 
 from .ir import TRANSCENDENTALS, Node
+from .optimize import prepare_for_backend
 from .program import Program
 
 SCALAR_CPP_PRIMITIVES = frozenset(
@@ -101,6 +102,7 @@ def emit_scalar_cpp(
 
     if not isinstance(program, Program):
         raise TypeError("scalar C++ lowering requires a TensorIR Program")
+    program = prepare_for_backend(program, "scalar")
     function_name = _identifier(function_name, "function_name")
     nodes = program.live_nodes
     if any(node.spec.shape != () or node.spec.dtype != "float64" for node in nodes):

@@ -39,6 +39,7 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
         "stationary_create",
         "stationary_topology",
         "stationary_reset",
+        "stationary_geometry_reset",
         "stationary_tasks",
         "stationary_nuclear",
         "stationary_geometry",

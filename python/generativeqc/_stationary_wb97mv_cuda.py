@@ -195,7 +195,11 @@ class PreparedWb97mvCudaGradient:
             na + n + basis.nprimitive + len(basis.shells)
         )
         device_bound = (
-            gp.peak_bytes + source_bytes + 48 * tile_points + nlc_budget + native_budget
+            gp.peak_bytes
+            + 2 * source_bytes
+            + 48 * tile_points
+            + nlc_budget
+            + native_budget
         )
         host_bound = (
             gp.host_bytes
@@ -251,6 +255,22 @@ class PreparedWb97mvCudaGradient:
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
+                # Keep semilocal and nonlocal source accounting distinct while
+                # both consumers borrow the same GridTask lease. This second
+                # bounded accumulator replaces the former second AO/grid pass.
+                self.nonlocal_sources = self._stack.enter_context(
+                    _CudaSources(
+                        basis,
+                        artifact,
+                        compiler,
+                        device,
+                        tile_points,
+                        capacity,
+                        source_bytes,
+                        spin_blocks=plan.spin_blocks,
+                        page_work_budget=1,
+                    )
+                )
                 self.grid = self._stack.enter_context(
                     CudaGrid(
                         basis,
@@ -333,11 +353,27 @@ class PreparedWb97mvCudaGradient:
         components = dict(zip(names, integral, strict=True))
         component_seconds["integral_derivatives"] = perf_counter() - component_start
         component_start = perf_counter()
-        density = state.density if plan.spin_blocks == 2 else state.density[0]
-        self.grid.set_density(density)
-        self.sources.reset(
-            source.grid_spec.coincident_tolerance, state.density, state.weighted_density
+        resident_density = source.cuda_resident_density()
+        if resident_density is None:
+            raise NotImplementedError(
+                "WB97M-V CUDA force requires the resident final-density bridge"
+            )
+        self.grid.set_density_device(
+            device_id=resident_density.device,
+            alpha=resident_density.alpha,
+            beta=resident_density.beta,
+            matrix_elements=resident_density.matrix_elements,
+            spins=resident_density.spins,
+            source_stream=resident_density.source_stream,
         )
+        # A concurrent replacement can only occur before the producer-stream
+        # copy is enqueued; reject it before any stationary source publication.
+        source.check_current()
+        # Integral derivatives already come from the token-bound native prepared
+        # owner above. These retained CUDA accumulators execute only nuclear and
+        # grid-geometry sources, so uploading detached host D/W here is redundant.
+        self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
+        self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
         charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
         for atom in range(na):
             for other in range(atom):
@@ -356,6 +392,7 @@ class PreparedWb97mvCudaGradient:
         resident_parts, resident_seconds, resident_work = resident_nonlocal_geometry(
             grid=self.grid,
             sources=self.sources,
+            nonlocal_sources=self.nonlocal_sources,
             nonlocal_owner=self._nonlocal,
             state=state,
             raw_weights=source.atomic_weights,
@@ -383,6 +420,8 @@ class PreparedWb97mvCudaGradient:
             "retained_grid_features": list(feature_plan.retained_features),
             "source_names": list(plan.source_names),
             "grid_points": npnt,
+            "grid_density_source": "exact-final-scf-device-binding",
+            "grid_density_h2d_bytes": 0,
             **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
             # The native v1 result does not identify whether optional shell

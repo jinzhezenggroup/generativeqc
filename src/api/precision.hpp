@@ -37,6 +37,35 @@ inline generativeqc_status copy_precision_provenance(const scf::PrecisionProvena
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+inline generativeqc_status copy_incremental_direct_jk_diagnostic(
+    const scf::IncrementalDirectJkDiagnostic& source,
+    generativeqc_incremental_direct_jk_diagnostic* out) {
+  if (out == nullptr) return GENERATIVEQC_STATUS_SUCCESS;
+  if (!valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  *out = {sizeof(*out),
+          GENERATIVEQC_ABI_VERSION,
+          source.policy_version,
+          source.requested ? 1 : 0,
+          source.active ? 1 : 0,
+          source.quartet_work_counters_valid ? 1 : 0,
+          source.anchor_full_builds,
+          source.delta_builds,
+          source.periodic_rebuilds,
+          source.bypass_full_builds,
+          source.post_scf_full_builds,
+          source.anchor_updates,
+          source.max_abs_delta_density,
+          source.full_candidate_shell_quartets,
+          source.full_rejected_shell_quartets,
+          source.full_admitted_shell_quartets,
+          source.full_admitted_quartet_tiles,
+          source.delta_candidate_shell_quartets,
+          source.delta_rejected_shell_quartets,
+          source.delta_admitted_shell_quartets,
+          source.delta_admitted_quartet_tiles};
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 /** Validate every destination before copying so a rejected variable-length
  * query cannot leave a summary or prefix that looks authoritative. */
 inline generativeqc_status copy_precision_work(const scf::PrecisionWork& source,

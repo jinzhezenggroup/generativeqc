@@ -7,6 +7,7 @@ or AD occurs here. The original Program remains the mathematical reference.
 from __future__ import annotations
 
 import hashlib
+import struct
 import typing
 from dataclasses import replace
 from fractions import Fraction
@@ -18,6 +19,7 @@ from generativeqc_compiler.common.value_numbering import (
     ValueNumberTable,
 )
 
+from .complexity import analyze_complexity, reassociate_einsums
 from .ir import PRIMITIVES, Node, _infer, constant
 from .precision import precision_execution_contracts, remap_precision_execution
 from .program import Program, hash_node
@@ -37,6 +39,74 @@ def _constant_values(node: Node) -> tuple[Fraction, ...] | None:
     if node.op != "constant":
         return None
     return tuple(Fraction(*pair) for pair in node.attrs["values"])
+
+
+def _round_fp(value: Fraction | float, dtype: str) -> float:
+    """Round one scalar exactly at the declared TensorIR storage precision."""
+
+    converted = float(value)
+    if dtype == "float64":
+        return converted
+    if dtype == "float32":
+        return struct.unpack("=f", struct.pack("=f", converted))[0]
+    raise ValueError("constant folding supports floating TensorIR values only")
+
+
+def _fp_bytes(value: float, dtype: str) -> bytes:
+    return struct.pack("=d" if dtype == "float64" else "=f", value)
+
+
+def _constant_fp_values(node: Node) -> tuple[float, ...]:
+    values = _constant_values(node)
+    assert values is not None
+    return tuple(_round_fp(value, node.spec.dtype) for value in values)
+
+
+def _evaluate_constant_node_fp(node: Node) -> tuple[bytes, ...] | None:
+    """Evaluate one constant-only primitive without importing NumPy/interpreter.
+
+    Every multiply/add/divide is rounded at the node dtype, matching the
+    interpreter's ordinary float32/float64 storage semantics closely enough for
+    the existing bitwise fold guard. Unsupported/non-finite conversions simply
+    keep the original graph.
+    """
+
+    if node.spec.dtype not in ("float32", "float64"):
+        return None
+    try:
+        columns = [_constant_fp_values(child) for child in node.inputs]
+        values: list[float] = []
+        for index in range(node.spec.size):
+            if node.op == "add":
+                value = _round_fp(0.0, node.spec.dtype)
+                for pair, column in zip(
+                    node.attrs["coefficients"], columns, strict=True
+                ):
+                    coefficient = _round_fp(Fraction(*pair), node.spec.dtype)
+                    term = _round_fp(
+                        coefficient * column[index],
+                        node.spec.dtype,
+                    )
+                    value = _round_fp(value + term, node.spec.dtype)
+            elif node.op == "multiply":
+                value = _round_fp(
+                    columns[0][index] * columns[1][index],
+                    node.spec.dtype,
+                )
+            elif node.op == "divide":
+                denominator = columns[1][index]
+                if denominator == 0.0:
+                    return None
+                value = _round_fp(
+                    columns[0][index] / denominator,
+                    node.spec.dtype,
+                )
+            else:
+                return None
+            values.append(value)
+        return tuple(_fp_bytes(value, node.spec.dtype) for value in values)
+    except (OverflowError, ValueError):
+        return None
 
 
 def _fold(node: Node) -> Node:
@@ -78,17 +148,18 @@ def _fold(node: Node) -> Node:
             symmetries=(),
         ),
     )
-    # Exact rational algebra alone is insufficient for floating-point folding:
-    # e.g. 1e16 + 1 - 1e16 must not become 1 in an FP64 interpreter. Fold only
-    # when the rounded literal agrees bit-for-bit with the original scalar DAG.
-    from .interpreter import execute
 
-    try:
-        before = execute(Program({"value": node}), {}).outputs["value"]
-        after = execute(Program({"value": candidate}), {}).outputs["value"]
-    except ValueError:
+    before = _evaluate_constant_node_fp(node)
+    if before is None:
         return node
-    return candidate if before.tobytes() == after.tobytes() else node
+    try:
+        after = tuple(
+            _fp_bytes(_round_fp(value, node.spec.dtype), node.spec.dtype)
+            for value in result
+        )
+    except (OverflowError, ValueError):
+        return node
+    return candidate if before == after else node
 
 
 def _is_literal_one(node: Node) -> bool:
@@ -453,20 +524,45 @@ def _optimizer(
     )
 
 
-def optimize(program: Program, *, requested_outputs: typing.Any = None) -> Program:
-    """Run the initial TensorIR pipeline through the shared pass manager."""
-    specialized = _project_requested_outputs(program, requested_outputs)
+def optimize(
+    program: Program,
+    *,
+    requested_outputs: typing.Any = None,
+    reassociate_contractions: bool = False,
+) -> Program:
+    """Run the TensorIR pipeline, with explicit opt-in contraction reassociation."""
+    if type(reassociate_contractions) is not bool:
+        raise TypeError("reassociate_contractions must be a Boolean")
+    requested = _project_requested_outputs(program, requested_outputs)
     value_numbering_diagnostics: list[ValueNumberingDiagnostics] = []
-    run = _optimizer(value_numbering_diagnostics).run(specialized)
-    result = run.value
-    pruning = _pruning_diagnostics(program, specialized, result)
+    run = _optimizer(value_numbering_diagnostics).run(requested)
+    baseline = run.value
+    pruning = _pruning_diagnostics(program, requested, baseline)
+    result = reassociate_einsums(baseline) if reassociate_contractions else baseline
+    complexity_diagnostics = None
+    if reassociate_contractions:
+        complexity_diagnostics = {
+            "requested": analyze_complexity(requested).summary_payload(),
+            "reassociated": analyze_complexity(result).summary_payload(),
+            "optimized": analyze_complexity(result).summary_payload(),
+            "reassociation": {
+                "enabled": True,
+                "changed": baseline.logical_hash != result.logical_hash,
+                "logical_hash": result.logical_hash,
+            },
+        }
     return Program(
         result.outputs,
         provenance={
             **result.provenance,
             "original_logical_hash": program.logical_hash,
-            "specialized_logical_hash": specialized.logical_hash,
+            "specialized_logical_hash": requested.logical_hash,
             "pruning_diagnostics": pruning,
+            **(
+                {"complexity_diagnostics": complexity_diagnostics}
+                if complexity_diagnostics is not None
+                else {}
+            ),
             # Keep the established rewrite inventory for compatibility.
             "rewrites": list(PASSES) + ["exact_cse", "dead_nodes"],
             "optimizer_identity": run.pipeline_identity,
@@ -485,5 +581,62 @@ def optimize(program: Program, *, requested_outputs: typing.Any = None) -> Progr
                 }
                 for record in run.records
             ],
+        },
+    )
+
+
+PRODUCTION_BACKENDS = frozenset(("cpu", "cuda", "scalar"))
+
+
+def prepare_for_backend(
+    program: Program,
+    backend: str,
+    *,
+    requested_outputs: typing.Any = None,
+    preserve_reduction_order: bool = False,
+) -> Program:
+    """Prepare one production TensorIR program before backend-specific lowering.
+
+    Exact optimizer passes always run. CPU/CUDA lowering additionally applies
+    only compiler-proven strict symbolic-degree contraction reassociation unless
+    the caller explicitly preserves the source reduction tree. Explicit
+    precision-execution programs keep their original tree until precision for
+    compiler-created intermediates is defined.
+    """
+
+    if not isinstance(program, Program):
+        raise TypeError("production preparation requires a TensorIR Program")
+    if backend not in PRODUCTION_BACKENDS:
+        raise ValueError(f"unsupported TensorIR production backend: {backend}")
+    if type(preserve_reduction_order) is not bool:
+        raise TypeError("preserve_reduction_order must be a Boolean")
+    allow_reassociation = (
+        backend in ("cpu", "cuda")
+        and not preserve_reduction_order
+        and program.provenance.get("precision_execution") is None
+    )
+    prepared = optimize(
+        program,
+        requested_outputs=requested_outputs,
+        reassociate_contractions=allow_reassociation,
+    )
+    unchanged = (
+        requested_outputs is None
+        and tuple(prepared.outputs) == tuple(program.outputs)
+        and prepared.logical_hash == program.logical_hash
+        and len(prepared.nodes) == len(program.nodes)
+    )
+    if unchanged:
+        return program
+    return Program(
+        prepared.outputs,
+        provenance={
+            **prepared.provenance,
+            "production_preparation": {
+                "schema": "generativeqc.tensor.production-preparation.v1",
+                "backend": backend,
+                "preserve_reduction_order": preserve_reduction_order,
+                "reassociation_enabled": allow_reassociation,
+            },
         },
     )
