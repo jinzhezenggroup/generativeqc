@@ -35,7 +35,6 @@ from .batch_schedule import (
     index_table_length,
     index_table_values,
 )
-from .complexity import reassociate_einsums
 from .cuda_dtype import program_precision, scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
