@@ -374,15 +374,38 @@ def test_composes_with_generated_objective_vjp() -> None:
     )
 
 
-def test_response_graph_can_be_planned_for_cuda_without_a_device() -> None:
+@pytest.mark.parametrize("reassociate", (True, False))
+def test_response_graph_can_be_planned_for_cuda_without_a_device(
+    reassociate: bool,
+) -> None:
     from generativeqc_compiler.common.cuda_target import cuda_target_info
     from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
+    vectors, _ = np.linalg.qr(np.random.default_rng(466).normal(size=(3, 3)))
+    roots = np.array([1.0, 2.0, 3.0])
+    divided = -1.0 / (
+        roots[:, None] * roots[None, :] * (roots[:, None] + roots[None, :])
+    )
+    seed = np.arange(9, dtype=float).reshape(3, 3) / 10
+    root = (vectors * roots) @ vectors.T
+    inverse = np.linalg.inv(root)
+    operator = np.kron(root, np.eye(3)) + np.kron(np.eye(3), root)
+    expected = np.linalg.solve(
+        operator, (-inverse @ ((seed + seed.T) / 2) @ inverse).ravel()
+    ).reshape(3, 3)
     program = SymmetricMatrixFunctionSpec(3, "lowering", 0.1).response_program()
-    plan = plan_cuda(program, cuda_target_info("sm_80"))
-    assert plan.program is program
+    original = program.dumps()
+    plan = plan_cuda(
+        program, cuda_target_info("sm_80"), reassociate_contractions=reassociate
+    )
     assert plan.peak_bytes > 0
-    # Planning is not GPU execution or a native eigensolver capability claim.
+    assert program.dumps() == original
+    actual = execute(
+        plan.program, {"vectors": vectors, "divided": divided, "seed": seed}
+    ).outputs
+    assert set(actual) == {"response"}
+    np.testing.assert_allclose(actual["response"], expected, atol=2e-14, rtol=2e-13)
+    # Prepared IR versus an independent Sylvester solve, not GPU execution.
 
 
 def _reference_pseudoinverse(matrix: typing.Any, threshold: typing.Any) -> typing.Any:
