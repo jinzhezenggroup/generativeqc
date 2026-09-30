@@ -93,6 +93,23 @@ void primitive_sum(std::size_t n, const double* first, const double* second, dou
         assert all(finding.effective_depth < finding.depth for finding in findings)
 
 
+def test_fixed_extent_does_not_hide_remaining_high_order_work() -> None:
+    source = r"""
+void still_high_order(std::size_t n, const double* data, double* out) {
+  for (std::size_t a = 0; a < n; ++a)
+    for (std::size_t b = 0; b < n; ++b)
+      for (std::size_t c = 0; c < n; ++c)
+        for (std::size_t d = 0; d < n; ++d)
+          for (unsigned axis = 0; axis < 3; ++axis)
+            out[a * n + b] += data[((c * n + d) * 3) + axis];
+}
+"""
+    findings = audit_text(source, path="synthetic.cpp")
+    assert len(findings) == 1
+    assert findings[0].effective_depth == 4
+    assert findings[0].classification != "fixed-extent-inner-loop"
+
+
 def test_audit_surfaces_high_rank_materialization_pass() -> None:
     source = r"""
 void symmetrize(std::size_t o, std::size_t v, double* target, const double* source) {
