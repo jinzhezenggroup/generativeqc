@@ -1,4 +1,4 @@
-name: One-shot PR merge audit
+name: One-shot reviewed merge repairs
 
 on:
   push:
@@ -13,20 +13,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  audit:
+  integrate:
     if: github.repository == 'jinzhezenggroup/generativeqc'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Capture fixed-head three-way merge evidence
+      - name: Install focused source-test dependencies
+        run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9
+      - name: Integrate only audited heads and require targeted tests
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import ast
           import json
           import os
           import subprocess
@@ -34,81 +38,109 @@ jobs:
           from pathlib import Path
 
           ROOT = Path.cwd()
-          OUTPUT = Path(os.environ['RUNNER_TEMP']) / 'pr-merge-audit'
+          OUTPUT = Path(os.environ['RUNNER_TEMP']) / 'review-integration'
           OUTPUT.mkdir()
+          RESOLVER = ROOT / '.github/review-merge-resolutions.py'
           MASTER = 'fbca33876e0a2382ec23f4d00a70b92310961c04'
           TARGETS = (
-              (1510, '20f80b7e7c8d4351d6815f81a51a8977a0fc2ebf', MASTER),
-              (1573, 'be77d0828d27e5b7b2966974b2a935d948a25ee5', MASTER),
-              (1589, '3dafb9b17eae914ebfdeb2f21ee6f85732f2ec2c', MASTER),
-              (1595, '0e77a96aec26a93b4d3707c13182e1b7165718bb', MASTER),
-              (1597, 'feff34cc199fec72e83804d160db87ade4917b8e', MASTER),
-              (1611, '5e1434347eed7c2e8cf81de3b1e70e45cf47d2a7', '489d0f68adec513de9ea4e6b4d273a5b69f9db4e'),
-              (1612, '23e42ece2ae7e261fa442bd1a7209a0f6c4b939d', '5e1434347eed7c2e8cf81de3b1e70e45cf47d2a7'),
-              (1613, '26abeb90ff12bcf2a2532af25be9a7a50e802818', '23e42ece2ae7e261fa442bd1a7209a0f6c4b939d'),
+              (1510, 'perf/1479-fuse-geometry-reduction', '20f80b7e7c8d4351d6815f81a51a8977a0fc2ebf', MASTER),
+              (1589, 'agent/dft-xc-native-resource-producer', '3dafb9b17eae914ebfdeb2f21ee6f85732f2ec2c', MASTER),
+              (1597, 'chatgpt/180-rks-hessian-production-owner', 'feff34cc199fec72e83804d160db87ade4917b8e', MASTER),
+              (1611, 'perf/1611-stationary-implicit-grid-owners', '1acd067cea929636e19c498def8307500e8b3ae9', '489d0f68adec513de9ea4e6b4d273a5b69f9db4e'),
+              (1612, 'perf/1612-wb97mv-resident-grid-points', '23e42ece2ae7e261fa442bd1a7209a0f6c4b939d', 1611),
+              (1613, 'perf/1613-stationary-resident-grid-weights', '26abeb90ff12bcf2a2532af25be9a7a50e802818', 1612),
           )
+          CONFLICTS = {
+              1510: {'tests/python/test_dft_mp_v1_capacity.py', 'tools/dft_mp_v1/qualify_capacity.py'},
+              1589: {'python/generativeqc_compiler/dft/xc_schedule.py', 'tests/python/test_dft_xc_schedule.py', 'tests/python/test_dft_xc_program_region.py'},
+              1597: {'docs/developer/hessian.md', 'python/generativeqc/rks_response.py'},
+          }
+          TESTS = {
+              1510: ['test_dft_mp_v1_capacity.py'],
+              1589: ['test_dft_xc_compiled_resources.py', 'test_dft_xc_schedule.py', 'test_dft_xc_program_region.py'],
+              1597: ['test_rks_hessian_production_owner.py', 'test_hessian_rks_import_contract.py', 'test_response_production_owner.py', 'test_stationary_nuclear_owner.py'],
+              1611: ['test_stationary_owner_kernel_abi.py', 'test_stationary_resident_nonlocal_join.py'],
+              1612: ['test_stationary_owner_kernel_abi.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py'],
+              1613: ['test_stationary_owner_kernel_abi.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py', 'test_wb97mv_resident_grid_weights.py'],
+          }
+          results = []
+          completed = {}
 
-          def run(*args, cwd=ROOT, check=True):
-              result = subprocess.run(args, cwd=cwd, capture_output=True)
+          def run(*args, cwd=ROOT, check=True, env=None):
+              result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env)
               if check and result.returncode:
-                  raise RuntimeError(result.stderr.decode(errors='replace'))
+                  raise RuntimeError(f'{args[0]} failed: {result.stderr or result.stdout}')
               return result
 
-          def text(*args, **kwargs):
-              return run(*args, **kwargs).stdout.decode(errors='replace').strip()
-
-          report = []
-          for number, head, target in TARGETS:
-              destination = OUTPUT / str(number)
-              destination.mkdir()
-              record = {'pr': number, 'head': head, 'target': target}
+          for number, branch, expected, parent in TARGETS:
+              record = {'pr': number, 'branch': branch, 'expected_head': expected}
+              directory = OUTPUT / str(number)
+              directory.mkdir()
               try:
-                  base = text('git', 'merge-base', head, target)
-                  record['merge_base'] = base
-                  paths = text('git', 'diff', '--name-only', base, head).splitlines()
-                  with tempfile.TemporaryDirectory(prefix='review-merge-') as temporary:
+                  target = completed[parent] if isinstance(parent, int) else parent
+                  record['target'] = target
+                  remote = run('git', 'ls-remote', 'origin', f'refs/heads/{branch}').stdout.split()
+                  if not remote or remote[0] != expected:
+                      raise RuntimeError('remote head moved; no changes made')
+                  with tempfile.TemporaryDirectory(prefix='review-integrate-') as temporary:
                       work = Path(temporary) / 'checkout'
-                      run('git', 'worktree', 'add', '--detach', str(work), head)
+                      run('git', 'worktree', 'add', '--detach', str(work), expected)
                       try:
-                          result = run('git', '-c', 'user.name=ChatGPT',
-                                       '-c', 'user.email=chatgpt@users.noreply.github.com',
-                                       '-c', 'merge.conflictStyle=zdiff3',
-                                       'merge', '--no-commit', '--no-ff', target,
-                                       cwd=work, check=False)
-                          record['merge_returncode'] = result.returncode
-                          record['merge_output'] = (result.stdout + result.stderr).decode(errors='replace')
-                          conflicts = text('git', 'diff', '--name-only', '--diff-filter=U', cwd=work).splitlines()
-                          record['conflicts'] = conflicts
-                          record['tree'] = text('git', 'write-tree', cwd=work) if not conflicts else None
-                          (destination / 'conflicts.diff').write_bytes(run('git', 'diff', '--cc', cwd=work).stdout)
-                          (destination / 'head-to-merged.patch').write_bytes(run('git', 'diff', '--binary', head, cwd=work).stdout)
-                          (destination / 'target-to-merged.patch').write_bytes(run('git', 'diff', '--binary', target, cwd=work).stdout)
-                          for path in sorted(set(paths) | set(conflicts)):
-                              if path.startswith('.git/') or '..' in Path(path).parts:
-                                  raise RuntimeError('unsafe source path')
-                              for label, revision in (('base', base), ('ours', head), ('theirs', target)):
-                                  value = run('git', 'show', f'{revision}:{path}', check=False)
-                                  if value.returncode == 0:
-                                      output = destination / label / path
-                                      output.parent.mkdir(parents=True, exist_ok=True)
-                                      output.write_bytes(value.stdout)
-                              source = work / path
-                              if source.is_file() and not source.is_symlink():
-                                  output = destination / 'merged' / path
-                                  output.parent.mkdir(parents=True, exist_ok=True)
-                                  output.write_bytes(source.read_bytes())
+                          merged = run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', '-c', 'merge.conflictStyle=zdiff3', 'merge', '--no-commit', '--no-ff', target, cwd=work, check=False)
+                          conflicts = set(run('git', 'diff', '--name-only', '--diff-filter=U', cwd=work).stdout.splitlines())
+                          if conflicts != CONFLICTS.get(number, set()):
+                              raise RuntimeError(f'unexpected conflict set: {sorted(conflicts)}')
+                          if merged.returncode and not conflicts:
+                              raise RuntimeError(merged.stderr or merged.stdout)
+                          if conflicts:
+                              run('python3', str(RESOLVER), str(number), str(work))
+                          pyfiles = sorted(path for path in conflicts if path.endswith('.py'))
+                          if number == 1589:
+                              pyfiles += ['python/generativeqc_compiler/dft/xc_compiled_resources.py', 'tests/python/test_dft_xc_compiled_resources.py']
+                          if number >= 1611:
+                              pyfiles += ['tests/python/test_stationary_owner_kernel_abi.py']
+                          if pyfiles:
+                              run('python3', '-m', 'ruff', 'check', '--fix', *pyfiles, cwd=work)
+                              run('python3', '-m', 'ruff', 'format', *pyfiles, cwd=work)
+                          env = dict(os.environ)
+                          env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
+                          command = ['python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--import-mode=importlib']
+                          command += ['tests/python/' + name for name in TESTS[number]]
+                          test = run(*command, cwd=work, check=False, env=env)
+                          (directory / 'tests.log').write_text(test.stdout + test.stderr)
+                          record['test_returncode'] = test.returncode
+                          record['test_summary'] = '\n'.join((test.stdout + test.stderr).splitlines()[-12:])
+                          if test.returncode:
+                              raise RuntimeError('focused tests failed; branch was not pushed')
+                          run('git', 'add', '-u', cwd=work)
+                          run('git', 'diff', '--cached', '--check', cwd=work)
+                          message = (f'fix(review): reconcile PR #{number} with reviewed parent\n\n'
+                                     'Preserve both histories and upstream fixes. Focused tests passed;\n'
+                                     'full protected-branch CI and normal review remain required.\n\n'
+                                     'Agent: ChatGPT\nModel: GPT-6 Astra Pro')
+                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
+                          head = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
+                          record['commit'] = head
+                          record['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
+                          (directory / 'integration.patch').write_text(run('git', 'diff', expected, head, cwd=work).stdout)
+                          (directory / 'parent-relative.patch').write_text(run('git', 'diff', target, head, cwd=work).stdout)
+                          run('git', 'push', 'origin', f'HEAD:refs/heads/{branch}', cwd=work)
+                          completed[number] = head
+                          record['pushed'] = True
                       finally:
                           run('git', 'worktree', 'remove', '--force', str(work), check=False)
               except Exception as error:
                   record['error'] = str(error)
-              report.append(record)
+              results.append(record)
+              (OUTPUT / 'report.json').write_text(json.dumps(results, indent=2) + '\n')
               print(json.dumps(record), flush=True)
-              (OUTPUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+          if any('error' in result for result in results):
+              raise SystemExit(1)
           PY
-      - name: Retain review-only source evidence
+      - name: Retain validation and exact integration diffs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr-merge-audit
-          path: ${{ runner.temp }}/pr-merge-audit/
+          name: reviewed-merge-integration
+          path: ${{ runner.temp }}/review-integration/
           retention-days: 1
