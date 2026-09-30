@@ -33,9 +33,15 @@ is part of the production force path.
 The complete Python force consumer admits built-in STO-3G and def2-SVP, or
 explicit all-electron s/p/d bases, in Cartesian or spherical representation.
 ECPs, density fitting and mixed precision are outside this force contract.
-The backend-neutral native C method registry continues to advertise energy
-only; Python owns the compiled stationary composition. The private snapshot
-bridge is not a public C force API.
+
+Capability discovery is intentionally layered. ``method_capabilities()`` is the
+backend-neutral registry view and therefore reports the DFT carrier as
+energy-only. After backend and basis selection, ``calculator.capabilities`` is
+the authoritative execution-context view; admitted CUDA WB97M-V RKS/UKS adds
+``forces`` there, and ``PreparedBatch.capabilities`` mirrors the same record.
+The native manifest/registry remains conservative because the complete force is
+a Python-composed stationary endpoint rather than a public C force action. The
+private snapshot bridge is not a public C force API.
 
 NVCC is required for the generated geometry and final-reduction modules;
 set `CUDA_PATH` or `CUDACXX` when it is not on `PATH`. Cold timing includes

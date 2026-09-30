@@ -3,7 +3,15 @@ import typing
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, Primitive, Shell, _native, method_capabilities
+from generativeqc import (
+    Calculator,
+    GridSpec,
+    KsOptions,
+    Primitive,
+    Shell,
+    _native,
+    method_capabilities,
+)
 
 
 def test_h2_energy_and_force_invariance() -> None:
@@ -146,6 +154,24 @@ def test_wb97m_v_is_reserved_not_implemented() -> None:
         pass
     else:
         raise AssertionError("wB97M-V must report that it is not implemented")
+
+
+@pytest.mark.parametrize("method", ("wb97m-v-rks", "wb97m-v-uks"))
+def test_wb97mv_capability_layers(method: str) -> None:
+    registry = method_capabilities(method)
+    assert registry.family == "density_functional"
+    assert registry.supported_properties == frozenset(("energy",))
+
+    calculator = Calculator(
+        method=method,
+        basis="sto-3g",
+        device="cuda",
+        ks_options=KsOptions(grid=GridSpec()),
+    )
+    assert calculator.capabilities.method == method
+    assert calculator.capabilities.supported_properties == frozenset(
+        ("energy", "forces")
+    )
 
 
 def test_method_capabilities_report_families_and_properties() -> None:

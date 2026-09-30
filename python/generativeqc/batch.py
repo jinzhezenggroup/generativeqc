@@ -14,7 +14,7 @@ from typing import Self
 import numpy as np
 
 from . import _native
-from ._api_types import Atom
+from ._api_types import Atom, MethodCapabilities
 from ._batch_diagnostics import (
     DensityFittingMetricDiagnostic,
     EigensolverDiagnostic,
@@ -126,6 +126,11 @@ class PreparedBatch:
     concurrent callers. Warm-start updates can be frozen after an initial
     execution when reproducible replays from one fixed dm0 are required.
     """
+
+    @property
+    def capabilities(self) -> MethodCapabilities:
+        """Report execution-context capabilities inherited from the calculator."""
+        return self._calculator.capabilities
 
     # Compatibility views preserve the private attributes used by checkpoint
     # and progressive helpers while making WarmStartState their single owner.

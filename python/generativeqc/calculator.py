@@ -73,7 +73,7 @@ _named_basis_shells = _model_resolution._named_basis_shells
 
 @cache
 def method_capabilities(method: str) -> MethodCapabilities:
-    """Query method support without constructing a calculator or system."""
+    """Query backend-neutral registry support without preparing execution state."""
 
     canonical = method.lower()
     from .ks import parse_automatic_libxc_selector
@@ -957,6 +957,11 @@ class Calculator:
                 raise NotImplementedError(
                     "DFT accuracy-model identities are not implemented yet"
                 )
+
+    @property
+    def capabilities(self) -> MethodCapabilities:
+        """Report capabilities for the selected backend/basis execution context."""
+        return self._capabilities
 
     @property
     def method_ir(self) -> typing.Any:
