@@ -510,6 +510,43 @@ generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
 
 // A private, token-checked stationary consumer. Publish all integral sources
 // together only after the current CUDA owner has completed successfully.
+generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
+    void** source_stream) {
+  if (!batch || !snapshot || !device || !alpha || !beta || !matrix_elements || !spins ||
+      !source_stream)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *device = -1;
+  *alpha = nullptr;
+  *beta = nullptr;
+  *matrix_elements = 0;
+  *spins = 0;
+  *source_stream = nullptr;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto current = check_current(*batch, *snapshot);
+    if (current != GENERATIVEQC_STATUS_SUCCESS) return current;
+    std::string detail;
+    const auto status = generativeqc::methods::detail::dft_cuda_resident_density(
+        *batch->plan, snapshot->index, snapshot->token, *device, *alpha, *beta, *matrix_elements,
+        *spins, *source_stream, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      *device = -1;
+      *alpha = nullptr;
+      *beta = nullptr;
+      *matrix_elements = 0;
+      *spins = 0;
+      *source_stream = nullptr;
+      return status;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count) {
