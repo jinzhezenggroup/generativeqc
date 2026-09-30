@@ -70,6 +70,7 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
   // Reset to the conservative FP64 record before the run so a failed or
   // fallback execution can never expose the previous successful mixed run.
   calculation->precision = {};
+  calculation->incremental_direct_jk = {};
   calculation->precision_available = false;
   calculation->scf_diagnostic.reset();
   calculation->ks_diagnostic.reset();
@@ -79,6 +80,7 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     generativeqc::methods::Result native = calculation->plan->execute(!omit_forces);
     // A normal return (converged or not) is a completed run: record what ran.
     calculation->precision = native.precision;
+    calculation->incremental_direct_jk = native.incremental_direct_jk;
     calculation->precision_available = true;
     calculation->ks_diagnostic = std::move(native.ks_diagnostic);
     if (native.physical_residual_rms) {
@@ -168,6 +170,16 @@ generativeqc_status generativeqc_calculation_get_precision_provenance(
     return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
   }
   return generativeqc::api::copy_precision_provenance(calculation->precision, out);
+}
+
+generativeqc_status generativeqc_calculation_get_incremental_direct_jk_diagnostic(
+    const generativeqc_calculation* calculation,
+    generativeqc_incremental_direct_jk_diagnostic* out) {
+  if (calculation == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  if (!calculation->precision_available) return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  return generativeqc::api::copy_incremental_direct_jk_diagnostic(
+      calculation->incremental_direct_jk, out);
 }
 
 generativeqc_status generativeqc_calculation_get_precision_work(

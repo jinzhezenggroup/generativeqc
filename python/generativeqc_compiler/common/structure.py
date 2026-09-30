@@ -17,6 +17,8 @@ ALLOWED = {
     "common": {"common"},
     "integral": {"integral", "common"},
     "tensor": {"tensor", "common"},
+    "cc": {"cc", "tensor", "common"},
+    "mp2": {"mp2", "tensor", "common"},
     "array_api": {"array_api", "tensor"},
     "geometry": {"geometry", "tensor", "common"},
     "periodic": {"periodic", "common"},

@@ -8,7 +8,9 @@
 #include "molecule/basis.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
+#include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/one_electron_derivatives.cuh"
+#include "scf/cuda/one_electron_view.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 
 namespace generativeqc::scf {
@@ -402,6 +404,118 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
   } catch (const std::invalid_argument& error) {
     detail = error.what();
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+}
+
+generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
+    CudaDirectJkPlan* source, const double* resident_density,
+    const double* resident_weighted_density, std::size_t matrix_elements, std::size_t maximum_bytes,
+    std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    OneElectronGradientResources* resources) {
+  if (resources) *resources = {};
+  detail.clear();
+  if (!source || source->device_id < 0 || source->derivative_order < 1 || !source->stream ||
+      !resident_density || !resident_weighted_density || !maximum_bytes) {
+    detail =
+        "prepared one-electron force requires a derivative-capable Direct owner and resident D/W";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto n = source->diagnostic.nbf;
+  if (!n || n > std::numeric_limits<std::size_t>::max() / n || matrix_elements != n * n ||
+      source->diagnostic.batch_size != 1 || source->coordinates_per_item == 0 ||
+      source->coordinates_per_item % 3 != 0) {
+    detail = "prepared one-electron force has incompatible Direct owner dimensions";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto* exchange = source->generated_exchange.get();
+  if (!exchange || !exchange->force_capability || !exchange->shared || !exchange->force) {
+    detail = "prepared Direct owner has no retained shell-force scratch";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  auto& shared = *exchange->shared;
+  const auto view = cuda_execution::one_electron_view(shared.batch);
+  if (shared.stream != source->stream || view.batch_size != 1 ||
+      static_cast<std::size_t>(view.nbf) != n || view.shell_pair_count == 0 || !view.atom_offsets ||
+      !view.atomic_numbers || !view.positions || !view.shell_atoms || !view.shell_ao_offsets ||
+      !view.shell_primitive_offsets || !view.shell_pair_first || !view.shell_pair_second ||
+      !view.ao_shells || !view.ao_term_counts || !view.ao_term_angular ||
+      !view.ao_term_coefficients || !view.primitive_exponents || !view.primitive_coefficients) {
+    detail = "prepared Direct owner lacks resident one-electron shell metadata";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto atoms = source->coordinates_per_item / 3;
+  if (atoms > std::numeric_limits<std::size_t>::max() / (6 * sizeof(double)) ||
+      6 * atoms * sizeof(double) > maximum_bytes) {
+    detail = "prepared one-electron host output staging exceeds maximum_bytes";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+
+  try {
+    std::vector<double> hcore_result(3 * atoms), pulay_result(3 * atoms);
+    DeviceGuard device_guard;
+    check(cudaSetDevice(source->device_id));
+    struct BorrowedStreamFence {
+      cudaStream_t stream{};
+      bool completed{};
+      ~BorrowedStreamFence() {
+        if (stream && !completed) (void)cudaStreamSynchronize(stream);
+      }
+    } fence{source->stream};
+
+    runtime::cuda_trace::TraceOperation trace("one_electron_stationary_pair_prepared",
+                                              source->stream, {1, n, 0, false, false});
+    runtime::cuda_trace::TraceRegion derivatives("one_electron_pair_resident_metadata",
+                                                 source->stream);
+    OneElectronWeightView hcore_weights{nullptr, resident_density, resident_density};
+    OneElectronWeightView pulay_weights{resident_weighted_density, nullptr, nullptr};
+    pulay_weights.overlap_scale = -1.0;
+    constexpr unsigned schedule = 1;
+    auto* output = exchange->force;
+    const auto output_bytes = 3 * atoms * sizeof(double);
+
+    check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
+    check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, hcore_weights, nullptr,
+                                                 schedule, 1.0, output, source->stream));
+    check(cudaMemcpyAsync(hcore_result.data(), output, output_bytes, cudaMemcpyDeviceToHost,
+                          source->stream));
+    check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
+    check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, pulay_weights, nullptr,
+                                                 schedule, 1.0, output, source->stream));
+    check(cudaMemcpyAsync(pulay_result.data(), output, output_bytes, cudaMemcpyDeviceToHost,
+                          source->stream));
+    derivatives.finish();
+    check(cudaStreamSynchronize(source->stream));
+    fence.completed = true;
+
+    const auto finite = [](const auto& values) {
+      return std::all_of(values.begin(), values.end(),
+                         [](double value) { return std::isfinite(value); });
+    };
+    if (!finite(hcore_result) || !finite(pulay_result)) {
+      detail = "nonfinite prepared generated one-electron gradient";
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    if (resources) {
+      resources->host_numeric_bytes =
+          (hcore_result.capacity() + pulay_result.capacity()) * sizeof(double);
+      resources->device_to_host_bytes = 2 * output_bytes;
+      resources->stream_synchronizations = 1;
+    }
+    runtime::cuda_trace::trace_counter("response_scratch_bytes", 0);
+    runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
+    runtime::cuda_trace::trace_counter("device_to_host_bytes", 2 * output_bytes);
+    runtime::cuda_trace::trace_counter("stream_synchronizations", 1);
+    hcore_gradient.swap(hcore_result);
+    pulay_gradient.swap(pulay_result);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const CudaFailure& failure) {
+    detail = std::string("prepared generated one-electron CUDA failure: ") +
+             cudaGetErrorString(failure.status);
+    return failure.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                       : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  } catch (const std::bad_alloc&) {
+    detail = "prepared generated one-electron host output allocation failed";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
 }
 }  // namespace generativeqc::scf

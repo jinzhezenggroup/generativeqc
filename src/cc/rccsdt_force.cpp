@@ -20,6 +20,7 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "scf/types.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -167,6 +168,36 @@ void add_projected_triples(ParameterWeights& target, const TriplesResponseResult
         }
 }
 
+// A borrowed interaction source must describe the same nuclear Hamiltonian.
+// Compare metadata before memory admission or reads, without allocating a second
+// identity vector or accepting equal AO counts as proof of source equivalence.
+bool force_source_matches_system(const core::System& a, const core::System& b) noexcept {
+  if (a.basis_representation != b.basis_representation || a.charge != b.charge ||
+      a.multiplicity != b.multiplicity || a.electron_count != b.electron_count ||
+      a.atoms.size() != b.atoms.size() || a.shells.size() != b.shells.size() ||
+      a.ecp_terms != b.ecp_terms)
+    return false;
+  for (std::size_t i = 0; i < a.atoms.size(); ++i) {
+    const auto& left = a.atoms[i];
+    const auto& right = b.atoms[i];
+    if (left.atomic_number != right.atomic_number || left.ecp_core != right.ecp_core ||
+        left.position != right.position)
+      return false;
+  }
+  for (std::size_t i = 0; i < a.shells.size(); ++i) {
+    const auto& left = a.shells[i];
+    const auto& right = b.shells[i];
+    if (left.atom_index != right.atom_index || left.angular_momentum != right.angular_momentum ||
+        left.primitives.size() != right.primitives.size())
+      return false;
+    for (std::size_t j = 0; j < left.primitives.size(); ++j)
+      if (left.primitives[j].exponent != right.primitives[j].exponent ||
+          left.primitives[j].coefficient != right.primitives[j].coefficient)
+        return false;
+  }
+  return true;
+}
+
 struct RawHamiltonian {
   std::vector<double> h, g, density, rotation;
 };
@@ -177,18 +208,19 @@ RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& sourc
   if (source.nbf() != n || !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD(T) raw Hamiltonian source/reference mismatch");
   const auto n2 = square(n), n4 = fourth(n);
-  const auto required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto retained_required = bytes(checked_add(checked_mul(3, n2), n4));
+  const auto transform_required = bytes(checked_mul(2, n2));
+  const auto required = std::max(retained_required, transform_required);
   if (required > max_bytes) throw std::length_error("RCCSD(T) raw Hamiltonian exceeds host budget");
   if (ref.coefficients.size() != n2 || ref.hcore.size() != n2)
     throw std::invalid_argument("RCCSD(T) reference one-electron shape mismatch");
   RawHamiltonian out;
   out.h.assign(n2, 0.0);
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q)
-      for (std::size_t mu = 0; mu < n; ++mu)
-        for (std::size_t nu = 0; nu < n; ++nu)
-          out.h[p * n + q] +=
-              ref.coefficients[mu * n + p] * ref.hcore[mu * n + nu] * ref.coefficients[nu * n + q];
+  {
+    std::vector<double> workspace(n2);
+    tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
+                           workspace.data());
+  }
   posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
   const auto all = range(n);
   out.g = provider.get({all, all, all, all}, false, 0);
@@ -202,8 +234,8 @@ RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& sourc
   return out;
 }
 
-struct ResponseWeights {
-  std::vector<double> hcore, eri, overlap, rotation_gradient, stationarity, orbital_rhs;
+struct SmallResponseWeights {
+  std::vector<double> hcore, overlap, rotation_gradient, stationarity, orbital_rhs;
 };
 
 struct ControlWeights {
@@ -219,34 +251,25 @@ CudaParameterResponseView cuda_parameter_view(const ParameterWeights& bar) {
           std::span<const double>{bar.oooo}, std::span<const double>{bar.vvvv}};
 }
 
-ResponseWeights detach_cuda_response(CudaHamiltonianResponseResult result) {
-  return {std::move(result.hcore),        std::move(result.eri),
-          std::move(result.overlap),      std::move(result.rotation_gradient),
+SmallResponseWeights detach_cuda_small(CudaHamiltonianSmallResponseResult result) {
+  return {std::move(result.hcore), std::move(result.overlap), std::move(result.rotation_gradient),
           std::move(result.stationarity), std::move(result.orbital_rhs)};
 }
 #endif
 
-ResponseWeights copy_hamiltonian_outputs(const generated::HamiltonianOutputs& output, std::size_t n,
-                                         std::size_t o, std::size_t v) {
-  const auto n2 = square(n), n4 = fourth(n), ov = checked_mul(o, v);
+SmallResponseWeights copy_small_hamiltonian_outputs(
+    const generated::HamiltonianSmallOutputs& output, std::size_t n, std::size_t o, std::size_t v) {
+  const auto n2 = square(n), ov = checked_mul(o, v);
   return {{output.hcore, output.hcore + n2},
-          {output.eri, output.eri + n4},
           {output.overlap, output.overlap + n2},
           {output.rotation_gradient, output.rotation_gradient + n2},
           {output.stationarity, output.stationarity + n2},
           {output.orbital_rhs, output.orbital_rhs + ov}};
 }
 
-ResponseWeights hamiltonian_pullback(const ParameterWeights& bar, double reference_seed,
-                                     const RawHamiltonian& raw, std::size_t o, std::size_t v,
-                                     std::size_t max_bytes) {
-  const auto n = checked_add(o, v);
-  const auto arena_elements = generated::hamiltonian_weights_arena_elements(o, v);
-  if (checked_add(bytes(arena_elements),
-                  bytes(checked_add(checked_add(fourth(n), checked_mul(4, square(n))),
-                                    checked_mul(o, v)))) > max_bytes)
-    throw std::length_error("RCCSD(T) Hamiltonian response exceeds host budget");
-  std::vector<double> arena(arena_elements);
+generated::HamiltonianWeightInputs hamiltonian_weight_inputs(const ParameterWeights& bar,
+                                                             const double* reference_seed,
+                                                             const RawHamiltonian& raw) {
   generated::HamiltonianWeightInputs inputs{};
   inputs.bar_foo = bar.foo.data();
   inputs.bar_fov = bar.fov.data();
@@ -258,14 +281,41 @@ ResponseWeights hamiltonian_pullback(const ParameterWeights& bar, double referen
   inputs.bar_ovoo = bar.ovoo.data();
   inputs.bar_oooo = bar.oooo.data();
   inputs.bar_vvvv = bar.vvvv.data();
-  inputs.bar_reference_electronic_energy = &reference_seed;
+  inputs.bar_reference_electronic_energy = reference_seed;
   inputs.density = raw.density.data();
   inputs.g = raw.g.data();
   inputs.h = raw.h.data();
   inputs.rotation = raw.rotation.data();
+  return inputs;
+}
+
+SmallResponseWeights hamiltonian_small_pullback(const ParameterWeights& bar, double reference_seed,
+                                                const RawHamiltonian& raw, std::size_t o,
+                                                std::size_t v, std::size_t max_bytes) {
+  const auto n = checked_add(o, v);
+  const auto arena_elements = generated::hamiltonian_small_weights_arena_elements(o, v);
+  const auto retained_elements = checked_add(checked_mul(4, square(n)), checked_mul(o, v));
+  if (checked_add(bytes(arena_elements), bytes(retained_elements)) > max_bytes)
+    throw std::length_error("RCCSD(T) small Hamiltonian response exceeds host budget");
+  std::vector<double> arena(arena_elements);
+  const auto inputs = hamiltonian_weight_inputs(bar, &reference_seed, raw);
   const auto output =
-      generated::run_hamiltonian_weights_cpu(o, v, inputs, arena.data(), arena.size());
-  return copy_hamiltonian_outputs(output, n, o, v);
+      generated::run_hamiltonian_small_weights_cpu(o, v, inputs, arena.data(), arena.size());
+  return copy_small_hamiltonian_outputs(output, n, o, v);
+}
+
+std::vector<double> hamiltonian_eri_pullback(const ParameterWeights& bar, double reference_seed,
+                                             const RawHamiltonian& raw, std::size_t o,
+                                             std::size_t v, std::size_t max_bytes) {
+  const auto n4 = fourth(checked_add(o, v));
+  const auto arena_elements = generated::hamiltonian_eri_weights_arena_elements(o, v);
+  if (checked_add(bytes(arena_elements), bytes(n4)) > max_bytes)
+    throw std::length_error("RCCSD(T) ERI response exceeds host budget");
+  std::vector<double> arena(arena_elements);
+  const auto inputs = hamiltonian_weight_inputs(bar, &reference_seed, raw);
+  const auto output =
+      generated::run_hamiltonian_eri_weights_cpu(o, v, inputs, arena.data(), arena.size());
+  return {output.eri, output.eri + n4};
 }
 
 ControlWeights hamiltonian_control_pullback(const ParameterWeights& bar, double reference_seed,
@@ -436,36 +486,46 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // Ask the generated provider plan only for its additional staging/output buffers.
   const auto provider =
       posthf::numeric_block_plan(n, 0, 0, {n, n, n, n}, {tile, tile, tile, tile}, false);
-  plan.raw_phase_bytes = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
-                              checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
+  const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
+                                   checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  plan.raw_phase_bytes = std::max(rank2_transform_phase, provider_phase);
   const auto raw_retained = bytes(sum({n4, checked_mul(3, n2)}));
-  const auto response_retained = bytes(sum({n4, checked_mul(4, n2), ov}));
-  const auto hamiltonian_arena = bytes(generated::hamiltonian_weights_arena_elements(o, v));
-  const auto fock_arena = bytes(generated::fock_weights_arena_elements(o, v));
+  const auto small_response_retained = bytes(sum({checked_mul(4, n2), ov}));
+  const auto eri_response_retained = bytes(n4);
+  const auto hamiltonian_small_arena =
+      bytes(generated::hamiltonian_small_weights_arena_elements(o, v));
+  const auto hamiltonian_eri_arena = bytes(generated::hamiltonian_eri_weights_arena_elements(o, v));
+  const auto control_arena = bytes(generated::hamiltonian_control_arena_elements(o, v));
   const auto core = checked_add(before_raw, raw_retained);
-  // Correlation, denominator and canonicalization outputs remain live. The
-  // generated orbital action owns its arena throughout the remaining phases.
-  const auto response_base = sum(
-      {core, checked_mul(3, response_retained), bytes(generated::orbital_jvp_arena_elements(o, v)),
-       bytes(sum({checked_mul(2, n2), square(ov), checked_mul(2, ov)}))});
+  // Retain the conservative split-response envelope while introducing the
+  // control-only CPU arena. The control owner is smaller than this bound and
+  // is released before final small/ERI publication; no admission cap is relaxed.
+  const auto response_base =
+      sum({core, checked_mul(2, small_response_retained),
+           bytes(generated::orbital_jvp_arena_elements(o, v)),
+           bytes(sum({checked_mul(3, n2), square(ov), checked_mul(2, ov)}))});
   response::GmresOptions z_options;
   z_options.restart = 30;
   z_options.max_workspace_bytes = max_bytes;
   const auto gmres = response::prepare_gmres(ov, z_options);
+  // This remains an upper bound after early control-workspace release.
+  // Moving final weights into the derivative consumer does not free their data.
+  const auto final_response_base = checked_add(response_base, bytes(checked_mul(2, ov)));
   plan.response_phase_bytes =
-      std::max({sum({core, response_retained, hamiltonian_arena}),
-                sum({core, checked_mul(3, response_retained), bytes(n2), fock_arena}),
+      std::max({sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
+                sum({core, checked_mul(2, small_response_retained), bytes(checked_mul(2, n2)),
+                     control_arena}),
                 checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
                 checked_add(response_base, gmres.workspace_bytes),
-                sum({response_base, bytes(checked_mul(2, ov)), checked_mul(2, parameter_retained),
-                     checked_mul(2, response_retained), hamiltonian_arena})});
-  // After the final pullback, only the temporary zero-parameter pack dies.
-  // Moving total weights into the derivative consumer does not free their data.
-  const auto derivative_live = sum({response_base, bytes(checked_mul(2, ov)), parameter_retained,
-                                    checked_mul(2, response_retained)});
+                sum({final_response_base, small_response_retained, hamiltonian_small_arena}),
+                sum({final_response_base, small_response_retained, eri_response_retained,
+                     hamiltonian_eri_arena})});
+  const auto derivative_live =
+      sum({final_response_base, small_response_retained, eri_response_retained});
   const auto coordinates = checked_mul(3, system.atoms.size());
   const auto derivative_staging =
-      bytes(sum({checked_mul(2, n2), checked_mul(shell, checked_mul(n, n2)),
+      bytes(sum({checked_mul(3, n2), checked_mul(shell, checked_mul(n, n2)),
                  checked_mul(square(shell), n2), checked_mul(checked_mul(shell, square(shell)), n),
                  fourth(shell), checked_mul(2, coordinates)}));
   plan.derivative_phase_bytes =
@@ -485,7 +545,8 @@ RccsdtForcePlan plan_rccsd_force_cpu(const core::System& system,
                                      const hf::PhysicalReference& reference, const Problem& p,
                                      const SolverResult& cc, std::size_t max_bytes) {
   if (source.nbf() != reference.nbf ||
-      !source.supports(integrals::ElectronInteractionOperator::eri))
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
     throw std::invalid_argument("RCCSD force interaction source/reference mismatch");
   return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, false,
                                       source.retained_numeric_bytes());
@@ -503,7 +564,8 @@ RccsdtForcePlan plan_rccsdt_force_cpu(const core::System& system,
                                       const hf::PhysicalReference& reference, const Problem& p,
                                       const SolverResult& cc, std::size_t max_bytes) {
   if (source.nbf() != reference.nbf ||
-      !source.supports(integrals::ElectronInteractionOperator::eri))
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
     throw std::invalid_argument("RCCSD(T) force interaction source/reference mismatch");
   return plan_relaxed_rccsd_force_cpu(system, reference, p, cc, max_bytes, true,
                                       source.retained_numeric_bytes());
@@ -586,7 +648,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
   if (triples) add_projected_triples(parameters, *triples, o, v);
-  const auto raw = raw_hamiltonian(source, reference, max_bytes);
+  auto raw = raw_hamiltonian(source, reference, max_bytes);
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)
@@ -595,20 +657,27 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
         max_bytes);
 #endif
   auto hamiltonian_dispatch = [&](const ParameterWeights& bar,
-                                  double reference_seed) -> ResponseWeights {
+                                  double reference_seed) -> SmallResponseWeights {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_response)
-      return detach_cuda_response(
-          cuda_response->hamiltonian(cuda_parameter_view(bar), reference_seed));
+      return detach_cuda_small(
+          cuda_response->hamiltonian_small(cuda_parameter_view(bar), reference_seed));
 #endif
-    return hamiltonian_pullback(bar, reference_seed, raw, o, v, max_bytes);
+    return hamiltonian_small_pullback(bar, reference_seed, raw, o, v, max_bytes);
+  };
+  auto eri_dispatch = [&](const ParameterWeights& bar, double reference_seed) {
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_response)
+      return cuda_response->hamiltonian_eri(cuda_parameter_view(bar), reference_seed);
+#endif
+    return hamiltonian_eri_pullback(bar, reference_seed, raw, o, v, max_bytes);
   };
   auto control_dispatch = [&](const ParameterWeights& bar,
                               double reference_seed) -> ControlWeights {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_response) {
-      auto full = detach_cuda_response(
-          cuda_response->hamiltonian(cuda_parameter_view(bar), reference_seed));
+      auto full = detach_cuda_small(
+          cuda_response->hamiltonian_small(cuda_parameter_view(bar), reference_seed));
       return {std::move(full.stationarity), std::move(full.orbital_rhs)};
     }
 #endif
@@ -742,24 +811,17 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 
   for (std::size_t index = 0; index < dimension; ++index)
     parameters.fov[index] -= z.solution[index];
-
-  // All CC, (T)-denominator, same-space canonicalization and physical-Z seeds
-  // now live in one parameter source. Publish the complete h/g/S cotangent
-  // exactly once, only for the final nuclear derivative.
   auto total = hamiltonian_dispatch(parameters, 1.0);
+  auto total_eri = eri_dispatch(parameters, 1.0);
   const double stationarity = max_abs(total.stationarity);
   if (stationarity > kStationarityTolerance)
     throw std::runtime_error("complete HF+RCCSD(T)+Z orbital stationarity failed");
-  parameters = ParameterWeights{};
-  std::vector<double>().swap(total.rotation_gradient);
-  std::vector<double>().swap(total.stationarity);
-  std::vector<double>().swap(total.orbital_rhs);
 
   mp2::LagrangianWeights weights;
   weights.orbitals = n;
   weights.occupied = o;
   weights.one_electron = std::move(total.hcore);
-  weights.two_electron = std::move(total.eri);
+  weights.two_electron = std::move(total_eri);
   weights.overlap = std::move(total.overlap);
   weights.stationarity_residual = stationarity;
   auto gradient = cuda_derivative

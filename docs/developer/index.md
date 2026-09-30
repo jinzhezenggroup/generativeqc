@@ -4,6 +4,7 @@ This guide describes how GenerativeQC is implemented and where new functionality
 
 ## Start here
 
+- [Build and CUDA configuration](build.md)
 - [Architecture](architecture.md)
 - [Scientific compiler architecture](compiler_architecture.md)
 - [Electronic-structure boundaries](electronic_structure_boundaries.md)
@@ -28,6 +29,7 @@ See [Extending GenerativeQC](extending/index.md). GenerativeQC does not yet prom
 :hidden:
 :maxdepth: 1
 
+build
 architecture
 compiler_architecture
 electronic_structure_boundaries

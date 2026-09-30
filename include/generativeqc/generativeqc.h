@@ -764,6 +764,31 @@ typedef struct generativeqc_precision_provenance {
   uint32_t operator_work_counters_valid;
 } generativeqc_precision_provenance;
 
+/** Read-only #990 incremental Direct-J/K work record for one completed SCF item. */
+typedef struct generativeqc_incremental_direct_jk_diagnostic {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint32_t policy_version;
+  int32_t requested;
+  int32_t active;
+  int32_t quartet_work_counters_valid;
+  uint64_t anchor_full_builds;
+  uint64_t delta_builds;
+  uint64_t periodic_rebuilds;
+  uint64_t bypass_full_builds;
+  uint64_t post_scf_full_builds;
+  uint64_t anchor_updates;
+  double max_abs_delta_density;
+  uint64_t full_candidate_shell_quartets;
+  uint64_t full_rejected_shell_quartets;
+  uint64_t full_admitted_shell_quartets;
+  uint64_t full_admitted_quartet_tiles;
+  uint64_t delta_candidate_shell_quartets;
+  uint64_t delta_rejected_shell_quartets;
+  uint64_t delta_admitted_shell_quartets;
+  uint64_t delta_admitted_quartet_tiles;
+} generativeqc_incremental_direct_jk_diagnostic;
+
 /** Version of the separate, variable-length precision-work query. */
 #define GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION 1u
 
@@ -1309,6 +1334,10 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_transport_d
  */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_precision_provenance(
     const generativeqc_calculation* calculation, generativeqc_precision_provenance* out);
+/** Read #990 incremental Direct-J/K work from the same completed calculation. */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_incremental_direct_jk_diagnostic(
+    const generativeqc_calculation* calculation,
+    generativeqc_incremental_direct_jk_diagnostic* out);
 /** Query ordered precision work without changing the aggregate descriptor.
  * Unsupported detail versions return NOT_IMPLEMENTED. Too-small row buffers
  * return INVALID_ARGUMENT without modifying any output descriptor. */
@@ -1334,6 +1363,10 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_cc_performance
  */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_precision_provenance(
     const generativeqc_batch* batch, uint32_t index, generativeqc_precision_provenance* out);
+/** Input-indexed #990 incremental Direct-J/K work record. */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_incremental_direct_jk_diagnostic(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_incremental_direct_jk_diagnostic* out);
 /** Original-index batch equivalent of generativeqc_calculation_get_precision_work. */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_precision_work(
     const generativeqc_batch* batch, uint32_t index, uint32_t detail_version,

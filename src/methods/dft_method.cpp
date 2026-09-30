@@ -647,10 +647,10 @@ std::optional<core::System> ks_auxiliary_for_system(const core::System& system,
 /** Backend selection must precede materialization: constructing the reference
  * grid and then uploading it hides cubic host work in CUDA preparation. */
 dft::MolecularGrid ks_molecular_grid(const core::System& system, dft::GridSpec spec,
-                                     generativeqc_backend backend, int device) {
+                                     generativeqc_backend backend, int device, bool retain_device) {
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
 #if GENERATIVEQC_HAS_CUDA
-    return dft::MolecularGrid::from_cuda(system, spec, device);
+    return dft::MolecularGrid::from_cuda(system, spec, device, retain_device);
 #else
     throw std::runtime_error("CUDA quadrature is unavailable in this build");
 #endif
@@ -679,7 +679,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U),
         basis_(system_),
-        grid_(ks_molecular_grid(system_, grid, backend_, device)) {
+        grid_(ks_molecular_grid(
+            system_, grid, backend_, device,
+            options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
@@ -825,6 +827,74 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
+  generativeqc_status resident_density(const dft::CudaKsFinalStateToken& expected, int& device,
+                                       const double*& alpha, const double*& beta,
+                                       std::size_t& matrix_elements, unsigned& spins,
+                                       void*& source_stream, std::string& detail) {
+    device = -1;
+    alpha = nullptr;
+    beta = nullptr;
+    matrix_elements = 0;
+    spins = 0;
+    source_stream = nullptr;
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_) {
+      detail = "resident final density requires a CUDA KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsResidentDensityBinding binding;
+    const auto status = cuda_->resident_final_density(expected, binding, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!binding) {
+      detail = "CUDA KS resident final-density binding is invalid";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+    device = binding.device_id;
+    alpha = binding.alpha;
+    beta = binding.beta;
+    matrix_elements = binding.matrix_elements;
+    spins = binding.spins;
+    source_stream = binding.stream;
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    detail = "resident final density requires a CUDA build";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
+  generativeqc_status resident_nonlocal_features(const dft::CudaKsFinalStateToken& expected,
+                                                 int& device, const double*& density,
+                                                 const double*& gradient, std::size_t& point_count,
+                                                 void*& source_stream, std::string& detail) {
+    device = -1;
+    density = nullptr;
+    gradient = nullptr;
+    point_count = 0;
+    source_stream = nullptr;
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_) {
+      detail = "resident nonlocal features require a CUDA KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsResidentNonlocalFeaturesBinding binding;
+    const auto status = cuda_->resident_final_nonlocal_features(expected, binding, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!binding) {
+      detail = "CUDA KS resident nonlocal feature binding is invalid";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+    device = binding.device_id;
+    density = binding.density;
+    gradient = binding.gradient;
+    point_count = binding.point_count;
+    source_stream = binding.stream;
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    detail = "resident nonlocal features require a CUDA build";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
   generativeqc_status read_derivative_state(const dft::CudaKsFinalStateToken& expected,
                                             KsDerivativeSnapshot& output, std::string& detail) {
     output = {};
@@ -857,14 +927,58 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
+  generativeqc_status cuda_full_range_integral_derivatives(
+      const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::string& detail) {
+#if GENERATIVEQC_HAS_CUDA
+    output.clear();
+    if (!cuda_ || !system_.ecp_terms.empty() || range_strategy_ ||
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      detail = "CUDA full-range stationary shell derivatives require an all-electron Direct owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
+    if (!derivative_source) {
+      detail = "prepared CUDA Fock owner has no retained Direct shell derivative lease";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsResidentDensityBinding resident_density;
+    auto status = cuda_->resident_final_density(expected, resident_density, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!resident_density || resident_density.device_id != derivative_source.device_id ||
+        resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
+      detail = "CUDA full-range stationary density is incompatible with the Direct shell owner";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+        fock_, resident_density.alpha, resident_density.beta, resident_density.matrix_elements,
+        output, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      output.clear();
+      return status;
+    }
+    const auto coordinates = 3 * system_.atoms.size();
+    if (output.size() != 2 * coordinates) {
+      output.clear();
+      detail = "prepared CUDA full-range shell derivative source shape mismatch";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    (void)expected;
+    (void)output;
+    detail = "CUDA full-range stationary shell derivatives are unavailable in this build";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
   generativeqc_status cuda_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if GENERATIVEQC_HAS_CUDA
-    if (!cuda_ || execution_plan_.semilocal_family != dft::SemilocalFamily::Wb97mv ||
-        !system_.ecp_terms.empty())
+    if (!cuda_ || !execution_plan_.range_exchange || !range_strategy_ || !system_.ecp_terms.empty())
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
       detail = "cached CUDA stationary D/W must be supplied together";
@@ -927,16 +1041,22 @@ class KsPreparedCalculation final : public PreparedCalculation {
             transfers_after.final_state_reads - transfers_before.final_state_reads,
             transfers_after.synchronizations - transfers_before.synchronizations};
     scf::OneElectronGradientResources one;
-    // D and W share immutable geometry/topology. Their total matrices were
-    // staged on the final-state stream before its validation drain, so this
-    // paired consumer borrows them directly and uploads metadata only.
+    // The retained Direct shell owner already has this exact immutable basis,
+    // geometry and stream. Borrow its one-electron view and force scratch so
+    // the hot path performs no pack/allocation/metadata H2D. The standalone
+    // bridge remains a bounded correctness fallback if optional shell state was
+    // not admitted by an unusually small provider budget.
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
     candidate.reserve(5 * nc);
     std::vector<double> hcore, pulay, value;
-    status = scf::execute_cuda_stationary_one_electron_pair(
-        device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
-        resident_weights.weighted_density);
+    status = scf::execute_prepared_cuda_stationary_one_electron_pair(
+        fock_.cuda_direct_source(), resident_weights.density, resident_weights.weighted_density,
+        resident_weights.matrix_elements, bytes, hcore, pulay, detail, &one);
+    if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+      status = scf::execute_cuda_stationary_one_electron_pair(
+          device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
+          resident_weights.weighted_density);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
     work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
@@ -944,10 +1064,6 @@ class KsPreparedCalculation final : public PreparedCalculation {
     work[5] += one.device_to_host_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
-    if (!range_strategy_) {
-      detail = "CUDA RSH integral gradient is missing its resolved range correction";
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
     status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
         fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
         resident_density.matrix_elements, value, detail);
@@ -1508,12 +1624,57 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status resident_density(std::size_t index,
+                                       const dft::CudaKsFinalStateToken& expected, int& device,
+                                       const double*& alpha, const double*& beta,
+                                       std::size_t& matrix_elements, unsigned& spins,
+                                       void*& source_stream, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_density(expected, device, alpha, beta, matrix_elements,
+                                                  spins, source_stream, detail);
+    device = -1;
+    alpha = nullptr;
+    beta = nullptr;
+    matrix_elements = 0;
+    spins = 0;
+    source_stream = nullptr;
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status resident_nonlocal_features(std::size_t index,
+                                                 const dft::CudaKsFinalStateToken& expected,
+                                                 int& device, const double*& density,
+                                                 const double*& gradient, std::size_t& point_count,
+                                                 void*& source_stream, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_nonlocal_features(expected, device, density, gradient,
+                                                            point_count, source_stream, detail);
+    device = -1;
+    density = nullptr;
+    gradient = nullptr;
+    point_count = 0;
+    source_stream = nullptr;
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status read_derivative_state(std::size_t index,
                                             const dft::CudaKsFinalStateToken& expected,
                                             KsDerivativeSnapshot& output, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_derivative_state(expected, output, detail);
     output = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status cuda_full_range_integral_derivatives(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->cuda_full_range_integral_derivatives(expected, output, detail);
+    output.clear();
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -1648,6 +1809,16 @@ generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
+generativeqc_status dft_cuda_full_range_integral_derivatives(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::vector<double>& output, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->cuda_full_range_integral_derivatives(index, expected, output, detail);
+  output.clear();
+  detail = "CUDA full-range stationary shell derivatives require a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                std::vector<double>& output,
@@ -1670,6 +1841,45 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
                                       &density, &weighted_density);
   detail = "CUDA integral gradient requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              int& device, const double*& alpha,
+                                              const double*& beta, std::size_t& matrix_elements,
+                                              unsigned& spins, void*& source_stream,
+                                              std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks)
+    return ks->resident_density(index, expected, device, alpha, beta, matrix_elements, spins,
+                                source_stream, detail);
+  device = -1;
+  alpha = nullptr;
+  beta = nullptr;
+  matrix_elements = 0;
+  spins = 0;
+  source_stream = nullptr;
+  detail = "resident final density requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        int& device, const double*& density,
+                                                        const double*& gradient,
+                                                        std::size_t& point_count,
+                                                        void*& source_stream, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks)
+    return ks->resident_nonlocal_features(index, expected, device, density, gradient, point_count,
+                                          source_stream, detail);
+  device = -1;
+  density = nullptr;
+  gradient = nullptr;
+  point_count = 0;
+  source_stream = nullptr;
+  detail = "resident nonlocal features require a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 

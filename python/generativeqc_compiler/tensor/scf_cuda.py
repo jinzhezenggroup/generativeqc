@@ -12,6 +12,7 @@ import typing
 
 from generativeqc_compiler.common.provenance import canonical_hash
 
+from .optimize import prepare_for_backend
 from .scf import density_program, weighted_density_program
 
 
@@ -57,7 +58,10 @@ def _require_fp64(program: typing.Any) -> None:
 
 
 def _validated_density_program() -> typing.Any:
-    program = density_program(1, 3, spin_count=2, orbital_count=2)
+    program = prepare_for_backend(
+        density_program(1, 3, spin_count=2, orbital_count=2),
+        "cuda",
+    )
     _require_fp64(program)
     if tuple(program.outputs) != ("density",):
         raise ValueError("SCF CUDA density lowering requires one density output")
@@ -90,7 +94,10 @@ def _validated_density_program() -> typing.Any:
 
 
 def _validated_weighted_density_program() -> typing.Any:
-    program = weighted_density_program(1, 3, spin_count=2, orbital_count=2)
+    program = prepare_for_backend(
+        weighted_density_program(1, 3, spin_count=2, orbital_count=2),
+        "cuda",
+    )
     _require_fp64(program)
     if tuple(program.outputs) != ("weighted_density",):
         raise ValueError("SCF CUDA weighted density requires one expected output")

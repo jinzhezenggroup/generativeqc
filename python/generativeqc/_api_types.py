@@ -160,6 +160,7 @@ class Result:
     accuracy: AccuracyAssessment | None = None
     resource_diagnostics: dict | None = None
     precision: dict | None = None
+    incremental_direct_jk: dict | None = None
     correlation: CorrelationResult | None = None
     cc_performance: CcPerformanceResult | None = None
     physical_residual_rms: float | None = None
@@ -170,7 +171,12 @@ class Result:
 
 @dataclass(frozen=True)
 class MethodCapabilities:
-    """Executable properties reported by the native method registry."""
+    """Executable properties exposed by one public capability boundary.
+
+    ``method_capabilities()`` reports the backend-neutral registry view.
+    ``Calculator.capabilities`` and ``PreparedBatch.capabilities`` may refine
+    that view after backend, basis, and composed endpoint admission are known.
+    """
 
     method: str
     family: str

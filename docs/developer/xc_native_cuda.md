@@ -17,12 +17,15 @@ no separate user memory budget. `CudaXcPlan` borrows the arena and stream, which
 must outlive it. Its destructor drains the stream before the caller releases
 either resource. Concurrent calculations use independent plans and arenas.
 
-Host GridSpec-v1 quadrature remains explicit. Setup validates the complete
-normalized AO packing against the grid's current system, uploads packed basis,
-points and complete weights once, and synchronizes before releasing borrowed
-host inputs. It retains the grid on device and uses bounded AO/intermediate
-tiles. Host grid generation and setup are part of complete calculation cost;
-this is not a claim that quadrature preparation runs on GPU.
+The molecular quadrature remains an explicit immutable input with host exports
+for derivative/reference consumers. Native CUDA preparation also retains the
+exact generated points and weights on their source device. Device-fused XC
+validates that lease against its current device and point count, keeps the
+lease's lifetime token, and borrows its pointers directly. Only packed basis
+data is uploaded during XC setup; points and weights are not re-uploaded and do
+not occupy a duplicate region in the XC arena. Host-unfused execution retains
+the existing host-only behavior. Quadrature preparation and its single host
+export remain part of complete calculation cost.
 
 Every `enqueue` consumes a strictly newer density generation, invalidates the
 old result view, clears its outputs/error and rebuilds the full XC contribution.

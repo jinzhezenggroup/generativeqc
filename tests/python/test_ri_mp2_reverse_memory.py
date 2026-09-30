@@ -2,7 +2,9 @@
 
 Only the value provider and the BLAS dispatch are fixtures. The reverse, metric
 response, spectral VJP, scalar GEMM and Jacobi bodies come from current sources.
-This is a scalar-host allocation contract, not a GPU or full force qualification.
+The incoming relaxed MP2 weight fixture uses the production factorized contract,
+so the retained baseline contains no dense N^4 cotangent. This is a scalar-host
+allocation contract, not a GPU or full force qualification.
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ PREFIX = r"""
 #include <numeric>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 namespace trace {
@@ -158,10 +161,29 @@ std::size_t eri_index(std::size_t n,std::size_t p,std::size_t q,std::size_t r,st
 bool finite(std::span<const double> x) {
   return std::all_of(x.begin(),x.end(),[](double v){return std::isfinite(v);});
 }
+struct FactorizedTwoElectronWeights {
+  static constexpr unsigned current_version=1;
+  unsigned version{current_version};
+  std::size_t orbitals{},occupied{};
+  std::vector<double> fock,correlation_iajb;
+};
 struct LagrangianWeights {
   std::size_t orbitals{},occupied{};
-  std::vector<double> one_electron,overlap,two_electron;
+  std::vector<double> one_electron,two_electron;
+  FactorizedTwoElectronWeights two_electron_factors;
+  std::vector<double> overlap;
 };
+bool valid_factorized_two_electron_weights(const FactorizedTwoElectronWeights& w) {
+  if(w.version!=FactorizedTwoElectronWeights::current_version || !w.orbitals || !w.occupied ||
+     w.occupied>=w.orbitals || w.fock.size()!=square(w.orbitals) || !finite(w.fock) ||
+     !finite(w.correlation_iajb)) return false;
+  const auto nv=w.orbitals-w.occupied;
+  return w.correlation_iajb.size()==w.occupied*w.occupied*nv*nv;
+}
+std::size_t g_index(std::size_t no,std::size_t nv,std::size_t i,std::size_t j,
+                    std::size_t a,std::size_t b) {
+  return ((i*no+j)*nv+a)*nv+b;
+}
 struct DensityFittedLagrangianWeights {
   std::size_t orbitals{},auxiliary{};
   std::vector<double> overlap,one_electron,three_center,metric;
@@ -172,17 +194,44 @@ struct DensityFittedLagrangianWeights {
 MAIN = r"""
 } // namespace generativeqc::mp2
 int main(int argc,char** argv) {
-  if(argc!=3) return 2;
+  if(argc!=3 && argc!=4) return 2;
   using namespace generativeqc;
   const std::size_t n=std::strtoul(argv[1],nullptr,10),na=std::strtoul(argv[2],nullptr,10);
   hf::PhysicalReference ref{n,1,std::vector<double>(n*n)};
   for(std::size_t i=0;i<n;++i) ref.coefficients[i*n+i]=1.0;
   posthf::DensityFittedBlockProvider provider(ref,na);
-  mp2::LagrangianWeights weights{n,1,std::vector<double>(n*n,0.2),
-                                std::vector<double>(n*n,0.1),std::vector<double>(n*n*n*n)};
-  for(std::size_t i=0;i<weights.two_electron.size();++i)
-    weights.two_electron[i]=0.001*(int(i%11)-5);
-  const std::size_t retained=provider.provider_bytes()+sizeof(double)*(2*n*n+n*n*n*n);
+  mp2::LagrangianWeights weights;
+  weights.orbitals=n;
+  weights.occupied=1;
+  weights.one_electron.assign(n*n,0.2);
+  weights.overlap.assign(n*n,0.1);
+  weights.two_electron_factors.orbitals=n;
+  weights.two_electron_factors.occupied=1;
+  weights.two_electron_factors.fock.assign(n*n,0.0);
+  weights.two_electron_factors.correlation_iajb.assign((n-1)*(n-1),0.0);
+  for(std::size_t i=0;i<weights.two_electron_factors.fock.size();++i)
+    weights.two_electron_factors.fock[i]=0.001*(int(i%11)-5);
+  for(std::size_t i=0;i<weights.two_electron_factors.correlation_iajb.size();++i)
+    weights.two_electron_factors.correlation_iajb[i]=0.002*(int(i%7)-3);
+  if(argc==4) {
+    auto& factors=weights.two_electron_factors;
+    if(std::string(argv[3])=="orbitals") factors.orbitals=n+1;
+    else factors.occupied=2;
+    const auto fn=factors.orbitals,fo=factors.occupied,fv=fn-fo;
+    factors.fock.assign(fn*fn,0.001);
+    factors.correlation_iajb.assign(fo*fo*fv*fv,0.002);
+    if(!mp2::valid_factorized_two_electron_weights(factors)) return 8;
+    trace::start();
+    bool rejected=false;
+    try {
+      (void)mp2::density_fitted_lagrangian_weights(
+          ref,provider,weights,std::numeric_limits<std::size_t>::max());
+    } catch(const std::invalid_argument&) { rejected=true; }
+    trace::active=false;
+    return rejected && !trace::gemms && !trace::eigensolves ? 0 : 9;
+  }
+  const std::size_t retained=provider.provider_bytes()+sizeof(double)*
+      (3*n*n+(n-1)*(n-1));
   std::size_t planned=0;
   for(unsigned repeat=0;repeat<2;++repeat) {
     trace::start();
@@ -196,6 +245,13 @@ int main(int argc,char** argv) {
     if(retained+trace::peak>planned) return 4;
     const auto result_bytes=sizeof(double)*(2*n*n+n*n*na+na*na);
     if(planned!=retained+result_bytes+result.workspace_bytes) return 5;
+    if(n>=4) {
+      const auto dense_n4=n*n*n*n;
+      const auto correlation=(n-1)*(n-1);
+      const auto old_dense_required=
+          planned+sizeof(double)*(dense_n4-n*n-correlation);
+      if(old_dense_required<=planned) return 7;
+    }
   }
   trace::start();
   bool rejected=false;
@@ -244,12 +300,28 @@ def reverse_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("n,na", ((2, 1), (2, 2), (2, 4), (2, 12), (3, 64), (4, 128)))
+@pytest.mark.parametrize(
+    "n,na", ((2, 1), (2, 2), (2, 4), (2, 12), (3, 64), (4, 128), (32, 8))
+)
 def test_reverse_budget_covers_measured_nested_peak(
     reverse_probe: Path, n: int, na: int
 ) -> None:
     process = subprocess.run(
         [str(reverse_probe), str(n), str(na)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+
+
+@pytest.mark.parametrize("mismatch", ("orbitals", "occupied"))
+def test_reverse_rejects_factor_population_mismatch_before_numerics(
+    reverse_probe: Path, mismatch: str
+) -> None:
+    process = subprocess.run(
+        [str(reverse_probe), "4", "8", mismatch],
         capture_output=True,
         text=True,
         timeout=30,

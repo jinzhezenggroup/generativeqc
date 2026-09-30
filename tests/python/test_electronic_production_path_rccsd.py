@@ -23,7 +23,7 @@ def test_cpu_rccsd_actual_path_anchors_are_explicit() -> None:
     assert row["backend"] == "cpu"
     assert row["domain"] == "canonical-rccsd"
     assert row["status"] == "production"
-    assert row["scientific_owner"] == "tools/generativeqc_cc/doubles.py"
+    assert row["scientific_owner"] == "python/generativeqc_compiler/cc/doubles.py"
     assert row["provider_owner"] == "src/posthf/native_provider.cpp"
     assert row["execution_owner"] == "src/methods/rccsd_method.cpp"
     assert row["selector"] == "src/methods/registry.cpp"

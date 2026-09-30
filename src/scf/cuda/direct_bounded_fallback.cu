@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_derivative_cuda_shell_aot.cuh"
 #include "scf/cuda/direct_bounded_contraction.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
@@ -199,6 +200,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
         const unsigned angular_order =
             batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
             batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
+        const unsigned shell_class = direct_quartet_shell_class_device(
+            batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+            batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
         if constexpr (Force) {
           // Full-range order 0--3 is already consumed by exact shell workers.
           // Range-separated exchange deliberately falls through to the generic
@@ -233,6 +237,11 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     batch, angular_order, &queue_count, queue + slot, screening_tolerance,
                     schwarz_bounds, density, active, output, coulomb_coefficient,
                     exchange_coefficient, secondary_exchange_coefficient, omega, subtile, lane);
+              } else if (contract_packaged_derivative_shell_aot<Unrestricted>(
+                             shell_class, radial_operator, omega, batch, &queue_count, queue + slot,
+                             screening_tolerance, schwarz_bounds, density, active, output,
+                             exchange_coefficient, subtile, lane)) {
+                // Exact shell-class package consumed this SR/LR subtile.
               } else if (omega == 0.3 && radial_operator == DirectRangeOperator::Long) {
                 contract_bounded_direct_force_subtile_range_aot_scaled<
                     Unrestricted, generativeqc::integrals::CoulombRange::Long, 300>(
