@@ -70,6 +70,8 @@ def test_planner_adoption_preserves_resident_owner_and_per_call_work_budget() ->
     join_keywords = {keyword.arg: keyword.value for keyword in join.keywords}
     assert ast.unparse(join_keywords["sources"]) == "self.sources"
     assert ast.unparse(join_keywords["nonlocal_sources"]) == "self.nonlocal_sources"
+    assert "self.sources.reset_geometry(" in SOURCE
     assert "self.nonlocal_sources.reset_geometry(" in SOURCE
+    assert "self.sources.reset(" not in SOURCE
     assert "feature_task_with_features" not in SOURCE
     assert SOURCE.index("self._nonlocal.close()") < SOURCE.index("self._stack.close()")
