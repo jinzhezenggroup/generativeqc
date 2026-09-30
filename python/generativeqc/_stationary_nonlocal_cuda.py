@@ -13,7 +13,8 @@ from __future__ import annotations
 import typing
 from time import perf_counter
 
-import numpy as np
+if typing.TYPE_CHECKING:
+    import numpy as np
 
 
 def resident_nonlocal_geometry(
@@ -42,7 +43,13 @@ def resident_nonlocal_geometry(
     """
     if type(tile_points) is not int or tile_points <= 0:
         raise ValueError("resident nonlocal tile_points must be a positive integer")
-    if not callable(getattr(nonlocal_sources, "geometry_external_device", None)):
+    if not callable(
+        getattr(
+            nonlocal_sources,
+            "geometry_external_device_molecular_resident_weights",
+            None,
+        )
+    ):
         raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
     if not callable(getattr(nonlocal_owner, "seed_from_snapshot", None)):
         raise TypeError("resident nonlocal owner lacks the final-state feature handoff")
@@ -50,6 +57,16 @@ def resident_nonlocal_geometry(
     count = len(points)
     if count == 0 or nonlocal_owner.point_count != count:
         raise ValueError("resident nonlocal owner/grid point count differs")
+    resident_grid = state._source.cuda_resident_grid()
+    if resident_grid is None:
+        raise NotImplementedError(
+            "resident nonlocal geometry requires the CUDA molecular-grid lease"
+        )
+    if resident_grid.device != grid.device_id or resident_grid.point_count != count:
+        raise ValueError("resident molecular-grid lease differs from stationary grid")
+    if count % sources.natom:
+        raise ValueError("molecular grid point count is not atom-major uniform")
+    points_per_atom = count // sources.natom
     if len(raw_weights) != count:
         raise ValueError("resident nonlocal raw quadrature size differs")
     if type(ao_count) is not int or ao_count <= 0:
@@ -76,19 +93,22 @@ def resident_nonlocal_geometry(
             break
         for begin in range(0, count, tile_points):
             end = min(begin + tile_points, count)
-            with grid.feature_task(
-                points[begin:end],
+            point_pointer = resident_grid.points + 3 * begin * 8
+            with grid.feature_task_device_points(
+                point_pointer,
+                end - begin,
                 None,
                 ingredients,
-                defer_error_to_consumer=True,
             ) as task:
-                owners = np.asarray(state.grid.owners[begin:end], dtype=np.int64)
                 weights = state.grid.weights[begin:end]
+                device_weights = resident_grid.weights + begin * 8
                 raw = raw_weights[begin:end]
                 if phase == 0:
-                    sources.geometry(
+                    sources.geometry_molecular_resident_weights(
                         task,
-                        owners,
+                        begin,
+                        points_per_atom,
+                        device_weights,
                         weights,
                         raw,
                         functional=functional,
@@ -131,9 +151,11 @@ def resident_nonlocal_geometry(
                     )
                 # Inactive MolecularV1 rows have all six seeds zeroed by the
                 # native producer, so no host active mask is needed.
-                nonlocal_sources.geometry_external_device(
+                nonlocal_sources.geometry_external_device_molecular_resident_weights(
                     task,
-                    owners,
+                    begin,
+                    points_per_atom,
+                    device_weights,
                     weights,
                     raw,
                     seeds.pointer,
@@ -182,6 +204,12 @@ def resident_nonlocal_geometry(
         "nonlocal_feature_collection_point_visits": 0 if snapshot_seeded else count,
         "nonlocal_feature_d2h_bytes": 0,
         "nonlocal_seed_h2d_bytes": 0,
+        "grid_owner_source": "implicit-atom-major-index",
+        "grid_owner_h2d_bytes": 0,
+        "grid_point_source": "exact-native-resident-grid",
+        "grid_point_h2d_bytes": 0,
+        "grid_weight_source": "exact-native-resident-grid",
+        "grid_weight_h2d_bytes": 0,
         "nonlocal_dense_pair_capacity": count * count,
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
