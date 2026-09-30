@@ -1026,9 +1026,7 @@ class _CudaSources:
                 np.arange(owner_offset, owner_offset + view.npoint, dtype=np.int64)
                 // points_per_atom
             )
-            self.geometry(
-                task, owners, weights, raw, functional=functional
-            )
+            self.geometry(task, owners, weights, raw, functional=functional)
             return
         work = task.density_jets(_stationary_density_jet_count(functional))
         self._call(
