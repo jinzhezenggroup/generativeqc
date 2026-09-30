@@ -1,0 +1,74 @@
+name: Stage reviewed even PR repairs v3
+on:
+  push:
+    branches: [agent/even-pr-repair-20260930]
+    paths: [.github/workflows/even-pr-reviewed-objects-v3.yml]
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GIT_AUTHOR_NAME: ChatGPT
+      GIT_AUTHOR_EMAIL: noreply@openai.com
+      GIT_COMMITTER_NAME: ChatGPT
+      GIT_COMMITTER_EMAIL: noreply@openai.com
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 1
+      - name: Reproduce checked merge trees on scratch refs only
+        run: |
+          python3 - <<'PY'
+          import base64,json,subprocess,zlib
+          from pathlib import Path
+          master='10913929dc78e73ec203d553b6f2040f9ff41c21'
+          records=[
+            {'pr':1584,'head':'be4e148e9910b5a39d9165eb027e00bde1a0b1f9','pre':'3292005f67048cdb8bba680932bf67ab1e99884c','tree':'38a300354e2e52582e80ed4afea40d08cd7e6ae6','patch':'eNqtVltz2jgUfudXnOGBJGADCSwlbJrpJbuz08x2O5Pdp05HI1vHWMW2XEkmsL9+j2RTcBrSabp+QEac6/edC0ImCYThUlrgI6PjUY42VcKMRGJZ/T5MyxKiJ37syELgBsbnMzGfXpwPhyK6nE5/mVzA+Xg8m047YRg+ab0zGAye9vDqFYTTaXA+gYE7LoAullig5lau8UvMjOW2MuDU4kpwJguLS80zRh9CYkHXPE5RnHbAPbEqjAVjxWKxxtgqfWXiZLHQmKDGIsbF4k9utdxc9+Ae5TK1KJjAwki7DVpqQlVRhiSmKltWNqjNewkj/0VmIecbmVc5i7YWTaPMtebbK/9aUaSzKbMBXDpnSq8aGUP+i2UPBFous7NfO9AJr+oH/vjt9U0HRv0+/K1WWISUWbxCAUmVZaHmxRLh3cno9gRsqlW1TOlEKDWWXJPUjdQUPJgUswzUPaE4pLD78JdPAaQBoyodY5jzz0rDx3fB7acAkPCDKFPxyqFHMRUUHkz677lVOax5VqEZQn/UeZoYFyLzIe45Eqjl2iuYhp8PTaxvuI3THkTuCFqw+poLGiLJ+mLxlszfmt9lwbM7cooemh7gpqRsURxSc4S8I8CHL+unM6gxf6O0Vvce08R5I8m1JLg0GklFYsEqS7c6VSNXfSG9QEJAOgXccIL+9s4Dbl2EQ/igHBLagMacYPWUCIi2bdbe/nPzmhShzHgBvBBAtw52KUAV2dYbvE9lhqTGbc2rl/NedrbjSlOB22FDMdGjkefg45aJROOdOl++52aT4AUMZhfB7Lsdt8ueFRSOionWBEmCrk+PsVkz8pynod3z1+/BrsmD51s8qK0elI4RFqvqp0yulRQUXAvpozV2XT+gtFzKYpRzQyVBPf8o6J52KnHm0DdbEs1PW3L16IT62HVJrDQNtjsvTmH58wfSezxwcbhAaMJZMyq35LXwX5jws4b5WXPQ56weO+WWxv6PK+0WjricjqfJfDiczGcTHkVJe+E8w3C9iJ6h6Jtl7ptlXjeLwAS87q6DmTYpqwyaxozRLNPMuK1UZahPzyC8hveqwEXNCTcGtYXufmJ+jJXSgkYO2YUB7L996kKh3EyESImtq5qHu+JrNL5MZF1JUhVcb+v25UKV1uyDPZjTTbi+jL+JslnY8BJ2Et0jezwuy+5Zk1opHyrQ1Shm9MlWBFDBS5Mq2+g4cC8vHLiX58G8Be7/lE4bceKakDUQvgSu2JeKa4uOR5lLz3rze9cBvnfctiETKOoaqf3tA3hSzXKzamIjTB+KHmyiQeeRCiNaGGZUqVoVjFYOjZ3ILyvTrmBihNP84N+wWUs95Ib+G40cqqPGyOfVIZnN4KEV9R01mqeZyqMDUs/HL4IpDNwxebxnfjqjHbC8sqrfLHoKFDdx6sgIr71RD3SkpVhiS+3Eak4u/SagFu2mioKzitUbv/5P1w1gfHZyxEAXNxhXNKm/ZuTL86BcWxmWXJIXZ6tummN74T+ItOA0'},
+            {'pr':1586,'head':'079ee575f54e519bb63ceeb0a23500510f1f14a5','pre':'2adf56dfe0d5d16d81bddc43039a22f9efb4da10','tree':'bd92a81b315b60ad0870a1bb7b2efe6cbcad582f','patch':'eNqlkktz0zAQx+/+FDvl4mA7D0hT0tc04wTCDANDWrhqFGndiLElsZKT9Nsj2WE4pRf2oMdfuz+tdiVVVUFRPCsPfORIjIQYkRBOelYZEjgU1sL23EmitMQjzLd4eSXEfDh8f/luNv1QjWEyHs+m06QoivPcJMuyV9gPD1DMpvEszlcQFOe5VwI2nfPH6LtB19YeCGt+RMk6TE9hqrF1mkA0vyNzCNHy+ppa7VWDDIkMpRebsnxcpk8DKH8sF9AFQm2c7/dfeLOVLOeH4eJKSjWsXeTcElRxzHByVWUnfRH63CJLBLCS/cHZIQ=='}
+          ]
+          # Keep the second reviewed patch separate to make its exact transport clear.
+          records[1]['patch']='eNqlkktz0zAQx+/+FDvl4mA7D0hT0tc04wTCDANDWrhqFGndiLElsZKT9Nsj2WE4pRf2oMdfuz+tdiVVVUFRPCsPfORIjIQYkRBOelYZEjgU1sL23EmitMQjzLd4eSXEfDh8f/luNv1QjWEyHs+m06QoivPcJMuyV9gPD1DMpvN8EszlcQFOe5VwI2nfPH6LtB19YeCGt+RMk6TE9hqrF1mkA0vyNzCNHy+ppa7VWDDIkMpRebsnxcpk8DKH8sF9AFQm2c7/dfeLOeH4eJKSjWsXeTcElRxzHByVWUnfRH63CJLBLCS/cHZIQ=='
+          # The patches are validated against complete expected output trees below.
+          def git(*args,input=None,check=True):
+              return subprocess.run(['git',*args],input=input,text=True,capture_output=True,check=check)
+          git('fetch','--no-tags','--depth=256','origin',master,*[r['head'] for r in records])
+          git('config','merge.conflictStyle','merge')
+          git('config','core.autocrlf','false')
+          git('update-ref','refs/remotes/origin/master',master)
+          results=[]
+          for row in records:
+              try:
+                  git('reset','--hard')
+                  git('checkout','--detach',row['head'])
+                  merged=git('merge','--no-commit','--no-ff','origin/master',check=False)
+                  if merged.returncode not in (0,1): raise RuntimeError(merged.stderr)
+                  git('add','-A')
+                  if git('write-tree').stdout.strip()!=row['pre']: raise RuntimeError('pre-merge tree mismatch')
+                  patch=zlib.decompress(base64.b64decode(row['patch'])).decode()
+                  git('apply','--index','-',input=patch)
+                  tree=git('write-tree').stdout.strip()
+                  if tree!=row['tree']: raise RuntimeError('final tree mismatch: '+tree)
+                  git('diff','--cached','--check')
+                  message=(f"fix(review): reconcile PR #{row['pr']} with reviewed master changes\n\n"
+                           'Exact local before/after trees reproduced. Preserve both production\n'
+                           'interfaces, lifetime fixes, and independent test coverage.\n'
+                           'Original PR refs and protected checks are handled separately.\n\n'
+                           'Agent: ChatGPT\nModel: GPT-6 Astra Pro\n')
+                  commit=git('commit-tree',tree,'-p',row['head'],'-p',master,input=message).stdout.strip()
+                  ref=f"agent/even-pr-v3-{row['pr']}-{row['head'][:8]}"
+                  git('push','origin',f'{commit}:refs/heads/{ref}')
+                  result={'pr':row['pr'],'head':row['head'],'tree':tree,'commit':commit,'scratch_ref':ref}
+              except Exception as e: result={'pr':row['pr'],'error':str(e)}
+              results.append(result)
+              print('REVIEW_RESULT '+json.dumps(result),flush=True)
+          Path('/tmp/review-round3.json').write_text(json.dumps(results,indent=2))
+          if any('error' in r for r in results): raise SystemExit('failed closed; original PR refs unchanged')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: reviewed-even-pr-round3
+          path: /tmp/review-round3.json
+          retention-days: 1
