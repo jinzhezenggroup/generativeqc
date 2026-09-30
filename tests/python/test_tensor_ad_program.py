@@ -24,6 +24,7 @@ from generativeqc_compiler.tensor import (
     linearize,
     multiply,
     optimize,
+    prepare_for_backend,
     reduce_sum,
     reshape,
     slice_tensor,
@@ -222,13 +223,38 @@ def test_optimize_before_and_after_generation_agree_numerically() -> None:
 
 
 def test_generated_programs_are_cpu_plannable_for_cuda_lowering() -> None:
-    program, _feeds, tangents, cotangents = _supported_dense_program()
+    program, feeds, tangents, cotangents = _supported_dense_program()
     forward = linearize(program, list(tangents))
     reverse = transpose_program(program, list(cotangents))
-    for generated in (forward.program, reverse.program):
+    references = (
+        (forward.program, tangents, "d", jvp(program, feeds, tangents).output_tangents),
+        (
+            reverse.program,
+            cotangents,
+            "bar",
+            vjp(program, feeds, cotangents).input_cotangents,
+        ),
+    )
+    for generated, seeds, prefix, reference in references:
+        original = generated.dumps()
+        prepared = prepare_for_backend(generated, "cuda")
         plan = plan_cuda(generated, TARGET)
-        assert plan.program is generated
+        # Planning may optimize the AD DAG, but must not mutate its source or
+        # change the derivative ABI/numerics. Use the primal AD oracle rather
+        # than comparing the optimized program only against itself.
+        assert plan.program.logical_hash == prepared.logical_hash
+        assert generated.dumps() == original
         assert plan.peak_bytes > 0
+        generated_feeds = {
+            **feeds,
+            **{f"{prefix}_{name}": value for name, value in seeds.items()},
+        }
+        actual = execute(plan.program, generated_feeds).outputs
+        assert set(actual) == {f"{prefix}_{name}" for name in reference}
+        for name, value in reference.items():
+            np.testing.assert_allclose(
+                actual[f"{prefix}_{name}"], value, rtol=1e-12, atol=1e-12
+            )
 
 
 def test_generated_reverse_plan_supports_bounded_recomputation() -> None:
