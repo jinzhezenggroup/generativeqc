@@ -130,3 +130,21 @@ def test_dft_stationary_inline_cuda_uses_shared_production_preparation() -> None
     assert "specialized = prepare_for_backend(" in source
     assert 'backend="cuda"' in source
     assert "from .optimize import optimize" not in source
+
+
+
+def test_gfn2_electronic_cpu_cuda_generators_use_shared_preparation() -> None:
+    cpu_source = (
+        ROOT / "tools/generate_gfn2_electronic_native.py"
+    ).read_text()
+    cuda_source = (
+        ROOT / "tools/generate_gfn2_electronic_cuda.py"
+    ).read_text()
+
+    assert cpu_source.count("prepare_for_backend(") >= 6
+    assert 'backend="cpu"' in cpu_source
+    assert "gfn2_scalar_integral_vjp_program_hash" in cpu_source
+    assert "gfn2_multipole_integral_vjp_program_hash" in cpu_source
+
+    assert cuda_source.count("prepare_for_backend(") >= 3
+    assert 'backend="cuda"' in cuda_source
