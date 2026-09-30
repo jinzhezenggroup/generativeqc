@@ -1,4 +1,4 @@
-name: One-shot resident-weight capacity repair
+name: One-shot WB97M-V master integration
 
 on:
   push:
@@ -10,7 +10,7 @@ concurrency:
   group: one-shot-reviewed-pr-repairs
   cancel-in-progress: false
 jobs:
-  repair:
+  integrate:
     if: github.repository == 'jinzhezenggroup/generativeqc'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -20,8 +20,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9
-      - name: Validate exact-head repair
+      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml
+      - name: Prepare a clean single-parent master landing
         shell: bash
         run: |
           set -euo pipefail
@@ -32,52 +32,46 @@ jobs:
           import tempfile
           from pathlib import Path
           root = Path.cwd()
-          out = Path(os.environ['RUNNER_TEMP']) / 'weight-capacity'
+          out = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-master'
           out.mkdir()
-          branch = 'perf/1613-stationary-resident-grid-weights'
-          expected = '9acf6ac1292f38d2d9470b18424c58c438fe18d5'
-          parent = '63b3f3eb11f70b6a59febafc182e16cc658cb7a5'
-          report = {'pr': 1613, 'expected_head': expected, 'parent': parent}
+          head = 'd3b8fb51d74aaf84f41a09e3d6fa0a29959336c6'
+          master = '268e7112ebb81db46755054ac1cc42374379040c'
+          branch = 'agent/review-wb-residency-master'
+          report = {'source_head': head, 'master': master, 'branch': branch}
           def run(*args, cwd=root, check=True, env=None):
               result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env)
               if check and result.returncode:
                   raise RuntimeError(result.stderr or result.stdout)
               return result
           try:
-              remote = run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.split()
-              if not remote or remote[0] != expected:
-                  raise RuntimeError('head moved; no changes made')
-              with tempfile.TemporaryDirectory(prefix='review-weight-') as temporary:
+              if run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.strip():
+                  raise RuntimeError('replacement ref already exists; no overwrite')
+              with tempfile.TemporaryDirectory(prefix='wb-master-') as temporary:
                   work = Path(temporary) / 'checkout'
-                  run('git', 'worktree', 'add', '--detach', str(work), expected)
+                  run('git', 'worktree', 'add', '--detach', str(work), head)
                   try:
-                      run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', parent, cwd=work)
-                      audited = run('python3', str(root / '.github/review-wb-capacity.py'), str(work))
-                      (out / 'hash-audit.json').write_text(audited.stdout)
-                      report['updated_contracts'] = json.loads(audited.stdout)
-                      files = ['tools/dft_mp_v1/qualify_capacity.py', 'tests/python/test_dft_mp_v1_capacity.py']
-                      changes = set(run('git', 'diff', '--name-only', cwd=work).stdout.splitlines())
-                      if not changes <= set(files):
-                          raise RuntimeError('unexpected changed paths')
-                      run('python3', '-m', 'ruff', 'check', *files, cwd=work)
-                      run('python3', '-m', 'ruff', 'format', '--check', *files, cwd=work)
+                      merge = run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', master, cwd=work, check=False)
+                      if merge.returncode:
+                          (out / 'conflicts.patch').write_text(run('git', 'diff', '--cc', cwd=work).stdout)
+                          raise RuntimeError('clean master integration failed; no branch created')
+                      tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py', 'test_wb97mv_resident_grid_weights.py', 'test_production_tensor_preparation.py']
                       env = dict(os.environ)
                       env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
-                      tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py', 'test_wb97mv_resident_grid_weights.py']
                       result = run('python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--import-mode=importlib', *['tests/python/' + name for name in tests], cwd=work, env=env, check=False)
                       (out / 'tests.log').write_text(result.stdout + result.stderr)
                       report['test_returncode'] = result.returncode
                       report['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-15:])
                       if result.returncode:
-                          raise RuntimeError('regression tests failed; no push')
-                      run('git', 'add', '--', *files, cwd=work)
+                          raise RuntimeError('integrated tests failed; no branch created')
                       run('git', 'diff', '--cached', '--check', cwd=work)
-                      message = 'fix(dft): bind resident-weight owner capacity evidence\n\nPreserve the formatted kernel ABI and validated parent fixes. Update only\naudited owner/header fingerprints; all capacity and selected grid tests pass.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
-                      run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
-                      report['commit'] = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
-                      report['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
-                      (out / 'repair.patch').write_text(run('git', 'diff', expected, report['commit'], cwd=work).stdout)
-                      run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
+                      tree = run('git', 'write-tree', cwd=work).stdout.strip()
+                      message = 'perf(dft): land reviewed WB97M-V owner/point/weight residency\n\nIntegrate the repaired #1611/#1612/#1613 slices on master after GitHub\nrefused native-stack retargeting. Preserve the P1 owner/ABI repairs, all\ncapacity mutation guards and concurrent publication/kernel regressions.\nFocused integrated tests pass; normal PR CI and review remain required.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                      commit = run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit-tree', tree, '-p', master, '-m', message, cwd=work).stdout.strip()
+                      report['commit'] = commit
+                      report['tree'] = tree
+                      (out / 'master-relative.patch').write_text(run('git', 'diff', master, commit, cwd=work).stdout)
+                      (out / 'source-integration.patch').write_text(run('git', 'diff', head, commit, cwd=work).stdout)
+                      run('git', 'push', 'origin', commit + ':refs/heads/' + branch, cwd=work)
                       report['pushed'] = True
                   finally:
                       run('git', 'worktree', 'remove', '--force', str(work), check=False)
@@ -91,6 +85,6 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: weight-capacity-repair
-          path: ${{ runner.temp }}/weight-capacity/
+          name: wb97mv-master-integration
+          path: ${{ runner.temp }}/wb97mv-master/
           retention-days: 1
