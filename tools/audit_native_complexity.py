@@ -506,8 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             f"native complexity audit: {scanned} files, "
-            f"{len(findings)} high-order loop nests"
-            + (f"; {counts}" if counts else "")
+            f"{len(findings)} high-order loop nests" + (f"; {counts}" if counts else "")
         )
         if not args.summary_only:
             for item in findings:
