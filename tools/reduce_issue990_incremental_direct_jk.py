@@ -23,7 +23,8 @@ def _maximum_abs_difference(first: Any, second: Any) -> float:
 
     if isinstance(first, list) or isinstance(second, list):
         if not isinstance(first, list) or not isinstance(second, list):
-            raise ValueError("baseline/incremental result shapes differ")
+            # Scalars and lists are valid results, but have incompatible shapes.
+            raise ValueError("baseline/incremental result shapes differ")  # noqa: TRY004
         if len(first) != len(second):
             raise ValueError("baseline/incremental result shapes differ")
         if not first:
