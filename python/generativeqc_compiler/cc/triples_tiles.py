@@ -384,7 +384,7 @@ def build_tile_triples_program(
     def F(name: typing.Any) -> typing.Any:
         return Index(name, sum_vir)
 
-    common = {
+    common: dict[str, typing.Any] = {
         "role": "parameter",
         "differentiable": True,
         "representation": "restricted_spatial",
@@ -505,7 +505,7 @@ def runtime_tile_capacity(
 
 
 def _runtime_controls(
-    coordinates: typing.Iterable[tuple[int, int, int]], capacity: int
+    coordinates: typing.Iterable[tuple[int, ...]], capacity: int
 ) -> dict[str, np.ndarray]:
     """Pack at most capacity triangular coordinates into runtime controls."""
     import numpy as np
@@ -520,7 +520,10 @@ def _runtime_controls(
     c_map = np.zeros(capacity, dtype=np.int64)
     active = np.zeros(capacity, dtype=np.float64)
     degeneracy = np.ones(capacity, dtype=np.float64)
-    for lane, (a, b, c) in enumerate(coordinates):
+    for lane, coordinate in enumerate(coordinates):
+        if len(coordinate) != 3:
+            raise ValueError("runtime triples coordinates must have three indices")
+        a, b, c = coordinate
         a_map[lane], b_map[lane], c_map[lane] = a, b, c
         active[lane] = 1.0
         degeneracy[lane] = float(_degeneracy(a, b, c))
@@ -627,7 +630,7 @@ def build_runtime_tile_triples_program(
         return Index(name, vir)
 
     q = Index("q", lanes)
-    common = {
+    common: dict[str, typing.Any] = {
         "role": "parameter",
         "differentiable": True,
         "representation": "restricted_spatial",
