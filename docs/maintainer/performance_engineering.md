@@ -21,6 +21,28 @@ When system size or a smaller budget changes a tile shape, compare actual work
 counts before interpreting a kernel slowdown. A sudden endpoint cliff often
 means the executed algorithm changed its amount of work.
 
+## Audit native high-order scalar work
+
+Run `python tools/audit_native_complexity.py` to inventory leaf native loop nests
+with depth four or greater. The default audit covers GenerativeQC production
+sources under `src/` and excludes the vendored xTB native tree; use
+`--include-vendored` for a broader diagnostic scan. `--format json` emits a
+machine-readable inventory.
+
+The audit separately classifies an avoidable rank-2 matrix-chain candidate when
+a high-order scalar reduction writes a rank-2 target from at least three
+pairwise-indexed inputs spanning four loop indices, without a genuine
+three-/four-index source access. This distinguishes patterns such as a scalar
+`C^T A C` implementation from an exact four-index ERI/J/K contraction. The
+pre-commit `native-complexity-audit` hook runs
+`--fail-on-matrix-chain`, so a reintroduced quartic rank-2 transform fails CI
+and must move to TensorIR or the shared dense-linear-algebra owner.
+
+The source audit is deliberately conservative: unclassified high-order loops are
+reported, not automatically rewritten. TensorIR symbolic complexity remains the
+proof-carrying path for legal contraction reassociation; native findings are
+review prompts for code that still sits outside that IR.
+
 ## Prefer source-driven reuse
 
 Expensive source work should normally be produced once and consumed by multiple
