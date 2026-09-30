@@ -124,6 +124,8 @@ __global__ void task_reduce(const double* input, const int64_t* tasks, size_t co
                             const int64_t* ao_atoms, size_t na, double* output, int* error);
 __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, double zb,
                                const double* centers, size_t na, double* output, int* error);
+__global__ void nuclear_all_kernel(unsigned kind, const double* charges,
+                                   const double* centers, size_t na, double* output, int* error);
 __global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error);
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners, size_t owner_offset,
@@ -364,6 +366,30 @@ int stationary_nuclear(void* pointer, unsigned kind, int64_t a, int64_t b, doubl
     p->count_primitive_work(1);
     finished(*p, stream);
     profile_elapsed(*p, p->primitive_kernel_ms, p->stage0, p->stage1);
+  });
+}
+int stationary_nuclear_all(void* pointer, unsigned kind, const double* charges, size_t count,
+                           char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !charges || count != p->atoms)
+      throw std::invalid_argument("invalid stationary nuclear batch");
+    check(*p);
+    drain_geometry(*p);
+    p->check_page_primitive_work(1);
+    auto stream = p->context.stream;
+    profile_record(*p, p->stage0, stream);
+    upload(*p, p->scratch, charges, p->atoms, stream);
+    profile_record(*p, p->stage1, stream);
+    nuclear_all_kernel<<<1, 1, 0, stream>>>(kind, p->scratch, p->centers, p->atoms, p->sources,
+                                            p->context.error);
+    profile_record(*p, p->stage2, stream);
+    ++p->launches;
+    p->count_primitive_work(p->atoms * (p->atoms - 1) / 2);
+    finished(*p, stream);
+    profile_elapsed(*p, p->primitive_h2d_ms, p->stage0, p->stage1);
+    profile_elapsed(*p, p->primitive_kernel_ms, p->stage1, p->stage2);
   });
 }
 int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTaskView* view,
