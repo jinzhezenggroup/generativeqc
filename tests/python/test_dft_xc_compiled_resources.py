@@ -56,7 +56,7 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             registers=56,
         ),
         resource(
-            "generativeqc::dft::cuda_xc_detail::evaluate_points<1, false>(double*)",
+            "generativeqc::dft::cuda_xc_detail::evaluate_points<4, false>(double*)",
             registers=80,
             spill_store_bytes=16 if spill else 0,
             spill_load_bytes=8 if spill else 0,
@@ -72,7 +72,7 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
         ),
         # Compiled but inactive variants must not contaminate the selected region.
         resource(
-            "generativeqc::dft::cuda_xc_detail::evaluate_points<2, false>(double*)",
+            "generativeqc::dft::cuda_xc_detail::evaluate_points<5, false>(double*)",
             registers=255,
             spill_store_bytes=128,
             spill_load_bytes=128,
@@ -113,7 +113,7 @@ def test_complete_region_selects_only_active_pbe_scopes() -> None:
         "ao_kernel",
         "tiled_density_product",
         "density_features",
-        "evaluate_points<1",
+        "evaluate_points<4",
         "tiled_potential",
     ),
 )
@@ -137,7 +137,7 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
         resource("ao_kernel(double*)"),
         resource("density_product<false>(double*)", registers=61),
         resource("density_features<false>(double*)", registers=62),
-        resource("evaluate_points<1, false>(double*)", registers=63),
+        resource("evaluate_points<4, false>(double*)", registers=63),
         resource("assemble_potential(double*)", registers=64),
         resource("accumulate_totals(double*)", registers=8),
         resource("tiled_density_product<false>(double*)", registers=250),
@@ -195,3 +195,61 @@ def test_compiled_evidence_cannot_be_relabelled_to_another_shape() -> None:
     )
     with pytest.raises(ValueError, match="binding identity is stale"):
         replace(first, shape=replace(shape, npoint=8192))
+
+
+@pytest.mark.parametrize("suffix", ["", "l", "ll"])
+@pytest.mark.parametrize(
+    ("functional", "feature_terms", "registers", "spill_bytes"),
+    [("LDA_XC_PW", 1, 72, 0), ("PBE", 4, 192, 96)],
+)
+def test_point_specialization_tracks_feature_width_not_functional_code(
+    suffix: str, functional: str, feature_terms: int, registers: int, spill_bytes: int
+) -> None:
+    shape = GridXcCompiledResourceShape(npoint=4096, tile_points=256, nao=96, spins=2)
+    rows = (
+        *(row for row in pbe_resources() if "evaluate_points" not in row.function),
+        resource(f"evaluate_points<1{suffix}, false>(double*)", registers=32),
+        resource(
+            f"evaluate_points<4{suffix}, false>(double*)",
+            registers=192,
+            spill_store_bytes=64,
+            spill_load_bytes=32,
+        ),
+        resource(f"evaluate_points<5{suffix}, false>(double*)", registers=255),
+        resource(f"evaluate_points<4{suffix}, true>(double*)", registers=254),
+        resource(f"evaluate_points<40{suffix}, false>(double*)", registers=253),
+    )
+    evidence = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=shape,
+        functional=functional,
+        target=TARGET,
+        source_identity="native-feature-width",
+    )
+    assert tuple(row.function for row in dict(evidence.scopes)["xc_points"]) == (
+        f"evaluate_points<{feature_terms}{suffix}, false>(double*)",
+    )
+    assert evidence.profitability.compiled_registers_per_thread == registers
+    assert evidence.profitability.spill_bytes == spill_bytes
+
+
+@pytest.mark.parametrize(
+    "inactive", ["1, false", "4, true", "40, false", "5, false"]
+)
+def test_missing_pbe_width_cannot_be_replaced_by_an_inactive_kernel(
+    inactive: str,
+) -> None:
+    rows = (
+        *(row for row in pbe_resources() if "evaluate_points" not in row.function),
+        resource(f"evaluate_points<{inactive}>(double*)"),
+    )
+    with pytest.raises(ValueError, match="functional-specific XC point kernel"):
+        native_grid_xc_compiled_region_evidence(
+            rows,
+            shape=GridXcCompiledResourceShape(
+                npoint=4096, tile_points=256, nao=96, spins=2
+            ),
+            functional="PBE",
+            target=TARGET,
+            source_identity="missing-native-pbe",
+        )
