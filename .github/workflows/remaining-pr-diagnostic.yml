@@ -1,0 +1,63 @@
+name: Remaining PR diagnostic
+on:
+  push:
+    branches: [ci/remaining-pr-repair-20260930-astra]
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Inspect live heads, conflicts, failed jobs and scoped instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, urllib.request
+          root = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY']
+          def get(path, text=False):
+              req = urllib.request.Request(root + path, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  b = r.read().decode()
+              return b if text else json.loads(b)
+          def git(*args):
+              return subprocess.run(['git', *args], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+          prs = get('/pulls?state=open&per_page=100')
+          print('OPEN_PRS', [p['number'] for p in prs], flush=True)
+          for p in sorted(prs, key=lambda p: p['number']):
+              n = p['number']; h = p['head']['sha']; b = p['base']['sha']
+              print(f'::group::PR {n} {h}', flush=True)
+              print(json.dumps({k:p[k] for k in ('number','title','draft','updated_at')}), 'HEAD', p['head']['ref'], 'BASE', p['base']['ref'], b, flush=True)
+              d = get('/pulls/' + str(n))
+              print('STATE', d.get('mergeable'), d.get('mergeable_state'), flush=True)
+              r = git('merge-tree','--write-tree', h, b)
+              print('MERGE_TREE_RC', r.returncode, r.stdout[:45000], flush=True)
+              runs = get('/actions/runs?head_sha='+h+'&event=pull_request&per_page=50')['workflow_runs']
+              seen=set()
+              for run in runs:
+                  if run['workflow_id'] in seen: continue
+                  seen.add(run['workflow_id'])
+                  print('WORKFLOW',run['id'],run['name'],run['status'],run['conclusion'],flush=True)
+                  if run['conclusion'] not in ('failure','timed_out','cancelled'): continue
+                  jobs = get('/actions/runs/'+str(run['id'])+'/jobs?per_page=100')['jobs']
+                  for job in jobs:
+                      if job['conclusion'] not in ('failure','timed_out'): continue
+                      print('FAILED_JOB',job['id'],job['name'],json.dumps(job['steps']),flush=True)
+                      try:
+                          log=get('/actions/jobs/'+str(job['id'])+'/logs',text=True)
+                          lines=log.splitlines()
+                          print('\n'.join(lines[-180:]),flush=True)
+                      except Exception as e: print('LOG_UNAVAILABLE',str(e),flush=True)
+              print('::endgroup::',flush=True)
+          for path in ('python/generativeqc_compiler/AGENTS.md','src/integrals/AGENTS.md','.agents/notes/AGENTS.md'):
+              print('INSTRUCTIONS',path,git('show','origin/master:'+path).stdout,flush=True)
+          PY
