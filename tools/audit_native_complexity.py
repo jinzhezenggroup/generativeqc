@@ -305,6 +305,62 @@ def _matrix_chain_lhs(
     return None
 
 
+def _classify_high_order(
+    body: str,
+    context: str,
+    variables: tuple[str, ...],
+    dynamic_variables: tuple[str, ...],
+    constant_variables: tuple[str, ...],
+) -> tuple[str, str, str | None]:
+    matrix_lhs = _matrix_chain_lhs(body, context, dynamic_variables)
+    if matrix_lhs is not None:
+        return (
+            "matrix-chain-candidate",
+            "rewrite through TensorIR or shared dense linear algebra; symbolic degree is reducible",
+            matrix_lhs,
+        )
+
+    aliases = {match.group(1): match.group(2) for match in _ALIAS.finditer(context)}
+    for reduction in _REDUCTION.finditer(body):
+        lhs = reduction.group("lhs").strip()
+        rhs = reduction.group("rhs")
+        lhs_dependencies = _dependencies(lhs, dynamic_variables, aliases)
+        rhs_dependencies = _dependencies(rhs, dynamic_variables, aliases)
+        access_dependencies = [
+            _dependencies(index, dynamic_variables, aliases)
+            for index in _access_indices(rhs, aliases)
+        ]
+        access_dependencies = [item for item in access_dependencies if item]
+        if len(lhs_dependencies) >= 4 and any(
+            len(item) >= 4 for item in access_dependencies
+        ):
+            return (
+                "high-rank-output-materialization",
+                "inspect whether producer/consumer fusion can remove a full high-rank permutation or symmetrization pass",
+                lhs,
+            )
+        if len(rhs_dependencies) >= 4 and any(
+            len(item) >= 3 for item in access_dependencies
+        ):
+            return (
+                "high-rank-source-contraction",
+                "inspect provider/factorization or fuse-consume ownership; formal scaling is not assumed reducible",
+                lhs,
+            )
+
+    if constant_variables and len(dynamic_variables) < len(variables):
+        return (
+            "fixed-extent-inner-loop",
+            "treat fixed small dimensions as constant factors; consider unrolling/fusion before calling this a scaling hotspot",
+            None,
+        )
+    return (
+        "high-order-loop",
+        "profile and inspect algebra before choosing a rewrite; no reducibility proof is available",
+        None,
+    )
+
+
 def audit_text(
     text: str,
     *,
@@ -337,20 +393,35 @@ def audit_text(
         )
         chain = parents + [inner]
         variables = tuple(loop.variable for loop in chain if loop.variable is not None)
-        lhs = None
-        if len(set(variables)) >= minimum_depth:
-            body = text[inner.body_start : inner.body_end]
-            context = text[chain[-minimum_depth].start : inner.body_end]
-            lhs = _matrix_chain_lhs(body, context, variables)
+        constant_variables = tuple(
+            loop.variable
+            for loop in chain
+            if loop.variable is not None and loop.constant_extent is not None
+        )
+        dynamic_variables = tuple(
+            loop.variable
+            for loop in chain
+            if loop.variable is not None and loop.constant_extent is None
+        )
+        body = text[inner.body_start : inner.body_end]
+        context = text[chain[-minimum_depth].start : inner.body_end]
+        classification, recommendation, lhs = _classify_high_order(
+            body,
+            context,
+            variables,
+            dynamic_variables,
+            constant_variables,
+        )
         findings.append(
             LoopFinding(
                 path=path,
                 line=text.count("\n", 0, inner.start) + 1,
                 depth=inner.depth,
                 variables=variables,
-                classification=(
-                    "matrix-chain-candidate" if lhs is not None else "high-order-loop"
-                ),
+                effective_depth=len(set(dynamic_variables)),
+                constant_variables=constant_variables,
+                classification=classification,
+                recommendation=recommendation,
                 lhs=lhs,
             )
         )
@@ -411,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
         item for item in findings if item.classification == "matrix-chain-candidate"
     )
     payload = {
-        "schema": "generativeqc.native-complexity-audit.v1",
+        "schema": "generativeqc.native-complexity-audit.v2",
         "scanned_files": scanned,
         "high_order_loops": [asdict(item) for item in findings],
         "matrix_chain_candidates": [asdict(item) for item in candidates],
@@ -427,6 +498,7 @@ def main(argv: list[str] | None = None) -> int:
             suffix = f" -> {item.lhs}" if item.lhs is not None else ""
             print(
                 f"{item.path}:{item.line}: depth={item.depth} "
+                f"effective_depth={item.effective_depth} "
                 f"{item.classification}{suffix}"
             )
         if not findings:
