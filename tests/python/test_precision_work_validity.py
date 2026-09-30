@@ -40,6 +40,16 @@ int main(int argc, char** argv) {
   const std::vector<std::uint8_t> host_final_audit_mask{static_cast<std::uint8_t>(audited)};
   const std::vector<std::uint8_t> host_final_fock_reuse_mask{0};
   const struct { double item_budget_error; } requested_precision_policy{0};
+  const struct { bool incremental_direct_jk; } options{false};
+  const bool incremental_iteration_enabled = false;
+  const std::uint64_t incremental_rebuild_interval = 0;
+  const std::vector<double> host_incremental_max_abs_delta_density{0.0};
+  const bool bounded_direct_streaming = false;
+  const struct { std::vector<std::size_t> system_shell_quartet_offsets; } host{{0, 0}};
+  const std::vector<std::uint64_t> host_incremental_full_admitted_shell_quartets{0};
+  const std::vector<std::uint64_t> host_incremental_full_admitted_quartet_tiles{0};
+  const std::vector<std::uint64_t> host_incremental_delta_admitted_shell_quartets{0};
+  const std::vector<std::uint64_t> host_incremental_delta_admitted_quartet_tiles{0};
   generativeqc::scf::ScfResult result;
 """
         + publication
