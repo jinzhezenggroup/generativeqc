@@ -5,6 +5,7 @@ transforms are specified here. Their reverse derivatives use the existing
 TensorIR AD; no handwritten CC orbital/normal-ordering derivative is added.
 """
 
+import typing
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -65,7 +66,7 @@ def build_hamiltonian_programs(
         raise ValueError("dense CC gradient programs support at most 12 MOs")
     space = IndexSpace("complete_mo", "orbital", n)
     idx = tuple(Index(c, space) for c in "pqrs")
-    common = {
+    common: dict[str, typing.Any] = {
         "role": "parameter",
         "differentiable": True,
         "representation": "restricted_spatial",
