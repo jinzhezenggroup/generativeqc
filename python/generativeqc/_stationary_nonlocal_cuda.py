@@ -53,6 +53,13 @@ def resident_nonlocal_geometry(
     count = len(points)
     if count == 0 or nonlocal_owner.point_count != count:
         raise ValueError("resident nonlocal owner/grid point count differs")
+    resident_grid = state._source.cuda_resident_grid()
+    if resident_grid is None:
+        raise NotImplementedError(
+            "resident nonlocal geometry requires the CUDA molecular-grid lease"
+        )
+    if resident_grid.device != grid.device_id or resident_grid.point_count != count:
+        raise ValueError("resident molecular-grid lease differs from stationary grid")
     if count % sources.natom:
         raise ValueError("molecular grid point count is not atom-major uniform")
     points_per_atom = count // sources.natom
@@ -82,11 +89,12 @@ def resident_nonlocal_geometry(
             break
         for begin in range(0, count, tile_points):
             end = min(begin + tile_points, count)
-            with grid.feature_task(
-                points[begin:end],
+            point_pointer = resident_grid.points + 3 * begin * 8
+            with grid.feature_task_device_points(
+                point_pointer,
+                end - begin,
                 None,
                 ingredients,
-                defer_error_to_consumer=True,
             ) as task:
                 weights = state.grid.weights[begin:end]
                 raw = raw_weights[begin:end]
@@ -191,6 +199,8 @@ def resident_nonlocal_geometry(
         "nonlocal_seed_h2d_bytes": 0,
         "grid_owner_source": "implicit-atom-major-index",
         "grid_owner_h2d_bytes": 0,
+        "grid_point_source": "exact-native-resident-grid",
+        "grid_point_h2d_bytes": 0,
         "nonlocal_dense_pair_capacity": count * count,
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
