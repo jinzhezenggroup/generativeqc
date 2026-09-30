@@ -28,15 +28,16 @@
         "scf-option:incremental_direct_jk"
       ],
       "owner_issues": [
-        990
+        1598
       ],
       "sources": [
         "src/scf/types.hpp"
       ],
-      "rationale": "Exact incremental Direct-J/K remains default-off until provider-owned work accounting, matched full-endpoint timing, RHF/UHF coverage, geometry-change behavior, and composition with precision policy are complete.",
-      "revisit_condition": "Reclassify only after #990 retains complete cold, warm, and changed-geometry endpoint evidence with numerical parity and a workload/resource guard, or after the experiment is retired.",
+      "rationale": "The exact incremental Direct-J/K implementation is merged via #990/#1579, but automatic selection remains unqualified: bounded-streaming provider-owned accounting, matched complete endpoints, RHF/UHF workload coverage, geometry-change behavior, and composition with precision policy still require a promotion decision under #1598.",
+      "revisit_condition": "Reclassify only after #1598 retains complete cold, warm, and changed-geometry endpoint evidence with numerical parity and a workload/resource guard, or records durable negative evidence and keeps the route opt-in.",
       "evidence": [
         "issue:#990",
+        "pr:#1579",
         "issue:#1598"
       ]
     },
