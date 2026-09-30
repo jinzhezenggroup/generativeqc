@@ -42,7 +42,9 @@ def resident_nonlocal_geometry(
     """
     if type(tile_points) is not int or tile_points <= 0:
         raise ValueError("resident nonlocal tile_points must be a positive integer")
-    if not callable(getattr(nonlocal_sources, "geometry_external_device", None)):
+    if not callable(
+        getattr(nonlocal_sources, "geometry_external_device_molecular", None)
+    ):
         raise TypeError("nonlocal stationary owner lacks the resident seed consumer")
     if not callable(getattr(nonlocal_owner, "seed_from_snapshot", None)):
         raise TypeError("resident nonlocal owner lacks the final-state feature handoff")
