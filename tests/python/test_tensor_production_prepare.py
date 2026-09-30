@@ -1,8 +1,8 @@
 """Production TensorIR preparation shared by CPU/CUDA generators."""
 
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 from generativeqc_compiler.tensor import (
     Index,
