@@ -13,7 +13,8 @@ from __future__ import annotations
 import typing
 from time import perf_counter
 
-import numpy as np
+if typing.TYPE_CHECKING:
+    import numpy as np
 
 
 def resident_nonlocal_geometry(
