@@ -46,6 +46,8 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
         "stationary_geometry_enqueue",
         "stationary_geometry_external_device",
         "stationary_geometry_external_device_enqueue",
+        "stationary_geometry_molecular_enqueue",
+        "stationary_geometry_external_device_molecular_enqueue",
         "stationary_geometry_drain",
         "stationary_finish",
         "stationary_finish_reduced",
