@@ -1,4 +1,4 @@
-name: One-shot WB97M-V restack
+name: One-shot WB97M-V child restack
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml
-      - name: Preserve and validate exact parent merges
+      - name: Clean parent merges without discarding concurrent commits
         shell: bash
         run: |
           set -euo pipefail
@@ -36,11 +36,10 @@ jobs:
           from pathlib import Path
 
           ROOT = Path.cwd()
-          OUT = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-restack'
+          OUT = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-children'
           OUT.mkdir()
           targets = (
-              (1611, 'perf/1611-stationary-implicit-grid-owners', '338405dabad4ae798b20225f8163b9acf2b760f1', '489d0f68adec513de9ea4e6b4d273a5b69f9db4e'),
-              (1612, 'perf/1612-wb97mv-resident-grid-points', '23e42ece2ae7e261fa442bd1a7209a0f6c4b939d', 1611),
+              (1612, 'perf/1612-wb97mv-resident-grid-points', '23e42ece2ae7e261fa442bd1a7209a0f6c4b939d', '077f6b3554ab140c638dc25d48a5e141461180a3'),
               (1613, 'perf/1613-stationary-resident-grid-weights', '26abeb90ff12bcf2a2532af25be9a7a50e802818', 1612),
           )
           reports = []
@@ -52,25 +51,28 @@ jobs:
                   raise RuntimeError(result.stderr or result.stdout)
               return result
 
-          for number, branch, expected, parent in targets:
-              record = {'pr': number, 'branch': branch, 'expected_head': expected}
+          for number, branch, minimum, parent in targets:
+              record = {'pr': number, 'branch': branch, 'minimum_ancestor': minimum}
               directory = OUT / str(number)
               directory.mkdir()
               try:
                   target = completed[parent] if isinstance(parent, int) else parent
                   record['target'] = target
                   remote = run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.split()
-                  if not remote or remote[0] != expected:
-                      raise RuntimeError('remote head moved; no changes made')
-                  with tempfile.TemporaryDirectory(prefix='wb97mv-restack-') as temporary:
+                  if not remote:
+                      raise RuntimeError('branch is unavailable')
+                  head = remote[0]
+                  record['starting_head'] = head
+                  run('git', 'fetch', '--no-tags', 'origin', head)
+                  run('git', 'merge-base', '--is-ancestor', minimum, head)
+                  (directory / 'concurrent-commits.patch').write_text(run('git', 'diff', minimum, head).stdout)
+                  with tempfile.TemporaryDirectory(prefix='wb97mv-child-') as temporary:
                       work = Path(temporary) / 'checkout'
-                      run('git', 'worktree', 'add', '--detach', str(work), expected)
+                      run('git', 'worktree', 'add', '--detach', str(work), head)
                       try:
                           run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', target, cwd=work)
-                          tests = ['test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py']
-                          if number >= 1612:
-                              tests.append('test_wb97mv_resident_grid_points.py')
-                          if number >= 1613:
+                          tests = ['test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py']
+                          if number == 1613:
                               tests.append('test_wb97mv_resident_grid_weights.py')
                           env = dict(os.environ)
                           env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
@@ -81,20 +83,20 @@ jobs:
                           record['test_returncode'] = result.returncode
                           record['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-12:])
                           if result.returncode:
-                              raise RuntimeError('focused tests failed; branch was not pushed')
+                              raise RuntimeError('focused tests failed; no push')
                           run('git', 'diff', '--cached', '--check', cwd=work)
-                          message = (f'fix(review): restack WB97M-V PR #{number} after owner repairs\n\n'
-                                     'Preserve concurrent host-kernel tests and both parent histories.\n'
+                          message = (f'fix(review): cleanly restack WB97M-V child #{number}\n\n'
+                                     'Preserve all concurrent descendant commits and both histories.\n'
                                      'Selected regressions passed; full PR CI is still required.\n\n'
                                      'Agent: ChatGPT\nModel: GPT-6 Astra Pro')
-                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
-                          head = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
-                          record['commit'] = head
+                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '--allow-empty', '-m', message, cwd=work)
+                          new_head = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
+                          record['commit'] = new_head
                           record['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
-                          (directory / 'integration.patch').write_text(run('git', 'diff', expected, head, cwd=work).stdout)
-                          (directory / 'parent-relative.patch').write_text(run('git', 'diff', target, head, cwd=work).stdout)
+                          (directory / 'integration.patch').write_text(run('git', 'diff', head, new_head, cwd=work).stdout)
+                          (directory / 'parent-relative.patch').write_text(run('git', 'diff', target, new_head, cwd=work).stdout)
                           run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
-                          completed[number] = head
+                          completed[number] = new_head
                           record['pushed'] = True
                       finally:
                           run('git', 'worktree', 'remove', '--force', str(work), check=False)
@@ -106,10 +108,10 @@ jobs:
           if any('error' in report for report in reports):
               raise SystemExit(1)
           PY
-      - name: Retain restack validation
+      - name: Retain child validation and concurrent changes
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: wb97mv-reviewed-restack
-          path: ${{ runner.temp }}/wb97mv-restack/
+          name: wb97mv-child-restack
+          path: ${{ runner.temp }}/wb97mv-children/
           retention-days: 1
