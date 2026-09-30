@@ -54,8 +54,7 @@ from generativeqc_compiler.tensor.ir import (
     slice_tensor,
     transpose,
 )
-from generativeqc_compiler.tensor.optimize import optimize as tensor_optimize
-from generativeqc_compiler.tensor.prepare import prepare_for_backend
+from generativeqc_compiler.tensor.optimize import optimize, prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
 
@@ -94,7 +93,7 @@ for _name, _value in {
     "VJPProgram": VJPProgram,
     "linearize": linearize,
     "transpose_program": transpose_program,
-    "optimize": tensor_optimize,
+    "optimize": optimize,
 }.items():
     setattr(_tensor_package, _name, _value)
 
@@ -129,8 +128,8 @@ def _prepare_production(
 ) -> Program:
     return prepare_for_backend(
         program,
-        backend=backend,
-        preserve_contraction_order=preserve_reduction_order,
+        backend,
+        preserve_reduction_order=preserve_reduction_order,
     )
 
 

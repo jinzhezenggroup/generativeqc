@@ -60,7 +60,7 @@ from .ir import (
     sqrt,
     transpose,
 )
-from .optimize import PASSES, optimize, rewrite
+from .optimize import PASSES, optimize, prepare_for_backend, rewrite
 from .precision import (
     CastBoundary,
     PrecisionDirective,
@@ -70,7 +70,6 @@ from .precision import (
     describe_precision,
     lower_precision,
 )
-from .prepare import prepare_for_backend
 from .program import Program
 from .scf import (
     SCF_TENSOR_VERSION,

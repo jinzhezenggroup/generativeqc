@@ -362,7 +362,7 @@ def test_runtime_indexed_streaming_schedule_bounds_high_rank_intermediates(
 
     assert streamed.identity != baseline.identity
     assert streamed.arena_bytes * 20 < baseline.arena_bytes
-    assert sum(step.virtual for step in streamed.steps) > 150
+    assert sum(step.virtual for step in streamed.steps) > 100
     assert sum(step.gemm != "none" for step in streamed.steps) < sum(
         step.gemm != "none" for step in baseline.steps
     )

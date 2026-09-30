@@ -35,11 +35,11 @@ from .batch_schedule import (
     index_table_length,
     index_table_values,
 )
-from .complexity import reassociate_einsums
 from .cuda_dtype import program_precision, scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
 from .ir import TRANSCENDENTALS, Node
+from .optimize import prepare_for_backend
 from .precision import PrecisionSchedule, ValuePrecision, describe_precision
 from .program import Program, _hash
 from .types import checked_size
@@ -728,8 +728,9 @@ def plan_cuda(
     preprocessing, the execution schedule shares the resulting SSA nodes and
     never uses an external chemistry program.
 
-    Symbolic contraction reassociation is enabled by default before CUDA
-    storage/layout planning. It rewrites only when the compiler proves a
+    Shared production preparation is enabled by default before CUDA
+    storage/layout planning. It runs exact optimizer passes and rewrites
+    contractions only when the compiler proves a
     strictly lower symbolic degree. Set `reassociate_contractions=False` to
     preserve the original contraction tree. Programs carrying an explicit
     precision-execution contract keep their original tree until intermediate
@@ -739,11 +740,11 @@ def plan_cuda(
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
     if type(reassociate_contractions) is not bool:
         raise TypeError("reassociate_contractions must be a Boolean")
-    if (
-        reassociate_contractions
-        and program.provenance.get("precision_execution") is None
-    ):
-        program = reassociate_einsums(program)
+    program = prepare_for_backend(
+        program,
+        "cuda",
+        preserve_reduction_order=not reassociate_contractions,
+    )
     checked_size(max_bytes, "tensor byte budget")
     checked_size(library_bytes, "library workspace")
     checked_size(provider_bytes, "provider allowance")
@@ -759,7 +760,7 @@ def plan_cuda(
             "CUB reduction provider requires stream_reductions for the pilot"
         )
     nodes, inputs, outputs = _occurrences(program, schedule.recompute)
-    mixed_accumulation_steps: frozenset[int] = frozenset()
+    mixed_accumulation_steps = frozenset[int]()
     if program.provenance.get("precision_execution") is not None:
         program_names = program.debug_names
         precision_values = {

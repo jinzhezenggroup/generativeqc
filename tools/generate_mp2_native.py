@@ -17,7 +17,7 @@ from generativeqc_compiler.method.mp2_schedule import (
 )
 from generativeqc_compiler.mp2.equations import cpu_capacity, energy_program
 from generativeqc_compiler.tensor.cpu_emit import emit_cpu
-from generativeqc_compiler.tensor.prepare import prepare_for_backend
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 from tools.generativeqc_posthf.plan_spec import native_header as block_capacity_header
 
@@ -39,7 +39,7 @@ def cpu_header() -> typing.Any:
     for tile in (1, 2, 4, 8):
         program = prepare_for_backend(
             energy_program((1, 1, tile, tile)),
-            backend="cpu",
+            "cpu",
         )
         lines.append(emit_cpu(program, function_name=f"tile_{tile}"))
         feeds = {"g": "g", "x": "x", "ei": "&ei", "ej": "&ej", "ea": "ea", "eb": "eb"}
@@ -127,7 +127,7 @@ def cuda_sources(directory: typing.Any, architectures: typing.Any) -> None:
         for tile in (1, 2, 4, 8):
             program = prepare_for_backend(
                 energy_program((1, 1, tile, tile)),
-                backend="cuda",
+                "cuda",
             )
             plan = plan_cuda(
                 program,
