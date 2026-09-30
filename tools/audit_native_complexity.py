@@ -271,7 +271,7 @@ def _matrix_chain_lhs(
         access_dependencies = [item for item in access_dependencies if item]
         rank2_accesses = [item for item in access_dependencies if len(item) <= 2]
         if (
-            len(lhs_dependencies) <= 2
+            len(lhs_dependencies) == 2
             and len(rhs_dependencies) >= 4
             and len(rank2_accesses) >= 3
             and set().union(*rank2_accesses) >= set(loop_variables[-4:])
