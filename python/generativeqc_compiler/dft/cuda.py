@@ -328,6 +328,16 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        lib.grid_cuda_density_device_v1.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_uint,
+            ct.c_void_p,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
         lib.grid_cuda_source_v1.argtypes = [
             ct.c_void_p,
             DOUBLE,
@@ -469,6 +479,66 @@ class CudaGrid:
             self._fallback_reason = "missing_orbitals"
             self._source_statistics = {}
             self._call("grid_cuda_density_v1", self._handle, pointer(d), d.size)
+            self._density_ready = True
+
+    def set_density_device(
+        self,
+        *,
+        device_id: typing.Any,
+        alpha: typing.Any,
+        beta: typing.Any,
+        matrix_elements: typing.Any,
+        spins: typing.Any,
+        source_stream: typing.Any,
+    ) -> None:
+        """Borrow a token-checked resident KS density without host staging.
+
+        Native execution copies/splits on the producer stream and establishes
+        device-side ordering with this grid owner's stream. The external source
+        allocation remains owned by the KS plan.
+        """
+        with self._lock:
+            self._check_open()
+            device_id = checked_int(device_id, "resident density device", low=0)
+            matrix_elements = checked_int(
+                matrix_elements, "resident density matrix elements", low=1
+            )
+            spins = checked_int(spins, "resident density spins", low=1)
+            if (
+                device_id != self.device_id
+                or matrix_elements != self.plan.nao * self.plan.nao
+                or spins not in (1, 2)
+                or type(alpha) is not int
+                or alpha <= 0
+                or (spins == 2 and (type(beta) is not int or beta <= 0))
+                or (spins == 1 and beta not in (None, 0))
+                or type(source_stream) is not int
+                or source_stream <= 0
+            ):
+                raise ValueError("incompatible resident CUDA density binding")
+            self._density_ready = False
+            self._source_stamp = None
+            self._source_kind = "density_matrix"
+            self._fallback_reason = "missing_orbitals"
+            self._source_statistics = {}
+            before = perf_counter()
+            self._call(
+                "grid_cuda_density_device_v1",
+                self._handle,
+                ct.c_void_p(alpha),
+                ct.c_void_p(0 if beta is None else beta),
+                matrix_elements,
+                spins,
+                ct.c_void_p(source_stream),
+            )
+            self._source_kind = "resident_density"
+            self._fallback_reason = None
+            self._source_statistics = {
+                "source_kind": self._source_kind,
+                "source_upload_seconds": perf_counter() - before,
+                "source_upload_bytes": 0,
+                "source_device_copy_bytes": matrix_elements * 8 * (2 if spins == 2 else 1),
+            }
             self._density_ready = True
 
     def set_source(
