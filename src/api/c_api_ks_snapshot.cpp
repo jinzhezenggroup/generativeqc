@@ -590,7 +590,8 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
   try {
     auto status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    if (count != 15 * snapshot->atoms) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const auto source_count = snapshot->token.identity.model.range_correction ? 5U : 4U;
+    if (count != source_count * 3 * snapshot->atoms) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     std::vector<double> candidate;
     std::array<std::uint64_t, 9> usage{};
     std::string detail;

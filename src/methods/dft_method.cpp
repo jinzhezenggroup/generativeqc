@@ -1014,8 +1014,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if GENERATIVEQC_HAS_CUDA
-    if (!cuda_ || !execution_plan_.range_exchange || !range_strategy_ || !system_.ecp_terms.empty())
+    if (!cuda_ || !system_.ecp_terms.empty() ||
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE)
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const bool range_exchange = execution_plan_.range_exchange;
+    if (range_exchange != range_strategy_.has_value()) {
+      detail = "CUDA stationary integral gradient has inconsistent range-exchange ownership";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
       detail = "cached CUDA stationary D/W must be supplied together";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -1084,7 +1090,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // not admitted by an unusually small provider budget.
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
-    candidate.reserve(5 * nc);
+    candidate.reserve((range_exchange ? 5 : 4) * nc);
     std::vector<double> hcore, pulay, value;
     status = scf::execute_prepared_cuda_stationary_one_electron_pair(
         fock_.cuda_direct_source(), resident_weights.density, resident_weights.weighted_density,
@@ -1100,9 +1106,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     work[5] += one.device_to_host_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
-    status = scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
-        fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
-        resident_density.matrix_elements, value, detail);
+    status = range_exchange
+                 ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+                       fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
+                       resident_density.matrix_elements, value, detail)
+                 : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+                       fock_, resident_density.alpha, resident_density.beta,
+                       resident_density.matrix_elements, value, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     candidate.insert(candidate.end(), value.begin(), value.end());
     output = std::move(candidate);
