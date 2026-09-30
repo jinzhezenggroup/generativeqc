@@ -23,7 +23,9 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
     assert "resident_final_stationary_weights" in bridge
     assert "resident_weights.density" in bridge
     assert "resident_weights.weighted_density" in bridge
-    assert "execute_cuda_stationary_one_electron_pair(" in bridge
+    assert "execute_prepared_cuda_stationary_one_electron_pair(" in bridge
+    assert "fock_.cuda_direct_source()" in bridge
+    assert "execute_cuda_stationary_one_electron_pair(" in bridge  # bounded fallback
     assert "auto density = (*cached_density)[0]" not in bridge
     assert "execute_cuda_one_electron_gradient(" not in bridge
 
@@ -86,8 +88,10 @@ def test_complete_cuda_force_matches_independent_engine(
             assert warm.iterations == 1
         work = batch._stationary_cuda_execution.last_work
         assert work["prepared_execution_reused"]
-        assert work["ao_collocation_point_visits"] == 2 * work["grid_points"]
+        assert work["ao_collocation_point_visits"] == work["grid_points"]
+        assert work["geometry_point_visits"] == 2 * work["grid_points"]
         assert work["nonlocal_execution"] == "resident-full-grid-device-seeds"
+        assert work["nonlocal_feature_source"] == "exact-final-scf-device-binding"
         assert work["nonlocal_feature_d2h_bytes"] == 0
         assert work["nonlocal_seed_h2d_bytes"] == 0
         assert work["nonlocal_dense_pair_capacity"] == work["grid_points"] ** 2
@@ -111,6 +115,7 @@ def test_complete_cuda_force_matches_independent_engine(
         assert native["final_state_export_d2h_bytes"] == 0
         assert native["final_state_export_reads"] == 0
         assert native["final_state_export_synchronizations"] == 0
+        assert native["one_electron_h2d_bytes"] == 0
         energy_only = batch.execute(strict=True, properties=("energy",)).items[0]
         assert cold.executed_backend == warm.executed_backend == "cuda"
         assert energy_only.forces is None

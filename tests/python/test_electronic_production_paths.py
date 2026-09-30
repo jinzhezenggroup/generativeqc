@@ -119,6 +119,17 @@ def test_repository_production_path_ledger_is_valid() -> None:
         assert set(levels) == set(EVIDENCE_LEVELS)
 
 
+def test_production_scientific_owner_cannot_live_under_tools(tmp_path: Path) -> None:
+    payload = _fixture()
+    row = typing.cast("list[dict[str, object]]", payload["rows"])[0]
+    row["scientific_owner"] = "tools/science.py"
+    errors = validate_production_path_ledger(payload, root=tmp_path)
+    assert (
+        "hf-energy-cpu-direct.scientific_owner production science must not live "
+        "under tools/: tools/science.py" in errors
+    )
+
+
 def test_production_row_requires_existing_actual_path_anchors(tmp_path: Path) -> None:
     payload = _fixture()
     _write_fixture_files(tmp_path)

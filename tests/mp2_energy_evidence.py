@@ -34,6 +34,7 @@ def main() -> typing.Any:
     helpers = runpy.run_path(str(ROOT / "tests/python/test_mp2_energy.py"))
     files = [
         *sorted((ROOT / "tools/generativeqc_mp2").glob("*.py")),
+        *sorted((ROOT / "python/generativeqc_compiler/mp2").glob("*.py")),
         ROOT / "tests/python/test_mp2_energy.py",
         Path(__file__).resolve(),
     ]

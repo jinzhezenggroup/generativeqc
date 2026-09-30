@@ -6,8 +6,9 @@ Complete CPU residual/iteration semantics are documented in
 [RCCSD CPU solver](rccsd_bc.md), while the current native/public CUDA execution
 and acceptance boundary is documented in [GPU RCCSD](rccsd_gpu.md).
 
-`tools.generativeqc_cc` provides the internal FP64 CPU scientific facade used for
-independent equation and solver validation. Public capability is determined by
+`generativeqc_compiler.cc` owns the audited RCCSD energy/residual TensorIR
+science. `tools.generativeqc_cc` remains the internal FP64 orchestration and
+validation facade. Public capability is determined by
 the native registry and the generated method table, not by this validation
 facade.
 
@@ -65,7 +66,8 @@ E_corr = 2 sum_ia F[i,a] t1[i,a]
 E_total = E_ref + E_corr
 ```
 
-`inventory.py` is the auditable equation source: 5 named energy contractions
+`python/generativeqc_compiler/cc/inventory.py` is the auditable equation source:
+5 named energy contractions
 E01–E05 and 30 named singles contractions S01–S30, each with exact integer
 coefficients, explicit Einstein indices and operand names. `build_program`
 lowers that unshared inventory to #145 TensorIR, retaining all individual terms
