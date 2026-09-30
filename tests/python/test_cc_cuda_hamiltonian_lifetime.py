@@ -88,8 +88,8 @@ struct CudaRawHamiltonianView { std::span<const double> density,g,h,rotation; };
 struct CudaParameterResponseView {
   std::span<const double> foo,fov,fvv,ovov,ovvo,oovv,ovvv,ovoo,oooo,vvvv;
 };
-struct CudaHamiltonianResponseResult {
-  TrackingVector hcore,eri,overlap,rotation_gradient,stationarity,orbital_rhs;
+struct CudaHamiltonianSmallResponseResult {
+  TrackingVector hcore,overlap,rotation_gradient,stationarity,orbital_rhs;
 };
 struct CudaHamiltonianResponseOwner { struct Impl; };
 namespace generated {
@@ -100,19 +100,25 @@ struct CudaState {
     *response_arena{};
   int* error{}; std::size_t o{},v{}; cudaStream_t stream{};
 };
-struct DeviceHamiltonianOutputs {
-  double *hcore,*eri,*overlap,*rotation_gradient,*stationarity,*orbital_rhs;
+struct DeviceHamiltonianSmallOutputs {
+  double *hcore,*overlap,*rotation_gradient,*stationarity,*orbital_rhs;
 };
+struct DeviceEriWeightOutput { double* eri; };
 struct DeviceOrbitalOutputs { double* d_fov; };
-std::size_t hamiltonian_weights_arena_elements(std::size_t,std::size_t) {return 1024;}
-std::size_t fock_weights_arena_elements(std::size_t,std::size_t) {return 1024;}
+std::size_t hamiltonian_small_weights_arena_elements(std::size_t,std::size_t) {return 768;}
+std::size_t hamiltonian_eri_weights_arena_elements(std::size_t,std::size_t) {return 512;}
+std::size_t fock_small_weights_arena_elements(std::size_t,std::size_t) {return 768;}
 std::size_t orbital_jvp_arena_elements(std::size_t,std::size_t) {return 1024;}
-DeviceHamiltonianOutputs run_hamiltonian_weights_cuda(CudaState& s) {
+DeviceHamiltonianSmallOutputs run_hamiltonian_small_weights_cuda(CudaState& s) {
   if(fail_generated)throw std::runtime_error("injected generated failure");
-  auto* p=s.response_arena; return {p,p,p,p,p,p};
+  auto* p=s.response_arena; return {p,p,p,p,p};
 }
-DeviceHamiltonianOutputs run_fock_weights_cuda(CudaState& s) {
-  return run_hamiltonian_weights_cuda(s);
+DeviceEriWeightOutput run_hamiltonian_eri_weights_cuda(CudaState& s) {
+  if(fail_generated)throw std::runtime_error("injected generated failure");
+  return {s.response_arena};
+}
+DeviceHamiltonianSmallOutputs run_fock_small_weights_cuda(CudaState& s) {
+  return run_hamiltonian_small_weights_cuda(s);
 }
 DeviceOrbitalOutputs run_orbital_jvp_cuda(CudaState& s) {
   if(fail_generated)throw std::runtime_error("injected generated failure");
@@ -149,8 +155,9 @@ int main(int argc,char** argv) {
   CudaParameterResponseView parameters{p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9]};
   bool threw=false;
   try {
-    if(op=="hamiltonian") (void)owner->hamiltonian(parameters,1.0);
-    else if(op=="fock") (void)owner->fock(matrix);
+    if(op=="hamiltonian_small") (void)owner->hamiltonian_small(parameters,1.0);
+    else if(op=="hamiltonian_eri") (void)owner->hamiltonian_eri(parameters,1.0);
+    else if(op=="fock_small") (void)owner->fock_small(matrix);
     else (void)owner->orbital_jvp(matrix);
   } catch(const std::exception&) {threw=true;}
   const bool expected_failure=mode=="copy" || mode=="sync" || mode=="generated" || mode=="invalid";
@@ -162,7 +169,7 @@ int main(int argc,char** argv) {
   if(!expected_failure && sync_count!=1) {std::cerr<<"extra normal-path fence";return 8;}
   // The same retained owner must remain reusable after an injected failure.
   fail_copy=fail_sync=0;fail_generated=false;
-  try {(void)owner->fock(matrix);}catch(...) {return 9;}
+  try {(void)owner->fock_small(matrix);}catch(...) {return 9;}
   return queued.empty() && active_device==before_device ? 0 : 10;
 }
 """
@@ -218,14 +225,23 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         *(
             (mode, op, 0)
             for mode in ("success", "device", "sync", "generated")
-            for op in ("hamiltonian", "fock", "orbital")
+            for op in ("hamiltonian_small", "hamiltonian_eri", "fock_small", "orbital")
         ),
         *(
             ("copy", op, i)
-            for op, count in (("hamiltonian", 18), ("fock", 8), ("orbital", 3))
+            for op, count in (
+                ("hamiltonian_small", 17),
+                ("hamiltonian_eri", 13),
+                ("fock_small", 7),
+                ("orbital", 3),
+            )
             for i in range(1, count + 1)
         ),
-        *(("invalid", "hamiltonian", i) for i in range(10)),
+        *(
+            ("invalid", op, i)
+            for op in ("hamiltonian_small", "hamiltonian_eri")
+            for i in range(10)
+        ),
     ],
 )
 def test_response_call_owns_device_and_host_lifetimes(

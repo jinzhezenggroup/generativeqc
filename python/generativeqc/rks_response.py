@@ -262,7 +262,9 @@ class _RKSIntegralSourceView:
         self.atoms = tuple(basis.atoms)
         self.shells = tuple(basis.shells)
         self.shell_sizes = tuple(
-            (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
+            2 * shell.angular_momentum + 1
+            if basis.representation == "real_spherical"
+            else (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
             for shell in basis.shells
         )
         if sum(self.shell_sizes) != basis.nao:
@@ -354,6 +356,9 @@ class _PreparedRKSJBackend:
         }
 
     def validate_reference(self, reference: typing.Any) -> typing.Self:
+        # Identity alone does not prove the provider is live. Zero-RHS solves
+        # can bypass evaluate(), so reject closure at this validation boundary.
+        self._plan._ensure_open()
         for name, expected in (
             ("geometry_hash", self.geometry_hash),
             ("basis_hash", self.basis_hash),

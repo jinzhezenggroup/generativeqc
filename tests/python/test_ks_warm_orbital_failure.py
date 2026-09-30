@@ -65,6 +65,7 @@ struct Owner {
   bool device_chunk_mode = false, is_active = true, is_failed = false;
   bool warm_ready = true, warm_orbitals_ready = false, warm_updates = true;
   bool warm_energy_baseline = false, final_state_ready = false;
+  bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   double warm_energy = std::numeric_limits<double>::infinity();
   std::size_t elements = 8;
   std::uint64_t final_generation = 0, generation = 7;

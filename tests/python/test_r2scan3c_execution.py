@@ -304,7 +304,9 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
         force, work = batch._public_dft_cuda_force(0, WATER)
 
     assert force.shape == (3, 3)
-    assert work["primitive_records"] == 12_134_769
+    assert work["primitive_records"] == 17_408
+    assert work["full_range_derivative_route"] == "prepared-direct-shell"
+    assert work["full_range_ao_task_domain_elided"] is True
     assert work["primitive_record_page_budget"] == 16_000_000
     assert (
         0 < work["primitive_page_peak_records"] <= work["primitive_record_page_budget"]

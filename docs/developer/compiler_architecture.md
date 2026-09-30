@@ -11,6 +11,8 @@ NumPy remains the existing dependency for recurrence/reference arithmetic.
 | --- | --- | --- |
 | `integral` | IntegralIR, scalar algebra, recurrence lowering, integral schedules and promotion | `common` |
 | `tensor` | TensorIR, AD, optimization, planning, tensor CUDA emission/execution | `common` |
+| `cc` | Production RCCSD energy/residual scientific inventory and TensorIR construction | `tensor`, `common` |
+| `mp2` | Production canonical restricted MP2 TensorIR energy equations | `tensor`, `common` |
 | `array_api` | Bounded symbolic array frontend that lowers ordinary array expressions directly to TensorIR; no method/runtime policy | `tensor` |
 | `dft` | Discrete grids, AO jets, density ingredients, prepared tile execution | `common`; `ao_cuda` alone also uses the existing scalar `integral.expr` and `integral.cuda` |
 | `xc` | Audited functional expressions, derivatives, point coefficients and XC execution | `common`, `integral`, `dft` |
@@ -217,6 +219,13 @@ The former tools/generativeqc_codegen, tools/generativeqc_tensor, tools/generati
 tools/generativeqc_dft forwarding packages were removed rather than retained as
 compatibility aliases. Repository generators and tests import canonical owners
 directly; generated-artifact identities therefore contain no shim bytes.
+
+The production RCCSD energy/residual and canonical MP2 energy equations are also
+owned by `generativeqc_compiler.cc` and `generativeqc_compiler.mp2`. Narrow
+`tools.generativeqc_cc.{inventory,equations,doubles}` and
+`tools.generativeqc_mp2.equations` module aliases remain temporarily for
+repository callers while they migrate; production-path ledgers may not name a
+`tools/` scientific owner.
 
 ## Structural verification
 

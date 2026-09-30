@@ -76,7 +76,7 @@ constexpr std::uint64_t kGeneratedStreamingFockShellClassMask=1, kNativeStreamin
 constexpr unsigned kSchwarzThreads=32;
 #define METADATA(F) F(system_shell_offsets) F(system_shell_pair_offsets) F(shell_direct_ao_offsets) \
  F(shell_pair_systems) F(shell_pair_first) F(shell_pair_second) F(shell_pair_primitive_offsets) \
- F(direct_ao_shells) F(direct_ao_angular)
+ F(direct_ao_shells) F(direct_ao_angular) F(shell_ao_offsets)
 struct HostBatch {
   std::size_t nbf=1, direct_nbf=1;
 #define V(name) std::vector<std::int64_t> name{0,1};

@@ -120,6 +120,16 @@ struct ArenaLayout {
   std::size_t density{};
   std::size_t next_density{};
   std::size_t fock{};
+  /** #990 exact-linear incremental Direct-J/K retained state. */
+  std::size_t incremental_anchor_density{};
+  std::size_t incremental_anchor_fock{};
+  std::size_t incremental_delta_updates{};
+  std::size_t incremental_full_build{};
+  std::size_t incremental_max_abs_delta_density{};
+  std::size_t incremental_full_admitted_shell_quartets{};
+  std::size_t incremental_delta_admitted_shell_quartets{};
+  std::size_t incremental_full_admitted_quartet_tiles{};
+  std::size_t incremental_delta_admitted_quartet_tiles{};
   std::size_t residual{};
   std::size_t weighted_density{};
   std::size_t total_density{};
@@ -163,7 +173,7 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
                  std::size_t spin_count, bool persistent_eri, bool transformed_direct,
                  bool shell_class_profiling, bool inactive_eigensolver_profiling,
                  bool bounded_fock_class_timing, bool bounded_direct_streaming,
-                 bool mixed_precision_fock, ArenaLayout& layout);
+                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout);
 
 /** Borrow an array from the already allocated and validated arena. */
 template <typename T>

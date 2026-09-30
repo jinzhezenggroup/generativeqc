@@ -259,6 +259,17 @@ def validate_production_path_ledger(
                 )
             seen_keys.add(key)
 
+        if (
+            status == "production"
+            and _is_nonempty_string(row["scientific_owner"])
+            and PurePosixPath(typing.cast("str", row["scientific_owner"])).parts[0]
+            == "tools"
+        ):
+            errors.append(
+                f"{row_id_text}.scientific_owner production science must not live "
+                f"under tools/: {row['scientific_owner']}"
+            )
+
         for field in PATH_FIELDS:
             value = row[field]
             if not _is_nonempty_string(value):

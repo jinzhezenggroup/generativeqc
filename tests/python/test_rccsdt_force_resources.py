@@ -77,6 +77,7 @@ def test_native_force_exact_cap_and_nested_live_allocations(
     assert result.returncode == 0, result.stdout + result.stderr
     record = json.loads(result.stdout)
     assert record["nested_peak"] + record["retained"] <= record["planned_peak"]
+    assert record["source_reads"] > 0
     # Ensure allocator interposition actually observed generated response work.
     assert record["largest_allocation"] > 500_000
 
@@ -93,6 +94,7 @@ CPP = r"""
 #include "cc/rccsdt_force.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
+#include "posthf/raw_source.hpp"
 #include "runtime/execution_context.hpp"
 
 namespace trace {
@@ -124,6 +126,25 @@ void* operator new[](std::size_t n) { return ::operator new(n); }
 void operator delete[](void* p) noexcept { ::operator delete(p); }
 void operator delete[](void* p,std::size_t) noexcept { ::operator delete(p); }
 
+class CountingSource final : public generativeqc::integrals::ElectronInteractionSource {
+ public:
+  explicit CountingSource(const generativeqc::posthf::RawSource& source) : source_(source) {}
+  const generativeqc::core::System& orbital() const override { return source_.orbital(); }
+  std::size_t nbf() const override { return source_.nbf(); }
+  std::size_t naux() const override { return source_.naux(); }
+  std::size_t retained_numeric_bytes() const override { return source_.retained_numeric_bytes(); }
+  bool supports(Operator op) const noexcept override { return source_.supports(op); }
+  void read(Operator op,const std::array<std::size_t,4>& begin,
+            const std::array<std::size_t,4>& count,double* out,
+            std::size_t elements) const override {
+    ++reads;
+    source_.read(op,begin,count,out,elements);
+  }
+  mutable std::size_t reads=0;
+ private:
+  const generativeqc::posthf::RawSource& source_;
+};
+
 int main(int argc,char** argv) {
   try {
     if(argc!=2) return 1;
@@ -150,30 +171,34 @@ int main(int argc,char** argv) {
     method.correlation_memory_budget_bytes=256ULL<<20;
     auto state=generativeqc::methods::detail::run_rccsd_native_state(execution,system,method);
     if(!state.solved.converged() || !state.reference) return 3;
-    const auto plan=generativeqc::cc::plan_rccsdt_force_cpu(system,*state.reference,state.problem,
-                                                    state.solved,256ULL<<20);
-    // Refuse before even the first triples-response output is materialized.
+    generativeqc::posthf::RawSource raw_source(system);
+    CountingSource force_source(raw_source);
+    const auto plan=generativeqc::cc::plan_rccsdt_force_cpu(
+        system,force_source,*state.reference,state.problem,state.solved,256ULL<<20);
+    // Refuse before even the first triples-response output or source tile is materialized.
     trace::start(); bool refused=false;
     try {
-      (void)generativeqc::cc::rccsdt_force_cpu(system,*state.reference,state.problem,state.solved,
-                                       state.eps_o,state.eps_v,plan.peak_bytes-1);
+      (void)generativeqc::cc::rccsdt_force_cpu(system,force_source,*state.reference,state.problem,
+                                       state.solved,state.eps_o,state.eps_v,plan.peak_bytes-1);
     } catch(const std::length_error&) { refused=true; }
     trace::active=false;
-    if(!refused || trace::largest>=4096) return 4;
+    if(!refused || trace::largest>=4096 || force_source.reads!=0) return 4;
     trace::start();
-    const auto force=generativeqc::cc::rccsdt_force_cpu(system,*state.reference,state.problem,state.solved,
-                                                state.eps_o,state.eps_v,plan.peak_bytes);
+    const auto force=generativeqc::cc::rccsdt_force_cpu(system,force_source,*state.reference,
+                                                state.problem,state.solved,state.eps_o,state.eps_v,
+                                                plan.peak_bytes);
     trace::active=false;
-    if(force.numeric_capacity_bytes!=plan.peak_bytes ||
+    if(force.numeric_capacity_bytes!=plan.peak_bytes || force_source.reads==0 ||
        trace::peak+plan.retained_input_bytes>plan.peak_bytes) return 5;
     const auto old_capacity=state.problem.foo.capacity();
     state.problem.foo.reserve(old_capacity+32);
-    const auto enlarged=generativeqc::cc::plan_rccsdt_force_cpu(system,*state.reference,state.problem,
-                                                        state.solved,256ULL<<20);
+    const auto enlarged=generativeqc::cc::plan_rccsdt_force_cpu(
+        system,force_source,*state.reference,state.problem,state.solved,256ULL<<20);
     if(enlarged.peak_bytes-plan.peak_bytes !=
        (state.problem.foo.capacity()-old_capacity)*sizeof(double)) return 6;
     std::cout << "{\"nested_peak\":" << trace::peak
               << ",\"largest_allocation\":" << trace::largest
+              << ",\"source_reads\":" << force_source.reads
               << ",\"retained\":" << plan.retained_input_bytes
               << ",\"planned_peak\":" << plan.peak_bytes << "}\n";
   } catch(const std::exception& e) { std::cerr<<e.what()<<'\n';return 7; }

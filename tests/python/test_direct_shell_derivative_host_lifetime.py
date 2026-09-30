@@ -39,7 +39,7 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ("route", "failed_step"),
     [
         (route, step)
-        for route, count in (("full_range", 12), ("rsh", 16))
+        for route, count in (("full_range", 12), ("rsh", 8))
         for step in range(count)
     ],
 )
@@ -100,7 +100,7 @@ int operation() {
   if(throw_error) throw std::runtime_error("injected CUDA wrapper exception");
   return 7;
 }
-struct Copy {void* dst; double values[3];};
+struct Copy {void* dst; double values[9]; std::size_t bytes;};
 Copy copies[3]{}; unsigned copy_count=0;
 int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
   int error=operation(); if(error) return error;
@@ -109,8 +109,11 @@ int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
 int cudaGetLastError() { return operation(); }
 int cudaMemcpyAsync(void* dst,const void* src,std::size_t n,int,cudaStream_t) {
   int error=operation(); if(error) return error;
-  if(n!=3*sizeof(double) || copy_count>=source_count) throw std::runtime_error("bad copy");
+  const auto expected=(source_count==3 ? 9U : 3U)*sizeof(double);
+  if(n!=expected || copy_count>=(source_count==3 ? 1U : 2U))
+    throw std::runtime_error("bad copy");
   copies[copy_count].dst=dst;
+  copies[copy_count].bytes=n;
   std::memcpy(copies[copy_count++].values,src,n);
   pending=true; return cudaSuccess;
 }
@@ -118,7 +121,7 @@ int cudaStreamSynchronize(cudaStream_t) {
   ++syncs;
   int error=operation(); if(error) return error;
   for(unsigned i=0;i<copy_count;++i)
-    std::memcpy(copies[i].dst,copies[i].values,3*sizeof(double));
+    std::memcpy(copies[i].dst,copies[i].values,copies[i].bytes);
   pending=false; copy_count=0; return cudaSuccess;
 }
 namespace generativeqc::scf::cuda_execution {
@@ -143,7 +146,7 @@ int prepare_generated_exchange_density(GeneratedExchangePlan&,bool,const double*
   return operation();
 }
 template<class... Args> void launch_bounded_shell_energy_derivative(Args&&...) {}
-template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&...) {}
+template<class... Args> void launch_bounded_shell_rsh_derivatives(Args&&...) {}
 """
 
 SUFFIX = r"""
@@ -155,7 +158,7 @@ int main(int argc,char** argv) {
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
-  double force[3]{}, bound=1, density=1;
+  double force[9]{}, bound=1, density=1;
   GeneratedExchangePlan plan{&shared,true,&pair,&bound,force,&cursor,&head};
   std::vector<double> output{99.0};
   const auto execute = [&]() {

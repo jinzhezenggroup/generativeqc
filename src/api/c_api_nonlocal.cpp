@@ -34,6 +34,7 @@ struct generativeqc_nonlocal_cuda_force {
 
   generativeqc::runtime::OwnedCudaBuffer<double> arena;
   generativeqc::runtime::OwnedCudaBuffer<int> errors;
+  generativeqc::runtime::OwnedCudaEvent source_ready;
   double *coordinates{}, *weights{}, *raw_density{}, *raw_gradient{}, *effective_weights{},
       *effective_density{}, *effective_gradient{}, *seeds{}, *point_derivative{}, *workspace{};
 
@@ -63,6 +64,12 @@ std::span<T> optional_span(T* pointer, std::uint32_t count, const char* label) {
     throw std::invalid_argument(std::string(label) + " pointer/count disagree");
   return pointer ? std::span<T>(pointer, count) : std::span<T>{};
 }
+
+#if GENERATIVEQC_HAS_CUDA
+void drain_failed_seed_source(cudaStream_t stream) noexcept {
+  if (stream) (void)cudaStreamSynchronize(stream);
+}
+#endif
 
 }  // namespace
 
@@ -231,6 +238,7 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_c
 
     generativeqc::runtime::CudaDeviceScope device(result->device);
     generativeqc::runtime::OwnedCudaStream setup(result->device);
+    result->source_ready.create(result->device, cudaEventDisableTiming);
     result->arena.allocate(result->device, doubles);
     result->errors.allocate(result->device, 3);
     auto* cursor = result->arena.get();
@@ -294,6 +302,58 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_c
         owner->stream, *view, offset, owner->point_count, owner->raw_density, owner->raw_gradient,
         owner->errors.get());
     owner->next_offset += view->npoint;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&owner->context->last_detail);
+  }
+}
+
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_seed_device_v1(
+    generativeqc_nonlocal_cuda_force* owner, generativeqc_context* expected_context, int device,
+    const double* density, const double* gradient, std::size_t point_count, void* source_stream_raw,
+    const generativeqc::dft::GridTaskView* view) {
+  if (!owner || !expected_context || !density || !gradient || !source_stream_raw || !view)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (owner->context != expected_context) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
+  try {
+    if (owner->executed || owner->next_offset != 0 || device != owner->device ||
+        point_count != owner->point_count || !view->stream)
+      throw std::invalid_argument("invalid resident nonlocal CUDA feature seed");
+    if (!owner->stream)
+      owner->stream = view->stream;
+    else if (owner->stream != view->stream)
+      throw std::invalid_argument("resident nonlocal CUDA feature stream changed");
+    generativeqc::runtime::CudaDeviceScope scope(owner->device);
+    const auto source_stream = reinterpret_cast<cudaStream_t>(source_stream_raw);
+    generativeqc::runtime::cuda_resource_check(
+        cudaMemsetAsync(owner->errors.get(), 0, sizeof(int), owner->stream));
+    // Read the final KS feature generation on its producer stream. A later KS
+    // begin/teardown therefore cannot overtake these D2D reads. When the grid
+    // consumer uses another stream, bridge the dependency with one device event
+    // rather than a host fence; owner teardown synchronizes the consumer stream,
+    // which in turn waits for this source-side copy to complete.
+    try {
+      generativeqc::runtime::cuda_resource_check(
+          cudaMemcpyAsync(owner->raw_density, density, point_count * sizeof(double),
+                          cudaMemcpyDeviceToDevice, source_stream));
+      generativeqc::runtime::cuda_resource_check(
+          cudaMemcpyAsync(owner->raw_gradient, gradient, 3 * point_count * sizeof(double),
+                          cudaMemcpyDeviceToDevice, source_stream));
+      if (source_stream != owner->stream) {
+        owner->source_ready.record(source_stream);
+        generativeqc::runtime::cuda_resource_check(
+            cudaStreamWaitEvent(owner->stream, owner->source_ready.get(), 0));
+      }
+    } catch (...) {
+      // A failed cross-stream handoff may already have queued a D2D read into
+      // owner-owned destination storage. Drain only on this exceptional path
+      // so owner teardown cannot free that storage while the source stream is
+      // still writing it. Successful execution remains fence-free on the host.
+      drain_failed_seed_source(source_stream);
+      throw;
+    }
+    owner->next_offset = owner->point_count;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&owner->context->last_detail);

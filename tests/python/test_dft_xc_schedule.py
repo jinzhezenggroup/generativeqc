@@ -6,6 +6,7 @@ import copy
 
 import pytest
 from generativeqc.autotune import dft_endpoint_gate
+from generativeqc_compiler.common.gpu_profitability import GpuProfitability
 from generativeqc_compiler.dft.grid import (
     GridSpec,
     MolecularGrid,
@@ -18,6 +19,7 @@ from generativeqc_compiler.dft.xc_schedule import (
     GridXcCandidateShape,
     GridXcScheduleCandidate,
     GridXcScientificIdentity,
+    aggregate_grid_xc_compiled_evidence,
     assess_grid_xc_schedule,
     grid_xc_schedule,
     rank_grid_xc_candidates,
@@ -296,6 +298,107 @@ def test_grid_xc_candidate_local_shapes_rank_distinct_point_tiles() -> None:
     )
     assert not rejected_assessment.legal
     assert "device bytes 41943040 exceeds limit 33554432" in rejected_assessment.reasons
+
+
+def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract() -> None:
+    shape = GridXcCandidateShape(
+        npoint=4096,
+        tile_points=256,
+        nao=96,
+        max_active_ao=48,
+        spins=2,
+        jet_components=4,
+        device_workspace_bytes=8 << 20,
+        generated_source_bytes=180_000,
+    )
+    limits = GridXcCandidateLimits(
+        device_bytes=32 << 20,
+        live_values=2_000_000,
+        source_bytes=300_000,
+    )
+    compiled = GpuProfitability(
+        compiled_registers_per_thread=72,
+        spill_store_bytes=16,
+        spill_load_bytes=8,
+        local_bytes=32,
+        shared_bytes=2048,
+        compiled_occupancy_upper_bound=0.5,
+        object_bytes=96_000,
+        compile_seconds=1.25,
+    )
+    (assessment,) = rank_grid_xc_candidates(
+        (GridXcScheduleCandidate(DEVICE_FUSED, shape, compiled),),
+        limits,
+        device_xc_available=True,
+        observable="potential",
+        functional="PBE",
+    )
+    profitability = assessment.schedule_contract.profitability
+    assert profitability.compiled_registers_per_thread == 72
+    assert profitability.spill_bytes == 24
+    assert profitability.local_bytes == 32
+    assert profitability.shared_bytes == 2048
+    assert profitability.compiled_occupancy_upper_bound == 0.5
+    assert profitability.object_bytes == 96_000
+    assert profitability.compile_seconds == 1.25
+    assert assessment.schedule_contract.resources.registers_per_thread == 72
+    assert assessment.schedule_contract.resources.shared_bytes == 2048
+    assert (
+        dict(assessment.schedule_contract.provenance)["compiled_resource_evidence"]
+        == "common.gpu_profitability"
+    )
+
+    with pytest.raises(ValueError, match="only compiled GPU profitability facts"):
+        GridXcScheduleCandidate(
+            DEVICE_FUSED,
+            shape,
+            GpuProfitability(semantic_traffic_bytes=1),
+        )
+
+
+def test_compiled_region_evidence_requires_every_native_device_stage() -> None:
+    def stage(
+        registers: int,
+        spill: int,
+        occupancy: float,
+        *,
+        local: int = 0,
+        shared: int = 0,
+    ) -> GpuProfitability:
+        return GpuProfitability(
+            compiled_registers_per_thread=registers,
+            spill_store_bytes=spill,
+            spill_load_bytes=0,
+            local_bytes=local,
+            shared_bytes=shared,
+            compiled_occupancy_upper_bound=occupancy,
+        )
+
+    evidence = aggregate_grid_xc_compiled_evidence(
+        {
+            "ao_collocation": stage(48, 0, 0.75, shared=1024),
+            "density_features": stage(56, 0, 0.75),
+            "xc_expression": stage(148, 16, 0.25, local=32),
+            "vxc_contraction": stage(64, 0, 0.5, shared=2048),
+        }
+    )
+    assert evidence.compiled_registers_per_thread == 148
+    assert evidence.spill_store_bytes == 16
+    assert evidence.spill_load_bytes == 0
+    assert evidence.local_bytes == 32
+    assert evidence.shared_bytes == 2048
+    assert evidence.compiled_occupancy_upper_bound == 0.25
+    assert evidence.object_bytes is None
+    assert evidence.compile_seconds is None
+
+    with pytest.raises(ValueError, match="exact stages"):
+        aggregate_grid_xc_compiled_evidence(
+            {
+                "ao_collocation": stage(48, 0, 0.75),
+                "density_features": stage(56, 0, 0.75),
+                "xc_expression": stage(148, 0, 0.25),
+            }
+        )
 
 
 def endpoint_sample(

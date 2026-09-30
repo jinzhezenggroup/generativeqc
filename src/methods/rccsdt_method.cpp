@@ -19,7 +19,9 @@
 #include "generated_rccsdt_cpu.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
+#include "posthf/raw_source.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/interaction_source_view.hpp"
 
 namespace generativeqc::methods::detail {
 namespace {
@@ -198,16 +200,31 @@ class RccsdtPrepared final : public PreparedCalculation {
           throw std::runtime_error("RCCSD(T) force owner lost the converged RHF reference");
         const auto force_denominator_threshold =
             descriptor_.ccsd_denominator_threshold ? descriptor_.ccsd_denominator_threshold : 1e-10;
+        // Borrow the exact CPU interaction source that already owns the converged
+        // reference/problem lifecycle. CUDA remains on the RawSource compatibility
+        // adapter until #1500 exposes a device-native prepared source.
+        std::unique_ptr<posthf::RawSource> force_raw_source;
+        std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
+        const integrals::ElectronInteractionSource* force_source = nullptr;
+        if (!execution_.cuda_requested() && cpu_exact_plan_) {
+          force_prepared_source.emplace(*cpu_exact_plan_);
+          force_source = &*force_prepared_source;
+        } else {
+          force_raw_source = std::make_unique<posthf::RawSource>(system_);
+          force_source = force_raw_source.get();
+        }
+
         constexpr std::size_t kCudaDerivativeStageBudget = 64ULL << 20;
-        auto force = execution_.cuda_requested()
-                         ? cc::rccsdt_force_cuda(system_, *state.reference, state.problem,
-                                                 state.solved, state.eps_o, state.eps_v,
-                                                 state.budget, execution_.device_id(),
-                                                 std::min(state.budget, kCudaDerivativeStageBudget),
-                                                 force_denominator_threshold)
-                         : cc::rccsdt_force_cpu(system_, *state.reference, state.problem,
-                                                state.solved, state.eps_o, state.eps_v,
-                                                state.budget, force_denominator_threshold);
+        auto force =
+            execution_.cuda_requested()
+                ? cc::rccsdt_force_cuda(system_, *force_source, *state.reference, state.problem,
+                                        state.solved, state.eps_o, state.eps_v, state.budget,
+                                        execution_.device_id(),
+                                        std::min(state.budget, kCudaDerivativeStageBudget),
+                                        force_denominator_threshold)
+                : cc::rccsdt_force_cpu(system_, *force_source, *state.reference, state.problem,
+                                       state.solved, state.eps_o, state.eps_v, state.budget,
+                                       force_denominator_threshold);
         if (execution_.cuda_requested()) {
           if (!force.lambda.cuda_actions || !force.lambda.owned_device_bytes)
             throw std::runtime_error(
