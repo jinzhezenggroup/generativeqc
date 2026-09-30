@@ -74,12 +74,15 @@ struct CudaKsResidentDensityBinding {
   const double* beta{};
   std::size_t matrix_elements{};
   unsigned spins{};
+  /** Stream owning the accepted final density generation. Cross-stream
+   * borrowers must order device reads against this stream before source reuse. */
+  void* stream{};
   std::uint64_t owner{}, solve_epoch{}, generation{};
 
   explicit operator bool() const noexcept {
     return device_id >= 0 && alpha != nullptr && matrix_elements != 0 &&
-           (spins == 1 || (spins == 2 && beta != nullptr)) && owner != 0 && solve_epoch != 0 &&
-           generation != 0;
+           (spins == 1 || (spins == 2 && beta != nullptr)) && stream != nullptr &&
+           owner != 0 && solve_epoch != 0 && generation != 0;
   }
 };
 
