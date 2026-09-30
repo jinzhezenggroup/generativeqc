@@ -1,7 +1,7 @@
 # Complete RCCSD residuals and CPU solver
 
 The A baseline and its reviewed commit remain documented in `rccsd.md`.
-Slice B adds `tools.generativeqc_cc.doubles.build_ccsd_program(o,v,form=...)`.
+Slice B adds `generativeqc_compiler.cc.doubles.build_ccsd_program(o,v,form=...)`.
 All inputs/energy/singles conventions from A continue unchanged. This remains
 an internal conventional all-electron real restricted CPU implementation.
 

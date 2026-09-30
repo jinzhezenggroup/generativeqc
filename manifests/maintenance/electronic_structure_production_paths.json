@@ -199,7 +199,7 @@
         },
         "represented": {
           "evidence": [
-            "tools/generativeqc_cc/doubles.py"
+            "python/generativeqc_compiler/cc/doubles.py"
           ],
           "reason": null,
           "state": "present"
@@ -212,7 +212,7 @@
       "provider_owner": "src/posthf/native_provider.cpp",
       "public_entry": "python/generativeqc/calculator.py",
       "resource_owner": "src/cc/solver.cpp",
-      "scientific_owner": "tools/generativeqc_cc/doubles.py",
+      "scientific_owner": "python/generativeqc_compiler/cc/doubles.py",
       "selector": "src/methods/registry.cpp",
       "state_owner": "src/cc/solver.hpp",
       "status": "production"
@@ -272,7 +272,7 @@
         },
         "represented": {
           "evidence": [
-            "tools/generativeqc_mp2/equations.py"
+            "python/generativeqc_compiler/mp2/equations.py"
           ],
           "reason": null,
           "state": "present"
@@ -285,7 +285,7 @@
       "provider_owner": "src/posthf/native_provider.cpp",
       "public_entry": "python/generativeqc/calculator.py",
       "resource_owner": "src/posthf/mp2_energy.cpp",
-      "scientific_owner": "tools/generativeqc_mp2/equations.py",
+      "scientific_owner": "python/generativeqc_compiler/mp2/equations.py",
       "selector": "src/methods/registry.cpp",
       "state_owner": "src/core/electronic_reference.hpp",
       "status": "production"

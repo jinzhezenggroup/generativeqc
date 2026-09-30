@@ -273,6 +273,31 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
   });
 }
+int stationary_geometry_reset(void* pointer, const double* centers, double tolerance, char* error,
+                              size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || !p->topology_ready || !std::isfinite(tolerance) || tolerance < 0)
+      throw std::invalid_argument("invalid geometry-only reset");
+    p->context.check_device();
+    drain_geometry(*p);
+    p->failed = false;
+    auto stream = p->context.stream;
+    profile_record(*p, p->stage0, stream);
+    cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
+    cuda_check(cudaMemsetAsync(p->sources, 0, 3 * stationary_source_count * p->atoms * 8, stream));
+    upload(*p, p->centers, centers, 3 * p->atoms, stream);
+    profile_record(*p, p->stage1, stream);
+    validate_centers<<<1, 1, 0, stream>>>(p->centers, p->atoms, tolerance, p->context.error);
+    profile_record(*p, p->stage2, stream);
+    ++p->launches;
+    p->pair_visits += p->atoms * (p->atoms - 1) / 2;
+    finished(*p, stream);
+    profile_elapsed(*p, p->setup_transfer_ms, p->stage0, p->stage1);
+    profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
+  });
+}
 int stationary_tasks(void* pointer, const int64_t* tasks, const double* charges, size_t count,
                      char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;

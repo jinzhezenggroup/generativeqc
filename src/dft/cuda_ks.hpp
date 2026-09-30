@@ -53,6 +53,10 @@ struct CudaKsTransfers {
   std::uint64_t execution_region_fallbacks{};
   /** Explicit host-unfused XC staging, separate from ordinary setup/seed movement. */
   std::uint64_t xc_host_d2h_bytes{}, xc_host_h2d_bytes{}, xc_host_synchronizations{};
+  /** Full-range density-fitted exchange provenance. Dense includes the first
+   * cold/warm-seed build where no canonical factor is available; occupied
+   * counts only builds whose Cocc generated the exact current device density. */
+  std::uint64_t fitted_dense_exchange_builds{}, fitted_occupied_exchange_builds{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The
@@ -109,11 +113,14 @@ struct CudaKsResidentNonlocalFeaturesBinding {
   const double* density{};
   const double* gradient{};
   std::size_t point_count{};
+  /** Producer stream that owns the final feature generation. Downstream
+   * cross-stream copies must order against this stream before source reuse. */
+  void* stream{};
   std::uint64_t owner{}, solve_epoch{}, generation{};
 
   explicit operator bool() const noexcept {
     return device_id >= 0 && density != nullptr && gradient != nullptr && point_count != 0 &&
-           owner != 0 && solve_epoch != 0 && generation != 0;
+           stream != nullptr && owner != 0 && solve_epoch != 0 && generation != 0;
   }
 };
 

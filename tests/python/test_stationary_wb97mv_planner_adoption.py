@@ -59,11 +59,17 @@ def test_planner_adoption_preserves_resident_owner_and_per_call_work_budget() ->
     assert len(_calls("_ResidentNonlocalForceOwner")) == 1
     assert len(_calls("resident_nonlocal_geometry")) == 1
     calls = _calls("_CudaSources")
-    assert len(calls) == 1
-    keywords = {keyword.arg: keyword.value for keyword in calls[0].keywords}
-    budget = keywords["page_work_budget"]
-    assert isinstance(budget, ast.Constant)
-    assert budget.value == 1
-    assert "work_budget" not in keywords
+    assert len(calls) == 2
+    for call in calls:
+        keywords = {keyword.arg: keyword.value for keyword in call.keywords}
+        budget = keywords["page_work_budget"]
+        assert isinstance(budget, ast.Constant)
+        assert budget.value == 1
+        assert "work_budget" not in keywords
+    join = _calls("resident_nonlocal_geometry")[0]
+    join_keywords = {keyword.arg: keyword.value for keyword in join.keywords}
+    assert ast.unparse(join_keywords["sources"]) == "self.sources"
+    assert ast.unparse(join_keywords["nonlocal_sources"]) == "self.nonlocal_sources"
+    assert "self.nonlocal_sources.reset_geometry(" in SOURCE
     assert "feature_task_with_features" not in SOURCE
     assert SOURCE.index("self._nonlocal.close()") < SOURCE.index("self._stack.close()")
