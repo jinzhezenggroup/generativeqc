@@ -1117,7 +1117,8 @@ class _CudaSources:
         points_per_atom: typing.Any,
         device_weights: typing.Any,
         host_weights: typing.Any,
-        raw: typing.Any,
+        device_raw: typing.Any,
+        host_raw: typing.Any,
         *,
         functional: typing.Any = None,
         pbe: typing.Any = None,
@@ -1134,9 +1135,11 @@ class _CudaSources:
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
-        raw = _checked(raw, (view.npoint,))
         device_weights = self._device_pointer(
             device_weights, "resident molecular-grid weights"
+        )
+        device_raw = self._device_pointer(
+            device_raw, "resident molecular-grid atomic measures"
         )
         if functional is None:
             if type(pbe) is not bool:
@@ -1157,7 +1160,7 @@ class _CudaSources:
                 owner_offset,
                 points_per_atom,
                 _checked(host_weights, (view.npoint,)),
-                raw,
+                _checked(host_raw, (view.npoint,)),
                 functional=functional,
             )
             return
@@ -1170,7 +1173,7 @@ class _CudaSources:
             owner_offset,
             points_per_atom,
             device_weights,
-            _ptr(raw),
+            ct.cast(device_raw, _DOUBLE),
         )
 
     def geometry_external_device_molecular_resident_weights(
@@ -1180,7 +1183,8 @@ class _CudaSources:
         points_per_atom: typing.Any,
         device_weights: typing.Any,
         host_weights: typing.Any,
-        raw: typing.Any,
+        device_raw: typing.Any,
+        host_raw: typing.Any,
         external_device: typing.Any,
         external_stride: typing.Any,
         external_offset: typing.Any = 0,
@@ -1197,9 +1201,11 @@ class _CudaSources:
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
-        raw = _checked(raw, (view.npoint,))
         device_weights = self._device_pointer(
             device_weights, "resident molecular-grid weights"
+        )
+        device_raw = self._device_pointer(
+            device_raw, "resident molecular-grid atomic measures"
         )
         external_device = self._device_pointer(
             external_device, "resident nonlocal seeds"
@@ -1219,7 +1225,7 @@ class _CudaSources:
                 owner_offset,
                 points_per_atom,
                 _checked(host_weights, (view.npoint,)),
-                raw,
+                _checked(host_raw, (view.npoint,)),
                 external_device,
                 external_stride,
                 external_offset,
@@ -1234,7 +1240,7 @@ class _CudaSources:
             owner_offset,
             points_per_atom,
             device_weights,
-            _ptr(raw),
+            ct.cast(device_raw, _DOUBLE),
             external_device,
             external_stride,
             external_offset,
