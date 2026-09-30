@@ -292,8 +292,8 @@ STATIONARY_PAGE_NUCLEAR_CONTRACT_SHA256 = (
 STATIONARY_PAGE_GEOMETRY_CONTRACT_SHA256 = (
     "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
 )
-STATIONARY_SOURCES_OWNER_CONTRACT_SHA256 = (
-    "54cc3b5a2b77747710e211f076ef8ab11cb72aed6fb7a45f29c978eec0b8cac8"
+STATIONARY_PAGE_FINISH_SPAN_CONTRACT_SHA256 = (
+    "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
 )
 STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
     "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -653,6 +653,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "geometry",
             STATIONARY_PAGE_GEOMETRY_CONTRACT_SHA256,
         ),
+        "finish_span": (
+            "_CudaSources",
+            "finish_span",
+            STATIONARY_PAGE_FINISH_SPAN_CONTRACT_SHA256,
+        ),
         "executor": (
             "_BoundedStationaryTaskExecutor",
             "execute_pages",
@@ -677,13 +682,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} page contract changed")
         page_contract[f"{label}_sha256"] = digest
-    sources_owner = classes.get("_CudaSources")
-    if sources_owner is None:
-        raise RuntimeError("stationary CUDA source owner is missing")
-    sources_owner_digest = _source_node_sha256(source, sources_owner)
-    if sources_owner_digest != STATIONARY_SOURCES_OWNER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA source owner contract changed")
-    page_contract["sources_owner_sha256"] = sources_owner_digest
     component_modes = [
         node
         for node in tree.body

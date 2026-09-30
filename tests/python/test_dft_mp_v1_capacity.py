@@ -294,8 +294,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "geometry_sha256": (
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
-        "sources_owner_sha256": (
-            "54cc3b5a2b77747710e211f076ef8ab11cb72aed6fb7a45f29c978eec0b8cac8"
+        "finish_span_sha256": (
+            "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
