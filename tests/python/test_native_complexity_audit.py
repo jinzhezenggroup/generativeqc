@@ -48,7 +48,9 @@ def test_production_has_no_avoidable_rank2_quartic_scalar_reduction() -> None:
     scanned, findings = audit_tree(ROOT / "src", excludes=DEFAULT_EXCLUDES)
     assert scanned > 0
     candidates = [
-        finding for finding in findings if finding.classification == "matrix-chain-candidate"
+        finding
+        for finding in findings
+        if finding.classification == "matrix-chain-candidate"
     ]
     assert not candidates, (
         "production source reintroduced avoidable high-order rank-2 contractions: "

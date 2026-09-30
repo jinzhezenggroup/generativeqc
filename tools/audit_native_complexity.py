@@ -9,7 +9,9 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-SOURCE_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".cu", ".cuh"})
+SOURCE_SUFFIXES = frozenset(
+    {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".cu", ".cuh"}
+)
 DEFAULT_EXCLUDES = ("src/xtb/native",)
 _TYPE = (
     r"(?:const\s+)?(?:"
@@ -294,7 +296,9 @@ def audit_text(
         loop
         for loop in loops
         if loop.depth >= minimum_depth
-        and not any(child.start > loop.start and child.end <= loop.end for child in loops)
+        and not any(
+            child.start > loop.start and child.end <= loop.end for child in loops
+        )
     ]
     findings: list[LoopFinding] = []
     for inner in leaves:
@@ -339,7 +343,9 @@ def audit_tree(
     scanned = 0
     findings: list[LoopFinding] = []
     paths = sorted(
-        candidate for candidate in root.rglob("*") if candidate.suffix in SOURCE_SUFFIXES
+        candidate
+        for candidate in root.rglob("*")
+        if candidate.suffix in SOURCE_SUFFIXES
     )
     for path in paths:
         relative = path.relative_to(root.parent).as_posix()
