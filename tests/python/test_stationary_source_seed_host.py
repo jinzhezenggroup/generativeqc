@@ -11,6 +11,20 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _function_definition(source: str, signature: str) -> str:
+    begin = source.index(signature)
+    opening = source.index("{", begin)
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[begin : index + 1]
+    raise AssertionError(f"unterminated function definition: {signature}")
+
+
 def test_source_seed_rejects_replacement_and_drains_failed_uploads(
     tmp_path: Path,
 ) -> None:
@@ -18,9 +32,7 @@ def test_source_seed_rejects_replacement_and_drains_failed_uploads(
     if compiler is None:
         pytest.skip("C++ compiler unavailable")
     source = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
-    begin = source.index("int stationary_seed_sources_v1(")
-    end = source.index("int stationary_tasks(", begin)
-    body = source[begin:end]
+    body = _function_definition(source, "int stationary_seed_sources_v1(")
     harness = r"""
 #include <algorithm>
 #include <array>
