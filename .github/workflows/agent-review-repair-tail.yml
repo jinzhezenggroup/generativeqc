@@ -1,0 +1,80 @@
+name: Complete isolated PR review repairs
+on:
+  push:
+    branches: [agent/review-all-20260930]
+    paths: [.github/workflows/agent-review-repair-tail.yml]
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Prepare reviewed patch inputs
+        run: |
+          mkdir -p /tmp/review-inputs /tmp/review-results
+          cp tools/review_20260930_* /tmp/review-inputs/
+          python -m pip install numpy pytest ruff==0.16.9
+          git config user.name njzjz-bot
+          git config user.email 48687836+njzjz-bot@users.noreply.github.com
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/review-inputs/review_20260930_abi_test.txt')
+          source = path.read_text().replace('import ctypes as ct\n', 'import ctypes as ct\nimport typing\n')
+          source = source.replace('def binding(batch, handle, device, points, weights, raw, count):', 'def binding(batch: int, handle: int, device: typing.Any, points: typing.Any, weights: typing.Any, raw: typing.Any, count: typing.Any) -> int:')
+          source = source.replace('def check(library, result, **kwargs):', 'def check(library: typing.Any, result: int, **kwargs: typing.Any) -> None:')
+          path.write_text(source)
+          PY
+      - name: Restack and validate remaining two heads
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous=ca46c1d3ba956d04d18eff6634482c52c39b32c0
+          for item in \
+            '1619 8daa15281fa2be7984e71e2a180112091d997f1a' \
+            '1620 f7f7b94a45f4e5a31e892aa3b0799b748486330d'; do
+            read -r pr original <<< "$item"
+            git checkout --detach "$original"
+            git merge --no-ff --no-edit "$previous"
+            if [[ "$pr" == 1619 ]]; then
+              python - <<'PY'
+          from pathlib import Path
+          for name in ('python/generativeqc/_ks_snapshot.py', 'src/api/c_api_ks_snapshot.cpp', 'src/api/ks_snapshot.hpp', 'tests/python/test_wb97mv_resident_grid_points.py'):
+              path = Path(name)
+              source = path.read_text()
+              old = 'generativeqc_ks_snapshot_cuda_resident_grid_v1'
+              assert source.count(old) == 1, name
+              path.write_text(source.replace(old, 'generativeqc_ks_snapshot_cuda_resident_grid_v2'))
+          PY
+              cp /tmp/review-inputs/review_20260930_abi_test.txt tests/python/test_ks_resident_grid_abi.py
+            else
+              cp /tmp/review-inputs/review_20260930_final_test.txt tests/python/test_wb97mv_final_reduction_contract.py
+            fi
+            git add python tests src
+            mapfile -t python_files < <(git diff --cached --name-only -- '*.py')
+            ruff check --fix "${python_files[@]}"
+            ruff format "${python_files[@]}"
+            git add python tests src
+            git diff --cached --check
+            tests=(tests/python/test_dft_mp_v1_capacity.py tests/python/test_stationary_resident_nonlocal_join.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_wb97mv_resident_grid_points.py tests/python/test_wb97mv_resident_grid_weights.py tests/python/test_stationary_geometry_kernel_host.py tests/python/test_grid_cuda_publication.py tests/python/test_grid_view_publication.py tests/python/test_stationary_owner_kernel_abi.py tests/python/test_stationary_nuclear_batch.py tests/python/test_stationary_nuclear_batch_host.py tests/python/test_stationary_wb97mv_planner_adoption.py tests/python/test_ks_resident_grid_abi.py)
+            if [[ "$pr" == 1620 ]]; then
+              tests+=(tests/python/test_wb97mv_final_reduction.py tests/python/test_wb97mv_final_reduction_contract.py tests/python/test_production_tensor_preparation.py)
+            fi
+            PYTHONPATH=.:python python -m pytest -q "${tests[@]}" | tee "/tmp/review-results/pr-${pr}.txt"
+            python tools/check_compiler_structure.py
+            python tools/check_scf_structure.py
+            git commit -m "fix(review): address PR #${pr} findings and executable regressions"
+            result=$(git rev-parse HEAD)
+            git push origin "HEAD:refs/heads/agent/review-result-${pr}-20260930"
+            printf 'REVIEW_RESULT %s %s %s\n' "$pr" "$original" "$result" | tee -a /tmp/review-results/commits.txt
+            previous="$result"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: reviewed-repair-tail-results
+          path: /tmp/review-results/
+          retention-days: 2
