@@ -862,6 +862,39 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  generativeqc_status resident_grid(const dft::CudaKsFinalStateToken& expected, int& device,
+                                    const double*& points, const double*& weights,
+                                    std::size_t& point_count, std::string& detail) {
+    device = -1;
+    points = nullptr;
+    weights = nullptr;
+    point_count = 0;
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_) {
+      detail = "resident molecular grid requires a CUDA KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    // Reuse the exact final-density lease as the zero-transfer token gate. The
+    // grid is immutable for this prepared KS owner and survives for its lifetime.
+    dft::CudaKsResidentDensityBinding density_binding;
+    const auto status = cuda_->resident_final_density(expected, density_binding, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto grid = grid_.cuda_view();
+    if (!density_binding || !grid || grid.device != density_binding.device_id) {
+      detail = "CUDA KS resident molecular-grid binding is invalid";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+    device = grid.device;
+    points = grid.points;
+    weights = grid.weights;
+    point_count = grid.point_count;
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    detail = "resident molecular grid requires a CUDA build";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
   generativeqc_status resident_nonlocal_features(const dft::CudaKsFinalStateToken& expected,
                                                  int& device, const double*& density,
                                                  const double*& gradient, std::size_t& point_count,
@@ -1642,6 +1675,21 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status resident_grid(std::size_t index,
+                                    const dft::CudaKsFinalStateToken& expected, int& device,
+                                    const double*& points, const double*& weights,
+                                    std::size_t& point_count, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_grid(expected, device, points, weights, point_count,
+                                               detail);
+    device = -1;
+    points = nullptr;
+    weights = nullptr;
+    point_count = 0;
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status resident_nonlocal_features(std::size_t index,
                                                  const dft::CudaKsFinalStateToken& expected,
                                                  int& device, const double*& density,
@@ -1861,6 +1909,20 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
   spins = 0;
   source_stream = nullptr;
   detail = "resident final density requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_resident_grid(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    int& device, const double*& points, const double*& weights, std::size_t& point_count,
+    std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->resident_grid(index, expected, device, points, weights, point_count, detail);
+  device = -1;
+  points = nullptr;
+  weights = nullptr;
+  point_count = 0;
+  detail = "resident molecular grid requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
