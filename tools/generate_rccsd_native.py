@@ -109,8 +109,11 @@ sys.modules.setdefault("tools.generativeqc_cc", _cc_package)
 
 from tools.generativeqc_cc.doubles import build_ccsd_program
 from tools.generativeqc_cc.gradient_equations import (
+    build_fock_small_weight_program,
     build_fock_weight_program,
+    build_hamiltonian_eri_weight_program,
     build_hamiltonian_programs,
+    build_hamiltonian_small_weight_program,
 )
 from tools.generativeqc_cc.lambda_equations import (
     PARAMETERS,
@@ -656,6 +659,16 @@ def _cpu_function(
             outputs["stationarity"],
             outputs["orbital_rhs"],
         ]
+    elif output_type == "HamiltonianSmallOutputs":
+        returned = [
+            outputs["hcore"],
+            outputs["overlap"],
+            outputs["rotation_gradient"],
+            outputs["stationarity"],
+            outputs["orbital_rhs"],
+        ]
+    elif output_type == "EriWeightOutput":
+        returned = [outputs["eri"]]
     elif output_type == "OrbitalJvpOutput":
         returned = [outputs["d_fov"]]
     elif output_type == "TriplesResponseOutputs":
@@ -716,9 +729,25 @@ def cpu_header() -> str:
         *REPRESENTATIVE, explicit_density_input=True
     )
     hamiltonian_weights = _prepare_production(hamiltonian.weights, "cpu")
+    hamiltonian_small_weights = _prepare_production(
+        build_hamiltonian_small_weight_program(
+            *REPRESENTATIVE, explicit_density_input=True
+        ),
+        "cpu",
+    )
+    hamiltonian_eri_weights = _prepare_production(
+        build_hamiltonian_eri_weight_program(
+            *REPRESENTATIVE, explicit_density_input=True
+        ),
+        "cpu",
+    )
     orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "cpu")
     fock_weights = _prepare_production(
         build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
+        "cpu",
+    )
+    fock_small_weights = _prepare_production(
+        build_fock_small_weight_program(*REPRESENTATIVE, explicit_density_input=True),
         "cpu",
     )
     hamiltonian_input_names = tuple(
@@ -793,6 +822,8 @@ def cpu_header() -> str:
             ],
             "};",
             "struct HamiltonianOutputs { const double* hcore{}; const double* eri{}; const double* overlap{}; const double* rotation_gradient{}; const double* stationarity{}; const double* orbital_rhs{}; };",
+            "struct HamiltonianSmallOutputs { const double* hcore{}; const double* overlap{}; const double* rotation_gradient{}; const double* stationarity{}; const double* orbital_rhs{}; };",
+            "struct EriWeightOutput { const double* eri{}; };",
             "struct OrbitalJvpOutput { const double* d_fov{}; };",
             "struct TriplesResponseOutputs {",
             *[f"  const double* {name}{{}};" for name in TRIPLES_RESPONSE_INPUTS],
@@ -809,8 +840,11 @@ def cpu_header() -> str:
                 for parameter, program in parameter_vjps.items()
             ],
             f'inline constexpr const char* hamiltonian_weights_program_hash="{hamiltonian_weights.logical_hash}";',
+            f'inline constexpr const char* hamiltonian_small_weights_program_hash="{hamiltonian_small_weights.logical_hash}";',
+            f'inline constexpr const char* hamiltonian_eri_weights_program_hash="{hamiltonian_eri_weights.logical_hash}";',
             f'inline constexpr const char* orbital_jvp_program_hash="{orbital_jvp.logical_hash}";',
             f'inline constexpr const char* fock_weights_program_hash="{fock_weights.logical_hash}";',
+            f'inline constexpr const char* fock_small_weights_program_hash="{fock_small_weights.logical_hash}";',
             f'inline constexpr const char* triples_response_program_hash="{triples_response.logical_hash}";',
             _required_function(iteration, "iteration_arena_elements"),
             _required_function(replay, "replay_arena_elements"),
@@ -829,8 +863,15 @@ def cpu_header() -> str:
             _required_function(
                 hamiltonian_weights, "hamiltonian_weights_arena_elements"
             ),
+            _required_function(
+                hamiltonian_small_weights, "hamiltonian_small_weights_arena_elements"
+            ),
+            _required_function(
+                hamiltonian_eri_weights, "hamiltonian_eri_weights_arena_elements"
+            ),
             _required_function(orbital_jvp, "orbital_jvp_arena_elements"),
             _required_function(fock_weights, "fock_weights_arena_elements"),
+            _required_function(fock_small_weights, "fock_small_weights_arena_elements"),
             _required_function(
                 triples_response, "triples_response_arena_elements", batch_dim=True
             ),
@@ -896,6 +937,24 @@ def cpu_header() -> str:
                 },
             ),
             _cpu_function(
+                hamiltonian_small_weights,
+                "run_hamiltonian_small_weights_cpu",
+                "HamiltonianSmallOutputs",
+                signature="const HamiltonianWeightInputs& inputs",
+                input_overrides={
+                    name: f"inputs.{name}" for name in hamiltonian_input_names
+                },
+            ),
+            _cpu_function(
+                hamiltonian_eri_weights,
+                "run_hamiltonian_eri_weights_cpu",
+                "EriWeightOutput",
+                signature="const HamiltonianWeightInputs& inputs",
+                input_overrides={
+                    name: f"inputs.{name}" for name in hamiltonian_input_names
+                },
+            ),
+            _cpu_function(
                 orbital_jvp,
                 "run_orbital_jvp_cpu",
                 "OrbitalJvpOutput",
@@ -908,6 +967,15 @@ def cpu_header() -> str:
                 fock_weights,
                 "run_fock_weights_cpu",
                 "HamiltonianOutputs",
+                signature="const FockWeightInputs& inputs",
+                input_overrides={
+                    name: f"inputs.{name}" for name in fock_weight_input_names
+                },
+            ),
+            _cpu_function(
+                fock_small_weights,
+                "run_fock_small_weights_cpu",
+                "HamiltonianSmallOutputs",
                 signature="const FockWeightInputs& inputs",
                 input_overrides={
                     name: f"inputs.{name}" for name in fock_weight_input_names
@@ -1160,6 +1228,16 @@ def _cuda_program(
             outputs["stationarity"],
             outputs["orbital_rhs"],
         ]
+    elif output_type == "DeviceHamiltonianSmallOutputs":
+        returned = [
+            outputs["hcore"],
+            outputs["overlap"],
+            outputs["rotation_gradient"],
+            outputs["stationarity"],
+            outputs["orbital_rhs"],
+        ]
+    elif output_type == "DeviceEriWeightOutput":
+        returned = [outputs["eri"]]
     elif output_type == "DeviceOrbitalJvpOutput":
         returned = [outputs["d_fov"]]
     else:
@@ -1201,9 +1279,25 @@ def cuda_source() -> str:
         *REPRESENTATIVE, explicit_density_input=True
     )
     hamiltonian_weights = _prepare_production(hamiltonian.weights, "cuda")
+    hamiltonian_small_weights = _prepare_production(
+        build_hamiltonian_small_weight_program(
+            *REPRESENTATIVE, explicit_density_input=True
+        ),
+        "cuda",
+    )
+    hamiltonian_eri_weights = _prepare_production(
+        build_hamiltonian_eri_weight_program(
+            *REPRESENTATIVE, explicit_density_input=True
+        ),
+        "cuda",
+    )
     orbital_jvp = _prepare_production(hamiltonian.orbital_jvp.program, "cuda")
     fock_weights = _prepare_production(
         build_fock_weight_program(*REPRESENTATIVE, explicit_density_input=True),
+        "cuda",
+    )
+    fock_small_weights = _prepare_production(
+        build_fock_small_weight_program(*REPRESENTATIVE, explicit_density_input=True),
         "cuda",
     )
     hamiltonian_input_names = tuple(
@@ -1275,9 +1369,27 @@ def cuda_source() -> str:
                 input_overrides={name: f"s.{name}" for name in hamiltonian_input_names},
             ),
             _cuda_program(
+                hamiltonian_small_weights,
+                "hamiltonian_small_weights",
+                "DeviceHamiltonianSmallOutputs",
+                input_overrides={name: f"s.{name}" for name in hamiltonian_input_names},
+            ),
+            _cuda_program(
+                hamiltonian_eri_weights,
+                "hamiltonian_eri_weights",
+                "DeviceEriWeightOutput",
+                input_overrides={name: f"s.{name}" for name in hamiltonian_input_names},
+            ),
+            _cuda_program(
                 fock_weights,
                 "fock_weights",
                 "DeviceHamiltonianOutputs",
+                input_overrides={name: f"s.{name}" for name in fock_weight_input_names},
+            ),
+            _cuda_program(
+                fock_small_weights,
+                "fock_small_weights",
+                "DeviceHamiltonianSmallOutputs",
                 input_overrides={name: f"s.{name}" for name in fock_weight_input_names},
             ),
             _cuda_program(
@@ -1303,7 +1415,10 @@ def cuda_source() -> str:
             "DeviceParameterOutput run_parameter_oooo_cuda(CudaState& state){return run_parameter_oooo(state);}",
             "DeviceParameterOutput run_parameter_vvvv_cuda(CudaState& state){return run_parameter_vvvv(state);}",
             "DeviceHamiltonianOutputs run_hamiltonian_weights_cuda(CudaState& state){return run_hamiltonian_weights(state);}",
+            "DeviceHamiltonianSmallOutputs run_hamiltonian_small_weights_cuda(CudaState& state){return run_hamiltonian_small_weights(state);}",
+            "DeviceEriWeightOutput run_hamiltonian_eri_weights_cuda(CudaState& state){return run_hamiltonian_eri_weights(state);}",
             "DeviceHamiltonianOutputs run_fock_weights_cuda(CudaState& state){return run_fock_weights(state);}",
+            "DeviceHamiltonianSmallOutputs run_fock_small_weights_cuda(CudaState& state){return run_fock_small_weights(state);}",
             "DeviceOrbitalJvpOutput run_orbital_jvp_cuda(CudaState& state){return run_orbital_jvp(state);}",
             "}",
             "",

@@ -77,7 +77,10 @@ def producer_case(
         axes = operand("unused", "ibk", dims).spec.indices
         value = broadcast(x, axes, (0, 2))
     elif kind == "reshape":
-        value = reshape(x, x.spec.indices)
+        # Exercise a real producer, not an identity view removed by preparation.
+        axes = x.spec.indices
+        x = operand("x", "q", {"q": dims["i"] * dims["b"] * dims["k"]})
+        value = reshape(x, axes)
     elif kind == "reduce":
         x = operand("x", "ibkr", {**dims, "r": 3})
         value = reduce_sum(x, (3,))
