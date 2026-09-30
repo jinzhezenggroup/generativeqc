@@ -1,0 +1,389 @@
+{
+  "schema": "generativeqc.default-promotion-inventory",
+  "schema_version": 1,
+  "tracking_issue": 1598,
+  "classifications": [
+    "diagnostic-test-only",
+    "negative-evidence",
+    "needs-qualification",
+    "guarded-promotion-candidate",
+    "already-default",
+    "retire"
+  ],
+  "scope": {
+    "audited_sources": [
+      "src/scf/types.hpp",
+      "python/generativeqc/calculator.py",
+      "python/generativeqc/resources_hf.py",
+      "python/generativeqc_compiler/tensor/cuda_plan.py",
+      "python/generativeqc_compiler/tensor/cuda_execute.py"
+    ],
+    "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current promotion classification. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
+  },
+  "entries": [
+    {
+      "id": "scf.incremental-direct-jk",
+      "classification": "needs-qualification",
+      "controls": [
+        "scf-option:incremental_direct_jk"
+      ],
+      "owner_issues": [
+        990
+      ],
+      "sources": [
+        "src/scf/types.hpp"
+      ],
+      "rationale": "Exact incremental Direct-J/K remains default-off until provider-owned work accounting, matched full-endpoint timing, RHF/UHF coverage, geometry-change behavior, and composition with precision policy are complete.",
+      "revisit_condition": "Reclassify only after #990 retains complete cold, warm, and changed-geometry endpoint evidence with numerical parity and a workload/resource guard, or after the experiment is retired.",
+      "evidence": [
+        "issue:#990",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "scf.incremental-xc",
+      "classification": "needs-qualification",
+      "controls": [
+        "scf-option:experimental_incremental_xc"
+      ],
+      "owner_issues": [
+        237
+      ],
+      "sources": [
+        "src/scf/types.hpp"
+      ],
+      "rationale": "The incremental XC anchor/update route is an experimental controller and is not a public/default execution policy.",
+      "revisit_condition": "Revisit after complete-solve numerical and endpoint qualification demonstrates a profitable guarded domain without weakening final-state or force checks.",
+      "evidence": [
+        "issue:#237",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "public.precision-auto",
+      "classification": "needs-qualification",
+      "controls": [
+        "public-policy:precision-auto"
+      ],
+      "owner_issues": [
+        375,
+        528,
+        1189
+      ],
+      "sources": [
+        "python/generativeqc/calculator.py"
+      ],
+      "rationale": "The public precision=auto mode is explicit opt-in. HF retained evidence is not sufficient for a global default, while DFT precision has independent admission gates.",
+      "revisit_condition": "Promote only a source-identified workload domain with repeatable full-endpoint benefit, executed lower-precision work, unchanged convergence gates, and strict FP64 opt-out.",
+      "evidence": [
+        "issue:#375",
+        "issue:#528",
+        "issue:#1189",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "hf.mixed-precision-diagnostic",
+      "classification": "diagnostic-test-only",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD"
+      ],
+      "owner_issues": [
+        375
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "The environment threshold is a legacy diagnostic/qualification override. Product policy is the explicit public precision request, not an environment-variable default.",
+      "revisit_condition": "Retire the override after all retained qualification and audit workflows use the public precision policy and no historical reproduction depends on it.",
+      "evidence": [
+        "issue:#375",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "hf.reference-and-diagnostics",
+      "classification": "diagnostic-test-only",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_FINAL_FOCK_REBUILD",
+        "hf-runtime:GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE",
+        "hf-runtime:GENERATIVEQC_XSYEV_PROBE_SKIP_DIAGNOSTIC",
+        "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_COUNT_DIAGNOSTIC",
+        "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_AOT_ONLY_DIAGNOSTIC",
+        "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_FOCK_ONLY_DIAGNOSTIC",
+        "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE",
+        "hf-runtime:GENERATIVEQC_DIRECT_TILE_VALIDATION"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "These controls force reference, tracing, validation, profiling, or qualification behavior. They are audit surfaces rather than candidates for automatic product policy.",
+      "revisit_condition": "Remove individual controls when their diagnostic or reproducibility role disappears; do not promote them merely because the underlying optimized path becomes default.",
+      "evidence": [
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "hf.bounded-direct-streaming",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_BOUNDED_DIRECT_STREAMING"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Normal direct-HF execution already selects bounded streaming when the fixed descriptor grid or its memory budget requires it; the environment variable is an explicit schedule override.",
+      "revisit_condition": "Retire the override after forced-path endpoint qualification no longer needs it; changes to automatic admission still require matched endpoint evidence.",
+      "evidence": [
+        "docs:docs/developer/weighted_eri.md",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "hf.force-density-product-screening",
+      "classification": "negative-evidence",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING"
+      ],
+      "owner_issues": [
+        406
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Force density-product screening has correctness coverage but retained endpoint evidence did not justify enabling it automatically.",
+      "revisit_condition": "Reconsider only with new complete force-endpoint evidence that crosses the shared performance gate under unchanged force accuracy and screening semantics.",
+      "evidence": [
+        "issue:#406",
+        "pr:#410",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "hf.direct-shell-experiments",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_PPPS_RESIDENT_BRA",
+        "hf-runtime:GENERATIVEQC_PPPS_SIGNATURE_BUCKETING",
+        "hf-runtime:GENERATIVEQC_PSPS_SIGNATURE_BUCKETING",
+        "hf-runtime:GENERATIVEQC_PPSS_SIGNATURE_BUCKETING",
+        "hf-runtime:GENERATIVEQC_PPPS_BLOCK_THREADS",
+        "hf-runtime:GENERATIVEQC_PSSS_RESIDENT_BRA"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "These shell-class schedule overrides remain explicit experiments/ablation controls and lack one shared qualified workload guard for normal execution.",
+      "revisit_condition": "Assign a narrower owner and reclassify each selector when complete endpoint evidence either admits a guarded default or records a durable negative decision.",
+      "evidence": [
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "hf.one-electron-mapping-overrides",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING",
+        "hf-runtime:GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Generated one-electron execution is production-owned; these mapping variables preserve measured/reproduction schedule overrides rather than a second scientific implementation.",
+      "revisit_condition": "Retire overrides when retained evidence no longer requires forced mappings and the automatic compiler-owned path remains independently auditable.",
+      "evidence": [
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "df.automatic-policy-overrides",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_DERIVATIVE_MAPPING",
+        "hf-runtime:GENERATIVEQC_DF_WEIGHTED_EXECUTION",
+        "hf-runtime:GENERATIVEQC_DF_SHELL_SCHEDULE",
+        "hf-runtime:GENERATIVEQC_DF_DERIVATIVE_PAIRS",
+        "hf-runtime:GENERATIVEQC_DF_PRIMITIVE_BUCKETS",
+        "hf-runtime:GENERATIVEQC_DF_RESPONSE_ALGEBRA",
+        "hf-runtime:GENERATIVEQC_DF_RAW_STAGING",
+        "hf-runtime:GENERATIVEQC_DF_EXCHANGE",
+        "hf-runtime:GENERATIVEQC_DF_SEED_EXCHANGE",
+        "hf-runtime:GENERATIVEQC_DF_FINAL_EXCHANGE",
+        "hf-runtime:GENERATIVEQC_DF_SHELL_POLICY",
+        "hf-runtime:GENERATIVEQC_DF_RESIDENT_EXCHANGE",
+        "hf-runtime:GENERATIVEQC_DF_RESPONSE_BATCHING",
+        "hf-runtime:GENERATIVEQC_DF_FINAL_PROJECTION",
+        "hf-runtime:GENERATIVEQC_DF_DIIS_DOTS",
+        "hf-runtime:GENERATIVEQC_DF_RESPONSE_STORAGE",
+        "hf-runtime:GENERATIVEQC_DF_RESPONSE_SPACE",
+        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC"
+      ],
+      "owner_issues": [
+        404,
+        407,
+        409,
+        459,
+        682
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Unset/auto behavior for these DF selectors is resolved by existing qualified production policies; explicit values retain diagnostic, reproduction, or forced-comparison routes.",
+      "revisit_condition": "Revisit per selector when its automatic guard or evidence identity changes; do not infer that every explicit override is itself production-qualified.",
+      "evidence": [
+        "docs:docs/developer/df_tuning.md",
+        "docs:docs/developer/df_occupied_cuda.md",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "df.diagnostic-overrides",
+      "classification": "diagnostic-test-only",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS",
+        "hf-runtime:GENERATIVEQC_DF_VALUE_STORAGE",
+        "hf-runtime:GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION",
+        "hf-runtime:GENERATIVEQC_DF_SEED_VERIFY",
+        "hf-runtime:GENERATIVEQC_DF_RAW_REUSE"
+      ],
+      "owner_issues": [
+        409,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "These selectors expose reference validation, fixed block-size/storage ablations, verification, or raw-source reuse controls and are not standalone automatic-promotion targets.",
+      "revisit_condition": "Retire them when the corresponding retained evidence or debugging workflow no longer needs a forced comparison path.",
+      "evidence": [
+        "issue:#409",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "df.value-candidates",
+      "classification": "negative-evidence",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_VALUE_MAPPING",
+        "hf-runtime:GENERATIVEQC_DF_VALUE_RAW_MAPPING",
+        "hf-runtime:GENERATIVEQC_DF_VALUE_MATH"
+      ],
+      "owner_issues": [
+        405,
+        409
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "Alternative generated DF value mappings/math remain explicit candidates after retained cold complete-endpoint regressions; the established generic/scalar route remains the safe default.",
+      "revisit_condition": "Reopen only with new complete cold/warm/changed-geometry evidence that beats the current route without changing the scientific model or force gates.",
+      "evidence": [
+        "issue:#405",
+        "issue:#409",
+        "pr:#410",
+        "docs:docs/developer/df_tuning.md"
+      ]
+    },
+    {
+      "id": "df.force-screening",
+      "classification": "negative-evidence",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_FORCE_SCREEN_ABS"
+      ],
+      "owner_issues": [
+        406,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "DF force screening is explicitly off by default; arithmetic/work reduction alone has not established a complete force-endpoint promotion.",
+      "revisit_condition": "Require changed-geometry force endpoints, resource accounting, and existing numerical gates before any nonzero automatic screening budget is admitted.",
+      "evidence": [
+        "issue:#406",
+        "docs:docs/developer/df_tuning.md",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "tensor.schedule-opt-ins",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "tensor-schedule:views",
+        "tensor-schedule:fuse",
+        "tensor-schedule:recompute",
+        "tensor-schedule:stream_reductions",
+        "tensor-schedule:streamed_gemm_reduction",
+        "tensor-schedule:inplace_donation",
+        "tensor-schedule:direct_gemm",
+        "tensor-schedule:layouts"
+      ],
+      "owner_issues": [
+        508,
+        509,
+        783
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/cuda_plan.py"
+      ],
+      "rationale": "TensorSchedule exposes explicit physical execution choices. Evidence exists for selected workloads, but normal planning must consume only identity-bound qualified winners and fail closed to the deterministic baseline.",
+      "revisit_condition": "Split/reclassify a schedule dimension when its production consumers have source/device/workload-bound evidence and normal planning encodes the exact admission guard.",
+      "evidence": [
+        "issue:#508",
+        "issue:#509",
+        "issue:#783",
+        "issue:#1598"
+      ]
+    },
+    {
+      "id": "tensor.reduction-provider-cub",
+      "classification": "negative-evidence",
+      "controls": [
+        "tensor-schedule:reduction_provider"
+      ],
+      "owner_issues": [
+        971
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/cuda_plan.py"
+      ],
+      "rationale": "The CUB/CCCL reduction provider is qualification-only and retained evidence rejected the tested candidate; generated reduction remains the production/default provider.",
+      "revisit_condition": "Reconsider only after a new source/device/workload campaign crosses complete-endpoint and numerical gates; representability or a kernel microbenchmark is insufficient.",
+      "evidence": [
+        "issue:#971",
+        "benchmarks:benchmarks/results/issue971-cub-block-reduce-h200/summary.json"
+      ]
+    },
+    {
+      "id": "tensor.cuda-graph-replay",
+      "classification": "needs-qualification",
+      "controls": [
+        "tensor-execution:cuda-graph"
+      ],
+      "owner_issues": [
+        507
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/cuda_execute.py"
+      ],
+      "rationale": "Prepared TensorIR CUDA Graph replay is explicit opt-in; ordinary execution remains the safe default while retained graph resources and repeated complete-endpoint benefit are not a universal admission rule.",
+      "revisit_condition": "Promote only through a bounded capture/resource guard with repeated-endpoint benefit, identity-safe replay invalidation, and ordinary execution as the guard-miss fallback.",
+      "evidence": [
+        "issue:#507",
+        "issue:#1598"
+      ]
+    }
+  ]
+}
