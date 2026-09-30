@@ -1,0 +1,86 @@
+name: Validate remaining WB PR repairs
+on:
+  push:
+    branches: [ci/remaining-pr-repair-20260930-astra]
+    paths: [.github/workflows/remaining-pr-wb-repair.yml, repair-scripts/fix_wb_fixtures.py]
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - number: 1611
+            stage: 1
+            branch: perf/1611-stationary-implicit-grid-owners
+            head: 8e874b38842feaeb45c20dc70510faf598a69dd8
+          - number: 1612
+            stage: 2
+            branch: perf/1612-wb97mv-resident-grid-points
+            head: 048c1cf2fe0a225670e8c49733283c564a534e03
+          - number: 1613
+            stage: 3
+            branch: perf/1613-stationary-resident-grid-weights
+            head: c1e0750e081a2ed8dbecb9bbd44821dd8ff565d7
+          - number: 1616
+            stage: 3
+            branch: agent/review-wb-residency-master
+            head: b6b486146f89ca91b7ed9e0a556630eed8f3e9e4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: '0.10.7'
+          python-version: '3.11'
+          enable-cache: false
+      - name: Reconcile the pinned head and repair fixtures
+        env:
+          EXPECTED_HEAD: ${{ matrix.head }}
+          PR_BRANCH: ${{ matrix.branch }}
+          STAGE: ${{ matrix.stage }}
+        run: |
+          set -euo pipefail
+          cp repair-scripts/fix_wb_fixtures.py /tmp/fix_wb_fixtures.py
+          test "$(git rev-parse "origin/${PR_BRANCH}")" = "${EXPECTED_HEAD}"
+          git config user.name njzjz-bot
+          git config user.email 48687836+njzjz-bot@users.noreply.github.com
+          git checkout --detach "${EXPECTED_HEAD}"
+          git merge --no-edit c8886146a77a115681eb5b90ef6c11cef022fdea
+          python /tmp/fix_wb_fixtures.py . "${STAGE}"
+          uv venv /tmp/repair-venv
+          uv pip install --python /tmp/repair-venv/bin/python numpy pytest ruff==0.16.9
+          /tmp/repair-venv/bin/ruff format tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py
+          /tmp/repair-venv/bin/ruff check tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py
+          git diff --check
+          git diff --stat
+      - name: Run all available focused residency regressions
+        env:
+          PYTHONPATH: python
+        run: |
+          set -euo pipefail
+          targets=(tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py tests/python/test_dft_mp_v1_capacity.py tests/python/test_stationary_resident_nonlocal_join.py)
+          for file in test_stationary_geometry_kernel_host.py test_stationary_owner_kernel_abi.py test_grid_cuda_publication.py test_wb97mv_resident_grid_density.py test_wb97mv_resident_grid_points.py test_wb97mv_resident_grid_weights.py; do
+            if [[ -f "tests/python/${file}" ]]; then targets+=("tests/python/${file}"); fi
+          done
+          /tmp/repair-venv/bin/python -m pytest -q --tb=short "${targets[@]}"
+      - name: Commit the verified fix to a separate staging branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.number }}
+          PR_BRANCH: ${{ matrix.branch }}
+          EXPECTED_HEAD: ${{ matrix.head }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin "refs/heads/${PR_BRANCH}" | cut -f1)" = "${EXPECTED_HEAD}"
+          git add tests/python/test_stationary_cuda_merge_boundary.py tests/python/test_stationary_nonlocal_timing.py tests/python/test_grid_view_publication.py .github/workflows/ci.yml
+          git commit -m "test(dft): synchronize residency fixtures and retry transient cache downloads"
+          git merge-base --is-ancestor "${EXPECTED_HEAD}" HEAD
+          auth="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" push origin "HEAD:refs/heads/ci/verified-wb-${PR_NUMBER}-20260930"
+          printf 'VERIFIED_PR=%s VERIFIED_HEAD=%s\n' "${PR_NUMBER}" "$(git rev-parse HEAD)"
