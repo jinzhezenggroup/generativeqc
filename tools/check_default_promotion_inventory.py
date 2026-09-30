@@ -89,8 +89,11 @@ def _string_tuple(assignments: dict[str, ast.AST], name: str) -> tuple[str, ...]
 def _discover_scf_options(root: Path) -> dict[str, str]:
     relative = Path("src/scf/types.hpp")
     source = _read(root / relative)
+    # Audit the field name, not its initializer: {}, {false}, = false and
+    # non-literal defaults must all require the same ownership registration.
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source, flags=re.DOTALL)
     names = re.findall(
-        r"\bbool\s+((?:experimental_|incremental_)[A-Za-z0-9_]*)\s*\{\s*\}\s*;",
+        r"\bbool\s+((?:experimental_|incremental_)[A-Za-z0-9_]*)\b",
         source,
     )
     return {f"scf-option:{name}": relative.as_posix() for name in names}

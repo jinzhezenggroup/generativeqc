@@ -325,16 +325,12 @@
         "tensor-schedule:views",
         "tensor-schedule:fuse",
         "tensor-schedule:recompute",
-        "tensor-schedule:stream_reductions",
-        "tensor-schedule:streamed_gemm_reduction",
         "tensor-schedule:inplace_donation",
-        "tensor-schedule:direct_gemm",
         "tensor-schedule:layouts"
       ],
       "owner_issues": [
         508,
-        509,
-        783
+        509
       ],
       "sources": [
         "python/generativeqc_compiler/tensor/cuda_plan.py"
@@ -344,8 +340,49 @@
       "evidence": [
         "issue:#508",
         "issue:#509",
-        "issue:#783",
         "issue:#1598"
+      ]
+    },
+    {
+      "id": "tensor.streaming-reductions",
+      "classification": "negative-evidence",
+      "controls": [
+        "tensor-schedule:stream_reductions",
+        "tensor-schedule:streamed_gemm_reduction"
+      ],
+      "owner_issues": [
+        783
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/cuda_plan.py"
+      ],
+      "rationale": "Both streaming schedules remain explicit memory-oriented alternatives. Retained RTX 5090 and H100 complete-endpoint evidence shows substantial runtime regressions against the deterministic baseline despite smaller arenas; the generated-reduction variant is still about 10.4x and 27.0x slower on the retained H100 workloads. Neither schedule belongs in default search.",
+      "revisit_condition": "Reconsider only after a new bounded cooperative/persistent lowering shares producer work and passes independent numerical, resource, and complete-endpoint gates on an identified workload domain; lower memory or launch counts alone do not justify promotion.",
+      "evidence": [
+        "issue:#783",
+        "pr:#845",
+        "benchmarks:benchmarks/results/tensor-streaming-783/generated-reduction-h100-4x8.json",
+        "benchmarks:benchmarks/results/tensor-streaming-783/generated-reduction-h100-8x16.json"
+      ]
+    },
+    {
+      "id": "tensor.direct-gemm",
+      "classification": "already-default",
+      "controls": [
+        "tensor-schedule:direct_gemm"
+      ],
+      "owner_issues": [
+        508
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/cuda_plan.py"
+      ],
+      "rationale": "TensorSchedule defaults direct_gemm to true, and ordinary plan_cuda uses that BASELINE_SCHEDULE. Existing layout and GEMM legality checks select direct execution when supported; direct_gemm=false retains the explicit packed comparison path.",
+      "revisit_condition": "Revisit when direct-GEMM legality, layout eligibility, or baseline policy changes; preserve the explicit packed opt-out and do not treat the already-default dimension as an unqualified opt-in.",
+      "evidence": [
+        "issue:#508",
+        "source:python/generativeqc_compiler/tensor/cuda_plan.py",
+        "docs:docs/developer/tensor_cuda.md"
       ]
     },
     {

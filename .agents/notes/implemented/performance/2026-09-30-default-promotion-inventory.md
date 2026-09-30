@@ -50,9 +50,11 @@ where one exists.
 
 ## Evidence
 
-The checker currently resolves 59 controls into 16 decision groups. Regression
+The checker currently resolves 59 controls into 18 decision groups. Regression
 tests cover the current repository, missing metadata, duplicate registration,
-missing controls, and a synthetic new TensorSchedule opt-in.
+missing controls, a synthetic new TensorSchedule opt-in, SCF declarations with
+implicit/explicit/non-literal defaults, and the distinct negative streaming and
+already-default direct-GEMM classifications.
 
 ## Consequences
 
