@@ -13,7 +13,7 @@ from fractions import Fraction
 from itertools import product
 from math import prod
 
-from .optimize import optimize
+from .prepare import prepare_for_backend
 from .program import Program
 
 
@@ -131,7 +131,11 @@ def lower_inline_cuda_output(
         raise TypeError("inline CUDA lowering requires a TensorIR Program")
     if not isinstance(output, str):
         raise TypeError("inline CUDA requested output must be a string")
-    specialized = optimize(program, requested_outputs=(output,))
+    specialized = prepare_for_backend(
+        program,
+        backend="cuda",
+        requested_outputs=(output,),
+    )
     root = specialized.outputs[output]
     if root.spec.dtype != "float64" or root.spec.size != 1:
         raise ValueError("inline CUDA lowering requires one FP64 scalar output")
