@@ -50,6 +50,9 @@ def resident_nonlocal_geometry(
     count = len(points)
     if count == 0 or nonlocal_owner.point_count != count:
         raise ValueError("resident nonlocal owner/grid point count differs")
+    if count % sources.natom:
+        raise ValueError("molecular grid point count is not atom-major uniform")
+    points_per_atom = count // sources.natom
     if len(raw_weights) != count:
         raise ValueError("resident nonlocal raw quadrature size differs")
     if type(ao_count) is not int or ao_count <= 0:
@@ -82,13 +85,13 @@ def resident_nonlocal_geometry(
                 ingredients,
                 defer_error_to_consumer=True,
             ) as task:
-                owners = np.asarray(state.grid.owners[begin:end], dtype=np.int64)
                 weights = state.grid.weights[begin:end]
                 raw = raw_weights[begin:end]
                 if phase == 0:
-                    sources.geometry(
+                    sources.geometry_molecular(
                         task,
-                        owners,
+                        begin,
+                        points_per_atom,
                         weights,
                         raw,
                         functional=functional,
@@ -131,9 +134,10 @@ def resident_nonlocal_geometry(
                     )
                 # Inactive MolecularV1 rows have all six seeds zeroed by the
                 # native producer, so no host active mask is needed.
-                nonlocal_sources.geometry_external_device(
+                nonlocal_sources.geometry_external_device_molecular(
                     task,
-                    owners,
+                    begin,
+                    points_per_atom,
                     weights,
                     raw,
                     seeds.pointer,
@@ -182,6 +186,8 @@ def resident_nonlocal_geometry(
         "nonlocal_feature_collection_point_visits": 0 if snapshot_seeded else count,
         "nonlocal_feature_d2h_bytes": 0,
         "nonlocal_seed_h2d_bytes": 0,
+        "grid_owner_source": "implicit-atom-major-index",
+        "grid_owner_h2d_bytes": 0,
         "nonlocal_dense_pair_capacity": count * count,
         "nonlocal_seed_generation": seeds.generation,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
