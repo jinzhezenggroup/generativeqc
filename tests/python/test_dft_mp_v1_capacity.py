@@ -153,10 +153,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
         ),
         "native_cuda_grid_sha256": (
-            "eed5f5bff7c67622c75fd0d21448b66502b581c102637036a748b459a288a41b"
+            "4d0a0bf35754c18f6025c800c6a96b230cd553c278290764f6437a8a791f9fbb"
         ),
         "native_cuda_grid_route_sha256": (
-            "1dc638a529158c28150096a80f8e13ec0dedefeb604eeccbf1270a5456508894"
+            "98b6763435fcd84c6306ea034c330a9864ecf4d33d0009031230f7b64e77b71e"
         ),
         "native_grid_point_count_sha256": (
             "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
@@ -1575,7 +1575,7 @@ def test_grid_count_fails_closed_when_native_backend_route_moves(
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
     target = tmp_path / "src/methods/dft_method.cpp"
     source = target.read_text(encoding="utf-8")
-    old = "return dft::MolecularGrid::from_cuda(system, spec, device);"
+    old = "return dft::MolecularGrid::from_cuda(system, spec, device, retain_device);"
     assert old in source
     target.write_text(
         source.replace(old, "return dft::MolecularGrid(system, spec);", 1),
