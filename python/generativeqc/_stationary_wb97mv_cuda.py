@@ -1,9 +1,10 @@
 """Complete WB97M-V CUDA stationary composition from a live native KS state.
 
 The native owner evaluates integral derivatives; generated CUDA contracts AO
-jets, semilocal/nonlocal feature adjoints, partition motion and the final sum.
-Host work is explicit snapshot validation and bounded tile scheduling. Nonlocal
-features and force seeds remain on the device throughout composition.
+jets, semilocal/nonlocal feature adjoints and partition motion. Components that
+are already published on the host are summed there exactly once, avoiding a
+redundant host->device->host final-add round trip. Nonlocal features and force
+seeds remain on the device throughout composition.
 """
 
 from __future__ import annotations
@@ -38,9 +39,6 @@ from generativeqc_compiler.method.stationary_gradient import (
 from generativeqc_compiler.method.stationary_prepared import (
     compile_stationary_prepared_plan,
 )
-from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
-from generativeqc_compiler.tensor.cuda_plan import plan_cuda
-
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
 from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
@@ -295,26 +293,10 @@ class PreparedWb97mvCudaGradient:
                     context=source._batch._context,
                     library=source._library,
                 )
-                rp = plan_cuda(
-                    plan.reduction_program(atoms=na),
-                    compiler.target,
-                    max_bytes=max_device_bytes - device_bound,
-                )
-                self.reduction = self._stack.enter_context(
-                    PreparedCuda(rp, compile_cuda(rp, compiler, cache), device=device)
-                )
-                self._reduction_device_bytes = rp.peak_bytes
-                self._reduction_host_bytes = rp.host_bytes
-                if host_bound + rp.host_bytes > max_host_bytes:
-                    raise ValueError(
-                        "WB97M-V stationary reduction exceeds host capacity"
-                    )
                 self._identity = identity
             except BaseException:
                 self.close()
                 raise
-        device_bound += self._reduction_device_bytes
-        host_bound += self._reduction_host_bytes
         component_seconds = {"prepare": perf_counter() - started}
         component_start = perf_counter()
         evaluate = source._library.generativeqc_ks_snapshot_cuda_integral_gradient_v1
@@ -394,8 +376,21 @@ class PreparedWb97mvCudaGradient:
         components.update(resident_parts)
         component_seconds.update(resident_seconds)
         component_start = perf_counter()
+        # The plan gate remains authoritative for complete source coverage.
+        # Every component is already a host FP64 array at this boundary, so a
+        # CUDA add would only upload those arrays and download the same 3*Natom
+        # sum again. Accumulate in canonical plan order with identical +1 weights.
         plan.reduction_program(atoms=na, sources=components)
-        result = self.reduction.execute(components)
+        gradient = np.zeros((na, 3), dtype=np.float64)
+        for name in plan.source_names:
+            component = np.asarray(components[name])
+            if component.dtype != np.float64 or component.shape != (na, 3):
+                raise ValueError("WB97M-V gradient component shape/dtype mismatch")
+            if not np.all(np.isfinite(component)):
+                raise ValueError("WB97M-V gradient component is nonfinite")
+            np.add(gradient, component, out=gradient)
+        if not np.all(np.isfinite(gradient)):
+            raise ValueError("WB97M-V final gradient is nonfinite")
         contract.validate(state)
         component_seconds["reduction_and_validation"] = perf_counter() - component_start
         self.executions += 1
@@ -412,6 +407,9 @@ class PreparedWb97mvCudaGradient:
             "grid_points": npnt,
             "grid_density_source": "exact-final-scf-device-binding",
             "grid_density_h2d_bytes": 0,
+            "final_reduction": "host-canonical-source-sum",
+            "final_reduction_h2d_bytes": 0,
+            "final_reduction_d2h_bytes": 0,
             **resident_work,
             "partition_pair_visits": 2 * npnt * na * (na - 1),
             # The native v1 result does not identify whether optional shell
@@ -458,4 +456,4 @@ class PreparedWb97mvCudaGradient:
             "component_seconds": component_seconds,
         }
         self.last_work = work
-        return -np.asarray(result.outputs["gradient"]).copy(), work
+        return -gradient.copy(), work
