@@ -132,6 +132,7 @@ class CudaResidentGrid:
     device: int
     points: int
     weights: int
+    atomic_weights: int
     point_count: int
 
 
@@ -301,11 +302,12 @@ class NativeKsSnapshot:
             ct.POINTER(ct.c_int),
             ct.POINTER(ct.c_void_p),
             ct.POINTER(ct.c_void_p),
+            ct.POINTER(ct.c_void_p),
             ct.POINTER(ct.c_size_t),
         ]
         binding.restype = ct.c_int
         device = ct.c_int(-1)
-        points, weights = ct.c_void_p(), ct.c_void_p()
+        points, weights, atomic_weights = ct.c_void_p(), ct.c_void_p(), ct.c_void_p()
         point_count = ct.c_size_t()
         status = binding(
             self._batch._batch,
@@ -313,6 +315,7 @@ class NativeKsSnapshot:
             ct.byref(device),
             ct.byref(points),
             ct.byref(weights),
+            ct.byref(atomic_weights),
             ct.byref(point_count),
         )
         if status == _native.STATUS_NOT_IMPLEMENTED:
@@ -323,6 +326,7 @@ class NativeKsSnapshot:
             device.value < 0
             or not points.value
             or not weights.value
+            or not atomic_weights.value
             or not point_count.value
         ):
             raise RuntimeError("native KS returned an invalid resident-grid lease")
@@ -330,6 +334,7 @@ class NativeKsSnapshot:
             device.value,
             int(points.value),
             int(weights.value),
+            int(atomic_weights.value),
             point_count.value,
         )
 
