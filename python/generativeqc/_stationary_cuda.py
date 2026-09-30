@@ -550,6 +550,13 @@ class _CudaSources:
             ct.c_double,
             *tail,
         ]
+        lib.stationary_nuclear_all.argtypes = [
+            ct.c_void_p,
+            ct.c_uint,
+            _DOUBLE,
+            ct.c_size_t,
+            *tail,
+        ]
         geometry_args = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -959,6 +966,26 @@ class _CudaSources:
             int(b),
             float(charges[a]),
             float(charges[b]),
+        )
+
+    def nuclear_all(self, charges: typing.Any) -> None:
+        """Submit every nuclear pair in deterministic atom-major order with one gate."""
+        self.flush()
+        charges = _checked(charges, (self.natom,))
+        kind = self.kinds["nuclear", ()]
+        if self.component_mode:
+            kind = encode_stationary_derivative_kind(
+                kind,
+                derivative_binding("nuclear", ()),
+                rank=2,
+                has_nucleus=False,
+            )
+        self._call(
+            "stationary_nuclear_all",
+            self.handle,
+            kind,
+            _ptr(charges),
+            self.natom,
         )
 
     def geometry(
