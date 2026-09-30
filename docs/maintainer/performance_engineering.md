@@ -43,7 +43,7 @@ reported, not automatically rewritten. Reports include both lexical loop depth a
 an effective depth that removes simple fixed extents such as spin=2 or xyz=3. The
 action classes are:
 
-- `matrix-chain-candidate`: proven rank-2 scalar matrix chain; CI-blocking;
+- `matrix-chain-candidate`: conservative structural match for a pure-algebra rank-2 scalar matrix chain; CI-blocking;
 - `high-rank-output-materialization`: high-rank permutation/symmetrization pass;
   inspect producer/consumer fusion to remove a complete traversal/materialization;
 - `high-rank-source-contraction`: genuine high-rank source access; inspect
