@@ -768,8 +768,9 @@ int stationary_workspace_device(void* pointer, size_t offset, size_t count, doub
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
+    if (!p || !output) throw std::invalid_argument("invalid stationary device workspace request");
     const size_t capacity = workers * 9 * p->atoms;
-    if (!p || !output || offset > capacity || count > capacity - offset)
+    if (offset > capacity || count > capacity - offset)
       throw std::invalid_argument("invalid stationary device workspace request");
     check(*p);
     drain_geometry(*p);
