@@ -10,7 +10,9 @@ from generativeqc.rks_response import _RKSIntegralSourceView
     "representation,sizes",
     [("cartesian", (1, 3, 6, 10)), ("real_spherical", (1, 3, 5, 7))],
 )
-def test_rks_topology_preserves_native_shell_component_counts(representation, sizes):
+def test_rks_topology_preserves_native_shell_component_counts(
+    representation: str, sizes: tuple[int, ...]
+) -> None:
     basis = SimpleNamespace(
         atoms=(object(),),
         shells=tuple(SimpleNamespace(angular_momentum=l) for l in range(4)),
@@ -29,7 +31,7 @@ def test_rks_topology_preserves_native_shell_component_counts(representation, si
         view._check_open()
 
 
-def test_rks_topology_still_rejects_inconsistent_native_ao_count():
+def test_rks_topology_still_rejects_inconsistent_native_ao_count() -> None:
     basis = SimpleNamespace(
         atoms=(object(),),
         shells=(SimpleNamespace(angular_momentum=2),),
