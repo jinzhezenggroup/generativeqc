@@ -62,9 +62,10 @@ for functional in (0,1,2):
     for scientific in ('__global__ void task_kernel', '__global__ void geometry_kernel'):
         assert scientific in s
         assert s.index(scientific) > include
-    geometry=s.split('__global__ void geometry_kernel',1)[1].split(
-        '}  // namespace vibeqc_stationary_cuda',1
-    )[0]
+    geometry, closing, _ = s.split('__global__ void geometry_kernel',1)[1].partition(
+        '}  // namespace generativeqc_stationary_cuda'
+    )
+    assert closing, 'generated stationary geometry namespace boundary is missing'
     assert '__global__ void geometry_reduce' not in geometry
     assert '__syncthreads();' in geometry
     assert 'for (size_t source_lane = 0; source_lane < workers; ++source_lane)' in geometry
