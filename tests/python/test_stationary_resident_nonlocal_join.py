@@ -123,11 +123,12 @@ def fixture(
             self.base = base
             self.finishes = 0
 
-        def geometry_molecular(
+        def geometry_molecular_resident_weights(
             self,
             task: SimpleNamespace,
             begin: int,
             points_per_atom: int,
+            device_weights: int,
             weights: np.ndarray,
             raw: np.ndarray,
             *,
@@ -136,16 +137,19 @@ def fixture(
             assert self.label == "local"
             assert task.alive and functional == 4
             assert points_per_atom == 3
+            assert device_weights == resident_grid.weights + begin * 8
             np.testing.assert_array_equal(
                 weights, state.grid.weights[begin : begin + len(weights)]
             )
+            events.append(("weight_pointer", begin))
             events.append(("local", len(weights)))
 
-        def geometry_external_device_molecular(
+        def geometry_external_device_molecular_resident_weights(
             self,
             task: SimpleNamespace,
             begin: int,
             points_per_atom: int,
+            device_weights: int,
             weights: np.ndarray,
             raw: np.ndarray,
             pointer: int,
@@ -155,9 +159,11 @@ def fixture(
             assert self.label == "nonlocal"
             assert task.alive and points_per_atom == 3 and seed_begin == begin
             assert (pointer, stride) == (4096, 6)
+            assert device_weights == resident_grid.weights + begin * 8
             np.testing.assert_array_equal(
                 weights, state.grid.weights[begin : begin + len(weights)]
             )
+            events.append(("weight_pointer", begin))
             events.append(("external", begin))
 
         def finish(self) -> dict[str, np.ndarray]:
@@ -222,7 +228,17 @@ def test_complete_join_collocates_each_grid_tile_once() -> None:
     assert work["grid_owner_h2d_bytes"] == 0
     assert work["grid_point_source"] == "exact-native-resident-grid"
     assert work["grid_point_h2d_bytes"] == 0
+    assert work["grid_weight_source"] == "exact-native-resident-grid"
+    assert work["grid_weight_h2d_bytes"] == 0
     assert [event[1] for event in events if event[0] == "point_pointer"] == [0, 2, 4]
+    assert [event[1] for event in events if event[0] == "weight_pointer"] == [
+        0,
+        0,
+        2,
+        2,
+        4,
+        4,
+    ]
     assert work["ao_collocation_point_visits"] == 6
     assert work["geometry_point_visits"] == 12
     assert work["nonlocal_dense_pair_capacity"] == 36
@@ -255,7 +271,9 @@ def test_cross_stream_seed_is_rejected_before_consumption() -> None:
 
 def test_join_refuses_missing_consumer_dependency() -> None:
     args, events = fixture()
-    args["nonlocal_sources"].geometry_external_device_molecular = None
+    args[
+        "nonlocal_sources"
+    ].geometry_external_device_molecular_resident_weights = None
     with pytest.raises(TypeError, match="lacks the resident"):
         MODULE.resident_nonlocal_geometry(**args)
     assert not events
@@ -290,8 +308,8 @@ def test_production_driver_uses_shared_pass_accumulators() -> None:
     assert "except NotImplementedError:" in join
     assert join.count("nonlocal_owner.collect(") == 1
     assert "state.grid.owners" not in join
-    assert "geometry_molecular(" in join
-    assert "geometry_external_device_molecular(" in join
+    assert "geometry_molecular_resident_weights(" in join
+    assert "geometry_external_device_molecular_resident_weights(" in join
     for retired in (
         "NonlocalFixedGridPlan",
         "feature_task_with_features(",
@@ -360,6 +378,8 @@ def test_missing_resident_features_preserves_bounded_device_fallback(
     assert work["nonlocal_feature_d2h_bytes"] == work["nonlocal_seed_h2d_bytes"] == 0
     assert work["grid_owner_source"] == "implicit-atom-major-index"
     assert work["grid_owner_h2d_bytes"] == 0
+    assert work["grid_weight_source"] == "exact-native-resident-grid"
+    assert work["grid_weight_h2d_bytes"] == 0
     assert "two_pass_geometry_and_pair_drain" in seconds
     assert "single_pass_geometry_and_pair_drain" not in seconds
     np.testing.assert_array_equal(components["xc_ao"], np.full((2, 3), 1.0))
