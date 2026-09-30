@@ -1,22 +1,19 @@
-name: One-shot WB97M-V capacity repair
+name: One-shot resident-weight capacity repair
 
 on:
   push:
     branches: [agent/review-fixed-owner-repairs]
     paths: [.github/workflows/review-fixed-owner-repairs.yml]
-
 permissions:
   contents: read
-
 concurrency:
   group: one-shot-reviewed-pr-repairs
   cancel-in-progress: false
-
 jobs:
-  capacity:
+  repair:
     if: github.repository == 'jinzhezenggroup/generativeqc'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -24,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9
-      - name: Rebind only audited source contracts and run every capacity guard
+      - name: Validate exact-head repair
         shell: bash
         run: |
           set -euo pipefail
@@ -34,94 +31,66 @@ jobs:
           import subprocess
           import tempfile
           from pathlib import Path
-
-          ROOT = Path.cwd()
-          OUT = Path(os.environ['RUNNER_TEMP']) / 'wb97mv-capacity'
-          OUT.mkdir()
-          HELPER = ROOT / '.github/review-wb-capacity.py'
-          targets = (
-              (1611, 'perf/1611-stationary-implicit-grid-owners', '077f6b3554ab140c638dc25d48a5e141461180a3', None),
-              (1612, 'perf/1612-wb97mv-resident-grid-points', 'e707a2bc262cd0821b6656c7c6af0cb18b86146d', 1611),
-              (1613, 'perf/1613-stationary-resident-grid-weights', '6bf8b8a3b79b9843305aed7c86a183a5241bb2bf', 1612),
-          )
-          files = ['tools/dft_mp_v1/qualify_capacity.py', 'tests/python/test_dft_mp_v1_capacity.py']
-          reports = []
-          completed = {}
-
-          def run(*args, cwd=ROOT, check=True, env=None):
+          root = Path.cwd()
+          out = Path(os.environ['RUNNER_TEMP']) / 'weight-capacity'
+          out.mkdir()
+          branch = 'perf/1613-stationary-resident-grid-weights'
+          expected = '9acf6ac1292f38d2d9470b18424c58c438fe18d5'
+          parent = '63b3f3eb11f70b6a59febafc182e16cc658cb7a5'
+          report = {'pr': 1613, 'expected_head': expected, 'parent': parent}
+          def run(*args, cwd=root, check=True, env=None):
               result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env)
               if check and result.returncode:
                   raise RuntimeError(result.stderr or result.stdout)
               return result
-
-          for number, branch, expected, parent in targets:
-              record = {'pr': number, 'branch': branch, 'expected_head': expected}
-              directory = OUT / str(number)
-              directory.mkdir()
-              try:
-                  target = completed[parent] if parent is not None else None
-                  record['target'] = target
-                  remote = run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.split()
-                  if not remote or remote[0] != expected:
-                      raise RuntimeError('remote head moved; no changes made')
-                  with tempfile.TemporaryDirectory(prefix='wb97mv-capacity-') as temporary:
-                      work = Path(temporary) / 'checkout'
-                      run('git', 'worktree', 'add', '--detach', str(work), expected)
-                      try:
-                          if target is not None:
-                              run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', target, cwd=work)
-                          result = run('python3', str(HELPER), str(work))
-                          (directory / 'hash-audit.json').write_text(result.stdout)
-                          record['updated_contracts'] = json.loads(result.stdout)
-                          unstaged = set(run('git', 'diff', '--name-only', cwd=work).stdout.splitlines())
-                          if not unstaged <= set(files):
-                              raise RuntimeError('unexpected source changes from fingerprint repair')
-                          run('python3', '-m', 'ruff', 'check', *files, cwd=work)
-                          run('python3', '-m', 'ruff', 'format', '--check', *files, cwd=work)
-                          tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py']
-                          if number >= 1612:
-                              tests += ['test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py']
-                          if number == 1613:
-                              tests.append('test_wb97mv_resident_grid_weights.py')
-                          env = dict(os.environ)
-                          env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
-                          command = ['python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--import-mode=importlib']
-                          command += ['tests/python/' + name for name in tests]
-                          result = run(*command, cwd=work, check=False, env=env)
-                          (directory / 'tests.log').write_text(result.stdout + result.stderr)
-                          record['test_returncode'] = result.returncode
-                          record['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-15:])
-                          if result.returncode:
-                              raise RuntimeError('capacity or owner tests failed; no push')
-                          run('git', 'add', '--', *files, cwd=work)
-                          run('git', 'diff', '--cached', '--check', cwd=work)
-                          message = (f'fix(dft): audit grid-owner capacity contracts for PR #{number}\n\n'
-                                     'Rebind the initializer, source owner, two existing geometry consumers\n'
-                                     'and full native header only. Keep all work, allocation and mutation\n'
-                                     'guards unchanged; full capacity and selected owner tests passed.\n\n'
-                                     'Agent: ChatGPT\nModel: GPT-6 Astra Pro')
-                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
-                          head = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
-                          record['commit'] = head
-                          record['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
-                          (directory / 'repair.patch').write_text(run('git', 'diff', expected, head, cwd=work).stdout)
-                          run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
-                          completed[number] = head
-                          record['pushed'] = True
-                      finally:
-                          run('git', 'worktree', 'remove', '--force', str(work), check=False)
-              except Exception as error:
-                  record['error'] = str(error)
-              reports.append(record)
-              (OUT / 'report.json').write_text(json.dumps(reports, indent=2) + '\n')
-              print(json.dumps(record), flush=True)
-          if any('error' in report for report in reports):
+          try:
+              remote = run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.split()
+              if not remote or remote[0] != expected:
+                  raise RuntimeError('head moved; no changes made')
+              with tempfile.TemporaryDirectory(prefix='review-weight-') as temporary:
+                  work = Path(temporary) / 'checkout'
+                  run('git', 'worktree', 'add', '--detach', str(work), expected)
+                  try:
+                      run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'merge', '--no-commit', '--no-ff', parent, cwd=work)
+                      audited = run('python3', str(root / '.github/review-wb-capacity.py'), str(work))
+                      (out / 'hash-audit.json').write_text(audited.stdout)
+                      report['updated_contracts'] = json.loads(audited.stdout)
+                      files = ['tools/dft_mp_v1/qualify_capacity.py', 'tests/python/test_dft_mp_v1_capacity.py']
+                      changes = set(run('git', 'diff', '--name-only', cwd=work).stdout.splitlines())
+                      if not changes <= set(files):
+                          raise RuntimeError('unexpected changed paths')
+                      run('python3', '-m', 'ruff', 'check', *files, cwd=work)
+                      run('python3', '-m', 'ruff', 'format', '--check', *files, cwd=work)
+                      env = dict(os.environ)
+                      env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
+                      tests = ['test_dft_mp_v1_capacity.py', 'test_stationary_owner_kernel_abi.py', 'test_stationary_geometry_kernel_host.py', 'test_stationary_resident_nonlocal_join.py', 'test_wb97mv_resident_grid_points.py', 'test_grid_cuda_publication.py', 'test_wb97mv_resident_grid_weights.py']
+                      result = run('python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--import-mode=importlib', *['tests/python/' + name for name in tests], cwd=work, env=env, check=False)
+                      (out / 'tests.log').write_text(result.stdout + result.stderr)
+                      report['test_returncode'] = result.returncode
+                      report['test_summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-15:])
+                      if result.returncode:
+                          raise RuntimeError('regression tests failed; no push')
+                      run('git', 'add', '--', *files, cwd=work)
+                      run('git', 'diff', '--cached', '--check', cwd=work)
+                      message = 'fix(dft): bind resident-weight owner capacity evidence\n\nPreserve the formatted kernel ABI and validated parent fixes. Update only\naudited owner/header fingerprints; all capacity and selected grid tests pass.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                      run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
+                      report['commit'] = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
+                      report['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
+                      (out / 'repair.patch').write_text(run('git', 'diff', expected, report['commit'], cwd=work).stdout)
+                      run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
+                      report['pushed'] = True
+                  finally:
+                      run('git', 'worktree', 'remove', '--force', str(work), check=False)
+          except Exception as error:
+              report['error'] = str(error)
+          (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report), flush=True)
+          if 'error' in report:
               raise SystemExit(1)
           PY
-      - name: Retain capacity audit and regression evidence
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: wb97mv-capacity-repair
-          path: ${{ runner.temp }}/wb97mv-capacity/
+          name: weight-capacity-repair
+          path: ${{ runner.temp }}/weight-capacity/
           retention-days: 1
