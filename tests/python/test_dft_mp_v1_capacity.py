@@ -274,7 +274,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "e529ebefad5e10fd56184b6b36b433f1922ba8432595a80e63af1014dd6bfb5b"
+            "def6bc1bcd2e1da05594e94c19b45d2057cdfefb8dcd29877a72b72f8fb3fe7a"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -295,7 +295,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
         "sources_owner_sha256": (
-            "31286c9474290ba7f86ed359eca8e505c329758052898ce6e90554cc76644a72"
+            "92b994a262949b3b806d45c4d073e620792410621922c9465a5881d57e8fb8a7"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -331,10 +331,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "8090ded22d15a0be0f3fd591a7e9ffc1f52e899eb0813942ca6b5fd9f9f89219"
+            "b2356eca0b5eafd0e3c67f59d334a769e38df765fc730a4c839757204d0a455b"
         ),
         "native_geometry_enqueue_sha256": (
-            "6333b07540ae8b28f8cc04cdfbe2d11a2faa0c8abf5fd9f47a53848d09478724"
+            "f555f778eaf4af1e8fac5e75e7f26d1d40827a43ee12f8c5a71ffe179a6a1891"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -343,7 +343,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
         "native_header_sha256": (
-            "9ec94f61e0acfbb37265c16b1e36a7cf496633a1b52def4d7088e7f3202b8aaf"
+            "5a2aedf3a18dc660c6b95d9c280ecc5e60ea541b1e78248d46cf741f436be828"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
