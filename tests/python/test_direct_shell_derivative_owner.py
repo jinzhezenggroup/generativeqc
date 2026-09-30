@@ -136,3 +136,5 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     assert "ao.set_density_device(" in stationary
     assert "if native_complete_integrals" in stationary
     assert "records -= ao_integral_primitive_records" in stationary
+    assert '"one_electron_device_peak_bytes"' in stationary
+    assert "additional_device_peak_bound=peak" in stationary

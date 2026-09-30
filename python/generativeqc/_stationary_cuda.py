@@ -2332,7 +2332,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             else ()
         ),
         native_integral_resources=dict(native_integral_resources),
-        additional_device_peak_bound=peak,
+        additional_device_peak_bound=peak
+        + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
         tensor_executions=tensor_work["executions"],
