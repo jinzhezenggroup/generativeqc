@@ -652,8 +652,11 @@ def prepare_for_backend(
         disabled_passes=disabled_passes,
         stop_after=stop_after,
     )
+    diagnostics = prepared.provenance["optimizer_diagnostics"]
     unchanged = (
         requested_outputs is None
+        and not diagnostics["disabled_passes"]
+        and diagnostics["stopped_after"] is None
         and tuple(prepared.outputs) == tuple(program.outputs)
         and prepared.logical_hash == program.logical_hash
         and len(prepared.nodes) == len(program.nodes)
