@@ -15,7 +15,11 @@ from generativeqc_compiler.common.source_reuse import (
 from generativeqc_compiler.method.mp2_schedule import (
     native_header as mp2_schedule_header,
 )
-from generativeqc_compiler.mp2.equations import cpu_capacity, energy_program, pair_energy_program
+from generativeqc_compiler.mp2.equations import (
+    cpu_capacity,
+    energy_program,
+    pair_energy_program,
+)
 from generativeqc_compiler.tensor.cpu_emit import emit_cpu
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
