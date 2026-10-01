@@ -1414,6 +1414,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && refinement_budget;
     }
     try {
+      // Final RI-K provenance is independent of whether the caller elects to
+      // update the reusable warm density cache.
+      if (output.converged) retain_final_fitted_projection();
       if (output.converged && warm_updates) {
         // E, F, residual and retained D all belong to this same generation.
         // A failed/unfinished solve can never overwrite the last-good cache.
@@ -1443,7 +1446,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
         final_generation = generation;
         output.precision_work.returned_solve_epoch = solve_epoch;
         output.precision_work.returned_state_generation = final_generation;
-        retain_final_fitted_projection();
       } else {
         final_fitted_projection_ready = false;
       }
