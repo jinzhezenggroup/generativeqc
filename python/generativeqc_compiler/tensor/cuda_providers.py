@@ -172,7 +172,7 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
             uses_cublas = contract.k > 0
             operation = "gemm"
             shape = (contract.batch, contract.m, contract.n, contract.k)
-        elif reduction_provider is not None:
+        elif reduction_provider is not None or node.op == "reduce":
             is_gemm = False
             uses_cublas = False
             operation = "reduce"
