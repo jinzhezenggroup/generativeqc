@@ -176,7 +176,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
         ),
         "force_capability_promotion_sha256": (
-            "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
+            "aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e"
         ),
         "cuda_force_method_sha256": (
             "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
@@ -313,7 +313,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "11cd95520b07a7a5e16df64ccea35b3a45035b528b8c69efca9a7e6e8750e052"
+            "89d3e7889d50a6a3ff1ca31c26ad2cc8e2f2dee72f4d66f3e9a717834fbfdb3c"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -373,7 +373,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
         ),
         "decode_sha256": (
-            "b22d47e054209d55f27ca68c8fbcb37577743835b3c4dffd175dd560d1b79429"
+            "c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (

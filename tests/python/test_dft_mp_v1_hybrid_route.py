@@ -16,15 +16,16 @@ from generativeqc.ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
     _scf_domain_for_ir,
     cuda_global_hybrid_force_eligible,
+    ks_coefficients,
 )
-from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method import compile_ks_execution_plan, resolve_method
 
 from tools.dft_mp_v1 import qualify_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _nodes() -> tuple[str, ast.Assign, ast.If]:
+def _nodes() -> tuple[str, dict[str, ast.Assign], ast.If]:
     source = (ROOT / "python/generativeqc/calculator.py").read_text(encoding="utf-8")
     owner = next(
         node
@@ -36,15 +37,18 @@ def _nodes() -> tuple[str, ast.Assign, ast.If]:
         for node in owner.body
         if isinstance(node, ast.FunctionDef) and node.name == "__init__"
     )
-    assignments = [
-        node
+    predicate_names = {
+        "semilocal_force",
+        "cuda_df_semilocal_force",
+        "cuda_hybrid_force",
+    }
+    assignments = {
+        target.id: node
         for node in ast.walk(constructor)
         if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "cuda_hybrid_force"
-            for target in node.targets
-        )
-    ]
+        for target in node.targets
+        if isinstance(target, ast.Name) and target.id in predicate_names
+    }
     promotions = [
         node
         for node in constructor.body
@@ -54,8 +58,8 @@ def _nodes() -> tuple[str, ast.Assign, ast.If]:
             for item in ast.walk(node.test)
         )
     ]
-    assert len(assignments) == len(promotions) == 1
-    return source, assignments[0], promotions[0]
+    assert set(assignments) == predicate_names and len(promotions) == 1
+    return source, assignments, promotions[0]
 
 
 def _promoted(
@@ -65,14 +69,19 @@ def _promoted(
     spin: str = "unpolarized",
     blocked: str | None = None,
     renamed: bool = False,
+    density_fitting: bool = False,
+    include_semilocal: bool = False,
 ) -> bool:
-    _, assignment, promotion = _nodes()
+    _, assignments, promotion = _nodes()
     options = SimpleNamespace(
         xc_schedule="device_fused",
         method_ir=resolve_method(method, spin=spin),
     )
     if renamed:
         options.method_ir = replace(options.method_ir, identifier="opaque-hybrid-alias")
+    options.execution_plan = compile_ks_execution_plan(options.method_ir)
+    if include_semilocal:
+        options.coefficients = ks_coefficients(options.method_ir)
     # Resolve the actual native domain instead of inferring it from a label.
     # Ineligible graphs must short-circuit without querying their native domain;
     # CAM-B3LYP deliberately has no native semilocal lowerer.
@@ -90,15 +99,21 @@ def _promoted(
             _native.METHOD_PBE_UKS if spin == "polarized" else _native.METHOD_PBE_RKS
         ),
         _basis="sto-3g",
+        _method_name=method.lower(),
+        _automatic_libxc_name=None,
     )
     scope = {
         "self": owner,
-        "basis_has_ecp": blocked == "ecp",
-        "density_fitting_mode": _native.DENSITY_FITTING_NONE,
+        "basis_has_ecp": blocked in ("ecp", "unqualified-ecp"),
+        "density_fitting_mode": (
+            _native.DENSITY_FITTING_AUTO
+            if density_fitting
+            else _native.DENSITY_FITTING_NONE
+        ),
         "semilocal_force": False,
         "named_cpu_all_electron_force": False,
         "cuda_wb97mv_force": False,
-        "qualified_basis": lambda basis: True,
+        "qualified_basis": lambda basis: blocked != "unqualified-ecp",
         "cuda_global_hybrid_force_eligible": cuda_global_hybrid_force_eligible,
         "SPLIT_HYBRID_SCF_DOMAIN": SPLIT_HYBRID_SCF_DOMAIN,
         "_native": _native,
@@ -116,10 +131,24 @@ def _promoted(
         owner._capabilities.family = "hartree_fock"
     elif blocked == "unregistered-method":
         owner._method = -1
-    for name, expression in (
-        ("cuda_hybrid_force", assignment.value),
+    elif blocked == "automatic-libxc":
+        owner._automatic_libxc_name = "unqualified"
+    elif blocked in ("exchange", "nonlocal", "post-scf"):
+        options.execution_plan = SimpleNamespace(
+            exchange=(object(),) if blocked == "exchange" else (),
+            nonlocal_correlation=object() if blocked == "nonlocal" else None,
+            post_scf=(object(),) if blocked == "post-scf" else (),
+        )
+    predicates = (
+        [("semilocal_force", assignments["semilocal_force"].value)]
+        if include_semilocal
+        else []
+    ) + [
+        ("cuda_df_semilocal_force", assignments["cuda_df_semilocal_force"].value),
+        ("cuda_hybrid_force", assignments["cuda_hybrid_force"].value),
         ("promoted", promotion.test),
-    ):
+    ]
+    for name, expression in predicates:
         scope[name] = eval(  # noqa: S307 - execute only the trusted repository predicate
             compile(ast.Expression(expression), "<Calculator force route>", "eval"),
             {"__builtins__": {}},
@@ -183,6 +212,61 @@ def test_hybrid_promotion_does_not_admit_other_source_contracts(
     assert not _promoted(precision=precision, method=method)
 
 
+@pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("method", ("LDA_XC_PW", "PBE", "R2SCAN"))
+@pytest.mark.parametrize("density_fitting", (False, True))
+def test_semilocal_force_precision_boundary_is_separate_from_hybrid_admission(
+    precision: int, spin: str, method: str, density_fitting: bool
+) -> None:
+    assert _promoted(
+        precision=precision,
+        spin=spin,
+        method=method,
+        density_fitting=density_fitting,
+        include_semilocal=True,
+    ) is (not density_fitting or precision == _native.PRECISION_FP64)
+
+
+@pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("method", ("PBE0", "B3LYP", "M06-2X", "MN15", "WB97M-V"))
+def test_density_fitting_never_borrows_direct_hybrid_force_admission(
+    precision: int, spin: str, method: str
+) -> None:
+    assert not _promoted(
+        precision=precision,
+        spin=spin,
+        method=method,
+        density_fitting=True,
+        include_semilocal=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "blocked",
+    (
+        "cpu",
+        "missing-options",
+        "wrong-family",
+        "unregistered-method",
+        "automatic-libxc",
+        "unqualified-ecp",
+        "exchange",
+        "nonlocal",
+        "post-scf",
+    ),
+)
+def test_df_semilocal_force_preserves_nonprecision_boundaries(blocked: str) -> None:
+    assert not _promoted(
+        precision=_native.PRECISION_FP64,
+        method="PBE",
+        blocked=blocked,
+        density_fitting=True,
+        include_semilocal=True,
+    )
+
+
 @pytest.mark.parametrize(
     "guard",
     (
@@ -198,7 +282,8 @@ def test_hybrid_promotion_does_not_admit_other_source_contracts(
 def test_capacity_audit_rejects_a_changed_hybrid_guard(
     tmp_path: Path, guard: str
 ) -> None:
-    source, assignment, _ = _nodes()
+    source, assignments, _ = _nodes()
+    assignment = assignments["cuda_hybrid_force"]
     segment = ast.get_source_segment(source, assignment)
     assert segment is not None and segment.count(guard) == 1
     for name in ("calculator.py", "batch.py"):

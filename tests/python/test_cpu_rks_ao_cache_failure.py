@@ -29,14 +29,20 @@ def cache_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <stdexcept>
 #include <string>
 int mode, preparations=0, queries=0;
+struct Grid {
+  std::size_t point_count() const {
+    constexpr std::size_t limit = 64ULL * 1024ULL * 1024ULL / (4 * sizeof(double));
+    return mode==6 ? limit : (mode==8 ? limit+1 : 7);
+  }
+};
 namespace dft {
 struct RksAoCache { int value=17; };
-std::size_t rks_ao_cache_bytes(int, int, unsigned) {
+std::size_t rks_ao_cache_bytes(int, const Grid&, unsigned) {
   ++queries;
   if (mode==4) throw std::invalid_argument("size");
   return (64ULL + (mode==5 ? 1 : 0))*1024*1024;
 }
-RksAoCache prepare_rks_ao_cache(int, int, unsigned) {
+RksAoCache prepare_rks_ao_cache(int, const Grid&, unsigned) {
   ++preparations;
   if (mode==1) throw std::bad_alloc();
   if (mode==2) throw std::bad_array_new_length();
@@ -44,26 +50,38 @@ RksAoCache prepare_rks_ao_cache(int, int, unsigned) {
   return {};
 }
 }
-bool select() {
-  const bool incremental_xc = mode==6;
+struct IncrementalState {
+  bool retain_anchor_features{};
+  const dft::RksAoCache* ao_cache{};
+};
+bool select(bool incremental) {
+  std::optional<IncrementalState> incremental_state;
+  if (incremental) incremental_state.emplace();
   const struct { bool cached_direct; } evaluate_xc{mode!=7};
-  const int basis=0, grid=0;
+  const int basis=0;
+  const Grid grid;
   const struct { unsigned ao_order; } ks{1};
 """
         + region
         + r"""
   if (ao_cache && ao_cache->value != 17) throw std::logic_error("changed cache");
+  if (incremental_state) {
+    if (incremental_state->retain_anchor_features != (mode!=8))
+      throw std::logic_error("feature cache admission changed");
+    if (incremental_state->ao_cache != (ao_cache ? &*ao_cache : nullptr))
+      throw std::logic_error("incremental AO pointer does not match its live owner");
+  }
   return ao_cache.has_value();
 }
 int main(int argc, char** argv) {
-  if (argc!=2) return 9;
+  if (argc!=3) return 9;
   mode=std::stoi(argv[1]);
   try {
-    const bool cached=select();
+    const bool cached=select(std::stoi(argv[2]) != 0);
     if (mode==3 || mode==4) return 1;
-    if (cached != (mode==0)) return 2;
-    if (preparations != (mode<=2 ? 1 : 0)) return 3;
-    if (queries != (mode==6 || mode==7 ? 0 : 1)) return 4;
+    if (cached != (mode==0 || mode==6 || mode==8)) return 2;
+    if (preparations != (mode<=2 || mode==6 || mode==8 ? 1 : 0)) return 3;
+    if (queries != (mode==7 ? 0 : 1)) return 4;
   } catch (const std::bad_alloc&) { return 5; }
     catch (const std::invalid_argument& e) {
       if (mode!=4 || std::string(e.what())!="size") return 6;
@@ -85,8 +103,11 @@ int main(int argc, char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("mode", range(8))
+@pytest.mark.parametrize("incremental", (False, True))
+@pytest.mark.parametrize("mode", range(9))
 def test_optional_cache_failure_keeps_streaming_available(
-    cache_probe: Path, mode: int
+    cache_probe: Path, mode: int, incremental: bool
 ) -> None:
-    subprocess.run([str(cache_probe), str(mode)], check=True, timeout=5)
+    subprocess.run(
+        [str(cache_probe), str(mode), str(int(incremental))], check=True, timeout=5
+    )
