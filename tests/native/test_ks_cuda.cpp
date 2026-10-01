@@ -1129,20 +1129,20 @@ void precision_work_census_case(bool restricted, int precision_mode) {
                   result.precision.mixed_stage_fock_builds &&
               operator_count(scf::PrecisionOperatorKind::CoulombJ, strict) ==
                   result.precision.strict_stage_fock_builds &&
-              operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) ==
-                  result.precision.mixed_stage_fock_builds &&
-              operator_count(scf::PrecisionOperatorKind::Xc, strict) ==
-                  result.precision.strict_stage_fock_builds,
-          "CUDA-KS J/XC operator census disagrees with Fock stages");
+              operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) == 0 &&
+              operator_count(scf::PrecisionOperatorKind::Xc, strict) == result.fock_builds &&
+              operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) ==
+                  result.precision.mixed_stage_fock_builds,
+          "CUDA-KS J/XC operator census disagrees with executed arithmetic");
   for (const auto kind :
        {scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionOperatorKind::PhysicalResidual,
         scf::PrecisionOperatorKind::Eigensolver, scf::PrecisionOperatorKind::DensityBuild,
         scf::PrecisionOperatorKind::Diagnostics})
     require(operator_count(kind, strict) == result.fock_builds,
             "CUDA-KS strict per-iteration operator census is incomplete");
-  require(
-      operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >= 7U * result.fock_builds,
-      "CUDA-KS matrix-product census missed mandatory physical work");
+  require(operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >=
+              7U * result.fock_builds + result.precision.strict_stage_fock_builds,
+          "CUDA-KS matrix-product census missed mandatory physical/XC work");
   require(operator_count(scf::PrecisionOperatorKind::Diis, strict) > 0 &&
               operator_count(scf::PrecisionOperatorKind::Diis, strict) <= result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::ExchangeK, strict) == 0,
