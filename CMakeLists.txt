@@ -375,6 +375,10 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli basis list --json)
     set_tests_properties(generativeqc_cli_basis_list PROPERTIES
                          PASS_REGULAR_EXPRESSION "def2-svp")
+    add_test(NAME generativeqc_cli_gaussian_contract
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_gaussian.py"
+                     $<TARGET_FILE:generativeqc_cli>)
     add_test(NAME generativeqc_cli_rhf_cpu
              COMMAND generativeqc_cli run
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
@@ -389,6 +393,10 @@ if(GENERATIVEQC_BUILD_TESTS)
                      --charge 1 --multiplicity 2 --json)
     set_tests_properties(generativeqc_cli_uhf_cpu PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"method\":\"uhf\"")
+    add_test(NAME generativeqc_cli_profile_safety
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_profile_cache.py"
+                     $<TARGET_FILE:generativeqc_cli>)
     add_test(NAME generativeqc_cli_profile_clear
              COMMAND ${CMAKE_COMMAND} -E env
                      "GENERATIVEQC_PROFILE_CACHE=${CMAKE_CURRENT_BINARY_DIR}/cli-profile-cache"
@@ -423,5 +431,8 @@ install(TARGETS generativeqc
 )
 if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  # The CLI embeds the BSE-derived Gaussian basis catalog in its binary.
+  install(FILES LICENSES/bse-data-BSD-3-Clause.txt
+          DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

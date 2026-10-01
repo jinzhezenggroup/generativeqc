@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -531,6 +532,71 @@ std::string json_escape(std::string_view value) {
   return escaped;
 }
 
+// The profile index schema is a JSON object mapping compatibility hashes to
+// bundle IDs. Validate the whole document before embedding it in show output.
+bool valid_profile_index(std::string_view text) {
+  std::size_t position = 0;
+  const auto whitespace = [&]() {
+    while (position < text.size() && (text[position] == ' ' || text[position] == '\t' ||
+                                      text[position] == '\r' || text[position] == '\n'))
+      ++position;
+  };
+  const auto take = [&](char expected) {
+    whitespace();
+    if (position == text.size() || text[position] != expected) return false;
+    ++position;
+    return true;
+  };
+  const auto string = [&]() {
+    if (!take('"')) return false;
+    while (position < text.size()) {
+      const unsigned char character = text[position++];
+      if (character == '"') return true;
+      if (character < 0x20) return false;
+      if (character >= 0x80) {
+        const unsigned continuation = character >= 0xf0 ? 3 : character >= 0xe0 ? 2 : 1;
+        if (character < 0xc2 || character > 0xf4) return false;
+        std::uint32_t codepoint = character & (0x7fu >> (continuation + 1));
+        for (unsigned index = 0; index < continuation; ++index) {
+          if (position == text.size()) return false;
+          const unsigned char next = text[position++];
+          if ((next & 0xc0u) != 0x80u) return false;
+          codepoint = (codepoint << 6) | (next & 0x3fu);
+        }
+        const std::uint32_t minimum = continuation == 1   ? 0x80
+                                      : continuation == 2 ? 0x800
+                                                          : 0x10000;
+        if (codepoint < minimum || codepoint > 0x10ffff ||
+            (codepoint >= 0xd800 && codepoint <= 0xdfff))
+          return false;
+        continue;
+      }
+      if (character != '\\') continue;
+      if (position == text.size()) return false;
+      const char escape = text[position++];
+      if (escape == 'u') {
+        for (int digit = 0; digit < 4; ++digit) {
+          if (position == text.size() ||
+              std::isxdigit(static_cast<unsigned char>(text[position++])) == 0)
+            return false;
+        }
+      } else if (std::string_view("\"\\/bfnrt").find(escape) == std::string_view::npos) {
+        return false;
+      }
+    }
+    return false;
+  };
+  if (!take('{')) return false;
+  if (!take('}')) {
+    do {
+      if (!string() || !take(':') || !string()) return false;
+    } while (take(','));
+    if (!take('}')) return false;
+  }
+  whitespace();
+  return position == text.size();
+}
+
 std::string read_profile_index(const std::filesystem::path& path) {
   std::error_code error;
   if (!std::filesystem::exists(path, error)) {
@@ -541,10 +607,10 @@ std::string read_profile_index(const std::filesystem::path& path) {
   std::ifstream stream(path);
   if (!stream) throw std::runtime_error("cannot open profile index: " + path.string());
   std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-  const auto first = content.find_first_not_of(" \t\r\n");
-  const auto last = content.find_last_not_of(" \t\r\n");
-  if (first == std::string::npos || content[first] != '{' || content[last] != '}')
-    throw std::runtime_error("profile index is not a JSON object: " + path.string());
+  if (stream.bad()) throw std::runtime_error("cannot read profile index: " + path.string());
+  if (!valid_profile_index(content))
+    throw std::runtime_error("profile index must be a JSON object mapping strings to strings: " +
+                             path.string());
   return content;
 }
 
@@ -599,25 +665,33 @@ int profile_clear() {
 
   ProfileCacheLock lock(root / ".lock");
   const auto active = root / "active.json";
-  auto pending = active;
-  pending += ".tmp";
 #if defined(__unix__) || defined(__APPLE__)
-  pending += "." + std::to_string(static_cast<long long>(::getpid()));
-#endif
-
-  {
-    std::ofstream stream(pending, std::ios::trunc);
-    if (!stream)
-      throw std::runtime_error("cannot write temporary profile index: " + pending.string());
-    stream << "{}\n";
-    stream.flush();
-    if (!stream)
-      throw std::runtime_error("cannot flush temporary profile index: " + pending.string());
+  // Never follow a predictable temporary-path symlink or truncate a stale file.
+  std::string pattern = (root / "active.json.tmp.XXXXXX").string();
+  std::vector<char> name(pattern.begin(), pattern.end());
+  name.push_back('\0');
+  const int descriptor = ::mkstemp(name.data());
+  if (descriptor < 0) throw std::runtime_error("cannot create temporary profile index");
+  const std::filesystem::path pending(name.data());
+  constexpr std::string_view content = "{}\n";
+  std::size_t written = 0;
+  while (written < content.size()) {
+    const auto count = ::write(descriptor, content.data() + written, content.size() - written);
+    if (count < 0 && errno == EINTR) continue;
+    if (count <= 0) {
+      (void)::close(descriptor);
+      std::filesystem::remove(pending, error);
+      throw std::runtime_error("cannot write temporary profile index");
+    }
+    written += static_cast<std::size_t>(count);
   }
-
-#if defined(_WIN32)
-  std::filesystem::remove(active, error);
-  error.clear();
+  if (::close(descriptor) != 0) {
+    std::filesystem::remove(pending, error);
+    throw std::runtime_error("cannot close temporary profile index");
+  }
+#else
+  throw std::runtime_error("profile clear requires POSIX locking and atomic replacement");
+  const auto pending = active;
 #endif
   std::filesystem::rename(pending, active, error);
   if (error) {
