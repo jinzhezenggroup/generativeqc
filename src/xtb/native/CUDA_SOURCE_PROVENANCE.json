@@ -284,7 +284,7 @@
     "src/backends/cuda/gfn2_mulliken.cu": {
       "adapted": true,
       "upstream_sha256": "a38ac9d9b567181add01e2dbfa4c3955497b0035a774abc4ff3f62bde4124ad1",
-      "vendored_sha256": "775028143814158b4a8fd39e0f37e4c3e8c879d5aabf8336c6a819002f29fed1"
+      "vendored_sha256": "c48caec09e9e92a44e3e139d8252703da6e83d7b2e0f21cb504754d403554ffa"
     },
     "src/backends/cuda/gfn2_mulliken.cuh": {
       "adapted": true,
