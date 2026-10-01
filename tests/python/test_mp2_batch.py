@@ -12,11 +12,30 @@ H2 = [
 ]
 
 
-def test_mp2_advertises_batches_and_rejects_unsupported_flags() -> None:
+def test_mp2_advertises_batches_reuses_hf_warm_state_and_rejects_profiling() -> None:
     assert method_capabilities("mp2").supports_batch
     calculator = Calculator(method="mp2", device="cpu")
-    with pytest.raises(RuntimeError, match="MP2 batch does not support warm starts"):
-        calculator.prepare_batch(H2)
+    with calculator.prepare_batch(H2) as batch:
+        cold = batch.execute(properties=("energy",), strict=True)
+        assert all(not item.warm_start_used for item in cold.items)
+
+        warm = batch.execute(properties=("energy",), strict=True)
+        np.testing.assert_allclose(warm.energies, cold.energies, atol=1.0e-10, rtol=0)
+        assert all(item.warm_start_used for item in warm.items)
+        assert all(not item.warm_start_fallback for item in warm.items)
+
+        changed_coordinates = np.asarray(
+            [[0.0, 0.0, -0.75], [0.0, 0.0, 0.75]], dtype=np.float64
+        )
+        changed = batch.execute(
+            [changed_coordinates, None], properties=("energy",), strict=True
+        )
+        assert all(item.warm_start_used for item in changed.items)
+
+        batch.clear_warm_starts()
+        cleared = batch.execute(properties=("energy",), strict=True)
+        assert all(not item.warm_start_used for item in cleared.items)
+
     with pytest.raises(RuntimeError, match="MP2 batch does not support profiling"):
         calculator.prepare_batch(H2, warm_start=False, shell_class_profiling=True)
 
