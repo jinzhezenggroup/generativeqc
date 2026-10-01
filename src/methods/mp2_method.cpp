@@ -79,30 +79,32 @@ class Mp2Prepared final : public PreparedCalculation {
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
       scf::ScfResult hf;
-      if (!density_fitted_ && !cuda) {
-        if (!cpu_exact_plan_) {
+      if (!density_fitted_) {
+        const auto backend = cuda ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+        if (!exact_plan_) {
           const auto strategy =
               scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
-                                      scf::FockBackend::Cpu, options_.screening_tolerance);
-          cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
+                                      backend, options_.screening_tolerance);
+          exact_plan_ = std::make_unique<scf::PreparedFockPlan>(
+              system_, nullptr, strategy, cuda ? context_.device_id : -1,
+              cuda ? options_.density_fitting_memory_budget_bytes : 0);
         }
-        prepared_exact = cpu_exact_plan_.get();
+        prepared_exact = exact_plan_.get();
         auto execution = options_;
         execution.resolved_fock_build = prepared_exact->strategy();
         hf = scf::run_prepared_fock_strategy(*prepared_exact, execution);
       } else {
-        hf = density_fitted_
-                 ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
-                                                                     context_.device_id)
-                                 : scf::run_rhf_density_fitting(system_, *auxiliary_, options_))
-                 : scf::run_rhf_cuda(system_, options_, context_.device_id);
+        hf = fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
+                                system_, *auxiliary_, options_, context_.device_id)
+                          : scf::run_rhf_density_fitting(system_, *auxiliary_, options_);
       }
       if (!hf.converged || !hf.reference)
         throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
       const auto& ref = *hf.reference;
-      // Release the iterative density. The exact CPU prepared owner remains
-      // alive when present so correlation can borrow its already-built ERIs.
+      // Release the iterative density. The exact prepared owner remains alive
+      // so CPU can borrow resident ERIs and CUDA can generate bounded raw ERI
+      // tiles from the same Direct basis/geometry owner used by the reference.
       hf.density.clear();
       hf.density.shrink_to_fit();
       std::unique_ptr<posthf::RawSource> raw_source;
@@ -129,7 +131,7 @@ class Mp2Prepared final : public PreparedCalculation {
         // The compatibility force planner does not borrow the prepared ERIs.
         // Retire its view before its owner and create RawSource only afterward.
         prepared_source.reset();
-        cpu_exact_plan_.reset();
+        exact_plan_.reset();
         if (!raw_source)
           raw_source =
               std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
@@ -220,7 +222,7 @@ class Mp2Prepared final : public PreparedCalculation {
   double threshold_;
   bool density_fitted_{};
   bool fitted_cuda_{};
-  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
+  std::unique_ptr<scf::PreparedFockPlan> exact_plan_;
   std::optional<generativeqc_correlation_diagnostic> last_;
   mutable std::mutex mutex_;
 };
