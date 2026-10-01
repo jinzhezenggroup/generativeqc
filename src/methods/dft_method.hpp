@@ -44,6 +44,15 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
     std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
 
+/** Token-checked density-fitted stationary integral sources for CPU or CUDA.
+ * Output is source-major [hcore, overlap/Pulay, J_DF, K_DF], each block
+ * containing 3*Natom values. D/W must be the already validated snapshot frame. */
+generativeqc_status dft_density_fitted_integral_gradient_cached(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
+
 /** Token-checked full-range J'/K' through the prepared Direct shell owner.
  * Output is source-major [J,K], each block containing 3*Natom values. */
 generativeqc_status dft_cuda_full_range_integral_derivatives(
