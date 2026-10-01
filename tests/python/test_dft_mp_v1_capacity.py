@@ -172,6 +172,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "semilocal_force_predicate_sha256": (
             "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
         ),
+        "global_hybrid_force_predicate_sha256": (
+            "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+        ),
         "force_capability_promotion_sha256": (
             "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
         ),
