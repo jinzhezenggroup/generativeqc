@@ -75,7 +75,12 @@ def test_generated_exchange_value_eligibility_is_request_owned(tmp_path: Path) -
 namespace generativeqc::scf {
 // The GPU storage owner is not constructed. Only presence/capability metadata
 // are supplied to the unchanged production predicates extracted below.
-struct CudaDirectJkPlan { void* generated_exchange{}; unsigned derivative_order{}; };
+struct SharedValueCapability { bool value_capability{}; };
+struct GeneratedExchangeValueCapability { SharedValueCapability* shared{}; };
+struct CudaDirectJkPlan {
+  GeneratedExchangeValueCapability* generated_exchange{};
+  unsigned derivative_order{};
+};
 """
         + dispatch
         + predicate
@@ -83,8 +88,7 @@ struct CudaDirectJkPlan { void* generated_exchange{}; unsigned derivative_order{
 }
 int main() {
   using namespace generativeqc::scf;
-  int storage;
-  for (unsigned capability : {0U, 1U})
+  for (bool value_capability : {false, true})
     for (bool available : {false, true})
       for (unsigned order : {0U, 1U})
         for (bool want_j : {false, true})
@@ -92,13 +96,15 @@ int main() {
             for (auto radial : {FockOperator::FullRange, FockOperator::ShortRange,
                                 FockOperator::LongRange})
               for (bool mixed_j : {false, true}) {
-                CudaDirectJkPlan plan{available ? &storage : nullptr, capability};
+                SharedValueCapability shared{value_capability};
+                GeneratedExchangeValueCapability exchange{&shared};
+                CudaDirectJkPlan plan{available ? &exchange : nullptr, 0U};
                 FockBuildSpec spec;
                 spec.derivative_order = order;
                 spec.coulomb.present = want_j;
                 spec.exchange.present = want_k;
                 spec.exchange.op = radial;
-                const bool expected = available && order == 0 && want_k &&
+                const bool expected = available && value_capability && order == 0 && want_k &&
                                       radial == FockOperator::FullRange;
                 const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
                 assert(selected == expected);

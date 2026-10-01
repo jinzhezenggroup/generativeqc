@@ -105,6 +105,7 @@ struct GeneratedCoulombPlan {
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
   std::uint64_t class_mask{};
+  bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{}, *shell_bounds{};
