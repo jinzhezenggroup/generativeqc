@@ -1102,6 +1102,18 @@ class Calculator:
             ),
         }
 
+    def _precision_report(
+        self, calculation: ctypes.c_void_p, index: int | None = None
+    ) -> dict | None:
+        """Expose aggregate provenance plus execution-owned detailed work."""
+
+        from ._precision_work import merge_precision_work, query_precision_work
+
+        return merge_precision_work(
+            self._precision_provenance(calculation, index),
+            query_precision_work(self._library, calculation, index=index),
+        )
+
     def _incremental_direct_jk_diagnostic(
         self, calculation: ctypes.c_void_p, index: int | None = None
     ) -> dict | None:
@@ -2101,7 +2113,7 @@ class Calculator:
                 density_rms=result_descriptor.density_rms,
                 executed_backend=backend,
                 resource_diagnostics=resource_diagnostics,
-                precision=self._precision_provenance(calculation),
+                precision=self._precision_report(calculation),
                 incremental_direct_jk=self._incremental_direct_jk_diagnostic(
                     calculation
                 ),

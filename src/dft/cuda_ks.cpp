@@ -736,7 +736,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refinement_iterations = 0;
     output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
     output.precision_work.owner_id = owner;
-    output.precision_work.events.reserve(options.max_iterations + 4U);
     output.precision_work.operators.reserve(1);
     pending_iterations = 0;
     // The bounded device-control prototype is qualified only for strict-FP64

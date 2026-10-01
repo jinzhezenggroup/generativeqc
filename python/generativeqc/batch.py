@@ -1218,7 +1218,7 @@ class PreparedBatch:
                     warm_start_used=bool(output.warm_start_used),
                     warm_start_fallback=bool(output.warm_start_fallback),
                     basis_metadata=deepcopy(self._basis_metadata[index]),
-                    precision=self._calculator._precision_provenance(
+                    precision=self._calculator._precision_report(
                         self._batch, index
                     ),
                     incremental_direct_jk=self._calculator._incremental_direct_jk_diagnostic(
