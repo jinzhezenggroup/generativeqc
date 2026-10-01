@@ -9,9 +9,7 @@ SCHEDULER = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
 def _geometry_block() -> str:
     function = SCHEDULER.index("def _complete_rks_cuda_gradient_diagnostic(")
     begin = SCHEDULER.index("        grid = state.grid", function)
-    end = SCHEDULER.index(
-        '        with timeline.phase("xc_geometry_drain"):', begin
-    )
+    end = SCHEDULER.index('        with timeline.phase("xc_geometry_drain"):', begin)
     return SCHEDULER[begin:end]
 
 

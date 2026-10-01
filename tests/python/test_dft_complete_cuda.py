@@ -210,10 +210,7 @@ def test_complete_cuda_independent_analytic(
         assert result.work["grid_point_h2d_bytes"] == 0
         assert result.work["grid_weight_source"] == "exact-native-resident-grid"
         assert result.work["grid_weight_h2d_bytes"] == 0
-        assert (
-            result.work["grid_atomic_measure_source"]
-            == "exact-native-resident-grid"
-        )
+        assert result.work["grid_atomic_measure_source"] == "exact-native-resident-grid"
         assert result.work["grid_atomic_measure_h2d_bytes"] == 0
         assert result.work["xc_points"] == len(state.grid.points)
         assert (
