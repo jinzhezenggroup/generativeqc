@@ -73,8 +73,13 @@ hybrid/range-separated and VV10 Hessians remain fail-closed.
 ## CUDA global-hybrid forces
 
 The Python `Calculator` exposes analytic forces for admitted all-electron
-global-hybrid RKS/UKS compositions with direct J/K, FP64, an explicit `GridSpec`,
-and device-fused XC. Force eligibility follows the actual MethodIR primitives;
+global-hybrid RKS/UKS compositions with direct J/K, an explicit `GridSpec`, and
+device-fused XC. SCF may use strict FP64 or qualified component-wise `precision="auto"`;
+AUTO can lower Direct Coulomb J and separately qualified density contractions, while
+exact K and the published force's final-state audit remain FP64. Public AUTO forces
+are currently limited to the qualified PBE0/B3LYP-style global-hybrid routes;
+generated split hybrids retain strict-FP64 force admission. Force eligibility
+follows the actual MethodIR primitives;
 the SCF owner still validates the semilocal composition. Request forces through
 the ordinary single-point or prepared-batch interface:
 
