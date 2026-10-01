@@ -84,9 +84,9 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         PREFIX
         + r"""
 int mp2_case(bool prepared,bool compute_forces) {
-  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
-  if (prepared) cpu_exact_plan_=std::make_unique<scf::PreparedFockPlan>();
-  auto* prepared_exact=cpu_exact_plan_.get();
+  std::unique_ptr<scf::PreparedFockPlan> exact_plan_;
+  if (prepared) exact_plan_=std::make_unique<scf::PreparedFockPlan>();
+  auto* prepared_exact=exact_plan_.get();
   const bool density_fitted_=false;
   int system_=0;
   std::optional<int> auxiliary_;
@@ -257,3 +257,24 @@ def test_native_provider_keeps_host_fallback_and_device_handoff() -> None:
     assert "posthf_cuda_batch_add_device_v1" in transform_header
     assert "raw_borrowed" in transform_cuda
     assert "if (p.raw_borrowed)" in transform_cuda
+
+
+def test_conventional_cuda_methods_retain_prepared_exact_source() -> None:
+    mp2 = (ROOT / "src/methods/mp2_method.cpp").read_text()
+    rccsd = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+
+    # Conventional MP2 now prepares one exact owner for either backend and
+    # gives that same owner to the method-neutral interaction-source view.
+    assert "const auto backend = cuda ? scf::FockBackend::Cuda" in mp2
+    assert "exact_plan_ = std::make_unique<scf::PreparedFockPlan>" in mp2
+    assert "prepared_source.emplace(*prepared_exact)" in mp2
+    assert "cpu_exact_plan_" not in mp2
+
+    # RCCSD uses the same retained exact owner for reference + MO problem
+    # construction. The CUDA force derivative compatibility source remains
+    # intentionally separate and does not undo the energy/problem cutover.
+    assert "execution_.cuda_requested() ? scf::FockBackend::Cuda" in rccsd
+    assert "exact_plan_ = std::make_unique<scf::PreparedFockPlan>" in rccsd
+    assert "prepared_source.emplace(*prepared_exact)" in rccsd
+    assert "CUDA RCCSD cannot borrow a CPU prepared exact source" not in rccsd
+    assert "cpu_exact_plan_" not in rccsd
