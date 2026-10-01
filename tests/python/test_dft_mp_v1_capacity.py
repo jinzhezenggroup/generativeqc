@@ -568,9 +568,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert pbe0_contract["coefficients"] == [0.75, 1.0, -0.125]
 
     b3lyp_benzene = next(
-        row
-        for row in rows
-        if row["id"] == "b3lyp/rks/benzene/fp64_energy_forces"
+        row for row in rows if row["id"] == "b3lyp/rks/benzene/fp64_energy_forces"
     )
     assert b3lyp_benzene["admission"]["outcome"] == "blocked"
     assert b3lyp_benzene["admission"]["first_blocker"]["gate"] == (

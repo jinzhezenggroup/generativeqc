@@ -1749,7 +1749,9 @@ def _public_selector_contract(
         raise RuntimeError(f"unrecognized frozen public selector {selector}") from error
     if hybrid:
         if grid_spec is None:
-            raise RuntimeError("global-hybrid selector contract requires the frozen grid")
+            raise RuntimeError(
+                "global-hybrid selector contract requires the frozen grid"
+            )
         options = resolve_ks_options(selector, KsOptions(grid=grid_spec))
     else:
         options = resolve_ks_options(selector)
@@ -1810,6 +1812,7 @@ def _public_selector_contract(
         "ks_execution_plan_identity": execution_plan.identity,
         "stationary_plan_identity": public_stationary.identity,
     }
+
 
 def _artifact_verification(
     directory: Path | None,
