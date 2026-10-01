@@ -284,6 +284,60 @@ class NativeKsSnapshot:
                 "stationary KS snapshot is stale or has no current native owner"
             )
 
+    def fock_provider_proof(self) -> tuple[str, str | None, float]:
+        """Read the live native primary J/K approximation instead of inferring it."""
+        self.check_current()
+        binding = getattr(
+            self._library, "generativeqc_ks_snapshot_fock_provider_v1", None
+        )
+        if binding is None:
+            # Preserve source compatibility with older exact-only native test
+            # doubles. Density fitting must never be guessed from Python labels.
+            if (
+                self._batch._calculator._density_fitting_mode
+                == _native.DENSITY_FITTING_NONE
+            ):
+                return "exact", ("exact" if self.coefficients[2] else None), 0.0
+            raise NotImplementedError(
+                "native library lacks density-fitted KS provider provenance"
+            )
+        binding.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_uint32),
+            ct.POINTER(ct.c_uint32),
+            ct.POINTER(ct.c_double),
+        ]
+        binding.restype = ct.c_int
+        coulomb = ct.c_uint32()
+        exchange = ct.c_uint32()
+        threshold = ct.c_double()
+        _native.check(
+            self._library,
+            binding(
+                self._batch._batch,
+                self._handle,
+                ct.byref(coulomb),
+                ct.byref(exchange),
+                ct.byref(threshold),
+            ),
+            context=self._batch._context,
+        )
+        self.check_current()
+        names = {0: "exact", 1: "density-fitted", 2: "seminumerical-cosx"}
+        absent = 2**32 - 1
+        if coulomb.value not in names:
+            raise ValueError("native KS snapshot has an unknown Coulomb approximation")
+        if exchange.value == absent:
+            exchange_name = None
+        elif exchange.value in names:
+            exchange_name = names[exchange.value]
+        else:
+            raise ValueError("native KS snapshot has an unknown exchange approximation")
+        if not np.isfinite(threshold.value) or threshold.value < 0:
+            raise ValueError("native KS snapshot has an invalid DF metric threshold")
+        return names[coulomb.value], exchange_name, float(threshold.value)
+
     def cuda_resident_grid(self) -> CudaResidentGrid | None:
         """Borrow exact CUDA-generated molecular-grid pointers without host staging."""
         if self.backend != "cuda":
@@ -762,6 +816,33 @@ class NativeKsSnapshot:
             else {}
         )
         basis_identity = basis.identity
+        coulomb_approximation, exchange_approximation, metric_threshold = (
+            self.fock_provider_proof()
+        )
+        has_exchange = exchange_approximation is not None
+        if has_exchange != bool(self.coefficients[2]):
+            raise ValueError("native KS provider exchange presence disagrees with composition")
+        if exchange_approximation is None:
+            provider_name = f"native-{self.backend}-{coulomb_approximation}-j-fp64"
+        elif exchange_approximation == coulomb_approximation:
+            provider_name = f"native-{self.backend}-{coulomb_approximation}-jk-fp64"
+        else:
+            provider_name = (
+                f"native-{self.backend}-{coulomb_approximation}-j-"
+                f"{exchange_approximation}-k-fp64"
+            )
+        provider_payload = {
+            "provider": provider_name,
+            "owner": owner,
+            "device": -1 if self.backend == "cpu" else device,
+            **(
+                {"metric_relative_threshold": metric_threshold}
+                if "density-fitted"
+                in (coulomb_approximation, exchange_approximation)
+                else {}
+            ),
+            **composition_identity,
+        }
         identity = StationaryKsIdentity(
             method=method,
             model_identity=canonical_hash(
@@ -802,14 +883,7 @@ class NativeKsSnapshot:
             # The derivative bridge consumes this exact SCF point model;
             # interior-v1 remains a separate diagnostic contract.
             regularization_identity=scf_regularization_identity(method),
-            provider_identity=canonical_hash(
-                {
-                    "provider": f"native-{self.backend}-exact-{'jk' if self.coefficients[2] else 'j'}-fp64",
-                    "owner": owner,
-                    "device": -1 if self.backend == "cpu" else device,
-                    **composition_identity,
-                }
-            ),
+            provider_identity=canonical_hash(provider_payload),
             owner=owner,
             solve_epoch=epoch,
             density_generation=density_generation,
