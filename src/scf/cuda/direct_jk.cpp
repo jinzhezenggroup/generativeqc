@@ -642,12 +642,11 @@ generativeqc_status create_cuda_direct_jk_plan(
                          sizeof(GeneratedCoulombPlan) +
                          runtime::vector_bytes(plan->generated_exchange->shared->allocations);
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
-      info.schedule =
-          plan->generated_exchange->shared->value_capability
-              ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-              : (plan->generated_exchange->bounded_value_capability
-                     ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
-                     : "force-only-shell-derivative/generic-jk-fallback");
+      info.schedule = plan->generated_exchange->shared->value_capability
+                          ? "generated-shell-coulomb+exchange/generic-jk-fallback"
+                          : (plan->generated_exchange->bounded_value_capability
+                                 ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
+                                 : "force-only-shell-derivative/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
@@ -851,14 +850,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         launch_independent_jk_finite_kernel(plan->stream, input, elements, numerical_error);
         direct_jk_check(cudaGetLastError());
       }
-    auto* generated_coulomb =
-        plan->generated_exchange ? plan->generated_exchange->shared.get()
-                                 : plan->generated_coulomb.get();
+    auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                                       : plan->generated_coulomb.get();
     const bool generated_coulomb_available =
-        !mixed_j &&
-        (plan->generated_exchange
-             ? direct_jk_generated_full_range_value_available(*plan)
-             : generated_coulomb != nullptr && generated_coulomb->value_capability);
+        !mixed_j && (plan->generated_exchange
+                         ? direct_jk_generated_full_range_value_available(*plan)
+                         : generated_coulomb != nullptr && generated_coulomb->value_capability);
     const bool generated_exchange_available =
         !mixed_j && direct_jk_generated_exchange_value_available(*plan, spec);
     const bool shell_values_cover_request =
@@ -913,8 +910,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                    spec.coulomb.present, spec.exchange.present, mixed_j);
       if (dispatch.generated_coulomb) {
         if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
-          direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted, density,
-                                                    beta, coulomb));
+          direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted,
+                                                    density, beta, coulomb));
         else
           direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
       }

@@ -453,10 +453,8 @@ void canonical_value_provider() {
                 const auto source_dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
                 const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
                 const auto quartets = diagnostic.batch_size * pairs * (pairs + 1U) / 2U;
-                const bool canonical_range_exchange =
-                    want_k && op != FockOperator::FullRange;
-                const auto radial_passes =
-                    canonical_range_exchange ? (want_j ? 2U : 1U) : 0U;
+                const bool canonical_range_exchange = want_k && op != FockOperator::FullRange;
+                const auto radial_passes = canonical_range_exchange ? (want_j ? 2U : 1U) : 0U;
                 require(work[0] == (canonical_range_exchange ? quartets : 0U) &&
                             work[1] == radial_passes * quartets,
                         "full-range shell ownership leaked work into the canonical source");
@@ -559,13 +557,14 @@ void canonical_one_electron_reuse() {
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
-      require(
-          plan->generated_exchange && plan->generated_exchange->force_capability &&
-              plan->generated_exchange->bounded_value_capability &&
-              plan->generated_exchange->shared &&
-              !plan->generated_exchange->shared->value_capability && plan->batch.shell_ao_offsets &&
-              plan->batch.shell_pair_first && plan->batch.shell_pair_second,
-          "through-f owner did not retain bounded value/force shell state and one-electron metadata");
+      require(plan->generated_exchange && plan->generated_exchange->force_capability &&
+                  plan->generated_exchange->bounded_value_capability &&
+                  plan->generated_exchange->shared &&
+                  !plan->generated_exchange->shared->value_capability &&
+                  plan->batch.shell_ao_offsets && plan->batch.shell_pair_first &&
+                  plan->batch.shell_pair_second,
+              "through-f owner did not retain bounded value/force shell state and one-electron "
+              "metadata");
       auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
       value_spec.derivative_order = 0;
       require(direct_jk_generated_exchange_value_available(*plan, value_spec),

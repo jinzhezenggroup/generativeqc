@@ -65,7 +65,9 @@ def test_generated_exchange_value_eligibility_is_request_owned(tmp_path: Path) -
     if compiler is None:
         pytest.skip("requires a C++ compiler")
     header = _source("src/scf/cuda/direct_jk_plan.hpp")
-    helper_start = header.index("inline bool direct_jk_generated_full_range_value_available(")
+    helper_start = header.index(
+        "inline bool direct_jk_generated_full_range_value_available("
+    )
     helper_end = header.index("\n}", helper_start) + 2
     start = header.index("inline bool direct_jk_generated_exchange_value_available(")
     end = header.index("\n}", start) + 2

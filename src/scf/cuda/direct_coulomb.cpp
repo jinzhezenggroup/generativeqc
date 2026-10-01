@@ -261,8 +261,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget,
                                           allow_bounded_shell_fallback);
   if (!shared) return {};
-  const bool bounded_value_capability =
-      allow_bounded_shell_fallback && !shared->value_capability;
+  const bool bounded_value_capability = allow_bounded_shell_fallback && !shared->value_capability;
   const bool bounded_resources = force_capability || bounded_value_capability;
 
   const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
@@ -358,8 +357,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (bounded_value_capability) {
     plan->bounded_value_overflow =
         static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
-    check(cudaMemsetAsync(plan->bounded_value_overflow, 0,
-                          quartet_classes * sizeof(std::uint32_t), stream));
+    check(cudaMemsetAsync(plan->bounded_value_overflow, 0, quartet_classes * sizeof(std::uint32_t),
+                          stream));
   }
 
   const auto& b = plan->shared->batch;
@@ -464,8 +463,7 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange) {
-  if (p.shared == nullptr ||
-      (!p.shared->value_capability && !p.bounded_value_capability))
+  if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability))
     return cudaErrorNotSupported;
   if (alpha_exchange == nullptr ||
       (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr))
@@ -689,8 +687,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
   const auto* kernels = generated::selected_fock_shell_kernels(count);
   for (std::size_t i = 0; i < count; ++i) {
     const auto cls = kernels[i].shell_class;
-    if (!(p.value_class_mask & kGeneratedStreamingFockShellClassMask &
-          (std::uint64_t{1} << cls)))
+    if (!(p.value_class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
       continue;
     error = generated::launch_shell_class_streaming_fock(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
@@ -732,8 +729,7 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* den
 
 cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricted,
                                       const double* alpha, const double* beta, double* coulomb) {
-  if (p.shared == nullptr ||
-      (!p.shared->value_capability && !p.bounded_value_capability))
+  if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability))
     return cudaErrorNotSupported;
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   if (error != cudaSuccess) return error;

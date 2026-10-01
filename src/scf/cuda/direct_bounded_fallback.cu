@@ -45,8 +45,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, DirectRangeOperator radial_operator,
-    double omega, double secondary_exchange_coefficient, bool coulomb_only,
-    bool exchange_only) {
+    double omega, double secondary_exchange_coefficient, bool coulomb_only, bool exchange_only) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
   __shared__ unsigned long long block_quartet;
@@ -184,9 +183,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                 batch, &queue_count, queue + slot, screening_tolerance, schwarz_bounds, density,
                 active, output, nullptr, 0U, 0U, coulomb_only, exchange_only);
           } else if (angular_order == 2U) {
-            contract_fock_direct_order2_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, nullptr,
-                coulomb_only, exchange_only);
+            contract_fock_direct_order2_task<Unrestricted>(batch, task, screening_tolerance,
+                                                           schwarz_bounds, density, active, output,
+                                                           nullptr, coulomb_only, exchange_only);
           }
         }
       }

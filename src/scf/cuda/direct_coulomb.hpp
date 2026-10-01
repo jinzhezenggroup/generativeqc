@@ -81,8 +81,7 @@ struct GeneratedExchangePlan {
  * classes not owned by generated/native streaming consumers. */
 std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool force_capability = false,
-    bool allow_bounded_shell_fallback = false);
+    std::size_t budget, bool force_capability = false, bool allow_bounded_shell_fallback = false);
 
 /** Enqueue a complete raw J through generated/native classes plus the bounded
  * higher-l shell fallback owned by the exchange plan. */
