@@ -256,6 +256,8 @@ struct IncrementalPbeRksState {
   double noise_density_rms{};
   std::size_t stagnation_iterations{};
   dft::IncrementalXcDiagnostic& diagnostic;
+  const dft::RksAoCache* ao_cache{};
+  dft::RksGgaFeatureCache anchor_features;
   Matrix anchor_density;
   std::optional<IncrementalPbeRksAnchorIdentity> anchor_identity;
   std::size_t updates_since_rebuild{};
@@ -264,7 +266,10 @@ struct IncrementalPbeRksState {
   bool rebuild_for_stagnation{};
   bool strict_only{};
 
-  std::size_t numeric_capacity() const noexcept { return runtime::vector_bytes(anchor_density); }
+  std::size_t numeric_capacity() const noexcept {
+    return runtime::add_capacity(runtime::vector_bytes(anchor_density),
+                                 anchor_features.numeric_capacity_bytes());
+  }
 
   void validate_identity(const IncrementalPbeRksModelIdentity& current) const {
     if (!(current == model))
@@ -288,8 +293,20 @@ struct IncrementalPbeRksState {
                              bool periodic, bool drift, bool noise, bool stagnation, bool fallback,
                              bool strict_final, bool replace_anchor) {
     const auto old_anchor_bytes = numeric_capacity();
-    auto full = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, density, tile, {},
-                                                        exchange_scale, correlation_scale);
+    dft::XcIntegral full;
+    dft::RksGgaFeatureCache replacement_features;
+    if (replace_anchor) {
+      auto retained = dft::integrate_pbe_rks_with_tail_scaled_retaining_features(
+          basis, grid, density, tile, {}, exchange_scale, correlation_scale, ao_cache);
+      full = std::move(retained.integral);
+      replacement_features = std::move(retained.features);
+    } else if (ao_cache) {
+      full = dft::integrate_pbe_rks_with_tail_scaled_cached(
+          basis, grid, density, tile, {}, exchange_scale, correlation_scale, *ao_cache);
+    } else {
+      full = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, density, tile, {},
+                                                     exchange_scale, correlation_scale);
+    }
     ++diagnostic.full_builds;
     diagnostic.periodic_rebuilds += periodic ? 1U : 0U;
     diagnostic.drift_rebuilds += drift ? 1U : 0U;
@@ -298,14 +315,15 @@ struct IncrementalPbeRksState {
     diagnostic.fallback_rebuilds += fallback ? 1U : 0U;
     diagnostic.strict_final_builds += strict_final ? 1U : 0U;
     if (replace_anchor) {
-      // Construct both replacement pieces before mutating the accepted anchor.
-      // If allocation/full evaluation fails, the preceding anchor stays valid.
+      // Construct the replacement density, exact linear features and identity
+      // before mutating the accepted anchor. Any failure leaves it untouched.
       Matrix replacement_density = density;
       if (diagnostic.anchor_generation == std::numeric_limits<std::uint64_t>::max())
         throw std::overflow_error("incremental XC anchor generation exhausted");
       const IncrementalPbeRksAnchorIdentity replacement_identity{model,
                                                                  diagnostic.anchor_generation + 1};
-      const auto replacement_bytes = runtime::vector_bytes(replacement_density);
+      const auto replacement_bytes = runtime::add_capacity(
+          runtime::vector_bytes(replacement_density), replacement_features.numeric_capacity_bytes());
       diagnostic.peak_replacement_overlap_bytes =
           std::max(diagnostic.peak_replacement_overlap_bytes,
                    runtime::add_capacity(old_anchor_bytes, replacement_bytes));
@@ -314,8 +332,10 @@ struct IncrementalPbeRksState {
           runtime::add_capacity(runtime::add_capacity(old_anchor_bytes, replacement_bytes),
                                 full.density_diagnostic.owned_numeric_bytes)));
       anchor_density.swap(replacement_density);
+      anchor_features = std::move(replacement_features);
       anchor_identity = replacement_identity;
       diagnostic.anchor_generation = replacement_identity.source_generation;
+      ++diagnostic.anchor_feature_builds;
       diagnostic.retained_anchor_bytes = numeric_capacity();
       updates_since_rebuild = 0;
       rebuild_for_stagnation = false;
@@ -356,13 +376,17 @@ struct IncrementalPbeRksState {
     diagnostic.peak_update_buffer_bytes =
         std::max(diagnostic.peak_update_buffer_bytes, update_bytes);
     try {
+      if (anchor_features.values.empty())
+        throw std::logic_error("incremental XC anchor features are unavailable");
       auto incremental = dft::integrate_pbe_rks_incremental_exact(
-          basis, grid, anchor_density, delta, tile, exchange_scale, correlation_scale);
+          basis, grid, anchor_density, delta, tile, exchange_scale, correlation_scale,
+          &anchor_features, ao_cache);
       runtime::sample_cpu_capacity(runtime::add_capacity(
           external_retained_bytes,
           runtime::add_capacity(runtime::add_capacity(numeric_capacity(), update_bytes),
                                 incremental.total.density_diagnostic.owned_numeric_bytes)));
       ++diagnostic.incremental_updates;
+      ++diagnostic.anchor_feature_reuses;
       ++updates_since_rebuild;
       return std::move(incremental.total);
     } catch (const std::domain_error&) {
@@ -391,6 +415,7 @@ struct IncrementalPbeRksState {
     strict_only = true;
     Matrix empty;
     anchor_density.swap(empty);
+    anchor_features = {};
     anchor_identity.reset();
     updates_since_rebuild = 0;
     diagnostic.retained_anchor_bytes = 0;
@@ -621,7 +646,7 @@ ScfResult run_rks(
   // workloads keep the existing tile-streaming recomputation path.
   constexpr std::size_t kCpuRksAoCacheMaximumBytes = 64ULL * 1024ULL * 1024ULL;
   std::optional<dft::RksAoCache> ao_cache;
-  if (!incremental_xc && evaluate_xc.cached_direct) {
+  if (evaluate_xc.cached_direct) {
     const auto cache_bytes = dft::rks_ao_cache_bytes(basis, grid, ks.ao_order);
     if (cache_bytes <= kCpuRksAoCacheMaximumBytes) {
       try {
@@ -632,6 +657,7 @@ ScfResult run_rks(
       }
     }
   }
+  if (incremental_state) incremental_state->ao_cache = ao_cache ? &*ao_cache : nullptr;
   std::shared_ptr<const OccupiedDensityFactor> factor;
   DensityFactorIdentity identity{};
   const bool use_orbitals = options.xc_density_route == dft::XcDensityRoute::OccupiedOrbitals;
