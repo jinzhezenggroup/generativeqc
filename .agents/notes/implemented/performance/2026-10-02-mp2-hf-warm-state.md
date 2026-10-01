@@ -30,7 +30,7 @@ Directly accepting a previous converged HF reference was rejected for this slice
 
 ## Evidence
 
-`tests/python/test_mp2_batch.py` covers cold-to-warm replay, same-geometry energy parity, changed-geometry seed use, explicit clearing, and the unchanged profiling rejection. Existing warm-disabled MP2 batch tests continue to exercise the old path.
+`tests/python/test_mp2_batch.py` covers cold-to-warm replay, same-geometry energy parity, changed-geometry seed use, checkpoint save/restore, explicit clearing, and the unchanged profiling rejection. Existing warm-disabled MP2 batch tests continue to exercise the old path.
 
 ## Consequences
 
