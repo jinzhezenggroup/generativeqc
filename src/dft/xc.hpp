@@ -83,9 +83,10 @@ struct SpinXcIntegral {
 /** Fixed-model exact incremental PBE prototype for #237.
  *
  * anchor_density is the accepted reference state and delta_density is a signed
- * AO-matrix increment. Linear grid features are contracted independently from
- * D0 and delta-D, then added before any nonlinear invariant/functional
- * evaluation. potential_difference is Vxc[D0+delta-D] - Vxc[D0], assembled
+ * AO-matrix increment. Linear D0 grid features come from the accepted anchor
+ * (retained or freshly contracted); signed delta-D features are contracted
+ * independently and added before any nonlinear invariant/functional evaluation.
+ * potential_difference is Vxc[D0+delta-D] - Vxc[D0], assembled
  * from exact coefficient differences; no fxc linearization or local skipping
  * is used.
  */
