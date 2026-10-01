@@ -179,7 +179,6 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str, precision: str) -
                 0
             ]
         with NativeAO(atoms, multiplicity=multiplicity) as basis:
-            primitive_count = basis.nprimitive
             state = StationaryKsState.from_native(batch, basis)
             try:
                 reference_energy, reference_gradient = (
