@@ -1,0 +1,80 @@
+name: Scoped PR review snapshot
+on:
+  push:
+    branches: [agent/astra-review-round-20261001]
+    paths: [.github/workflows/astra-review-round.yml]
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+  checks: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture only source and review evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, json, os, subprocess, urllib.request
+          from pathlib import Path
+          root = Path.cwd()
+          out = Path(os.environ['RUNNER_TEMP']) / 'review-round'
+          out.mkdir()
+          repo = 'jinzhezenggroup/generativeqc'
+          master = '8154ab3df56a10900dd267039b857021a1054721'
+          def api(path):
+              req = urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,
+                  headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'], 'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+          def git(*args, check=True):
+              r = subprocess.run(['git', *args], check=False, capture_output=True)
+              if check and r.returncode: raise RuntimeError(r.stderr.decode())
+              return r
+          with (out/'master.tar.gz').open('wb') as f:
+              subprocess.run(['git','archive','--format=tar.gz',master],stdout=f,check=True)
+          master_commit = api('git/commits/'+master)
+          (out/'master-commit.json').write_text(json.dumps(master_commit,indent=2))
+          def inspect(number):
+              p = api('pulls/'+str(number))
+              d = out/str(number); d.mkdir()
+              (d/'pr.json').write_text(json.dumps(p,indent=2))
+              head=p['head']['sha']; base=p['base']['sha']
+              for sha in (head,base):
+                  if git('cat-file','-e',sha,check=False).returncode:
+                      git('fetch','--no-tags','origin',sha)
+              ancestor=git('merge-base',base,head).stdout.decode().strip()
+              (d/'master-to-head.patch').write_bytes(git('diff','--binary',master,head).stdout)
+              (d/'pr.patch').write_bytes(git('diff','--binary',ancestor,head).stdout)
+              for name,path in (
+                  ('reviews','pulls/'+str(number)+'/reviews?per_page=100'),
+                  ('inline-comments','pulls/'+str(number)+'/comments?per_page=100'),
+                  ('comments','issues/'+str(number)+'/comments?per_page=100'),
+                  ('checks','commits/'+head+'/check-runs?per_page=100'),
+                  ('runs','actions/runs?head_sha='+head+'&per_page=100')):
+                  (d/(name+'.json')).write_text(json.dumps(api(path),indent=2))
+              merge=git('merge-tree','--write-tree',head,master,check=False)
+              (d/'merge.txt').write_bytes(merge.stdout+merge.stderr)
+              tree=merge.stdout.decode().splitlines()[0] if merge.stdout else ''
+              if len(tree)==40:
+                  (d/'merge-integration.patch').write_bytes(git('diff','--binary',head,tree).stdout)
+              return {'pr':number,'head':head,'base':base,'ancestor':ancestor,'draft':p['draft'],
+                      'state':p['state'],'merged':p.get('merged'),'mergeable':p.get('mergeable'),
+                      'merge_status':merge.returncode,'merge_tree':tree}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+              report=list(pool.map(inspect,[1510,1634,1636,1637,1641,1642,1644]))
+          (out/'report.json').write_text(json.dumps({'master':master,'prs':report},indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: astra-review-round
+          path: ${{ runner.temp }}/review-round/
+          retention-days: 1
