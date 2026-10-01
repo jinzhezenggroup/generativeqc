@@ -16,6 +16,7 @@ inline constexpr std::size_t padded_mo = static_cast<std::size_t>(-1);
 struct ProviderWork {
   std::size_t source_scans{};
   std::size_t source_reads{};
+  std::size_t device_source_reads{};
   std::size_t source_values{};
   std::size_t transform_fmas{};
   std::size_t transform_stages{};

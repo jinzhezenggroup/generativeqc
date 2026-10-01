@@ -229,7 +229,13 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
 
   std::size_t raw_elements = 1;
   for (const auto extent : tile_) raw_elements = checked_mul(raw_elements, extent);
-  std::vector<double> raw(raw_elements);
+  const bool device_source =
+      cuda && source_.supports_device_read(integrals::ElectronInteractionOperator::eri, device);
+  const bool host_source = source_.supports_host_read(integrals::ElectronInteractionOperator::eri);
+  if (!device_source && !host_source)
+    throw std::invalid_argument(
+        "native MO provider has no readable AO ERI source for this backend");
+  std::vector<double> raw(device_source ? 0 : raw_elements);
   if (work) {
     work->source_scans = checked_add(work->source_scans, 1);
     work->mo_blocks = checked_add(work->mo_blocks, requests.size());
@@ -246,13 +252,32 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
             elements = checked_mul(elements, current[k]);
           }
           const auto source_started = std::chrono::steady_clock::now();
-          source_.read(integrals::ElectronInteractionOperator::eri, begin, current, raw.data(),
-                       elements);
+          if (device_source) {
+#if GENERATIVEQC_HAS_CUDA
+            double* device_values = nullptr;
+            void* stream = nullptr;
+            int source_device = -1;
+            std::size_t capacity = 0;
+            check(posthf_cuda_batch_input_v1(device_batch.pointer, &device_values, &stream,
+                                             &source_device, &capacity, error, sizeof(error)));
+            if (source_device != device || capacity < elements)
+              throw std::logic_error("native MO device-source tile binding mismatch");
+            source_.read_device(integrals::ElectronInteractionOperator::eri, begin, current,
+                                {source_device, stream, device_values, capacity}, elements);
+#else
+            throw std::logic_error("device interaction source selected without CUDA support");
+#endif
+          } else {
+            source_.read(integrals::ElectronInteractionOperator::eri, begin, current, raw.data(),
+                         elements);
+          }
           if (work) {
             work->source_seconds +=
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - source_started)
                     .count();
             work->source_reads = checked_add(work->source_reads, 1);
+            if (device_source)
+              work->device_source_reads = checked_add(work->device_source_reads, 1);
             work->source_values = checked_add(work->source_values, elements);
             for (std::size_t request = 0; request < states.size(); ++request) {
               const auto& state = states[request];
@@ -278,10 +303,16 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
             if (work) {
               work->cuda_transform_calls = checked_add(work->cuda_transform_calls, states.size());
               work->cuda_batch_calls = checked_add(work->cuda_batch_calls, 1);
-              work->h2d_bytes = checked_add(work->h2d_bytes, checked_mul(elements, sizeof(double)));
+              if (!device_source)
+                work->h2d_bytes =
+                    checked_add(work->h2d_bytes, checked_mul(elements, sizeof(double)));
             }
-            check(posthf_cuda_batch_add_v1(device_batch.pointer, raw.data(), begin.data(),
-                                           current.data(), error, sizeof(error)));
+            if (device_source)
+              check(posthf_cuda_batch_add_device_v1(device_batch.pointer, begin.data(),
+                                                    current.data(), error, sizeof(error)));
+            else
+              check(posthf_cuda_batch_add_v1(device_batch.pointer, raw.data(), begin.data(),
+                                             current.data(), error, sizeof(error)));
 #endif
             continue;
           }

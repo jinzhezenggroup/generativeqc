@@ -20,6 +20,16 @@ int posthf_cuda_batch_create_v1(int, std::size_t, std::size_t, const std::size_t
 void posthf_cuda_batch_destroy_v1(void*);
 int posthf_cuda_batch_add_v1(void*, const double*, const std::size_t*, const std::size_t*, char*,
                              std::size_t);
+/** Borrow the batch's raw device staging tile and owning stream. No work is
+ * submitted and no synchronization occurs. The pointer remains valid only
+ * while the batch handle is alive.
+ */
+int posthf_cuda_batch_input_v1(void*, double**, void**, int*, std::size_t*, char*, std::size_t);
+/** Transform/accumulate a tile already written into the borrowed raw device
+ * staging buffer returned by posthf_cuda_batch_input_v1.
+ */
+int posthf_cuda_batch_add_device_v1(void*, const std::size_t*, const std::size_t*, char*,
+                                    std::size_t);
 int posthf_cuda_batch_download_v1(void*, double* const*, const std::size_t*, std::size_t, char*,
                                   std::size_t);
 int posthf_cuda_batch_metrics_v1(void*, generativeqc_tensor::Metrics*, char*, std::size_t);
