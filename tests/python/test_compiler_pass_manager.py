@@ -12,6 +12,7 @@ from generativeqc_compiler.tensor import (
     input_tensor,
     multiply,
     optimize,
+    prepare_for_backend,
 )
 
 
@@ -97,6 +98,58 @@ def test_pass_manager_fails_closed_for_invalid_pipeline_or_bisection() -> None:
         manager.run(2, disabled=("prepare",))
     with pytest.raises(ValueError, match="unknown disabled"):
         manager.run(2, disabled=("absent",))
+
+
+def test_tensor_optimizer_exposes_bisection_controls_and_fingerprints() -> None:
+    live = multiply(constant(2), constant(3))
+    dead = multiply(constant(4), constant(5))
+    program = Program({"value": live}, definitions=(dead,))
+
+    diagnostic = optimize(
+        program,
+        disabled_passes=("dead_nodes",),
+        stop_after="identity_transposes",
+    )
+    provenance = diagnostic.provenance
+    diagnostics = provenance["optimizer_diagnostics"]
+    assert diagnostics["disabled_passes"] == ["dead_nodes"]
+    assert diagnostics["stopped_after"] == "identity_transposes"
+    assert [item["name"] for item in provenance["optimizer_passes"]] == [
+        "identity_transposes"
+    ]
+    record = provenance["optimizer_passes"][0]
+    assert len(record["before"]) == 64
+    assert len(record["after"]) == 64
+    assert record["invalidated_analyses"] == []
+    assert provenance["pruning_diagnostics"]["minimal_before_lowering"] is False
+    assert diagnostic.definitions == (dead,)
+
+    full = optimize(program)
+    assert full.provenance["optimizer_identity"] != provenance["optimizer_identity"]
+    assert full.provenance["pruning_diagnostics"]["minimal_before_lowering"] is True
+
+    with pytest.raises(ValueError, match="unknown disabled"):
+        optimize(program, disabled_passes=("missing_pass",))
+
+
+def test_backend_preparation_preserves_noncanonical_bisection_provenance() -> None:
+    dead = multiply(constant(4), constant(5))
+    program = Program(
+        {"value": multiply(constant(2), constant(3))},
+        definitions=(dead,),
+    )
+    prepared = prepare_for_backend(
+        program,
+        "scalar",
+        disabled_passes=("dead_nodes",),
+        stop_after="identity_transposes",
+    )
+    production = prepared.provenance["production_preparation"]
+    assert production["disabled_passes"] == ["dead_nodes"]
+    assert production["stopped_after"] == "identity_transposes"
+    assert prepared.definitions == (dead,)
+    assert prepared.logical_hash == program.logical_hash
+    assert prepared is not program
 
 
 def test_tensor_optimizer_records_shared_pipeline_without_changing_equation() -> None:
