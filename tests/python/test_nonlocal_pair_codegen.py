@@ -119,6 +119,9 @@ def test_nonlocal_pair_generation_is_standalone_and_deterministic(
             ordered_native_sums=True,
             output_dependency_order=True,
         )
+        body = body.replace("std::sqrt(", "::sqrt(").replace(
+            "std::pow(", "::pow("
+        )
         assert (
             body.replace(
                 "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
