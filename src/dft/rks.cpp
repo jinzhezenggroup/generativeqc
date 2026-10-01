@@ -11,7 +11,9 @@
 #include <utility>
 
 #include "dft/ao_grid.hpp"
+#if GENERATIVEQC_HAS_CUDA
 #include "dft/cosx_scf.hpp"
+#endif
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -984,6 +986,7 @@ ScfResult run_pbe_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                  RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached), "PBE", nullptr);
 }
 
+#if GENERATIVEQC_HAS_CUDA
 ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
                             const dft::MolecularGrid& grid, const ScfOptions& options,
                             const std::vector<double>* initial_density) {
@@ -1003,6 +1006,8 @@ ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
                  RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached), "PBE0-COSX",
                  nullptr);
 }
+
+#endif
 
 ScfResult run_pbe_rks_nonlocal(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                                const dft::MolecularGrid& grid, const ScfOptions& options,
