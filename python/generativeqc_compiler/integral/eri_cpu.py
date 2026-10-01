@@ -19,7 +19,11 @@ from .ir import IntegralIR, build_integral_ir
 from .ir_serialization import integral_to_payload
 from .one_electron_cuda import _emit_boys_support
 from .scalar_c import ScalarCEmitter
-from .shell_class import build_shell_class_component_kernel
+from .shell_class import (
+    ShellClassComponentKernel,
+    build_coulomb_derivative_algebra,
+    build_shell_class_component_kernel,
+)
 from .shell_signature import ShellSignature
 from .shell_spec import ShellClassSpec, cartesian_components
 
@@ -81,6 +85,25 @@ def eri_cpu_component_map() -> tuple[tuple[tuple[int, ...], ...], tuple[int, ...
     return representatives, records
 
 
+@cache
+def eri_cpu_coulomb_layout() -> tuple[
+    tuple[tuple[int, int, int], ...], tuple[tuple[int, ...], ...]
+]:
+    """Graded roots and lossless physical-axis indices for each canonical view."""
+    orders = tuple(order for order, _ in build_coulomb_derivative_algebra(8).roots)
+    indices = {order: index for index, order in enumerate(orders)}
+    permutations_ = []
+    for axes in AXIS_PERMUTATIONS:
+        row = []
+        for order in orders:
+            physical = [0, 0, 0]
+            for axis, original in enumerate(axes):
+                physical[original] = order[axis]
+            row.append(indices[(physical[0], physical[1], physical[2])])
+        permutations_.append(tuple(row))
+    return orders, tuple(permutations_)
+
+
 def _value_integral(angular: tuple[int, ...]) -> IntegralIR:
     if len(angular) != 4:
         raise ValueError("CPU ERI values require four angular momenta")
@@ -105,7 +128,7 @@ def eri_cpu_inventory() -> dict[str, Any]:
     representatives, _ = eri_cpu_component_map()
     return {
         "schema": "generativeqc.eri_cpu",
-        "version": 2,
+        "version": 3,
         "precision": "fp64",
         "maximum_angular": 2,
         "maximum_coulomb_order": 8,
@@ -121,10 +144,23 @@ def eri_cpu_inventory() -> dict[str, Any]:
             "boys_value_count": 9,
         },
         "component_schedule": {
-            "kind": "prepared_geometry_symmetry_representatives",
+            "kind": "prepared_geometry_coulomb_symmetry_representatives",
             "record_bits": 16,
             "maximum_shell_component_count": len(cartesian_components(2)) ** 4,
             "component_scratch_owner": "native_caller",
+        },
+        "coulomb_reuse": {
+            "abi_version": 1,
+            "reuse_scope": "primitive_quartet",
+            "maximum_order": 8,
+            "scalar_count": 165,
+            "readiness": "matching_maximum_order",
+            "order_prefix_counts": [
+                (order + 1) * (order + 2) * (order + 3) // 6 for order in range(9)
+            ],
+            "scratch_owner": "native_caller",
+            "initialization": "requested_graded_prefix_only",
+            "compatibility_schedule": "component_local_factored_dag",
         },
         "components": list(COMPONENTS),
         "values": [
@@ -211,15 +247,47 @@ def _emit_component(index: int, component_indices: tuple[int, ...]) -> str:
     kernel = build_shell_class_component_kernel(
         integral.spec, components, integral=integral
     )
+    shared = _emit_component_body(kernel, shared_coulomb=True)
+    local = _emit_component_body(kernel, shared_coulomb=False)
+    return "\n".join(
+        [
+            f"// Cartesian representative {components!r}; value-only IntegralIR.",
+            "template <bool SharedCoulomb>",
+            f"static inline double component_{index}(const Geometry& geometry,",
+            "    [[maybe_unused]] const CoulombValues* coulomb,",
+            "    [[maybe_unused]] const unsigned* center_order,",
+            "    [[maybe_unused]] const unsigned* axis_order,",
+            "    [[maybe_unused]] const std::uint8_t* coulomb_order,",
+            "    [[maybe_unused]] double difference_sign) {",
+            "  if constexpr (SharedCoulomb) {",
+            *("  " + line for line in shared),
+            "  } else {",
+            *("  " + line for line in local),
+            "  }",
+            "}",
+        ]
+    )
+
+
+def _emit_component_body(
+    kernel: ShellClassComponentKernel, *, shared_coulomb: bool
+) -> list[str]:
     # Cut the original DAG at its exact shared geometry nodes before algebraic
     # factoring. No recurrence or Gaussian-product equations live in this backend.
-    prepared_value = kernel.graph.replace_subexpressions(
-        (kernel.value,),
-        {
-            root: kernel.graph.variable(f"geometry_{name}")
-            for name, root in kernel.geometry_roots
-        },
-    )
+    replacements = {
+        root: kernel.graph.variable(f"geometry_{name}")
+        for name, root in kernel.geometry_roots
+    }
+    orders, _ = eri_cpu_coulomb_layout()
+    order_indices = {order: index for index, order in enumerate(orders)}
+    if shared_coulomb:
+        replacements.update(
+            {
+                root: kernel.graph.variable(f"coulomb_{order_indices[order]}")
+                for order, root in kernel.coulomb_roots
+            }
+        )
+    prepared_value = kernel.graph.replace_subexpressions((kernel.value,), replacements)
     graph, roots = kernel.graph.apply_algebra_form(
         prepared_value,
         AlgebraForm.FACTORED_NARY,
@@ -245,6 +313,21 @@ def _emit_component(index: int, component_indices: tuple[int, ...]) -> str:
         }
     )
     variables.update({f"boys_{order}": f"geometry.boys[{order}]" for order in range(9)})
+    if shared_coulomb:
+        variables.update(
+            {
+                f"coulomb_{index}": (
+                    "geometry.boys[0]"
+                    if index == 0
+                    else (
+                        f"(difference_sign * coulomb->values[coulomb_order[{index}]])"
+                        if sum(order) % 2
+                        else f"coulomb->values[coulomb_order[{index}]]"
+                    )
+                )
+                for index, order in enumerate(orders)
+            }
+        )
     required_variables = {
         str(graph.nodes[identifier].payload)
         for identifier in graph.topological_order(roots)
@@ -263,20 +346,53 @@ def _emit_component(index: int, component_indices: tuple[int, ...]) -> str:
     }
     emitter = ScalarCEmitter(graph, references)
     emitter.emit(roots)
-    return "\n".join(
-        [
-            f"// Cartesian representative {components!r}; value-only IntegralIR.",
-            f"static inline double component_{index}(const Geometry& geometry, [[maybe_unused]] const unsigned* center_order,",
-            "                                      [[maybe_unused]] const unsigned* axis_order, [[maybe_unused]] double difference_sign) {",
-            *(
-                f"  const double {reference} = {variables[name]};"
-                for name, reference in references.items()
-            ),
-            *emitter.lines,
-            f"  return {emitter.reference(roots[0])};",
-            "}",
-        ]
+    return [
+        *(
+            f"  const double {reference} = {variables[name]};"
+            for name, reference in references.items()
+        ),
+        *emitter.lines,
+        f"  return {emitter.reference(roots[0])};",
+    ]
+
+
+def _emit_coulomb() -> str:
+    algebra = build_coulomb_derivative_algebra(8)
+    orders, permutations_ = eri_cpu_coulomb_layout()
+    graph, roots = algebra.graph.apply_algebra_form(
+        tuple(root for _, root in algebra.roots),
+        AlgebraForm.FACTORED_NARY,
+        PowerLowering.SMALL_INTEGER,
     )
+    variables = {"rho": "geometry.rho"}
+    variables.update(
+        {
+            f"difference_{axis}": f"geometry.difference[{i}]"
+            for i, axis in enumerate("xyz")
+        }
+    )
+    variables.update({f"boys_{order}": f"geometry.boys[{order}]" for order in range(9)})
+    emitter = ScalarCEmitter(graph, variables)
+    for index, (order, root) in enumerate(zip(orders, roots, strict=True)):
+        emitter.emit_assignment(root, f"coulomb.values[{index}]")
+        if index + 1 == len(orders) or sum(orders[index + 1]) != sum(order):
+            emitter.lines.append(
+                f"  if (geometry.maximum_order == {sum(order)}U) return;"
+            )
+    lines = [
+        "/** Caller-owned scratch; only the requested graded prefix is initialized. */",
+        "struct CoulombValues { double values[165]; unsigned maximum_order = 9U; };",
+        "/** Fill once per geometry, before any shared-component consumers. */",
+        "inline void prepare_coulomb(const Geometry& geometry, CoulombValues& coulomb) {",
+        "  coulomb.maximum_order = geometry.maximum_order;",
+        "  if (geometry.maximum_order > 8U) return;",
+        *emitter.lines,
+        "}",
+        "inline constexpr std::uint8_t coulomb_axis_permutations[6][165] = {",
+        *("  {" + ", ".join(map(str, row)) + "}," for row in permutations_),
+        "};",
+    ]
+    return "\n".join(lines)
 
 
 def emit_eri_cpu() -> str:
@@ -292,6 +408,7 @@ def emit_eri_cpu() -> str:
         "namespace generativeqc::integrals::generated_eri_cpu {",
         boys,
         _emit_geometry(),
+        _emit_coulomb(),
         "/** CCA-ordered Cartesian s/p/d index; 10 denotes unsupported angular momentum. */",
         "constexpr unsigned component_index(unsigned x, unsigned y, unsigned z) {",
     ]
@@ -335,24 +452,36 @@ def emit_eri_cpu() -> str:
             "  return component_map[key];",
             "}",
             "/** Unnormalized, unscreened component using previously prepared geometry. */",
-            "inline double prepared_primitive(const Geometry& geometry, unsigned record) {",
+            "template <bool SharedCoulomb>",
+            "inline double primitive_dispatch(const Geometry& geometry, const CoulombValues* coulomb, unsigned record) {",
             "  if ((record >> 6) >= 313U || (record & 7U) >= 6U ||",
             "      geometry.maximum_order > 8U ||",
             "      representative_orders[record >> 6] > geometry.maximum_order) return NAN;",
+            "  if constexpr (SharedCoulomb)",
+            "    if (coulomb == nullptr || coulomb->maximum_order != geometry.maximum_order) return NAN;",
             "  const auto& center_order = center_permutations[(record >> 3) & 7U];",
             "  const auto& axis_order = axis_permutations[record & 7U];",
+            "  const auto& coulomb_order = coulomb_axis_permutations[record & 7U];",
             "  const double difference_sign = center_order[0] < 2U ? 1.0 : -1.0;",
             "  switch (record >> 6) {",
         )
     )
     lines.extend(
-        f"    case {index}: return component_{index}(geometry, center_order, axis_order, difference_sign);"
+        f"    case {index}: return component_{index}<SharedCoulomb>(geometry, coulomb, center_order, axis_order, coulomb_order, difference_sign);"
         for index in range(len(representatives))
     )
     lines.extend(
         (
             "  }",
             "  return NAN;",
+            "}",
+            "/** The scratch must have been prepared from this exact geometry. */",
+            "inline double prepared_primitive(const Geometry& geometry, const CoulombValues& coulomb, unsigned record) {",
+            "  return primitive_dispatch<true>(geometry, &coulomb, record);",
+            "}",
+            "/** Single-component compatibility preserves its component-local CSE schedule. */",
+            "inline double prepared_primitive(const Geometry& geometry, unsigned record) {",
+            "  return primitive_dispatch<false>(geometry, nullptr, record);",
             "}",
             "/** Compatibility wrapper for callers without a shell-quartet reuse schedule. */",
             "inline double primitive(const double (&exponents)[4], const double (&centers)[4][3],",
