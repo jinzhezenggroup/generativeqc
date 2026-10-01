@@ -1100,7 +1100,14 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             np.eye(basis.nao)[None, :, :] * 0.2, plan.spin_blocks, axis=0
         )
         sources = []
-        for lanes in (32, 256, 2048):
+        for lanes, cached in (
+            (32, False),
+            (32, True),
+            (256, False),
+            (256, True),
+            (2048, False),
+            (2048, True),
+        ):
             budget = stationary_cuda_allocation_bytes(
                 atoms=basis.natom,
                 aos=basis.nao,
@@ -1110,6 +1117,7 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 spins=plan.spin_blocks,
                 sources=len(stationary_runtime_sources(plan)),
                 geometry_lanes=lanes,
+                cache_center_geometry=cached,
             )
             owner = stack.enter_context(
                 _CudaSources(
@@ -1126,6 +1134,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             )
             assert owner.metrics()["geometry_lane_capacity"] == lanes
             assert owner.metrics()["owned_device_bytes"] == budget
+            assert owner.metrics()["center_geometry_bytes"] == (48 if cached else 0)
+            with pytest.raises((ValueError, RuntimeError)):
+                owner.reset_geometry(-1.0)
             sources.append(owner)
         grid = stack.enter_context(
             CudaGrid(
@@ -1138,7 +1149,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             )
         )
         previous = None
-        for current_basis in (basis, basis, moved_basis, moved_basis):
+        for repeat, current_basis in enumerate(
+            (basis, basis, moved_basis, moved_basis, basis, moved_basis, basis)
+        ):
             centers = np.ascontiguousarray(current_basis.packed[:6].reshape(2, 3))
             grid._rebind_centers(centers)
             grid.set_density(density[0] if plan.spin_blocks == 1 else density)
@@ -1146,7 +1159,11 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             results = []
             for owner in sources:
                 owner.rebind_geometry(current_basis)
-                owner.reset(1e-12, density, np.zeros_like(density))
+                metrics_before = owner.metrics()
+                if repeat % 2:
+                    owner.reset_geometry(1e-12)
+                else:
+                    owner.reset(1e-12, density, np.zeros_like(density))
                 # Reuse the full panels for an irregular large tile, a 6-point
                 # tail, and an empty tile; stale high lanes must not be reduced.
                 for begin, end in (
@@ -1171,6 +1188,22 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                             functional=functional,
                         )
                 result = owner.finish()
+                metrics_after = owner.metrics()
+                cached = metrics_after["center_geometry_bytes"] != 0
+                assert metrics_after["center_distance_evaluations"] - metrics_before[
+                    "center_distance_evaluations"
+                ] == (1 if cached else 1 + 2 * point_capacity)
+                assert metrics_after["center_geometry_preparations"] - metrics_before[
+                    "center_geometry_preparations"
+                ] == int(cached)
+                # Preparation is device-only and adds no center table upload.
+                expected_upload = 3 * basis.natom * 8 + 3 * point_capacity * 8
+                if not repeat % 2:
+                    expected_upload += 2 * density.nbytes
+                assert (
+                    metrics_after["h2d_bytes"] - metrics_before["h2d_bytes"]
+                    == expected_upload
+                )
                 results.append(
                     np.stack(
                         [result[name] for name in ("xc_ao", "xc_grid", "xc_weight")]

@@ -659,6 +659,8 @@ class _CudaSources:
         ]
         lib.stationary_destroy.argtypes = [ct.c_void_p]
         lib.stationary_destroy.restype = None
+        # This is the admitted upper bound. Native metrics report actual retained
+        # geometry bytes if a typed device-allocation failure selects the fallback.
         self.resources = plan_stationary_cuda_resources(
             atoms=basis.natom,
             aos=basis.nao,
@@ -1456,8 +1458,8 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
-        values = (ct.c_uint64 * 18)()
-        if self.library.stationary_metrics(self.handle, values, 18):
+        values = (ct.c_uint64 * 21)()
+        if self.library.stationary_metrics(self.handle, values, 21):
             raise RuntimeError("stationary metrics unavailable")
         metrics = dict(
             zip(
@@ -1480,6 +1482,9 @@ class _CudaSources:
                     "geometry_threads",
                     "geometry_scratch_bytes",
                     "geometry_peak_lanes",
+                    "center_geometry_bytes",
+                    "center_distance_evaluations",
+                    "center_geometry_preparations",
                 ),
                 values,
             )
@@ -1991,6 +1996,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "synchronizations",
         "primitive_batches",
         "geometry_batches",
+        "center_distance_evaluations",
+        "center_geometry_preparations",
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]

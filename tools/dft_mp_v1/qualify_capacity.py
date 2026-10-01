@@ -291,7 +291,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "0908f435396d11624447adc2016546cf10f29d23a3557d0ee5bf4b6faa0add89"
+    "c960c6720625bfc7a64d6715937b440355808e449c26a8ee9fdf6135e8a273e9"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
@@ -336,16 +336,16 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "5f2e8924e1d97f1668edefc95caec70b96223244afadfc2aac97ad254d601b82"
+    "7b41328a1daaf4dcd4b3884bc29d248c25b7294ad8e69e53eaa966096f3212d9"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
-    "47b73fb800b28abeea23bdef2feab6c18b3c9747508b02522e322f758d5fe878"
+    "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
-    "52e4b914ac2baa804db89f85f331f05835bdb4786e981777a6ea4303743d058a"
+    "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
 )
 NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "fa3f0b989c571b4abd7d983fc0a6f3eafce3059a889b53c97bdd06bd416509fa"
+    "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
 )
 NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
     "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -354,16 +354,16 @@ NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
     "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
 )
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "efc8f4643fdd271782ad62ecc29d387f279347bae98fb78fc3bb78146743ef80"
+    "8b34352ef1a6638e90072d0071705dd288466b511f02186434be69e486ddc66d"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "4770b1100e26c8e79012054f25dedfe5857635342fff64ef1fe61eb97a047d8d"
+    "9cdbea99b233dc5528f6a600c2f1650d1f619a6bb3c51d6353b787501a4c1b70"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
-    "680742eea07b5e65ee26b1e45820f865c26b06d35921eb85caa19cd8d59a3ed3"
+    "0ec299536fb1da83e09a8e0e2dd93350604b90e75d907f202e159913c5dabd80"
 )
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
@@ -389,7 +389,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "de8487535c96e9dc73ab21f9e95dd86a5ac281751e4a814ecf49cf237da09c3b"
+    "99ce4fe1c67c4faa91999f1eeebc5b66a2203c40e7ca99b30d39136f12a0205a"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -1360,6 +1360,7 @@ def _method_resources(
             "stationary_source_bytes": source_bytes,
             "stationary_geometry_lanes": resources.geometry_lanes,
             "stationary_geometry_scratch_bytes": resources.geometry_scratch_bytes,
+            "stationary_center_geometry_bytes": resources.center_geometry_bytes,
             "additional_device_peak_bound": device_bound,
             "minimum_additional_device_bytes": grid_plan.peak_bytes + minimum,
             "stationary_native_pair_reserve_bytes": native_reserve,
