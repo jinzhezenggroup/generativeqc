@@ -125,6 +125,17 @@ void launch_bounded_shell_range_exchange_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DirectCoulombRange range, double omega, double exchange_coefficient);
 
+/** Fill one raw full-range source for classes not covered by generated/native
+ * consumers, reusing the Direct-HF bounded shell dispatcher. */
+void launch_bounded_shell_fock_source(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    std::uint64_t covered_shell_class_mask, const std::uint32_t* class_state,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* cursor, bool coulomb_only, bool exchange_only);
+
 /** Fused [J', SR-K', LR-K'] over one screened shell traversal. */
 void launch_bounded_shell_rsh_derivatives(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,

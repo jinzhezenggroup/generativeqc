@@ -60,6 +60,17 @@ void launch_bounded_direct_shell_quartet_kernel(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile);
 
+/** Consume only shell classes outside covered_shell_class_mask and publish one
+ * raw source: J when coulomb_only, positive K when exchange_only. */
+void launch_bounded_direct_fock_source_shell_quartet_kernel(
+    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+    DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    std::uint64_t covered_shell_class_mask, const std::uint32_t* bounded_generated_overflow,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* global_cursor, bool coulomb_only, bool exchange_only);
+
 /** Consume only Fock registry gaps through the bounded hierarchical dispatcher. */
 void launch_bounded_direct_fock_shell_quartet_kernel(
     bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
