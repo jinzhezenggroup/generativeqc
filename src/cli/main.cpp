@@ -23,6 +23,7 @@
 #include <unistd.h>
 #endif
 
+#include "cli/native_basis.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/generated_method_manifest.hpp"
 
@@ -185,6 +186,7 @@ void print_usage(std::ostream& out) {
   out << "Usage:\n"
          "  generativeqc --version\n"
          "  generativeqc methods [--json]\n"
+         "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc profile show|clear\n"
          "  generativeqc autotune --show-profile|--clear-profile\n"
@@ -200,6 +202,32 @@ void print_usage(std::ostream& out) {
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
          "  --forces                 Request analytic forces\n"
          "  --json                   Emit machine-readable output\n";
+}
+
+int basis_command(int argc, char** argv) {
+  if (argc < 3) throw UsageError("basis requires an operation");
+  const std::string_view operation = argv[2];
+  if (operation == "--help" || operation == "-h" || operation == "help") {
+    print_usage(std::cout);
+    return 0;
+  }
+  if (operation != "list") throw UsageError("unknown basis operation: " + std::string(operation));
+  if (argc > 4 || (argc == 4 && std::string_view(argv[3]) != "--json"))
+    throw UsageError("basis list accepts only the optional --json flag");
+
+  const bool json = argc == 4;
+  const auto names = generativeqc::cli::bundled_basis_names();
+  if (json) {
+    std::cout << "[";
+    for (std::size_t index = 0; index < names.size(); ++index) {
+      if (index) std::cout << ",";
+      std::cout << "\"" << names[index] << "\"";
+    }
+    std::cout << "]\n";
+  } else {
+    for (const auto name : names) std::cout << name << '\n';
+  }
+  return 0;
 }
 
 void print_methods(bool json) {
@@ -588,6 +616,7 @@ int main(int argc, char** argv) {
       print_methods(argc == 3);
       return 0;
     }
+    if (command == "basis") return basis_command(argc, argv);
     if (command == "run") {
       if (argc == 3 &&
           (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
