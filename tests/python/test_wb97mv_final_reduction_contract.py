@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from generativeqc._stationary_wb97mv_cuda import _canonical_gradient_sum
+from generativeqc._stationary_composite_cuda import _canonical_gradient_sum
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,

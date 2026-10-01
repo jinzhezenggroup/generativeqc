@@ -10,12 +10,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _work_fields() -> dict[str, ast.expr]:
     module = ast.parse(
-        (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+        (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
     )
     owner = next(
         node
         for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "PreparedWb97mvCudaGradient"
+        if isinstance(node, ast.ClassDef) and node.name == "PreparedCompositeStationaryCudaGradient"
     )
     execute = next(
         node
