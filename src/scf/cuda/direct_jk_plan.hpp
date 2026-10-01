@@ -85,14 +85,20 @@ struct CudaDirectJkPlan {
   ~CudaDirectJkPlan();
 };
 
-/** A derivative-capable provider owner may still use generated exchange for a
- * zero-order value request. The owner's maximum derivative capability must not
- * select the SCF value schedule.
- */
+/** Complete full-range shell value ownership may be either entirely
+ * generated/native or generated/native plus HF's bounded higher-l fallback. */
+inline bool direct_jk_generated_full_range_value_available(const CudaDirectJkPlan& plan) noexcept {
+  return plan.generated_exchange != nullptr && plan.generated_exchange->shared != nullptr &&
+         (plan.generated_exchange->shared->value_capability ||
+          plan.generated_exchange->bounded_value_capability);
+}
+
+/** A derivative-capable provider owner may still use its full-range value
+ * route for a zero-order request. The owner's maximum derivative capability
+ * does not select the SCF value schedule. */
 inline bool direct_jk_generated_exchange_value_available(const CudaDirectJkPlan& plan,
                                                          const FockBuildSpec& spec) noexcept {
-  return plan.generated_exchange != nullptr && plan.generated_exchange->shared != nullptr &&
-         plan.generated_exchange->shared->value_capability && spec.derivative_order == 0 &&
+  return direct_jk_generated_full_range_value_available(plan) && spec.derivative_order == 0 &&
          spec.exchange.present && spec.exchange.op == FockOperator::FullRange;
 }
 

@@ -593,14 +593,13 @@ generativeqc_status create_cuda_direct_jk_plan(
     }
     if (budget > plan->device_bytes) {
       const auto optional_budget = budget - plan->device_bytes;
-      // Value shell kernels are qualified only through d, but the shared
-      // bounded force scheduler and Cartesian recurrence cover s/p/d/f. Keep a
-      // force-only shell lease for derivative-capable through-f plans while
-      // leaving value J/K on the canonical/generic provider.
-      const bool force_only_through_f = derivative_order != 0 && through_f;
+      // Generated/native streaming owns its qualified classes; through-f plans
+      // retain HF's bounded shell dispatcher for the remaining higher-l value
+      // classes and, when requested, for stationary derivatives.
+      const bool bounded_through_f = through_f;
       plan->generated_exchange = prepare_generated_exchange(
           host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
-          derivative_order != 0, force_only_through_f);
+          derivative_order != 0, bounded_through_f);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
@@ -643,9 +642,12 @@ generativeqc_status create_cuda_direct_jk_plan(
                          sizeof(GeneratedCoulombPlan) +
                          runtime::vector_bytes(plan->generated_exchange->shared->allocations);
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
-      info.schedule = plan->generated_exchange->shared->value_capability
-                          ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-                          : "force-only-shell-derivative/generic-jk-fallback";
+      info.schedule =
+          plan->generated_exchange->shared->value_capability
+              ? "generated-shell-coulomb+exchange/generic-jk-fallback"
+              : (plan->generated_exchange->bounded_value_capability
+                     ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
+                     : "force-only-shell-derivative/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
@@ -653,7 +655,7 @@ generativeqc_status create_cuda_direct_jk_plan(
       info.host_preparation_bytes += plan->generated_coulomb->host_preparation_bytes;
       info.schedule = "generated-shell-coulomb/generic-jk-fallback";
     }
-    if (plan->canonical_pairs)
+    if (plan->canonical_pairs && !direct_jk_generated_full_range_value_available(*plan))
       info.schedule = plan->canonical_cartesian
                           ? (plan->canonical_row_prefix
                                  ? "canonical-cartesian-jk/screened-rows/automatic"
@@ -849,7 +851,21 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         launch_independent_jk_finite_kernel(plan->stream, input, elements, numerical_error);
         direct_jk_check(cudaGetLastError());
       }
-    if ((spec.coulomb.present || spec.exchange.present) && plan->canonical_pairs && !mixed_j) {
+    auto* generated_coulomb =
+        plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                 : plan->generated_coulomb.get();
+    const bool generated_coulomb_available =
+        !mixed_j &&
+        (plan->generated_exchange
+             ? direct_jk_generated_full_range_value_available(*plan)
+             : generated_coulomb != nullptr && generated_coulomb->value_capability);
+    const bool generated_exchange_available =
+        !mixed_j && direct_jk_generated_exchange_value_available(*plan, spec);
+    const bool shell_values_cover_request =
+        !mixed_j && (!spec.coulomb.present || generated_coulomb_available) &&
+        (!spec.exchange.present || generated_exchange_available);
+    if ((spec.coulomb.present || spec.exchange.present) && plan->canonical_pairs &&
+        !shell_values_cover_request) {
       const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
       const auto matrix = direct_jk_product(dimension, dimension);
       const auto spin_count = unrestricted ? 2U : 1U;
@@ -889,19 +905,19 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           direct_jk_check(cudaGetLastError());
         }
     } else if (spec.coulomb.present || spec.exchange.present) {
-      auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
-                                                         : plan->generated_coulomb.get();
-      if (generated_coulomb && !generated_coulomb->value_capability) generated_coulomb = nullptr;
       // Derivative capability is an owner maximum, not a value-schedule request.
-      // Force-capable owners retain generated exchange state that is also valid
-      // for the zero-order SCF K build.
-      const bool generated_exchange_available =
-          direct_jk_generated_exchange_value_available(*plan, spec);
+      // Full-range value ownership can combine generated/native classes with
+      // the bounded higher-l shell fallback.
       const auto dispatch =
-          direct_jk_value_dispatch(generated_coulomb != nullptr, generated_exchange_available,
+          direct_jk_value_dispatch(generated_coulomb_available, generated_exchange_available,
                                    spec.coulomb.present, spec.exchange.present, mixed_j);
-      if (dispatch.generated_coulomb)
-        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+      if (dispatch.generated_coulomb) {
+        if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
+          direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted, density,
+                                                    beta, coulomb));
+        else
+          direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+      }
       if (dispatch.generated_exchange)
         direct_jk_check(enqueue_generated_exchange(*plan->generated_exchange, unrestricted, density,
                                                    beta, alpha_exchange, beta_exchange));
