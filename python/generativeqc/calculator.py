@@ -883,10 +883,10 @@ class Calculator:
             and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and (
-                self._basis in ("sto-3g", "def2-svp")
+                self._basis in ("sto-3g", "def2-svp", "def2-tzvp")
                 if isinstance(self._basis, str)
                 else all(
-                    shell.angular_momentum <= 2
+                    shell.angular_momentum <= 3
                     for element in self._basis.elements
                     for shell in element.shells
                 )
