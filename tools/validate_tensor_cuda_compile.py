@@ -174,10 +174,11 @@ def main() -> None:
         compiler,
         args.cache / "streamed-einsum-generated",
     )
-    streamed_einsum_source = (
-        streamed_einsum.library.parent / "program.cu"
-    ).read_text()
-    if "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)" not in streamed_einsum_source:
+    streamed_einsum_source = (streamed_einsum.library.parent / "program.cu").read_text()
+    if (
+        "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)"
+        not in streamed_einsum_source
+    ):
         raise RuntimeError(
             "streamed einsum source lacks block-parallel reduction lowering"
         )
