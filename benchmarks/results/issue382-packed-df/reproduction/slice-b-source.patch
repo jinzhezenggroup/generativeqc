@@ -149,7 +149,7 @@ index 780e00d..5c6f0df 100644
 @@ -49,6 +49,39 @@ __global__ void coulomb_weights_kernel(std::size_t matrix, std::size_t a, std::s
    weights[pi] += coefficient * density[pi % matrix] * potential[begin + pi / matrix];
  }
-
+ 
 +/** Fold the physical Coulomb adjoint directly into public lower AO pairs.
 + * Reading both density entries retains the dense adapter's exact convention,
 + * even when its accepted symmetric input differs by floating-point roundoff.
@@ -352,11 +352,11 @@ index 059d972..944b59e 100644
 @@ -4,6 +4,7 @@
  #include <cublas_v2.h>
  #include <cuda_runtime.h>
-
+ 
 +#include <cstdint>
  #include <functional>
  #include <span>
-
+ 
 @@ -42,6 +43,12 @@ std::size_t cuda_df_response_workspace_elements(std::size_t n, std::size_t a, st
   * Return the first CUDA launch error; the caller drains before freeing scratch.
   * A cuBLAS failure throws CudaDfResponseBlasFailure so its allocation status
@@ -377,7 +377,7 @@ index 059d972..944b59e 100644
 -    const CudaDfResponseBuffers* borrowed = nullptr, std::span<const double> raw_host = {});
 +    const CudaDfResponseBuffers* borrowed = nullptr, std::span<const double> raw_host = {},
 +    bool packed_pairs = false, std::span<const std::int64_t> auxiliary_shell_offsets = {});
-
+ 
  }  // namespace vibeqc::scf
  #endif
 diff --git a/src/scf/cuda/df_shell_derivatives.cu b/src/scf/cuda/df_shell_derivatives.cu
@@ -528,7 +528,7 @@ index 23a939f..4784656 100644
 @@ -14,10 +14,17 @@ struct DfShellBasisView {
    std::size_t begin[4]{}, count[4]{};
  };
-
+ 
 +/** Ordered dense reference, folded dense shell pairs, or folded packed AOs.
 + * packed stores W_ii once and W_ij+W_ji at i*(i+1)/2+j (i>j), auxiliary-major.
 + * It therefore includes the off-diagonal multiplicity before AO expansion.

@@ -2,13 +2,13 @@
 +++ diagnose_df_counters.cpp
 @@ -22,6 +22,10 @@
  #include "scf/mean_field.hpp"
-
+ 
  namespace {
 +void diagnostic_require(bool condition, const char* message) {
 +  if (!condition) std::cerr << "DIAGNOSTIC_ONLY_COUNTER_MISMATCH " << message << "\n";
 +}
 +
-
+ 
  void require(bool condition, const char* message) {
    if (!condition) throw std::runtime_error(message);
 @@ -1871,11 +1875,17 @@

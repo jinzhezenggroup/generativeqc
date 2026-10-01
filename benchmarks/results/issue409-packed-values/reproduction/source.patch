@@ -48,7 +48,7 @@ index 37c1bcd..584ee66 100644
 +with full AO/auxiliary tiles and existing factor capacity. The experimental
 +packed resident constructor below also supports the explicit `factor` override.
 +UHF, batch, streamed and other generated-source plans keep dense seeds.
-
+ 
  The seed reuses the compact GPU eigensolver and transient Fock/eigenvalue
  scratch to form `L = V sqrt(lambda)`, then builds occupied K with weight one.
 @@ -259,3 +260,57 @@ host-only or Nsight timelines and clean complete endpoints.
@@ -121,8 +121,8 @@ index bd827f1..d8ef0fd 100644
 +    if storage is not None:
 +        storage.argtypes = [ct.c_void_p]
 +        storage.restype = ct.c_int
-
-
+ 
+ 
  def _check(lib, status, detail):
 @@ -528,6 +532,14 @@ class FockPlan:
                  status,
@@ -168,8 +168,8 @@ index 3b52ffc..e2c638a 100644
 +    contraction_scratch_bytes: int = 0
 +    projection_capacity_elements: int = 0
 +    panel_capacity_elements: int = 0
-
-
+ 
+ 
  def density_fitting_source_bytes(
 @@ -61,12 +70,15 @@ def density_fitting_tile_plan(
      budget_bytes,
@@ -178,7 +178,7 @@ index 3b52ffc..e2c638a 100644
 +    pair_storage="dense",
  ):
      """Compose a fixed reservation with the provider's own tiling decisions.
-
+ 
      A zero native budget means implementation defaults. The global planner
      should supply a positive sub-budget when constraining a calculation. Every
      shape/product is checked by the native implementation before allocation.
@@ -257,8 +257,8 @@ index 3b52ffc..e2c638a 100644
 +        projection_capacity_elements=values[8] if packed else 0,
 +        panel_capacity_elements=values[9] if packed else 0,
      )
-
-
+ 
+ 
 diff --git a/python/vibeqc/resources_hf.py b/python/vibeqc/resources_hf.py
 index 5d8a92e..565cc3d 100644
 --- a/python/vibeqc/resources_hf.py
@@ -367,7 +367,7 @@ index 96683ed..66e81a6 100644
 @@ -253,6 +253,16 @@ extern "C" vibeqc_status vibeqc_fock_plan_solve(vibeqc_fock_plan* plan,
    }
  }
-
+ 
 +/** Private additive query preserves the public diagnostic struct's ABI.
 + * Read the prepared variant, not the current environment: existing owners keep
 + * their actual representation across later diagnostic selector changes.
@@ -392,11 +392,11 @@ index 5dcf402..5d7d0bc 100644
 +#include <iterator>
  #include <limits>
  #include <stdexcept>
-
+ 
 @@ -198,6 +200,37 @@ int vibeqc_resource_df_tiles_v1(std::size_t batch, std::size_t nbf, std::size_t
                                       output, count, error, error_size);
  }
-
+ 
 +/** Explicit physical-source packed representation, without changing the dense
 + * query ABI or inferring storage from environment variables. The final four
 + * fields report one immutable factor's bytes, total mutable scratch bytes,
@@ -442,7 +442,7 @@ index b30996f..1399e58 100644
 +#include "scf/cuda/df_packed_values.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
  #include "scf/cuda/df_runtime.hpp"
-
+ 
 @@ -26,6 +27,41 @@ vibeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* densit
    TraceOperation trace(
        "ri_j", plan.stream,
@@ -496,7 +496,7 @@ index 5bc764c..eb3210c 100644
 +#include "scf/cuda/df_packed_values.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
  #include "scf/cuda/df_runtime.hpp"
-
+ 
 @@ -333,8 +334,9 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
          return cuda_failure(cuda_error, "transpose CUDA DF exchange density", detail);
        }
@@ -830,11 +830,11 @@ index f96da45..4f4a452 100644
 +#include "scf/cuda/df_packed_values.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
  #include "scf/cuda/df_runtime.hpp"
-
+ 
 @@ -32,8 +33,11 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
    trace_counter("occupied_factor_bytes", plan.nbf * rank * sizeof(double));
    if (!rank) return VIBEQC_STATUS_SUCCESS;
-
+ 
 +  const bool packed = plan.value_storage.pairs == DfPairStorage::SymmetricLower;
 +  const bool complete_projection =
 +      packed ? rank <= plan.value_storage.rank_capacity : plan.auxiliary_tile == plan.naux;
@@ -930,7 +930,7 @@ index 56f6b7d..f3d3a2f 100644
 @@ -123,6 +134,10 @@ bool cuda_density_fitting_scf_policy_matches(const CudaDensityFittingJkPlan* pla
               df_occupied_exchange_requested(plan->nbf, plan->naux, plan->batch_size);
  }
-
+ 
 +DfPairStorage cuda_density_fitting_pair_storage(const CudaDensityFittingJkPlan* plan) noexcept {
 +  return plan ? plan->value_storage.pairs : DfPairStorage::Dense;
 +}
@@ -1066,7 +1066,7 @@ index d8974e9..abef835 100644
 @@ -176,6 +220,23 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
      return fail_before_plan(VIBEQC_STATUS_OUT_OF_MEMORY);
    }
-
+ 
 +  DfPackedValueCapacity packed_capacity;
 +  std::size_t projection_bytes = tile_bytes;
 +  if (packed) {
@@ -1157,7 +1157,7 @@ index a34e471..4e2c751 100644
      std::string& detail, CudaDensityFittingIntegralSource* integral_source,
 -    bool retain_three_center = false);
 +    bool retain_three_center = false, DfValueStorageOptions storage = {});
-
+ 
  /** Destroy the sole plan owner, including retained SCF state. */
  void release(CudaDensityFittingJkPlan& plan) noexcept;
 diff --git a/src/scf/cuda/df_response_weights.cu b/src/scf/cuda/df_response_weights.cu
@@ -1165,13 +1165,13 @@ index 18bedc3..a9d6be5 100644
 --- a/src/scf/cuda/df_response_weights.cu
 +++ b/src/scf/cuda/df_response_weights.cu
 @@ -3,6 +3,7 @@
-
+ 
  #include "runtime/cuda_component_trace.hpp"
  #include "scf/cuda/df_jk_kernels.hpp"
 +#include "scf/cuda/df_packed_values.hpp"
  #include "scf/cuda/df_response_weights.cuh"
  #include "scf/cuda/df_scf_kernels.hpp"
-
+ 
 @@ -363,12 +364,13 @@ static cudaError_t contract_occupied_response(
    auto* raw = buffers.raw_auxiliary_major;
    auto* projected = buffers.exchange_response;
@@ -1348,17 +1348,17 @@ index 00e74f8..f82b273 100644
 --- a/src/scf/cuda_density_fitting.hpp
 +++ b/src/scf/cuda_density_fitting.hpp
 @@ -9,6 +9,7 @@
-
+ 
  #include "core/types.hpp"
  #include "scf/density_factor.hpp"
 +#include "scf/df_value_storage.hpp"
  #include "scf/fock_build.hpp"
  #include "vibeqc/vibeqc.h"
-
+ 
 @@ -130,6 +131,17 @@ vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
      CudaDensityFittingJkPlan** plan, std::vector<CudaDensityFittingMetricDiagnostic>& diagnostics,
      std::string& detail, bool retain_three_center);
-
+ 
 +/** Explicit physical-source representation and occupied scratch reservation.
 + * Packed storage retains raw A and B directly, without a dense intermediate.
 + * Dense overloads retain their existing source-transfer and tensor contracts.
@@ -1379,7 +1379,7 @@ index 00e74f8..f82b273 100644
  std::size_t cuda_density_fitting_scf_value_budget(const CudaDensityFittingJkPlan* plan) noexcept;
 +/** Representation frozen in this owner, independent of ambient selectors. */
 +DfPairStorage cuda_density_fitting_pair_storage(const CudaDensityFittingJkPlan* plan) noexcept;
-
+ 
  /** Whether a cached plan reserved storage for the current SCF exchange policy.
   * High-level callers rebuild on mismatch; low-level SCF calls cannot enable
 @@ -207,6 +221,10 @@ struct CudaDensityFittingMetricDiagnostic {
@@ -1391,7 +1391,7 @@ index 00e74f8..f82b273 100644
 +  std::size_t stored_factor_bytes{}, raw_factor_bytes{}, contraction_scratch_bytes{};
 +  std::size_t occupied_rank_capacity{};
  };
-
+ 
  /**
 diff --git a/src/scf/cuda_density_fitting_stub.cpp b/src/scf/cuda_density_fitting_stub.cpp
 index 9743beb..5b164d6 100644
@@ -1400,7 +1400,7 @@ index 9743beb..5b164d6 100644
 @@ -124,6 +124,17 @@ vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
        ao_pair_tile, plan, diagnostics, detail);
  }
-
+ 
 +vibeqc_status create_cuda_density_fitting_jk_plan_from_source(
 +    int device_id, CudaDensityFittingIntegralSource** source, std::size_t batch_size,
 +    std::size_t nbf, std::size_t naux, const std::vector<double>& metrics,
@@ -1489,7 +1489,7 @@ index 3b1c4d9..e073bce 100644
 @@ -996,6 +996,58 @@ DensityFittingTilePlan plan_density_fitting_tiles(std::size_t batch_size, std::s
    return plan;
  }
-
+ 
 +DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std::size_t n,
 +                                                         std::size_t a, std::size_t rank,
 +                                                         std::size_t budget,
@@ -1551,11 +1551,11 @@ index 1e0d887..f162ded 100644
 +++ b/src/scf/density_fitting.hpp
 @@ -7,6 +7,7 @@
  #include <vector>
-
+ 
  #include "integrals/s_integrals.hpp"
 +#include "scf/df_value_storage.hpp"
  #include "scf/fock_build.hpp"
-
+ 
  namespace vibeqc::scf {
 @@ -61,6 +62,9 @@ struct DensityFittingScfData {
    int one_electron_gradient_device{-1};
@@ -1565,7 +1565,7 @@ index 1e0d887..f162ded 100644
 +  // Changing it retires cached full host tensors as well as captured J/K work.
 +  DfPairStorage value_storage{DfPairStorage::Dense};
  };
-
+ 
  /**
 @@ -215,6 +219,7 @@ struct DensityFittingTilePlan {
    std::size_t peak_workspace_bytes{};
@@ -1573,12 +1573,12 @@ index 1e0d887..f162ded 100644
    bool stores_full_three_center{};
 +  DfValueStorageOptions value_storage{};
  };
-
+ 
  /** A valid DF shape has no tile fitting the requested positive allowance.
 @@ -248,6 +253,16 @@ class DensityFittingBudgetError : public std::invalid_argument {
                                                                  std::size_t fixed_device_bytes = 0,
                                                                  bool generated_source = false);
-
+ 
 +/** Explicit exact packed resident plan, including both A/B and bounded dense
 + * fallback panels. rank_capacity reserves complete U; ranks beyond that bound
 + * remain executable through panel projection. No budget can authorize omitting
@@ -1682,7 +1682,7 @@ index 79eb7b7..ab924d1 100644
 +  DfPairStorage df_pair_storage{DfPairStorage::Dense};
    bool operator==(const FockExecutionVariant&) const = default;
  };
-
+ 
 diff --git a/src/scf/rhf.cpp b/src/scf/rhf.cpp
 index 3673d8a..aab236a 100644
 --- a/src/scf/rhf.cpp
@@ -1951,7 +1951,7 @@ index 4ba3a2f..428f03e 100644
 @@ -148,9 +148,48 @@ double uhf_df_total_energy(const vibeqc::integrals::IntegralData& one_electron,
           one_electron.nuclear_repulsion;
  }
-
+ 
 +void check_packed_storage_planner() {
 +  using namespace vibeqc::scf;
 +  const auto full_rank = plan_packed_density_fitting_tiles(1, 768, 768, 768, 0);
@@ -2024,7 +2024,7 @@ index 4ba3a2f..428f03e 100644
        if (std::string(policy) == "dense") {
          baseline = final;
 @@ -366,6 +405,7 @@ vibeqc::core::System compact_auxiliary_system() {
-
+ 
  int main() {
    try {
 +    check_packed_storage_planner();
@@ -2111,7 +2111,7 @@ index 4ba3a2f..428f03e 100644
 +
        const auto source_host_uhf_gradient = vibeqc::scf::build_density_fitting_uhf_gradient(
            integrals, alpha_density, beta_density, 1.0e-12);
-
+ 
 @@ -1467,8 +1581,8 @@ int main() {
                                                                            {beta_density, 0.0, 0.5}}
                  : std::vector<vibeqc::scf::DensityFittingDensityResponse>{
@@ -2163,7 +2163,7 @@ index d7e4676..d371c1a 100644
  #include <iostream>
  #include <memory>
  #include <stdexcept>
-
+ 
 +#include "integrals/s_integrals.hpp"
  #include "molecule/basis.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
@@ -2172,7 +2172,7 @@ index d7e4676..d371c1a 100644
 +#include "scf/cuda_density_fitting_integrals.hpp"
  #include "scf/cuda_df_gradient.hpp"
 +#include "scf/density_fitting.hpp"
-
+ 
  namespace {
  using namespace vibeqc::scf;
 @@ -131,12 +135,188 @@ void lifecycle(bool uhf) {
@@ -2370,8 +2370,8 @@ index fe7a5a9..2027ac9 100644
 +++ b/tests/python/test_df_resources.py
 @@ -5,6 +5,62 @@ from vibeqc import Calculator
  from vibeqc.resources_df import density_fitting_tile_plan
-
-
+ 
+ 
 +def test_packed_query_preserves_complete_u_when_budget_shrinks(monkeypatch):
 +    """Query native allocation capacities without touching a GPU or tensor."""
 +    library = Calculator()._library
@@ -2433,8 +2433,8 @@ index fe7a5a9..2027ac9 100644
      [(1, 768, 768, 160), (1, 384, 384, 80), (2, 768, 768, 160), (1, 768, 767, 160)],
 @@ -195,6 +251,58 @@ def test_overlap_storage_is_reserved_in_every_cuda_df_candidate():
              assert row["resident_host_bytes"] >= expected
-
-
+ 
+ 
 +def test_packed_inventory_charges_both_owners_and_separates_identity(monkeypatch):
 +    """Representation switches change provenance before any CUDA allocation.
 +

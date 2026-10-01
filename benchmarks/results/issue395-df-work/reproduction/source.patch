@@ -59,8 +59,8 @@ index ccccc07..9474a26 100644
 +++ b/python/vibeqc_compiler/integral/df_shell_derivatives.py
 @@ -62,6 +62,47 @@ def axis_cache_layout(angular):
      return offsets, size
-
-
+ 
+ 
 +def shell_work_model(angular):
 +    """Describe fixed work in the emitted lowering before compiler optimization.
 +
@@ -220,7 +220,7 @@ index 2baf212..b6b2a7e 100644
 @@ -15,6 +15,56 @@ namespace generated = generated_df_shell;
  namespace scalar = generated_df_derivatives;
  constexpr unsigned term_capacity = molecule::kMaximumAoExpansionTerms;
-
+ 
 +/** Publish one aggregated owner count; normal kernels receive a null sink. */
 +__device__ __forceinline__ void record_work(unsigned long long* work, DfShellWork kind,
 +                                            unsigned long long value) {
@@ -435,7 +435,7 @@ index 2baf212..b6b2a7e 100644
 -                                        gradient, counters, pairs, triangle, task, tasks);
 +                                        gradient, counters, pairs, triangle, task, tasks, work);
  }
-
+ 
  template <unsigned A, unsigned B, unsigned C, unsigned Variant>
 @@ -201,7 +310,8 @@ __global__ void shell_packet(DfShellBasisView orbital, DfShellBasisView auxiliar
                               const double* positions, std::size_t begin, std::size_t count,
@@ -459,7 +459,7 @@ index 2baf212..b6b2a7e 100644
 +      slice.triangle, task, slice.tasks,
 +      work ? work + low * DfShellDiagnostics::row_elements : nullptr);
  }
-
+ 
  /** Resource values are maxima within an operation, not sums over its launches. */
 @@ -271,7 +382,7 @@ cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
                             std::span<const DfShellBasisView> auxiliary, const double* positions,
@@ -530,7 +530,7 @@ index 2baf212..b6b2a7e 100644
 +    report_work<A, B, C>(diagnostics, 0, first.primitives, second.primitives, x.primitives);
 +  return error;
  }
-
+ 
  template <unsigned A, unsigned B, unsigned C, unsigned Variant>
  cudaError_t launch(DfShellBasisView o, DfShellBasisView x, const double* positions,
                     std::size_t begin, std::size_t count, const double* weights, double* gradient,
@@ -544,7 +544,7 @@ index 2baf212..b6b2a7e 100644
 +                                        pairs != DfDerivativePairs::full && A == B, diagnostics);
  }
  }  // namespace
-
+ 
 @@ -422,7 +551,8 @@ cudaError_t launch_df_shell_derivative_panel(DfShellBasisView o, DfShellBasisVie
                                               std::size_t count, const double* weights,
                                               double* gradient, unsigned long long* counters,
@@ -572,7 +572,7 @@ index 2baf212..b6b2a7e 100644
    });
    return status;
  }
-
+ 
 -cudaError_t launch_df_shell_derivative_group(DfShellBasisView first, DfShellBasisView second,
 -                                             DfShellBasisView x, const double* positions,
 -                                             std::size_t begin, std::size_t count,
@@ -605,7 +605,7 @@ index 2baf212..b6b2a7e 100644
    });
    return status;
  }
-
+ 
 -cudaError_t launch_df_shell_derivative_packets(std::span<const DfShellBasisView> orbital,
 -                                               std::span<const DfShellBasisView> auxiliary,
 -                                               const double* positions, std::size_t begin,
@@ -644,10 +644,10 @@ index 8d21a00..c0560ec 100644
 +++ b/src/scf/cuda/df_shell_derivatives.cuh
 @@ -3,6 +3,7 @@
  #include <span>
-
+ 
  #include "scf/cuda/df_derivatives.cuh"
 +#include "scf/cuda/df_shell_diagnostics.cuh"
-
+ 
  namespace vibeqc::scf {
  /** Compact angular-class shell lists; storage grows with shells, never triples.
 @@ -41,7 +42,8 @@ cudaError_t launch_df_shell_derivative_panel(DfShellBasisView orbital, DfShellBa
@@ -657,7 +657,7 @@ index 8d21a00..c0560ec 100644
 -                                             DfDerivativePairs pairs = DfDerivativePairs::full);
 +                                             DfDerivativePairs pairs = DfDerivativePairs::full,
 +                                             DfShellDiagnostics* diagnostics = nullptr);
-
+ 
  /** Launch one primitive-signature shell-group product.
   * The first/second orbital views each contain exactly one angular/signature
 @@ -53,7 +55,8 @@ cudaError_t launch_df_shell_derivative_group(
@@ -677,7 +677,7 @@ index 8d21a00..c0560ec 100644
 -                                               unsigned variant, DfDerivativePairs pairs);
 +                                               unsigned variant, DfDerivativePairs pairs,
 +                                               DfShellDiagnostics* diagnostics = nullptr);
-
+ 
  }  // namespace vibeqc::scf
 diff --git a/src/scf/cuda/df_shell_diagnostics.cuh b/src/scf/cuda/df_shell_diagnostics.cuh
 new file mode 100644

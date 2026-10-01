@@ -19,7 +19,7 @@ index 5b667eb..2a2f830 100644
 @@ -8,6 +8,7 @@
  #include <utility>
  #include <vector>
-
+ 
 +#include "runtime/cuda_component_trace.hpp"
  #include "runtime/df_progress_trace.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
@@ -59,14 +59,14 @@ index 60f0017..31ac02c 100644
 +++ b/src/scf/cuda/df_scf_factor.cpp
 @@ -1,17 +1,145 @@
  #include "scf/cuda/df_scf_factor.hpp"
-
+ 
  #include <algorithm>
 +#include <cmath>
 +#include <cstdio>
  #include <cstdlib>
 +#include <cstring>
  #include <new>
-
+ 
  #include "runtime/cuda_component_trace.hpp"
 +#include "runtime/df_progress_trace.hpp"
  #include "scf/cuda/df_jk_internal.hpp"
@@ -74,9 +74,9 @@ index 60f0017..31ac02c 100644
  #include "scf/cuda/df_scf_kernels.hpp"
 +#include "scf/cuda/df_scf_library.hpp"
  #include "scf/df_exchange_policy.hpp"
-
+ 
  namespace vibeqc::scf::cuda_df {
-
+ 
 +vibeqc_status qualified_resident_rhf_exchange(const CudaDensityFittingJkPlan& plan,
 +                                              std::span<const std::int32_t> alpha,
 +                                              std::span<const std::int32_t> beta, bool& qualified,
@@ -225,7 +225,7 @@ index 60f0017..31ac02c 100644
    if (enabled && !plan.occupied_scf_reserved) {
      detail = "CUDA DF plan did not reserve occupied SCF storage; recreate the plan";
 @@ -88,8 +210,10 @@ vibeqc_status allocate_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScf
-
+ 
  vibeqc_status reset_scf_factors(CudaDensityFittingJkPlan& plan, PersistentScfState& state,
                                  std::string& detail) {
 -  // Every imported/warm density is untrusted until the first dense iteration
@@ -336,9 +336,9 @@ index 8e3ec8c..4914d06 100644
 --- a/src/scf/cuda/df_scf_factor.hpp
 +++ b/src/scf/cuda/df_scf_factor.hpp
 @@ -7,7 +7,15 @@
-
+ 
  namespace vibeqc::scf::cuda_df {
-
+ 
 -/** Explicit opt-in until fixed-K and complete endpoint evidence selects policy. */
 +/** Exact measured resident RHF domain shared by occupied, seed and final selectors.
 + * Shape, occupation, storage/provider and actual device identity must all match.
@@ -372,12 +372,12 @@ index 7d39ea5..a1bcdaa 100644
 +++ b/src/scf/cuda/df_scf_final_state.cpp
 @@ -1,10 +1,12 @@
  #include "scf/cuda/df_scf_final_state.hpp"
-
+ 
  #include <algorithm>
 +#include <cstdlib>
  #include <limits>
  #include <new>
-
+ 
  #include "runtime/cuda_component_trace.hpp"
 +#include "scf/cuda/df_jk_internal.hpp"
  #include "scf/cuda/df_runtime.hpp"
@@ -386,7 +386,7 @@ index 7d39ea5..a1bcdaa 100644
 @@ -163,6 +165,102 @@ vibeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkP
    }
  }
-
+ 
 +vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan* plan,
 +                                                    const CudaDfFinalStateToken& expected,
 +                                                    const std::vector<double>& density,
@@ -491,9 +491,9 @@ index 8ecf533..8bd7e77 100644
 --- a/src/scf/cuda/df_scf_kernels.cu
 +++ b/src/scf/cuda/df_scf_kernels.cu
 @@ -14,6 +14,54 @@
-
+ 
  namespace vibeqc::scf::cuda_df {
-
+ 
 +__global__ void density_exchange_factor_kernel(std::size_t nbf, std::size_t rank,
 +                                               const double* vectors, const double* values,
 +                                               double* factor) {
@@ -550,9 +550,9 @@ index de49985..9799f5d 100644
 --- a/src/scf/cuda/df_scf_kernels.hpp
 +++ b/src/scf/cuda/df_scf_kernels.hpp
 @@ -7,6 +7,18 @@
-
+ 
  namespace vibeqc::scf::cuda_df {
-
+ 
 +/** Scale the retained, sorted positive eigenvectors into column-major L.
 + * Rank selection is already validated; occupation is absorbed in sqrt(lambda).
 + */
@@ -575,7 +575,7 @@ index ef4b7dd..f107c03 100644
 @@ -99,11 +99,14 @@ struct PersistentScfState {
    int* d_final_alpha_info{};
    int* d_final_beta_info{};
-
+ 
 -  // A solve always seeds from its arbitrary input D with dense K. Only the
 -  // coefficients that constructed the next canonical density are retained.
 +  // An algebraic seed factor may temporarily occupy alpha storage before the
@@ -596,7 +596,7 @@ index 66a5b28..a7edac3 100644
 @@ -47,6 +47,18 @@ vibeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPlan* pl
                                                      CudaDfFinalStateSnapshot& snapshot,
                                                      std::string& detail);
-
+ 
 +/** Try physical J/K from an exact current singleton RHF retained density/frame.
 + * Token, device generation and every supplied density entry must match. A
 + * correction step, stale token or unsupported plan returns used=false so the
@@ -618,7 +618,7 @@ index a2cede2..00bca49 100644
 +++ b/src/scf/cuda_density_fitting_stub.cpp
 @@ -3,6 +3,14 @@
  #include "scf/cuda_density_fitting_final_state.hpp"
-
+ 
  namespace vibeqc::scf {
 +vibeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPlan*,
 +                                                    const CudaDfFinalStateToken&,

@@ -57,11 +57,6 @@ def test_pbe0_evidence_uses_own_schema_and_exact_oracle(tmp_path: Path) -> None:
         (directory / f"{engine}.outcome").write_text('{"exit_code":0}')
     point = collect(tmp_path, 3, schema=SCHEMA)
     assert point["engines"]["native"]["medians"]["warm"] == 1.0
-    pytest.importorskip("matplotlib")
-    figure([point], tmp_path, title="PBE0 / def2-SVP", filename="pbe0.svg")
-    svg = (tmp_path / "pbe0.svg").read_text()
-    assert "PBE0 / def2-SVP" in svg
-    assert "OMol25" not in svg and "through-f" not in svg
     (directory / "native.outcome").write_text('{"exit_code":124}')
     point = collect(tmp_path, 3, schema=SCHEMA)
     assert point["engines"]["native"]["status"] == "timeout"
@@ -108,3 +103,17 @@ def test_retained_pbe0_larger_failures_are_not_timings(atoms: int) -> None:
     assert point["engines"]["reference"]["status"] == "failed"
     for entry in point["engines"].values():
         assert "medians" not in entry
+
+
+def test_pbe0_plot_has_its_own_method_label(tmp_path: Path) -> None:
+    """Rendering alone needs matplotlib; timeout/evidence validation always runs."""
+    pytest.importorskip("matplotlib")
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/pbe0-def2-svp-20261001/water3.json"
+    )
+    point = json.loads(path.read_text())
+    figure([point], tmp_path, title="PBE0 / def2-SVP", filename="pbe0.svg")
+    svg = (tmp_path / "pbe0.svg").read_text()
+    assert "PBE0 / def2-SVP" in svg
+    assert "OMol25" not in svg and "through-f" not in svg
