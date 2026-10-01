@@ -1,7 +1,7 @@
 {
   "path": "src/scf/cuda/direct_bounded_dddd.cu",
-  "role": "runtime",
+  "role": "scientific",
   "subsystem": "direct_integrals",
-  "reason": "Bounded dddd page/schedule owner. Fock integral evaluation and scatter are compiler-owned through generated Direct source contraction/Fock accumulation; force roots and derivative primitives are compiler-owned through the shared generated Direct-force path. This file retains pair-class enumeration, page traversal, profiling and launch control.",
+  "reason": "Bounded dddd traversal delegates integral roots, Fock scatter and derivative primitives to compiler/shared owners, but still owns the initial physical Schwarz acceptance predicate. Retain this scientific screening policy; page enumeration, profiling and launch control are runtime work, not duplicate ERI algebra.",
   "regions": []
 }

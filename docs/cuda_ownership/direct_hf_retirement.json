@@ -100,7 +100,8 @@
         "src/scf/cuda/direct_schwarz_kernels.cu",
         "src/scf/cuda/direct_screening.cuh",
         "src/scf/cuda/direct_bounded_pages.cu",
-        "src/scf/cuda/direct_bounded_tasks.cu"
+        "src/scf/cuda/direct_bounded_tasks.cu",
+        "src/scf/cuda/direct_bounded_dddd.cu"
       ]
     },
     {

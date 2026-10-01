@@ -1,7 +1,7 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_pairlist.cu",
-  "reason": "GFN2 pair-list topology construction, descriptor transport, activity masks and ordered accumulation. Coordination-pair mathematics is consumed from the same compiler-generated TensorIR/AD helper as dense geometry.",
+  "reason": "Pair-list topology and descriptor transport are runtime; coordination-pair scalar mathematics is compiler-generated. Native code still computes pair distances, applies the physical cutoff and composes the radial CN derivative with inverse distance. These remaining scientific representation/force policies are not retired by the generated scalar helper.",
   "regions": [],
-  "role": "runtime",
+  "role": "scientific",
   "subsystem": "gfn2"
 }
