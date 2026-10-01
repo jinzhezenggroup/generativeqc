@@ -1117,7 +1117,9 @@ def test_native_finish_span_fails_closed_on_contract_drift(
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="native_finish_span_sha256 contract changed"):
+    with pytest.raises(
+        RuntimeError, match="native_finish_span_sha256 contract changed"
+    ):
         qualify_capacity._source_limits(tmp_path)
 
 
