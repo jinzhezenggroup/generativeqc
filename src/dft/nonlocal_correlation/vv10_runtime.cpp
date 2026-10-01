@@ -63,6 +63,7 @@ struct PairValues {
   double dphi_dkappa_i{};
 };
 
+template <bool ComputeRadialDerivative>
 PairValues pair_values(double r2, double omega_i, double omega_j, double kappa_i, double kappa_j,
                        Vv10Variant variant) {
   PairValues result;
@@ -77,8 +78,10 @@ PairValues pair_values(double r2, double omega_i, double omega_j, double kappa_i
     const auto factor_z = 1.0 / zi + 1.0 / (zi + zj);
     result.dphi_domega_i = -result.phi * r2 / kappa_i * factor_z;
     result.dphi_dkappa_i = result.phi / kappa_i * (-1.5 + (zi - 1.0) * factor_z);
-    const auto logarithmic = ai / zi + aj / zj + (ai + aj) / (zi + zj);
-    result.dphi_dr2 = -result.phi * logarithmic;
+    if constexpr (ComputeRadialDerivative) {
+      const auto logarithmic = ai / zi + aj / zj + (ai + aj) / (zi + zj);
+      result.dphi_dr2 = -result.phi * logarithmic;
+    }
   } else {
     const auto gi = omega_i * r2 + kappa_i;
     const auto gj = omega_j * r2 + kappa_j;
@@ -86,8 +89,10 @@ PairValues pair_values(double r2, double omega_i, double omega_j, double kappa_i
     const auto dphi_dgi = -result.phi * (1.0 / gi + 1.0 / (gi + gj));
     result.dphi_domega_i = dphi_dgi * r2;
     result.dphi_dkappa_i = dphi_dgi;
-    const auto logarithmic = omega_i / gi + omega_j / gj + (omega_i + omega_j) / (gi + gj);
-    result.dphi_dr2 = -result.phi * logarithmic;
+    if constexpr (ComputeRadialDerivative) {
+      const auto logarithmic = omega_i / gi + omega_j / gj + (omega_i + omega_j) / (gi + gj);
+      result.dphi_dr2 = -result.phi * logarithmic;
+    }
   }
   return result;
 }
@@ -290,61 +295,72 @@ generativeqc_status Vv10Plan::execute(
 
   double total_energy = 0.0;
   const auto tile = static_cast<std::size_t>(resources_.tile_points);
-  for (std::size_t i = 0; i < n; ++i) {
-    if (mask_zero_weights && weights[i] == 0.0) {
-      vrho[i] = vsigma[i] = 0.0;
-      continue;
-    }
-    double sum_phi = 0.0;
-    double sum_rho = 0.0;
-    double sum_sigma = 0.0;
-    std::array<double, 3> coordinate_sum{};
-    for (std::size_t begin = 0; begin < n; begin += tile) {
-      const auto end = std::min(begin + tile, n);
-      for (std::size_t j = begin; j < end; ++j) {
-        // Check the weight, not its density product: a nonzero signed weight
-        // can underflow in weighted_density_ and still owns feature outputs.
-        if (mask_zero_weights && weights[j] == 0.0) continue;
-        const auto dx = coordinates[3 * i] - coordinates[3 * j];
-        const auto dy = coordinates[3 * i + 1] - coordinates[3 * j + 1];
-        const auto dz = coordinates[3 * i + 2] - coordinates[3 * j + 2];
-        const auto r2 = dx * dx + dy * dy + dz * dz;
-        const auto pair =
-            pair_values(r2, omega_[i], omega_[j], kappa_[i], kappa_[j], parameters_.variant);
-        if (!finite_pair(pair)) {
-          detail = "VV10 pair kernel produced a nonfinite value";
-          return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-        }
-        const auto partner = weighted_density_[j];
-        sum_phi += partner * pair.phi;
-        if (want_features) {
-          const auto dphi_drho =
-              pair.dphi_domega_i * domega_drho_[i] + pair.dphi_dkappa_i * dkappa_drho_[i];
-          const auto dphi_dsigma = pair.dphi_domega_i * domega_dsigma_[i];
-          sum_rho += partner * dphi_drho;
-          sum_sigma += partner * dphi_dsigma;
-        }
-        if (want_geometry) {
-          const auto factor = 2.0 * partner * pair.dphi_dr2;
-          coordinate_sum[0] += factor * dx;
-          coordinate_sum[1] += factor * dy;
-          coordinate_sum[2] += factor * dz;
+  const auto execute_pairs = [&]<bool MaskZeroWeights>() {
+    for (std::size_t i = 0; i < n; ++i) {
+      if (MaskZeroWeights && weights[i] == 0.0) {
+        vrho[i] = vsigma[i] = 0.0;
+        continue;
+      }
+      double sum_phi = 0.0;
+      double sum_rho = 0.0;
+      double sum_sigma = 0.0;
+      std::array<double, 3> coordinate_sum{};
+      for (std::size_t begin = 0; begin < n; begin += tile) {
+        const auto end = std::min(begin + tile, n);
+        for (std::size_t j = begin; j < end; ++j) {
+          // Check the weight, not its density product: a nonzero signed weight
+          // can underflow in weighted_density_ and still owns feature outputs.
+          if (MaskZeroWeights && weights[j] == 0.0) continue;
+          const auto dx = coordinates[3 * i] - coordinates[3 * j];
+          const auto dy = coordinates[3 * i + 1] - coordinates[3 * j + 1];
+          const auto dz = coordinates[3 * i + 2] - coordinates[3 * j + 2];
+          const auto r2 = dx * dx + dy * dy + dz * dz;
+          // The admitted weighted E/V consumer never reads dphi_dr2. The same
+          // envelope proves the omitted legacy arithmetic finite: |phi| < 1e36,
+          // logarithmic <= 3e24, so |dphi_dr2| < 3e60. Outside that envelope,
+          // retain all legacy pair work and failure checks, even without geometry.
+          const auto pair = pair_values<!MaskZeroWeights>(
+              r2, omega_[i], omega_[j], kappa_[i], kappa_[j],
+              MaskZeroWeights ? Vv10Variant::vv10 : parameters_.variant);
+          if (!finite_pair(pair)) {
+            detail = "VV10 pair kernel produced a nonfinite value";
+            return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+          }
+          const auto partner = weighted_density_[j];
+          sum_phi += partner * pair.phi;
+          if (MaskZeroWeights || want_features) {
+            const auto dphi_drho =
+                pair.dphi_domega_i * domega_drho_[i] + pair.dphi_dkappa_i * dkappa_drho_[i];
+            const auto dphi_dsigma = pair.dphi_domega_i * domega_dsigma_[i];
+            sum_rho += partner * dphi_drho;
+            sum_sigma += partner * dphi_dsigma;
+          }
+          if (!MaskZeroWeights && want_geometry) {
+            const auto factor = 2.0 * partner * pair.dphi_dr2;
+            coordinate_sum[0] += factor * dx;
+            coordinate_sum[1] += factor * dy;
+            coordinate_sum[2] += factor * dz;
+          }
         }
       }
+      total_energy += weighted_density_[i] * (beta + 0.5 * sum_phi);
+      if (MaskZeroWeights || want_features) {
+        vrho[i] = coefficient * (beta + sum_phi + density[i] * sum_rho);
+        vsigma[i] = coefficient * density[i] * sum_sigma;
+      }
+      if (!MaskZeroWeights && want_geometry) {
+        const auto prefactor = coefficient * weighted_density_[i];
+        point_derivative[3 * i] = prefactor * coordinate_sum[0];
+        point_derivative[3 * i + 1] = prefactor * coordinate_sum[1];
+        point_derivative[3 * i + 2] = prefactor * coordinate_sum[2];
+        weight_derivative[i] = coefficient * density[i] * (beta + sum_phi);
+      }
     }
-    total_energy += weighted_density_[i] * (beta + 0.5 * sum_phi);
-    if (want_features) {
-      vrho[i] = coefficient * (beta + sum_phi + density[i] * sum_rho);
-      vsigma[i] = coefficient * density[i] * sum_sigma;
-    }
-    if (want_geometry) {
-      const auto prefactor = coefficient * weighted_density_[i];
-      point_derivative[3 * i] = prefactor * coordinate_sum[0];
-      point_derivative[3 * i + 1] = prefactor * coordinate_sum[1];
-      point_derivative[3 * i + 2] = prefactor * coordinate_sum[2];
-      weight_derivative[i] = coefficient * density[i] * (beta + sum_phi);
-    }
-  }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  };
+  const auto pair_status = mask_zero_weights ? execute_pairs.template operator()<true>()
+                                             : execute_pairs.template operator()<false>();
+  if (pair_status != GENERATIVEQC_STATUS_SUCCESS) return pair_status;
   energy = coefficient * total_energy;
   if (!std::isfinite(energy) ||
       (want_features &&

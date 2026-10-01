@@ -249,6 +249,44 @@ void nonlocal_weighted_potential_execution() {
                 "VV10 screening changed an active row's ordered feature sums");
     }
 
+    // Near the coordinate envelope, retain every E/V field exactly despite
+    // omitting the provably finite, unused geometry derivative. All weights
+    // here are nonzero, so this also isolates output-demand reduction from
+    // the earlier zero-weight optimization.
+    auto wide_coordinates = coordinates;
+    auto steep_gradient = gradient;
+    for (std::size_t k = 0; k < wide_coordinates.size(); ++k) {
+      wide_coordinates[k] = k % 2 == 0 ? 1e6 : -1e6;
+      steep_gradient[k] = k % 3 == 0 ? 1e6 : 0.0;
+    }
+    const std::vector<double> unit_density(points, 1.0);
+    const std::vector<double> signed_weights{0.3, -0.2, 0.1, -0.1, 0.7};
+    const auto raw_wide =
+        evaluate(*plan, wide_coordinates, signed_weights, unit_density, steep_gradient, false);
+    const auto weighted_wide =
+        evaluate(*plan, wide_coordinates, signed_weights, unit_density, steep_gradient, true);
+    require_same(raw_wide, weighted_wide);
+    require(weighted_wide.pairs == dense_pairs,
+            "VV10 output-demand reduction changed the all-active pair domain");
+
+    auto wide_masked_weights = signed_weights;
+    wide_masked_weights[3] = 0.0;
+    const auto raw_wide_masked =
+        evaluate(*plan, wide_coordinates, wide_masked_weights, unit_density, steep_gradient, false);
+    const auto weighted_wide_masked =
+        evaluate(*plan, wide_coordinates, wide_masked_weights, unit_density, steep_gradient, true);
+    require(raw_wide_masked.status == GENERATIVEQC_STATUS_SUCCESS &&
+                weighted_wide_masked.status == GENERATIVEQC_STATUS_SUCCESS &&
+                weighted_wide_masked.pairs == 16 &&
+                raw_wide_masked.energy == weighted_wide_masked.energy,
+            "wide VV10 fixture did not enter the reduced finite-envelope path");
+    for (std::size_t i = 0; i < points; ++i)
+      require(wide_masked_weights[i] * raw_wide_masked.vrho[i] ==
+                      wide_masked_weights[i] * weighted_wide_masked.vrho[i] &&
+                  wide_masked_weights[i] * raw_wide_masked.vsigma[i] ==
+                      wide_masked_weights[i] * weighted_wide_masked.vsigma[i],
+              "wide VV10 output-demand reduction changed a weighted potential");
+
     const std::vector<double> zero_weights{0.0, -0.0, 0.0, -0.0, 0.0};
     const auto vacuum = evaluate(*plan, coordinates, zero_weights, density, gradient, true);
     require(vacuum.status == GENERATIVEQC_STATUS_SUCCESS && vacuum.energy == 0.0 &&
@@ -371,6 +409,44 @@ void nonlocal_weighted_potential_execution() {
   require_same(raw_rvv10, weighted_rvv10);
   require(weighted_rvv10.pairs == dense_pairs,
           "VV10 weighted-potential permission changed the rVV10 execution domain");
+}
+
+void nonlocal_unused_geometry_failure() {
+  using namespace dft::nlc;
+  // At coincidence, all consumed E/V pair fields are finite, but the unused
+  // dphi/dr^2 overflows. An E/V-only request outside the optimization envelope
+  // must preserve the legacy pair failure rather than silently succeed.
+  constexpr std::size_t points = 2;
+  constexpr double b = 1e-70;
+  constexpr double c = 0.01;
+  const std::vector<double> coordinates(3 * points, 0.0);
+  const std::vector<double> weights(points, 0.0);
+  const std::vector<double> density(points, 1.0);
+  const std::vector<double> gradient{1e16, 0.0, 0.0, 1e16, 0.0, 0.0};
+  const auto pi = std::acos(-1.0);
+  const auto omega = std::sqrt(c * 1e64 + 4.0 * pi / 3.0);
+  const auto kappa = b * 1.5 * pi * std::pow(1.0 / (9.0 * pi), 1.0 / 6.0);
+  const auto phi = -1.5 / (kappa * kappa * (kappa + kappa));
+  const auto dphi_dkappa = -phi * (1.0 / kappa + 1.0 / (kappa + kappa));
+  const auto dphi_dr2 = -phi * (omega / kappa + omega / kappa + (omega + omega) / (kappa + kappa));
+  require(std::isfinite(phi) && std::isfinite(dphi_dkappa) && !std::isfinite(dphi_dr2),
+          "VV10 unused-geometry fixture did not isolate derivative overflow");
+  std::string detail;
+  generativeqc_status status;
+  auto plan = Vv10Plan::prepare(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1, points, 1,
+                                {Vv10Variant::vv10, b, c, 0.7}, 12 * points * sizeof(double),
+                                detail, status);
+  require(plan && status == GENERATIVEQC_STATUS_SUCCESS, detail);
+  for (bool weighted : {false, true}) {
+    double energy = 0.0;
+    std::vector<double> vrho(points), vsigma(points);
+    status = plan->execute(coordinates, weights, density, gradient, energy, vrho, vsigma, {}, {},
+                           detail, weighted);
+    require(status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+                plan->last_execution_pair_evaluations() == 0 &&
+                detail.find("pair kernel") != std::string::npos,
+            "VV10 E/V execution concealed an unused geometry-derivative failure");
+  }
 }
 
 void nonlocal_zero_weight_ao_overflow() {
@@ -707,6 +783,7 @@ int main(int argc, char** argv) {
                 available,
             "generic RKS DFT carrier is missing its energy admission");
     nonlocal_weighted_potential_execution();
+    nonlocal_unused_geometry_failure();
     nonlocal_zero_weight_ao_overflow();
     nonlocal_density_domain();
     run_case(0, false, output.is_open() ? &output : nullptr);
