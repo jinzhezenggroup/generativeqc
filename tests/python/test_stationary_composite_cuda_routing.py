@@ -27,6 +27,11 @@ def test_composite_route_is_selected_from_compiler_source_inventory() -> None:
     assert "resolve_method(" not in DRIVER
 
 
+def test_composite_route_keeps_shared_point_model_for_ordinary_dft() -> None:
+    assert "source.nonlocal_density_policy == MOLECULAR_VV10_DENSITY_POLICY" in DRIVER
+    assert "else SCF_POINT_MODEL" in DRIVER
+
+
 def test_composite_driver_inherits_live_functional_code() -> None:
     assert "functional = int(source.functional_code)" in DRIVER
     assert "functional=functional" in DRIVER
