@@ -27,7 +27,7 @@ complete. Larger native points remain unmeasured; the unchanged 1024-AO force
 cap still excludes 96 atoms/1856 AOs. No through-100-atom speed claim follows
 from this small-system result.
 
-The earlier [opt-in preview curve](omol25.svg), JSON, patches and qualification
+The earlier [opt-in preview curve](omol25.svg), JSON and qualification
 records remain intact. The historical snapshot below records the earlier
 schedule and baseline; its opt-in settings and old source revision do not
 describe the current production default.
@@ -99,7 +99,7 @@ through f, including both spins/AO representations, nonsymmetric densities,
 output masks, two geometries and bounded fallback. Its instrumented scheduler
 visits/evaluates exactly 1,464,616 and 23,028,291 unique ERIs per radial pass at
 58 and 116 AOs. [schedule-qualification.json](schedule-qualification.json)
-retains the current binary/source/patch identity and Slurm 11955 evidence.
+retains the current binary/source identity and Slurm 11955 evidence.
 This synthetic single-primitive work census is **not** a molecular energy/force
 endpoint benchmark and supplies no additional points for the performance curve.
 
@@ -116,12 +116,11 @@ extrapolated curve point.
   CUDA 12.9.1 / sm_120 build with generated shell AOT enabled, stationary-force
   AOT disabled, and the unchanged default resource planners. Benchmark scripts
   are added on top of this revision; source status and binary hash accompany
-  each result. [endpoint-speedup.patch](endpoint-speedup.patch) applies the
-  production changes against that master. The earlier
-  [native-force-fix.patch](native-force-fix.patch) is preserved against PR head
-  `6795097b003a30f9f5e9ab8c34e0705dddbf2427` for the historical numerical
-  qualification and preview build. Per-file hashes identify both the dirty
-  Python consumers and native schedule; a native binary digest alone is insufficient.
+  each result. Historical numerical qualification records PR head
+  `6795097b003a30f9f5e9ab8c34e0705dddbf2427`; the implementation changes now
+  live in Git history and PR #1651 rather than duplicated reconstruction files.
+  Per-file hashes identify both the dirty Python consumers and native schedule;
+  a native binary digest alone is insufficient.
 - Both reference and native measurements are fresh matched-domain runs. The old
   GPU4PySCF default-domain reference timings are excluded, not reused. Each
   engine's source, environment and raw hash is retained without rewriting identity.
@@ -230,10 +229,11 @@ eight threads. That unrelated convergence behavior is not changed here.
 Use the repository Python dependencies plus the versions above; install
 `basis-set-exchange==0.12` only to regenerate the optional offline source. The
 retained basis inputs themselves need no BSE package or network service.
-Use the benchmark/comparator scripts from this change. On a clean copy of the
-recorded master, apply `endpoint-speedup.patch` before rebuilding and running;
-the unmodified PR is retained only as historical failure evidence. Start with
-a bounded three-atom point rather than waiting for the full slow matrix.
+Use the benchmark/comparator scripts from this change. Historical timing
+records retain their source hashes and commit/PR identities; the implementation
+now lives in Git history rather than duplicated reconstruction files. For new
+runs, rebuild the current implementation and start with a bounded three-atom
+point rather than waiting for the full slow matrix.
 
 ```bash
 cmake --preset cuda-release-sm120 \

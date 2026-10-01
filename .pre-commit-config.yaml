@@ -7,8 +7,6 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        # Source reconstruction patches contain significant diff context markers.
-        exclude: ^benchmarks/results/.*\.patch$
       - id: end-of-file-fixer
         # Keep archived Basis Set Exchange response bytes unchanged.
         exclude: ^benchmarks/results/.*\.bse\.json$
