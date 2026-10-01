@@ -747,18 +747,20 @@ void build_value_eri_shell_quartet(const core::System& system, const std::vector
     const auto& position = system.atoms[shells[slot]->atom_index].position;
     for (unsigned axis = 0; axis < 3; ++axis) centers[slot][axis] = position[axis];
   }
+  generated_eri_cpu::CoulombValues coulomb;
   for (const core::Primitive& pi : shells[0]->primitives) {
     for (const core::Primitive& pj : shells[1]->primitives) {
       for (const core::Primitive& pk : shells[2]->primitives) {
         for (const core::Primitive& pl : shells[3]->primitives) {
           const double exponents[4]{pi.exponent, pj.exponent, pk.exponent, pl.exponent};
           const auto geometry = generated_eri_cpu::make_geometry(exponents, centers, maximum_order);
+          generated_eri_cpu::prepare_coulomb(geometry, coulomb);
           for (std::size_t item = 0; item < count; ++item) {
             auto& component = components[item];
             const double weight = component.normalization * pi.coefficient * pj.coefficient *
                                   pk.coefficient * pl.coefficient;
             component.value +=
-                weight * generated_eri_cpu::prepared_primitive(geometry, component.record);
+                weight * generated_eri_cpu::prepared_primitive(geometry, coulomb, component.record);
           }
         }
       }

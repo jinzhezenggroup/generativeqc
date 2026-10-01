@@ -59,14 +59,39 @@ APIs, but the CLI still needs a native named-basis/data resolver before those
 methods can accept user-friendly XYZ input without Python.
 
 
+## Manage local profile activation
+
+The native executable also owns the profile-cache operations that do not need
+the Python compiler or autotuner:
+
+```bash
+generativeqc profile show
+generativeqc profile clear
+generativeqc autotune --show-profile
+generativeqc autotune --clear-profile
+```
+
+`profile show` reports the resolved cache root and active profile index without
+probing a GPU. Invalid indexes fail closed rather than emitting malformed JSON.
+On POSIX systems, `profile clear` deactivates profiles while retaining immutable
+bundle directories that may still be used by live processes. The cache root
+uses `GENERATIVEQC_PROFILE_CACHE` first, then `XDG_CACHE_HOME`, then
+`~/.cache/generativeqc/profiles`, matching the Python frontend contract.
+
+This migration only covers cache administration. The native `run` path still
+uses the library selected by its native installation/linkage and does not yet
+discover or switch to a cached local profile library. Native local-profile
+selection is a separate runtime migration.
+
 ## Stable subcommand namespace
 
 The top-level CLI keeps one stable subcommand layout while implementations move
 from Python to the native runtime. The native executable currently owns
-`methods` and `run`. The existing `resources`, `profile`, and `autotune`
-names are reserved in the native CLI so later migration does not require a
-user-facing command rename.
+`methods`, `run`, and the non-compiling `profile show/clear` operations.
+`resources`, `profile install/export/diagnose`, and the actual `autotune`
+search remain in the Python frontend because they still depend on Python-side
+basis/resource/compiler or bundle-validation machinery.
 
-Until those commands are migrated, invoking them from the native executable
-returns a clear unsupported message. The native runtime does **not** discover,
-spawn, or silently fall back to a Python interpreter.
+Invoking one of those remaining operations from the native executable returns a
+clear unsupported message. The native runtime does **not** discover, spawn, or
+silently fall back to a Python interpreter.
