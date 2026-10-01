@@ -14,7 +14,8 @@
     "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces.",
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
-    "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy."
+    "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
+    "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
