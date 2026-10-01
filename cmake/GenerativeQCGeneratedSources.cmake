@@ -948,7 +948,8 @@ macro(generativeqc_register_cuda_generated_sources target)
   set(GENERATIVEQC_MP2_GENERATED_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/generated/mp2")
   set(GENERATIVEQC_MP2_GENERATED_SOURCES
-      "${GENERATIVEQC_MP2_GENERATED_DIRECTORY}/mp2_cuda_table.cu")
+      "${GENERATIVEQC_MP2_GENERATED_DIRECTORY}/mp2_cuda_table.cu"
+      "${GENERATIVEQC_MP2_GENERATED_DIRECTORY}/mp2_pair_energy.cuh")
   set(GENERATIVEQC_MP2_ARCHITECTURES "")
   foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     string(REGEX REPLACE "-.*$" "" _numeric_arch "${_arch}")
