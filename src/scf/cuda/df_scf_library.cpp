@@ -56,11 +56,12 @@ generativeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-generativeqc_status scf_gemm_strided(
-    CudaDensityFittingJkPlan& plan, bool transpose_left, std::size_t batch_size, std::size_t nbf,
-    const double* left, std::size_t left_stride, const double* right, std::size_t right_stride,
-    double* output, std::size_t output_stride, double alpha, double beta,
-    const char* failure_context, std::string& detail) {
+generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
+                                     std::size_t batch_size, std::size_t nbf, const double* left,
+                                     std::size_t left_stride, const double* right,
+                                     std::size_t right_stride, double* output,
+                                     std::size_t output_stride, double alpha, double beta,
+                                     const char* failure_context, std::string& detail) {
   const cublasStatus_t status = cublasDgemmStridedBatched(
       plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(nbf),
       static_cast<int>(nbf), static_cast<int>(nbf), &alpha, left, static_cast<int>(nbf),

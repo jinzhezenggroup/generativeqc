@@ -12,11 +12,12 @@ namespace generativeqc::scf::cuda_df {
  * Scientific callers own equation/order semantics; this boundary owns only
  * library submission, strides, accumulation coefficients, and failure mapping.
  */
-generativeqc_status scf_gemm_strided(
-    CudaDensityFittingJkPlan& plan, bool transpose_left, std::size_t batch_size, std::size_t nbf,
-    const double* left, std::size_t left_stride, const double* right, std::size_t right_stride,
-    double* output, std::size_t output_stride, double alpha, double beta,
-    const char* failure_context, std::string& detail);
+generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
+                                     std::size_t batch_size, std::size_t nbf, const double* left,
+                                     std::size_t left_stride, const double* right,
+                                     std::size_t right_stride, double* output,
+                                     std::size_t output_stride, double alpha, double beta,
+                                     const char* failure_context, std::string& detail);
 
 generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left,
                              std::size_t batch_size, std::size_t nbf, const double* left,
