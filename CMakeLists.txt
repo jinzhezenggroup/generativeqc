@@ -389,6 +389,13 @@ if(GENERATIVEQC_BUILD_TESTS)
                      --charge 1 --multiplicity 2 --json)
     set_tests_properties(generativeqc_cli_uhf_cpu PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"method\":\"uhf\"")
+    add_test(NAME generativeqc_cli_rhf_df_cpu
+             COMMAND generativeqc_cli run
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     --method rhf --basis sto-3g --backend cpu --units bohr
+                     --density-fitting cpu --auxiliary-basis def2-svp --json)
+    set_tests_properties(generativeqc_cli_rhf_df_cpu PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"density_fitting\":\"cpu\"")
     add_test(NAME generativeqc_cli_profile_clear
              COMMAND ${CMAKE_COMMAND} -E env
                      "GENERATIVEQC_PROFILE_CACHE=${CMAKE_CURRENT_BINARY_DIR}/cli-profile-cache"
