@@ -231,6 +231,10 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
   for (const auto extent : tile_) raw_elements = checked_mul(raw_elements, extent);
   const bool device_source =
       cuda && source_.supports_device_read(integrals::ElectronInteractionOperator::eri, device);
+  const bool host_source =
+      source_.supports_host_read(integrals::ElectronInteractionOperator::eri);
+  if (!device_source && !host_source)
+    throw std::invalid_argument("native MO provider has no readable AO ERI source for this backend");
   std::vector<double> raw(device_source ? 0 : raw_elements);
   if (work) {
     work->source_scans = checked_add(work->source_scans, 1);
