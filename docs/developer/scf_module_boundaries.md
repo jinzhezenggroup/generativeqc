@@ -188,7 +188,7 @@ queried Xsyevd workspace above the small native domain. It reuses the same
 dispatch for iterations and final-state canonicalization, rejects capture, and
 charges both host and device workspace. Graph consumers retain their separate
 qualification policies. See the
-[KS eigensolver rationale](../.agents/notes/proposed/2026-09-23-ordinary-ks-eigensolver.md).
+[KS eigensolver rationale](../../.agents/notes/implemented/performance/2026-09-23-ordinary-ks-eigensolver.md).
 Only six narrow launch wrappers and the unchanged native Jacobi/instrumentation
 kernels require CUDA compilation. The largest new implementation is 458 lines.
 Shared headers contain POD layouts or narrow contracts; there is no umbrella
