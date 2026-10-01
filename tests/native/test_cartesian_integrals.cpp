@@ -132,6 +132,63 @@ generativeqc::scf::detail::DirectQuartetTaskLayout direct_task_layout(
 
 int main() {
   try {
+    // The generated value-only ERI route must agree with the independent
+    // dynamic recurrence for every entry, including normalized contractions,
+    // asymmetric geometry, spherical projection, and the derivative fallback.
+    for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      generativeqc::core::System system;
+      system.atoms = {{2, {0.1, -0.3, 0.2}}, {2, {-0.7, 0.8, 0.5}}, {2, {0.9, 0.2, -0.6}}};
+      system.shells = {{0, 0, {{0.9, 0.7}, {0.25, 0.3}}},
+                       {1, 1, {{0.65, 0.8}, {0.18, -0.15}}},
+                       {2, 2, {{0.4, 1.0}}}};
+      system.basis_representation = representation;
+      system.multiplicity = 1;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "generated ERI contraction fixture normalization failed");
+      const auto values = generativeqc::integrals::build_integrals(system, false);
+      const auto derivatives = generativeqc::integrals::build_integrals(system, true);
+      generativeqc::posthf::RawSource source(system);
+      const auto n = source.nbf();
+      std::vector<double> reference(n * n * n * n);
+      source.read(generativeqc::posthf::RawSource::Operator::eri, {0, 0, 0, 0}, {n, n, n, n},
+                  reference.data(), reference.size());
+      require(values.eri.size() == reference.size() && values.eri_derivative.empty(),
+              "generated value ERI layout changed");
+      require(derivatives.eri_derivative.size() == system.atoms.size() * 3 * reference.size(),
+              "ERI derivative fallback layout changed");
+      for (std::size_t i = 0; i < reference.size(); ++i) {
+        require(std::isfinite(values.eri[i]), "generated ERI value is nonfinite");
+        require_close(values.eri[i], reference[i], 3.0e-12,
+                      "generated contracted ERI differs from independent RawSource");
+        require_close(values.eri[i], derivatives.eri[i], 3.0e-12,
+                      "generated ERI differs from derivative fallback value");
+      }
+    }
+    {
+      generativeqc::core::System higher;
+      higher.atoms = {{2, {0.1, -0.2, 0.3}}};
+      higher.shells = {{0, 0, {{0.8, 1.0}}}, {0, 3, {{0.55, 1.0}}}};
+      higher.multiplicity = 1;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(higher, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "f-shell fallback fixture normalization failed");
+      const auto values = generativeqc::integrals::build_integrals(higher, false);
+      generativeqc::posthf::RawSource source(higher);
+      for (const auto indices :
+           {std::array<std::size_t, 4>{0, 1, 0, 1}, std::array<std::size_t, 4>{1, 1, 1, 1},
+            std::array<std::size_t, 4>{2, 5, 4, 7}}) {
+        double reference{};
+        source.read(generativeqc::posthf::RawSource::Operator::eri, indices, {1, 1, 1, 1},
+                    &reference, 1);
+        const double actual =
+            values.eri[eri_index(indices[0], indices[1], indices[2], indices[3], values.nbf)];
+        require(std::isfinite(actual), "f-shell ERI fallback returned a nonfinite value");
+        require_close(actual, reference, 3.0e-12, "f-shell ERI fallback differs from RawSource");
+      }
+    }
     // For a normalized exp(-r^2) s Gaussian on He, T=3/2 and
     // V=-4*sqrt(2/pi). The generated attraction already includes the minus sign.
     {

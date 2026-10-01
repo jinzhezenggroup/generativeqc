@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "generated_eri_cpu.hpp"
 #include "generated_one_electron_st_cpu.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/generated_df_cpu.hpp"
@@ -516,6 +517,33 @@ Jet primitive_eri_cartesian(double alpha, const Vec3& a,
   }
   const double prefactor = 2.0 * std::pow(std::numbers::pi, 2.5) / (p * q * std::sqrt(p + q));
   return prefactor * value;
+}
+
+// Values-only ERIs use the same scalar mathematical DAG as the generated
+// CUDA shell-class kernels. Keep the dynamic recurrence above independent for
+// derivative execution, unsupported angular momenta, and RawSource validation.
+Jet production_eri_cartesian(double alpha, const Vec3& a,
+                             const molecule::CartesianComponent& angular_a, double beta,
+                             const Vec3& b, const molecule::CartesianComponent& angular_b,
+                             double gamma, const Vec3& c,
+                             const molecule::CartesianComponent& angular_c, double delta,
+                             const Vec3& d, const molecule::CartesianComponent& angular_d) {
+  const unsigned components[4]{
+      generated_eri_cpu::component_index(angular_a[0], angular_a[1], angular_a[2]),
+      generated_eri_cpu::component_index(angular_b[0], angular_b[1], angular_b[2]),
+      generated_eri_cpu::component_index(angular_c[0], angular_c[1], angular_c[2]),
+      generated_eri_cpu::component_index(angular_d[0], angular_d[1], angular_d[2])};
+  if (a[0].derivative.empty() && components[0] < 10 && components[1] < 10 && components[2] < 10 &&
+      components[3] < 10) {
+    const double exponents[4]{alpha, beta, gamma, delta};
+    const double centers[4][3]{{a[0].value, a[1].value, a[2].value},
+                               {b[0].value, b[1].value, b[2].value},
+                               {c[0].value, c[1].value, c[2].value},
+                               {d[0].value, d[1].value, d[2].value}};
+    return Jet(generated_eri_cpu::primitive(exponents, centers, components), 0);
+  }
+  return primitive_eri_cartesian(alpha, a, angular_a, beta, b, angular_b, gamma, c, angular_c,
+                                 delta, d, angular_d);
 }
 
 double primitive_range_eri_cartesian(double alpha, const Vec3& a,
@@ -1673,10 +1701,10 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
                   for (const core::Primitive& pl : ao_l.shell->primitives) {
                     const double weight = component_factor * pi.coefficient * pj.coefficient *
                                           pk.coefficient * pl.coefficient;
-                    value = value + weight * primitive_eri_cartesian(pi.exponent, a, ao_i.angular,
-                                                                     pj.exponent, b, ao_j.angular,
-                                                                     pk.exponent, c, ao_k.angular,
-                                                                     pl.exponent, d, ao_l.angular);
+                    value = value + weight * production_eri_cartesian(pi.exponent, a, ao_i.angular,
+                                                                      pj.exponent, b, ao_j.angular,
+                                                                      pk.exponent, c, ao_k.angular,
+                                                                      pl.exponent, d, ao_l.angular);
                   }
                 }
               }
