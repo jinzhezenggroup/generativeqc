@@ -1,6 +1,7 @@
 """Deterministic pass-pipeline execution and bisection contracts."""
 
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.pass_manager import PassManager, PassStage
 from generativeqc_compiler.tensor import (
     Index,
@@ -12,7 +13,11 @@ from generativeqc_compiler.tensor import (
     input_tensor,
     multiply,
     optimize,
+    prepare_for_backend,
 )
+from generativeqc_compiler.tensor.cpu import emit_cpu
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
 def fingerprint(value: int) -> str:
@@ -97,6 +102,118 @@ def test_pass_manager_fails_closed_for_invalid_pipeline_or_bisection() -> None:
         manager.run(2, disabled=("prepare",))
     with pytest.raises(ValueError, match="unknown disabled"):
         manager.run(2, disabled=("absent",))
+
+
+def test_tensor_optimizer_exposes_bisection_controls_and_fingerprints() -> None:
+    live = multiply(constant(2), constant(3))
+    dead = multiply(constant(4), constant(5))
+    program = Program({"value": live}, definitions=(dead,))
+
+    diagnostic = optimize(
+        program,
+        disabled_passes=("dead_nodes",),
+        stop_after="identity_transposes",
+    )
+    provenance = diagnostic.provenance
+    diagnostics = provenance["optimizer_diagnostics"]
+    assert diagnostics["disabled_passes"] == ["dead_nodes"]
+    assert diagnostics["stopped_after"] == "identity_transposes"
+    assert [item["name"] for item in provenance["optimizer_passes"]] == [
+        "identity_transposes"
+    ]
+    record = provenance["optimizer_passes"][0]
+    assert len(record["before"]) == 64
+    assert len(record["after"]) == 64
+    assert record["invalidated_analyses"] == []
+    assert provenance["pruning_diagnostics"]["minimal_before_lowering"] is False
+    assert diagnostic.definitions == (dead,)
+
+    full = optimize(program)
+    assert full.provenance["optimizer_identity"] != provenance["optimizer_identity"]
+    assert full.provenance["pruning_diagnostics"]["minimal_before_lowering"] is True
+
+    with pytest.raises(ValueError, match="unknown disabled"):
+        optimize(program, disabled_passes=("missing_pass",))
+
+
+def test_backend_preparation_preserves_noncanonical_bisection_provenance() -> None:
+    dead = multiply(constant(4), constant(5))
+    program = Program(
+        {"value": multiply(constant(2), constant(3))},
+        definitions=(dead,),
+    )
+    prepared = prepare_for_backend(
+        program,
+        "scalar",
+        disabled_passes=("dead_nodes",),
+        stop_after="identity_transposes",
+    )
+    production = prepared.provenance["production_preparation"]
+    assert production["disabled_passes"] == ["dead_nodes"]
+    assert production["stopped_after"] == "identity_transposes"
+    assert prepared.definitions == (dead,)
+    assert prepared.logical_hash == program.logical_hash
+    assert prepared is not program
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda", "portable", "scalar"])
+def test_diagnostic_selection_survives_repeated_backend_preparation(
+    backend: str,
+) -> None:
+    program = Program({"value": multiply(constant(2), constant(3))})
+    diagnostic = prepare_for_backend(program, backend, stop_after="identity_transposes")
+    repeated = prepare_for_backend(diagnostic, backend)
+    assert repeated.outputs["value"].op == "multiply"
+    assert repeated.provenance["optimizer_diagnostics"]["stopped_after"] == (
+        "identity_transposes"
+    )
+    assert (
+        repeated.provenance["optimizer_identity"]
+        == diagnostic.provenance["optimizer_identity"]
+    )
+    # Explicitly running optimize without controls restores canonical lowering.
+    canonical = prepare_for_backend(optimize(diagnostic), backend)
+    assert canonical.outputs["value"].op == "constant"
+    assert canonical.provenance["optimizer_diagnostics"]["stopped_after"] is None
+
+
+def test_diagnostic_selection_survives_actual_lowering_entrypoints() -> None:
+    program = Program({"value": multiply(constant(2), constant(3))})
+    diagnostic = prepare_for_backend(
+        program, "cuda", disabled_passes=("scalar_constants",)
+    )
+    plan = plan_cuda(
+        diagnostic, cuda_target_info("sm_80"), provider_bytes=0, library_bytes=0
+    )
+    assert plan.program.outputs["value"].op == "multiply"
+    assert plan.program.provenance["optimizer_diagnostics"]["disabled_passes"] == [
+        "scalar_constants"
+    ]
+    assert " * " in emit_scalar_cpp(diagnostic, function_name="diagnostic")
+    assert " * " in emit_cpu(diagnostic)[0]
+
+
+def test_backend_preparation_inherits_combined_controls_and_allows_override() -> None:
+    program = Program({"value": multiply(constant(2), constant(3))})
+    diagnostic = prepare_for_backend(
+        program,
+        "scalar",
+        disabled_passes=("dead_nodes",),
+        stop_after="identity_transposes",
+    )
+    inherited = prepare_for_backend(diagnostic, "scalar")
+    assert inherited.provenance["optimizer_diagnostics"]["disabled_passes"] == [
+        "dead_nodes"
+    ]
+    assert inherited.provenance["optimizer_diagnostics"]["stopped_after"] == (
+        "identity_transposes"
+    )
+    overridden = prepare_for_backend(
+        diagnostic, "scalar", disabled_passes=("scalar_constants",)
+    )
+    controls = overridden.provenance["optimizer_diagnostics"]
+    assert controls["disabled_passes"] == ["scalar_constants"]
+    assert controls["stopped_after"] is None
 
 
 def test_tensor_optimizer_records_shared_pipeline_without_changing_equation() -> None:

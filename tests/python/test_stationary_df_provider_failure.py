@@ -99,6 +99,8 @@ def test_fitted_derivative_failure_never_selects_exact_fallback(failure: str) ->
             source, budget=0 if failure == "no-budget" else 32, ecp=failure == "ecp"
         )
     exact.assert_not_called()
+    if failure in ("no-budget", "ecp"):
+        source.density_fitted_integral_derivatives.assert_not_called()
 
 
 def test_fitted_provider_errors_propagate_without_exact_retry() -> None:
