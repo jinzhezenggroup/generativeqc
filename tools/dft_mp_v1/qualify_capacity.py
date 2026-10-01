@@ -1776,7 +1776,9 @@ def _public_selector_contract(
     if native_functional != expected_functional:
         failures.append("native functional-family lowering")
     if options.coefficients != expected_coefficients:
-        failures.append("scientific coefficients" if hybrid else "semilocal coefficients")
+        failures.append(
+            "scientific coefficients" if hybrid else "semilocal coefficients"
+        )
     if (
         execution_plan.method.identity != method_ir.identity
         or execution_plan.nonlocal_correlation is not None
