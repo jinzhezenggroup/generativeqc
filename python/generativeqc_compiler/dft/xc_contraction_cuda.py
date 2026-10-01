@@ -402,25 +402,18 @@ inline void scheduled_density_product(cudaStream_t stream, const double* density
     const double* ao, I n, I count, I spins, I work_jets, bool mixed,
     double* work, int* error) {
   if (tiled_xc_admitted(n, count, spins, work_jets)) {
+    // Retain the measured tiled schedule. On RTX 5090 the four-jet fused tiled
+    // kernel reduced block-level parallelism 4x and regressed the 24-AO case by
+    // ~2.92x. Revisit only with a separately qualified crossover policy.
     const dim3 block(@TILE@,@TILE@);
-    if (work_jets == 4) {
-      const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@, spins);
-      if (mixed)
-        tiled_density_product_fused_jets<true><<<grid, block, 0, stream>>>(
-            density, ao, n, count, work, error);
-      else
-        tiled_density_product_fused_jets<false><<<grid, block, 0, stream>>>(
-            density, ao, n, count, work, error);
-    } else {
-      const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@,
-                      spins*work_jets);
-      if (mixed)
-        tiled_density_product<true><<<grid, block, 0, stream>>>(
-            density, ao, n, count, work_jets, work, error);
-      else
-        tiled_density_product<false><<<grid, block, 0, stream>>>(
-            density, ao, n, count, work_jets, work, error);
-    }
+    const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@,
+                    spins*work_jets);
+    if (mixed)
+      tiled_density_product<true><<<grid, block, 0, stream>>>(
+          density, ao, n, count, work_jets, work, error);
+    else
+      tiled_density_product<false><<<grid, block, 0, stream>>>(
+          density, ao, n, count, work_jets, work, error);
   } else if (work_jets == 4) {
     if (mixed)
       density_product_fused_jets<true><<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
