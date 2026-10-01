@@ -17,8 +17,6 @@
 namespace generativeqc::dft::nlc {
 namespace {
 
-constexpr double kPi = 3.141592653589793238462643383279502884;
-
 // Scientific pair formulas and output-demand closures have one compiler owner.
 using PairKernelValues = generated::PairValues;
 
@@ -48,9 +46,9 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
   const double gz = gradient[3 * i + 2];
   const double sigma = gx * gx + gy * gy + gz * gz;
   const double rho = density[i];
-  const double ratio = sigma / (rho * rho);
-  omega[i] = sqrt(c * ratio * ratio + (4.0 * kPi / 3.0) * rho);
-  kappa[i] = b * 1.5 * kPi * pow(rho / (9.0 * kPi), 1.0 / 6.0);
+  const auto local = generated::local_scales_cuda<Variant, Features>(rho, sigma, b, c);
+  omega[i] = local.omega;
+  kappa[i] = local.kappa;
   weighted_density[i] = weights[i] * rho;
   // Preserve the inactive -0 marker, but do not create one when an active
   // negative integration weight underflows in the density product.
@@ -59,21 +57,11 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
       !isfinite(weighted_density[i]))
     atomicExch(failed, 1);
   if constexpr (Features) {
-    domega_drho[i] =
-        ((4.0 * kPi / 3.0) - 4.0 * c * sigma * sigma / pow(rho, 5.0)) / (2.0 * omega[i]);
-    domega_dsigma[i] = c * sigma / (omega[i] * pow(rho, 4.0));
-    dkappa_drho[i] = kappa[i] / (6.0 * rho);
+    domega_drho[i] = local.domega_drho;
+    domega_dsigma[i] = local.domega_dsigma;
+    dkappa_drho[i] = local.dkappa_drho;
     if (!isfinite(domega_drho[i]) || !isfinite(domega_dsigma[i]) || !isfinite(dkappa_drho[i]))
       atomicExch(failed, 1);
-  }
-  // rVV10 pair algebra depends on alpha=omega/kappa and kappa^(3/2).
-  // Once local feature derivatives are materialized, reuse the existing
-  // omega/kappa workspace slots for those pair invariants so the O(N^2)
-  // loop performs neither alpha division nor a per-pair square root.
-  if constexpr (Variant == Vv10Variant::rvv10) {
-    omega[i] /= kappa[i];
-    kappa[i] *= sqrt(kappa[i]);
-    if (!isfinite(omega[i]) || !isfinite(kappa[i])) atomicExch(failed, 1);
   }
 }
 
