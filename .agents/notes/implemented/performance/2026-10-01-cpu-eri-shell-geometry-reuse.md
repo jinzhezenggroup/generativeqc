@@ -72,6 +72,15 @@ with independent PySCF/libcint numerical checks, identical spherical BSE inputs,
 core guess, DIIS history 8, energy tolerance 1e-10 and density RMS tolerance 1e-8.
 Cold, fresh-object warm and changed-geometry measurements remain separate.
 
+Final warm endpoint medians improve by 2.05x for water/STO-3G, 1.82x for
+water/def2-SVP and 2.03x for formaldehyde/def2-SVP. All 144 endpoints converge,
+with maximum errors 8.53e-14 Ha versus #1662 and 4.98e-13 Ha versus PySCF.
+The initial H2 warm median is 14.6% slower; a separate twenty-process-pair
+confirmation gives a 1.64% pooled median difference and a wide paired confidence
+interval. H2 remains an explicit no-reuse/performance limitation, not a speedup
+or guaranteed non-regression claim. Both campaigns and all raw samples are in
+`benchmarks/results/cpu-eri-geometry-20261001/README.md`.
+
 ## Revisit when
 
 Remaining profiles identify pair construction, component dispatch, contraction,
