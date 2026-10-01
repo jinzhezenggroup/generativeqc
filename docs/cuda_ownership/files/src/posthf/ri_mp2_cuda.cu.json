@@ -1,14 +1,7 @@
 {
   "path": "src/posthf/ri_mp2_cuda.cu",
-  "reason": "Bounded CUDA RI-MP2 source/metric-plan reuse, device-resident AO-to-MO and fitted-integral orchestration, transfer/resource accounting and failure-atomic runtime ownership. Shared DF generation/whitening remains owned by the SCF provider; placement/block choices are compiler-generated.",
-  "regions": [
-    {
-      "reason": "Ordered RHF-MP2 denominator, opposite-/same-spin correlation equations and device reductions.",
-      "role": "scientific",
-      "start": "__global__ void reduce_ri_mp2_block",
-      "stop": "std::size_t fixed_capacity"
-    }
-  ],
+  "reason": "Bounded CUDA RI-MP2 source/metric-plan reuse, device-resident AO-to-MO orchestration, block indexing, compensated reductions, transfer/resource accounting and failure-atomic runtime ownership. The ordered RHF-MP2 denominator and opposite-/same-spin pair-energy equations are compiler-owned in generated mp2_pair_energy.cuh; shared DF generation/whitening remains owned by the SCF provider.",
+  "regions": [],
   "role": "runtime",
   "subsystem": "runtime"
 }
