@@ -462,8 +462,8 @@ std::string read_profile_index(const std::filesystem::path& path) {
 int profile_show() {
   const auto root = profile_cache_root();
   const auto active = read_profile_index(root / "active.json");
-  std::cout << "{\n  \"cache\": \"" << json_escape(root.string()) << "\",\n  \"active\": "
-            << active << "\n}\n";
+  std::cout << "{\n  \"cache\": \"" << json_escape(root.string()) << "\",\n  \"active\": " << active
+            << "\n}\n";
   return 0;
 }
 
@@ -518,10 +518,12 @@ int profile_clear() {
 
   {
     std::ofstream stream(pending, std::ios::trunc);
-    if (!stream) throw std::runtime_error("cannot write temporary profile index: " + pending.string());
+    if (!stream)
+      throw std::runtime_error("cannot write temporary profile index: " + pending.string());
     stream << "{}\n";
     stream.flush();
-    if (!stream) throw std::runtime_error("cannot flush temporary profile index: " + pending.string());
+    if (!stream)
+      throw std::runtime_error("cannot flush temporary profile index: " + pending.string());
   }
 
 #if defined(_WIN32)
