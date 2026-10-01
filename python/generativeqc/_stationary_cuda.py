@@ -410,9 +410,7 @@ def _artifact_derivative_requests(
     return inventory
 
 
-def _layout(
-    basis: typing.Any, *, integral_derivatives: bool = True
-) -> typing.Any:
+def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.Any:
     """Read normalized public-AO records without evaluating integrals.
 
     Generic stationary integral descriptors remain qualified through d shells.
@@ -425,9 +423,7 @@ def _layout(
         raise NotImplementedError(
             "CUDA gradient integral descriptors admit s/p/d bases only"
         )
-    if not integral_derivatives and any(
-        s.angular_momentum > 3 for s in basis.shells
-    ):
+    if not integral_derivatives and any(s.angular_momentum > 3 for s in basis.shells):
         raise NotImplementedError(
             "CUDA stationary geometry admits through f bases only"
         )
