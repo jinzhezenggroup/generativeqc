@@ -704,7 +704,8 @@ static void direct_jk_canonical_density(CudaDirectJkPlan* plan, bool unrestricte
   const auto batch_size = plan->batch.batch_size;
   const auto source_dimension = plan->canonical_batch.nbf;
   const auto states = direct_jk_product(plan->diagnostic.batch_size, spin_count);
-  const auto rectangular = direct_jk_product(states, direct_jk_product(dimension, source_dimension));
+  const auto rectangular =
+      direct_jk_product(states, direct_jk_product(dimension, source_dimension));
   const auto source_elements =
       direct_jk_product(states, direct_jk_product(source_dimension, source_dimension));
   const auto blocks = [](std::size_t elements) {
