@@ -75,6 +75,22 @@ def _unsupported() -> dict[str, Any]:
     }
 
 
+def merge_precision_work(
+    aggregate: dict[str, Any] | None, detail: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Merge execution detail without inventing or upgrading any evidence."""
+
+    if aggregate is None:
+        return detail
+    if detail is None:
+        return aggregate
+    return {
+        **aggregate,
+        **detail,
+        "native_provenance": dict(aggregate),
+    }
+
+
 def query_precision_work(
     library: object, handle: object, index: int | None = None
 ) -> dict[str, Any] | None:

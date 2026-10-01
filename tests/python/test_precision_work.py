@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from generativeqc import _native
-from generativeqc._precision_work import query_precision_work
+from generativeqc._precision_work import merge_precision_work, query_precision_work
 
 
 def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNamespace:
@@ -132,3 +132,31 @@ def test_batch_decoder_preserves_original_index() -> None:
     precision = query_precision_work(library, ctypes.c_void_p(), index=7)
     assert precision is not None and precision["detail_version"] == 1
     assert observed == [7, 7]
+
+
+def test_merge_preserves_native_aggregate_and_partial_detail() -> None:
+    aggregate = {
+        "requested_mode": "auto",
+        "mixed_stage_fock_builds": 2,
+        "strict_stage_fock_builds": 1,
+        "operator_work_counters_valid": False,
+    }
+    detail = {
+        "detail_version": 1,
+        "complete": False,
+        "operator_inventory_complete": False,
+        "returned_state_identity": "cuda-ks:9:8:7",
+        "scf_fock_timeline": [{"kind": "mixed_fock"}],
+        "operators": [{"name": "coulomb_recurrence", "count": 23}],
+    }
+
+    merged = merge_precision_work(aggregate, detail)
+    assert merged is not None
+    assert merged["requested_mode"] == "auto"
+    assert merged["complete"] is False
+    assert merged["operators"] == detail["operators"]
+    assert merged["native_provenance"] == aggregate
+    assert merged["native_provenance"] is not aggregate
+
+    assert merge_precision_work(aggregate, None) is aggregate
+    assert merge_precision_work(None, detail) is detail
