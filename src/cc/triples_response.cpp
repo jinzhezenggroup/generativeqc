@@ -31,8 +31,7 @@ double degeneracy(std::size_t a, std::size_t b, std::size_t c) {
 
 void accumulate(double& target, double contribution) {
   const double updated = target + contribution;
-  if (!std::isfinite(updated))
-    throw std::runtime_error("nonfinite RCCSD(T) response accumulation");
+  if (!std::isfinite(updated)) throw std::runtime_error("nonfinite RCCSD(T) response accumulation");
   target = updated;
 }
 
@@ -40,8 +39,7 @@ void add_block(std::vector<double>& target, const double* source) {
   for (std::size_t i = 0; i < target.size(); ++i) accumulate(target[i], source[i]);
 }
 
-void add_symmetric_matrix_block(std::vector<double>& target, const double* source,
-                                std::size_t n) {
+void add_symmetric_matrix_block(std::vector<double>& target, const double* source, std::size_t n) {
   if (target.size() != checked_mul(n, n))
     throw std::logic_error("RCCSD(T) symmetric response block shape mismatch");
   for (std::size_t left = 0; left < n; ++left)
@@ -201,7 +199,9 @@ TriplesResponseResult triples_response_cpu(const Problem& p, const SolverResult&
     }
   }
   run_page(lane);
-  result.reason = "runtime-indexed generated standard-(T) response completed with fused parameter-source projection";
+  result.reason =
+      "runtime-indexed generated standard-(T) response completed with fused parameter-source "
+      "projection";
   return result;
 }
 

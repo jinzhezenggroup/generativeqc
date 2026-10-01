@@ -135,8 +135,7 @@ ParameterWeights parameter_vjp(const Problem& p, const SolverResult& cc, const L
   return out;
 }
 
-void add_triples_parameter_sources(ParameterWeights& target,
-                                   const TriplesResponseResult& triples) {
+void add_triples_parameter_sources(ParameterWeights& target, const TriplesResponseResult& triples) {
   if (triples.fov.size() != target.fov.size() || triples.ovov.size() != target.ovov.size() ||
       triples.ovvv.size() != target.ovvv.size() || triples.ovoo.size() != target.ovoo.size())
     throw std::invalid_argument("RCCSD(T) direct triples parameter-source shape mismatch");

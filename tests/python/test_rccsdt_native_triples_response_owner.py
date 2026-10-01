@@ -37,15 +37,9 @@ def _case(o: int, v: int, seed: int) -> typing.Any:
         inputs=NAMES,
         max_elements=10_000_000,
     )
-    expected["ovov"] = 0.5 * (
-        expected["ovov"] + expected["ovov"].transpose(2, 3, 0, 1)
-    )
-    expected["ovvv"] = 0.5 * (
-        expected["ovvv"] + expected["ovvv"].transpose(0, 1, 3, 2)
-    )
-    expected["ovoo"] = 0.5 * (
-        expected["ovoo"] + expected["ovoo"].transpose(0, 1, 3, 2)
-    )
+    expected["ovov"] = 0.5 * (expected["ovov"] + expected["ovov"].transpose(2, 3, 0, 1))
+    expected["ovvv"] = 0.5 * (expected["ovvv"] + expected["ovvv"].transpose(0, 1, 3, 2))
+    expected["ovoo"] = 0.5 * (expected["ovoo"] + expected["ovoo"].transpose(0, 1, 3, 2))
     return arrays, expected
 
 
