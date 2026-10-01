@@ -61,14 +61,35 @@ class Mp2Prepared final : public PreparedCalculation {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
-  Result execute_with_reference_seed(bool compute_forces,
-                                     const std::vector<double>* initial_density,
+  Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
                                      bool* warm_start_fallback,
                                      std::optional<scf::HfWarmState>* retained_warm_state) {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     if (warm_start_fallback) *warm_start_fallback = false;
     try {
+      // The prior last-good seed must survive failure, and a candidate seed
+      // stays live until the complete endpoint succeeds. Charge both numeric
+      // payloads to every phase; warm-disabled execution retains its old budget.
+      const auto warm_bytes = [](std::size_t density, std::size_t coordinates) {
+        return posthf::checked_mul(sizeof(double), posthf::checked_add(density, coordinates));
+      };
+      const auto n = molecule::ao_count(system_);
+      auto warm_capacity = initial_state ? warm_bytes(initial_state->density.size(),
+                                                      initial_state->coordinates.size())
+                                         : 0;
+      if (retained_warm_state)
+        warm_capacity = posthf::checked_add(
+            warm_capacity,
+            warm_bytes(posthf::checked_mul(n, n), posthf::checked_mul(3, system_.atoms.size())));
+      if (warm_capacity >= budget_ || reference_capacity_ > budget_ - warm_capacity)
+        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                          "MP2 warm state and reference exceed numeric memory budget");
+      const auto phase_budget = budget_ - warm_capacity;
+      const auto reference_capacity = posthf::checked_add(reference_capacity_, warm_capacity);
+      auto reference_options = options_;
+      reference_options.reference_memory_budget_bytes = phase_budget;
+      const auto* initial_density = initial_state ? &initial_state->density : nullptr;
       const bool cuda = context_.requested_backend == GENERATIVEQC_BACKEND_CUDA;
       const bool execution_cuda = density_fitted_ ? fitted_cuda_ : cuda;
       if (!cuda && context_.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
@@ -96,17 +117,17 @@ class Mp2Prepared final : public PreparedCalculation {
             cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
           }
           prepared_exact = cpu_exact_plan_.get();
-          auto execution = options_;
+          auto execution = reference_options;
           execution.resolved_fock_build = prepared_exact->strategy();
           candidate = scf::run_prepared_fock_strategy(*prepared_exact, execution, seed);
         } else {
-          candidate =
-              density_fitted_
-                  ? (fitted_cuda_
-                         ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
-                                                             context_.device_id, seed)
-                         : scf::run_rhf_density_fitting(system_, *auxiliary_, options_, seed))
-                  : scf::run_rhf_cuda(system_, options_, context_.device_id, seed);
+          candidate = density_fitted_
+                          ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
+                                                system_, *auxiliary_, reference_options,
+                                                context_.device_id, seed)
+                                          : scf::run_rhf_density_fitting(system_, *auxiliary_,
+                                                                         reference_options, seed))
+                          : scf::run_rhf_cuda(system_, reference_options, context_.device_id, seed);
         }
         return candidate;
       };
@@ -122,6 +143,8 @@ class Mp2Prepared final : public PreparedCalculation {
           hf = run_reference(nullptr);
         }
         if (!retried_cold && (!hf.converged || !hf.reference)) {
+          // Retire the unsuccessful proposal before allocating a cold solve.
+          hf = {};
           if (warm_start_fallback) *warm_start_fallback = true;
           hf = run_reference(nullptr);
         }
@@ -134,7 +157,7 @@ class Mp2Prepared final : public PreparedCalculation {
 
       if (retained_warm_state) {
         scf::HfWarmState state;
-        state.density = hf.density;
+        state.density = std::move(hf.density);
         state.coordinates.reserve(3 * system_.atoms.size());
         for (const auto& atom : system_.atoms)
           state.coordinates.insert(state.coordinates.end(), atom.position.begin(),
@@ -161,11 +184,11 @@ class Mp2Prepared final : public PreparedCalculation {
         conventional_source = &*prepared_source;
       }
       const auto corr =
-          density_fitted_ ? mp2::density_fitted_energy(ref, *raw_source, budget_, threshold_,
+          density_fitted_ ? mp2::density_fitted_energy(ref, *raw_source, phase_budget, threshold_,
                                                        options_.density_fitting_relative_threshold,
                                                        8, fitted_cuda_, context_.device_id)
-                          : mp2::conventional_energy(ref, *conventional_source, budget_, threshold_,
-                                                     8, cuda, context_.device_id);
+                          : mp2::conventional_energy(ref, *conventional_source, phase_budget,
+                                                     threshold_, 8, cuda, context_.device_id);
       Result result;
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
@@ -183,16 +206,16 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.absolute_tolerance = 1e-12;
         response_options.restart = 30;
         response_options.max_iterations = 200;
-        response_options.max_workspace_bytes = budget_;
+        response_options.max_workspace_bytes = phase_budget;
         force_diagnostic =
             density_fitted_
-                ? mp2::density_fitted_force_cpu(ref, *raw_source, budget_, threshold_,
+                ? mp2::density_fitted_force_cpu(ref, *raw_source, phase_budget, threshold_,
                                                 options_.density_fitting_relative_threshold, 1e-10,
                                                 response_options)
-                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, budget_, threshold_, 1e-10,
-                                                       response_options, context_.device_id)
-                        : mp2::conventional_force_cpu(ref, *raw_source, budget_, threshold_, 1e-10,
-                                                      response_options));
+                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, phase_budget, threshold_,
+                                                       1e-10, response_options, context_.device_id)
+                        : mp2::conventional_force_cpu(ref, *raw_source, phase_budget, threshold_,
+                                                      1e-10, response_options));
         result.forces = force_diagnostic->forces;
       }
       result.convergence = {hf.iterations, hf.energy_change, ref.commutator_residual, true};
@@ -207,8 +230,8 @@ class Mp2Prepared final : public PreparedCalculation {
       diagnostic.same_spin_energy = corr.same_spin;
       diagnostic.minimum_absolute_denominator = corr.minimum_denominator;
       diagnostic.reference_residual = ref.commutator_residual;
-      diagnostic.numeric_capacity_bytes =
-          std::max(reference_capacity_, corr.numeric_capacity_bytes);
+      diagnostic.numeric_capacity_bytes = std::max(
+          reference_capacity, posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity));
       diagnostic.energy_tile_count = corr.tiles;
       diagnostic.mo_host_staging = executed_cuda && !density_fitted_ ? 1 : 0;
       last_ = diagnostic;
@@ -231,11 +254,14 @@ class Mp2Prepared final : public PreparedCalculation {
         last_->response_workspace_allocation_count =
             force_diagnostic->response.workspace_allocation_count;
         last_->derivative_workspace_bytes = force_diagnostic->derivative_workspace_bytes;
-        last_->planned_endpoint_peak_bytes =
-            std::max(reference_capacity_, force_diagnostic->planned_endpoint_peak_bytes);
-        // Preserve the producer's unavailable-measurement sentinel. A planned
-        // reference capacity cannot turn an unmeasured endpoint into an observation.
-        last_->measured_endpoint_peak_bytes = force_diagnostic->measured_endpoint_peak_bytes;
+        last_->planned_endpoint_peak_bytes = std::max(
+            reference_capacity,
+            posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity));
+        // A planned warm-state reservation is not allocator telemetry. Until
+        // endpoint measurement includes these external owners, keep it unknown.
+        // Warm-disabled calls preserve the producer's value (including zero).
+        last_->measured_endpoint_peak_bytes =
+            warm_capacity ? 0 : force_diagnostic->measured_endpoint_peak_bytes;
         last_->numeric_capacity_bytes =
             std::max(last_->numeric_capacity_bytes, last_->planned_endpoint_peak_bytes);
         last_->force_provenance_flags = density_fitted_ ? 0x5 : 0x7;
@@ -364,8 +390,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
         std::optional<scf::HfWarmState> next_warm_state;
         auto& owner = static_cast<Mp2Prepared&>(*owners_[index]);
         result.calculation = owner.execute_with_reference_seed(
-            compute_forces, has_warm_state ? &warm_states_[index]->density : nullptr,
-            &warm_start_fallback,
+            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr, &warm_start_fallback,
             warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
         result.warm_start_fallback = warm_start_fallback;
         if (next_warm_state) warm_states_[index].swap(next_warm_state);

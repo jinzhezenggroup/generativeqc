@@ -19,8 +19,10 @@ from generativeqc import Calculator, _native
 from generativeqc.checkpoint import (
     _HEADER,
     CheckpointError,
+    _controls,
     _json,
     _read,
+    _validate_controls,
     inspect_checkpoint,
 )
 from generativeqc_compiler.common.resources import ResourceBudget
@@ -712,3 +714,26 @@ def test_older_checkpoint_without_new_df_controls_keeps_source_provenance(
     )
     with pytest.raises(CheckpointError, match="runtime policy"):
         inspect_checkpoint(path)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("screening_tolerance", -1.0),
+        ("screening_tolerance", float("nan")),
+        ("screening_tolerance", float("inf")),
+        ("screening_tolerance", False),
+        ("energy_tolerance", 0.0),
+        ("density_tolerance", 0.0),
+    ],
+)
+def test_checkpoint_control_validation_keeps_unscreened_boundary_strict(
+    field: str,
+    value: typing.Any,
+) -> None:
+    controls = _controls(calc())
+    controls["screening_tolerance"] = 0.0
+    _validate_controls(controls)
+    controls[field] = value
+    with pytest.raises(CheckpointError, match=f"invalid source {field}"):
+        _validate_controls(controls)

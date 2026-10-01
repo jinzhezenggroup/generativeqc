@@ -22,7 +22,7 @@ Directly accepting a previous converged HF reference was rejected for this slice
 ## Invariants
 
 - Warm state never establishes convergence for a new target.
-- Warm-state failure cannot make an otherwise valid endpoint less robust; cold retry remains available.
+- Numerical warm-reference failure retains a cold retry; resource admission still includes every live seed payload.
 - Warm state is updated only after a complete successful MP2 endpoint.
 - `warm_start=False` preserves the prior deterministic cold path.
 - Missing checkpoint entries preserve neighboring retained states.
@@ -31,6 +31,34 @@ Directly accepting a previous converged HF reference was rejected for this slice
 ## Evidence
 
 `tests/python/test_mp2_batch.py` covers cold-to-warm replay, same-geometry energy parity, changed-geometry seed use, checkpoint save/restore, explicit clearing, and the unchanged profiling rejection. Existing warm-disabled MP2 batch tests continue to exercise the old path.
+
+### Review repair: bounded warm-state lifetime
+
+The first implementation copied a candidate density before correlation while
+retaining the previous seed, but still passed the entire numeric budget to every
+phase and reported the old capacities. The endpoint now reserves both live
+states' density/coordinate payloads before reference, energy, and force
+admission, and adds that reservation to phase diagnostics. The iterative density
+is moved into the candidate, and an unsuccessful reference result is retired
+before cold retry. Frozen updates reserve only the previous seed; warm-disabled
+execution keeps the previous budget. Admission failure preserves last-good state
+and invalidates result diagnostics. This follows the per-item method budget,
+not a new global batch/RSS promise.
+
+Exact-source checkpoint execution also exposed a pre-existing generic validator
+that rejected MP2's mandatory zero screening tolerance. Screening now permits
+zero (the unscreened contract), while negative/nonfinite/non-numeric screening
+and nonpositive energy/density convergence tolerances remain rejected.
+
+Tests cover one-byte-below/exact-boundary energy and force admission,
+frozen changed-geometry replay, atomic rejected/partial imports, failure after
+reference success, and an independent PySCF moved-geometry energy/force oracle.
+The opt-in real-CUDA test now executes actual warm replay and checks backend,
+complete energy/force parity, and failed-item recovery. CUDA qualification is
+NVIDIA_NOT_RUN until that gate runs on a real device; CPU success cannot replace
+it. No endpoint speedup is claimed.
+
+Review repair by Agent: dot
 
 ## Consequences
 
