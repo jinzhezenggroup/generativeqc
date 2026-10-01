@@ -40,6 +40,24 @@ def test_mp2_advertises_batches_reuses_hf_warm_state_and_rejects_profiling() -> 
         calculator.prepare_batch(H2, warm_start=False, shell_class_profiling=True)
 
 
+def test_mp2_batch_checkpoint_restores_hf_warm_state(tmp_path) -> None:
+    calculator = Calculator(method="mp2", device="cpu")
+    checkpoint = tmp_path / "mp2-warm.vqcp"
+
+    with calculator.prepare_batch(H2) as source:
+        baseline = source.execute(properties=("energy",), strict=True)
+        source.save_checkpoint(checkpoint)
+
+    with calculator.prepare_batch(H2) as target:
+        report = target.load_checkpoint(checkpoint)
+        assert all(item["restored_fields"] == ["density"] for item in report["items"])
+        replay = target.execute(properties=("energy",), strict=True)
+
+    np.testing.assert_allclose(replay.energies, baseline.energies, atol=1.0e-10, rtol=0)
+    assert all(item.warm_start_used for item in replay.items)
+    assert all(not item.warm_start_fallback for item in replay.items)
+
+
 def test_mp2_batch_energy_force_replay_geometry_and_order_independence() -> None:
     calculator = Calculator(method="mp2", device="cpu")
     expected = [calculator.singlepoint(system) for system in H2]
