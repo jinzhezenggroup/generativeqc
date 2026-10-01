@@ -514,7 +514,7 @@ class _CudaSources:
             else _layout(basis, integral_derivatives=False)
         )
         self.expansions = tuple(expansions)
-        self.component_mode = _component_mode(self.expansions)
+        self.component_mode = integral_derivatives and _component_mode(self.expansions)
         self.components = tuple(expansion[0][0] for expansion in self.expansions)
         self.primitive_table = np.ascontiguousarray(self.primitives, dtype=np.float64)
         self.ao_ranges = np.ascontiguousarray(self.aos[:, 1:3], dtype=np.int64)

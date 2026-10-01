@@ -90,6 +90,72 @@ def pyscf_energy(
     return mf.e_tot
 
 
+def pyscf_energy_gradient(
+    calc: Calculator,
+    state: Any,
+    raw_atoms: Any,
+    multiplicity: int,
+    functional: str,
+) -> tuple[float, np.ndarray]:
+    """Independent DF-SCF plus analytic auxiliary/metric and moving-grid response."""
+    pyscf = pytest.importorskip("pyscf")
+    from pyscf import dft, gto
+
+    pyscf.lib.num_threads(1)
+    atoms = tuple(Atom.from_value(a) for a in raw_atoms)
+    labels = [f"{symbol}{i}" for i, (symbol, _) in enumerate(raw_atoms)]
+
+    def basis_dict(selected: Any) -> dict:
+        result = {label: [] for label in labels}
+        for shell in calc._shells_for_atoms(atoms, selected):
+            result[labels[shell.atom_index]].append(
+                [
+                    shell.angular_momentum,
+                    *[(p.exponent, p.coefficient) for p in shell.primitives],
+                ]
+            )
+        return result
+
+    mol = gto.M(
+        atom=[
+            (label, atom.position) for label, atom in zip(labels, atoms, strict=True)
+        ],
+        basis=basis_dict(calc._basis),
+        unit="Bohr",
+        cart=True,
+        spin=multiplicity - 1,
+        verbose=0,
+    )
+    mf = (dft.RKS(mol) if multiplicity == 1 else dft.UKS(mol)).density_fit(
+        auxbasis=basis_dict(calc._auxiliary_basis)
+    )
+    points = np.asarray(state.grid.points)
+    weights = np.asarray(state.grid.weights)
+    owners = np.asarray(state.grid.owners)
+    atomic_weights = np.asarray(state._source.atomic_weights)
+    mf.xc = functional
+    mf.grids.coords = points
+    mf.grids.weights = weights
+    mf.grids.radii_adjust = None
+    atomic_grid = {
+        mol.atom_symbol(a): (
+            points[owners == a] - mol.atom_coord(a),
+            atomic_weights[owners == a],
+        )
+        for a in range(mol.natm)
+    }
+    mf.grids.gen_atomic_grids = lambda *args, **kwargs: atomic_grid
+    mf.small_rho_cutoff = 0
+    mf.conv_tol = 1e-13
+    mf.conv_tol_grad = 1e-10
+    mf.max_cycle = 200
+    mf.kernel()
+    assert mf.converged
+    gradient = mf.nuc_grad_method()
+    gradient.grid_response = True
+    return mf.e_tot, np.asarray(gradient.kernel())
+
+
 @pytest.mark.parametrize(
     "method,functional,atoms,multiplicity",
     [
@@ -133,20 +199,40 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
     ]
     expected = calc.singlepoint(moved, properties=("energy",)).energy
     with calc.prepare_batch([WATER, WATER], warm_start=True) as batch:
-        cold = batch.execute(strict=True)
-        # Private/native snapshots also reject the conventional force path.
+        cold = batch.execute(strict=True, properties=("energy",))
         from generativeqc._ks_snapshot import NativeKsSnapshot
 
-        with pytest.raises(NotImplementedError):
-            NativeKsSnapshot(batch, 0)
-        warm = batch.execute(strict=True)
         if device == "cuda":
-            # Ordinary SCF and same-geometry replay retain device matrices.
+            snapshot = NativeKsSnapshot(batch, 0)
+            try:
+                coulomb, exchange, threshold = snapshot.fock_provider_proof()
+                assert coulomb == "density-fitted" and exchange is None
+                assert threshold == calc._density_fitting_relative_threshold
+            finally:
+                snapshot.close()
+        else:
+            with pytest.raises(NotImplementedError):
+                NativeKsSnapshot(batch, 0)
+        transport_before_warm = (
+            tuple(batch.ks_transport_diagnostics) if device == "cuda" else None
+        )
+        warm = batch.execute(strict=True, properties=("energy",))
+        if device == "cuda":
+            # NativeKsSnapshot is an explicit final-state export and its matrices
+            # remain charged to the cumulative legacy matrix_d2h_bytes counter.
+            # The warm SCF replay itself must add no further matrix D2H.
+            transport_after_warm = tuple(batch.ks_transport_diagnostics)
+            assert transport_before_warm is not None
             assert all(
-                item.matrix_d2h_bytes == 0 for item in batch.ks_transport_diagnostics
+                after.matrix_d2h_bytes == before.matrix_d2h_bytes
+                for before, after in zip(
+                    transport_before_warm, transport_after_warm, strict=True
+                )
             )
         updated = batch.execute(
-            coordinates=[None, [xyz for _, xyz in moved]], strict=True
+            coordinates=[None, [xyz for _, xyz in moved]],
+            strict=True,
+            properties=("energy",),
         )
         assert warm.energies == pytest.approx(cold.energies, abs=1e-9)
         assert all(item.warm_start_used for item in warm.items)
@@ -170,8 +256,11 @@ def test_df_rejects_unqualified_force_precision_and_resource_consumers(
     device: str,
 ) -> None:
     calc = calculator(device)
-    with pytest.raises(ValueError, match="does not support.*forces"):
-        calc.singlepoint(WATER, properties=("energy", "forces"))
+    if device == "cpu":
+        with pytest.raises(ValueError, match="does not support.*forces"):
+            calc.singlepoint(WATER, properties=("energy", "forces"))
+    else:
+        assert "forces" in calc.capabilities.supported_properties
     with pytest.raises(NotImplementedError, match="resource plans"):
         calc.estimate_resources([WATER])
     if device == "cuda":
@@ -205,5 +294,74 @@ def test_df_default_auxiliary_ragged_batch(device: str) -> None:
     ]
     expected = [pyscf_energy(calc, atoms, 1, "PBE") for atoms in systems]
     with calc.prepare_batch(systems) as batch:
-        result = batch.execute(strict=True)
+        result = batch.execute(strict=True, properties=("energy",))
         assert result.energies == pytest.approx(expected, abs=1e-8)
+
+
+@pytest.mark.parametrize(
+    "method,functional,atoms,multiplicity",
+    [
+        ("pbe-rks", "PBE", WATER, 1),
+        ("r2scan-rks", "R2SCAN", WATER, 1),
+        ("pbe-uks", "PBE", [("Li", (0.0, 0.0, 0.0))], 2),
+    ],
+)
+def test_df_cuda_semilocal_force_matches_independent_response(
+    method: str, functional: str, atoms: Any, multiplicity: int
+) -> None:
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires an allocated native CUDA library/device")
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+
+    calc = calculator("cuda", method)
+    assert "forces" in calc.capabilities.supported_properties
+    with calc.prepare_batch(
+        [atoms], multiplicities=[multiplicity], warm_start=True
+    ) as batch:
+        public = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        with NativeAO(
+            atoms,
+            basis=calc._basis,
+            representation=calc._representation_name,
+            multiplicity=multiplicity,
+        ) as basis:
+            state = StationaryKsState.from_native(batch, basis)
+            try:
+                coulomb, exchange, threshold = state._source.fock_provider_proof()
+                assert coulomb == "density-fitted" and exchange is None
+                assert threshold == calc._density_fitting_relative_threshold
+                reference_energy, reference_gradient = pyscf_energy_gradient(
+                    calc, state, atoms, multiplicity, functional
+                )
+            finally:
+                state._source.close()
+        assert public.executed_backend == "cuda" and public.converged
+        assert public.energy == pytest.approx(reference_energy, abs=1e-8)
+        np.testing.assert_allclose(
+            public.forces, -reference_gradient, atol=3e-7, rtol=0
+        )
+        np.testing.assert_allclose(public.forces.sum(axis=0), 0, atol=2e-9, rtol=0)
+        replay = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
+
+
+def test_df_cuda_force_rebinds_auxiliary_response_on_moved_geometry() -> None:
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires an allocated native CUDA library/device")
+    calc = calculator("cuda", "pbe-rks")
+    moved = np.asarray([xyz for _, xyz in WATER], dtype=np.float64)
+    moved[1] += (0.02, -0.01, 0.03)
+    moved_atoms = [
+        (atom[0], tuple(position)) for atom, position in zip(WATER, moved, strict=True)
+    ]
+    with calc.prepare_batch([WATER], warm_start=True) as batch:
+        cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        replay = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        changed = batch.execute(
+            coordinates=(moved,), strict=True, properties=("energy", "forces")
+        ).items[0]
+    fresh = calc.singlepoint(moved_atoms, properties=("energy", "forces"))
+    np.testing.assert_allclose(replay.forces, cold.forces, atol=2e-8, rtol=0)
+    assert changed.energy == pytest.approx(fresh.energy, abs=1e-9)
+    np.testing.assert_allclose(changed.forces, fresh.forces, atol=3e-8, rtol=0)
