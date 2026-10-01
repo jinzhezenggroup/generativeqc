@@ -1,8 +1,9 @@
 {
-  "current_default": "CPU SCF density, energy-weighted density, DIIS residual Gram, and DIIS Fock extrapolation use build-time generated SCF TensorIR helpers. CUDA RHF/UHF plain and energy-weighted densities now use build-time generated TensorIR specializations; plain density preserves the qualified upper-triangle mirror schedule while weighted density preserves its historical full-square FP64 order. Native CUDA retains warm-start density repair, J/K, energy/force contractions and resident DIIS.",
+  "current_default": "CPU SCF density, energy-weighted density, DIIS residual Gram, and DIIS Fock extrapolation use build-time generated SCF TensorIR helpers. CUDA RHF/UHF plain and energy-weighted densities now use build-time generated TensorIR specializations; plain density preserves the qualified upper-triangle mirror schedule while weighted density preserves its historical full-square FP64 order. Native CUDA retains warm-start density repair, J/K, energy/force contractions and resident DIIS state/solve policy; DF DIIS residual matrix products use the DF SCF dense-library provider rather than calling cuBLAS from scientific method code.",
   "evidence": [
     "docs/developer/architecture.md",
-    "benchmarks/results/issues388-391-df/README.md"
+    "benchmarks/results/issues388-391-df/README.md",
+    ".agents/notes/implemented/architecture/2026-10-02-df-diis-blas-provider-boundary.md"
   ],
   "generated_capability": "TensorIR owns general contractions/AD plus SCF density, energy-weighted density, DIIS Gram, and DIIS extrapolation equations. CPU production consumes checked build-time specializations. CUDA RHF/UHF plain and weighted densities consume the same logical identities through compiler-owned integer-occupation lowerings; backend schedules preserve the qualified plain-density symmetry optimization and weighted-density FP64 ordering policy.",
   "missing_capability": "CUDA integration remains open for circular live-history materialization, residual Gram execution, Fock extrapolation, and complete resident/ragged DIIS endpoint qualification. Warm-start density repair, metric normalization, dependent-history retirement and the augmented small solve remain explicit runtime/solver policy rather than TensorIR equations.",
