@@ -25,9 +25,7 @@ def reduction_extent(node: typing.Any) -> int:
         return prod(node.inputs[0].spec.shape[axis] for axis in node.attrs["axes"])
     if node.op == "einsum":
         domains: dict[str, int] = {}
-        for child, labels in zip(
-            node.inputs, node.attrs["labels"], strict=True
-        ):
+        for child, labels in zip(node.inputs, node.attrs["labels"], strict=True):
             domains.update(zip(labels, child.spec.shape, strict=True))
         return prod(
             extent
