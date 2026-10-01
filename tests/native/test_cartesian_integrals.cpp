@@ -176,7 +176,7 @@ int main() {
                       {2, {0.9, 0.2, -0.6}},
                       {2, {-0.4, -0.6, 0.7}}};
       for (std::size_t slot = 0; slot < 4; ++slot) {
-        const auto atom = reversed ? 3 - slot : slot;
+        const auto atom = static_cast<std::uint32_t>(reversed ? 3 - slot : slot);
         system.shells.push_back({atom, 2, {{0.35 + 0.1 * static_cast<double>(atom), 1.0}}});
       }
       system.multiplicity = 1;
