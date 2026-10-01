@@ -560,6 +560,23 @@ unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
+/** Retain the existing generated DF response only for the semilocal CUDA J
+ * domain. Hybrid/RSH/nonlocal promotion remains a separate provider contract. */
+unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
+                                    generativeqc_backend backend) noexcept {
+#if GENERATIVEQC_HAS_CUDA
+  if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda &&
+      strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+      !strategy.spec.exchange.present)
+    return 1;
+#else
+  (void)strategy;
+  (void)backend;
+#endif
+  return 0;
+}
+
 std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend backend,
                               unsigned direct_derivative_order = 0) {
 #if GENERATIVEQC_HAS_CUDA
@@ -678,7 +695,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                   : options_.density_fitting_memory_budget_bytes,
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
-                  : 0U),
+                  : 0U,
+              ks_fitted_derivative_order(*options_.resolved_fock_build, backend)),
         basis_(system_),
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
@@ -935,8 +953,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
   generativeqc_status read_derivative_state(const dft::CudaKsFinalStateToken& expected,
                                             KsDerivativeSnapshot& output, std::string& detail) {
     output = {};
-    if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-      detail = "DFT density-fitted derivative snapshots require auxiliary and metric response";
+    if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+        ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
+      detail =
+          "DFT density-fitted derivative snapshots require a qualified CUDA semilocal DF-J owner";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     dft::VerifiedKsFinalState state;
