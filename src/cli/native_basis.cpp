@@ -66,16 +66,14 @@ NativeBasisData expand_bundled_basis(std::string_view name,
       found = true;
       const auto primitive_offset = static_cast<std::uint32_t>(result.primitives.size());
       for (std::uint32_t index = 0; index < shell->primitive_count; ++index) {
-        const auto& primitive =
-            basis_generated::kPrimitives[shell->primitive_offset + index];
+        const auto& primitive = basis_generated::kPrimitives[shell->primitive_offset + index];
         result.primitives.push_back({primitive.exponent, primitive.coefficient});
       }
       result.shells.push_back({static_cast<std::uint32_t>(atom_index), shell->angular_momentum,
                                primitive_offset, shell->primitive_count});
     }
     if (!found) {
-      throw std::invalid_argument(std::string(basis->name) +
-                                  " is not bundled for atomic number " +
+      throw std::invalid_argument(std::string(basis->name) + " is not bundled for atomic number " +
                                   std::to_string(atomic_number));
     }
   }
