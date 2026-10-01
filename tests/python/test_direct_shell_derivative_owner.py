@@ -1,6 +1,10 @@
 """Guard the prepared Direct shell derivative owner used by DFT stationary forces."""
 
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,9 +53,89 @@ def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
     assert "prepare_generated_exchange(" in source
     assert "derivative_order != 0" in source
     assert "execute_cuda_direct_shell_full_range_derivatives_device(" in source
-    assert (
-        "plan->derivative_order == 0 && plan->generated_exchange != nullptr" in source
+    assert "direct_jk_generated_exchange_value_available(*plan, spec)" in source
+
+
+def test_generated_exchange_value_eligibility_is_request_owned(tmp_path: Path) -> None:
+    """Compile the actual dispatch predicates; no CUDA runtime or ERI stand-in executes."""
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a C++ compiler")
+    header = _source("src/scf/cuda/direct_jk_plan.hpp")
+    start = header.index("inline bool direct_jk_generated_exchange_value_available(")
+    end = header.index("\n}", start) + 2
+    predicate = header[start:end]
+    start = header.index("struct DirectJkValueDispatch")
+    end = header.index("/** Own one exact public-AO provider", start)
+    dispatch = header[start:end]
+    harness = (
+        r"""
+#include <cassert>
+#include "scf/fock_build.hpp"
+namespace generativeqc::scf {
+// The GPU storage owner is not constructed. Only presence/capability metadata
+// are supplied to the unchanged production predicates extracted below.
+struct CudaDirectJkPlan { void* generated_exchange{}; unsigned derivative_order{}; };
+"""
+        + dispatch
+        + predicate
+        + r"""
+}
+int main() {
+  using namespace generativeqc::scf;
+  int storage;
+  for (unsigned capability : {0U, 1U})
+    for (bool available : {false, true})
+      for (unsigned order : {0U, 1U})
+        for (bool want_j : {false, true})
+          for (bool want_k : {false, true})
+            for (auto radial : {FockOperator::FullRange, FockOperator::ShortRange,
+                                FockOperator::LongRange})
+              for (bool mixed_j : {false, true}) {
+                CudaDirectJkPlan plan{available ? &storage : nullptr, capability};
+                FockBuildSpec spec;
+                spec.derivative_order = order;
+                spec.coulomb.present = want_j;
+                spec.exchange.present = want_k;
+                spec.exchange.op = radial;
+                const bool expected = available && order == 0 && want_k &&
+                                      radial == FockOperator::FullRange;
+                const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
+                assert(selected == expected);
+                const auto route = direct_jk_value_dispatch(true, selected, want_j, want_k,
+                                                            mixed_j);
+                assert(route.generated_exchange == (expected && !mixed_j));
+                assert(route.generic_exchange == (want_k && !route.generated_exchange));
+                assert(route.generated_coulomb == (want_j && !mixed_j));
+                assert(route.generic_coulomb == (want_j && mixed_j));
+              }
+}
+"""
     )
+    source = tmp_path / "exchange_value_policy.cpp"
+    executable = tmp_path / "exchange_value_policy"
+    source.write_text(harness)
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
 
 
 def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
