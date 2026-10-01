@@ -302,6 +302,56 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
           "prepared CUDA interaction source silently published a host ERI");
 }
 
+void mixed_coulomb_preserves_strict_exchange() {
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
+  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+  const std::vector<double> zeros(matrix, 0.0);
+  CudaDirectJkPlan* raw{};
+  CudaDirectJkDiagnostic diagnostic;
+  require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U * 1024U * 1024U, &raw, diagnostic,
+                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+      raw, &destroy_cuda_direct_jk_plan);
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  DeviceMatrix device_density(density), strict_j(zeros), strict_k(zeros), mixed_j(zeros),
+      mixed_k(zeros), error({0.0});
+  DeviceCounter count;
+  auto* failure = reinterpret_cast<int*>(error.pointer);
+  require(enqueue_cuda_direct_jk_device(plan.get(), spec, device_density.pointer, nullptr, matrix,
+                                        strict_j.pointer, strict_k.pointer, nullptr, failure,
+                                        detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  count.set(0);
+  require(enqueue_cuda_direct_jk_device_mixed_j(plan.get(), spec, device_density.pointer, nullptr,
+                                                matrix, mixed_j.pointer, mixed_k.pointer, nullptr,
+                                                failure, detail,
+                                                count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() > 0, "mixed-J hybrid did not execute mixed Coulomb work");
+  std::vector<double> strict_exchange(matrix), mixed_exchange(matrix);
+  check(cudaMemcpy(strict_exchange.data(), strict_k.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  check(cudaMemcpy(mixed_exchange.data(), mixed_k.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  for (std::size_t i = 0; i < matrix; ++i)
+    require(std::isfinite(strict_exchange[i]) && std::isfinite(mixed_exchange[i]) &&
+                std::abs(strict_exchange[i] - mixed_exchange[i]) < 3e-12,
+            "mixed-J hybrid changed strict FP64 exchange");
+}
+
 void direct_value_dispatch_selection() {
   const auto hybrid = direct_jk_value_dispatch(true, true, true, false);
   require(hybrid.generated_coulomb && !hybrid.generic_coulomb && hybrid.generic_exchange,
@@ -885,7 +935,8 @@ int main(int argc, char** argv) {
   try {
     if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
       mixed_coulomb_work_census();
-      std::cout << "CUDA mixed Coulomb work census PASS\n";
+      mixed_coulomb_preserves_strict_exchange();
+      std::cout << "CUDA mixed Coulomb work census and strict exchange PASS\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {
@@ -899,6 +950,7 @@ int main(int argc, char** argv) {
     const bool through_f_response = argc == 2;
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
+    mixed_coulomb_preserves_strict_exchange();
     device_selection();
     range_exchange_provider();
     range_exchange_derivatives();
