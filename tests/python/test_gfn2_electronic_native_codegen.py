@@ -282,9 +282,7 @@ def test_generated_cuda_header_and_consumers_own_the_pair_science(
     assert "__device__ inline bool gfn2_population_update_cuda_tensor" in source
     assert "std::fma" in source
 
-    mulliken = (
-        root / "src/xtb/native/src/backends/cuda/gfn2_mulliken.cu"
-    ).read_text()
+    mulliken = (root / "src/xtb/native/src/backends/cuda/gfn2_mulliken.cu").read_text()
     assert '#include "generated_gfn2_electronic_native.cuh"' in mulliken
     assert mulliken.count("gfn2_population_update_cuda_tensor(") == 4
     assert "fma(-density" not in mulliken
