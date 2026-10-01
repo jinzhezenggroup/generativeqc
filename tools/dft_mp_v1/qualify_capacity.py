@@ -254,8 +254,11 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
     "4c3d56e2bcc1ba02e48d6f2bd063b52609e5bc31e48dff2ccb47a7bcb525888d"
 )
+# The public hybrid route admits FP64 and component-wise AUTO requests.
+# This frozen report still covers only FP64 rows; this source binding is not
+# numerical qualification of AUTO or its strict-refined force handoff.
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
-    "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+    "9ca4e0287b1b943cc8fa110585415f31307a7179a956391124a5ba58e8826386"
 )
 PYTHON_GRID_CONTRACT_SHA256 = (
     "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
