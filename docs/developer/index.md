@@ -1,52 +1,114 @@
 # Developer Guide
 
-This guide describes how GenerativeQC is implemented and where new functionality belongs.
+This guide describes how GenerativeQC is implemented and where new functionality
+belongs. Start with the architectural boundaries, then use the topic map below
+instead of scanning the source tree.
 
 ## Start here
 
-- [Build and CUDA configuration](build.md)
-- [Architecture](architecture.md)
-- [Scientific compiler architecture](compiler_architecture.md)
-- [Electronic-structure boundaries](electronic_structure_boundaries.md)
-- [Electronic method IR](electronic_method_ir.md)
-- [Program IR](program_ir.md)
-- [Integral IR](integral_ir.md)
-- [Tensor IR](tensor_ir.md)
+1. [Build and CUDA configuration](build.md)
+2. [Architecture](architecture.md)
+3. [Scientific compiler architecture](compiler_architecture.md)
+4. [Electronic-structure boundaries](electronic_structure_boundaries.md)
 
-## Implementation topics
+The primary IR layers are [Electronic Method IR](electronic_method_ir.md),
+[Program IR](program_ir.md), [Integral IR](integral_ir.md), and
+[Tensor IR](tensor_ir.md).
 
-- SCF and Fock: [module boundaries](scf_module_boundaries.md), [Fock construction](fock_build.md), [strategy selection](fock_strategies.md), and [safe SCF proposals](scf_proposals.md).
-- Integrals: [shell generation](shell_codegen.md), [one-electron values](one_electron_codegen.md), [one-electron derivatives](one_electron_derivatives.md), and [second derivatives](second_integral_derivatives.md).
-- Density fitting: [overview](density_fitting.md), [derivatives](df_derivatives.md), [occupied exchange](df_occupied_cuda.md), and [tuning](df_tuning.md).
-- DFT and XC: [grids](dft_grid.md), [expressions](xc_expressions.md), [integration](xc_integration.md), [SCF domain](xc_scf_domain.md), and [native CUDA](xc_native_cuda.md).
-- Post-HF: [reference and providers](posthf.md), [MP2](mp2.md), [RCCSD](rccsd.md), [Lambda](rccsd_lambda.md), [triples](rccsd_t.md), and [CCSD gradients](ccsd_gradient.md).
-- Derivatives and response: [stationary problems](stationary_problem.md), [implicit response](implicit_response.md), [orbital response](response.md), and [Hessians](hessian.md).
-- Execution: [TensorIR CUDA](tensor_cuda.md), [tensor precision](tensor_precision.md), [state transport](state_transport.md), and [experimental OpenCL](opencl_backend.md).
+## Topic map
 
-See [Extending GenerativeQC](extending/index.md). GenerativeQC does not yet promise a stable third-party extension API; that section intentionally reserves the framework future public contracts should fill.
+- **Compiler and IR** — scientific ownership, lowering, generated sources,
+  specialization, tensor programs, and compiler-facing method descriptions.
+- **Integrals and SCF/HF** — shell/integral generation, Fock construction,
+  range-separated exchange, SCF proposals, and HF force finalization.
+- **DFT and XC** — grids, XC expressions/contractions, native CUDA integration,
+  Libxc capability import, diagnostics, and D3.
+- **Density fitting** — DF storage, streaming, occupied exchange, response,
+  residency, replay, final state, and tuning.
+- **Post-HF** — MP2, RCCSD, triples, Lambda equations, GPU ownership, and
+  correlated gradients.
+- **Derivatives and response** — stationary problems, implicit/orbital response,
+  first/second derivatives, and Hessians.
+- **Execution and backends** — TensorIR CUDA, precision, state transport,
+  experimental backends, and extension boundaries.
+
+See [Extending GenerativeQC](extending/index.md) for extension points.
+GenerativeQC does not yet promise a stable third-party extension API.
 
 ```{toctree}
 :hidden:
 :maxdepth: 1
+:caption: Foundations
 
 build
 architecture
 compiler_architecture
 electronic_structure_boundaries
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Compiler and IR
+
 electronic_method_ir
 program_ir
 integral_ir
 tensor_ir
 array_api_frontend
-ccsd_gradient
+source_registry
+spatial_tasks
+geometry_pair_ir
+matrix_function
+local_spaces
 compiler_gfn1_geometry
 compiler_xtb_method_ir
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Integrals and SCF/HF
+
+shell_codegen
 cpu_integral_codegen
+one_electron_codegen
+one_electron_derivatives
+second_integral_derivatives
+fock_build
+fock_strategies
+scf_module_boundaries
+scf_proposals
+incremental_low_rank
+range_separated_integrals
+weighted_eri
+hf_force_finalization
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: DFT and XC
+
+dft_grid
+dft_d3
+xc_expressions
+xc_integration
+xc_contractions
+xc_native_cuda
+xc_scf_domain
+ks_diagnostics
+libxc_bulk_capabilities
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Density fitting
+
 density_fitting
 density_sources
 df_batch_properties
-df_ccsdt
-df_ccsdt_gradient
 df_component_trace
 df_derivatives
 df_device_replay
@@ -61,51 +123,50 @@ df_setup_eigensystem
 df_shell_derivatives
 df_streamed_panels
 df_tuning
-dft_d3
-dft_grid
-extensions
-first_directional_derivatives
-fock_build
-fock_strategies
-geometry_pair_ir
-hessian
-implicit_response
-incremental_low_rank
-ks_diagnostics
-libxc_bulk_capabilities
-local_spaces
-matrix_function
-mp2
-one_electron_codegen
-one_electron_derivatives
-opencl_backend
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Post-HF
+
 posthf
-range_separated_integrals
+mp2
 rccsd
 rccsd_bc
 rccsd_gpu
 rccsd_lambda
 rccsd_t
 rccsd_t_api
-response
-scf_module_boundaries
-scf_proposals
-second_integral_derivatives
-shell_codegen
-source_registry
-spatial_tasks
-state_transport
-stationary_cuda_diagnostic
-stationary_native_consumers
+ccsd_gradient
+df_ccsdt
+df_ccsdt_gradient
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Derivatives and response
+
+first_directional_derivatives
 stationary_problem
+stationary_native_consumers
+stationary_cuda_diagnostic
+implicit_response
+response
+hessian
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Execution and backends
+
 tensor_cuda
 tensor_precision
-weighted_eri
-xc_contractions
-xc_expressions
-xc_integration
-xc_native_cuda
-xc_scf_domain
+state_transport
+opencl_backend
+extensions
 xtb_native_ownership
 extending/index
 ```
