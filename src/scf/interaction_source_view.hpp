@@ -4,7 +4,9 @@
 #include <array>
 #include <cstddef>
 #include <limits>
+#include <new>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "integrals/electron_interaction_source.hpp"
