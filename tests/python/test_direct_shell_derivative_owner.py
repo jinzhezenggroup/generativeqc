@@ -171,6 +171,46 @@ def test_through_f_full_range_values_precede_canonical_fallback() -> None:
     assert "p.force_cursor, false, true" in owner
 
 
+def test_canonical_screening_fixture_does_not_disable_default_provider_gate() -> None:
+    """Match the screened oracle's route without weakening default-route coverage."""
+    source = _source("tests/native/test_cuda_fock_provider.cpp")
+
+    def body(name: str) -> str:
+        begin = source.index(f"void {name}() {{")
+        return source[begin : source.index("\n}\n", begin)]
+
+    screened = body("canonical_screened_values")
+    override = "plan->generated_exchange->bounded_value_capability = false;"
+    assert screened.count(override) == 1
+    assert screened.index(override) < screened.index("direct_device(")
+    assert "!direct_jk_generated_full_range_value_available(*plan)" in screened
+    assert "!plan->generated_exchange->shared->value_capability" in screened
+    assert "screened_cartesian_public_eri(" in screened
+    assert "{0.08, 0.9}" in screened
+    assert "work[0] == admitted" in screened
+    assert (
+        "work[1] == admitted * (operation == FockOperator::FullRange ? 1U : 2U)"
+        in screened
+    )
+
+    default = body("canonical_value_provider")
+    assert default.index("direct_device(") < default.index(override)
+    assert "plan->generated_exchange->bounded_value_capability &&" in default
+    assert "plan->generated_exchange->bounded_value_capability = bounded;" in default
+    assert "work[0] == (canonical_range_exchange ? quartets : 0U)" in default
+    assert "work[1] == radial_passes * quartets" in default
+    for fixture in (screened, default):
+        assert "FockSpin::Restricted, FockSpin::Unrestricted" in fixture
+        for operation in ("FullRange", "ShortRange", "LongRange"):
+            assert f"FockOperator::{operation}" in fixture
+
+    entry = source[source.index('std::string(argv[1]) == "--canonical-values-only"') :]
+    entry = entry[: entry.index("return 0;")]
+    assert "canonical_screened_values();" in entry
+    assert "canonical_value_provider();" in entry
+    assert "std::abs(actual[i] - expected[i]) < 3e-12" in source
+
+
 def test_canonical_outer_dispatch_preserves_mixed_source(tmp_path: Path) -> None:
     """Compile the real outer gate, including the competing through-f owner."""
     compiler = shutil.which("c++")

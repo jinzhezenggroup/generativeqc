@@ -829,8 +829,18 @@ void canonical_screened_values() {
       require(status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
-      require(plan->canonical_cartesian && plan->canonical_row_prefix,
-              "screened Cartesian default schedule was not prepared");
+      require(plan->canonical_cartesian && plan->canonical_row_prefix && plan->generated_exchange &&
+                  plan->generated_exchange->bounded_value_capability &&
+                  plan->generated_exchange->shared &&
+                  !plan->generated_exchange->shared->value_capability,
+              "screened canonical fallback and competing through-f shell owner were not prepared");
+      // This oracle screens Cartesian AO pairs before public projection. The
+      // default shell provider applies a different shell+density predicate.
+      // Select only this fixture's canonical fallback; canonical_value_provider
+      // independently retains and checks the default bounded value route.
+      plan->generated_exchange->bounded_value_capability = false;
+      require(!direct_jk_generated_full_range_value_available(*plan),
+              "canonical screening fixture still selects a competing full-range shell source");
       DeviceMatrix census(std::vector<double>(2U));
       plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
       std::vector<std::size_t> pairs;
