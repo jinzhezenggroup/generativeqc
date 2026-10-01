@@ -70,6 +70,24 @@ def test_stationary_timeline_normalizes_without_zero_filling_missing_components(
     assert set(record["wall_seconds"]) == set(COMPONENTS)
 
 
+def test_composite_component_seconds_use_method_neutral_route_name() -> None:
+    work = {
+        "execution": "cuda-complete-composite",
+        "endpoint_seconds": 1.0,
+        "component_seconds": {
+            "prepare": 0.1,
+            "integral_derivatives": 0.4,
+            "semilocal_geometry_and_features": 0.2,
+            "nonlocal_geometry_and_pair_drain": 0.1,
+            "reduction_and_validation": 0.2,
+        },
+    }
+
+    record = normalize_force_work(work)
+
+    assert record["source_route"] == "composite-component-seconds"
+
+
 def test_wb97mv_component_seconds_map_to_same_schema() -> None:
     work = {
         "execution": "cuda-complete-wb97mv",

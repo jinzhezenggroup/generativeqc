@@ -85,6 +85,8 @@ struct EspContractedGeometryDerivative {
  * from the compiler-owned one-electron DAG shared with CUDA.  RawSource keeps
  * a structurally independent host recurrence for reference validation; g+ S/T
  * explicitly falls back to that reference until its generated domain expands.
+ * Values-only full-range s/p/d ERIs use the shared compiler shell-class DAG.
+ * ERI derivatives and f+ values retain the independent recurrence fallback.
  * Other host integral families retain their existing implementation here.
  */
 IntegralData build_integrals(const core::System& system, bool include_derivatives = true,

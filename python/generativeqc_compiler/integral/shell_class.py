@@ -86,6 +86,10 @@ class ShellClassComponentKernel:
     # ``None`` preserves compatibility for callers that instantiate kernels
     # directly; builders always attach the selected mathematical IR.
     integral: IntegralIR | None = None
+    # Exact nodes of this component's existing DAG, exposed as a lowering
+    # boundary for backends that reuse geometry across a shell quartet.  This
+    # adds no second geometry algebra and leaves value/derivative roots intact.
+    geometry_roots: tuple[tuple[str, Expr], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -670,12 +674,14 @@ def build_shell_class_component_kernel(
         "qc": {axis: product_q[axis] - coordinates["third"][axis] for axis in AXES},
         "qd": {axis: product_q[axis] - coordinates["fourth"][axis] for axis in AXES},
     }
+    inverse_two_p = 0.5 / p
+    inverse_two_q = 0.5 / q
     primitive_value = _shell_component_value(
         graph,
         normalized,
         shifts,
-        0.5 / p,
-        0.5 / q,
+        inverse_two_p,
+        inverse_two_q,
         rho,
         difference,
         boys,
@@ -686,7 +692,8 @@ def build_shell_class_component_kernel(
     )
     pi = graph.variable("kPi")
     normalization = 2.0 * pi.pow(2.5) / (p * q * (p + q).pow(0.5))
-    value = normalization * pair_decay * primitive_value
+    prefactor = normalization * pair_decay
+    value = prefactor * primitive_value
 
     independent_gradients: dict[int, tuple[Expr, Expr, Expr]] = {}
     for center_index in selected_integral.independent_derivative_centers:
@@ -731,6 +738,19 @@ def build_shell_class_component_kernel(
         value=value,
         gradients=gradients,
         integral=selected_integral,
+        geometry_roots=(
+            ("inverse_two_p", inverse_two_p),
+            ("inverse_two_q", inverse_two_q),
+            ("rho", rho),
+            *(
+                (f"{pair}_{axis}", shifts[pair][axis])
+                for pair in ("pa", "pb", "qc", "qd")
+                for axis in AXES
+            ),
+            *((f"difference_{axis}", difference[axis]) for axis in AXES),
+            ("boys_argument", boys_argument),
+            ("prefactor", prefactor),
+        ),
     )
 
 

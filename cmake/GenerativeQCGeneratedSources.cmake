@@ -169,6 +169,21 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/one_electron_derivatives_cuda.py"
     ARGS --cpu-st-output "${GENERATIVEQC_ONE_ELECTRON_ST_CPU_HEADER}")
 
+  set(GENERATIVEQC_ERI_CPU_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_eri_cpu.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_eri_cpu_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_eri_cpu.py"
+    OUTPUTS "${GENERATIVEQC_ERI_CPU_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/eri_cpu.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_class.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/scalar_c.py"
+    ARGS --output "${GENERATIVEQC_ERI_CPU_HEADER}"
+    COMMENT "Generating shared-DAG CPU s/p/d ERI values")
+
   set(GENERATIVEQC_DF_VALUE_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_values_cpu.hpp")
   generativeqc_register_generated_sources(
@@ -933,7 +948,8 @@ macro(generativeqc_register_cuda_generated_sources target)
   set(GENERATIVEQC_MP2_GENERATED_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/generated/mp2")
   set(GENERATIVEQC_MP2_GENERATED_SOURCES
-      "${GENERATIVEQC_MP2_GENERATED_DIRECTORY}/mp2_cuda_table.cu")
+      "${GENERATIVEQC_MP2_GENERATED_DIRECTORY}/mp2_cuda_table.cu"
+      "${GENERATIVEQC_MP2_GENERATED_DIRECTORY}/mp2_pair_energy.cuh")
   set(GENERATIVEQC_MP2_ARCHITECTURES "")
   foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     string(REGEX REPLACE "-.*$" "" _numeric_arch "${_arch}")

@@ -4,27 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
-
-# Build-time code generation must stay independent of NumPy/site packages.
-import generativeqc_compiler
-
-for package_name in ("tensor", "method"):
-    qualified = f"generativeqc_compiler.{package_name}"
-    if qualified not in sys.modules:
-        package = types.ModuleType(qualified)
-        package.__path__ = [
-            str(ROOT / "python" / "generativeqc_compiler" / package_name)
-        ]
-        package.__package__ = qualified
-        sys.modules[qualified] = package
-        setattr(generativeqc_compiler, package_name, package)
 
 from generativeqc_compiler.method.gfn2_es2_runtime import (
     GFN2_ES2_RUNTIME_VERSION,
