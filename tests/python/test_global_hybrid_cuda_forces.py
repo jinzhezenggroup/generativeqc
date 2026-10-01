@@ -42,7 +42,7 @@ def pinned_reference() -> None:
 
 @pytest.mark.parametrize(
     "options",
-    ({"precision": "auto"}, {"density_fitting": "cuda"}, {"host_unfused": True}),
+    ({"density_fitting": "cuda"}, {"host_unfused": True}),
 )
 def test_global_hybrid_force_does_not_inherit_unqualified_execution(
     options: dict,
@@ -63,6 +63,35 @@ def test_global_hybrid_force_does_not_inherit_unqualified_execution(
         calc.singlepoint(
             [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))], properties=("energy", "forces")
         )
+
+
+def test_pbe0_auto_force_uses_strict_final_state() -> None:
+    """AUTO may lower qualified SCF components; the published force uses the FP64-refined state."""
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    calc = Calculator(
+        method="pbe0-rks",
+        device="cuda",
+        basis="sto-3g",
+        precision="auto",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        max_iterations=200,
+    )
+    result = calc.singlepoint(
+        [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))],
+        properties=("energy", "forces"),
+    )
+    assert result.converged and np.isfinite(result.forces).all()
+    assert result.precision is not None
+    assert result.precision["requested_mode"] == "auto"
+    assert result.precision["effective_bits"] == 32
+    assert result.precision["strict_refinement_applied"] is True
+    assert result.precision["refinement_iterations"] >= 1
 
 
 @pytest.mark.parametrize("name", ("PBE0", "B3LYP", "M06-2X", "MN15", "PBE0-alias"))
