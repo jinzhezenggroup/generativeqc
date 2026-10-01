@@ -4,14 +4,14 @@ index 9474a26..36a1c84 100644
 +++ b/python/vibeqc_compiler/integral/df_shell_derivatives.py
 @@ -22,8 +22,9 @@ class ShellSchedule:
      """One bounded ownership variant; the scientific cache is unchanged."""
-
+ 
      component_lanes: int
 -    triples_per_block: int
 +    owner_groups_per_block: int
      shared_bytes: int
 +    auxiliary_shells_per_owner: int
-
-
+ 
+ 
  def shell_schedule(angular, variant):
 @@ -43,7 +44,10 @@ def shell_schedule(angular, variant):
      lanes = 32 if variant != 2 else min(32, max(4, 1 << (components - 1).bit_length()))
@@ -22,8 +22,8 @@ index 9474a26..36a1c84 100644
 +    # valid only within one primitive signature and one supplied response panel.
 +    auxiliary_group = 4 if max(angular) <= 1 else 1
 +    return ShellSchedule(lanes, groups, groups * group_bytes + 1024, auxiliary_group)
-
-
+ 
+ 
  def axis_cache_layout(angular):
 @@ -134,6 +138,10 @@ template<unsigned A,unsigned B,unsigned C>
  struct Moments {
@@ -71,7 +71,7 @@ index b6b2a7e..47ae59e 100644
    if (diagnostics->observer)
      diagnostics->observer(A, B, C, pa, pb, pc, totals, diagnostics->observer_context);
  }
-
+ 
 -/** One generated subgroup owns a shell triple and contracts its public weights.
 +/** Homogeneous signatures may group C shells; legacy mixed views stay scalar.
 + * Host launch sizing and device indexing share this integer-only ownership map.
@@ -520,7 +520,7 @@ index b6b2a7e..47ae59e 100644
    }
  }
 @@ -349,7 +450,7 @@ __global__ void shell_packet(DfShellBasisView orbital, DfShellBasisView auxiliar
-
+ 
  /** Resource values are maxima within an operation, not sums over its launches. */
  template <unsigned A, unsigned B, unsigned C, unsigned Variant, class Kernel>
 -cudaError_t profile_resources(Kernel kernel) {

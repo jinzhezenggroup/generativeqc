@@ -23,8 +23,8 @@ index 12149fd..ce4ea22 100644
 +    "VIBEQC_DF_RESPONSE_ALGEBRA",
 +    "VIBEQC_DF_RAW_STAGING",
 +)
-
-
+ 
+ 
  def main():
 @@ -49,16 +66,36 @@ def main():
      parser.add_argument("--output", type=Path, required=True)
@@ -348,7 +348,7 @@ index b903213..fd0deae 100644
 @@ -1,9 +1,10 @@
 -# Generated shell-block DF response prototype
 +# Generated shell-block DF response
-
+ 
 -`VIBEQC_DF_WEIGHTED_EXECUTION=shell-sp` selects an experimental weighted
 -three-center derivative consumer for the seven non-SSS s/p shell classes.
 -The default remains `generic`. This prototype demonstrates shared execution;
@@ -358,11 +358,11 @@ index b903213..fd0deae 100644
 +seven non-SSS s/p classes as a comparison subset. The default remains `generic`
 +until complete endpoint measurements qualify promotion. The initial s/p-only
 +prototype did not resolve the 192-to-384-AO force scaling problem in #308.
-
+ 
  The scalar and shell consumers use the same generated primitive geometry and
  Boys routine. The compiler builds each shell class's axis-moment cache from
 @@ -15,7 +16,7 @@ fixed in this derivative.
-
+ 
  The native runtime owns compact angular-class shell lists and AO offsets. It
  projects each shell block's public weights through the existing normalized
 -sparse Cartesian expansions once. One warp then traverses primitive shell
@@ -398,7 +398,7 @@ index b903213..fd0deae 100644
 +generator reserves 1 KiB for compiler/runtime shared state and keeps total
 +storage below 48 KiB, including the FFF weights and moment cache. Resource
 +qualification compares these bounds with every compiled kernel's actual use.
-
+ 
  Metadata allocation grows with shell count and is charged before choosing the
  response tile from the remaining budget. Static shared storage is bounded by
  the generated angular class. The launcher borrows the response owner's stream
@@ -406,10 +406,10 @@ index b903213..fd0deae 100644
 -gradient diagnostic together with the prototype is rejected because that
 +gradient diagnostic together with shell execution is rejected because that
  diagnostic specifically controls the original AO-element sink layout.
-
+ 
  Set `VIBEQC_DF_SHELL_COUNTERS=1` and enable the existing component trace to obtain
 @@ -55,13 +72,46 @@ response. Launch counts alone do not establish reuse or endpoint performance.
-
+ 
  The weighted-execution selector is recorded in prepared replay metadata, so a
  route change cannot silently reuse a result from a different execution policy.
 -CPU emission tests compare all seven classes and coincident/asymmetric centers
@@ -417,7 +417,7 @@ index b903213..fd0deae 100644
  against Libcint. GPU checks include transitions back to generic execution,
  independent complete RHF/UHF Cartesian/spherical forces, existing auxiliary and
  metric/subspace response cases, bounded budgets, and memory sanitization.
-
+ 
 +Two additional controls isolate the measured response bottlenecks:
 +
 +| Control | Default | Alternative |
@@ -470,14 +470,14 @@ index 42a40f1..703cd0d 100644
 +    "VIBEQC_DF_RAW_STAGING",
      "VIBEQC_DF_EXCHANGE",
  )
-
+ 
 diff --git a/python/vibeqc_compiler/integral/df_shell_derivatives.py b/python/vibeqc_compiler/integral/df_shell_derivatives.py
 index f94d02c..7a0ec18 100644
 --- a/python/vibeqc_compiler/integral/df_shell_derivatives.py
 +++ b/python/vibeqc_compiler/integral/df_shell_derivatives.py
 @@ -1,17 +1,49 @@
  """Shell-shared lowering of the existing weighted DF derivative moment DAG.
-
+ 
 -The prototype covers the seven non-SSS s/p classes. Geometry and Boys values
 -come from the scalar generated evaluator; only ownership and reuse change.
 +All s/p/d/f classes use the scalar generated geometry, Boys values and axis
@@ -486,13 +486,13 @@ index f94d02c..7a0ec18 100644
  No derivative tensor is produced: the consumer accumulates six independent
  center coordinates and recovers the auxiliary center by translation.
  """
-
+ 
 +from dataclasses import dataclass
  from itertools import product
-
+ 
  from .cuda import CudaEmitter
  from .df_derivatives import axis_polynomial
-
+ 
  PROTOTYPE_CLASSES = tuple(a for a in product(range(2), repeat=3) if any(a))
 +SHELL_CLASSES = tuple(product(range(4), repeat=3))
 +
@@ -524,8 +524,8 @@ index f94d02c..7a0ec18 100644
 +    limit = 1 if variant == 0 else min(128 // lanes, (48 * 1024 - 1024) // group_bytes)
 +    groups = 1 << (limit.bit_length() - 1)
 +    return ShellSchedule(lanes, groups, groups * group_bytes + 1024)
-
-
+ 
+ 
  def axis_cache_layout(angular):
 @@ -40,6 +72,7 @@ def emit_df_shell_derivatives_cuda():
  namespace vibeqc::scf::generated_df_shell {
@@ -533,7 +533,7 @@ index f94d02c..7a0ec18 100644
  template<unsigned A,unsigned B,unsigned C> struct Shell;
 +template<unsigned A,unsigned B,unsigned C,unsigned Variant> struct Schedule;
  struct Contracted { double gradient[3][3]; };
-
+ 
  /** CCA index of one normalized expansion's Cartesian component. */
 @@ -77,6 +110,20 @@ struct Moments {
      return a*rows*columns*(a+rows+columns-1)/2
@@ -883,7 +883,7 @@ index 3a4205b..5047a6d 100644
 @@ -10,22 +10,31 @@ namespace generated = generated_df_shell;
  namespace scalar = generated_df_derivatives;
  constexpr unsigned term_capacity = molecule::kMaximumAoExpansionTerms;
-
+ 
 -/** One warp owns a shell triple and immediately contracts its public weights.
 +/** One generated subgroup owns a shell triple and contracts its public weights.
   * Sparse normalized AO expansions are applied to weights once, before any
@@ -998,7 +998,7 @@ index 3a4205b..5047a6d 100644
      }
    }
  }
-
+ 
 -template <unsigned A, unsigned B, unsigned C>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant>
  cudaError_t launch(DfShellBasisView o, DfShellBasisView x, const double* positions,
@@ -1053,7 +1053,7 @@ index e3f91ef..23a939f 100644
 @@ -14,15 +14,19 @@ struct DfShellBasisView {
    std::size_t begin[4]{}, count[4]{};
  };
-
+ 
 -/** Launch the generated s/p prototype on a complete auxiliary-major AO panel.
 +/** Launch generated weighted derivatives on a complete auxiliary-major AO panel.
   * All pointers belong to the caller and remain live through its stream drain.
@@ -1084,7 +1084,7 @@ index 73b43e3..2b68dbd 100644
 +    SHELL_CLASSES,
      emit_df_shell_derivatives_cuda,
  )
-
+ 
 @@ -43,7 +43,7 @@ extern "C" void shell_derivative(unsigned code,const double* e,const double* r,
      generated_df_derivatives::prepare_geometry(e[0],{r[0],r[1],r[2]},e[1],{r[3],r[4],r[5]},
                                                 e[2],{r[6],r[7],r[8]},A+B+C,g);
@@ -1096,8 +1096,8 @@ index 73b43e3..2b68dbd 100644
      const unsigned p=generated_df_shell::cartesian_index(C,powers+6);
 @@ -86,7 +86,7 @@ extern "C" void shell_derivative(unsigned code,const double* e,const double* r,
      return library
-
-
+ 
+ 
 -@pytest.mark.parametrize("angular", PROTOTYPE_CLASSES)
 +@pytest.mark.parametrize("angular", SHELL_CLASSES)
  @pytest.mark.parametrize("variant", ["asymmetric", "coincident"])
@@ -1108,7 +1108,7 @@ index 976a4fd..1091089 100644
 --- a/tests/python/test_df_shell_derivatives_cuda.py
 +++ b/tests/python/test_df_shell_derivatives_cuda.py
 @@ -16,8 +16,12 @@ pytestmark = pytest.mark.skipif(
-
+ 
  @pytest.mark.parametrize("method", ["rhf", "uhf"])
  @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 +@pytest.mark.parametrize("schedule", ["warp", "packed", "compact"])
@@ -1120,7 +1120,7 @@ index 976a4fd..1091089 100644
 +    method, representation, schedule, algebra, staging, monkeypatch, tmp_path
  ):
      """Independent complete gradients and counters exclude a silent generic replay.
-
+ 
 @@ -60,9 +64,12 @@ def test_shell_execution_and_return_to_generic(
          screening_tolerance=1e-14,
      )
