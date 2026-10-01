@@ -1,0 +1,122 @@
+name: Scoped all-PR review snapshot
+on:
+  push:
+    branches: [agent/astra-review-all-20261001-1535]
+    paths: [.github/workflows/astra-review-all.yml]
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  pull-requests: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture source, current checks and exact merge evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import concurrent.futures, datetime, json, os, subprocess, urllib.request
+          from pathlib import Path
+          out = Path(os.environ['RUNNER_TEMP']) / 'all-pr-review'
+          out.mkdir()
+          api = 'https://api.github.com/repos/jinzhezenggroup/generativeqc/'
+          def get(path):
+              req = urllib.request.Request(api + path, headers={
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'Accept': 'application/vnd.github+json',
+              })
+              with urllib.request.urlopen(req, timeout=45) as response:
+                  return json.load(response)
+          def pages(path, key=None):
+              rows = []
+              for page in range(1, 31):
+                  data = get(path + ('&' if '?' in path else '?') + f'per_page=100&page={page}')
+                  batch = data[key] if key else data
+                  rows.extend(batch)
+                  if len(batch) < 100:
+                      return rows
+              raise RuntimeError('pagination limit reached: ' + path)
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          master = get('git/ref/heads/master')['object']['sha']
+          git('fetch', '--no-tags', 'origin', master)
+          manifest = {'as_of': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      'master': master, 'snapshots': {}, 'prs': []}
+          previous = None
+          def snapshot_tree(key, tree):
+              global previous
+              if key in manifest['snapshots']:
+                  return manifest['snapshots'][key]
+              args = ['-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com',
+                      'commit-tree', tree, '-m', 'Local review snapshot of ' + key + '\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro']
+              if previous:
+                  args += ['-p', previous]
+              local = git(*args)
+              previous = local
+              entry = {'original': key, 'tree': tree, 'snapshot': local}
+              manifest['snapshots'][key] = entry
+              return entry
+          def snapshot(sha):
+              git('fetch', '--no-tags', 'origin', sha)
+              return snapshot_tree(sha, git('rev-parse', sha + '^{tree}'))
+          snapshot(master)
+          open_prs = pages('pulls?state=open&sort=created&direction=asc')
+          numbers = [p['number'] for p in open_prs]
+          def metadata(number):
+              folder = out / str(number)
+              folder.mkdir()
+              pr = get(f'pulls/{number}')
+              (folder / 'pr.json').write_text(json.dumps(pr, indent=2))
+              head = pr['head']['sha']
+              for name, path, key in (
+                  ('reviews', f'pulls/{number}/reviews', None),
+                  ('inline', f'pulls/{number}/comments', None),
+                  ('comments', f'issues/{number}/comments', None),
+                  ('runs', f'actions/runs?head_sha={head}', 'workflow_runs'),
+                  ('checks', f'commits/{head}/check-runs', 'check_runs'),
+              ):
+                  try:
+                      payload = pages(path, key)
+                  except Exception as error:
+                      payload = {'error': str(error)}
+                  (folder / (name + '.json')).write_text(json.dumps(payload, indent=2))
+              return pr
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+              prs = list(executor.map(metadata, numbers))
+          for pr in prs:
+              number, head = pr['number'], pr['head']['sha']
+              folder = out / str(number)
+              snapshot(head)
+              merge_base = git('merge-base', master, head)
+              snapshot(merge_base)
+              record = {'number': number, 'state': pr['state'], 'draft': pr['draft'],
+                        'merged': pr['merged'], 'head': head, 'branch': pr['head']['ref'],
+                        'base_ref': pr['base']['ref'], 'merge_base': merge_base,
+                        'mergeable': pr['mergeable'], 'mergeable_state': pr['mergeable_state']}
+              result = subprocess.run(['git', 'merge-tree', '--write-tree', master, head], capture_output=True, text=True)
+              record['integration_returncode'] = result.returncode
+              (folder / 'merge.txt').write_text(result.stdout + result.stderr)
+              if result.returncode in (0, 1) and result.stdout:
+                  tree = result.stdout.splitlines()[0]
+                  record['integration_tree'] = tree
+                  record['integration_snapshot'] = snapshot_tree('merge-' + str(number), tree)['snapshot']
+              manifest['prs'].append(record)
+              (folder / 'pr.diff').write_text(git('diff', '--binary', merge_base, head) + '\n')
+              (folder / 'upstream.diff').write_text(git('diff', '--binary', merge_base, master) + '\n')
+              print(json.dumps(record), flush=True)
+          git('update-ref', 'refs/heads/review-snapshots', previous)
+          git('bundle', 'create', str(out / 'sources.bundle'), 'refs/heads/review-snapshots')
+          (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: astra-all-pr-review-1535
+          path: ${{ runner.temp }}/all-pr-review/
+          retention-days: 1
