@@ -35,8 +35,8 @@ def native_local_scale_cpp() -> str:
 
     These spell the existing operation orders verbatim. CPU forms rho^4 and
     sigma^2 explicitly; CUDA forms sigma/rho^2 before squaring and optionally
-    preconditions rVV10 omega/kappa for the ordered pair kernel. Runtime callers
-    continue to own finite/domain checks and signed-weight publication policy.
+    emits rVV10 preconditioning separately. Runtime callers validate the raw
+    scales before converting representation, preserving the prior failure domain.
     """
     return r"""
 struct LocalScaleValues {
@@ -85,11 +85,18 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cuda(
     out.domega_dsigma = c * sigma / (out.omega * ::pow(rho, 4.0));
     out.dkappa_drho = out.kappa / (6.0 * rho);
   }
-  if constexpr (Variant == Vv10Variant::rvv10) {
-    out.omega /= out.kappa;
-    out.kappa *= ::sqrt(out.kappa);
-  }
   return out;
+}
+
+// The runtime validates raw scales before this representation change. In
+// particular, a positive raw kappa may underflow to zero after preconditioning.
+template <Vv10Variant Variant>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline void precondition_local_scales_cuda(
+    double& omega, double& kappa) noexcept {
+  if constexpr (Variant == Vv10Variant::rvv10) {
+    omega /= kappa;
+    kappa *= ::sqrt(kappa);
+  }
 }
 """
 

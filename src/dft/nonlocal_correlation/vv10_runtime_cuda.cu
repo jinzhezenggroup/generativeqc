@@ -63,6 +63,10 @@ __global__ void local_scales_kernel(std::size_t npoint, double b, double c, cons
     if (!isfinite(domega_drho[i]) || !isfinite(domega_dsigma[i]) || !isfinite(dkappa_drho[i]))
       atomicExch(failed, 1);
   }
+  generated::precondition_local_scales_cuda<Variant>(omega[i], kappa[i]);
+  if constexpr (Variant == Vv10Variant::rvv10) {
+    if (!isfinite(omega[i]) || !isfinite(kappa[i])) atomicExch(failed, 1);
+  }
 }
 
 __global__ void count_active_partner_blocks_kernel(std::size_t npoint,
