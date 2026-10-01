@@ -78,9 +78,17 @@ def _plan_for_state(state: typing.Any) -> StationaryGradientPlan:
 
 
 def requires_composite_stationary_cuda(state: typing.Any) -> bool:
-    """Select the composite owner from compiler source inventory, never method name."""
+    """Select the qualified composite owner or fail closed on unowned sources."""
     plan = _plan_for_state(state)
-    return stationary_external_provider_sources(plan) == _COMPOSITE_EXTERNAL_SOURCES
+    external_sources = stationary_external_provider_sources(plan)
+    if not external_sources:
+        return False
+    if external_sources != _COMPOSITE_EXTERNAL_SOURCES:
+        raise NotImplementedError(
+            "stationary CUDA external-provider source inventory is not qualified: "
+            + ", ".join(external_sources)
+        )
+    return True
 
 
 def _canonical_gradient_sum(
@@ -476,8 +484,7 @@ class PreparedCompositeStationaryCudaGradient:
             "two_electron_shell_traversals": None,
             "two_electron_radial_operators": [
                 "full-range",
-                "short-range",
-                "long-range",
+                *(primitive.operator for primitive in plan.range_exchange_primitives),
             ],
             "range_recurrences_per_participating_center": None,
             "two_electron_work_scope": (
