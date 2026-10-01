@@ -9,6 +9,21 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _extract_function(source: str, symbol: str) -> str:
+    start = source.index(symbol)
+    opening = source.index("{", start)
+    depth = 0
+    for index in range(opening, len(source)):
+        token = source[index]
+        if token == "{":
+            depth += 1
+        elif token == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : index + 1]
+    raise AssertionError(f"unterminated function: {symbol}")
+
+
 @pytest.fixture(scope="module")
 def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     compiler = shutil.which("c++")
@@ -18,7 +33,7 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     bodies = []
     for route in ("full_range", "rsh"):
         symbol = f"cudaError_t execute_generated_{route}_energy_derivatives("
-        bodies.append(symbol + source.split(symbol, 1)[1].split("\ncudaError_t ", 1)[0])
+        bodies.append(_extract_function(source, symbol))
     body = "\n".join(bodies)
     folder = tmp_path_factory.mktemp("direct-shell-host-lifetime")
     cpp, binary = folder / "probe.cpp", folder / "probe"
