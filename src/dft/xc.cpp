@@ -148,6 +148,14 @@ void validate_rks_ao_cache(const AoBasis& basis, const MolecularGrid& grid, cons
     throw std::invalid_argument("prepared RKS AO cache does not match basis/grid/order");
 }
 
+void validate_rks_gga_feature_cache(const AoBasis& basis, const MolecularGrid& grid,
+                                    const RksGgaFeatureCache& cache) {
+  if (cache.points != grid.point_count() || cache.nao != basis.nao ||
+      cache.points > std::numeric_limits<std::size_t>::max() / 4 ||
+      cache.values.size() != 4 * cache.points)
+    throw std::invalid_argument("prepared RKS GGA feature cache does not match basis/grid");
+}
+
 point::Value evaluate_generated_lda_point(const double rho[2]) {
   point::Value out;
   for (unsigned spin = 0; spin < 2; ++spin)
@@ -213,6 +221,10 @@ point::Value evaluate_generated_pbe_point(const double rho[2], const double grad
 
 std::size_t RksAoCache::numeric_capacity_bytes() const noexcept {
   return runtime::vector_bytes(jets);
+}
+
+std::size_t RksGgaFeatureCache::numeric_capacity_bytes() const noexcept {
+  return runtime::vector_bytes(values);
 }
 
 std::size_t rks_ao_cache_bytes(const AoBasis& basis, const MolecularGrid& grid, unsigned order) {
@@ -841,7 +853,8 @@ XcIntegral integrate_pbe_rks_impl(const AoBasis& basis, const MolecularGrid& gri
                                   const std::vector<double>& density, std::size_t tile_points,
                                   bool allow_tail, XcDensitySource source,
                                   double exchange_scale = 1.0, double correlation_scale = 1.0,
-                                  const RksAoCache* cache = nullptr) {
+                                  const RksAoCache* cache = nullptr,
+                                  RksGgaFeatureCache* retained_features = nullptr) {
   const std::size_t n = basis.nao;
   validate_density_matrix(basis, grid, density, tile_points);
   if (cache) validate_rks_ao_cache(basis, grid, *cache, 1U);
@@ -849,6 +862,13 @@ XcIntegral integrate_pbe_rks_impl(const AoBasis& basis, const MolecularGrid& gri
   XcIntegral result;
   result.potential.assign(n * n, 0.0);
   result.points = grid.point_count();
+  if (retained_features) {
+    if (result.points > std::numeric_limits<std::size_t>::max() / 4)
+      throw std::invalid_argument("RKS GGA feature cache size overflow");
+    retained_features->points = result.points;
+    retained_features->nao = n;
+    retained_features->values.assign(4 * result.points, 0.0);
+  }
   auto& record = result.density_diagnostic;
   record.npoint = result.points;
   record.ingredient_mask = 3;
@@ -872,6 +892,10 @@ XcIntegral integrate_pbe_rks_impl(const AoBasis& basis, const MolecularGrid& gri
       const double* grad_y = ao_data + (2 * point_stride + stored_point) * n;
       const double* grad_z = ao_data + (3 * point_stride + stored_point) * n;
       const auto features = rks_features(phi, {grad_x, grad_y, grad_z}, n, density, factor, 7U);
+      if (retained_features) {
+        const std::size_t feature_offset = 4 * (begin + point);
+        std::copy_n(features.begin(), 4, retained_features->values.begin() + feature_offset);
+      }
       const double rho = features[0];
       const std::array<double, 3> gradient{features[1], features[2], features[3]};
       const double sigma =
@@ -914,9 +938,12 @@ XcIntegral integrate_pbe_rks(const AoBasis& basis, const MolecularGrid& grid,
 ExactIncrementalXcIntegral integrate_pbe_rks_incremental_exact(
     const AoBasis& basis, const MolecularGrid& grid, const std::vector<double>& anchor_density,
     const std::vector<double>& delta_density, std::size_t tile_points, double exchange_scale,
-    double correlation_scale) {
+    double correlation_scale, const RksGgaFeatureCache* anchor_features,
+    const RksAoCache* cache) {
   const std::size_t n = basis.nao;
   validate_density_matrix(basis, grid, anchor_density, tile_points);
+  if (anchor_features) validate_rks_gga_feature_cache(basis, grid, *anchor_features);
+  if (cache) validate_rks_ao_cache(basis, grid, *cache, 1U);
   // delta-D is intentionally allowed to be indefinite; only shape, symmetry
   // and finiteness are required here. Physical-domain validation is applied to
   // the reconstructed total features before nonlinear XC evaluation.
@@ -940,17 +967,28 @@ ExactIncrementalXcIntegral integrate_pbe_rks_incremental_exact(
   const auto& weights = grid.weights();
   for (std::size_t begin = 0; begin < result.total.points; begin += tile_points) {
     const std::size_t count = std::min(tile_points, result.total.points - begin);
-    ao.resize(4 * count * n);
+    if (!cache) {
+      ao.resize(4 * count * n);
+      basis.evaluate(points.data() + 3 * begin, count, 1, 0, n, ao.data(), ao.size());
+    }
     sample_xc_capacity(result.total, ao, count);
-    basis.evaluate(points.data() + 3 * begin, count, 1, 0, n, ao.data(), ao.size());
+    const double* ao_data = cache ? cache->jets.data() : ao.data();
+    const std::size_t point_stride = cache ? cache->points : count;
     for (std::size_t point = 0; point < count; ++point) {
-      const double* phi = ao.data() + point * n;
-      const double* grad_x = ao.data() + (count + point) * n;
-      const double* grad_y = ao.data() + (2 * count + point) * n;
-      const double* grad_z = ao.data() + (3 * count + point) * n;
+      const std::size_t stored_point = cache ? begin + point : point;
+      const double* phi = ao_data + stored_point * n;
+      const double* grad_x = ao_data + (point_stride + stored_point) * n;
+      const double* grad_y = ao_data + (2 * point_stride + stored_point) * n;
+      const double* grad_z = ao_data + (3 * point_stride + stored_point) * n;
       const std::array<const double*, 3> jets{grad_x, grad_y, grad_z};
 
-      const auto anchor = rks_features(phi, jets, n, anchor_density, nullptr, 7U);
+      std::array<double, 5> anchor{};
+      if (anchor_features) {
+        const std::size_t feature_offset = 4 * (begin + point);
+        std::copy_n(anchor_features->values.begin() + feature_offset, 4, anchor.begin());
+      } else {
+        anchor = rks_features(phi, jets, n, anchor_density, nullptr, 7U);
+      }
       const auto delta = rks_features(phi, jets, n, delta_density, nullptr, 7U);
       std::array<double, 4> total{};
       for (unsigned i = 0; i < 4; ++i) total[i] = anchor[i] + delta[i];
@@ -1018,6 +1056,17 @@ XcIntegral integrate_pbe_rks_with_tail_scaled_cached(
     double correlation_scale, const RksAoCache& cache) {
   return integrate_pbe_rks_impl(basis, grid, density, tile_points, true, source, exchange_scale,
                                 correlation_scale, &cache);
+}
+
+XcIntegralWithRksGgaFeatures integrate_pbe_rks_with_tail_scaled_retaining_features(
+    const AoBasis& basis, const MolecularGrid& grid, const std::vector<double>& density,
+    std::size_t tile_points, XcDensitySource source, double exchange_scale,
+    double correlation_scale, const RksAoCache* cache) {
+  XcIntegralWithRksGgaFeatures result;
+  result.integral =
+      integrate_pbe_rks_impl(basis, grid, density, tile_points, true, source, exchange_scale,
+                             correlation_scale, cache, &result.features);
+  return result;
 }
 
 XcIntegral integrate_pbe_rks_with_tail(const AoBasis& basis, const MolecularGrid& grid,
