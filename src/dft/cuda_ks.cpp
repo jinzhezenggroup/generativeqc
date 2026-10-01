@@ -327,18 +327,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
 
-      // enqueue_legacy executes four products for FDS-SDF and three around the
-      // generalized eigensolve. UKS occupation stabilization adds two more.
-      // Device-fused XC additionally executes one logical density-times-AO
-      // contraction using the selected density precision.
-      const std::uint64_t strict_matrix_products =
-          (stabilize_occupations ? 9U : 7U) + (mixed ? 0U : 1U);
+      // enqueue_legacy executes four explicit matrix products for FDS-SDF and
+      // three around the generalized eigensolve. UKS occupation stabilization
+      // adds two more. Strict XC internals stay represented by the XC owner
+      // above; only the independently instrumented AUTO density-times-AO
+      // contraction is split out here because its arithmetic mode differs.
+      const std::uint64_t strict_matrix_products = stabilize_occupations ? 9U : 7U;
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
+                                scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict,
                                 strict_matrix_products);
       if (mixed)
         record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
+                                  scf::PrecisionDtype::Fp32,
+                                  scf::PrecisionArithmeticMode::Mixed);
       if (!final_closure)
         record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
