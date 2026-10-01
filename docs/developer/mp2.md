@@ -114,8 +114,8 @@ ERIs with a checked capacity; CUDA RHF uses the bounded matrix-direct route.
 ```text
 C / C++ / Python public prepare
   -> method registry -> Mp2Prepared
-  -> existing RHF driver, requested owned physical reference
-  -> conventional: CG10 RawSource + cyclic staged MO transforms
+  -> shared prepared exact RHF owner, requested owned physical reference
+  -> conventional: prepared interaction source + cyclic staged MO transforms
   -> RI: shared DF source + metric factor + occupied/virtual three-center transform
   -> CG08 energy equation -> generated native CPU or CG09 CUDA tile program
   -> native compensated scalar fold
@@ -150,10 +150,20 @@ commutator residual and canonical density drift. GPU computation of Fock,
 orbitals and reference energy remains on device; its reference validation and
 matrix snapshots are disclosed host staging.
 
-Conventional correlation AO tiles come from the existing **CPU values-only
-source**. CUDA mode uploads those tiles, performs all four cyclic transforms
-with CG10 cuBLAS, downloads bounded MO tiles, reorders exchange on host, and
-uploads them through CG09's host-input ABI.
+Conventional correlation uses the same prepared exact interaction owner as the
+RHF reference. On CPU, that view borrows the retained dense ERI. On CUDA, it
+borrows the prepared Direct basis/geometry metadata and evaluates exact,
+unscreened full-range AO ERI tiles directly into the CUDA MO transform's bounded
+raw buffer with the same `contracted_eri<double>` evaluator used by Direct J/K.
+There is no molecular AO N^4 tensor and no raw-AO CPU-to-GPU tile upload.
+
+This is not yet a fully resident conventional correlation pipeline. The four
+cyclic cuBLAS AO-to-MO transforms run on device, but the bounded transformed MO
+blocks are still downloaded for request/exchange assembly and then uploaded
+through the existing CUDA MP2 tensor ABI. Therefore `mo_host_staging` remains
+true until the transform output is connected directly to the tensor consumer.
+The CUDA analytic-force compatibility path also retains its separately audited
+RawSource derivative owner in this slice.
 
 RI mode builds the RHF reference and correlation integrals from the same
 orbital/auxiliary systems and metric threshold. `density_fitting="cpu"` selects
