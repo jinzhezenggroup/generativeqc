@@ -1483,22 +1483,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (output.converged) {
         final_state_ready = true;
         final_generation = generation;
-        auto& work = output.precision_work;
-        work.returned_solve_epoch = solve_epoch;
-        work.returned_state_generation = final_generation;
-        if (complete_precision_inventory_domain()) {
-          // The diagnostics kernel of this final strict physical F[D] iteration
-          // already evaluated the residual/convergence gates. FinalAudit records
-          // that executed audit; it does not invent another Fock build or kernel.
-          work.events.push_back({scf::PrecisionWorkEventKind::FinalAudit,
-                                 scf::PrecisionWorkPhase::Finalization,
-                                 static_cast<std::uint64_t>(work.events.size()), output.iterations,
-                                 owner, solve_epoch, final_generation});
-          ++output.precision.final_residual_audits;
-          work.complete = true;
-          work.operator_inventory_complete = true;
-          output.precision.operator_work_counters_valid = 1U;
-        }
+        output.precision_work.returned_solve_epoch = solve_epoch;
+        output.precision_work.returned_state_generation = final_generation;
       }
     } catch (...) {
       cudaStreamSynchronize(stream);
@@ -1509,6 +1495,29 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
     previous_energy = output.energy;
+    try {
+      if (output.converged && complete_precision_inventory_domain()) {
+        auto& work = output.precision_work;
+        // The diagnostics kernel of this final strict physical F[D] iteration
+        // already evaluated the residual/convergence gates. FinalAudit records
+        // that executed audit; it does not invent another Fock build or kernel.
+        work.events.push_back({scf::PrecisionWorkEventKind::FinalAudit,
+                               scf::PrecisionWorkPhase::Finalization,
+                               static_cast<std::uint64_t>(work.events.size()), output.iterations,
+                               owner, solve_epoch, final_generation});
+        ++output.precision.final_residual_audits;
+        work.complete = true;
+        work.operator_inventory_complete = true;
+        output.precision.operator_work_counters_valid = 1U;
+      }
+    } catch (...) {
+      is_active = false;
+      is_failed = true;
+      output.converged = false;
+      final_state_ready = false;
+      occupied_fitted_factor_ready = false;
+      throw;
+    }
     return is_active;
   }
 
