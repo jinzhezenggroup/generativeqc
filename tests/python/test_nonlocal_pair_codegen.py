@@ -500,7 +500,9 @@ def test_pair_output_demands_do_not_change_observed_failure_domain(
     assert energy[1:] == [0.0, 0.0, 0.0]
 
 
-def test_cpu_and_cuda_pair_consumers_include_shared_generated_header(tmp_path: Path) -> None:
+def test_cpu_and_cuda_pair_consumers_include_shared_generated_header(
+    tmp_path: Path,
+) -> None:
     generated = _generate(tmp_path / "generated.hpp")
     assert "local_scales_cpu(" in generated
     assert "local_scales_cuda(" in generated
