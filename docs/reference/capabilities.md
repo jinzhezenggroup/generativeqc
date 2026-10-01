@@ -33,6 +33,9 @@ grid, and other execution choices are fixed, `Calculator.capabilities` is the
 authoritative public capability view for that calculation. Prepared batches
 expose the corresponding contextual capability record.
 
+This record does not replace per-system geometry, electron-count, convergence,
+or resource checks performed during preparation and execution.
+
 This layer is where properties that depend on the fully resolved execution
 context are admitted. Unsupported combinations fail closed rather than being
 inferred from a nearby method or backend.

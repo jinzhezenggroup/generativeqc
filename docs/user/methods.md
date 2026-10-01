@@ -25,6 +25,8 @@ After those execution choices are fixed, `Calculator.capabilities` is the
 authoritative public view for that calculation context. Prepared batches expose
 the corresponding contextual capability record. Unsupported combinations fail
 closed rather than silently changing the requested method, backend, or property.
+Per-system geometry, electron-count, convergence, and resource checks still apply
+during preparation and execution.
 
 For the ownership of each capability source and why GenerativeQC does not maintain
 a second handwritten CPU/GPU matrix, see

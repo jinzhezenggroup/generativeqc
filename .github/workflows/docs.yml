@@ -35,6 +35,8 @@ jobs:
         run: |
           uv venv --python 3.11
           uv pip install --python .venv/bin/python -r docs/requirements.txt
+      - name: Test documentation source-link resolution
+        run: .venv/bin/python -m unittest discover -s tests/python -p test_sphinx_repository_links.py
       - name: Build documentation with warnings as errors
         env:
           PYTHONPATH: python
