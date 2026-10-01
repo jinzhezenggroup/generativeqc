@@ -1,0 +1,152 @@
+name: Scoped reviewed PR repairs
+on:
+  push:
+    branches: [agent/astra-review-batch-20261001-1415]
+    paths: [.github/workflows/astra-reviewed-fixes.yml]
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: [1641, 1647, 1649]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install pytest numpy ruff==0.16.9 clang-format==23.1.1
+      - name: Validate fixed-head source repairs
+        env:
+          REVIEW_PR: ${{ matrix.pr }}
+          OMP_NUM_THREADS: 1
+          OPENBLAS_NUM_THREADS: 1
+        run: |
+          python3 - <<'PY'
+          import ast, hashlib, json, os, re, shutil, subprocess, tempfile
+          from pathlib import Path
+          root = Path.cwd()
+          number = int(os.environ['REVIEW_PR'])
+          heads = {1641: 'd6b0822cf34fab9e2e46ef66d8ba9ab6873d4be8', 1647: '7507c57754ecac1ba71e1b5916887c00280e9942', 1649: 'fd5be6b6227dc1ed2b08299dfe472e51036cade6'}
+          head = heads[number]
+          master = '6ccecb1b41d604018d738f814a6cb44d2e191996'
+          out = Path(os.environ['RUNNER_TEMP']) / 'review-result'
+          out.mkdir()
+          branch = f'agent/astra-reviewed-{number}-1415'
+          report = {'pr': number, 'parent': head, 'branch': branch}
+          def run(*args, cwd=root, check=True, env=None):
+              result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, env=env)
+              if check and result.returncode:
+                  raise RuntimeError((result.stdout + result.stderr)[-10000:])
+              return result
+          def digest(source, node):
+              return hashlib.sha256(ast.get_source_segment(source, node).encode()).hexdigest()
+          try:
+              if run('git', 'ls-remote', 'origin', 'refs/heads/' + branch).stdout.strip():
+                  raise RuntimeError('result branch already exists; refusing overwrite')
+              with tempfile.TemporaryDirectory() as temporary:
+                  work = Path(temporary) / 'checkout'
+                  run('git', 'worktree', 'add', '--detach', str(work), head)
+                  try:
+                      if number == 1641:
+                          run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', '-c', 'merge.conflictStyle=zdiff3', 'merge', '--no-commit', '--no-ff', master, cwd=work, check=False)
+                          path = 'tests/native/test_cuda_fock_provider.cpp'
+                          conflicts = run('git', 'diff', '--name-only', '--diff-filter=U', cwd=work).stdout.splitlines()
+                          if conflicts != [path]:
+                              raise RuntimeError('unexpected conflict paths')
+                          target = work / path
+                          source = target.read_text()
+                          pattern = r'^<<<<<<< HEAD\n(.*?)^\|\|\|\|\|\|\| [^\n]*\n(.*?)^=======\n(.*?)^>>>>>>> [^\n]*\n'
+                          matches = list(re.finditer(pattern, source, re.M | re.S))
+                          if len(matches) != 1 or matches[0][2]:
+                              raise RuntimeError('unexpected conflict body')
+                          if 'direct_eri_tile(plan.get(), 1, other.eri, n);' not in matches[0][1] or 'direct_jk_generated_exchange_value_available' not in matches[0][3]:
+                              raise RuntimeError('reviewed regression anchors are missing')
+                          target.write_text(re.sub(pattern, lambda m: m[1] + m[3], source, flags=re.M | re.S))
+                          run('git', 'add', '-u', cwd=work)
+                          run('clang-format', '--dry-run', '--Werror', path, cwd=work)
+                          tests = ['test_posthf_cuda_transform_validation.py', 'test_posthf_prepared_source_lifetime.py', 'test_direct_shell_derivative_owner.py']
+                          title = 'fix(review): retain both Direct ERI and force-owner regressions'
+                      elif number == 1647:
+                          paths = ['tools/dft_mp_v1/qualify_capacity.py', 'tests/python/test_dft_mp_v1_capacity.py']
+                          source = (work / 'python/generativeqc/_ks_snapshot.py').read_text()
+                          owner = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'NativeKsSnapshot')
+                          decode = next(n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == 'decode')
+                          if digest(source, decode) != 'c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6':
+                              raise RuntimeError('snapshot before-image changed')
+                          source = (work / 'python/generativeqc/calculator.py').read_text()
+                          owner = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'Calculator')
+                          init = next(n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == '__init__')
+                          promotion = next(n for n in init.body if isinstance(n, ast.If) and any(isinstance(x, ast.Name) and x.id == 'semilocal_force' for x in ast.walk(n.test)))
+                          if digest(source, promotion) != 'aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e':
+                              raise RuntimeError('promotion before-image changed')
+                          replacements = {
+                              'b22d47e054209d55f27ca68c8fbcb37577743835b3c4dffd175dd560d1b79429': 'c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6',
+                              '3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8': 'aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e',
+                          }
+                          for path in paths:
+                              target = work / path
+                              text = target.read_text()
+                              for old, new in replacements.items():
+                                  if text.count(old) != 1:
+                                      raise RuntimeError('unexpected source contract occurrence')
+                                  text = text.replace(old, new)
+                              target.write_text(text)
+                          new_test = 'tests/python/test_ks_snapshot_provider_proof.py'
+                          if (work / new_test).exists():
+                              raise RuntimeError('new test path already exists')
+                          shutil.copyfile(root / '.github/review_ks_provider_proof.py', work / new_test)
+                          paths.append(new_test)
+                          run('python3', '-m', 'ruff', 'check', '--fix', *paths, cwd=work)
+                          run('python3', '-m', 'ruff', 'format', *paths, cwd=work)
+                          run('git', 'add', '--', *paths, cwd=work)
+                          tests = ['test_dft_mp_v1_capacity.py', 'test_ks_snapshot_provider_proof.py']
+                          title = 'fix(dft): rebind DF snapshot audit without weakening static gates'
+                      else:
+                          path = 'tests/native/test_ks_cuda.cpp'
+                          target = work / path
+                          before = target.read_text()
+                          run('clang-format', '-i', path, cwd=work)
+                          after = target.read_text()
+                          if ''.join(before.split()) != ''.join(after.split()) or before == after:
+                              raise RuntimeError('not the expected whitespace-only formatter repair')
+                          run('git', 'add', '--', path, cwd=work)
+                          tests = ['test_precision_work.py', 'test_precision_work_validity.py', 'test_r2scan_precision_boundary.py']
+                          title = 'style(tests): format the CUDA-KS precision inventory assertion'
+                      env = dict(os.environ)
+                      env['PYTHONPATH'] = str(work / 'python') + os.pathsep + str(work)
+                      result = run('python3', '-m', 'pytest', '-q', '-o', 'addopts=', '--tb=short', *['tests/python/' + t for t in tests], cwd=work, env=env, check=False)
+                      (out / 'tests.log').write_text(result.stdout + result.stderr)
+                      report['test_returncode'] = result.returncode
+                      report['tests'] = tests
+                      report['summary'] = '\n'.join((result.stdout + result.stderr).splitlines()[-10:])
+                      if result.returncode:
+                          raise RuntimeError('focused regression failure; no result ref published')
+                      run('git', 'diff', '--cached', '--check', cwd=work)
+                      message = title + '\n\nApply only the audited review repair. Focused regressions and formatting\npassed; full PR CI and any outstanding GPU numerical gates still apply.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                      run('git', '-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com', 'commit', '-m', message, cwd=work)
+                      report['commit'] = run('git', 'rev-parse', 'HEAD', cwd=work).stdout.strip()
+                      report['tree'] = run('git', 'rev-parse', 'HEAD^{tree}', cwd=work).stdout.strip()
+                      (out / 'repair.patch').write_text(run('git', 'diff', head, 'HEAD', cwd=work).stdout)
+                      (out / 'master-relative.patch').write_text(run('git', 'diff', master, 'HEAD', cwd=work).stdout)
+                      run('git', 'push', 'origin', 'HEAD:refs/heads/' + branch, cwd=work)
+                      report['published'] = True
+                  finally:
+                      run('git', 'worktree', 'remove', '--force', str(work), check=False)
+          except Exception as error:
+              report['error'] = str(error)
+          (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report), flush=True)
+          if 'error' in report:
+              raise SystemExit(1)
+          PY
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reviewed-repair-${{ matrix.pr }}-1415
+          path: ${{ runner.temp }}/review-result/
+          retention-days: 1
