@@ -653,6 +653,69 @@ void compare_rks_chunk_history(bool pbe) {
           "could not restore CUDA RKS chunk qualification");
 }
 
+void compare_pbe0_chunk_history() {
+  const auto system = water();
+  const dft::AoBasis basis(system);
+  const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
+  const dft::MolecularGrid grid(system, grid_spec);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.max_iterations = 150;
+  options.semilocal_exchange_scale = 0.75;
+  options.semilocal_correlation_scale = 1.0;
+
+  const scf::PreparedFockPlan cpu(
+      system, nullptr, exact_exchange_strategy(true, scf::FockBackend::Cpu));
+  const auto solve = [&](const char* width) {
+    require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", width, 1) == 0,
+            "could not select CUDA PBE0 history route");
+    const scf::PreparedFockPlan gpu(
+        system, nullptr, exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
+    dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
+    auto result = plan.run(nullptr, false, false);
+    return std::pair{std::move(result), plan.transfers()};
+  };
+
+  const auto ordinary = solve("1");
+  const auto chunked = solve("2");
+  const auto reference = scf::run_pbe_rks(cpu, basis, grid, options);
+  const auto& left = ordinary.first.dft_diagnostic.history;
+  const auto& right = chunked.first.dft_diagnostic.history;
+  require(reference.converged && ordinary.first.converged && chunked.first.converged &&
+              ordinary.first.iterations == chunked.first.iterations &&
+              left.size() == right.size() &&
+              std::abs(reference.energy - chunked.first.energy) < 1e-10 &&
+              std::abs(ordinary.first.energy - chunked.first.energy) < 1e-13,
+          "CUDA PBE0 chunk changed the ordinary physical trajectory");
+  for (std::size_t i = 0; i < left.size(); ++i) {
+    const bool energy_change_equal =
+        (std::isinf(left[i].energy_change) && std::isinf(right[i].energy_change)) ||
+        std::abs(left[i].energy_change - right[i].energy_change) < 1e-13;
+    require(left[i].iteration == right[i].iteration && energy_change_equal &&
+                std::abs(left[i].components.total() - right[i].components.total()) < 1e-13 &&
+                std::abs(left[i].components.exact_exchange -
+                         right[i].components.exact_exchange) < 1e-13 &&
+                std::abs(left[i].density_change - right[i].density_change) < 1e-13 &&
+                std::abs(left[i].physical_residual - right[i].physical_residual) < 1e-13 &&
+                left[i].occupation_stabilized == right[i].occupation_stabilized,
+            "CUDA PBE0 chunk changed an ordinary iteration-history row");
+  }
+  require(ordinary.second.iteration_synchronizations == ordinary.second.iterations &&
+              chunked.second.iteration_synchronizations < chunked.second.iterations &&
+              chunked.second.execution_region_bindings == 1 &&
+              chunked.second.execution_region_executions == chunked.second.iteration_chunks &&
+              chunked.second.execution_region_failures == 0,
+          "CUDA PBE0 qualification did not reduce host-fence cadence");
+  require(chunked.second.execution_region_captures == 0 &&
+              chunked.second.execution_region_replays == 0 &&
+              chunked.second.execution_region_fallbacks == 0,
+          "CUDA PBE0 chunk incorrectly captured the unqualified exact-exchange provider");
+  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
+          "could not restore CUDA PBE0 chunk qualification");
+}
+
 /** OH exercises the stationary integer-occupation cycle from #305 on CUDA.
  * Rebuild every returned physical quantity with the unshifted CPU operator. */
 void run_hydroxyl(bool pbe) {
@@ -1398,6 +1461,7 @@ int main() {
         compare_rks_chunk_history(pbe);
         run_case(2, true, pbe);
       }
+      compare_pbe0_chunk_history();
       require(::unsetenv("GENERATIVEQC_CUDA_KS_REPLAY") == 0,
               "could not restore CUDA KS replay baseline");
       require(::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
