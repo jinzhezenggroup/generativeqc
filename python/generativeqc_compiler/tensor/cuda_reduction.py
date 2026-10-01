@@ -44,7 +44,10 @@ def cooperative_reduction_provider(
 
     step = plan.steps[index]
     reduction_like = step.node.op == "reduce" or (
-        step.node.op == "einsum" and step.gemm == "none"
+        plan.schedule.streamed_gemm_reduction
+        and step.node.op == "einsum"
+        and step.gemm == "none"
+        and any(plan.steps[child].virtual for child in step.inputs)
     )
     if (
         not plan.schedule.stream_reductions
