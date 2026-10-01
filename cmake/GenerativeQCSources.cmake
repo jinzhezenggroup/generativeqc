@@ -40,7 +40,6 @@ function(generativeqc_add_dft_sources target)
   target_sources(${target} PRIVATE
     src/dft/ao_grid.cpp
     src/dft/cosx_reference.cpp
-    src/dft/cosx_fock_provider.cpp
     src/dft/bridge.cpp
     src/dft/grid.cpp
     src/dft/ks_final_state.cpp
@@ -54,6 +53,7 @@ function(generativeqc_add_dft_sources target)
     src/methods/dft_method.cpp)
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
+      src/dft/cosx_fock_provider.cpp
       src/dft/cosx_scf.cpp
       src/dft/cuda_cosx.cu
       src/dft/cuda_cosx_derivative.cu
