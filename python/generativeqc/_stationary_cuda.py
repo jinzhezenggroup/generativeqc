@@ -410,10 +410,27 @@ def _artifact_derivative_requests(
     return inventory
 
 
-def _layout(basis: typing.Any) -> typing.Any:
-    """Read normalized s/p/d public-AO records without evaluating integrals."""
-    if any(s.angular_momentum > 2 for s in basis.shells):
-        raise NotImplementedError("CUDA gradient diagnostic admits s/p/d bases only")
+def _layout(
+    basis: typing.Any, *, integral_derivatives: bool = True
+) -> typing.Any:
+    """Read normalized public-AO records without evaluating integrals.
+
+    Generic stationary integral descriptors remain qualified through d shells.
+    Geometry-only consumers may reuse the packed AO topology through f without
+    constructing the combinatorial SPDF derivative inventory.
+    """
+    if type(integral_derivatives) is not bool:
+        raise TypeError("integral_derivatives must be boolean")
+    if integral_derivatives and any(s.angular_momentum > 2 for s in basis.shells):
+        raise NotImplementedError(
+            "CUDA gradient integral descriptors admit s/p/d bases only"
+        )
+    if not integral_derivatives and any(
+        s.angular_momentum > 3 for s in basis.shells
+    ):
+        raise NotImplementedError(
+            "CUDA stationary geometry admits through f bases only"
+        )
     start = 3 * basis.natom
     primitives = basis.packed[start : start + 2 * basis.nprimitive].reshape(-1, 2)
     aos = basis.packed[start + 2 * basis.nprimitive :].reshape(-1, 16)
@@ -433,9 +450,13 @@ def _layout(basis: typing.Any) -> typing.Any:
         for row in aos
     )
     requests = (
-        derivative_requests(_component_domain(expansions))
-        if _component_mode(expansions)
-        else qualified_sp_requests()
+        (
+            derivative_requests(_component_domain(expansions))
+            if _component_mode(expansions)
+            else qualified_sp_requests()
+        )
+        if integral_derivatives
+        else (("nuclear", ()),)
     )
     return primitives, aos, expansions, requests
 
@@ -458,8 +479,12 @@ class _CudaSources:
         timeline: _ExclusiveWallTimeline | None = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
+        integral_derivatives: bool = True,
     ) -> None:
+        if type(integral_derivatives) is not bool:
+            raise TypeError("integral_derivatives must be boolean")
         self.source_names = source_names
+        self.integral_derivatives = integral_derivatives
         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
             raise ValueError("stationary CUDA binary hash mismatch")
         self.artifact = artifact
@@ -487,7 +512,11 @@ class _CudaSources:
             basis.packed[: 3 * basis.natom].reshape(-1, 3)
         )
         self.ao_atoms = np.ascontiguousarray(_native_ao_atoms(basis), dtype=np.int64)
-        self.primitives, self.aos, expansions, requests = _layout(basis)
+        self.primitives, self.aos, expansions, requests = (
+            _layout(basis)
+            if integral_derivatives
+            else _layout(basis, integral_derivatives=False)
+        )
         self.expansions = tuple(expansions)
         self.component_mode = _component_mode(self.expansions)
         self.components = tuple(expansion[0][0] for expansion in self.expansions)
@@ -503,10 +532,13 @@ class _CudaSources:
             key: i
             for i, key in enumerate(_artifact_derivative_requests(requests, artifact))
         }
-        component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
-        self.component_ids = np.asarray(
-            [component_index[label] for label in self.components], dtype=np.int64
-        )
+        if integral_derivatives:
+            component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+            self.component_ids = np.asarray(
+                [component_index[label] for label in self.components], dtype=np.int64
+            )
+        else:
+            self.component_ids = None
         self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
@@ -783,6 +815,10 @@ class _CudaSources:
         charge: typing.Any = 1.0,
     ) -> None:
         """Append public-AO tasks while Cartesian primitive products stay native."""
+        if not self.integral_derivatives:
+            raise NotImplementedError(
+                "geometry-only stationary CUDA source does not admit integral tasks"
+            )
         indices = tuple(int(i) for i in indices)
         rank = len(indices)
         if rank not in (2, 4):
@@ -845,6 +881,10 @@ class _CudaSources:
         charge: float = 1.0,
     ) -> None:
         """Append one bounded logical page, vectorizing the scalar AO producer."""
+        if not self.integral_derivatives:
+            raise NotImplementedError(
+                "geometry-only stationary CUDA source does not admit integral tasks"
+            )
         coordinates = tuple(coordinates)
         if not coordinates:
             return
