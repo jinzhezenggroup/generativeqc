@@ -1765,6 +1765,8 @@ def _public_selector_contract(
     failures = []
     if metadata["family"] != "density_functional" or metadata["provider"] != "dft":
         failures.append("family/provider")
+    if not hybrid and SEMILOCAL_ABI_IDS.get(selector) != expected_abi:
+        failures.append("native ABI ID")
     if expected_abi not in generated_methods.NATIVE_DFT_METHOD_IDS:
         failures.append("native DFT eligibility")
     if not metadata["supports_batch"] or "energy" not in metadata["properties"]:
@@ -1774,7 +1776,7 @@ def _public_selector_contract(
     if native_functional != expected_functional:
         failures.append("native functional-family lowering")
     if options.coefficients != expected_coefficients:
-        failures.append("scientific coefficients")
+        failures.append("scientific coefficients" if hybrid else "semilocal coefficients")
     if (
         execution_plan.method.identity != method_ir.identity
         or execution_plan.nonlocal_correlation is not None
@@ -2100,7 +2102,9 @@ def _build_report(
                 grid_spec=grid_spec,
             )
         native_properties = list(
-            generated_methods.METHOD_METADATA[selector]["properties"]
+            generated_methods.METHOD_METADATA[
+                selector_cache[selector]["registry_selector"]
+            ]["properties"]
         )
         rows.append(
             {
