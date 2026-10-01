@@ -18,7 +18,9 @@ def _number(value: object, *, positive: bool, label: str) -> str:
     return text
 
 
-def load_pack(path: Path) -> list[tuple[str, list[tuple[int, int, list[tuple[str, str]]]]]]:
+def load_pack(
+    path: Path,
+) -> list[tuple[str, list[tuple[int, int, list[tuple[str, str]]]]]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1 or not isinstance(payload.get("bases"), dict):
         raise ValueError("unsupported bundled basis-pack schema")
@@ -31,9 +33,15 @@ def load_pack(path: Path) -> list[tuple[str, list[tuple[int, int, list[tuple[str
         if not isinstance(elements, dict) or not elements:
             raise ValueError(f"{name}: basis requires element records")
         rows = []
-        for atomic_text, shells in sorted(elements.items(), key=lambda item: int(item[0])):
+        for atomic_text, shells in sorted(
+            elements.items(), key=lambda item: int(item[0])
+        ):
             atomic_number = int(atomic_text)
-            if not 1 <= atomic_number <= 118 or not isinstance(shells, list) or not shells:
+            if (
+                not 1 <= atomic_number <= 118
+                or not isinstance(shells, list)
+                or not shells
+            ):
                 raise ValueError(f"{name}: invalid element record {atomic_text!r}")
             for shell in shells:
                 if not isinstance(shell, dict):
@@ -56,7 +64,9 @@ def load_pack(path: Path) -> list[tuple[str, list[tuple[int, int, list[tuple[str
                         _number(exponent, positive=True, label="basis exponent"),
                         _number(coefficient, positive=False, label="basis coefficient"),
                     )
-                    for exponent, coefficient in zip(exponents, coefficients, strict=True)
+                    for exponent, coefficient in zip(
+                        exponents, coefficients, strict=True
+                    )
                 ]
                 rows.append((atomic_number, angular, primitives))
         result.append((name, rows))
@@ -105,7 +115,9 @@ def emit(pack: list[tuple[str, list[tuple[int, int, list[tuple[str, str]]]]]]) -
         "",
         f"inline constexpr std::array<PrimitiveRow, {len(primitives)}> kPrimitives{{{{",
     ]
-    lines.extend(f"    {{{exponent}, {coefficient}}}," for exponent, coefficient in primitives)
+    lines.extend(
+        f"    {{{exponent}, {coefficient}}}," for exponent, coefficient in primitives
+    )
     lines.extend(
         [
             "}};",
