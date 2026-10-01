@@ -334,13 +334,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // contraction is split out here because its arithmetic mode differs.
       const std::uint64_t strict_matrix_products = stabilize_occupations ? 9U : 7U;
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict,
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
                                 strict_matrix_products);
       if (mixed)
         record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                  scf::PrecisionDtype::Fp32,
-                                  scf::PrecisionArithmeticMode::Mixed);
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
       if (!final_closure)
         record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
@@ -776,8 +774,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // escape.  Never leave the prior successful solve's precision receipt
     // observable after a failed begin().
     output.precision = {};
-    output.precision.requested_mode =
-        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+    output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
     output.precision_work = {};
     output.precision_work.owner_id = owner;
     output.precision_work.operators.reserve(14);

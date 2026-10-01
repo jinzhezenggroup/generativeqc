@@ -1201,8 +1201,7 @@ void precision_work_census_case(bool restricted, int precision_mode) {
     require(injected_failure && plan.failed(),
             "CUDA-KS one-shot runtime failure did not fail the new solve");
     const auto failed = plan.result(false);
-    require(!failed.precision_work.complete &&
-                !failed.precision_work.operator_inventory_complete &&
+    require(!failed.precision_work.complete && !failed.precision_work.operator_inventory_complete &&
                 failed.precision.operator_work_counters_valid == 0 &&
                 failed.precision.final_residual_audits == 0 &&
                 failed.precision_work.returned_solve_epoch == 0 &&
