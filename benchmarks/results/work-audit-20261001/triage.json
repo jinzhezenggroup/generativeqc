@@ -1,0 +1,201 @@
+{
+  "items": [
+    {
+      "action": "Profile this fallback separately; evaluate bounded reuse or source-driven consumption under the existing memory budget and stream lifetime contract",
+      "conditional_source_counts": {
+        "producer_passes": 2,
+        "staged_values": "2 * batch_size * matrix_elements * naux",
+        "stream_wait_calls": "2 * batch_size * ceil(naux/auxiliary_tile) * ceil(matrix_elements/pair_tile)",
+        "whitening_multiply_accumulates": "2 * batch_size * matrix_elements * naux^2"
+      },
+      "count_provenance": "Manual symbolic source inspection, conditional on positive valid dimensions and successful completion; not instrumented runtime counters",
+      "false_positive_check": "Not the native source/device-resident branch. Keeping the full whitened tensor would violate the reason for bounded streaming in some resource regimes. No speedup or automatic removal of waits is justified.",
+      "id": "host-staged-df-whitening",
+      "role": "Host-staged streamed Coulomb branch after the native integral-source branch returns",
+      "scanner_fingerprints": [
+        "0941eae17c82a0fd97d8-1",
+        "e2047b2f38702379203c-1",
+        "0aa7946e239c37d771d7-1",
+        "e2047b2f38702379203c-2",
+        "0aa7946e239c37d771d7-2"
+      ],
+      "sources": [
+        {
+          "lines": [
+            194,
+            285
+          ],
+          "path": "src/scf/cuda/df_coulomb.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/scf/cuda/df_coulomb.cpp#L194-L285"
+        }
+      ],
+      "status": "verified-repeated-source-work-in-bounded-fallback",
+      "verified": "The same raw-times-inverse whitening domain is evaluated in both pair-tile loops, with no host writes to raw or inverse between them. On a successful full call both loops execute."
+    },
+    {
+      "action": "Measure plan/endpoint-owned reusable scratch; preserve zeroing of g/x and valid padding energies before each generated-kernel call",
+      "conditional_source_counts": {
+        "requested_bytes_per_tile": "16 * tile^2 + 16 * tile",
+        "sized_vector_constructions": "4 * nocc^2 * ceil(nvirt/tile)^2"
+      },
+      "count_provenance": "Manual source-derived constructor/extent count; physical allocator calls and elapsed time are not measured",
+      "false_positive_check": "These are not empty vector declarations or resize calls on retained capacity. g and x are separate declarators on the same source line and are separate scanner sites.",
+      "id": "ri-mp2-tile-workspaces",
+      "role": "CPU density-fitted MP2 energy tile evaluation",
+      "scanner_fingerprints": [
+        "1e895eaad2822b5277d2-1",
+        "e46ecd8067a7a6fae34d-1",
+        "db6f50d9f44bcda2fcee-1",
+        "d7111cae52617f5e1f78-1"
+      ],
+      "sources": [
+        {
+          "lines": [
+            310,
+            341
+          ],
+          "path": "src/posthf/mp2_energy.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/posthf/mp2_energy.cpp#L310-L341"
+        }
+      ],
+      "status": "verified-fresh-vector-constructions-per-tile",
+      "verified": "g, x, ea and eb are four fresh sized std::vector<double> objects in the innermost occupied-pair/virtual-tile loop. tile is positive on this validated route."
+    },
+    {
+      "action": "Evaluate bounded maximum-stage workspaces with complete force-endpoint evidence; keep per-stage zero-initialization semantics",
+      "false_positive_check": "The loops implement a required AO/MO derivative transform. Allocation visibility is not proof that the arithmetic or final dense consumer is avoidable.",
+      "id": "mp2-derivative-shell-scratch",
+      "role": "Conventional dense-weight derivative transform and shell contraction",
+      "scanner_fingerprints": [
+        "bb8af9488f289a24b6d7-1",
+        "c99c21c18cc4fcdedced-1",
+        "290d5f6b538f1e58c33f-1",
+        "aeb108d9c36f91e014a6-1"
+      ],
+      "sources": [
+        {
+          "lines": [
+            44,
+            95
+          ],
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/posthf/mp2_derivative_common.cpp#L44-L95"
+        },
+        {
+          "lines": [
+            129,
+            173
+          ],
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/posthf/mp2_derivative_common.cpp#L129-L173"
+        }
+      ],
+      "status": "verified-fresh-scratch-within-shell-loops",
+      "verified": "first, second, third and local vectors have progressively smaller stage extents; second/third/local are reconstructed at sj/sk/sl loop depths."
+    },
+    {
+      "action": "Keep oracle independence; consider scratch/packed support only after identifying a live production fallback and validating every recurrence consumer",
+      "count_provenance": "The simplex count is manual combinatorial evidence, not automatically inferred by this scanner",
+      "false_positive_check": "Do not call the final AO ERI output structurally zero. Do not claim an empty Jet derivative vector allocates. Generated CPU value paths and qualified generated DF routes bypass these fallbacks.",
+      "id": "dynamic-jet-fallback-storage",
+      "manual_support_example": {
+        "L": 8,
+        "allocated_slots": 6561,
+        "ratio": 13.254545454545454,
+        "written_simplex_slots": 495
+      },
+      "role": "Retained dynamic Jet/reference/fallback integral paths, not the generated-value geometry optimization",
+      "scanner_fingerprints": [
+        "2e4bfe1ef6fc96d8329d-1",
+        "684959d5cdeaea0180d7-1",
+        "3eeea61bfc86cc3ed33b-1",
+        "bf2764a0158fd034580c-1",
+        "2d60315680cd5fde2179-1",
+        "aa512c005c03dd2f7dc3-1"
+      ],
+      "sources": [
+        {
+          "lines": [
+            126,
+            154
+          ],
+          "path": "src/integrals/s_integrals.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/integrals/s_integrals.cpp#L126-L154"
+        },
+        {
+          "lines": [
+            225,
+            270
+          ],
+          "path": "src/integrals/s_integrals.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/integrals/s_integrals.cpp#L225-L270"
+        },
+        {
+          "lines": [
+            1129,
+            1198
+          ],
+          "path": "src/integrals/s_integrals.cpp",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/src/integrals/s_integrals.cpp#L1129-L1198"
+        }
+      ],
+      "status": "verified-cross-call-sites-retained-fallback-role",
+      "verified": "The scanner follows explicit same-file calls from native loops to sized scalar and Jet Boys vectors. Manual recurrence inspection separately finds a (L+1)^4 Coulomb slab with n+t+u+v<=L write support."
+    },
+    {
+      "action": "Inspect a factorized occupied/virtual congruence end to end; do not change the public dense-return contract without adapting consumers",
+      "conditional_source_counts": {
+        "dense_elements": "(nocc+nvirt)^2",
+        "unchanged_zero_coordinates": "nocc^2+nvirt^2",
+        "written_coordinates": "2*nocc*nvirt"
+      },
+      "count_provenance": "AST local write-domain evidence plus manual class-invariant/consumer inspection; no threshold sparsification",
+      "false_positive_check": "AST output intentionally leaves strict_reduction_proven=false until class invariants are read. density_matrix feeds c @ delta_mo @ c.T, so a producer-only packed return would break the consumer contract.",
+      "id": "response-mo-offdiagonal-support",
+      "role": "MO orbital-response compatibility matrices; density response is consumed by a dense AO congruence",
+      "scanner_fingerprints": [
+        "9ef2968070dc23acb8f9-1",
+        "18dd423a75110da565ef-1"
+      ],
+      "sources": [
+        {
+          "lines": [
+            63,
+            74
+          ],
+          "path": "python/generativeqc/response_problem.py",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/python/generativeqc/response_problem.py#L63-L74"
+        },
+        {
+          "lines": [
+            100,
+            106
+          ],
+          "path": "python/generativeqc/response_problem.py",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/python/generativeqc/response_problem.py#L100-L106"
+        },
+        {
+          "lines": [
+            145,
+            159
+          ],
+          "path": "python/generativeqc/response_problem.py",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/python/generativeqc/response_problem.py#L145-L159"
+        },
+        {
+          "lines": [
+            138,
+            142
+          ],
+          "path": "python/generativeqc/response_operator.py",
+          "url": "https://github.com/jinzhezenggroup/generativeqc/blob/530f0a355cd8488deab887c7a6dba6a99e5486eb/python/generativeqc/response_operator.py#L138-L142"
+        }
+      ],
+      "status": "verified-structured-support-with-dense-consumer",
+      "verified": "AST finds only ov and vo writes. Separate constructor validation proves disjoint occupied/virtual indices, and nmo=nocc+nvirt. Thus the live support is at most 2*nocc*nvirt of nmo^2 entries."
+    }
+  ],
+  "schema": "generativeqc.work-audit-triage.v1",
+  "source_commit": "530f0a355cd8488deab887c7a6dba6a99e5486eb",
+  "source_digest": "6625b6388ccfca8951a5a3797ef5df5ea1e4027bbdf69c2a99d025372b1b4689"
+}
