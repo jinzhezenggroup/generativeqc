@@ -179,10 +179,10 @@ EigenResult stabilized_uks_orbitals(Matrix fock, const Matrix& density, const Ma
 
 template <class PrimaryPlan>
 ScfResult run_uks_impl(
-    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
-    const dft::AoBasis& basis, const dft::MolecularGrid& grid, const ScfOptions& options,
-    SpinXcEvaluator evaluate_xc, const char* method_name,
-    const std::vector<double>* initial_density, dft::nlc::Vv10Plan* nonlocal_correlation,
+    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction, const dft::AoBasis& basis,
+    const dft::MolecularGrid& grid, const ScfOptions& options, SpinXcEvaluator evaluate_xc,
+    const char* method_name, const std::vector<double>* initial_density,
+    dft::nlc::Vv10Plan* nonlocal_correlation,
     dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {
   using namespace reference;
   const auto& strategy = plan.strategy();

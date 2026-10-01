@@ -436,12 +436,11 @@ dft::XcIntegral evaluate_cam_b3lyp_xc_rks(const dft::AoBasis& basis, const dft::
 
 template <class PrimaryPlan>
 RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
-                           const dft::AoBasis& basis,
-                           const dft::MolecularGrid& grid, const Matrix& density,
-                           RksXcEvaluator evaluate_xc, const char* method_name,
-                           dft::XcDensitySource source, std::size_t retained_capacity,
-                           std::size_t tile, double exchange_scale, double correlation_scale,
-                           dft::nlc::Vv10Plan* nonlocal_correlation,
+                           const dft::AoBasis& basis, const dft::MolecularGrid& grid,
+                           const Matrix& density, RksXcEvaluator evaluate_xc,
+                           const char* method_name, dft::XcDensitySource source,
+                           std::size_t retained_capacity, std::size_t tile, double exchange_scale,
+                           double correlation_scale, dft::nlc::Vv10Plan* nonlocal_correlation,
                            dft::nlc::Vv10DensityDomain nonlocal_domain,
                            const dft::RksAoCache* ao_cache,
                            std::optional<dft::XcIntegral> xc_override = std::nullopt) {
@@ -502,8 +501,8 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
 
 template <class PrimaryPlan>
 ScfResult run_rks(
-    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
-    const dft::AoBasis& basis, const dft::MolecularGrid& grid, const ScfOptions& options,
+    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction, const dft::AoBasis& basis,
+    const dft::MolecularGrid& grid, const ScfOptions& options,
     const std::vector<double>* initial_density, RksXcEvaluator evaluate_xc, const char* method_name,
     dft::nlc::Vv10Plan* nonlocal_correlation,
     dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {

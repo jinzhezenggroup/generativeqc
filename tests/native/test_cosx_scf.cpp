@@ -159,24 +159,23 @@ void verify_pbe0_rks(int device) {
   const auto jk = plan.build(result.density);
   auto fock = scf::assemble_fock(strategy, plan.one_electron().hcore, jk).alpha;
   const auto two = scf::contract_fock_energy_components(strategy, jk, result.density);
-  const auto xc = dft::integrate_pbe_rks_with_tail_scaled(
-      basis, grid, result.density, control.xc_tile_points, {}, 0.75, 1.0);
+  const auto xc = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, result.density,
+                                                          control.xc_tile_points, {}, 0.75, 1.0);
   require(xc.potential.size() == fock.size(), "COSX PBE0 RKS XC/Fock shape mismatch");
   for (std::size_t i = 0; i < fock.size(); ++i) fock[i] += xc.potential[i];
   const auto residual = scf::reference::commutator_residual(
       fock, result.density, plan.one_electron().overlap, plan.one_electron().nbf);
-  const double independent_energy =
-      plan.one_electron().nuclear_repulsion +
-      scf::reference::dot(result.density, plan.one_electron().hcore) + two.coulomb + two.exchange +
-      xc.energy;
+  const double independent_energy = plan.one_electron().nuclear_repulsion +
+                                    scf::reference::dot(result.density, plan.one_electron().hcore) +
+                                    two.coulomb + two.exchange + xc.energy;
   require(std::abs(independent_energy - result.energy) < 5.0e-9 &&
               scf::reference::residual_rms(residual) < 1.0e-8,
           "COSX PBE0 RKS endpoint disagrees with independent PBE + RI-J/COSX-K assembly");
 
   const auto warm = scf::run_pbe0_cosx_rks(plan, basis, grid, control, &result.density);
-  require(warm.converged && warm.initial_density_used &&
-              std::abs(warm.energy - result.energy) < 5.0e-9,
-          "COSX PBE0 RKS warm replay changed the endpoint");
+  require(
+      warm.converged && warm.initial_density_used && std::abs(warm.energy - result.energy) < 5.0e-9,
+      "COSX PBE0 RKS warm replay changed the endpoint");
 }
 
 void verify_pbe0_uks(int device) {
@@ -200,10 +199,9 @@ void verify_pbe0_uks(int device) {
   const auto jk = plan.build(alpha, beta);
   auto fock = scf::assemble_fock(strategy, plan.one_electron().hcore, jk);
   const auto two = scf::contract_fock_energy_components(strategy, jk, alpha, beta);
-  const auto xc = dft::integrate_pbe_uks_scaled(basis, grid, alpha, beta, control.xc_tile_points,
-                                                0.75, 1.0);
-  require(xc.potential[0].size() == fock.alpha.size() &&
-              xc.potential[1].size() == fock.beta.size(),
+  const auto xc =
+      dft::integrate_pbe_uks_scaled(basis, grid, alpha, beta, control.xc_tile_points, 0.75, 1.0);
+  require(xc.potential[0].size() == fock.alpha.size() && xc.potential[1].size() == fock.beta.size(),
           "COSX PBE0 UKS XC/Fock shape mismatch");
   for (std::size_t i = 0; i < fock.alpha.size(); ++i) {
     fock.alpha[i] += xc.potential[0][i];
@@ -213,10 +211,10 @@ void verify_pbe0_uks(int device) {
       scf::reference::commutator_residual(fock.alpha, alpha, plan.one_electron().overlap, n);
   const auto rb =
       scf::reference::commutator_residual(fock.beta, beta, plan.one_electron().overlap, n);
-  const double independent_energy =
-      plan.one_electron().nuclear_repulsion +
-      scf::reference::dot(alpha, plan.one_electron().hcore) +
-      scf::reference::dot(beta, plan.one_electron().hcore) + two.coulomb + two.exchange + xc.energy;
+  const double independent_energy = plan.one_electron().nuclear_repulsion +
+                                    scf::reference::dot(alpha, plan.one_electron().hcore) +
+                                    scf::reference::dot(beta, plan.one_electron().hcore) +
+                                    two.coulomb + two.exchange + xc.energy;
   require(std::abs(independent_energy - result.energy) < 5.0e-9 &&
               std::max(scf::reference::residual_rms(ra), scf::reference::residual_rms(rb)) < 1.0e-8,
           "COSX PBE0 UKS endpoint disagrees with independent PBE + RI-J/COSX-K assembly");
