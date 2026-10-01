@@ -2,7 +2,10 @@
 
 #include <cuda_runtime_api.h>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "scf/cuda_direct_jk.hpp"
 
@@ -15,6 +18,21 @@ namespace generativeqc::scf {
 cudaStream_t cuda_direct_jk_stream(const CudaDirectJkPlan* plan);
 /** Device ordinal in the current process's visibility namespace; null returns -1. */
 int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept;
+
+/** Enqueue one exact, unscreened full-range AO ERI tile into caller-owned
+ * device storage on caller_stream. The tile is row-major [i,j,k,l] with the
+ * last axis fastest and uses the prepared Direct plan's public AO basis.
+ *
+ * This borrows immutable geometry/basis metadata only. It does not use the
+ * HF screening tolerance, allocate storage, transfer through host memory, or
+ * synchronize on success. The plan must outlive completion on caller_stream.
+ */
+generativeqc_status enqueue_cuda_direct_eri_tile(
+    CudaDirectJkPlan* plan, std::size_t item,
+    const std::array<std::size_t, 4>& begin,
+    const std::array<std::size_t, 4>& count,
+    double* output, std::size_t elements, cudaStream_t caller_stream,
+    std::string& detail);
 
 /** Enqueue raw, unscaled value J/K against caller-owned device matrices.
  *
