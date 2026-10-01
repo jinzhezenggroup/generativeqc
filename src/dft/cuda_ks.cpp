@@ -69,13 +69,12 @@ struct CudaKsPrecisionSchedule {
 };
 
 CudaKsPrecisionSchedule resolve_cuda_ks_precision_schedule(
-    std::optional<generativeqc_precision_mode> mode, std::uint32_t functional,
-    bool fitted_coulomb, bool nonlocal_correlation) {
+    std::optional<generativeqc_precision_mode> mode, std::uint32_t functional, bool fitted_coulomb,
+    bool nonlocal_correlation) {
   if (!mode || *mode == GENERATIVEQC_PRECISION_FP64) return {};
   if (*mode != GENERATIVEQC_PRECISION_AUTO)
     throw std::invalid_argument("CUDA KS received an unknown precision mode");
-  if (fitted_coulomb)
-    throw std::invalid_argument("CUDA fitted KS requires strict FP64");
+  if (fitted_coulomb) throw std::invalid_argument("CUDA fitted KS requires strict FP64");
   if (nonlocal_correlation)
     throw std::invalid_argument("CUDA KS nonlocal composition currently requires strict FP64");
 
@@ -85,10 +84,9 @@ CudaKsPrecisionSchedule resolve_cuda_ks_precision_schedule(
   schedule.mixed_coulomb = true;
   // #987 qualifies only the density-times-AO products for LDA/PBE/r2SCAN.
   // r2SCAN tau accumulation and all point algebra/reductions remain FP64.
-  schedule.mixed_density_contraction =
-      is_semilocal_family(functional, SemilocalFamily::Lda) ||
-      is_semilocal_family(functional, SemilocalFamily::Pbe) ||
-      is_semilocal_family(functional, SemilocalFamily::R2scan);
+  schedule.mixed_density_contraction = is_semilocal_family(functional, SemilocalFamily::Lda) ||
+                                       is_semilocal_family(functional, SemilocalFamily::Pbe) ||
+                                       is_semilocal_family(functional, SemilocalFamily::R2scan);
   return schedule;
 }
 void check(cudaError_t status) {
@@ -1155,10 +1153,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
               detail);
       mixed_precision_executed =
           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
-      const auto potential =
-          stage_xc(++generation,
-                   pending_mixed_density ? CudaXcDensityPrecision::Fp32ComputeFp64Accumulate
-                                         : CudaXcDensityPrecision::Fp64);
+      const auto potential = stage_xc(
+          ++generation, pending_mixed_density ? CudaXcDensityPrecision::Fp32ComputeFp64Accumulate
+                                              : CudaXcDensityPrecision::Fp64);
       pending_generations[0] = generation;
       ++movement.submitted_iterations;
       pending_iterations = 1;

@@ -1067,8 +1067,7 @@ int main() {
                 "cannot enable the CUDA KS chunk integration regression");
         require(generativeqc_calculation_execute(auto_calculation, &auto_result) ==
                         GENERATIVEQC_STATUS_SUCCESS &&
-                    auto_result.converged == 1 &&
-                    std::abs(auto_result.energy - cold.energy) < 2e-8,
+                    auto_result.converged == 1 && std::abs(auto_result.energy - cold.energy) < 2e-8,
                 "CUDA KS component-wise AUTO target refinement changed the FP64 endpoint");
         generativeqc_precision_provenance precision{sizeof(generativeqc_precision_provenance),
                                                     GENERATIVEQC_ABI_VERSION};
