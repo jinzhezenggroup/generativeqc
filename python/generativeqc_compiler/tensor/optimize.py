@@ -431,6 +431,8 @@ def _pruning_diagnostics(
     before: Program,
     requested: Program,
     after: Program,
+    *,
+    require_minimal: bool = True,
 ) -> dict[str, typing.Any]:
     """Summarize #673 output/input/DCE pruning before backend lowering."""
 
@@ -442,7 +444,8 @@ def _pruning_diagnostics(
     retained_outputs = tuple(after.outputs)
     if requested_outputs != retained_outputs:
         raise ValueError("TensorIR optimizer changed requested output names")
-    if after_nodes != after_live_nodes:
+    minimal_before_lowering = after_nodes == after_live_nodes
+    if require_minimal and not minimal_before_lowering:
         raise ValueError("TensorIR optimizer left dead definitions before lowering")
     before_inputs = _input_names(before)
     after_inputs = _input_names(after)
@@ -469,7 +472,7 @@ def _pruning_diagnostics(
         "inputs_before": list(before_inputs),
         "inputs_after": list(after_inputs),
         "removed_inputs": list(removed_inputs),
-        "minimal_before_lowering": True,
+        "minimal_before_lowering": minimal_before_lowering,
     }
 
 
@@ -529,15 +532,32 @@ def optimize(
     *,
     requested_outputs: typing.Any = None,
     reassociate_contractions: bool = False,
+    disabled_passes: typing.Any = (),
+    stop_after: str | None = None,
 ) -> Program:
-    """Run the TensorIR pipeline, with explicit opt-in contraction reassociation."""
+    """Run the TensorIR pipeline with explicit diagnostic bisection controls.
+
+    disabled_passes and stop_after expose the shared PassManager controls without
+    changing the default production pipeline. Non-default controls are recorded
+    in provenance and participate in optimizer identity so diagnostic artifacts
+    cannot be mistaken for the canonical optimized program.
+    """
     if type(reassociate_contractions) is not bool:
         raise TypeError("reassociate_contractions must be a Boolean")
     requested = _project_requested_outputs(program, requested_outputs)
     value_numbering_diagnostics: list[ValueNumberingDiagnostics] = []
-    run = _optimizer(value_numbering_diagnostics).run(requested)
+    run = _optimizer(value_numbering_diagnostics).run(
+        requested,
+        disabled=disabled_passes,
+        stop_after=stop_after,
+    )
     baseline = run.value
-    pruning = _pruning_diagnostics(program, requested, baseline)
+    pruning = _pruning_diagnostics(
+        program,
+        requested,
+        baseline,
+        require_minimal=not (run.disabled or run.stopped_after is not None),
+    )
     result = reassociate_einsums(baseline) if reassociate_contractions else baseline
     complexity_diagnostics = None
     if reassociate_contractions:
@@ -569,6 +589,8 @@ def optimize(
             "optimizer_diagnostics": {
                 "nodes_before": len(program.nodes),
                 "nodes_after": len(result.nodes),
+                "disabled_passes": list(run.disabled),
+                "stopped_after": run.stopped_after,
                 "value_numbering": [
                     stats.to_payload() for stats in value_numbering_diagnostics
                 ],
@@ -578,10 +600,14 @@ def optimize(
                     "name": record.name,
                     "version": record.version,
                     "changed": record.changed,
+                    "before": record.before,
+                    "after": record.after,
+                    "invalidated_analyses": list(record.invalidated_analyses),
                 }
                 for record in run.records
             ],
         },
+        definitions=result.definitions,
     )
 
 
@@ -594,6 +620,8 @@ def prepare_for_backend(
     *,
     requested_outputs: typing.Any = None,
     preserve_reduction_order: bool = False,
+    disabled_passes: typing.Any = (),
+    stop_after: str | None = None,
 ) -> Program:
     """Prepare one production TensorIR program before backend-specific lowering.
 
@@ -621,6 +649,8 @@ def prepare_for_backend(
         program,
         requested_outputs=requested_outputs,
         reassociate_contractions=allow_reassociation,
+        disabled_passes=disabled_passes,
+        stop_after=stop_after,
     )
     unchanged = (
         requested_outputs is None
@@ -639,6 +669,12 @@ def prepare_for_backend(
                 "backend": backend,
                 "preserve_reduction_order": preserve_reduction_order,
                 "reassociation_enabled": allow_reassociation,
+                "disabled_passes": list(
+                    prepared.provenance["optimizer_diagnostics"]["disabled_passes"]
+                ),
+                "stopped_after": prepared.provenance["optimizer_diagnostics"][
+                    "stopped_after"
+                ],
             },
         },
     )
