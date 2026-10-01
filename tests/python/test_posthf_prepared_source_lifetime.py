@@ -84,9 +84,9 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         PREFIX
         + r"""
 int mp2_case(bool prepared,bool compute_forces) {
-  std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
-  if (prepared) cpu_exact_plan_=std::make_unique<scf::PreparedFockPlan>();
-  auto* prepared_exact=cpu_exact_plan_.get();
+  std::unique_ptr<scf::PreparedFockPlan> exact_plan_;
+  if (prepared) exact_plan_=std::make_unique<scf::PreparedFockPlan>();
+  auto* prepared_exact=exact_plan_.get();
   const bool density_fitted_=false;
   int system_=0;
   std::optional<int> auxiliary_;
