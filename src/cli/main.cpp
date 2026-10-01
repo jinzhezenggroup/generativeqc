@@ -93,7 +93,8 @@ int atomic_number(std::string token) {
   if (!token.empty() && std::all_of(token.begin(), token.end(),
                                     [](unsigned char c) { return std::isdigit(c) != 0; })) {
     const int value = parse_int(token, "atomic number");
-    if (value < 1 || value > 86) throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
+    if (value < 1 || value > 86)
+      throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
     return value;
   }
 
@@ -207,7 +208,8 @@ void print_usage(std::ostream& out) {
          "  --method gfn2-xtb|rhf|uhf  Native method (default: gfn2-xtb)\n"
          "  --basis NAME             Bundled Gaussian basis for RHF/UHF (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
-         "  --density-fitting none|cpu|cuda|auto  HF Coulomb/exchange approximation (default: none)\n"
+         "  --density-fitting none|cpu|cuda|auto  HF Coulomb/exchange approximation (default: "
+         "none)\n"
          "  --auxiliary-basis NAME   Optional bundled auxiliary basis; default is orbital basis\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
@@ -278,9 +280,7 @@ void print_methods(bool json) {
   if (json) std::cout << "\n]\n";
 }
 
-bool is_gfn2(const RunOptions& options) {
-  return options.method == GENERATIVEQC_METHOD_GFN2_XTB;
-}
+bool is_gfn2(const RunOptions& options) { return options.method == GENERATIVEQC_METHOD_GFN2_XTB; }
 
 std::string_view representation_name(generativeqc_basis_representation representation) {
   return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
@@ -414,11 +414,11 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
-  if (is_gfn2(options) &&
-      (options.basis_explicit || options.representation_explicit ||
-       options.density_fitting_explicit || options.auxiliary_basis_explicit))
+  if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit ||
+                           options.density_fitting_explicit || options.auxiliary_basis_explicit))
     throw UsageError(
-        "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags apply to RHF/UHF");
+        "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags apply to "
+        "RHF/UHF");
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
@@ -437,7 +437,7 @@ int run(const RunOptions& options) {
   if (!is_gfn2(options)) {
     try {
       basis = generativeqc::cli::expand_bundled_basis(options.basis_name, atoms,
-                                                       options.representation);
+                                                      options.representation);
     } catch (const std::invalid_argument& error) {
       throw UsageError(error.what());
     }
@@ -449,9 +449,16 @@ int run(const RunOptions& options) {
   const std::uint32_t primitive_count =
       is_gfn2(options) ? 0u : static_cast<std::uint32_t>(basis.primitives.size());
   const generativeqc_system_descriptor system_descriptor{
-      sizeof(generativeqc_system_descriptor), GENERATIVEQC_ABI_VERSION,
-      atoms.data(), static_cast<std::uint32_t>(atoms.size()), shells, shell_count,
-      primitives, primitive_count, options.charge, options.multiplicity,
+      sizeof(generativeqc_system_descriptor),
+      GENERATIVEQC_ABI_VERSION,
+      atoms.data(),
+      static_cast<std::uint32_t>(atoms.size()),
+      shells,
+      shell_count,
+      primitives,
+      primitive_count,
+      options.charge,
+      options.multiplicity,
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system(context, system_descriptor);
 
@@ -459,8 +466,8 @@ int run(const RunOptions& options) {
   std::optional<generativeqc::System> auxiliary_basis;
   if (!is_gfn2(options) && options.auxiliary_basis_explicit) {
     try {
-      auxiliary_basis_data = generativeqc::cli::expand_bundled_basis(
-          options.auxiliary_basis_name, atoms, options.representation);
+      auxiliary_basis_data = generativeqc::cli::expand_bundled_basis(options.auxiliary_basis_name,
+                                                                     atoms, options.representation);
     } catch (const std::invalid_argument& error) {
       throw UsageError(error.what());
     }
@@ -498,7 +505,7 @@ int run(const RunOptions& options) {
       if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
         std::cout << ",\"auxiliary_basis\":\""
                   << (options.auxiliary_basis_explicit ? options.auxiliary_basis_name
-                                                      : "same-as-orbital")
+                                                       : "same-as-orbital")
                   << "\"";
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
@@ -524,7 +531,7 @@ int run(const RunOptions& options) {
       if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
         std::cout << "auxiliary_basis: "
                   << (options.auxiliary_basis_explicit ? options.auxiliary_basis_name
-                                                      : "same-as-orbital")
+                                                       : "same-as-orbital")
                   << '\n';
     }
     std::cout << "energy_hartree: " << result.energy << '\n'
