@@ -96,7 +96,8 @@ def test_pbe0_auto_force_uses_strict_final_state() -> None:
 
 @pytest.mark.parametrize("name", ("PBE0", "B3LYP", "M06-2X", "MN15", "PBE0-alias"))
 @pytest.mark.parametrize("spin", ("rks", "uks"))
-def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
+@pytest.mark.parametrize("precision", ("fp64", "auto"))
+def test_public_cuda_global_hybrid_force(name: str, spin: str, precision: str) -> None:
     from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc_compiler.dft import NativeAO
@@ -131,6 +132,7 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
         method=method,
         device="cuda",
         basis="sto-3g",
+        precision=precision,
         ks_options=KsOptions(
             grid=GridSpec(radial_points=32, angular_polar=10, angular_azimuth=20),
             composition=composition,
@@ -162,6 +164,11 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
             finally:
                 state._source.close()
         assert public.executed_backend == "cuda" and public.converged
+        if precision == "auto":
+            assert public.precision is not None
+            assert public.precision["requested_mode"] == "auto"
+            assert public.precision["strict_refinement_applied"] is True
+            assert public.precision["refinement_iterations"] >= 1
         assert public.energy == pytest.approx(reference_energy, abs=2e-8)
         np.testing.assert_allclose(
             public.forces, -reference_gradient, atol=2e-7, rtol=0
@@ -230,10 +237,11 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
     assert abs(estimates[-1] - estimates[-2]) < 1e-6
     assert abs(estimates[-1] - analytic) < 1e-6
     _record_evidence(
-        f"{name.lower()}-{spin}",
+        f"{name.lower()}-{spin}-{precision}",
         {
             "method": method,
             "reference_xc": reference_xc,
+            "precision": precision,
             "energy_error": abs(public.energy - reference_energy),
             "gradient_max_error": float(
                 np.max(np.abs(public.forces + reference_gradient))
