@@ -354,6 +354,23 @@ void run_density_fitted_exchange_case(bool restricted) {
   require(snapshot.identity.determinant.model == gpu.strategy() &&
               std::abs(snapshot.components.total() - result.energy) < 1e-10,
           "density-fitted hybrid final state lost its model or energy");
+
+  dft::CudaKsResidentFittedProjectionBinding projection;
+  const auto projection_status = plan.resident_final_fitted_projection(token, projection, detail);
+  if (restricted && movement.fitted_occupied_exchange_builds > 0) {
+    require(projection_status == GENERATIVEQC_STATUS_SUCCESS, detail);
+    require(projection && projection.nbf == basis.nao && projection.naux > 0 &&
+                projection.rank == system.electron_count / 2 &&
+                projection.owner == token.identity.model.owner &&
+                projection.solve_epoch == token.identity.determinant.solve_epoch &&
+                projection.generation == token.identity.determinant.factor.density_generation &&
+                movement.fitted_final_projection_leases == 1,
+            "restricted fitted hybrid lost final Cocc/U projection provenance");
+  } else {
+    require(projection_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                movement.fitted_final_projection_leases == 0,
+            "unsupported fitted-hybrid final projection was published");
+  }
 }
 
 void run_range_exchange_case(bool restricted) {
