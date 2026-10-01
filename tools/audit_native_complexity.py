@@ -279,16 +279,51 @@ def _access_indices(
     return result
 
 
+def _pure_product(
+    expression: str,
+    aliases: dict[str, str],
+    seen: frozenset[str] = frozenset(),
+) -> bool:
+    """Admit only products; coupled denominators and opaque aliases stay reports."""
+    if _CALL.search(expression):
+        return False
+    # Arithmetic inside one tensor index does not change the product algebra.
+    scalar = _ACCESS.sub("value", expression)
+    if re.fullmatch(r"[\w\s.*()]+", scalar) is None:
+        return False
+    for name in set(re.findall(r"\b[A-Za-z_]\w*\b", scalar)):
+        if name in aliases and (
+            name in seen or not _pure_product(aliases[name], aliases, seen | {name})
+        ):
+            return False
+    return True
+
+
 def _matrix_chain_lhs(
     body: str,
     context: str,
     loop_variables: tuple[str, ...],
 ) -> str | None:
+    # Conditional/coupled iteration domains are not an ordinary matrix chain.
+    if re.search(r"\b(if|while|switch|do|break|continue|return|goto)\b", context):
+        return None
+    for loop in _FOR.finditer(context):
+        opening = context.find("(", loop.start())
+        closing = _matching(context, opening, "(", ")")
+        header = context[opening + 1 : closing]
+        variable = _LOOP_VAR.search(header)
+        if closing < 0 or variable is None:
+            return None
+        if any(
+            name != variable.group(1) and re.search(rf"\b{re.escape(name)}\b", header)
+            for name in loop_variables
+        ):
+            return None
     aliases = {match.group(1): match.group(2) for match in _ALIAS.finditer(context)}
     for reduction in _REDUCTION.finditer(body):
         lhs = reduction.group("lhs").strip()
         rhs = reduction.group("rhs")
-        if _CALL.search(rhs):
+        if not _pure_product(rhs, aliases):
             continue
         lhs_dependencies = _dependencies(lhs, loop_variables, aliases)
         rhs_dependencies = _dependencies(rhs, loop_variables, aliases)
@@ -376,7 +411,7 @@ def audit_text(
 
     if minimum_depth < 2:
         raise ValueError("minimum_depth must be at least two")
-    _, loops = _loop_spans(text)
+    clean, loops = _loop_spans(text)
     leaves = [
         loop
         for loop in loops
@@ -408,8 +443,8 @@ def audit_text(
             for loop in chain
             if loop.variable is not None and loop.constant_extent is None
         )
-        body = text[inner.body_start : inner.body_end]
-        context = text[chain[-minimum_depth].start : inner.body_end]
+        body = clean[inner.body_start : inner.body_end]
+        context = clean[chain[-minimum_depth].start : inner.body_end]
         classification, recommendation, lhs = _classify_high_order(
             body,
             context,

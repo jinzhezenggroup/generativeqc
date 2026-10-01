@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from tools.audit_native_complexity import (
     DEFAULT_EXCLUDES,
     audit_text,
@@ -142,3 +144,62 @@ def test_production_has_no_avoidable_rank2_quartic_scalar_reduction() -> None:
         "production source reintroduced avoidable high-order rank-2 contractions: "
         + ", ".join(f"{item.path}:{item.line}" for item in candidates)
     )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        (
+            "// out[p*n+q] += a[p*n+k]*b[k*n+l]*c[l*n+q];\n"
+            "out[p*n+q] += a[((p*n+q)*n+k)*n+l];"
+        ),
+        ("out[p*n+q] += a[p*n+k]*b[k*n+l]*c[l*n+q] / (1.0 + d[p*n+k] + d[l*n+q]);"),
+        (
+            "const auto nonlinear = std::exp(a[p*n+k]);\n"
+            "out[p*n+q] += nonlinear*b[k*n+l]*c[l*n+q];"
+        ),
+    ],
+    ids=["commented-example", "coupled-denominator", "opaque-alias"],
+)
+def test_ambiguous_algebra_remains_report_only(body: str) -> None:
+    source = (
+        "void f(size_t n, double* out, double* a, double* b, double* c, double* d) {\n"
+        "for (size_t p=0;p<n;++p) for(size_t q=0;q<n;++q) "
+        "for(size_t k=0;k<n;++k) for(size_t l=0;l<n;++l) {\n" + body + "\n}}"
+    )
+    findings = audit_text(source, path="ambiguous.cpp")
+    assert len(findings) == 1
+    assert findings[0].classification != "matrix-chain-candidate"
+
+
+def test_audit_preserves_pure_product_alias_detection() -> None:
+    source = """
+void f(size_t n, double* out, double* a, double* b, double* c) {
+  for (size_t p=0;p<n;++p) for(size_t q=0;q<n;++q)
+    for(size_t k=0;k<n;++k) for(size_t l=0;l<n;++l) {
+      const auto product = a[p*n+k] * b[k*n+l];
+      out[p*n+q] += product * c[l*n+q];
+    }
+}
+"""
+    assert audit_text(source)[0].classification == "matrix-chain-candidate"
+
+
+@pytest.mark.parametrize(
+    "domain,statement",
+    [
+        ("0", "if (p + q > k + l) out[p*n+q] += a[p*n+k]*b[k*n+l]*c[l*n+q];"),
+        ("p + q", "out[p*n+q] += a[p*n+k]*b[k*n+l]*c[l*n+q];"),
+    ],
+)
+def test_conditional_or_coupled_domain_is_not_ci_blocking(
+    domain: str, statement: str
+) -> None:
+    source = (
+        "void f(size_t n, double* out, double* a, double* b, double* c) {"
+        "for(size_t p=0;p<n;++p) for(size_t q=0;q<n;++q) "
+        + f"for(size_t k={domain};k<n;++k) for(size_t l=0;l<n;++l) {{"
+        + statement
+        + "}}"
+    )
+    assert audit_text(source)[0].classification != "matrix-chain-candidate"
