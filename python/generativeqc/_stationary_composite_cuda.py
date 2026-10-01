@@ -208,10 +208,13 @@ class PreparedCompositeStationaryCudaGradient:
             raise ValueError(
                 "composite stationary CUDA stationary shape exceeds its bounded domain"
             )
-        if any(shell.angular_momentum > 2 for shell in basis.shells):
+        if any(shell.angular_momentum > 3 for shell in basis.shells):
             raise NotImplementedError(
-                "composite stationary CUDA forces currently qualify s/p/d AOs"
+                "composite stationary CUDA forces currently qualify through-f AOs"
             )
+        integral_derivatives = not any(
+            shell.angular_momentum > 2 for shell in basis.shells
+        )
         device = int(source.metadata[12])
         plan = _plan_for_state(state)
         external_sources = stationary_external_provider_sources(plan)
@@ -322,6 +325,7 @@ class PreparedCompositeStationaryCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        integral_derivatives=integral_derivatives,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -341,6 +345,7 @@ class PreparedCompositeStationaryCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        integral_derivatives=integral_derivatives,
                         page_work_budget=1,
                     )
                 )
