@@ -41,6 +41,7 @@ from generativeqc_compiler.method.stationary_feature_lease import (
     plan_stationary_feature_leases,
 )
 from generativeqc_compiler.method.stationary_gradient import (
+    SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
@@ -66,12 +67,14 @@ _COMPOSITE_EXTERNAL_SOURCES = (
 
 def _plan_for_state(state: typing.Any) -> StationaryGradientPlan:
     source = state._source
+    point_model = (
+        source._batch._calculator._ks_options.scf_domain
+        if source.nonlocal_density_policy == MOLECULAR_VV10_DENSITY_POLICY
+        else SCF_POINT_MODEL
+    )
     return StationaryGradientPlan(
         source.method_ir,
-        StationaryMeanField(
-            source._batch._calculator._ks_options.scf_domain,
-            hamiltonian=source.hamiltonian,
-        ),
+        StationaryMeanField(point_model, hamiltonian=source.hamiltonian),
     )
 
 
