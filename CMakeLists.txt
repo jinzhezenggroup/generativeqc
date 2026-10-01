@@ -357,6 +357,19 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
                          PASS_REGULAR_EXPRESSION "gfn2-xtb")
+    add_test(NAME generativeqc_cli_profile_clear
+             COMMAND ${CMAKE_COMMAND} -E env
+                     "GENERATIVEQC_PROFILE_CACHE=${CMAKE_CURRENT_BINARY_DIR}/cli-profile-cache"
+                     $<TARGET_FILE:generativeqc_cli> profile clear)
+    set_tests_properties(generativeqc_cli_profile_clear PROPERTIES
+                         PASS_REGULAR_EXPRESSION "Local profiles deactivated")
+    add_test(NAME generativeqc_cli_profile_show
+             COMMAND ${CMAKE_COMMAND} -E env
+                     "GENERATIVEQC_PROFILE_CACHE=${CMAKE_CURRENT_BINARY_DIR}/cli-profile-cache"
+                     $<TARGET_FILE:generativeqc_cli> profile show)
+    set_tests_properties(generativeqc_cli_profile_show PROPERTIES
+                         DEPENDS generativeqc_cli_profile_clear
+                         PASS_REGULAR_EXPRESSION "\"active\"")
     if(GENERATIVEQC_XTB_CPU_LINALG_LIBRARY OR GENERATIVEQC_BUNDLE_XTB_OPENBLAS)
       add_test(NAME generativeqc_cli_gfn2_cpu
                COMMAND generativeqc_cli run
