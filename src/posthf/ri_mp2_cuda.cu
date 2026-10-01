@@ -13,6 +13,7 @@
 
 #include "posthf/capacity.hpp"
 #include "posthf/mp2_schedule_generated.hpp"
+#include "mp2/mp2_pair_energy.cuh"
 #include "posthf/ri_mp2_cuda.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
@@ -96,11 +97,12 @@ __global__ void reduce_ri_mp2_block(const double* g, const double* exchange, std
     const double direct_value = direct[a + a_count * b];
     const double exchange_value =
         same_virtual_block ? direct[b + b_count * a] : swapped[b + b_count * a];
-    const double denominator = orbital_energies[i] + orbital_energies[j] -
-                               orbital_energies[no + a_begin + a] -
-                               orbital_energies[no + b_begin + b];
-    const double os_value = direct_value * direct_value / denominator;
-    const double ss_value = direct_value * (direct_value - exchange_value) / denominator;
+    double os_value = 0.0;
+    double ss_value = 0.0;
+    (void)generated::ri_mp2_pair_energy(
+        direct_value, exchange_value, orbital_energies[i], orbital_energies[j],
+        orbital_energies[no + a_begin + a], orbital_energies[no + b_begin + b], os_value,
+        ss_value);
     const double os_adjusted = os_value - os_correction;
     const double os_next = os + os_adjusted;
     os_correction = (os_next - os) - os_adjusted;
