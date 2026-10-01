@@ -83,6 +83,7 @@ def test_stationary_cuda_component_tasks_preserve_public_ao_indices_and_weights(
 
     _, aos, expansions, requests = _layout(_d_shell_basis())
     owner = object.__new__(_CudaSources)
+    owner.integral_derivatives = True
     owner.aos = aos
     owner.expansions = expansions
     owner.component_mode = True
