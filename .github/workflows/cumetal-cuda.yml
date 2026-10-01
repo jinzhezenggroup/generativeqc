@@ -402,10 +402,22 @@ jobs:
             printf 'quit\n'
           } | "${GENERATIVEQC_CUMETAL_FP32_BENCH}" | tee "${log}"
 
-          grep -q '^READY device=' "${log}"
-          for workload in compute memory gather mixed; do
-            grep -Eq "^OK ${workload} [0-9]+([.][0-9]+)?$" "${log}"
-          done
+          .venv/bin/python - "${log}" <<'PY'
+          import math
+          import pathlib
+          import sys
+
+          lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
+          assert any(line.startswith("READY device=") for line in lines), lines
+          samples = {}
+          for line in lines:
+              fields = line.split()
+              if len(fields) == 3 and fields[0] == "OK":
+                  samples[fields[1]] = float(fields[2])
+          expected = {"compute", "memory", "gather", "mixed"}
+          assert samples.keys() >= expected, samples
+          assert all(math.isfinite(samples[name]) and samples[name] > 0.0 for name in expected), samples
+          PY
 
       - name: Run CodSpeed FP32 CuMetal proxy suite
         id: codspeed
