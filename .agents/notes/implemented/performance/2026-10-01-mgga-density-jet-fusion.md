@@ -1,6 +1,6 @@
 # Decision: fuse meta-GGA density products across AO jets
 
-Status: implemented
+Status: experimental
 Date: 2026-10-01
 
 ## Problem
@@ -13,10 +13,10 @@ r2SCAN and other rho/sigma/tau functionals pay this cost while LDA/GGA use one w
 
 ## Decision
 
-When the immutable native layout requests exactly four work jets, compute all four dot products
-under one density-row/tile owner.  The scalar kernel loads each symmetric density element once
-per `(spin, point, mu, nu)` and applies it to four AO jets.  The tiled kernel loads one shared
-density tile and walks the four AO panels against that retained tile.
+When the immutable native layout requests exactly four work jets, the scalar fallback can
+compute all four dot products under one density-row owner. The attempted tiled fusion remains
+in source for measured crossover work, but production retains the prior tiled schedule after
+RTX 5090 qualification found a 2.92x kernel regression in the 24-AO regime.
 
 The one-work-jet LDA/GGA path and the generic non-four-jet fallback remain unchanged.  No new
 workspace, host transfer, functional-name dispatch, or scientific expression is introduced.
@@ -45,9 +45,9 @@ workspace, host transfer, functional-name dispatch, or scientific expression is 
 
 ## Evidence
 
-Structural regression coverage requires both fused and generic kernels, requires the
-`work_jets == 4` selection boundary, and pins the fused tiled z-domain to spins rather than
-spin-times-jet.
+Structural regression coverage retains both fused and generic kernels while requiring the
+production tiled launch to keep the qualified spin-times-jet z-domain. The scalar fused
+implementation remains a bounded candidate outside the tiled schedule.
 
 For one meta-GGA density-product output tuple, the conceptual symmetric density load is reused
 across four AO jets instead of repeated four times.  AO loads, four dot products, work writes,
@@ -79,6 +79,19 @@ shape-specific schedule rather than relying on an unmeasured static heuristic.
 - #168
 - `python/generativeqc_compiler/dft/ao_cuda.py`
 - `python/generativeqc_compiler/dft/xc_contraction_cuda.py`
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol
+
+
+## 2026-10-02 qualification follow-up
+
+Matched RTX 5090 evidence for PR head `26fd7f3` measured the fused tiled density
+kernel at about 2.92x the baseline in the 24-AO r2SCAN RKS case, with the launch
+domain shrinking from 128 to 32 blocks. Complete warm endpoints showed no
+meaningful speedup. Production therefore retains the previous tiled schedule;
+no unmeasured AO-count threshold is introduced. The fused tiled implementation
+is retained only as an experimental candidate for a future measured crossover.
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
