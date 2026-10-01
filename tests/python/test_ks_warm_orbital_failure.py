@@ -68,8 +68,14 @@ struct Owner {
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   double warm_energy = std::numeric_limits<double>::infinity();
   std::size_t elements = 8;
-  std::uint64_t final_generation = 0, generation = 7;
-  struct { bool converged = false; double energy = 0.0; } output;
+  std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
+  struct {
+    bool converged = false;
+    double energy = 0.0;
+    struct {
+      std::uint64_t returned_solve_epoch = 0, returned_state_generation = 0;
+    } precision_work;
+  } output;
   struct {
     std::uint64_t warm_orbital_frames_retained = 0, warm_orbital_frame_invalidations = 0;
   } movement;
@@ -157,6 +163,8 @@ int main(int argc, char** argv) {
     assert(owner.warm_ready && owner.warm[0] == 10.0);
     assert(owner.warm_orbitals_ready == initially_ready);
     assert(owner.final_state_ready && owner.final_generation == owner.generation);
+    assert(owner.output.precision_work.returned_solve_epoch == owner.solve_epoch);
+    assert(owner.output.precision_work.returned_state_generation == owner.final_generation);
   } else {
     assert(owner.warm_orbitals_ready && owner.movement.warm_orbital_frames_retained == 1);
     for (std::size_t i = 0; i < owner.elements; ++i)

@@ -913,6 +913,44 @@ class Calculator:
                 supported_properties=self._capabilities.supported_properties
                 | {"forces"},
             )
+        second_order_basis = (
+            self._basis is not None
+            and not basis_has_ecp
+            and (
+                isinstance(self._basis, str)
+                or (
+                    isinstance(self._basis, BasisSet)
+                    and all(
+                        shell.angular_momentum <= 3
+                        for element in self._basis.elements
+                        for shell in element.shells
+                    )
+                )
+                or (
+                    not isinstance(self._basis, BasisSet)
+                    and not isinstance(self._basis, str)
+                    and all(shell.angular_momentum <= 3 for shell in self._basis)
+                )
+            )
+        )
+        public_rks_second_order = (
+            self._device_name == "cpu"
+            and self._method_name in ("lda-rks", "pbe-rks")
+            and density_fitting_mode == _native.DENSITY_FITTING_NONE
+            and self._precision_mode == _native.PRECISION_FP64
+            and self._representation_name == "cartesian"
+            and self._automatic_libxc_name is None
+            and self._dispersion_method_ir is None
+            and second_order_basis
+            and self._ks_options is not None
+            and self._ks_options.coefficients == (1.0, 1.0, 0.0)
+            and self._ks_options.execution_plan.nonlocal_correlation is None
+        )
+        if public_rks_second_order:
+            self._capabilities = replace(
+                self._capabilities,
+                supported_second_order=frozenset(("hvp", "hessian")),
+            )
         if self._method in _COUPLED_CLUSTER_METHODS:
             if density_fitting_mode != _native.DENSITY_FITTING_NONE:
                 raise NotImplementedError(
@@ -956,6 +994,11 @@ class Calculator:
     def capabilities(self) -> MethodCapabilities:
         """Report capabilities for the selected backend/basis execution context."""
         return self._capabilities
+
+    @property
+    def second_order_capabilities(self) -> frozenset[str]:
+        """Qualified public second-order endpoints for this execution context."""
+        return self._capabilities.supported_second_order
 
     @property
     def method_ir(self) -> typing.Any:
@@ -1095,6 +1138,18 @@ class Calculator:
                 provenance.operator_work_counters_valid
             ),
         }
+
+    def _precision_report(
+        self, calculation: ctypes.c_void_p, index: int | None = None
+    ) -> dict | None:
+        """Expose aggregate provenance plus execution-owned detailed work."""
+
+        from ._precision_work import merge_precision_work, query_precision_work
+
+        return merge_precision_work(
+            self._precision_provenance(calculation, index),
+            query_precision_work(self._library, calculation, index=index),
+        )
 
     def _incremental_direct_jk_diagnostic(
         self, calculation: ctypes.c_void_p, index: int | None = None
@@ -1834,6 +1889,150 @@ class Calculator:
         ) as batch:
             return batch.execute(strict=strict)
 
+    def _checked_rks_second_order_atoms(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        multiplicity: int,
+        endpoint: str,
+    ) -> tuple[Atom, ...]:
+        if endpoint not in self._capabilities.supported_second_order:
+            raise NotImplementedError(
+                f"method {self._method_name!r} does not expose public {endpoint}; "
+                "the qualified DFT second-order domain is CPU direct all-electron "
+                "Cartesian FP64 closed-shell LDA/PBE RKS"
+            )
+        if multiplicity != 1:
+            raise NotImplementedError(
+                "public DFT second-order execution is restricted to closed-shell "
+                "RKS multiplicity=1"
+            )
+        native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
+        if not native_atoms:
+            raise ValueError("at least one atom is required")
+        return native_atoms
+
+    def _run_public_rks_second_order(
+        self,
+        atoms: tuple[Atom, ...],
+        *,
+        charge: int,
+        multiplicity: int,
+        operation: typing.Callable[[typing.Any], typing.Any],
+    ) -> typing.Any:
+        from generativeqc_compiler.dft import NativeAO
+
+        from .rks_response import NativeRKSResponse
+
+        with self.prepare_batch(
+            [atoms],
+            charges=[charge],
+            multiplicities=[multiplicity],
+            warm_start=False,
+        ) as batch:
+            batch.execute(strict=True, properties=("energy",))
+            with (
+                NativeAO(
+                    atoms,
+                    basis=self._basis,
+                    representation=self._representation_name,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                ) as basis,
+                NativeRKSResponse.from_native(batch, basis) as operator,
+            ):
+                return operation(operator)
+
+    def hessian_vector_product(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        direction: typing.Any,
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        cache: typing.Any = ".artifacts",
+        integral_budget_bytes: int = 64 << 20,
+        solver_options: typing.Any = None,
+    ) -> typing.Any:
+        """Compute a bounded analytic Cartesian HVP for qualified LDA/PBE RKS.
+
+        The public domain is CPU, direct, all-electron, Cartesian, strict-FP64,
+        closed-shell LDA/PBE RKS. Unsupported methods/backends fail before SCF.
+        The integral budget bounds generated second-order integral work;
+        response/provider diagnostics remain separately reported.
+        """
+        from .rks_hessian import rks_hvp
+        from .rks_hessian_integrals import checked_direction
+
+        native_atoms = self._checked_rks_second_order_atoms(
+            atoms, multiplicity=multiplicity, endpoint="hvp"
+        )
+        vector = checked_direction(direction, len(native_atoms))
+        return self._run_public_rks_second_order(
+            native_atoms,
+            charge=charge,
+            multiplicity=multiplicity,
+            operation=lambda operator: rks_hvp(
+                operator,
+                vector,
+                cache=cache,
+                integral_budget_bytes=integral_budget_bytes,
+                solver_options=solver_options,
+                _public_calculator_endpoint=True,
+            ),
+        )
+
+    def hessian(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        block_size: int | None = None,
+        cache: typing.Any = ".artifacts",
+        strategy: str = "recycled",
+        output_budget_bytes: int = 64 << 20,
+        integral_budget_bytes: int = 64 << 20,
+        solver_options: typing.Any = None,
+    ) -> typing.Any:
+        """Assemble a raw bounded analytic Cartesian Hessian for LDA/PBE RKS.
+
+        The matrix is never post-hoc symmetrized. The output budget must hold
+        both the dense matrix and immutable publication; integral/response
+        resources retain their independently checked contracts.
+        """
+        from .rks_hessian import rks_hessian
+
+        native_atoms = self._checked_rks_second_order_atoms(
+            atoms, multiplicity=multiplicity, endpoint="hessian"
+        )
+        if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
+            raise ValueError("output_budget_bytes must be a positive int64 byte count")
+        coordinates = 3 * len(native_atoms)
+        output_peak_bound = (
+            2 * coordinates * coordinates * np.dtype(np.float64).itemsize
+        )
+        if output_peak_bound > output_budget_bytes:
+            raise ValueError(
+                "full RKS Hessian output and immutable publication exceed "
+                "output_budget_bytes"
+            )
+        return self._run_public_rks_second_order(
+            native_atoms,
+            charge=charge,
+            multiplicity=multiplicity,
+            operation=lambda operator: rks_hessian(
+                operator,
+                block_size=block_size,
+                cache=cache,
+                strategy=strategy,
+                output_budget_bytes=output_budget_bytes,
+                integral_budget_bytes=integral_budget_bytes,
+                solver_options=solver_options,
+                _public_calculator_endpoint=True,
+            ),
+        )
+
     def singlepoint(
         self,
         atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
@@ -2095,7 +2294,7 @@ class Calculator:
                 density_rms=result_descriptor.density_rms,
                 executed_backend=backend,
                 resource_diagnostics=resource_diagnostics,
-                precision=self._precision_provenance(calculation),
+                precision=self._precision_report(calculation),
                 incremental_direct_jk=self._incremental_direct_jk_diagnostic(
                     calculation
                 ),

@@ -93,13 +93,14 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         assert (pointer, stride, offset) == (4096, 1, 0)
 
     parts = {
-        name: np.zeros((1, 3)) for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
+        name: np.zeros((1, 3))
+        for name in ("xc_ao", "xc_grid", "xc_weight", "overlap_pulay", "nuclear")
     }
     sink = SimpleNamespace(
         geometry_molecular_resident_weights=geometry,
         geometry_external_device_molecular_resident_weights=nonlocal_geometry,
         natom=1,
-        finish=lambda: parts,
+        finish_span=lambda names: {name: parts[name] for name in names},
     )
     state = SimpleNamespace(
         grid=SimpleNamespace(

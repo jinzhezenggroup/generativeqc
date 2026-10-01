@@ -29,6 +29,47 @@ development directions are listed in the
 [implementation roadmap](../maintainer/roadmap.md), which does not promise
 release dates or a fixed implementation order.
 
+## CPU semilocal RKS Hessian and HVP
+
+The Python `Calculator` exposes analytic Cartesian second-order derivatives for
+the qualified **CPU direct all-electron strict-FP64 closed-shell LDA/PBE RKS**
+domain. This capability is separate from `singlepoint(properties=...)` and is
+reported by `calculator.capabilities.supported_second_order`.
+
+```python
+from generativeqc import Calculator, GridSpec, KsOptions
+
+atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+calc = Calculator(
+    method="pbe-rks",
+    basis="sto-3g",
+    device="cpu",
+    precision="fp64",
+    ks_options=KsOptions(grid=GridSpec()),
+)
+
+hvp = calc.hessian_vector_product(
+    atoms,
+    [[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
+    integral_budget_bytes=64 << 20,
+)
+hessian = calc.hessian(
+    atoms,
+    integral_budget_bytes=64 << 20,
+    output_budget_bytes=64 << 20,
+)
+print(hvp.value, hessian.matrix)
+```
+
+The full Hessian is the **raw** analytic matrix; GenerativeQC does not hide
+missing terms by post-hoc symmetrization. `output_budget_bytes` covers the dense
+matrix plus immutable publication, while `integral_budget_bytes` bounds generated
+second-order integral work. Response/provider memory remains under its own
+reported bounds rather than being relabeled as one global peak-memory guarantee.
+
+CUDA, density fitting, ECP, real-spherical AOs, UKS, meta-GGA/r2SCAN,
+hybrid/range-separated and VV10 Hessians remain fail-closed.
+
 ## CUDA global-hybrid forces
 
 The Python `Calculator` exposes analytic forces for admitted all-electron

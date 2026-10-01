@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <stdexcept>
 
 #include "core/types.hpp"
 
@@ -16,6 +17,20 @@ namespace generativeqc::integrals {
  * layers.
  */
 enum class ElectronInteractionOperator { overlap, hcore, eri, metric, three_center };
+
+/** Caller-owned device destination for an optional zero-host-staging read.
+ *
+ * The source does not own or extend the lifetime of values/stream. A successful
+ * read_device() call only guarantees that work was enqueued in-order on this
+ * stream; the caller owns completion/publication. Opaque stream spelling keeps
+ * this method-neutral contract usable by CPU-only translation units.
+ */
+struct DeviceInteractionTarget {
+  int device{-1};
+  void* stream{};
+  double* values{};
+  std::size_t capacity{};
+};
 
 /** Read-only AO interaction source shared by mean-field and post-HF adapters.
  *
@@ -37,11 +52,42 @@ class ElectronInteractionSource {
    * resident value tensors merely because they are immutable or shared.
    */
   virtual std::size_t retained_numeric_bytes() const = 0;
+  /** Logical operator capability, independent of publication memory space. */
   virtual bool supports(Operator op) const noexcept = 0;
+
+  /** Existing sources are host-readable by default. Device-only adapters
+   * override this explicitly instead of making supports() lie about semantics.
+   */
+  virtual bool supports_host_read(Operator op) const noexcept { return supports(op); }
+
+  /** Optional device-resident value path. False means callers must use read().
+   * This capability never changes operator semantics or authorizes screening.
+   */
+  virtual bool supports_device_read(Operator op, int device) const noexcept {
+    (void)op;
+    (void)device;
+    return false;
+  }
 
   virtual void read(Operator op, const std::array<std::size_t, 4>& begin,
                     const std::array<std::size_t, 4>& count, double* out,
                     std::size_t elements) const = 0;
+
+  /** Enqueue one exact row-major tile directly into caller-owned device storage.
+   * Implementations must validate the same bounds/operator contract as read(),
+   * write exactly elements values, and use target.stream on target.device.
+   * No synchronization or host publication is implied.
+   */
+  virtual void read_device(Operator op, const std::array<std::size_t, 4>& begin,
+                           const std::array<std::size_t, 4>& count, DeviceInteractionTarget target,
+                           std::size_t elements) const {
+    (void)op;
+    (void)begin;
+    (void)count;
+    (void)target;
+    (void)elements;
+    throw std::invalid_argument("interaction source has no device-read capability");
+  }
 };
 
 }  // namespace generativeqc::integrals

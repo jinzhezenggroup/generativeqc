@@ -172,6 +172,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "semilocal_force_predicate_sha256": (
             "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
         ),
+        "global_hybrid_force_predicate_sha256": (
+            "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+        ),
         "force_capability_promotion_sha256": (
             "3ea6ef6ce2c0d8ea5849161ef4ccd706f987261e2ceacdd13c7cfb185525d2d8"
         ),
@@ -274,7 +277,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "cc3cd127b107b05984761fa27130c930d8fa6d8b8e00f387a706265954bf0588"
+            "20b479949538cd216c5d914aae2787a44b9f5c36def2e284129aff8a46464a4b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -294,8 +297,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "geometry_sha256": (
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
-        "sources_owner_sha256": (
-            "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
+        "finish_span_sha256": (
+            "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -342,8 +345,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_metrics_sha256": (
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
-        "native_header_sha256": (
-            "29e6eb566b8b3c9f41339b3e896216d2ebf481a92810e18bbd77778d56de86d0"
+        "native_finish_span_sha256": (
+            "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -458,26 +461,44 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     ]
 
 
-def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
+def test_report_covers_every_required_fp64_force_row_and_aot_route(
     tmp_path: Path,
 ) -> None:
     result = report()
     rows = result["rows"]
 
-    assert len(rows) == 22
+    assert len(rows) == 35
     assert result["summary"] == {
+        "required_fp64_force_rows": 35,
         "required_semilocal_fp64_force_rows": 22,
-        "statically_blocked_rows": 12,
-        "rows_passing_static_stationary_caps": 10,
+        "statically_blocked_rows": 19,
+        "rows_passing_static_stationary_caps": 16,
         "scientific_qualification": "NOT_RUN",
     }
-    assert {row["method"] for row in rows} == {"lda", "pbe", "r2scan"}
+    assert {row["method"] for row in rows} == {
+        "lda",
+        "pbe",
+        "r2scan",
+        "pbe0",
+        "b3lyp",
+    }
     assert {row["product"] for row in rows} == {"energy+analytic_forces"}
     assert all(row["required"] is True for row in rows)
     assert all(row["public_capability"]["forces"] is True for row in rows)
     assert {
         row["public_capability"]["selector_contract"]["selector"] for row in rows
-    } == set(qualify_capacity.SEMILOCAL_ABI_IDS)
+    } == {
+        "lda-rks",
+        "lda-uks",
+        "pbe-rks",
+        "pbe-uks",
+        "r2scan-rks",
+        "r2scan-uks",
+        "pbe0-rks",
+        "pbe0-uks",
+        "b3lyp-rks",
+        "b3lyp-uks",
+    }
     assert all(
         row["public_capability"]["selector_contract"]["stationary_plan_identity"]
         == row["stationary_plan"]["identity"]
@@ -499,6 +520,10 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
             "pbe_uks",
             "r2scan_rks",
             "r2scan_uks",
+            "pbe0_rks",
+            "pbe0_uks",
+            "b3lyp_rks",
+            "b3lyp_uks",
         ],
         "component_domain": "spd",
     }
@@ -519,6 +544,40 @@ def test_report_covers_every_required_semilocal_fp64_force_row_and_aot_route(
         "overlap_pulay",
         "nuclear",
     ]
+
+    b3lyp_uks = next(
+        row for row in rows if row["id"] == "b3lyp/uks/oh/fp64_energy_forces"
+    )
+    assert b3lyp_uks["packaged_aot"]["name"] == "b3lyp_uks_spd"
+    assert "exact_exchange" in b3lyp_uks["stationary_plan"]["source_names"]
+    b3lyp_contract = b3lyp_uks["public_capability"]["selector_contract"]
+    assert b3lyp_contract["registry_selector"] == "pbe-uks"
+    assert b3lyp_contract["coefficients"] == [1.0, 1.0, -0.2]
+    assert b3lyp_contract["exchange"] == [
+        {
+            "operator": "full-range",
+            "coefficient": "1/5",
+            "omega": "0",
+            "fock_coefficient": "-1/5",
+        }
+    ]
+
+    pbe0_rks = next(
+        row for row in rows if row["id"] == "pbe0/rks/water/fp64_energy_forces"
+    )
+    assert pbe0_rks["packaged_aot"]["name"] == "pbe0_rks_spd"
+    pbe0_contract = pbe0_rks["public_capability"]["selector_contract"]
+    assert pbe0_contract["registry_selector"] == "pbe-rks"
+    assert pbe0_contract["coefficients"] == [0.75, 1.0, -0.125]
+
+    b3lyp_benzene = next(
+        row for row in rows if row["id"] == "b3lyp/rks/benzene/fp64_energy_forces"
+    )
+    assert b3lyp_benzene["admission"]["outcome"] == "blocked"
+    assert b3lyp_benzene["admission"]["first_blocker"]["gate"] == (
+        "grid_pair_work_budget"
+    )
+
     water32 = next(
         row for row in rows if row["id"] == "pbe/rks/water32/fp64_energy_forces"
     )
@@ -556,6 +615,7 @@ def test_each_row_uses_its_own_method_memory_admission(
         functional: int,
         spin: str,
         limits: dict,
+        plan: object | None = None,
     ) -> tuple[dict, object]:
         memory, plan = original(
             basis,
@@ -563,6 +623,7 @@ def test_each_row_uses_its_own_method_memory_admission(
             functional=functional,
             spin=spin,
             limits=limits,
+            plan=plan,
         )
         memory = dict(memory)
         if functional == qualify_capacity.SEMILOCAL_FUNCTIONALS["pbe"]:
@@ -604,6 +665,35 @@ def test_public_selector_contract_rejects_changed_semilocal_coefficients(
             expected_functional=1,
             expected_spin="unpolarized",
             stationary_plan=plan,
+        )
+
+
+def test_public_selector_contract_rejects_changed_hybrid_coefficients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = qualify_capacity.resolve_ks_options
+
+    def changed(selector: str, options: object | None = None) -> SimpleNamespace:
+        resolved = original(selector, options)
+        return SimpleNamespace(
+            coefficients=(1.0, 1.0, -0.125),
+            execution_plan=resolved.execution_plan,
+        )
+
+    monkeypatch.setattr(qualify_capacity, "resolve_ks_options", changed)
+    method_ir, _ = qualify_capacity.resolve_ks_method("b3lyp-rks")
+    plan = qualify_capacity.StationaryGradientPlan(
+        method_ir,
+        qualify_capacity.StationaryMeanField(qualify_capacity.SCF_POINT_MODEL),
+    )
+
+    with pytest.raises(RuntimeError, match="scientific coefficients"):
+        qualify_capacity._public_selector_contract(
+            "b3lyp-rks",
+            expected_functional=3,
+            expected_spin="unpolarized",
+            stationary_plan=plan,
+            grid_spec=qualify_capacity.GridSpec(),
         )
 
 
@@ -1097,7 +1187,7 @@ def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
         qualify_capacity._source_limits(tmp_path)
 
 
-def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
+def test_native_finish_span_fails_closed_on_contract_drift(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
@@ -1106,13 +1196,20 @@ def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "constexpr size_t workers = 32"
-    assert native.count(old) == 1
+    marker = "int stationary_finish_span("
+    start = native.index(marker)
+    old = "p->downloads += count * 8;"
+    position = native.index(old, start)
     target.write_text(
-        native.replace(old, "constexpr size_t workers = 64", 1), encoding="utf-8"
+        native[:position]
+        + "p->downloads += count * 16;"
+        + native[position + len(old) :],
+        encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="native header contract changed"):
+    with pytest.raises(
+        RuntimeError, match="native_finish_span_sha256 contract changed"
+    ):
         qualify_capacity._source_limits(tmp_path)
 
 

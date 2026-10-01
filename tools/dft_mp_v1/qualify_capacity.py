@@ -113,6 +113,9 @@ from generativeqc.basis import BasisSet
 from generativeqc.basis_capabilities import resolved_basis_metadata
 from generativeqc.calculator import _basis_pack, _named_basis_record
 from generativeqc.ks import (
+    KsOptions,
+    ks_coefficients,
+    native_dft_carrier,
     native_xc_functional_code,
     resolve_ks_method,
     resolve_ks_options,
@@ -126,7 +129,7 @@ from generativeqc_compiler.method.stationary_cuda import (
     _qualified_aot_plan,
     _stationary_aot_name,
     load_stationary_aot_artifact,
-    stationary_aot_contract_identity,
+    stationary_aot_profile_contract_identity,
     stationary_runtime_sources,
 )
 from generativeqc_compiler.method.stationary_gradient import (
@@ -145,6 +148,9 @@ _LOCAL_HELPERS = {
     "BasisSet": BasisSet,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
     "resolved_basis_metadata": resolved_basis_metadata,
+    "KsOptions": KsOptions,
+    "ks_coefficients": ks_coefficients,
+    "native_dft_carrier": native_dft_carrier,
     "native_xc_functional_code": native_xc_functional_code,
     "resolve_ks_method": resolve_ks_method,
     "resolve_ks_options": resolve_ks_options,
@@ -156,7 +162,7 @@ _LOCAL_HELPERS = {
     "plan_tiles": plan_tiles,
     "_qualified_aot_plan": _qualified_aot_plan,
     "load_stationary_aot_artifact": load_stationary_aot_artifact,
-    "stationary_aot_contract_identity": stationary_aot_contract_identity,
+    "stationary_aot_profile_contract_identity": stationary_aot_profile_contract_identity,
     "stationary_runtime_sources": stationary_runtime_sources,
     "StationaryGradientPlan": StationaryGradientPlan,
     "StationaryMeanField": StationaryMeanField,
@@ -199,6 +205,7 @@ _IMPORTED_LOCAL_MODULE_SOURCES = {
 
 SCHEMA = "generativeqc.dft-mp-v1.stationary-capacity.v1"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
+FP64_FORCE_METHODS = frozenset((*SEMILOCAL_FUNCTIONALS, "pbe0", "b3lyp"))
 SEMILOCAL_ABI_IDS = {
     "lda-rks": 6,
     "pbe-rks": 7,
@@ -247,6 +254,9 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
     "4c3d56e2bcc1ba02e48d6f2bd063b52609e5bc31e48dff2ccb47a7bcb525888d"
 )
+PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
+    "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+)
 PYTHON_GRID_CONTRACT_SHA256 = (
     "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
 )
@@ -275,7 +285,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "cc3cd127b107b05984761fa27130c930d8fa6d8b8e00f387a706265954bf0588"
+    "20b479949538cd216c5d914aae2787a44b9f5c36def2e284129aff8a46464a4b"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
@@ -292,8 +302,8 @@ STATIONARY_PAGE_NUCLEAR_CONTRACT_SHA256 = (
 STATIONARY_PAGE_GEOMETRY_CONTRACT_SHA256 = (
     "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
 )
-STATIONARY_SOURCES_OWNER_CONTRACT_SHA256 = (
-    "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
+STATIONARY_PAGE_FINISH_SPAN_CONTRACT_SHA256 = (
+    "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
 )
 STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
     "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -349,8 +359,8 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
     "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
 )
-NATIVE_STATIONARY_HEADER_CONTRACT_SHA256 = (
-    "29e6eb566b8b3c9f41339b3e896216d2ebf481a92810e18bbd77778d56de86d0"
+NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
+    "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
@@ -653,6 +663,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "geometry",
             STATIONARY_PAGE_GEOMETRY_CONTRACT_SHA256,
         ),
+        "finish_span": (
+            "_CudaSources",
+            "finish_span",
+            STATIONARY_PAGE_FINISH_SPAN_CONTRACT_SHA256,
+        ),
         "executor": (
             "_BoundedStationaryTaskExecutor",
             "execute_pages",
@@ -677,13 +692,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} page contract changed")
         page_contract[f"{label}_sha256"] = digest
-    sources_owner = classes.get("_CudaSources")
-    if sources_owner is None:
-        raise RuntimeError("stationary CUDA source owner is missing")
-    sources_owner_digest = _source_node_sha256(source, sources_owner)
-    if sources_owner_digest != STATIONARY_SOURCES_OWNER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA source owner contract changed")
-    page_contract["sources_owner_sha256"] = sources_owner_digest
     component_modes = [
         node
         for node in tree.body
@@ -739,16 +747,16 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "int stationary_metrics(",
             NATIVE_STATIONARY_METRICS_CONTRACT_SHA256,
         ),
+        "native_finish_span_sha256": (
+            "int stationary_finish_span(",
+            NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256,
+        ),
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
-    native_header_digest = _lf_sha256(native_source.encode())
-    if native_header_digest != NATIVE_STATIONARY_HEADER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA native header contract changed")
-    page_contract["native_header_sha256"] = native_header_digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
         raise RuntimeError("stationary CUDA component-label capacity changed")
     definition_nodes = {
@@ -1257,8 +1265,10 @@ def _method_resources(
     functional: int,
     spin: str,
     limits: dict[str, Any],
+    plan: Any | None = None,
 ) -> tuple[dict[str, Any], Any]:
-    plan = _qualified_aot_plan(functional, spin)
+    if plan is None:
+        plan = _qualified_aot_plan(functional, spin)
     source_names = stationary_runtime_sources(plan)
     tile_points = limits["tile_points"]
     primitive_tile = limits["primitive_tile"]
@@ -1443,7 +1453,18 @@ def _admission_record(failures: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _source_package_inventory(repository: Path) -> dict[str, Any]:
     cmake = (repository / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
-    names = ("lda_rks", "lda_uks", "pbe_rks", "pbe_uks", "r2scan_rks", "r2scan_uks")
+    names = (
+        "lda_rks",
+        "lda_uks",
+        "pbe_rks",
+        "pbe_uks",
+        "r2scan_rks",
+        "r2scan_uks",
+        "pbe0_rks",
+        "pbe0_uks",
+        "b3lyp_rks",
+        "b3lyp_uks",
+    )
     required = (
         "generativeqc_stationary_spd_primitives",
         'OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd"',
@@ -1502,6 +1523,15 @@ def _source_public_route(repository: Path) -> dict[str, str]:
             for target in node.targets
         )
     ]
+    hybrid_assignments = [
+        node
+        for node in ast.walk(constructors[0])
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "cuda_hybrid_force"
+            for target in node.targets
+        )
+    ]
     force_promotions = [
         node
         for node in constructors[0].body
@@ -1511,12 +1541,19 @@ def _source_public_route(repository: Path) -> dict[str, str]:
             for item in ast.walk(node.test)
         )
     ]
-    if len(semilocal_assignments) != 1 or len(force_promotions) != 1:
-        raise RuntimeError("public semilocal force capability owner is ambiguous")
+    if (
+        len(semilocal_assignments) != 1
+        or len(hybrid_assignments) != 1
+        or len(force_promotions) != 1
+    ):
+        raise RuntimeError("public CUDA force capability owner is ambiguous")
     semilocal_digest = _source_node_sha256(calculator, semilocal_assignments[0])
+    hybrid_digest = _source_node_sha256(calculator, hybrid_assignments[0])
     promotion_digest = _source_node_sha256(calculator, force_promotions[0])
     if semilocal_digest != PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256:
         raise RuntimeError("public semilocal force predicate changed")
+    if hybrid_digest != PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256:
+        raise RuntimeError("public global-hybrid force predicate changed")
     if promotion_digest != PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256:
         raise RuntimeError("public force capability promotion changed")
 
@@ -1540,6 +1577,7 @@ def _source_public_route(repository: Path) -> dict[str, str]:
         raise RuntimeError("public CUDA force route changed")
     return {
         "semilocal_force_predicate_sha256": semilocal_digest,
+        "global_hybrid_force_predicate_sha256": hybrid_digest,
         "force_capability_promotion_sha256": promotion_digest,
         "cuda_force_method_sha256": batch_digest,
     }
@@ -1694,25 +1732,38 @@ def _public_selector_contract(
     expected_functional: int,
     expected_spin: str,
     stationary_plan: Any,
+    grid_spec: GridSpec | None = None,
 ) -> dict[str, Any]:
     """Prove that a public selector resolves to the audited packaged plan."""
 
+    method_ir, functional = resolve_ks_method(selector)
+    expected_coefficients = ks_coefficients(method_ir)
+    hybrid = expected_coefficients[2] != 0.0
+    registry_selector = native_dft_carrier(selector) if hybrid else selector
     try:
-        expected_abi = SEMILOCAL_ABI_IDS[selector]
-        metadata = generated_methods.METHOD_METADATA[selector]
+        metadata = generated_methods.METHOD_METADATA[registry_selector]
+        expected_abi = int(metadata["abi_id"])
     except KeyError as error:
         raise RuntimeError(f"unrecognized frozen public selector {selector}") from error
-    method_ir, functional = resolve_ks_method(selector)
-    options = resolve_ks_options(selector)
+    if hybrid:
+        if grid_spec is None:
+            raise RuntimeError(
+                "global-hybrid selector contract requires the frozen grid"
+            )
+        options = resolve_ks_options(selector, KsOptions(grid=grid_spec))
+    else:
+        options = resolve_ks_options(selector)
     native_functional = int(native_xc_functional_code(selector))
     public_stationary = StationaryGradientPlan(
         method_ir,
         StationaryMeanField(SCF_POINT_MODEL),
     )
+    execution_plan = options.execution_plan
+    exchange = tuple(execution_plan.exchange)
     failures = []
     if metadata["family"] != "density_functional" or metadata["provider"] != "dft":
         failures.append("family/provider")
-    if metadata["abi_id"] != expected_abi:
+    if not hybrid and SEMILOCAL_ABI_IDS.get(selector) != expected_abi:
         failures.append("native ABI ID")
     if expected_abi not in generated_methods.NATIVE_DFT_METHOD_IDS:
         failures.append("native DFT eligibility")
@@ -1722,32 +1773,45 @@ def _public_selector_contract(
         failures.append("spin")
     if native_functional != expected_functional:
         failures.append("native functional-family lowering")
-    if options.coefficients != (1.0, 1.0, 0.0):
-        failures.append("semilocal coefficients")
+    if options.coefficients != expected_coefficients:
+        failures.append(
+            "scientific coefficients" if hybrid else "semilocal coefficients"
+        )
     if (
-        options.execution_plan.method.identity != method_ir.identity
-        or options.execution_plan.exchange
-        or options.execution_plan.nonlocal_correlation is not None
-        or options.execution_plan.post_scf
+        execution_plan.method.identity != method_ir.identity
+        or execution_plan.nonlocal_correlation is not None
+        or execution_plan.post_scf
     ):
+        failures.append("KS execution plan")
+    if hybrid:
+        if (
+            len(exchange) != 1
+            or exchange[0].operator != "full-range"
+            or float(exchange[0].fock_coefficient) != expected_coefficients[2]
+            or exchange[0].omega != 0
+        ):
+            failures.append("exact-exchange execution plan")
+    elif exchange:
         failures.append("KS execution plan")
     if public_stationary.identity != stationary_plan.identity:
         failures.append("stationary plan identity")
     if failures:
         raise RuntimeError(
-            f"public selector {selector} disagrees with packaged semilocal plan: "
+            f"public selector {selector} disagrees with packaged DFT plan: "
             + ", ".join(failures)
         )
     return {
         "selector": selector,
+        "registry_selector": registry_selector,
         "native_abi_id": expected_abi,
         "native_dft_eligible": True,
         "supports_batch": True,
         "native_functional_code": native_functional,
         "spin": expected_spin,
         "coefficients": list(options.coefficients),
+        "exchange": [term.semantic_payload() for term in exchange],
         "method_ir_identity": method_ir.identity,
-        "ks_execution_plan_identity": options.execution_plan.identity,
+        "ks_execution_plan_identity": execution_plan.identity,
         "stationary_plan_identity": public_stationary.identity,
     }
 
@@ -1865,7 +1929,7 @@ def _build_report(
         row
         for row in manifest["rows"]
         if row["required"]
-        and row["method"] in SEMILOCAL_FUNCTIONALS
+        and row["method"] in FP64_FORCE_METHODS
         and row["level"] == "fp64_energy_forces"
     ]
     rows_by_case: dict[str, list[dict[str, Any]]] = {}
@@ -1948,14 +2012,21 @@ def _build_report(
         method_plans = {}
         for row in rows_by_case.get(case_name, ()):
             spin = "unpolarized" if row["spin"] == "rks" else "polarized"
+            selector = f"{row['method']}-{row['spin']}"
             key = f"{row['method']}/{row['spin']}"
             if key not in method_memory:
+                method_ir, _ = resolve_ks_method(selector)
+                plan = StationaryGradientPlan(
+                    method_ir,
+                    StationaryMeanField(SCF_POINT_MODEL),
+                )
                 method_memory[key], method_plans[key] = _method_resources(
                     basis,
                     atom_count=shape["atom_count"],
-                    functional=SEMILOCAL_FUNCTIONALS[row["method"]],
+                    functional=int(native_xc_functional_code(selector)),
                     spin=spin,
                     limits=limits,
+                    plan=plan,
                 )
         admission_by_method_spin = {
             key: _admission_record(_case_failures(shape, requirements, memory, limits))
@@ -2004,16 +2075,17 @@ def _build_report(
             "record": record,
         }
 
-    artifact_cache: dict[tuple[int, str], dict[str, Any]] = {}
+    artifact_cache: dict[tuple[int, str, str], dict[str, Any]] = {}
     selector_cache: dict[str, dict[str, Any]] = {}
     rows = []
     for frozen_row in sorted(required_rows, key=lambda item: item["id"]):
         method = frozen_row["method"]
-        functional = SEMILOCAL_FUNCTIONALS[method]
         spin = "unpolarized" if frozen_row["spin"] == "rks" else "polarized"
+        selector = f"{method}-{'rks' if spin == 'unpolarized' else 'uks'}"
+        functional = int(native_xc_functional_code(selector))
         method_key = f"{method}/{frozen_row['spin']}"
         plan = case_work[frozen_row["case"]]["plans"][method_key]
-        aot_key = (functional, spin)
+        aot_key = (functional, spin, plan.identity)
         if aot_key not in artifact_cache:
             artifact_cache[aot_key] = _artifact_verification(
                 aot_directory,
@@ -2021,16 +2093,18 @@ def _build_report(
                 spin=spin,
                 plan=plan,
             )
-        selector = f"{method}-{'rks' if spin == 'unpolarized' else 'uks'}"
         if selector not in selector_cache:
             selector_cache[selector] = _public_selector_contract(
                 selector,
                 expected_functional=functional,
                 expected_spin=spin,
                 stationary_plan=plan,
+                grid_spec=grid_spec,
             )
         native_properties = list(
-            generated_methods.METHOD_METADATA[selector]["properties"]
+            generated_methods.METHOD_METADATA[
+                selector_cache[selector]["registry_selector"]
+            ]["properties"]
         )
         rows.append(
             {
@@ -2064,14 +2138,14 @@ def _build_report(
                 "public_capability": {
                     "forces": True,
                     "native_registry_properties": native_properties,
-                    "promotion": "python semilocal direct-CUDA stationary-force predicate",
+                    "promotion": "python direct-CUDA stationary-force predicate",
                     "owner": "python/generativeqc/calculator.py::Calculator.__init__",
                     "source_audited": True,
                     "selector_contract": selector_cache[selector],
                 },
                 "public_route": {
                     "scientific_runtime_compilation_required": False,
-                    "selection": "all-electron semilocal packaged stationary CUDA",
+                    "selection": "all-electron packaged stationary CUDA",
                     "owner": "python/generativeqc/batch.py::_public_dft_cuda_force",
                     "missing_aot_behavior": "fail closed; no NVCC fallback",
                     "source_audited": True,
@@ -2081,13 +2155,13 @@ def _build_report(
                         functional,
                         spin,
                         component_domain=QUALIFIED_SPD_COMPONENTS,
+                        plan=plan,
                     ),
                     "architecture": "sm_120",
                     "source_package_declared": True,
                     "source_owner": "cmake/GenerativeQCCuda.cmake",
-                    "contract_identity": stationary_aot_contract_identity(
-                        functional,
-                        spin=spin,
+                    "contract_identity": stationary_aot_profile_contract_identity(
+                        f"{method}_{'rks' if spin == 'unpolarized' else 'uks'}",
                         component_domain=QUALIFIED_SPD_COMPONENTS,
                     ),
                     "binary_verification": artifact_cache[aot_key],
@@ -2159,7 +2233,10 @@ def _build_report(
         "cases": cases,
         "rows": rows,
         "summary": {
-            "required_semilocal_fp64_force_rows": len(rows),
+            "required_fp64_force_rows": len(rows),
+            "required_semilocal_fp64_force_rows": sum(
+                row["method"] in SEMILOCAL_FUNCTIONALS for row in rows
+            ),
             "statically_blocked_rows": blocked,
             "rows_passing_static_stationary_caps": len(rows) - blocked,
             "scientific_qualification": "NOT_RUN",

@@ -531,6 +531,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.precision_work = std::move(native.precision_work);
   native.dft_diagnostic.fock_builds = native.fock_builds;
   native.dft_diagnostic.initial_density_used = native.initial_density_used;
   // Move the snapshot instead of retaining another max-iteration history.

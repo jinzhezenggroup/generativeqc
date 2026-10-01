@@ -277,6 +277,59 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
 
+  std::uint64_t* mixed_coulomb_work_counter() noexcept {
+    static_assert(kCudaKsChunkCapacity >= 2);
+    static_assert(sizeof(cuda_ks_detail::Scalars) >= sizeof(std::uint64_t));
+    static_assert(alignof(cuda_ks_detail::Scalars) >= alignof(std::uint64_t));
+    // AUTO is deliberately excluded from device_chunk_mode. The second scalar
+    // record is therefore dead for the whole AUTO trajectory and can hold the
+    // provider-owned recurrence counter without growing the numeric arena.
+    return reinterpret_cast<std::uint64_t*>(scalar_records + 1);
+  }
+
+  void record_fock_precision_work(std::uint64_t mixed_coulomb_recurrences) {
+    auto& work = output.precision_work;
+    const bool mixed = pending_mixed_coulomb || pending_mixed_density;
+    const auto phase = mixed ? scf::PrecisionWorkPhase::Scf
+                             : (mixed_precision_executed ? scf::PrecisionWorkPhase::Refinement
+                                                         : scf::PrecisionWorkPhase::Scf);
+    work.events.push_back(
+        {mixed ? scf::PrecisionWorkEventKind::MixedFock : scf::PrecisionWorkEventKind::StrictFock,
+         phase, static_cast<std::uint64_t>(work.events.size()), output.iterations, owner,
+         solve_epoch, generation});
+    if (!pending_mixed_coulomb || mixed_coulomb_recurrences == 0) return;
+
+    constexpr scf::PrecisionOperatorRecord signature{scf::PrecisionOperatorKind::CoulombRecurrence,
+                                                     scf::PrecisionDtype::Fp64,
+                                                     scf::PrecisionDtype::Fp32,
+                                                     scf::PrecisionDtype::Fp64,
+                                                     scf::PrecisionDtype::Fp64,
+                                                     scf::PrecisionArithmeticMode::Mixed,
+                                                     0};
+    auto found = std::find_if(work.operators.begin(), work.operators.end(), [&](const auto& item) {
+      return item.kind == signature.kind && item.storage == signature.storage &&
+             item.compute == signature.compute && item.accumulation == signature.accumulation &&
+             item.reduction == signature.reduction &&
+             item.arithmetic_mode == signature.arithmetic_mode;
+    });
+    if (found == work.operators.end()) {
+      auto record = signature;
+      record.count = mixed_coulomb_recurrences;
+      work.operators.push_back(record);
+    } else {
+      if (mixed_coulomb_recurrences > std::numeric_limits<std::uint64_t>::max() - found->count)
+        throw std::overflow_error("CUDA KS mixed Coulomb recurrence census overflow");
+      found->count += mixed_coulomb_recurrences;
+    }
+  }
+
+  void record_precision_retry() {
+    auto& work = output.precision_work;
+    work.events.push_back({scf::PrecisionWorkEventKind::Retry, scf::PrecisionWorkPhase::Retry,
+                           static_cast<std::uint64_t>(work.events.size()), output.iterations, owner,
+                           solve_epoch, generation});
+  }
+
   runtime::CompiledExecutionBinding device_chunk_binding() const {
     return {"cuda-ks-device-chunk-v1:" + std::to_string(n) + ":" + std::to_string(spins) + ":" +
                 std::to_string(functional) + ":" + std::to_string(history) + ":" +
@@ -706,6 +759,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     final_corrections = 0;
     refinement_iterations = 0;
     output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+    output.precision_work.owner_id = owner;
+    output.precision_work.operators.reserve(1);
     pending_iterations = 0;
     // The bounded device-control prototype is qualified only for strict-FP64
     // direct all-electron RKS. AUTO must stay on the legacy host-controlled
@@ -1136,7 +1191,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         jk_status = scf::enqueue_prepared_cuda_fock(
             provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
             has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error,
-            pending_mixed_coulomb, detail);
+            pending_mixed_coulomb, detail,
+            pending_mixed_coulomb ? mixed_coulomb_work_counter() : nullptr);
       }
       check(jk_status, detail);
       if (fitted_exchange) {
@@ -1233,9 +1289,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     current_device();
     if (!is_pending) throw std::logic_error("no pending CUDA KS iteration");
     cuda_ks_detail::Scalars physical{};
+    std::uint64_t mixed_coulomb_recurrences{};
     try {
       check(cudaMemcpyAsync(&physical, scalar_records, sizeof(physical), cudaMemcpyDeviceToHost,
                             stream));
+      if (pending_mixed_coulomb)
+        check(cudaMemcpyAsync(&mixed_coulomb_recurrences, mixed_coulomb_work_counter(),
+                              sizeof(mixed_coulomb_recurrences), cudaMemcpyDeviceToHost, stream));
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       cudaStreamSynchronize(stream);
@@ -1244,7 +1304,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       pending_iterations = 0;
       throw;
     }
-    movement.scalar_d2h_bytes += sizeof(physical);
+    movement.scalar_d2h_bytes +=
+        sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U);
     ++movement.synchronizations;
     ++movement.iteration_synchronizations;
     ++movement.iteration_chunks;
@@ -1253,6 +1314,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_iterations = 0;
     ++output.iterations;
     ++output.fock_builds;
+    if (pending_mixed_coulomb || pending_mixed_density)
+      ++output.precision.mixed_stage_fock_builds;
+    else
+      ++output.precision.strict_stage_fock_builds;
+    record_fock_precision_work(mixed_coulomb_recurrences);
     if (mixed_precision_executed && !pending_mixed_coulomb && !pending_mixed_density)
       ++refinement_iterations;
     output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
@@ -1282,6 +1348,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (pending_mixed_coulomb || pending_mixed_density) {
         // Any failed low-precision attempt retries the same density with the
         // strict target operator. Do not publish or cache the failed proposal.
+        ++output.precision.execution_retries;
+        record_precision_retry();
         strict_refinement = true;
         stabilize_occupations = false;
         final_closure = false;
@@ -1377,6 +1445,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (output.converged) {
         final_state_ready = true;
         final_generation = generation;
+        output.precision_work.returned_solve_epoch = solve_epoch;
+        output.precision_work.returned_state_generation = final_generation;
       }
     } catch (...) {
       cudaStreamSynchronize(stream);
