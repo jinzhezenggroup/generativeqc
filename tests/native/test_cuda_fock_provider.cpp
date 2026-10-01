@@ -837,6 +837,7 @@ void direct_providers(bool through_f_response) {
               !too_small,
           "nonfinite direct source geometry accepted");
       if (angular == 0 && representation == GENERATIVEQC_BASIS_CARTESIAN) {
+        prepared_interaction_source_device(first, ints.eri);
         direct_device_failures(plan.get(), packed_a);
         // Inputs are finite but deliberately outside the stable numerical
         // range. A failed bound must not silently screen the entire source.
