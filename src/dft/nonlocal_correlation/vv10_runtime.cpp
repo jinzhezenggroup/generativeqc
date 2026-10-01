@@ -172,13 +172,12 @@ std::unique_ptr<Vv10Plan> Vv10Plan::prepare(generativeqc_backend backend, int de
   }
 }
 
-generativeqc_status Vv10Plan::execute(std::span<const double> coordinates,
-                                      std::span<const double> weights,
-                                      std::span<const double> density,
-                                      std::span<const double> density_gradient, double& energy,
-                                      std::span<double> vrho, std::span<double> vsigma,
-                                      std::span<double> point_derivative,
-                                      std::span<double> weight_derivative, std::string& detail) {
+generativeqc_status Vv10Plan::execute(
+    std::span<const double> coordinates, std::span<const double> weights,
+    std::span<const double> density, std::span<const double> density_gradient, double& energy,
+    std::span<double> vrho, std::span<double> vsigma, std::span<double> point_derivative,
+    std::span<double> weight_derivative, std::string& detail, bool weighted_potential_only) {
+  last_execution_pair_evaluations_ = 0;
   detail.clear();
   const auto n = static_cast<std::size_t>(resources_.point_count);
   if (coordinates.size() != 3 * n || weights.size() != n || density.size() != n ||
@@ -236,6 +235,17 @@ generativeqc_status Vv10Plan::execute(std::span<const double> coordinates,
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 
+  // Skip only exact-zero quadrature work in the molecular weighted-potential
+  // consumer. Preserve raw zero-weight derivatives and all geometry consumers.
+  // The envelope ensures even omitted pair arithmetic and zero-row reductions
+  // would be finite; outside it, keep the original dense failure behavior.
+  // With |xyz| <= 1e6 and scales in [1e-12, 1e12], r^2 <= 1.2e13,
+  // |phi| < 1e36, and |dphi/domega| < 1.4e61. The remaining bounds,
+  // including the admitted uint32 point count, keep every sum below 1e120.
+  bool mask_zero_weights = weighted_potential_only && want_features && !want_geometry &&
+                           parameters_.variant == Vv10Variant::vv10 && coefficient <= 1e6 &&
+                           beta <= 1e24;
+  std::uint64_t active_weights = 0;
   for (std::size_t i = 0; i < n; ++i) {
     const auto rho = density[i];
     const auto x = density_gradient[3 * i];
@@ -267,11 +277,24 @@ generativeqc_status Vv10Plan::execute(std::span<const double> coordinates,
     domega_drho_[i] = domega_drho;
     domega_dsigma_[i] = domega_dsigma;
     dkappa_drho_[i] = dkappa_drho;
+    if (mask_zero_weights) {
+      mask_zero_weights = std::abs(coordinates[3 * i]) <= 1e6 &&
+                          std::abs(coordinates[3 * i + 1]) <= 1e6 &&
+                          std::abs(coordinates[3 * i + 2]) <= 1e6 && rho <= 1e6 && omega >= 1e-12 &&
+                          omega <= 1e12 && kappa >= 1e-12 && kappa <= 1e12 &&
+                          std::abs(domega_drho) <= 1e24 && std::abs(domega_dsigma) <= 1e24 &&
+                          std::abs(dkappa_drho) <= 1e24 && std::abs(weighted_density_[i]) <= 1e12;
+      if (weights[i] != 0.0) ++active_weights;
+    }
   }
 
   double total_energy = 0.0;
   const auto tile = static_cast<std::size_t>(resources_.tile_points);
   for (std::size_t i = 0; i < n; ++i) {
+    if (mask_zero_weights && weights[i] == 0.0) {
+      vrho[i] = vsigma[i] = 0.0;
+      continue;
+    }
     double sum_phi = 0.0;
     double sum_rho = 0.0;
     double sum_sigma = 0.0;
@@ -279,6 +302,9 @@ generativeqc_status Vv10Plan::execute(std::span<const double> coordinates,
     for (std::size_t begin = 0; begin < n; begin += tile) {
       const auto end = std::min(begin + tile, n);
       for (std::size_t j = begin; j < end; ++j) {
+        // Check the weight, not its density product: a nonzero signed weight
+        // can underflow in weighted_density_ and still owns feature outputs.
+        if (mask_zero_weights && weights[j] == 0.0) continue;
         const auto dx = coordinates[3 * i] - coordinates[3 * j];
         const auto dy = coordinates[3 * i + 1] - coordinates[3 * j + 1];
         const auto dz = coordinates[3 * i + 2] - coordinates[3 * j + 2];
@@ -331,6 +357,8 @@ generativeqc_status Vv10Plan::execute(std::span<const double> coordinates,
     detail = "VV10 execution produced nonfinite output";
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
+  last_execution_pair_evaluations_ =
+      mask_zero_weights ? active_weights * active_weights : resources_.pair_evaluations;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 

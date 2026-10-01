@@ -204,6 +204,31 @@ owns nuclear gradients. Broader methods should
 reuse the existing orthogonalization, provider and SCF infrastructure rather
 than wrap full SCF in the Python fixed-density tooling loop.
 
+## CPU molecular VV10 pair execution
+
+The `MolecularV1` nonlocal E/V consumer opts into an internal weighted-potential
+execution contract. Exactly zero effective quadrature weights may be omitted
+from both pair domains because this consumer uses only energy and weighted
+feature derivatives. Nonzero weights, including negative and subnormal values,
+retain the original pair arithmetic and ascending reduction order. The existing
+molecular density threshold and grid definition are unchanged.
+
+The CPU fast path uses no additional numeric workspace. It retains the original
+full-index traversal with cheap zero-weight checks and evaluates the expensive
+pair kernel only for pairs of nonzero effective weights. A conservative finite
+arithmetic envelope preserves the dense path's failure behavior; out-of-envelope
+inputs fall back to dense execution. The molecular caller also bounds AO jets
+and effective density gradients so masking cannot hide overflow in the later
+zero-weight AO pullback. All input and local-scale validation occurs before
+masking. Raw fixed-grid derivatives, geometry/weight derivatives,
+energy-only calls, rVV10 and CUDA retain their existing execution contracts.
+
+`Vv10Plan::last_execution_pair_evaluations()` reports actual pair-kernel calls
+for a successful CPU execution and zero after failure or CUDA execution.
+`resources().pair_evaluations` remains the prepared dense work bound. See the
+[zero-weight CPU VV10 decision](../../.agents/notes/implemented/performance/2026-10-01-cpu-vv10-zero-weight-work.md)
+for the numerical-envelope proof and endpoint qualification.
+
 ## Independent reproduction
 
 The exporter uses PySCF **2.14.0 / Libxc 7.0.0** `NumInt.nr_rks/nr_uks`, including
