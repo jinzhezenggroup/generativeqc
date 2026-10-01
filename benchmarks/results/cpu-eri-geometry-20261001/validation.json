@@ -1,0 +1,111 @@
+{
+  "native_tests": {
+    "passed": 57,
+    "failed": 0
+  },
+  "public_endpoint_tests": {
+    "passed": 14,
+    "cuda_skipped": 6,
+    "deselected": 96
+  },
+  "compiled_eri_tests": {
+    "passed": 23,
+    "libcint_primitive_values": 60000,
+    "path_count": 2,
+    "requested_boys_orders": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ]
+  },
+  "source_identity_tests": {
+    "passed": 15
+  },
+  "existing_compiler_regressions": {
+    "passed": 59
+  },
+  "focused_derivative_ir_cuda_regressions": {
+    "passed": 10
+  },
+  "native_derivative_and_f_plus_fallbacks": "passed",
+  "hf_pbe_pbe0": [
+    {
+      "case": "water-sto3g",
+      "method": "rhf",
+      "baseline_energy": -74.96244167336656,
+      "candidate_energy": -74.96244167336653,
+      "absolute_error": 2.842170943040401e-14,
+      "iterations": 8
+    },
+    {
+      "case": "water-sto3g",
+      "method": "pbe-rks",
+      "baseline_energy": -75.2243104192774,
+      "candidate_energy": -75.2243104192774,
+      "absolute_error": 0.0,
+      "iterations": 8
+    },
+    {
+      "case": "water-sto3g",
+      "method": "pbe0-rks",
+      "baseline_energy": -75.24463807006738,
+      "candidate_energy": -75.24463807006741,
+      "absolute_error": 2.842170943040401e-14,
+      "iterations": 8
+    },
+    {
+      "case": "water-svp",
+      "method": "rhf",
+      "baseline_energy": -75.96113256370144,
+      "candidate_energy": -75.96113256370144,
+      "absolute_error": 0.0,
+      "iterations": 13
+    },
+    {
+      "case": "water-svp",
+      "method": "pbe-rks",
+      "baseline_energy": -76.27179184952598,
+      "candidate_energy": -76.27179184952595,
+      "absolute_error": 2.842170943040401e-14,
+      "iterations": 13
+    },
+    {
+      "case": "water-svp",
+      "method": "pbe0-rks",
+      "baseline_energy": -76.27617121996533,
+      "candidate_energy": -76.27617121996538,
+      "absolute_error": 4.263256414560601e-14,
+      "iterations": 12
+    }
+  ],
+  "precommit": "passed",
+  "typecheck": {
+    "new_diagnostics": 0,
+    "preexisting_shell_class_warnings": 18
+  },
+  "independent_review": {
+    "ao_orbit_shell_patterns": 30,
+    "maximum_component_records": 1296,
+    "geometry_remap_comparisons": 19200,
+    "factored_corner_comparisons": 1440,
+    "maximum_ordinary_normalized_absolute_difference": 9.01e-15,
+    "million_bohr_translation_normalized_absolute_difference": 1.6e-11,
+    "million_bohr_translation_passed_ordinary_gate": false
+  },
+  "generated_math": {
+    "existing_scientific_files": 115,
+    "byte_identical": 107,
+    "expression_identity_only_differences": 8,
+    "explanation": "Libxc qualification identity deliberately hashes the compiler common/integral/xc source inventory; stripping only ExpressionIdentity strings leaves all eight arithmetic translation units byte-identical."
+  },
+  "timed_endpoint_count": 144,
+  "timed_process_count": 36,
+  "all_converged": true,
+  "all_loaded_threadpools_single_threaded": true
+}

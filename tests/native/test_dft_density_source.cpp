@@ -174,6 +174,26 @@ void fixed_density() {
               "native C potential violates the orbital directional derivative");
     }
   }
+
+  const auto ao_cache = dft::prepare_rks_ao_cache(basis, grid, 1U);
+  const auto retained = dft::integrate_pbe_rks_with_tail_scaled_retaining_features(
+      basis, grid, density, 7, {}, 1.0, 1.0, &ao_cache);
+  const Matrix signed_delta{1.0e-3, -4.0e-4, -4.0e-4, 7.0e-4};
+  const auto reference =
+      dft::integrate_pbe_rks_incremental_exact(basis, grid, density, signed_delta, 7, 1.0, 1.0);
+  const auto cached = dft::integrate_pbe_rks_incremental_exact(
+      basis, grid, density, signed_delta, 7, 1.0, 1.0, &retained.features, &ao_cache);
+  same_xc(cached.total, reference.total);
+  require(
+      retained.features.points == grid.point_count() && retained.features.nao == basis.nao &&
+          retained.features.numeric_capacity_bytes() == 4 * grid.point_count() * sizeof(double) &&
+          std::abs(cached.anchor_energy - reference.anchor_energy) < 3e-11 &&
+          std::abs(cached.energy_difference - reference.energy_difference) < 3e-11 &&
+          cached.potential_difference.size() == reference.potential_difference.size(),
+      "retained incremental PBE feature cache shape or scalar parity failed");
+  for (std::size_t i = 0; i < cached.potential_difference.size(); ++i)
+    require(std::abs(cached.potential_difference[i] - reference.potential_difference[i]) < 3e-11,
+            "retained incremental PBE feature cache changed the potential difference");
 }
 
 void native_scf() {
@@ -213,6 +233,8 @@ void native_scf() {
                 inc.strict_final_builds >= inc.strict_refinement_iterations + inc.final_audits &&
                 inc.strict_refinement_iterations >= 2 && inc.final_audits >= 1 &&
                 inc.audit_failures == 0 && inc.anchor_generation >= 1 &&
+                inc.anchor_feature_builds >= 1 &&
+                inc.anchor_feature_reuses == inc.incremental_updates &&
                 inc.retained_anchor_bytes == 0 && inc.peak_update_buffer_bytes != 0 &&
                 inc.peak_replacement_overlap_bytes != 0 &&
                 std::abs(incremental.energy - d.energy) < 2e-10 &&

@@ -7,7 +7,7 @@ SOURCE = (
     Path(__file__).resolve().parents[2]
     / "python"
     / "generativeqc"
-    / "_stationary_wb97mv_cuda.py"
+    / "_stationary_composite_cuda.py"
 ).read_text()
 TREE = ast.parse(SOURCE)
 

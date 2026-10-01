@@ -1,0 +1,50 @@
+{
+  "scope": "One primitive quartet evaluated over all ordered Cartesian components of each shell class; excludes native symmetry reduction, contraction/scatter and data-dependent Boys evaluator arithmetic. DAG arithmetic uses existing analyze_ssa, with explicit prepared permutation-sign multiplications added. Native compiler constant folding is not modeled.",
+  "geometry": {
+    "arithmetic_nodes": {
+      "add": 34,
+      "exp": 1,
+      "multiply": 51,
+      "power": 2,
+      "reciprocal": 4
+    },
+    "arithmetic_operations": 110
+  },
+  "shell_classes": {
+    "ssss": {
+      "old_geometry_and_boys_evaluations": 1,
+      "old_scalar_arithmetic_operations": 86,
+      "ordered_component_count": 1,
+      "shared_geometry_and_boys_evaluations": 1,
+      "shared_scalar_arithmetic_operations_including_sign": 111
+    },
+    "psss": {
+      "old_geometry_and_boys_evaluations": 3,
+      "old_scalar_arithmetic_operations": 285,
+      "ordered_component_count": 3,
+      "shared_geometry_and_boys_evaluations": 1,
+      "shared_scalar_arithmetic_operations_including_sign": 134
+    },
+    "pppp": {
+      "old_geometry_and_boys_evaluations": 81,
+      "old_scalar_arithmetic_operations": 16071,
+      "ordered_component_count": 81,
+      "shared_geometry_and_boys_evaluations": 1,
+      "shared_scalar_arithmetic_operations_including_sign": 7403
+    },
+    "dppp": {
+      "old_geometry_and_boys_evaluations": 162,
+      "old_scalar_arithmetic_operations": 46986,
+      "ordered_component_count": 162,
+      "shared_geometry_and_boys_evaluations": 1,
+      "shared_scalar_arithmetic_operations_including_sign": 26414
+    },
+    "dddd": {
+      "old_geometry_and_boys_evaluations": 1296,
+      "old_scalar_arithmetic_operations": 1401195,
+      "ordered_component_count": 1296,
+      "shared_geometry_and_boys_evaluations": 1,
+      "shared_scalar_arithmetic_operations_including_sign": 1011014
+    }
+  }
+}

@@ -132,7 +132,7 @@ def test_source_identity_includes_public_and_geometry_consumers() -> None:
         "python/generativeqc/calculator.py",
         "python/generativeqc/ks.py",
         "python/generativeqc/_stationary_cuda.py",
-        "python/generativeqc/_stationary_wb97mv_cuda.py",
+        "python/generativeqc/_stationary_composite_cuda.py",
         "src/scf/cuda/direct_jk.cpp",
         "src/scf/cuda/direct_jk_kernels.cu",
         "src/scf/cuda/direct_jk_kernels.hpp",

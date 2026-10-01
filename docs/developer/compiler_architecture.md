@@ -52,9 +52,10 @@ scientific algebra implementation.
 
 ## Shared nonlocal pair lowering
 
-`method.nonlocal_pair` owns the scalar VV10/rVV10 pair energy and analytic
-feature/radial derivative expressions as TensorIR. The build generates one
-`generated_nonlocal_pair_native.hpp` for CPU and CUDA consumers. Requested
+`method.nonlocal_pair` owns the scalar VV10/rVV10 local-scale policy plus pair
+energy and analytic feature/radial derivative expressions. The build generates
+one `generated_nonlocal_pair_native.hpp` for CPU and CUDA consumers, preserving
+the separately qualified CPU/CUDA FP64 local-scale operation orders. Requested
 output roots determine the generated arithmetic; their explicit dependency-first
 emission schedule keeps the energy producer ahead of derivative consumers.
 Runtime policy determines which roots must remain observable for numerical-failure

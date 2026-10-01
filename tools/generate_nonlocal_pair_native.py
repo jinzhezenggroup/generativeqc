@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,26 +11,12 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
 
-# Follow the existing standalone TensorIR generators: no NumPy or runtime import.
-import generativeqc_compiler
-
-if __package__ in (None, ""):
-    for package_name in ("tensor", "method"):
-        qualified = f"generativeqc_compiler.{package_name}"
-        if qualified not in sys.modules:
-            package = types.ModuleType(qualified)
-            package.__path__ = [
-                str(ROOT / "python" / "generativeqc_compiler" / package_name)
-            ]
-            package.__package__ = qualified
-            sys.modules[qualified] = package
-            setattr(generativeqc_compiler, package_name, package)
-
 from generativeqc_compiler.method.nonlocal_pair import (
     NONLOCAL_PAIR_LOWERING_VERSION,
     PAIR_INPUT_ORDER,
     PAIR_OUTPUT_ORDER,
     build_nonlocal_pair_program,
+    native_local_scale_cpp,
 )
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -66,6 +51,9 @@ def native_header() -> str:
                     caller_owned_checks=True,
                     ordered_native_sums=True,
                     output_dependency_order=True,
+                )
+                body = body.replace("std::sqrt(", "::sqrt(").replace(
+                    "std::pow(", "::pow("
                 )
                 bodies.append(
                     f"// TensorIR logical hash: {program.logical_hash}\n"
@@ -113,6 +101,8 @@ struct PairValues {
 };
 
 """
+        + native_local_scale_cpp()
+        + "\n"
         + "\n".join(bodies)
         + """
 template <Vv10Variant Variant, bool Features, bool Geometry, bool Preconditioned = false>

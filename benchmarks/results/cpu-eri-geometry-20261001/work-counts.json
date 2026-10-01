@@ -1,0 +1,46 @@
+{
+  "h2-sto3g": {
+    "shells": 2,
+    "cartesian_aos": 2,
+    "canonical_ao_quartets": 6,
+    "primitive_component_evaluations": 486,
+    "baseline_geometry_boys_evaluations": 486,
+    "candidate_geometry_boys_evaluations": 486,
+    "canonical_shell_quartets": 6,
+    "maximum_active_components": 1,
+    "geometry_reuse_ratio": 1.0
+  },
+  "water-sto3g": {
+    "shells": 5,
+    "cartesian_aos": 7,
+    "canonical_ao_quartets": 406,
+    "primitive_component_evaluations": 32886,
+    "baseline_geometry_boys_evaluations": 32886,
+    "candidate_geometry_boys_evaluations": 9720,
+    "canonical_shell_quartets": 120,
+    "maximum_active_components": 21,
+    "geometry_reuse_ratio": 3.3833333333333333
+  },
+  "water-svp": {
+    "shells": 12,
+    "cartesian_aos": 25,
+    "canonical_ao_quartets": 52975,
+    "primitive_component_evaluations": 326255,
+    "baseline_geometry_boys_evaluations": 326255,
+    "candidate_geometry_boys_evaluations": 38111,
+    "canonical_shell_quartets": 3081,
+    "maximum_active_components": 378,
+    "geometry_reuse_ratio": 8.560651780325891
+  },
+  "formaldehyde-svp": {
+    "shells": 18,
+    "cartesian_aos": 40,
+    "canonical_ao_quartets": 336610,
+    "primitive_component_evaluations": 2261946,
+    "baseline_geometry_boys_evaluations": 2261946,
+    "candidate_geometry_boys_evaluations": 199362,
+    "canonical_shell_quartets": 14706,
+    "maximum_active_components": 756,
+    "geometry_reuse_ratio": 11.345923495952087
+  }
+}

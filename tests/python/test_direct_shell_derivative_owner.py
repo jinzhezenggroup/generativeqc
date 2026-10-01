@@ -161,11 +161,64 @@ def test_through_f_full_range_values_precede_canonical_fallback() -> None:
     owner = _source("src/scf/cuda/direct_coulomb.cpp")
     assert "const bool bounded_through_f = through_f;" in direct
     assert "shell_values_cover_request" in direct
-    assert "plan->canonical_pairs &&\n        !shell_values_cover_request" in direct
+    assert (
+        "plan->canonical_pairs && !mixed_j &&\n        !shell_values_cover_request"
+        in direct
+    )
     assert "enqueue_generated_coulomb(*plan->generated_exchange" in direct
     assert "launch_bounded_shell_fock_source(" in owner
     assert "p.force_cursor, true, false" in owner
     assert "p.force_cursor, false, true" in owner
+
+
+def test_canonical_outer_dispatch_preserves_mixed_source(tmp_path: Path) -> None:
+    """Compile the real outer gate, including the competing through-f owner."""
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a C++ compiler")
+    source = _source("src/scf/cuda/direct_jk.cpp")
+    begin = source.index("if ((spec.coulomb.present || spec.exchange.present)")
+    end = source.index(") {", begin)
+    condition = source[begin + len("if (") : end]
+    harness = r"""
+#include <cassert>
+struct Term { bool present; };
+struct Spec { Term coulomb, exchange; };
+struct Plan { bool canonical_pairs; };
+bool canonical_route(const Plan* plan, Spec spec, bool mixed_j,
+                     bool shell_values_cover_request) {
+  return CONDITION;
+}
+int main() {
+  for (unsigned mask = 0; mask < 32; ++mask) {
+    const bool canonical = mask & 1U, mixed = mask & 2U;
+    const bool shell = mask & 4U, j = mask & 8U, k = mask & 16U;
+    const Plan plan{canonical};
+    assert(canonical_route(&plan, {{j}, {k}}, mixed, shell) ==
+           (canonical && !mixed && !shell && (j || k)));
+  }
+}
+""".replace("CONDITION", condition)
+    path = tmp_path / "canonical_value_policy.cpp"
+    executable = tmp_path / "canonical_value_policy"
+    path.write_text(harness)
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            str(path),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
 
 
 def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:

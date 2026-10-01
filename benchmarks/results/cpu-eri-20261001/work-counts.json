@@ -1,0 +1,21 @@
+{
+  "kind": "source-derived exact unscreened Cartesian canonical-loop census, unchanged baseline/candidate",
+  "water-sto3g": {
+    "cartesian_aos": 7,
+    "canonical_ao_quartets": 406,
+    "primitive_eri_evaluations": 32886
+  },
+  "water-svp": {
+    "cartesian_aos": 25,
+    "public_spherical_aos": 24,
+    "canonical_ao_quartets": 52975,
+    "primitive_eri_evaluations": 326255
+  },
+  "formaldehyde-svp": {
+    "cartesian_aos": 40,
+    "public_spherical_aos": 38,
+    "canonical_ao_quartets": 336610,
+    "primitive_eri_evaluations": 2261946
+  },
+  "note": "Both endpoints still materialize in-core four-center ERIs. Native Fock builds are iterations + 2 (source-derived); PySCF J/K calls are counted in observations."
+}

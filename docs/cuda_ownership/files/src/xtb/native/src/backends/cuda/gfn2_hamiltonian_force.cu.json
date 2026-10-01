@@ -1,7 +1,7 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_hamiltonian_force.cu",
-  "reason": "Vendored transitional GFN2 CUDA source for #560 native backend admission; counted conservatively as handwritten scientific ownership until generated/GenerativeQC-native replacements retire the equivalent path.",
+  "reason": "GFN2 Hamiltonian-force traversal, validation, reduction and adjoint publication. S/D/Q pair reverse-mode adjoints, including spin-overlap terms, are compiler-generated TensorIR products.",
   "regions": [],
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "gfn2"
 }

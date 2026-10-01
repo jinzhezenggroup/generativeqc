@@ -18,7 +18,7 @@ Use this guide to install GenerativeQC and run calculations. If the terminology 
 - [Progressive HF](progressive_hf.md)
 - [KS options](ks_options.md)
 - [Automatic Libxc semilocal functionals](libxc.md)
-- [Density-fitted DFT energies](dft_density_fitting.md)
+- [Density-fitted DFT](dft_density_fitting.md)
 - [WB97M-V CUDA energy and forces](wb97mv_cuda.md)
 - [r2SCAN-3c](r2scan3c.md)
 

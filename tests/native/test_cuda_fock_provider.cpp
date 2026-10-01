@@ -22,6 +22,8 @@
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/fock_prepared.hpp"
+#include "scf/interaction_source_view.hpp"
 
 namespace {
 using namespace generativeqc::scf;
@@ -133,10 +135,10 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
   }
 }
 
-void mixed_coulomb_work_census() {
+void mixed_coulomb_work_census(bool through_f = false) {
   generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
-  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, through_f ? 3U : 0U, {{0.6, 1.0}}}};
   system.electron_count = 2;
   system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
   std::string detail;
@@ -145,7 +147,11 @@ void mixed_coulomb_work_census() {
       detail.c_str());
 
   const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
-  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+  std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+  if (through_f) {
+    density.resize(matrix);
+    for (std::size_t index = 0; index < matrix; ++index) density[index] = (1.0 + 0.01 * index) / n;
+  }
   const std::vector<double> zero_density(matrix, 0.0), sentinel(matrix, 123.0);
   require(density.size() == matrix, "mixed-work fixture density shape changed");
 
@@ -161,6 +167,9 @@ void mixed_coulomb_work_census() {
       make_plan(0.0), &destroy_cuda_direct_jk_plan);
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> screened(
       make_plan(std::numeric_limits<double>::max()), &destroy_cuda_direct_jk_plan);
+  if (through_f)
+    require(plan->canonical_pairs != nullptr,
+            "through-f mixed-work fixture must retain the competing FP64 canonical route");
 
   auto spec = make_hf_fock_spec(FockSpin::Restricted);
   spec.derivative_order = 0;
@@ -220,6 +229,88 @@ void mixed_coulomb_work_census() {
               reinterpret_cast<std::uint64_t*>(reinterpret_cast<char*>(count.pointer) + 1)) ==
               GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "mixed Coulomb census accepted a misaligned counter");
+}
+
+void direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
+                     const std::vector<double>& expected_eri, std::size_t n) {
+  require(plan != nullptr && n >= 2, "invalid raw ERI tile fixture");
+  const std::array<std::size_t, 4> begin{0, 1, 0, 0};
+  const std::array<std::size_t, 4> count{2, 1, 2, 2};
+  const std::size_t elements = 8;
+  std::vector<double> expected(elements);
+  for (std::size_t local = 0; local < elements; ++local) {
+    auto remainder = local;
+    std::array<std::size_t, 4> index{};
+    for (std::size_t reverse = 0; reverse < 4; ++reverse) {
+      const auto axis = 3 - reverse;
+      index[axis] = begin[axis] + remainder % count[axis];
+      remainder /= count[axis];
+    }
+    const auto flat = ((index[0] * n + index[1]) * n + index[2]) * n + index[3];
+    expected[local] = expected_eri[flat];
+  }
+
+  DeviceMatrix output(std::vector<double>(elements, 123.0));
+  cudaStream_t stream{};
+  check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+  std::string detail;
+  const auto status = enqueue_cuda_direct_eri_tile(plan, item, begin, count, output.pointer,
+                                                   elements, stream, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    cudaStreamDestroy(stream);
+    require(false, detail.c_str());
+  }
+  check(cudaStreamSynchronize(stream));
+  check(cudaStreamDestroy(stream));
+  output.verify(expected);
+}
+
+void prepared_interaction_source_device(const generativeqc::core::System& system,
+                                        const std::vector<double>& expected_eri) {
+  auto spec = make_hf_fock_spec(FockSpin::Restricted, FockApproximation::Exact);
+  spec.derivative_order = 0;
+  const auto strategy = resolve_fock_build(spec, FockBackend::Cuda, 0.0);
+  PreparedFockPlan prepared(system, nullptr, strategy, 0, 64U * 1024U * 1024U);
+  PreparedFockInteractionSourceView source(prepared);
+  const auto op = generativeqc::integrals::ElectronInteractionOperator::eri;
+  require(
+      source.supports(op) && !source.supports_host_read(op) && source.supports_device_read(op, 0),
+      "prepared CUDA interaction source advertised the wrong ERI memory spaces");
+
+  const std::size_t n = source.nbf();
+  const std::array<std::size_t, 4> begin{0, 1, 0, 0};
+  const std::array<std::size_t, 4> count{2, 1, 2, 2};
+  constexpr std::size_t elements = 8;
+  std::vector<double> expected(elements);
+  for (std::size_t local = 0; local < elements; ++local) {
+    auto remainder = local;
+    std::array<std::size_t, 4> index{};
+    for (std::size_t reverse = 0; reverse < 4; ++reverse) {
+      const auto axis = 3 - reverse;
+      index[axis] = begin[axis] + remainder % count[axis];
+      remainder /= count[axis];
+    }
+    expected[local] = expected_eri[((index[0] * n + index[1]) * n + index[2]) * n + index[3]];
+  }
+
+  DeviceMatrix output(std::vector<double>(elements, 123.0));
+  cudaStream_t stream{};
+  check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+  source.read_device(op, begin, count,
+                     {0, reinterpret_cast<void*>(stream), output.pointer, elements}, elements);
+  check(cudaStreamSynchronize(stream));
+  check(cudaStreamDestroy(stream));
+  output.verify(expected);
+
+  std::array<double, 1> host_sentinel{123.0};
+  bool host_rejected = false;
+  try {
+    source.read(op, {0, 0, 0, 0}, {1, 1, 1, 1}, host_sentinel.data(), 1);
+  } catch (const std::invalid_argument&) {
+    host_rejected = true;
+  }
+  require(host_rejected && host_sentinel[0] == 123.0,
+          "prepared CUDA interaction source silently published a host ERI");
 }
 
 void direct_value_dispatch_selection() {
@@ -1252,6 +1343,8 @@ void direct_providers(bool through_f_response) {
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
+      direct_eri_tile(plan.get(), 0, ints.eri, n);
+      direct_eri_tile(plan.get(), 1, other.eri, n);
       if (derivatives) {
         auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
         value_spec.derivative_order = 0;
@@ -1402,6 +1495,7 @@ void direct_providers(bool through_f_response) {
               !too_small,
           "nonfinite direct source geometry accepted");
       if (angular == 0 && representation == GENERATIVEQC_BASIS_CARTESIAN) {
+        prepared_interaction_source_device(first, ints.eri);
         direct_device_failures(plan.get(), packed_a);
         // Inputs are finite but deliberately outside the stable numerical
         // range. A failed bound must not silently screen the entire source.
@@ -1454,6 +1548,7 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
       mixed_coulomb_work_census();
+      mixed_coulomb_work_census(true);
       std::cout << "CUDA mixed Coulomb work census PASS\n";
       return 0;
     }
@@ -1469,6 +1564,7 @@ int main(int argc, char** argv) {
     const bool through_f_response = argc == 2;
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
+    mixed_coulomb_work_census(true);
     device_selection();
     range_exchange_provider();
     range_exchange_derivatives();
