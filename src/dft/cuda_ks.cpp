@@ -322,12 +322,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // which is recorded separately as a MatrixProduct logical contraction.
       record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
-      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly,
-                                scf::PrecisionDtype::Fp64,
+      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
-                                scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict);
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
 
       // enqueue_legacy executes four products for FDS-SDF and three around the
       // generalized eigensolve. UKS occupation stabilization adds two more.
@@ -336,13 +334,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const std::uint64_t strict_matrix_products =
           (stabilize_occupations ? 9U : 7U) + (mixed ? 0U : 1U);
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict,
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
                                 strict_matrix_products);
       if (mixed)
         record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                  scf::PrecisionDtype::Fp32,
-                                  scf::PrecisionArithmeticMode::Mixed);
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
       if (!final_closure)
         record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
