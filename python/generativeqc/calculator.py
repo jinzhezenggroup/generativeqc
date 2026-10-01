@@ -919,8 +919,11 @@ class Calculator:
                 supported_properties=self._capabilities.supported_properties
                 | {"forces"},
             )
-        second_order_basis = not basis_has_ecp and (
-            isinstance(self._basis, str)
+        second_order_basis = (
+            self._basis is not None
+            and not basis_has_ecp
+            and (
+                isinstance(self._basis, str)
             or (
                 isinstance(self._basis, BasisSet)
                 and all(
@@ -934,6 +937,7 @@ class Calculator:
                 and not isinstance(self._basis, str)
                 and all(shell.angular_momentum <= 3 for shell in self._basis)
             )
+        )
         )
         public_rks_second_order = (
             self._device_name == "cpu"
