@@ -474,6 +474,7 @@ ScfResult run_pbe_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
 }
 
 #if GENERATIVEQC_HAS_CUDA
+#if GENERATIVEQC_HAS_CUDA
 ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
                             const dft::MolecularGrid& grid, const ScfOptions& options,
                             const std::vector<double>* initial_density) {
@@ -492,6 +493,7 @@ ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
   return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_pbe_xc_uks, "PBE0-COSX",
                       initial_density, nullptr);
 }
+#endif
 
 #endif
 

@@ -19,6 +19,8 @@ scf::ScfResult run_cosx_uhf(PreparedCosxFockPlan& plan, const scf::ScfOptions& o
 
 }  // namespace generativeqc::dft
 
+// The prepared COSX provider is linked only in CUDA-enabled builds.
+#if GENERATIVEQC_HAS_CUDA
 namespace generativeqc::scf {
 
 /** Internal host-controlled PBE0 RKS over explicit RI/direct-J + COSX-K.
@@ -33,5 +35,7 @@ ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
                             const std::vector<double>* initial_density = nullptr);
 
 }  // namespace generativeqc::scf
+
+#endif  // GENERATIVEQC_HAS_CUDA
 
 #endif
