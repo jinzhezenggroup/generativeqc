@@ -769,6 +769,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     ++solve_epoch;
     is_active = false;
     is_failed = true;
+    // A new attempt invalidates execution evidence immediately, before any
+    // device selection, injected runtime failure, or seed validation can
+    // escape.  Never leave the prior successful solve's precision receipt
+    // observable after a failed begin().
+    output.precision = {};
+    output.precision.requested_mode =
+        options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+    output.precision_work = {};
+    output.precision_work.owner_id = owner;
+    output.precision_work.operators.reserve(14);
     current_device();
 #if defined(GENERATIVEQC_TEST_HOOKS)
     if (fail_next_ks_runtime) {
