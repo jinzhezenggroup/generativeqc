@@ -79,7 +79,11 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     artifact = SimpleNamespace(
         library=tmp_path / "runtime.so", metadata={"binary_sha256": "binary"}
     )
-    compiler = SimpleNamespace(target=SimpleNamespace(compute_capability=(12, 0)))
+    compiler = SimpleNamespace(
+        target=SimpleNamespace(
+            compute_capability=(12, 0), maximum_threads_per_block=1024
+        )
+    )
     basis = SimpleNamespace(
         natom=1,
         nprimitive=2,
