@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "dft/ao_grid.hpp"
+#include "dft/cosx_scf.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -433,8 +434,9 @@ dft::XcIntegral evaluate_cam_b3lyp_xc_rks(const dft::AoBasis& basis, const dft::
   return dft::integrate_cam_b3lyp_rks(basis, grid, density, tile, source);
 }
 
-RksEvaluation evaluate_rks(const PreparedFockPlan& plan,
-                           const PreparedFockPlan* long_range_correction, const dft::AoBasis& basis,
+template <class PrimaryPlan>
+RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
+                           const dft::AoBasis& basis,
                            const dft::MolecularGrid& grid, const Matrix& density,
                            RksXcEvaluator evaluate_xc, const char* method_name,
                            dft::XcDensitySource source, std::size_t retained_capacity,
@@ -498,8 +500,9 @@ RksEvaluation evaluate_rks(const PreparedFockPlan& plan,
   return result;
 }
 
+template <class PrimaryPlan>
 ScfResult run_rks(
-    const PreparedFockPlan& plan, const PreparedFockPlan* long_range_correction,
+    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
     const dft::AoBasis& basis, const dft::MolecularGrid& grid, const ScfOptions& options,
     const std::vector<double>* initial_density, RksXcEvaluator evaluate_xc, const char* method_name,
     dft::nlc::Vv10Plan* nonlocal_correlation,
@@ -513,15 +516,22 @@ ScfResult run_rks(
   const auto& ints = plan.one_electron();
   if (options.compute_forces)
     throw std::invalid_argument(std::string(method_name) + " RKS forces are not implemented");
-  if (strategy.backend != FockBackend::Cpu || strategy.spec.spin != FockSpin::Restricted ||
-      strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
-      strategy.spec.coulomb.coefficient != 1.0 ||
-      (strategy.spec.exchange.present &&
-       (strategy.spec.exchange.op != FockOperator::FullRange ||
-        (strategy.spec.exchange.approximation != FockApproximation::Exact &&
-         strategy.spec.exchange.approximation != FockApproximation::DensityFitted))))
-    throw std::invalid_argument(std::string(method_name) +
-                                " RKS requires a CPU full-range exact or fitted J/K Fock strategy");
+  const bool ordinary_primary =
+      strategy.backend == FockBackend::Cpu &&
+      (!strategy.spec.exchange.present ||
+       (strategy.spec.exchange.op == FockOperator::FullRange &&
+        (strategy.spec.exchange.approximation == FockApproximation::Exact ||
+         strategy.spec.exchange.approximation == FockApproximation::DensityFitted)));
+  const bool cosx_primary =
+      strategy.backend == FockBackend::Cuda && strategy.spec.exchange.present &&
+      strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx;
+  if (strategy.spec.spin != FockSpin::Restricted || strategy.spec.derivative_order != 0 ||
+      !strategy.spec.coulomb.present || strategy.spec.coulomb.coefficient != 1.0 ||
+      (!ordinary_primary && !cosx_primary))
+    throw std::invalid_argument(
+        std::string(method_name) +
+        " RKS requires a CPU exact/DF or explicit CUDA COSX full-range J/K Fock strategy");
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
@@ -973,6 +983,26 @@ ScfResult run_pbe_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                       const std::vector<double>* initial_density) {
   return run_rks(plan, nullptr, basis, grid, options, initial_density,
                  RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached), "PBE", nullptr);
+}
+
+ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const std::vector<double>* initial_density) {
+  const auto& strategy = plan.strategy();
+  const bool pbe0_exchange =
+      strategy.backend == FockBackend::Cuda && strategy.spec.spin == FockSpin::Restricted &&
+      strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.coefficient == 1.0 && strategy.spec.exchange.present &&
+      strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx &&
+      strategy.spec.exchange.coefficient == -0.125;
+  if (!pbe0_exchange || options.semilocal_exchange_scale != 0.75 ||
+      options.semilocal_correlation_scale != 1.0)
+    throw std::invalid_argument(
+        "PBE0 COSX RKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
+  return run_rks(plan, nullptr, basis, grid, options, initial_density,
+                 RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached), "PBE0-COSX",
+                 nullptr);
 }
 
 ScfResult run_pbe_rks_nonlocal(const PreparedFockPlan& plan, const dft::AoBasis& basis,
