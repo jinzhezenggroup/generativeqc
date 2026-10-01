@@ -1,7 +1,11 @@
 """Structural guards for compiler-driven composite stationary CUDA routing."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+from generativeqc._stationary_composite_cuda import requires_composite_stationary_cuda
+from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_POLICY
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.stationary_cuda import (
     stationary_external_provider_sources,
@@ -79,4 +83,39 @@ def test_external_provider_inventory_follows_method_ir_primitives() -> None:
         "nonlocal_ao",
         "nonlocal_grid",
         "nonlocal_weight",
+    )
+
+
+def _fake_state(
+    identifier: str,
+    *,
+    nonlocal_policy: str | None = None,
+    point_model: str = SCF_POINT_MODEL,
+) -> SimpleNamespace:
+    source = SimpleNamespace(
+        method_ir=resolve_method(identifier, spin="unpolarized"),
+        nonlocal_density_policy=nonlocal_policy,
+        hamiltonian="all-electron",
+        _batch=SimpleNamespace(
+            _calculator=SimpleNamespace(
+                _ks_options=SimpleNamespace(scf_domain=point_model)
+            )
+        ),
+    )
+    return SimpleNamespace(_source=source)
+
+
+def test_runtime_route_fails_closed_on_unqualified_external_sources() -> None:
+    assert requires_composite_stationary_cuda(_fake_state("PBE")) is False
+    with pytest.raises(NotImplementedError, match="exchange_short_range"):
+        requires_composite_stationary_cuda(_fake_state("CAM-B3LYP"))
+    assert (
+        requires_composite_stationary_cuda(
+            _fake_state(
+                "WB97M-V",
+                nonlocal_policy=MOLECULAR_VV10_DENSITY_POLICY,
+                point_model="libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
+            )
+        )
+        is True
     )
