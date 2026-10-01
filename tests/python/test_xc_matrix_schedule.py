@@ -63,6 +63,24 @@ def test_potential_uses_compact_triangular_tile_domain() -> None:
         assert triangle < square
 
 
+def test_mgga_density_product_reuses_one_density_tile_across_four_jets() -> None:
+    """Meta-GGA may change scheduling, but not the per-jet contraction algebra."""
+    source = emit_native_xc_matrix_schedule()
+    assert "__global__ void tiled_density_product_fused_jets" in source
+    assert "constexpr I jets = 4;" in source
+    assert "if (work_jets == 4) {" in source
+    assert "density_product_fused_jets<false>" in source
+    assert "tiled_density_product_fused_jets<false>" in source
+    # The ordinary work_jets path remains the explicit LDA/GGA/fallback route.
+    assert "spins*work_jets), block" in source
+    assert "density_product<false>" in source
+    # Fused tiled launch owns one z-plane per spin rather than per spin/jet.
+    assert (
+        "(count+15)/16, spins);"
+        in source
+    )
+
+
 def test_tiled_potential_fuses_point_total_reduction() -> None:
     """The production tiled path must not submit a separate total kernel per tile."""
     source = emit_native_xc_matrix_schedule()
