@@ -7,7 +7,6 @@ from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
-    PackedLayout,
     Program,
     Symmetry,
     TensorSpec,
@@ -42,6 +41,8 @@ def amplitude_specs(nocc: typing.Any, nvir: typing.Any) -> typing.Any:
 
 def amplitude_layouts(nocc: typing.Any, nvir: typing.Any) -> typing.Any:
     """Reuse #145 orbit ordering and multiplicity-weighted dense inner product."""
+    from generativeqc_compiler.tensor import PackedLayout
+
     return tuple(PackedLayout.from_spec(s) for s in amplitude_specs(nocc, nvir))
 
 

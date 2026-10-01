@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,19 +11,6 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
 
-# Build-time generation must not acquire the NumPy interpreter dependency.
-import generativeqc_compiler
-
-for package_name in ("tensor", "method"):
-    qualified = f"generativeqc_compiler.{package_name}"
-    if qualified not in sys.modules:
-        package = types.ModuleType(qualified)
-        package.__path__ = [
-            str(ROOT / "python" / "generativeqc_compiler" / package_name)
-        ]
-        package.__package__ = qualified
-        sys.modules[qualified] = package
-        setattr(generativeqc_compiler, package_name, package)
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_RUNTIME_VERSION,
     build_gfn2_core_energy_update_program,

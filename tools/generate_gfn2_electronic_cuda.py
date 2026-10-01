@@ -4,25 +4,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
-
-# Keep build-time codegen independent of NumPy-backed interpreter packages.
-import generativeqc_compiler
-
-for package_name in ("tensor", "method"):
-    qualified = f"generativeqc_compiler.{package_name}"
-    if qualified not in sys.modules:
-        package = types.ModuleType(qualified)
-        package.__path__ = [
-            str(ROOT / "python" / "generativeqc_compiler" / package_name)
-        ]
-        package.__package__ = qualified
-        sys.modules[qualified] = package
-        setattr(generativeqc_compiler, package_name, package)
 
 from generativeqc_compiler.method.gfn2_electronic_contract import (
     GFN2_DIPOLE_COMPONENTS,
