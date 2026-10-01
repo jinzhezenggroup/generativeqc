@@ -15,6 +15,9 @@ struct TriplesResponseOptions {
 };
 
 struct TriplesResponseResult {
+  // Integral-source cotangents are accumulated directly in the symmetry
+  // convention consumed by the RCCSD(T) Hamiltonian response.  The producer
+  // publishes only this canonical projected representation.
   std::vector<double> ovvv;
   std::vector<double> ovoo;
   std::vector<double> ovov;
