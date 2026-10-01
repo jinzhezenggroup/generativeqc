@@ -1,0 +1,98 @@
+name: Scoped review source snapshot
+on:
+  push:
+    branches: [agent/astra-review-batch-20261001-1415]
+    paths: [.github/workflows/astra-review-batch.yml]
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  pull-requests: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export identified source trees and read-only review evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import datetime, json, os, subprocess, urllib.request
+          from pathlib import Path
+          out = Path(os.environ['RUNNER_TEMP']) / 'review-snapshot'
+          out.mkdir()
+          api = 'https://api.github.com/repos/jinzhezenggroup/generativeqc/'
+          def get(path):
+              req = urllib.request.Request(api + path, headers={
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'Accept': 'application/vnd.github+json',
+              })
+              with urllib.request.urlopen(req, timeout=45) as response:
+                  return json.load(response)
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          master = get('git/ref/heads/master')['object']['sha']
+          git('fetch', '--no-tags', 'origin', master)
+          manifest = {'as_of': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      'master': master, 'snapshots': {}, 'prs': []}
+          previous = None
+          def snapshot(sha):
+              global previous
+              if sha in manifest['snapshots']:
+                  return manifest['snapshots'][sha]
+              git('fetch', '--no-tags', 'origin', sha)
+              tree = git('rev-parse', sha + '^{tree}')
+              args = ['-c', 'user.name=ChatGPT', '-c', 'user.email=chatgpt@users.noreply.github.com',
+                      'commit-tree', tree, '-m', 'Local review snapshot of ' + sha + '\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro']
+              if previous:
+                  args += ['-p', previous]
+              local = git(*args)
+              previous = local
+              entry = {'original': sha, 'tree': tree, 'snapshot': local}
+              manifest['snapshots'][sha] = entry
+              return entry
+          snapshot(master)
+          numbers = [1510, 1634, 1636, 1637, 1641, 1642, 1647, 1649, 1650, 1651]
+          for number in numbers:
+              pr = get(f'pulls/{number}')
+              folder = out / str(number)
+              folder.mkdir()
+              (folder / 'pr.json').write_text(json.dumps(pr, indent=2))
+              head = pr['head']['sha']
+              snapshot(head)
+              merge_base = git('merge-base', master, head)
+              snapshot(merge_base)
+              record = {'number': number, 'state': pr['state'], 'draft': pr['draft'],
+                        'merged': pr['merged'], 'head': head, 'branch': pr['head']['ref'],
+                        'base_ref': pr['base']['ref'], 'merge_base': merge_base,
+                        'mergeable': pr['mergeable'], 'mergeable_state': pr['mergeable_state']}
+              manifest['prs'].append(record)
+              for name, path in (
+                  ('reviews', f'pulls/{number}/reviews?per_page=100'),
+                  ('inline', f'pulls/{number}/comments?per_page=100'),
+                  ('comments', f'issues/{number}/comments?per_page=100'),
+                  ('runs', f'actions/runs?head_sha={head}&per_page=100'),
+                  ('checks', f'commits/{head}/check-runs?per_page=100'),
+              ):
+                  try:
+                      payload = get(path)
+                  except Exception as error:
+                      payload = {'error': str(error)}
+                  (folder / (name + '.json')).write_text(json.dumps(payload, indent=2))
+              (folder / 'pr.diff').write_text(git('diff', '--binary', merge_base, head) + '\n')
+              (folder / 'upstream.diff').write_text(git('diff', '--binary', merge_base, master) + '\n')
+              print(json.dumps(record), flush=True)
+          git('update-ref', 'refs/heads/review-snapshots', previous)
+          git('bundle', 'create', str(out / 'sources.bundle'), 'refs/heads/review-snapshots')
+          (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: astra-review-source-1415
+          path: ${{ runner.temp }}/review-snapshot/
+          retention-days: 1
