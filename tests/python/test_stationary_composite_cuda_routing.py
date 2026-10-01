@@ -5,9 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BATCH = (ROOT / "python/generativeqc/batch.py").read_text()
 DRIVER = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
-COMPILER = (
-    ROOT / "python/generativeqc_compiler/method/stationary_cuda.py"
-).read_text()
+COMPILER = (ROOT / "python/generativeqc_compiler/method/stationary_cuda.py").read_text()
 
 
 def test_public_cuda_force_routing_has_no_method_name_special_case() -> None:

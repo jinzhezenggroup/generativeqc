@@ -55,7 +55,6 @@ from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
-
 _COMPOSITE_EXTERNAL_SOURCES = (
     "exchange_short_range",
     "exchange_long_range",
@@ -81,9 +80,7 @@ def _plan_for_state(state: typing.Any) -> StationaryGradientPlan:
 def requires_composite_stationary_cuda(state: typing.Any) -> bool:
     """Select the composite owner from compiler source inventory, never method name."""
     plan = _plan_for_state(state)
-    return (
-        stationary_external_provider_sources(plan) == _COMPOSITE_EXTERNAL_SOURCES
-    )
+    return stationary_external_provider_sources(plan) == _COMPOSITE_EXTERNAL_SOURCES
 
 
 def _canonical_gradient_sum(
@@ -97,7 +94,9 @@ def _canonical_gradient_sum(
     for name in plan.source_names:
         component = np.asarray(components[name])
         if component.dtype != np.float64 or component.shape != (natom, 3):
-            raise ValueError("composite stationary gradient component shape/dtype mismatch")
+            raise ValueError(
+                "composite stationary gradient component shape/dtype mismatch"
+            )
         if not np.all(np.isfinite(component)):
             raise ValueError("composite stationary gradient component is nonfinite")
         np.add(gradient, component, out=gradient)
@@ -197,9 +196,13 @@ class PreparedCompositeStationaryCudaGradient:
         functional = int(source.functional_code)
         n, na, npnt = basis.nao, basis.natom, len(state.grid.points)
         if not (1 <= n <= 1024 and 1 <= na <= 128 and 1 <= npnt <= 4_000_000):
-            raise ValueError("composite stationary CUDA stationary shape exceeds its bounded domain")
+            raise ValueError(
+                "composite stationary CUDA stationary shape exceeds its bounded domain"
+            )
         if any(shell.angular_momentum > 2 for shell in basis.shells):
-            raise NotImplementedError("composite stationary CUDA forces currently qualify s/p/d AOs")
+            raise NotImplementedError(
+                "composite stationary CUDA forces currently qualify s/p/d AOs"
+            )
         device = int(source.metadata[12])
         plan = _plan_for_state(state)
         external_sources = stationary_external_provider_sources(plan)
@@ -268,7 +271,9 @@ class PreparedCompositeStationaryCudaGradient:
             + native_budget
         )
         if device_bound > max_device_bytes or host_bound > max_host_bytes:
-            raise ValueError("composite stationary stationary numeric capacity budget exceeded")
+            raise ValueError(
+                "composite stationary stationary numeric capacity budget exceeded"
+            )
         cache = Path(cache)
         identity = (
             basis.identity,

@@ -150,6 +150,7 @@ def _force_diagnostic(
 
     return batch._public_dft_cuda_force(0, atoms)
 
+
 def _clean_sample(
     batch: typing.Any,
     atoms: tuple[tuple[str, tuple[float, float, float]], ...],

@@ -15,7 +15,8 @@ def _work_fields() -> dict[str, ast.expr]:
     owner = next(
         node
         for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "PreparedCompositeStationaryCudaGradient"
+        if isinstance(node, ast.ClassDef)
+        and node.name == "PreparedCompositeStationaryCudaGradient"
     )
     execute = next(
         node
