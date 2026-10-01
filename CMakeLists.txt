@@ -334,9 +334,23 @@ if(NOT GENERATIVEQC_PYTHON_WHEEL)
 endif()
 
 if(GENERATIVEQC_BUILD_CLI)
-  add_executable(generativeqc_cli src/cli/main.cpp)
+  add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp)
+  set(GENERATIVEQC_CLI_BASIS_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_cli_basis_codegen
+    TARGET generativeqc_cli
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_basis_pack.py"
+    OUTPUTS "${GENERATIVEQC_CLI_BASIS_HEADER}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
+    ARGS
+      --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
+      --output "${GENERATIVEQC_CLI_BASIS_HEADER}"
+    COMMENT "Generating Python-free CLI basis catalog")
   target_link_libraries(generativeqc_cli PRIVATE generativeqc)
-  target_include_directories(generativeqc_cli PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_include_directories(generativeqc_cli PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_VERSION="${PROJECT_VERSION}")
   target_compile_options(generativeqc_cli PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
@@ -357,6 +371,10 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
                          PASS_REGULAR_EXPRESSION "gfn2-xtb")
+    add_test(NAME generativeqc_cli_basis_list
+             COMMAND generativeqc_cli basis list --json)
+    set_tests_properties(generativeqc_cli_basis_list PROPERTIES
+                         PASS_REGULAR_EXPRESSION "def2-svp")
     add_test(NAME generativeqc_cli_profile_clear
              COMMAND ${CMAKE_COMMAND} -E env
                      "GENERATIVEQC_PROFILE_CACHE=${CMAKE_CURRENT_BINARY_DIR}/cli-profile-cache"
