@@ -4,7 +4,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from generativeqc._stationary_composite_cuda import requires_composite_stationary_cuda
+from generativeqc._stationary_composite_cuda import (
+    _plan_for_state,
+    requires_composite_stationary_cuda,
+)
 from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_POLICY
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.stationary_cuda import (
@@ -41,8 +44,10 @@ def test_composite_route_is_selected_from_compiler_source_inventory() -> None:
 
 
 def test_composite_route_keeps_shared_point_model_for_ordinary_dft() -> None:
-    assert "source.nonlocal_density_policy == MOLECULAR_VV10_DENSITY_POLICY" in DRIVER
-    assert "else SCF_POINT_MODEL" in DRIVER
+    state = _fake_state("PBE")
+    assert _plan_for_state(state).mean_field.point_model == SCF_POINT_MODEL
+    del state._source.nonlocal_density_policy
+    assert _plan_for_state(state).mean_field.point_model == SCF_POINT_MODEL
 
 
 def test_composite_driver_inherits_live_functional_code() -> None:

@@ -64,6 +64,9 @@ def test_unavailable_route_is_disclosed_without_losing_radial_identity() -> None
     assert "native execution route is not exported" in scope
     assert "public-AO capability fallback" in scope
     radial = ast.unparse(fields["two_electron_radial_operators"])
-    assert "full-range" in radial
+    assert any(
+        isinstance(item, ast.Constant) and item.value == "full-range"
+        for item in ast.walk(fields["two_electron_radial_operators"])
+    )
     assert "plan.range_exchange_primitives" in radial
     assert "primitive.operator" in radial
