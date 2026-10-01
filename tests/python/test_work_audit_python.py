@@ -58,7 +58,6 @@ def test_response_constructors_use_general_rules() -> None:
     [
         "out[:occupied, occupied:] = values",
         "out[0, :] = values",
-        "out[occupied, occupied] = values",
         "out[np.diag_indices(n)] = values",
         "for i in range(n):\n    out[i, i] = values[i]",
     ],
@@ -302,6 +301,26 @@ def test_rebound_induction_target_cannot_hide_dense_fill() -> None:
     assert (
         audit(
             "rows = list(range(n))\nout = np.zeros((n, n))\nfor i in range(1):\n    i = rows\n    out[i, :] = 1\nreturn out"
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("index", ["occupied", "self.index"])
+def test_repeated_unknown_index_does_not_prove_diagonal_support(index: str) -> None:
+    # Ordinary NumPy accepts slice(None), None or True here; each fills the
+    # whole matrix. Repeated names only prove a diagonal with a known index type.
+    assert (
+        audit(f"out = np.zeros((n, n))\nout[{index}, {index}] = values\nreturn out")
+        == []
+    )
+
+
+@pytest.mark.parametrize("value", ["slice(None)", "None", "True"])
+def test_repeated_index_that_selects_dense_matrix_fails_closed(value: str) -> None:
+    assert (
+        audit(
+            f"index = {value}\nout = np.zeros((n, n))\nout[index, index] = values\nreturn out"
         )
         == []
     )

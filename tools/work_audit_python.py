@@ -188,17 +188,11 @@ def _support(
                 f"range({_text(dimension)})",
                 f"range(0, {_text(dimension)})",
             }
-        elif isinstance(axis, (ast.Name, ast.Attribute)) and dims.count(
-            _text(dimension)
-        ) == len(dims):
-            # Repeated advanced indices are a diagonal only on equal-sized axes.
-            if sum(_text(other) == expression for other in axes) < 2:
-                return None
-            if expression not in seen:
-                terms.append(_text(dimension))
-                seen.add(expression)
-            restricted = True
         else:
+            # A repeated unknown name or attribute is not necessarily an
+            # advanced integer index. Slices, None and scalar booleans can
+            # select the entire tensor even in out[index, index]. Without an
+            # index-type proof, only the range-bound names above are admitted.
             return None
     diagonal = len(set(map(_text, axes))) == 1 and not isinstance(axes[0], ast.Slice)
     return {

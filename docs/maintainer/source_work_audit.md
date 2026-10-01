@@ -29,7 +29,10 @@ are not executable Python statements and are not parsed as native code.
   intervening mutation, alias identity and resource lifetime are not proved.
 - **Structured zero materialization:** a Python AST analysis reports a fresh
   NumPy zero tensor and the union/bound of its admitted local writes. Supported
-  forms include slices, Cartesian `ix_` blocks, diagonals and triangular loops.
+  forms include literal slices, Cartesian `ix_` blocks, `diag_indices` and
+  range-indexed diagonals, and `triu_indices`/`tril_indices` triangles. Repeated
+  unknown index names or attributes are omitted because their runtime values
+  may be slices, new axes or scalar booleans that select the full tensor.
   Escaping aliases, unsupported mutation and unknown calls fail closed. A
   symbolic restricted write domain need not prove a strict storage reduction.
 - **CUDA boundaries:** direct named transfer/synchronization sites and bounded
