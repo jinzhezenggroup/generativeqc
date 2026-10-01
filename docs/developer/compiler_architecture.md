@@ -50,6 +50,27 @@ allows only these exact imports from `dft.ao_cuda`, without permitting DFT to
 depend on integral recurrence or method scheduling. This avoids a second
 scientific algebra implementation.
 
+## Shared nonlocal pair lowering
+
+`method.nonlocal_pair` owns the scalar VV10/rVV10 pair energy and analytic
+feature/radial derivative expressions as TensorIR. The build generates one
+`generated_nonlocal_pair_native.hpp` for CPU and CUDA consumers. Requested
+output roots determine the generated arithmetic; runtime policy determines
+which roots must remain observable for numerical-failure compatibility.
+
+The CPU raw rVV10 and CUDA preconditioned rVV10 representations remain explicit
+lowering choices. They retain their established ordered FP64 arithmetic rather
+than exchanging raw and preconditioned parameters silently. The shared scalar
+C++ emitter's opt-in native-sum and caller-owned-check modes preserve the native
+signed-zero and exceptional-arithmetic contract. Other callers retain checked,
+transactional output publication by default.
+
+Native runtimes still own local scales, traversal, residency, reduction,
+screening and failure reporting. In particular, CPU exact-zero-weight admission
+and CUDA density-screened negative-zero row markers are distinct policies;
+sharing pair expressions does not make those predicates interchangeable.
+The independent fixed-grid Python reference remains outside production codegen.
+
 ## Lowering and tuning modules
 
 `integral.cuda_lowering` and `integral.cuda_emitter` retain callable facades.

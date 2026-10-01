@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from tools.generate_nonlocal_pair_native import native_header
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -33,7 +35,6 @@ def signed_weight_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     pieces = [
-        _definition(source, "struct PairKernelValues") + ";",
         _definition(
             source, "template <Vv10Variant Variant, bool Features, bool Geometry>"
         ),
@@ -55,7 +56,10 @@ using std::signbit;
 #define __device__
 #define __global__
 constexpr double kPi = 3.141592653589793238462643383279502884;
+namespace generativeqc::dft::nlc {
 enum class Vv10Variant { vv10, rvv10 };
+}
+using namespace generativeqc::dft::nlc;
 struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1}, gridDim{1};
 void atomicExch(int* out, int value) { *out = value; }
 double __longlong_as_double(unsigned long long value) {
@@ -120,7 +124,13 @@ extern "C" int run(int variant, int mask, double weight, double density, double*
 """
     directory = tmp_path_factory.mktemp("vv10-signed-weights")
     cpp, library = directory / "probe.cpp", directory / "probe.so"
-    cpp.write_text(prefix + "\n".join(pieces) + wrapper)
+    cpp.write_text(
+        prefix
+        + native_header()
+        + "\nusing PairKernelValues = generated::PairValues;\n"
+        + "\n".join(pieces)
+        + wrapper
+    )
     subprocess.run(
         [
             compiler,

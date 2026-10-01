@@ -1,6 +1,7 @@
 """Compile scalar lowering with adversarial names and failed output publication."""
 
 import ctypes as ct
+import math
 import shutil
 import subprocess
 import typing
@@ -11,8 +12,15 @@ from generativeqc_compiler.tensor import (
     Program,
     TensorSpec,
     add,
+    constant,
+    divide,
+    exp,
     input_tensor,
+    log,
     multiply,
+    power,
+    scaled_bilinear,
+    sqrt,
 )
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -76,3 +84,185 @@ def test_fma_lowering_is_opt_in_and_does_not_hide_shared_products() -> None:
     assert "std::fma" not in emit_scalar_cpp(
         shared, function_name="shared", fused_accumulation=True
     )
+
+
+def _compile_program(
+    tmp_path: Path, program: Program, **options: typing.Any
+) -> tuple[typing.Any, str]:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("C++ compiler unavailable")
+    inputs = sorted(
+        {node.attrs["name"] for node in program.live_nodes if node.op == "input"}
+    )
+    outputs = sorted(program.outputs)
+    source = emit_scalar_cpp(
+        program,
+        function_name="scalar_probe",
+        input_order=inputs,
+        output_order=outputs,
+        **options,
+    )
+    arguments = [f"inputs[{i}]" for i in range(len(inputs))]
+    arguments += [f"outputs[{i}]" for i in range(len(outputs))]
+    path, library = tmp_path / "probe.cpp", tmp_path / "probe.so"
+    path.write_text(
+        "#include <cmath>\n"
+        + source
+        + '\nextern "C" int call(const double* inputs, double* outputs) { '
+        + f"return scalar_probe({', '.join(arguments)}); }}\n"
+    )
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++17",
+            "-O2",
+            "-shared",
+            "-fPIC",
+            str(path),
+            "-o",
+            str(library),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    call = ct.CDLL(str(library)).call
+    call.argtypes = [ct.POINTER(ct.c_double), ct.POINTER(ct.c_double)]
+    call.restype = ct.c_int
+    return call, source
+
+
+@pytest.mark.parametrize("ordered", (False, True))
+def test_ordered_native_sums_preserve_signed_zero_and_unary_minus(
+    tmp_path: Path, ordered: bool
+) -> None:
+    x = input_tensor("x", TensorSpec((), role="input"))
+    call, source = _compile_program(
+        tmp_path,
+        Program({"negated": add(x, coefficients=(-1,)), "sum": add(x, x)}),
+        ordered_native_sums=ordered,
+    )
+    for value in (-0.0, 0.0):
+        outputs = (ct.c_double * 2)(-7.0, -9.0)
+        assert call((ct.c_double * 1)(value), outputs) == 1
+        assert list(outputs) == [0.0, 0.0]
+        expected_negation_sign = (
+            -1.0 if ordered and value == 0.0 and math.copysign(1.0, value) > 0 else 1.0
+        )
+        expected_sum_sign = -1.0 if ordered and math.copysign(1.0, value) < 0 else 1.0
+        assert math.copysign(1.0, outputs[0]) == expected_negation_sign
+        assert math.copysign(1.0, outputs[1]) == expected_sum_sign
+    assert "std::fma" not in source
+    if ordered:
+        assert " = 0.0;" not in source
+
+
+def test_ordered_native_sums_keep_term_order(tmp_path: Path) -> None:
+    spec = TensorSpec((), role="input")
+    x, y, z = (input_tensor(name, spec) for name in ("x", "y", "z"))
+    call, _ = _compile_program(
+        tmp_path,
+        Program(
+            {"ordered": add(x, y, z), "scaled": add(x, y, z, coefficients=(1, -1, 2))}
+        ),
+        ordered_native_sums=True,
+    )
+    outputs = (ct.c_double * 2)()
+    assert call((ct.c_double * 3)(1e16, -1e16, 1.0), outputs) == 1
+    assert list(outputs) == [1.0, 2e16]
+
+
+@pytest.mark.parametrize("check_intermediates", (False, True))
+@pytest.mark.parametrize(
+    ("operation", "value", "expected"),
+    (
+        ("zero_product", math.inf, "nan"),
+        ("zero_quotient", 0.0, "nan"),
+        ("zero_sum_coefficient", math.inf, "nan"),
+        ("overflow", 1e200, "inf"),
+        ("recovered_overflow", 1e200, "negative_zero"),
+        ("input_nan", math.nan, "nan"),
+        ("sqrt", -1.0, "nan"),
+        ("log", 0.0, "negative_inf"),
+        ("power", -1.0, "nan"),
+        ("exp", 1000.0, "inf"),
+    ),
+)
+def test_caller_owned_checks_publish_native_exceptional_arithmetic(
+    tmp_path: Path,
+    check_intermediates: bool,
+    operation: str,
+    value: float,
+    expected: str,
+) -> None:
+    x = input_tensor("x", TensorSpec((), role="input"))
+    expressions = {
+        "zero_product": multiply(constant(0), x),
+        "zero_quotient": divide(constant(0), x),
+        "zero_sum_coefficient": add(x, coefficients=(0,)),
+        "overflow": multiply(x, x),
+        "recovered_overflow": divide(constant("-3/2"), multiply(x, x)),
+        "input_nan": x,
+        "sqrt": sqrt(x),
+        "log": log(x),
+        "power": power(x, "3/2"),
+        "exp": exp(x),
+    }
+    call, source = _compile_program(
+        tmp_path,
+        Program({"out": expressions[operation]}),
+        check_intermediates=check_intermediates,
+        caller_owned_checks=True,
+        ordered_native_sums=True,
+    )
+    output = (ct.c_double * 1)(-7.0)
+    assert call((ct.c_double * 1)(value), output) == 1
+    assert "return false" not in source
+    assert "std::isfinite" not in source
+    if expected == "nan":
+        assert math.isnan(output[0])
+    elif expected == "inf":
+        assert output[0] == math.inf
+    elif expected == "negative_inf":
+        assert output[0] == -math.inf
+    else:
+        assert output[0] == 0.0 and math.copysign(1.0, output[0]) == -1.0
+
+
+@pytest.mark.parametrize("operation", ("divide", "sqrt", "log", "power"))
+def test_default_domain_checks_preserve_output_references(
+    tmp_path: Path, operation: str
+) -> None:
+    x = input_tensor("x", TensorSpec((), role="input"))
+    expressions = {
+        "divide": divide(constant(0), x),
+        "sqrt": sqrt(x),
+        "log": log(x),
+        "power": power(x, "3/2"),
+    }
+    call, _ = _compile_program(tmp_path, Program({"out": expressions[operation]}))
+    output = (ct.c_double * 1)(-7.0)
+    value = 0.0 if operation == "divide" else -1.0
+    assert call((ct.c_double * 1)(value), output) == 0
+    assert output[0] == -7.0
+
+
+def test_caller_owned_scaled_bilinear_requires_direct_lowering(tmp_path: Path) -> None:
+    x = input_tensor("x", TensorSpec((), role="input"))
+    zero = constant(0)
+    program = Program({"out": scaled_bilinear(zero, x, zero, x, x, x)})
+    with pytest.raises(ValueError, match="requires direct_scaled_bilinear"):
+        emit_scalar_cpp(program, function_name="probe", caller_owned_checks=True)
+    call, source = _compile_program(
+        tmp_path,
+        program,
+        caller_owned_checks=True,
+        direct_scaled_bilinear=True,
+        check_intermediates=False,
+    )
+    for value in (0.0, math.inf):
+        output = (ct.c_double * 1)(-7.0)
+        assert call((ct.c_double * 1)(value), output) == 1
+        assert math.isnan(output[0])
+    assert "return false" not in source
