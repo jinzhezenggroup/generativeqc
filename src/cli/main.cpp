@@ -88,7 +88,8 @@ int atomic_number(std::string token) {
   if (!token.empty() && std::all_of(token.begin(), token.end(),
                                     [](unsigned char c) { return std::isdigit(c) != 0; })) {
     const int value = parse_int(token, "atomic number");
-    if (value < 1 || value > 86) throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
+    if (value < 1 || value > 86)
+      throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
     return value;
   }
 
@@ -271,9 +272,7 @@ void print_methods(bool json) {
   if (json) std::cout << "\n]\n";
 }
 
-bool is_gfn2(const RunOptions& options) {
-  return options.method == GENERATIVEQC_METHOD_GFN2_XTB;
-}
+bool is_gfn2(const RunOptions& options) { return options.method == GENERATIVEQC_METHOD_GFN2_XTB; }
 
 std::string_view representation_name(generativeqc_basis_representation representation) {
   return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
@@ -372,7 +371,8 @@ RunOptions parse_run(int argc, char** argv) {
     }
   }
   if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit))
-    throw UsageError("GFN2-xTB owns its intrinsic basis; --basis/--representation apply to RHF/UHF");
+    throw UsageError(
+        "GFN2-xTB owns its intrinsic basis; --basis/--representation apply to RHF/UHF");
   return options;
 }
 
@@ -388,7 +388,7 @@ int run(const RunOptions& options) {
   if (!is_gfn2(options)) {
     try {
       basis = generativeqc::cli::expand_bundled_basis(options.basis_name, atoms,
-                                                       options.representation);
+                                                      options.representation);
     } catch (const std::invalid_argument& error) {
       throw UsageError(error.what());
     }
@@ -400,9 +400,16 @@ int run(const RunOptions& options) {
   const std::uint32_t primitive_count =
       is_gfn2(options) ? 0u : static_cast<std::uint32_t>(basis.primitives.size());
   const generativeqc_system_descriptor system_descriptor{
-      sizeof(generativeqc_system_descriptor), GENERATIVEQC_ABI_VERSION,
-      atoms.data(), static_cast<std::uint32_t>(atoms.size()), shells, shell_count,
-      primitives, primitive_count, options.charge, options.multiplicity,
+      sizeof(generativeqc_system_descriptor),
+      GENERATIVEQC_ABI_VERSION,
+      atoms.data(),
+      static_cast<std::uint32_t>(atoms.size()),
+      shells,
+      shell_count,
+      primitives,
+      primitive_count,
+      options.charge,
+      options.multiplicity,
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system(context, system_descriptor);
 
@@ -418,8 +425,7 @@ int run(const RunOptions& options) {
               << "\"backend\":\"" << backend_name(result.executed_backend) << "\"";
     if (!is_gfn2(options)) {
       std::cout << ",\"basis\":\"" << options.basis_name << "\","
-                << "\"representation\":\"" << representation_name(options.representation)
-                << "\"";
+                << "\"representation\":\"" << representation_name(options.representation) << "\"";
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
