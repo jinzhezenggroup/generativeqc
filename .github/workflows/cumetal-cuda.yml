@@ -277,7 +277,10 @@ jobs:
 
       - name: Install Python test dependencies
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: uv pip install --python .venv/bin/python --editable '.[test]'
+        # The CuMetal lane already built the native library above. Installing the
+        # project itself would start a second ordinary macOS wheel build, whose
+        # scoped GFN2 wheel provider is intentionally Linux-only.
+        run: uv pip install --python .venv/bin/python 'pytest>=8'
 
       - name: Run full CUDA suite on the Apple GPU
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -286,6 +289,7 @@ jobs:
           CUMETAL_ROOT: /tmp/cumetal-install
           DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
+          PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: full
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "300"
