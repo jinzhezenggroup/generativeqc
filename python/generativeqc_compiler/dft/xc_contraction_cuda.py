@@ -267,6 +267,62 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
     work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
 }
 
+// Meta-GGA has four D*AO jets. Reuse one shared density tile across all
+// four AO panels instead of relaunching the same density tile once per jet.
+// The per-jet begin/k traversal is unchanged, so every dot product retains its
+// qualified reduction order and mixed-precision contract.
+template <bool Mixed>
+__global__ void tiled_density_product_fused_jets(
+    const double* density, const double* ao, I n, I count, double* work, int* error) {
+  constexpr I jets = 4;
+  __shared__ double d[@TILE@][@PAD@], a[@TILE@][@PAD@];
+  const I x = threadIdx.x, y = threadIdx.y;
+  const I mu = I(blockIdx.x)*@TILE@+x, point = I(blockIdx.y)*@TILE@+y;
+  const I spin = blockIdx.z, panel = count*n;
+  const double* matrix = density+spin*n*n;
+  double value[jets]{};
+  for (I begin = 0; begin < n; begin += @TILE@) {
+    const I row = I(blockIdx.x)*@TILE@+y, col = begin+x;
+    if constexpr (Mixed) {
+      if (row < n && col < n) {
+        const float left = __double2float_rn(matrix[row*n+col]);
+        const float right = __double2float_rn(matrix[col*n+row]);
+        d[y][x] = static_cast<double>(
+            __fadd_rn(__fmul_rn(0.5f, left), __fmul_rn(0.5f, right)));
+      } else {
+        d[y][x] = 0.0;
+      }
+    } else {
+      d[y][x] =
+          row < n && col < n ? 0.5*matrix[row*n+col]+0.5*matrix[col*n+row] : 0.0;
+    }
+#pragma unroll
+    for (I jet = 0; jet < jets; ++jet) {
+      const double* source = ao+jet*panel;
+      if constexpr (Mixed)
+        a[y][x] = point < count && col < n
+                      ? static_cast<double>(__double2float_rn(source[point*n+col]))
+                      : 0.0;
+      else
+        a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
+      __syncthreads();
+      for (I k = 0; k < @TILE@; ++k) {
+        if constexpr (Mixed)
+          value[jet] = __dadd_rn(
+              value[jet], static_cast<double>(__fmul_rn(__double2float_rn(d[x][k]),
+                                                        __double2float_rn(a[y][k]))));
+        else
+          value[jet] += d[x][k]*a[y][k];
+      }
+      __syncthreads();
+    }
+  }
+  if (mu < n && point < count)
+#pragma unroll
+    for (I jet = 0; jet < jets; ++jet)
+      work[(spin*jets+jet)*panel+point*n+mu] = finite(value[jet], error, 1);
+}
+
 // One triangle is authoritative, including on diagonal and partial blocks.
 // A compact linear block domain enumerates only tile_mu <= tile_nu instead of
 // launching the unused lower half of a square grid. One lane decodes the tile
@@ -345,14 +401,32 @@ inline void scheduled_density_product(cudaStream_t stream, const double* density
     const double* ao, I n, I count, I spins, I work_jets, bool mixed,
     double* work, int* error) {
   if (tiled_xc_admitted(n, count, spins, work_jets)) {
-    const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@,
-                    spins*work_jets), block(@TILE@,@TILE@);
+    const dim3 block(@TILE@,@TILE@);
+    if (work_jets == 4) {
+      const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@, spins);
+      if (mixed)
+        tiled_density_product_fused_jets<true><<<grid, block, 0, stream>>>(
+            density, ao, n, count, work, error);
+      else
+        tiled_density_product_fused_jets<false><<<grid, block, 0, stream>>>(
+            density, ao, n, count, work, error);
+    } else {
+      const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@,
+                      spins*work_jets);
+      if (mixed)
+        tiled_density_product<true><<<grid, block, 0, stream>>>(
+            density, ao, n, count, work_jets, work, error);
+      else
+        tiled_density_product<false><<<grid, block, 0, stream>>>(
+            density, ao, n, count, work_jets, work, error);
+    }
+  } else if (work_jets == 4) {
     if (mixed)
-      tiled_density_product<true><<<grid, block, 0, stream>>>(
-          density, ao, n, count, work_jets, work, error);
+      density_product_fused_jets<true><<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
+          density,ao,n,count,spins,work,error);
     else
-      tiled_density_product<false><<<grid, block, 0, stream>>>(
-          density, ao, n, count, work_jets, work, error);
+      density_product_fused_jets<false><<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
+          density,ao,n,count,spins,work,error);
   } else {
     if (mixed)
       density_product<true><<<generativeqc_tensor::blocks(spins*work_jets*count*n,128),128,0,stream>>>(
