@@ -203,6 +203,8 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
         from generativeqc._ks_snapshot import NativeKsSnapshot
 
         if device == "cuda":
+            transport_before_snapshot = tuple(batch.ks_transport_diagnostics)
+            assert all(item.matrix_d2h_bytes == 0 for item in transport_before_snapshot)
             snapshot = NativeKsSnapshot(batch, 0)
             try:
                 coulomb, exchange, threshold = snapshot.fock_provider_proof()
@@ -210,6 +212,14 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
                 assert threshold == calc._density_fitting_relative_threshold
             finally:
                 snapshot.close()
+            transport_after_snapshot = tuple(batch.ks_transport_diagnostics)
+            matrix_bytes = 7 * 7 * np.dtype(np.float64).itemsize
+            assert [
+                after.matrix_d2h_bytes - before.matrix_d2h_bytes
+                for before, after in zip(
+                    transport_before_snapshot, transport_after_snapshot, strict=True
+                )
+            ] == [3 * matrix_bytes, 0]
         else:
             with pytest.raises(NotImplementedError):
                 NativeKsSnapshot(batch, 0)
@@ -249,7 +259,10 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
             # Rebuilding only the moved item's owner exports its last-good RKS
             # density once; WATER/STO-3G has seven orbital basis functions.
             density_bytes = 7 * 7 * np.dtype(np.float64).itemsize
-            assert [item.matrix_d2h_bytes for item in transport] == [0, density_bytes]
+            assert [
+                after.matrix_d2h_bytes - before.matrix_d2h_bytes
+                for before, after in zip(transport_after_warm, transport, strict=True)
+            ] == [0, density_bytes]
 
 
 def test_df_rejects_unqualified_force_precision_and_resource_consumers(

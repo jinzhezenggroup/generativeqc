@@ -338,6 +338,11 @@ class NativeKsSnapshot:
             raise ValueError("native KS snapshot has an invalid DF metric threshold")
         return names[coulomb.value], exchange_name, float(threshold.value)
 
+    @property
+    def density_fitted(self) -> bool:
+        """Bind derivative fallback policy to the live native provider proof."""
+        return "density-fitted" in self.fock_provider_proof()[:2]
+
     def cuda_resident_grid(self) -> CudaResidentGrid | None:
         """Borrow exact CUDA-generated molecular-grid pointers without host staging."""
         if self.backend != "cuda":

@@ -117,7 +117,7 @@ def test_capacity_audit_rejects_bypassed_native_provider_proof(tmp_path: Path) -
 
     relative = "python/generativeqc/_ks_snapshot.py"
     source = (Path(__file__).resolve().parents[2] / relative).read_text()
-    assert source.count("self.fock_provider_proof()") == 1
+    assert source.count("self.fock_provider_proof()") == 2
     target = tmp_path / relative
     target.parent.mkdir(parents=True)
     target.write_text(
@@ -125,3 +125,16 @@ def test_capacity_audit_rejects_bypassed_native_provider_proof(tmp_path: Path) -
     )
     with pytest.raises(RuntimeError, match="snapshot functional contract changed"):
         qualify_capacity._snapshot_functional_contract(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "coulomb,exchange", [(0, None), (1, None), (0, "density-fitted")]
+)
+def test_fitted_fallback_policy_uses_native_proof(
+    coulomb: int, exchange: str | None
+) -> None:
+    proof = ("density-fitted" if coulomb == 1 else "exact", exchange, 1e-10)
+    snapshot = SimpleNamespace(fock_provider_proof=lambda: proof)
+    assert NativeKsSnapshot.density_fitted.fget(snapshot) == (
+        "density-fitted" in proof[:2]
+    )
