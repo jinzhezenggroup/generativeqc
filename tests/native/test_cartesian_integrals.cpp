@@ -166,6 +166,45 @@ int main() {
                       "generated ERI differs from derivative fallback value");
       }
     }
+    // Four distinct d shells exercise the complete 6^4 bounded component
+    // buffer and shell-pair ordering that differs from global AO-pair ordering.
+    // Reversed shell storage must describe the same permuted physical tensor.
+    for (const bool reversed : {false, true}) {
+      generativeqc::core::System system;
+      system.atoms = {{2, {0.1, -0.3, 0.2}},
+                      {2, {-0.7, 0.8, 0.5}},
+                      {2, {0.9, 0.2, -0.6}},
+                      {2, {-0.4, -0.6, 0.7}}};
+      for (std::size_t slot = 0; slot < 4; ++slot) {
+        const auto atom = static_cast<std::uint32_t>(reversed ? 3 - slot : slot);
+        system.shells.push_back({atom, 2, {{0.35 + 0.1 * static_cast<double>(atom), 1.0}}});
+      }
+      system.multiplicity = 1;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "dddd geometry reuse fixture normalization failed");
+      const auto values = generativeqc::integrals::build_integrals(system, false);
+      generativeqc::posthf::RawSource source(system);
+      std::vector<double> reference(6 * 6 * 6 * 6);
+      source.read(generativeqc::posthf::RawSource::Operator::eri, {0, 6, 12, 18}, {6, 6, 6, 6},
+                  reference.data(), reference.size());
+      for (std::size_t i = 0; i < 6; ++i) {
+        for (std::size_t j = 0; j < 6; ++j) {
+          for (std::size_t k = 0; k < 6; ++k) {
+            for (std::size_t l = 0; l < 6; ++l) {
+              const auto expected = reference[eri_index(i, j, k, l, 6)];
+              const auto actual = values.eri[eri_index(i, j + 6, k + 12, l + 18, values.nbf)];
+              require(std::isfinite(actual), "shared dddd geometry returned a nonfinite value");
+              require_close(actual, expected, 3.0e-12,
+                            "shared dddd geometry differs from independent RawSource");
+              require_close(values.eri[eri_index(l + 18, k + 12, j + 6, i, values.nbf)], actual,
+                            0.0, "shared dddd geometry lost eightfold tensor symmetry");
+            }
+          }
+        }
+      }
+    }
     {
       generativeqc::core::System higher;
       higher.atoms = {{2, {0.1, -0.2, 0.3}}};
