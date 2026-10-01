@@ -1,0 +1,38 @@
+{
+  "classification": "Source-derived, unscreened demand census; not instrumented runtime FLOPs or speedup factors.",
+  "unchanged_scope": "Same primitive quartets, Cartesian components, exact in-core ERI tensor, SCF/Fock work and convergence gates.",
+  "cases": {
+    "h2-sto3g": {
+      "primitive_quartets": 486,
+      "cached_coulomb_states": 486,
+      "component_local_coulomb_states": 486,
+      "primitive_components": 486
+    },
+    "water-sto3g": {
+      "primitive_quartets": 9720,
+      "cached_coulomb_states": 42930,
+      "component_local_coulomb_states": 114048,
+      "primitive_components": 32886
+    },
+    "water-svp": {
+      "primitive_quartets": 38111,
+      "cached_coulomb_states": 319254,
+      "component_local_coulomb_states": 2344466,
+      "primitive_components": 326255
+    },
+    "formaldehyde-svp": {
+      "primitive_quartets": 199362,
+      "cached_coulomb_states": 1995222,
+      "component_local_coulomb_states": 18759192,
+      "primitive_components": 2261946
+    }
+  },
+  "design_estimate_only": "Original coulomb-static-audit.json baseline_ops/candidate_ops are hypothetical DAG design estimates, not measured runtime operations or exact emitted-schedule operation counts. Full original retained in supporting-evidence.json.gz.",
+  "scratch": {
+    "doubles": 165,
+    "maximum_order": 8,
+    "bytes_with_order_on_measured_abi": 1328,
+    "lifetime": "Caller-owned and re-prepared for each exact primitive geometry; matching maximum_order is not a stale-geometry guard.",
+    "initialization": "Only requested graded prefix; 1,4,10,20,35,56,84,120,165 values for orders 0..8."
+  }
+}
