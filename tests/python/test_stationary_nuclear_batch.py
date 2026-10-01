@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPILER = (ROOT / "python/generativeqc_compiler/method/stationary_cuda.py").read_text()
 RUNTIME = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
 PYTHON = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
-WB97MV = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+WB97MV = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
 
 
 def test_generated_single_and_batched_routes_share_one_pair_helper() -> None:

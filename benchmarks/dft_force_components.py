@@ -139,7 +139,7 @@ def _stationary_work_counts(
     return counts
 
 
-def _wb97mv_work_counts(
+def _composite_work_counts(
     work: Mapping[str, typing.Any],
 ) -> dict[str, dict[str, int]]:
     counts = _empty_work_counts()
@@ -217,7 +217,7 @@ def _coverage(
     }
 
 
-def _normalize_wb97mv(
+def _normalize_composite(
     work: Mapping[str, typing.Any], *, state_export_seconds: float | None
 ) -> dict[str, typing.Any]:
     component = _mapping(work.get("component_seconds"))
@@ -286,14 +286,20 @@ def _normalize_wb97mv(
     if endpoint is not None and state_export_seconds is not None:
         endpoint += state_export_seconds
     attributed = sum(value for value in wall.values() if value is not None)
+    execution = str(work.get("execution", ""))
+    source_route = (
+        "wb97mv-component-seconds"
+        if execution.startswith("cuda-complete-wb97mv")
+        else "composite-component-seconds"
+    )
     return {
         "schema": "generativeqc.dft-force-components.v1",
-        "source_route": "wb97mv-component-seconds",
+        "source_route": source_route,
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,
         "work_count_schema": "generativeqc.dft-work-counts.v1",
-        "work_counts": _wb97mv_work_counts(work),
+        "work_counts": _composite_work_counts(work),
         "work_count_policy": WORK_COUNT_POLICY,
         "work_count_notes": {
             "stationary_integral_derivatives": (
@@ -617,7 +623,7 @@ def normalize_force_work(
     index: int = 0,
     state_export_seconds: float | None = None,
 ) -> dict[str, typing.Any]:
-    """Return one schema across semilocal/hybrid stationary and WB97M-V work."""
+    """Return one schema across shared stationary and composite force work."""
 
     state_export = (
         None
@@ -628,5 +634,5 @@ def normalize_force_work(
     if isinstance(work.get("component_seconds"), Mapping) or str(
         work.get("execution", "")
     ).startswith("cuda-complete-wb97mv"):
-        return _normalize_wb97mv(work, state_export_seconds=state_export)
+        return _normalize_composite(work, state_export_seconds=state_export)
     return _normalize_stationary(work, state_export_seconds=state_export)
