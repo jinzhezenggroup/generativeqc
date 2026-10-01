@@ -52,12 +52,23 @@ class Vv10Plan {
   [[nodiscard]] const Vv10Parameters& parameters() const noexcept { return parameters_; }
   [[nodiscard]] const Vv10ResourceUsage& resources() const noexcept { return resources_; }
 
+  // Actual successful CPU pair work; zero before execution, after failure, or
+  // for CUDA execution. resources().pair_evaluations remains the dense bound.
+  [[nodiscard]] std::uint64_t last_execution_pair_evaluations() const noexcept {
+    return last_execution_pair_evaluations_;
+  }
+
+  // weighted_potential_only is an internal molecular E/V contract: feature
+  // outputs at exactly zero weights may be zeroed because the caller only
+  // consumes weight * vrho/vsigma. Raw and geometry consumers must not opt in.
+  // Unsupported variants/shapes or unsafe numerical ranges retain dense work.
   generativeqc_status execute(std::span<const double> coordinates, std::span<const double> weights,
                               std::span<const double> density,
                               std::span<const double> density_gradient, double& energy,
                               std::span<double> vrho, std::span<double> vsigma,
                               std::span<double> point_derivative,
-                              std::span<double> weight_derivative, std::string& detail);
+                              std::span<double> weight_derivative, std::string& detail,
+                              bool weighted_potential_only = false);
 
  private:
   Vv10Plan(generativeqc_backend backend, int device_id, Vv10Parameters parameters,
@@ -68,6 +79,7 @@ class Vv10Plan {
   int device_id_{};
   Vv10Parameters parameters_{};
   Vv10ResourceUsage resources_{};
+  std::uint64_t last_execution_pair_evaluations_{};
   std::vector<double> omega_;
   std::vector<double> kappa_;
   std::vector<double> weighted_density_;
