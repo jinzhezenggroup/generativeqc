@@ -628,7 +628,12 @@ def prepare_for_backend(
 
     Portable preparation denotes one generated scientific source compiled for both
     CPU and CUDA; it is a provenance/lowering domain, not a third execution backend.
-    Exact optimizer passes always run. CPU/CUDA/portable lowering additionally applies
+    The shared exact optimizer pipeline runs unless diagnostic controls select a
+    prefix or disable passes. Default preparation inherits such controls from an
+    already diagnostic input, so subsequent lowering does not erase the selection.
+    Explicit non-default controls replace that selection; optimize(program)
+    without controls resets it to the canonical pipeline.
+    CPU/CUDA/portable lowering additionally applies
     only compiler-proven strict symbolic-degree contraction reassociation unless
     the caller explicitly preserves the source reduction tree. Explicit
     precision-execution programs keep their original tree until precision for
@@ -641,6 +646,14 @@ def prepare_for_backend(
         raise ValueError(f"unsupported TensorIR production backend: {backend}")
     if type(preserve_reduction_order) is not bool:
         raise TypeError("preserve_reduction_order must be a Boolean")
+    # Production emitters/planners prepare their input again. Carry an explicit
+    # diagnostic selection across that boundary instead of silently running the
+    # full pipeline and erasing the very regression being bisected. Calling
+    # optimize(program) explicitly resets the selection to the canonical pipeline.
+    if not disabled_passes and stop_after is None:
+        inherited = program.provenance.get("optimizer_diagnostics", {})
+        disabled_passes = inherited.get("disabled_passes", ())
+        stop_after = inherited.get("stopped_after")
     allow_reassociation = (
         backend in ("cpu", "cuda", "portable")
         and not preserve_reduction_order
