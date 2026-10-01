@@ -162,3 +162,96 @@ def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> N
             check=False,
         )
         assert process.returncode == 0, (mode, process.returncode, process.stderr)
+
+
+def test_device_interaction_source_defaults_fail_closed(tmp_path: Path) -> None:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("host C++ compiler unavailable")
+    source = tmp_path / "device_source_contract.cpp"
+    executable = tmp_path / "device_source_contract"
+    source.write_text(
+        r"""
+#include <array>
+#include <cstddef>
+#include <stdexcept>
+#include "integrals/electron_interaction_source.hpp"
+
+using generativeqc::integrals::DeviceInteractionTarget;
+using generativeqc::integrals::ElectronInteractionOperator;
+using generativeqc::integrals::ElectronInteractionSource;
+
+struct HostOnly final : ElectronInteractionSource {
+  const generativeqc::core::System& orbital() const override {
+    static const generativeqc::core::System system{};
+    return system;
+  }
+  std::size_t nbf() const override { return 1; }
+  std::size_t naux() const override { return 0; }
+  std::size_t retained_numeric_bytes() const override { return 0; }
+  bool supports(Operator op) const noexcept override {
+    return op == ElectronInteractionOperator::eri;
+  }
+  void read(Operator, const std::array<std::size_t, 4>&,
+            const std::array<std::size_t, 4>&, double*, std::size_t) const override {}
+};
+
+int main() {
+  HostOnly source;
+  if (source.supports_device_read(ElectronInteractionOperator::eri, 0)) return 1;
+  std::array<std::size_t, 4> begin{0, 0, 0, 0}, count{1, 1, 1, 1};
+  try {
+    source.read_device(ElectronInteractionOperator::eri, begin, count,
+                       DeviceInteractionTarget{0, nullptr, nullptr, 1}, 1);
+  } catch (const std::invalid_argument&) {
+    return 0;
+  }
+  return 2;
+}
+"""
+    )
+    compiled = subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-O0",
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    process = subprocess.run(
+        [str(executable)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert process.returncode == 0, process.stderr
+
+
+def test_native_provider_keeps_host_fallback_and_device_handoff() -> None:
+    provider = (ROOT / "src/posthf/native_provider.cpp").read_text()
+    transform_header = (ROOT / "src/posthf/cuda_transform.hpp").read_text()
+    transform_cuda = (ROOT / "src/posthf/cuda_transform.cu").read_text()
+
+    assert "source_.supports_device_read(" in provider
+    assert "source_.read_device(" in provider
+    assert "source_.read(" in provider
+    assert "posthf_cuda_batch_input_v1(" in provider
+    assert "posthf_cuda_batch_add_device_v1(" in provider
+    assert "posthf_cuda_batch_add_v1(" in provider
+
+    assert "posthf_cuda_batch_input_v1" in transform_header
+    assert "posthf_cuda_batch_add_device_v1" in transform_header
+    assert "raw_borrowed" in transform_cuda
+    assert "if (p.raw_borrowed)" in transform_cuda
