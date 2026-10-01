@@ -501,9 +501,18 @@ def test_pair_output_demands_do_not_change_observed_failure_domain(
 
 
 def test_cpu_and_cuda_pair_consumers_include_shared_generated_header() -> None:
+    generated = _generate(Path(pytest.ensuretemp("nonlocal-local-scale")) / "generated.hpp")
+    assert "local_scales_cpu(" in generated
+    assert "local_scales_cuda(" in generated
     for filename in ("vv10_runtime.cpp", "vv10_runtime_cuda.cu"):
         source = (ROOT / "src/dft/nonlocal_correlation" / filename).read_text(
             encoding="utf-8"
         )
         assert '#include "generated_nonlocal_pair_native.hpp"' in source
         assert re.search(r"generated::pair_values\s*<", source)
+    cpu = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime.cpp").read_text()
+    cuda = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
+    assert "generated::local_scales_cpu<" in cpu
+    assert "generated::local_scales_cuda<" in cuda
+    assert "const auto omega2 = c * sigma2 / rho4" not in cpu
+    assert "const double ratio = sigma / (rho * rho)" not in cuda
