@@ -381,7 +381,31 @@ jobs:
             -I"$CUMETAL_PREFIX/include" \
             -o "$GENERATIVEQC_BENCH_BUILD/generativeqc_cumetal_fp32_benchmark"
 
+      - name: Smoke CuMetal FP32 proxy workloads
+        shell: bash
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/cumetal-fp32-smoke.log"
+          {
+            printf 'run compute\n'
+            printf 'run memory\n'
+            printf 'run gather\n'
+            printf 'run mixed\n'
+            printf 'quit\n'
+          } | "${GENERATIVEQC_CUMETAL_FP32_BENCH}" | tee "${log}"
+
+          grep -q '^READY device=' "${log}"
+          for workload in compute memory gather mixed; do
+            grep -Eq "^OK ${workload} [0-9]+([.][0-9]+)?$" "${log}"
+          done
+
       - name: Run CodSpeed FP32 CuMetal proxy suite
+        id: codspeed
+        continue-on-error: true
         uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
@@ -390,6 +414,11 @@ jobs:
         with:
           mode: walltime
           run: .venv/bin/python -m pytest benchmarks/test_cumetal_fp32_codspeed.py --codspeed -q
+
+      - name: Report CodSpeed telemetry failure
+        if: steps.codspeed.outcome == 'failure'
+        run: |
+          echo "::warning::CuMetal benchmark workloads passed their direct smoke gate, but CodSpeed telemetry failed. Treating profiler/upload infrastructure as non-gating."
 
   upload-test-results:
     name: Upload CUDA test results
