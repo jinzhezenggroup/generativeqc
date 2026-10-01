@@ -1,5 +1,6 @@
 """A failed KS proposal cannot keep an intermediate orbital frame eligible."""
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,9 +37,10 @@ def orbital_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         )
     )
     legacy = _method(source, "  bool finish_legacy()")
-    end = legacy.index("    previous_energy =")
-    begin = legacy.rfind("    try {\n", 0, end)
-    assert begin >= 0
+    end = legacy.rindex("\n    previous_energy =") + 1
+    publication_blocks = list(re.finditer(r"^    try \{\n", legacy[:end], re.MULTILINE))
+    assert publication_blocks
+    begin = publication_blocks[-1].start()
     # Compile the actual accepted-proposal copy/exception block and entry
     # guards. Only the CUDA calls and unrelated solver stages are test doubles.
     publication = legacy[begin:end]
