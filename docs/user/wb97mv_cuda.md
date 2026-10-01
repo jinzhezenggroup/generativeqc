@@ -30,9 +30,13 @@ spin. Energy-only requests avoid derivative work. Forces are the negative
 energy gradient. No CPU integral derivative, reference SCF or finite difference
 is part of the production force path.
 
-The complete Python force consumer admits built-in STO-3G and def2-SVP, or
-explicit all-electron s/p/d bases, in Cartesian or spherical representation.
-ECPs, density fitting and mixed precision are outside this force contract.
+The complete Python force consumer admits built-in STO-3G, def2-SVP and
+def2-TZVP, or explicit all-electron bases through f angular momentum, in
+Cartesian or spherical representation. Generic stationary integral descriptors
+remain qualified through d shells; the f-shell WB97M-V path uses the
+geometry-only stationary topology while one-/two-electron derivatives stay
+owned by the prepared native source. ECPs, density fitting and mixed precision
+are outside this force contract.
 
 Capability discovery is intentionally layered. ``method_capabilities()`` is the
 backend-neutral registry view and therefore reports the DFT carrier as
