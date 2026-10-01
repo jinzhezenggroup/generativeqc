@@ -344,9 +344,9 @@ std::vector<double> reference_range_exchange(const generativeqc::core::System& s
   return reference_exchange_from_eri(eri, generativeqc::molecule::ao_count(system), density);
 }
 
-/** Qualify the default canonical source with nonsymmetric densities, both
- * spin layouts, two independent geometries, and all Coulomb ranges through f.
- * CPU integral matrices are an oracle only; production never borrows them. */
+/** Qualify the through-f shell value owner and retain the canonical source as
+ * the independent range/resource fallback. CPU integral matrices are an oracle
+ * only; production never borrows them. */
 void canonical_value_provider() {
   for (unsigned angular : {0U, 1U, 2U, 3U}) {
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
@@ -379,8 +379,11 @@ void canonical_value_provider() {
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
       require(plan->canonical_pairs && plan->canonical_cartesian && plan->canonical_row_prefix &&
-                  plan->canonical_pair_offsets.size() == 2,
-              "canonical source was not prepared");
+                  plan->canonical_pair_offsets.size() == 2 && plan->generated_exchange &&
+                  plan->generated_exchange->bounded_value_capability &&
+                  plan->generated_exchange->shared &&
+                  !plan->generated_exchange->shared->value_capability,
+              "through-f shell owner/canonical fallback was not prepared");
       require(diagnostic.device_bytes <= 64U << 20,
               "canonical source exceeded its explicit budget");
       DeviceMatrix census(std::vector<double>(2U, 0.0));
@@ -450,21 +453,25 @@ void canonical_value_provider() {
                 const auto source_dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
                 const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
                 const auto quartets = diagnostic.batch_size * pairs * (pairs + 1U) / 2U;
+                const bool canonical_range_exchange =
+                    want_k && op != FockOperator::FullRange;
                 const auto radial_passes =
-                    (want_j || (want_k && op == FockOperator::FullRange) ? 1U : 0U) +
-                    (want_k && op != FockOperator::FullRange ? 1U : 0U);
-                require(work[0] == (want_j || want_k ? quartets : 0U) &&
+                    canonical_range_exchange ? (want_j ? 2U : 1U) : 0U;
+                require(work[0] == (canonical_range_exchange ? quartets : 0U) &&
                             work[1] == radial_passes * quartets,
-                        "canonical source output-mask/radial reuse census drift");
+                        "full-range shell ownership leaked work into the canonical source");
               }
               if (want_j && want_k && op == FockOperator::FullRange && plan->canonical_transform) {
                 const auto* spans = plan->canonical_projection_spans;
                 require(spans, "shell-local projection inventory was not retained");
+                const bool bounded = plan->generated_exchange->bounded_value_capability;
+                plan->generated_exchange->bounded_value_capability = false;
                 plan->canonical_projection_spans = nullptr;
                 direct_device(plan.get(), spec, alpha,
                               spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
                               expected_j, expected_alpha, expected_beta);
                 plan->canonical_projection_spans = spans;
+                plan->generated_exchange->bounded_value_capability = bounded;
               }
             }
           }
@@ -510,7 +517,12 @@ void canonical_value_provider() {
         expected_k.insert(expected_k.end(), reference.exchange_alpha.begin(),
                           reference.exchange_alpha.end());
       }
+      const bool dense_bounded =
+          dense->generated_exchange && dense->generated_exchange->bounded_value_capability;
+      if (dense->generated_exchange) dense->generated_exchange->bounded_value_capability = false;
       direct_device(dense.get(), spec, alpha, {}, expected_j, expected_k, {});
+      if (dense->generated_exchange)
+        dense->generated_exchange->bounded_value_capability = dense_bounded;
     }
   }
 }
@@ -549,14 +561,18 @@ void canonical_one_electron_reuse() {
           raw, &destroy_cuda_direct_jk_plan);
       require(
           plan->generated_exchange && plan->generated_exchange->force_capability &&
+              plan->generated_exchange->bounded_value_capability &&
               plan->generated_exchange->shared &&
               !plan->generated_exchange->shared->value_capability && plan->batch.shell_ao_offsets &&
               plan->batch.shell_pair_first && plan->batch.shell_pair_second,
-          "through-f owner did not retain the force-only shell lease and one-electron metadata");
+          "through-f owner did not retain bounded value/force shell state and one-electron metadata");
       auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
       value_spec.derivative_order = 0;
+      require(direct_jk_generated_exchange_value_available(*plan, value_spec),
+              "bounded through-f shell owner was not admitted for full-range value exchange");
+      value_spec.derivative_order = 1;
       require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
-              "force-only through-f owner leaked into the value exchange selector");
+              "derivative request incorrectly selected the zero-order value route");
       std::vector<double> shell_rsh, canonical_rsh;
       constexpr double omega = 0.3;
       require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
@@ -899,8 +915,11 @@ void canonical_work_census() {
     require(preparation_status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
     std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
         raw, &destroy_cuda_direct_jk_plan);
-    require(plan->canonical_pairs && plan->canonical_cartesian,
-            "default through-f Cartesian source was not prepared");
+    require(plan->canonical_pairs && plan->canonical_cartesian && plan->generated_exchange &&
+                plan->generated_exchange->bounded_value_capability &&
+                plan->generated_exchange->shared &&
+                !plan->generated_exchange->shared->value_capability,
+            "through-f bounded shell value owner/canonical range source was not prepared");
     DeviceMatrix census(std::vector<double>(2U, 0.0));
     plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
     const auto matrix = dimension * dimension;
@@ -935,11 +954,18 @@ void canonical_work_census() {
       int numerical_error{};
       check(cudaMemcpy(&numerical_error, error.pointer, sizeof(int), cudaMemcpyDeviceToHost));
       require(numerical_error == 0, "census source produced nonfinite values");
-      require(work[0] == quartets && work[1] == quartets,
-              "canonical source repeated or omitted a candidate/radial evaluation");
+      if (operation == FockOperator::FullRange) {
+        require(work[0] == 0U && work[1] == 0U,
+                "full-range through-f value unexpectedly entered the canonical AO source");
+      } else {
+        require(work[0] == quartets && work[1] == quartets,
+                "range fallback repeated or omitted a canonical candidate/radial evaluation");
+      }
       std::cout << "{\"public_aos\":" << dimension << ",\"source_aos\":" << source_dimension
                 << ",\"operator\":\""
                 << (operation == FockOperator::FullRange ? "full-JK" : "long-K")
+                << "\",\"route\":\""
+                << (operation == FockOperator::FullRange ? "bounded-shell" : "canonical-range")
                 << "\",\"candidate_quartets\":" << work[0]
                 << ",\"evaluated_radial_eris\":" << work[1] << ",\"seconds\":" << seconds
                 << ",\"device_bytes\":" << diagnostic.device_bytes << "}\n";
@@ -1230,8 +1256,13 @@ void direct_providers(bool through_f_response) {
       if (derivatives) {
         auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
         value_spec.derivative_order = 0;
-        require(direct_jk_generated_exchange_value_available(*plan, value_spec) == (angular <= 2),
-                "force-capable owner changed generated exchange value eligibility");
+        require(direct_jk_generated_exchange_value_available(*plan, value_spec),
+                "complete shell value ownership was not retained");
+        if (angular == 3U)
+          require(plan->generated_exchange && plan->generated_exchange->bounded_value_capability &&
+                      plan->generated_exchange->shared &&
+                      !plan->generated_exchange->shared->value_capability,
+                  "f-shell value ownership did not use the bounded Direct-HF fallback");
         value_spec.derivative_order = 1;
         require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
                 "derivative request incorrectly selected generated value exchange");

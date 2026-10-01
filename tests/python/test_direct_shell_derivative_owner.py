@@ -22,6 +22,8 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         "bounded_pair_order",
         "shell_pair_block_bounds",
         "force_cursor",
+        "bounded_value_capability",
+        "bounded_value_overflow",
         "execute_generated_full_range_energy_derivatives",
         "execute_generated_rsh_energy_derivatives",
     ):
@@ -52,6 +54,7 @@ def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
     source = _source("src/scf/cuda/direct_jk.cpp")
     assert "prepare_generated_exchange(" in source
     assert "derivative_order != 0" in source
+    assert "const bool bounded_through_f = through_f;" in source
     assert "execute_cuda_direct_shell_full_range_derivatives_device(" in source
     assert "direct_jk_generated_exchange_value_available(*plan, spec)" in source
 
@@ -62,9 +65,11 @@ def test_generated_exchange_value_eligibility_is_request_owned(tmp_path: Path) -
     if compiler is None:
         pytest.skip("requires a C++ compiler")
     header = _source("src/scf/cuda/direct_jk_plan.hpp")
+    helper_start = header.index("inline bool direct_jk_generated_full_range_value_available(")
+    helper_end = header.index("\n}", helper_start) + 2
     start = header.index("inline bool direct_jk_generated_exchange_value_available(")
     end = header.index("\n}", start) + 2
-    predicate = header[start:end]
+    predicate = header[helper_start:helper_end] + "\n" + header[start:end]
     start = header.index("struct DirectJkValueDispatch")
     end = header.index("/** Own one exact public-AO provider", start)
     dispatch = header[start:end]
@@ -76,7 +81,10 @@ namespace generativeqc::scf {
 // The GPU storage owner is not constructed. Only presence/capability metadata
 // are supplied to the unchanged production predicates extracted below.
 struct SharedValueCapability { bool value_capability{}; };
-struct GeneratedExchangeValueCapability { SharedValueCapability* shared{}; };
+struct GeneratedExchangeValueCapability {
+  SharedValueCapability* shared{};
+  bool bounded_value_capability{};
+};
 struct CudaDirectJkPlan {
   GeneratedExchangeValueCapability* generated_exchange{};
   unsigned derivative_order{};
@@ -89,23 +97,25 @@ struct CudaDirectJkPlan {
 int main() {
   using namespace generativeqc::scf;
   for (bool value_capability : {false, true})
-    for (bool available : {false, true})
-      for (unsigned order : {0U, 1U})
+    for (bool bounded_value_capability : {false, true})
+      for (bool available : {false, true})
+        for (unsigned order : {0U, 1U})
         for (bool want_j : {false, true})
           for (bool want_k : {false, true})
             for (auto radial : {FockOperator::FullRange, FockOperator::ShortRange,
                                 FockOperator::LongRange})
               for (bool mixed_j : {false, true}) {
                 SharedValueCapability shared{value_capability};
-                GeneratedExchangeValueCapability exchange{&shared};
+                GeneratedExchangeValueCapability exchange{&shared, bounded_value_capability};
                 CudaDirectJkPlan plan{available ? &exchange : nullptr, 0U};
                 FockBuildSpec spec;
                 spec.derivative_order = order;
                 spec.coulomb.present = want_j;
                 spec.exchange.present = want_k;
                 spec.exchange.op = radial;
-                const bool expected = available && value_capability && order == 0 && want_k &&
-                                      radial == FockOperator::FullRange;
+                const bool expected =
+                    available && (value_capability || bounded_value_capability) && order == 0 &&
+                    want_k && radial == FockOperator::FullRange;
                 const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
                 assert(selected == expected);
                 const auto route = direct_jk_value_dispatch(true, selected, want_j, want_k,
@@ -142,6 +152,18 @@ int main() {
         timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_through_f_full_range_values_precede_canonical_fallback() -> None:
+    direct = _source("src/scf/cuda/direct_jk.cpp")
+    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    assert "const bool bounded_through_f = through_f;" in direct
+    assert "shell_values_cover_request" in direct
+    assert "plan->canonical_pairs &&\n        !shell_values_cover_request" in direct
+    assert "enqueue_generated_coulomb(*plan->generated_exchange" in direct
+    assert "launch_bounded_shell_fock_source(" in owner
+    assert "p.force_cursor, true, false" in owner
+    assert "p.force_cursor, false, true" in owner
 
 
 def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
