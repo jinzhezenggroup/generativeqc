@@ -13,6 +13,7 @@
 #include "dft/xc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 
 namespace {
