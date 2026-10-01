@@ -1,9 +1,11 @@
 /** Resident conventional MO block with four cuBLAS AO-axis transformations.
- * The AO source is explicitly host staged; no tensor arithmetic occurs there.
+ * Host sources use explicit staging; qualified device sources may write the
+ * same bounded raw tile directly on this owner's stream before transformation.
  * Reuses CG09's private stream, cuBLAS provider guard and owned arena lifecycle.
  */
 #include <array>
 #include <climits>
+#include <utility>
 #include <vector>
 
 #include "../tensor/cuda_runtime.cuh"
@@ -81,9 +83,11 @@ struct BatchTransform {
   double* raw{};
   bool validated = true;
   bool failed = false;
+  bool raw_borrowed = false;
 };
 void validate(BatchTransform& p) {
   if (p.failed) throw std::runtime_error("MO batch accumulation failed; recreate the transform");
+  if (p.raw_borrowed) throw std::runtime_error("MO batch raw device tile is still borrowed");
   if (p.validated) return;
   auto& ctx = p.context;
   ctx.section(true, ctx.metrics.kernel_ms, [&] {
@@ -101,6 +105,72 @@ void validate(BatchTransform& p) {
   readback_drain.active = false;
   if (invalid) throw std::runtime_error("nonfinite MO batch transformation");
   p.validated = true;
+}
+
+std::pair<std::array<size_t, 4>, size_t> batch_tile(
+    const BatchTransform& p, const size_t* begin, const size_t* counts) {
+  if (!begin || !counts) throw std::invalid_argument("null MO batch tile shape");
+  std::array<size_t, 4> shape{};
+  size_t elements = 1;
+  for (unsigned axis = 0; axis < 4; ++axis) {
+    if (!counts[axis] || counts[axis] > p.tile[axis] || begin[axis] > p.nbf ||
+        counts[axis] > p.nbf - begin[axis])
+      throw std::invalid_argument("MO batch tile outside prepared bounds");
+    shape[axis] = counts[axis];
+    elements = size_mul(elements, counts[axis]);
+  }
+  return {shape, elements};
+}
+
+size_t raw_tile_capacity(const BatchTransform& p) {
+  size_t result = 1;
+  for (const auto extent : p.tile) result = size_mul(result, extent);
+  return result;
+}
+
+void accumulate_batch_device(BatchTransform& p, const size_t* begin,
+                             const std::array<size_t, 4>& shape, size_t elements) {
+  auto& ctx = p.context;
+  ctx.section(true, ctx.metrics.library_ms, [&] {
+    // Execute the transform trie one depth at a time. Existing per-request
+    // scratch buffers ping-pong by depth; all parents are dead before reuse.
+    for (unsigned k = 0; k < 4; ++k) {
+      for (size_t request = 0; request < p.states.size(); ++request) {
+        auto& state = p.states[request];
+        if (state.prefix_leader[k] != request) continue;
+
+        auto transformed_shape = shape;
+        auto transformed_elements = elements;
+        for (unsigned prefix = 0; prefix < k; ++prefix) {
+          const auto rest = transformed_elements / transformed_shape[0];
+          transformed_elements = size_mul(rest, state.m[prefix]);
+          for (unsigned axis = 0; axis < 3; ++axis)
+            transformed_shape[axis] = transformed_shape[axis + 1];
+          transformed_shape[3] = state.m[prefix];
+        }
+
+        const int dim = static_cast<int>(transformed_shape[0]);
+        const int rest = static_cast<int>(transformed_elements / transformed_shape[0]);
+        const int columns = static_cast<int>(state.m[k]);
+        const double alpha = 1, beta = 0;
+        const double* in = p.raw;
+        if (k) {
+          const auto& parent = p.states[state.prefix_leader[k - 1]];
+          in = (k & 1U) ? parent.first : parent.second;
+        }
+        double* out_state = (k & 1U) ? state.second : state.first;
+        blas_check(cublasDgemm(ctx.handle, CUBLAS_OP_N, CUBLAS_OP_T, columns, rest, dim, &alpha,
+                               state.c + state.c_offset[k] + begin[k] * state.m[k], columns, in,
+                               rest, &beta, out_state, columns));
+      }
+    }
+    const double one = 1;
+    for (auto& state : p.states) {
+      const auto& leaf = p.states[state.prefix_leader[3]];
+      blas_check(cublasDaxpy(ctx.handle, static_cast<int>(state.output), &one, leaf.second, 1,
+                             state.result, 1));
+    }
+  });
 }
 }  // namespace
 extern "C" {
@@ -362,23 +432,58 @@ int posthf_cuda_batch_create_v1(int device, size_t nbf, size_t request_count, co
   });
 }
 void posthf_cuda_batch_destroy_v1(void* pointer) { delete static_cast<BatchTransform*>(pointer); }
-int posthf_cuda_batch_add_v1(void* pointer, const double* values, const size_t* begin,
-                             const size_t* counts, char* error, size_t size) {
+
+int posthf_cuda_batch_input_v1(void* pointer, double** values, void** stream, int* device,
+                               size_t* capacity, char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !values || !begin || !counts) throw std::invalid_argument("null MO batch tile");
+    if (!pointer || !values || !stream || !device || !capacity)
+      throw std::invalid_argument("null MO batch device-input request");
     auto& p = *static_cast<BatchTransform*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
     ctx.check_device();
-    std::array<size_t, 4> shape{};
-    size_t elements = 1;
-    for (unsigned axis = 0; axis < 4; ++axis) {
-      if (!counts[axis] || counts[axis] > p.tile[axis] || begin[axis] > p.nbf ||
-          counts[axis] > p.nbf - begin[axis])
-        throw std::invalid_argument("MO batch tile outside prepared bounds");
-      shape[axis] = counts[axis];
-      elements = size_mul(elements, counts[axis]);
-    }
+    if (p.failed) throw std::runtime_error("MO batch accumulation failed; recreate the transform");
+    if (p.raw_borrowed) throw std::runtime_error("MO batch raw device tile is already borrowed");
+    p.raw_borrowed = true;
+    *values = p.raw;
+    *stream = reinterpret_cast<void*>(ctx.stream);
+    *device = ctx.device;
+    *capacity = raw_tile_capacity(p);
+  });
+}
+
+int posthf_cuda_batch_add_device_v1(void* pointer, const size_t* begin, const size_t* counts,
+                                    char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer) throw std::invalid_argument("null MO batch device tile");
+    auto& p = *static_cast<BatchTransform*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (!p.raw_borrowed)
+      throw std::invalid_argument("MO batch device tile was not borrowed before accumulation");
+    const auto [shape, elements] = batch_tile(p, begin, counts);
+    if (p.failed) throw std::runtime_error("MO batch accumulation failed; recreate the transform");
+    p.validated = false;
+    p.failed = true;
+    StreamDrain accumulation_drain{ctx.stream};
+    accumulate_batch_device(p, begin, shape, elements);
+    p.raw_borrowed = false;
+    p.failed = false;
+    accumulation_drain.active = false;
+  });
+}
+
+int posthf_cuda_batch_add_v1(void* pointer, const double* values, const size_t* begin,
+                             const size_t* counts, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !values) throw std::invalid_argument("null MO batch tile");
+    auto& p = *static_cast<BatchTransform*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (p.raw_borrowed) throw std::runtime_error("MO batch raw device tile is borrowed");
+    const auto [shape, elements] = batch_tile(p, begin, counts);
     if (p.failed) throw std::runtime_error("MO batch accumulation failed; recreate the transform");
     p.validated = false;
     p.failed = true;
@@ -386,46 +491,7 @@ int posthf_cuda_batch_add_v1(void* pointer, const double* values, const size_t* 
     ctx.section(true, ctx.metrics.input_ms, [&] {
       cuda_check(cudaMemcpyAsync(p.raw, values, elements * 8, cudaMemcpyHostToDevice, ctx.stream));
     });
-    ctx.section(true, ctx.metrics.library_ms, [&] {
-      // Execute the transform trie one depth at a time. Existing per-request
-      // scratch buffers ping-pong by depth; all parents are dead before reuse.
-      for (unsigned k = 0; k < 4; ++k) {
-        for (size_t request = 0; request < p.states.size(); ++request) {
-          auto& state = p.states[request];
-          if (state.prefix_leader[k] != request) continue;
-
-          auto transformed_shape = shape;
-          auto transformed_elements = elements;
-          for (unsigned prefix = 0; prefix < k; ++prefix) {
-            const auto rest = transformed_elements / transformed_shape[0];
-            transformed_elements = size_mul(rest, state.m[prefix]);
-            for (unsigned axis = 0; axis < 3; ++axis)
-              transformed_shape[axis] = transformed_shape[axis + 1];
-            transformed_shape[3] = state.m[prefix];
-          }
-
-          const int dim = static_cast<int>(transformed_shape[0]);
-          const int rest = static_cast<int>(transformed_elements / transformed_shape[0]);
-          const int columns = static_cast<int>(state.m[k]);
-          const double alpha = 1, beta = 0;
-          const double* in = p.raw;
-          if (k) {
-            const auto& parent = p.states[state.prefix_leader[k - 1]];
-            in = (k & 1U) ? parent.first : parent.second;
-          }
-          double* out_state = (k & 1U) ? state.second : state.first;
-          blas_check(cublasDgemm(ctx.handle, CUBLAS_OP_N, CUBLAS_OP_T, columns, rest, dim, &alpha,
-                                 state.c + state.c_offset[k] + begin[k] * state.m[k], columns, in,
-                                 rest, &beta, out_state, columns));
-        }
-      }
-      const double one = 1;
-      for (auto& state : p.states) {
-        const auto& leaf = p.states[state.prefix_leader[3]];
-        blas_check(cublasDaxpy(ctx.handle, static_cast<int>(state.output), &one, leaf.second, 1,
-                               state.result, 1));
-      }
-    });
+    accumulate_batch_device(p, begin, shape, elements);
     p.failed = false;
     accumulation_drain.active = false;
   });
