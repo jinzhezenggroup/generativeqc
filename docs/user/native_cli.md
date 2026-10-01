@@ -72,7 +72,8 @@ generativeqc autotune --clear-profile
 ```
 
 `profile show` reports the resolved cache root and active profile index without
-probing a GPU. `profile clear` deactivates profiles while retaining immutable
+probing a GPU. Invalid indexes fail closed rather than emitting malformed JSON.
+On POSIX systems, `profile clear` deactivates profiles while retaining immutable
 bundle directories that may still be used by live processes. The cache root
 uses `GENERATIVEQC_PROFILE_CACHE` first, then `XDG_CACHE_HOME`, then
 `~/.cache/generativeqc/profiles`, matching the Python frontend contract.

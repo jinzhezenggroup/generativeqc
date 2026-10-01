@@ -357,6 +357,10 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
                          PASS_REGULAR_EXPRESSION "gfn2-xtb")
+    add_test(NAME generativeqc_cli_profile_safety
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_profile_cache.py"
+                     $<TARGET_FILE:generativeqc_cli>)
     add_test(NAME generativeqc_cli_profile_clear
              COMMAND ${CMAKE_COMMAND} -E env
                      "GENERATIVEQC_PROFILE_CACHE=${CMAKE_CURRENT_BINARY_DIR}/cli-profile-cache"
