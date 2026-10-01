@@ -256,7 +256,7 @@ namespace {
 using generativeqc_tensor::finite;
 using generativeqc_tensor::I;
 
-// r2SCAN additionally keeps D*grad(phi) so tau is formed from the same
+// Meta-GGA additionally keeps D*grad(phi) so tau is formed from the same
 // density matrix as rho/gradient; LDA/GGA retain the one-panel fast path.
 template <bool Mixed>
 __global__ void density_product(const double* density, const double* ao, I n, I count, I spins,
