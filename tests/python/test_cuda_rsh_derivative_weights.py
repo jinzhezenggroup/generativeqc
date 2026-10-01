@@ -22,9 +22,9 @@ def weights_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     if compiler is None:
         pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text()
-    kernel = source.index("__global__ void independent_rsh_derivative_kernel(")
-    begin = source.index("    double j_weight =", kernel)
-    end = source.index("    if (j_weight ==", begin)
+    helper = source.index("__device__ unsigned contract_rsh_quartet(")
+    begin = source.index("  double j_weight =", helper)
+    end = source.index("  if (j_weight ==", begin)
     statements = source[begin:end]
     directory = tmp_path_factory.mktemp("cuda-rsh-weights")
     (directory / "cuda_runtime.h").write_text("#pragma once\n#define __device__\n")

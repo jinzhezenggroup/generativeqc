@@ -57,6 +57,7 @@ def test_pbe0_evidence_uses_own_schema_and_exact_oracle(tmp_path: Path) -> None:
         (directory / f"{engine}.outcome").write_text('{"exit_code":0}')
     point = collect(tmp_path, 3, schema=SCHEMA)
     assert point["engines"]["native"]["medians"]["warm"] == 1.0
+    pytest.importorskip("matplotlib")
     figure([point], tmp_path, title="PBE0 / def2-SVP", filename="pbe0.svg")
     svg = (tmp_path / "pbe0.svg").read_text()
     assert "PBE0 / def2-SVP" in svg
