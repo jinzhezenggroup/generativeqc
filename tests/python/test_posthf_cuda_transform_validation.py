@@ -91,12 +91,26 @@ def test_native_multi_request_cuda_reuses_one_raw_upload_and_context() -> None:
         source, "posthf_cuda_batch_download_v1", "posthf_cuda_batch_metrics_v1"
     )
 
+    device_add = _function_body(
+        source, "posthf_cuda_batch_add_device_v1", "posthf_cuda_batch_add_v1"
+    )
+    shared_begin = source.index("void accumulate_batch_device(")
+    shared = source[shared_begin : source.index("}  // namespace", shared_begin)]
+
     assert batch_add.count("cudaMemcpyAsync(p.raw, values") == 1
-    assert "for (auto& state : p.states)" in batch_add
-    assert "state.prefix_leader[k] != request" in batch_add
-    assert "state.prefix_leader[k - 1]" in batch_add
+    assert "cudaMemcpyAsync" not in device_add
+    assert "for (auto& state : p.states)" in shared
+    assert "state.prefix_leader[k] != request" in shared
+    assert "state.prefix_leader[k - 1]" in shared
     assert batch_add.count("ctx.section(true, ctx.metrics.input_ms") == 1
-    assert batch_add.count("ctx.section(true, ctx.metrics.library_ms") == 1
+    assert shared.count("ctx.section(true, ctx.metrics.library_ms") == 1
+    for entrypoint in (batch_add, device_add):
+        assert (
+            entrypoint.count("accumulate_batch_device(p, begin, shape, elements)") == 1
+        )
+        assert entrypoint.index("batch_tile(p, begin, counts)") < entrypoint.index(
+            "accumulate_batch_device(p, begin, shape, elements)"
+        )
     assert batch_download.count("ctx.section(true, ctx.metrics.output_ms") == 1
 
     assert "posthf_cuda_batch_create_v1(" in provider
