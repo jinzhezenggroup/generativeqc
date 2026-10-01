@@ -118,8 +118,7 @@ def pyscf_energy_gradient(
 
     mol = gto.M(
         atom=[
-            (label, atom.position)
-            for label, atom in zip(labels, atoms, strict=True)
+            (label, atom.position) for label, atom in zip(labels, atoms, strict=True)
         ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
