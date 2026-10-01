@@ -1,9 +1,9 @@
-"""Compiler-owned scalar VV10/rVV10 pair expressions for both native backends.
+"""Compiler-owned scalar VV10/rVV10 pair and local-scale expressions.
 
-Runtime owners retain local-scale construction, traversal, screening, reduction,
-and failure publication.  The raw and preconditioned rVV10 representations have
-separate ordered FP64 lowerings of the same equations; changing representation
-must not silently change the established exceptional-arithmetic domain.
+Runtime owners retain traversal, screening, reduction, and failure publication.
+CPU and CUDA keep their qualified floating-point operation orders as separate
+compiler-emitted local-scale policies; changing representation must not silently
+change the established exceptional-arithmetic domain.
 """
 
 from __future__ import annotations
@@ -28,6 +28,70 @@ from generativeqc_compiler.tensor.types import TensorSpec
 NONLOCAL_PAIR_LOWERING_VERSION = "nonlocal-pair-ordered-native-fp64-v1"
 PAIR_INPUT_ORDER = ("r2", "wi", "wj", "ki", "kj", "row_inverse_kappa")
 PAIR_OUTPUT_ORDER = ("phi", "dphi_domega", "dphi_dkappa", "dphi_dr2")
+
+
+def native_local_scale_cpp() -> str:
+    """Emit the qualified CPU/CUDA local-scale policies from one compiler owner.
+
+    These spell the existing operation orders verbatim. CPU forms rho^4 and
+    sigma^2 explicitly; CUDA forms sigma/rho^2 before squaring and optionally
+    preconditions rVV10 omega/kappa for the ordered pair kernel. Runtime callers
+    continue to own finite/domain checks and signed-weight publication policy.
+    """
+    return r"""
+struct LocalScaleValues {
+  double omega{};
+  double kappa{};
+  double domega_drho{};
+  double domega_dsigma{};
+  double dkappa_drho{};
+};
+
+template <bool Features>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cpu(
+    double rho, double sigma, double b, double c) noexcept {
+  constexpr double pi = 3.141592653589793238462643383279502884;
+  constexpr double four_pi_over_three = 4.0 * pi / 3.0;
+  const double rho2 = rho * rho;
+  const double rho4 = rho2 * rho2;
+  const double sigma2 = sigma * sigma;
+  const double omega2 = c * sigma2 / rho4 + four_pi_over_three * rho;
+  LocalScaleValues out{};
+  out.omega = std::sqrt(omega2);
+  out.kappa = b * 1.5 * pi * std::pow(rho / (9.0 * pi), 1.0 / 6.0);
+  if constexpr (Features) {
+    const double rho5 = rho4 * rho;
+    out.domega_drho =
+        (four_pi_over_three - 4.0 * c * sigma2 / rho5) / (2.0 * out.omega);
+    out.domega_dsigma = c * sigma / (out.omega * rho4);
+    out.dkappa_drho = out.kappa / (6.0 * rho);
+  }
+  return out;
+}
+
+template <Vv10Variant Variant, bool Features>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cuda(
+    double rho, double sigma, double b, double c) noexcept {
+  constexpr double pi = 3.141592653589793238462643383279502884;
+  constexpr double four_pi_over_three = 4.0 * pi / 3.0;
+  const double ratio = sigma / (rho * rho);
+  LocalScaleValues out{};
+  out.omega = std::sqrt(c * ratio * ratio + four_pi_over_three * rho);
+  out.kappa = b * 1.5 * pi * std::pow(rho / (9.0 * pi), 1.0 / 6.0);
+  if constexpr (Features) {
+    out.domega_drho =
+        (four_pi_over_three - 4.0 * c * sigma * sigma / std::pow(rho, 5.0)) /
+        (2.0 * out.omega);
+    out.domega_dsigma = c * sigma / (out.omega * std::pow(rho, 4.0));
+    out.dkappa_drho = out.kappa / (6.0 * rho);
+  }
+  if constexpr (Variant == Vv10Variant::rvv10) {
+    out.omega /= out.kappa;
+    out.kappa *= std::sqrt(out.kappa);
+  }
+  return out;
+}
+"""
 
 
 def build_nonlocal_pair_program(
