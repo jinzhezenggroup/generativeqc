@@ -91,7 +91,8 @@ struct CudaDirectJkPlan {
  */
 inline bool direct_jk_generated_exchange_value_available(const CudaDirectJkPlan& plan,
                                                          const FockBuildSpec& spec) noexcept {
-  return plan.generated_exchange != nullptr && spec.derivative_order == 0 &&
+  return plan.generated_exchange != nullptr && plan.generated_exchange->shared != nullptr &&
+         plan.generated_exchange->shared->value_capability && spec.derivative_order == 0 &&
          spec.exchange.present && spec.exchange.op == FockOperator::FullRange;
 }
 

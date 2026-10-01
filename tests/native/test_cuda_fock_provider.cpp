@@ -547,9 +547,31 @@ void canonical_one_electron_reuse() {
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
-      require(!plan->generated_exchange && plan->batch.shell_ao_offsets &&
-                  plan->batch.shell_pair_first && plan->batch.shell_pair_second,
-              "through-f owner did not retain HF one-electron metadata");
+      require(plan->generated_exchange && plan->generated_exchange->force_capability &&
+                  plan->generated_exchange->shared &&
+                  !plan->generated_exchange->shared->value_capability &&
+                  plan->batch.shell_ao_offsets && plan->batch.shell_pair_first &&
+                  plan->batch.shell_pair_second,
+              "through-f owner did not retain the force-only shell lease and one-electron metadata");
+      auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
+      value_spec.derivative_order = 0;
+      require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
+              "force-only through-f owner leaked into the value exchange selector");
+      std::vector<double> shell_rsh, canonical_rsh;
+      constexpr double omega = 0.3;
+      require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                  plan.get(), FockSpin::Restricted, 1.0, -0.37, -0.61, omega, input.pointer,
+                  nullptr, matrix, shell_rsh, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      require(execute_cuda_direct_rsh_energy_derivatives_device(
+                  plan.get(), FockSpin::Restricted, 1.0, -0.37, -0.61, omega, input.pointer,
+                  nullptr, matrix, canonical_rsh, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      require(shell_rsh.size() == canonical_rsh.size(),
+              "through-f shell/canonical RSH source shapes differ");
+      for (std::size_t coordinate = 0; coordinate < shell_rsh.size(); ++coordinate)
+        require(std::abs(shell_rsh[coordinate] - canonical_rsh[coordinate]) < 3e-10,
+                "through-f shell RSH derivative differs from the canonical source");
       const auto oracle = generativeqc::integrals::build_integrals(moved, true, false);
       std::vector<double> hcore, pulay;
       OneElectronGradientResources resources;
@@ -578,7 +600,7 @@ void canonical_one_electron_reuse() {
       weights.verify(weighted_density);
     }
   }
-  std::cout << "CUDA through-f HF one-electron reuse/CPU gradient/zero-H2D gates PASS\n";
+  std::cout << "CUDA through-f shell RSH + HF one-electron reuse/CPU gradient/zero-H2D gates PASS\n";
 }
 
 /** Boundary fixtures include empty rows, equal keys, underflow and exact products.
