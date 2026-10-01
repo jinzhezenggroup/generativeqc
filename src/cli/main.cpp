@@ -43,11 +43,16 @@ class UsageError : public std::runtime_error {
 struct RunOptions {
   std::string input;
   std::string method_name{"gfn2-xtb"};
+  generativeqc_method method{GENERATIVEQC_METHOD_GFN2_XTB};
+  std::string basis_name{"sto-3g"};
+  generativeqc_basis_representation representation{GENERATIVEQC_BASIS_CARTESIAN};
   generativeqc_backend backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   int device_id{0};
   int charge{0};
   std::uint32_t multiplicity{1};
   bool input_angstrom{true};
+  bool basis_explicit{false};
+  bool representation_explicit{false};
   bool forces{false};
   bool json{false};
 };
@@ -83,7 +88,7 @@ int atomic_number(std::string token) {
   if (!token.empty() && std::all_of(token.begin(), token.end(),
                                     [](unsigned char c) { return std::isdigit(c) != 0; })) {
     const int value = parse_int(token, "atomic number");
-    if (value < 1 || value > 86) throw UsageError("GFN2-xTB supports atomic numbers 1 through 86");
+    if (value < 1 || value > 86) throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
     return value;
   }
 
@@ -100,7 +105,7 @@ int atomic_number(std::string token) {
       "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn"};
   const auto found = std::find(symbols.begin(), symbols.end(), token);
   if (found == symbols.end())
-    throw UsageError("unknown or unsupported GFN2-xTB element symbol: " + token);
+    throw UsageError("unknown or unsupported native XYZ element symbol: " + token);
   return static_cast<int>(std::distance(symbols.begin(), found)) + 1;
 }
 
@@ -194,7 +199,9 @@ void print_usage(std::ostream& out) {
          "  generativeqc profile install|export|diagnose ...  # reserved; Python frontend owns it\n"
          "  generativeqc autotune ...    # tuning remains in the Python frontend\n\n"
          "Native run options:\n"
-         "  --method gfn2-xtb|gfn2   Native CLI execution method (default: gfn2-xtb)\n"
+         "  --method gfn2-xtb|rhf|uhf  Native method (default: gfn2-xtb)\n"
+         "  --basis NAME             Bundled Gaussian basis for RHF/UHF (default: sto-3g)\n"
+         "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --charge N               Molecular charge (default: 0)\n"
@@ -264,16 +271,24 @@ void print_methods(bool json) {
   if (json) std::cout << "\n]\n";
 }
 
-generativeqc_method_descriptor gfn2_method() {
+bool is_gfn2(const RunOptions& options) {
+  return options.method == GENERATIVEQC_METHOD_GFN2_XTB;
+}
+
+std::string_view representation_name(generativeqc_basis_representation representation) {
+  return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
+}
+
+generativeqc_method_descriptor method_descriptor(const RunOptions& options) {
   generativeqc_method_descriptor descriptor{};
   descriptor.struct_size = sizeof(descriptor);
   descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
-  descriptor.method = GENERATIVEQC_METHOD_GFN2_XTB;
+  descriptor.method = options.method;
   descriptor.max_iterations = 100;
   descriptor.diis_history = 8;
-  descriptor.energy_tolerance = 1.0e-10;
-  descriptor.density_tolerance = 1.0e-8;
-  descriptor.screening_tolerance = 0.0;
+  descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
+  descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
+  descriptor.screening_tolerance = is_gfn2(options) ? 0.0 : 1.0e-14;
   descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   descriptor.density_fitting_relative_threshold = 1.0e-10;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
@@ -300,11 +315,31 @@ RunOptions parse_run(int argc, char** argv) {
 
     if (option == "--method") {
       const std::string selected = lower(std::string(value()));
-      if (selected != "gfn2-xtb" && selected != "gfn2")
-        throw UsageError(
-            "native run currently supports gfn2-xtb; Gaussian-basis CLI "
-            "resolution is not yet exposed");
-      options.method_name = "gfn2-xtb";
+      if (selected == "gfn2-xtb" || selected == "gfn2") {
+        options.method_name = "gfn2-xtb";
+        options.method = GENERATIVEQC_METHOD_GFN2_XTB;
+      } else if (selected == "rhf") {
+        options.method_name = "rhf";
+        options.method = GENERATIVEQC_METHOD_RHF;
+      } else if (selected == "uhf") {
+        options.method_name = "uhf";
+        options.method = GENERATIVEQC_METHOD_UHF;
+      } else {
+        throw UsageError("native run method must be gfn2-xtb, rhf, or uhf");
+      }
+    } else if (option == "--basis") {
+      options.basis_name = lower(std::string(value()));
+      std::replace(options.basis_name.begin(), options.basis_name.end(), '_', '-');
+      options.basis_explicit = true;
+    } else if (option == "--representation") {
+      const std::string selected = lower(std::string(value()));
+      if (selected == "cartesian")
+        options.representation = GENERATIVEQC_BASIS_CARTESIAN;
+      else if (selected == "spherical")
+        options.representation = GENERATIVEQC_BASIS_SPHERICAL;
+      else
+        throw UsageError("--representation must be cartesian or spherical");
+      options.representation_explicit = true;
     } else if (option == "--backend") {
       const std::string selected = lower(std::string(value()));
       if (selected == "cpu")
@@ -336,6 +371,8 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
+  if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit))
+    throw UsageError("GFN2-xTB owns its intrinsic basis; --basis/--representation apply to RHF/UHF");
   return options;
 }
 
@@ -347,20 +384,29 @@ int run(const RunOptions& options) {
                                                            options.device_id, options.backend};
   generativeqc::Context context(context_descriptor);
 
-  const generativeqc_system_descriptor system_descriptor{sizeof(generativeqc_system_descriptor),
-                                                         GENERATIVEQC_ABI_VERSION,
-                                                         atoms.data(),
-                                                         static_cast<std::uint32_t>(atoms.size()),
-                                                         nullptr,
-                                                         0,
-                                                         nullptr,
-                                                         0,
-                                                         options.charge,
-                                                         options.multiplicity,
-                                                         GENERATIVEQC_BASIS_CARTESIAN};
+  generativeqc::cli::NativeBasisData basis;
+  if (!is_gfn2(options)) {
+    try {
+      basis = generativeqc::cli::expand_bundled_basis(options.basis_name, atoms,
+                                                       options.representation);
+    } catch (const std::invalid_argument& error) {
+      throw UsageError(error.what());
+    }
+  }
+  const auto* shells = is_gfn2(options) ? nullptr : basis.shells.data();
+  const auto* primitives = is_gfn2(options) ? nullptr : basis.primitives.data();
+  const std::uint32_t shell_count =
+      is_gfn2(options) ? 0u : static_cast<std::uint32_t>(basis.shells.size());
+  const std::uint32_t primitive_count =
+      is_gfn2(options) ? 0u : static_cast<std::uint32_t>(basis.primitives.size());
+  const generativeqc_system_descriptor system_descriptor{
+      sizeof(generativeqc_system_descriptor), GENERATIVEQC_ABI_VERSION,
+      atoms.data(), static_cast<std::uint32_t>(atoms.size()), shells, shell_count,
+      primitives, primitive_count, options.charge, options.multiplicity,
+      is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system(context, system_descriptor);
 
-  const generativeqc_method_descriptor method = gfn2_method();
+  const generativeqc_method_descriptor method = method_descriptor(options);
   generativeqc::Calculation calculation(context, system, method);
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
@@ -369,8 +415,13 @@ int run(const RunOptions& options) {
   std::cout << std::setprecision(17);
   if (options.json) {
     std::cout << "{\"method\":\"" << options.method_name << "\","
-              << "\"backend\":\"" << backend_name(result.executed_backend) << "\","
-              << "\"energy_hartree\":" << result.energy << ","
+              << "\"backend\":\"" << backend_name(result.executed_backend) << "\"";
+    if (!is_gfn2(options)) {
+      std::cout << ",\"basis\":\"" << options.basis_name << "\","
+                << "\"representation\":\"" << representation_name(options.representation)
+                << "\"";
+    }
+    std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
     if (result.forces) {
       std::cout << ",\"forces_hartree_per_bohr\":[";
@@ -385,8 +436,12 @@ int run(const RunOptions& options) {
     std::cout << "}\n";
   } else {
     std::cout << "method: " << options.method_name << '\n'
-              << "backend: " << backend_name(result.executed_backend) << '\n'
-              << "energy_hartree: " << result.energy << '\n'
+              << "backend: " << backend_name(result.executed_backend) << '\n';
+    if (!is_gfn2(options)) {
+      std::cout << "basis: " << options.basis_name << '\n'
+                << "representation: " << representation_name(options.representation) << '\n';
+    }
+    std::cout << "energy_hartree: " << result.energy << '\n'
               << "iterations: " << result.iterations << '\n';
     if (result.forces) {
       std::cout << "forces_hartree_per_bohr:\n";
