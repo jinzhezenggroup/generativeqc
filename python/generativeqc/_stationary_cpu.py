@@ -423,9 +423,12 @@ def complete_rks_gradient_diagnostic(
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"{name} must be an integer in [1,{cap}]")
-    native_fitted_integrals = execution == "native" and bool(
-        getattr(state._source, "density_fitted", False)
-    )
+    native_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
+    if native_fitted_integrals and execution != "native":
+        raise NotImplementedError(
+            "density-fitted stationary derivatives require execution='native'; "
+            "Direct reference derivatives would change the Hamiltonian"
+        )
     work = _admit_work(
         state,
         basis,

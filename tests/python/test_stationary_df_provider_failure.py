@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 from contextlib import nullcontext
 from pathlib import Path
 from types import CodeType, FunctionType, MappingProxyType, SimpleNamespace
@@ -68,6 +69,7 @@ def _select(source: object, *, budget: int = 32, ecp: bool = False) -> object:
     return FunctionType(
         compiled,
         {
+            "__builtins__": builtins.__dict__,
             "state": SimpleNamespace(_source=source),
             "max_device_bytes": budget,
             "peak": 0,
@@ -136,3 +138,53 @@ def test_complete_fitted_response_and_explicit_exact_fallback_remain_distinct() 
     source.cuda_integral_derivatives.assert_called_once_with(
         2, 32, range_exchange=False
     )
+
+
+def _cpu_selection(source: object, execution: str) -> bool:
+    path = ROOT / "python/generativeqc/_stationary_cpu.py"
+    module = ast.parse(path.read_text())
+    owner = next(
+        n
+        for n in module.body
+        if isinstance(n, ast.FunctionDef)
+        and n.name == "complete_rks_gradient_diagnostic"
+    )
+
+    def assigned(statement: ast.stmt, name: str) -> bool:
+        return isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in statement.targets
+        )
+
+    start = next(
+        i for i, n in enumerate(owner.body) if assigned(n, "native_fitted_integrals")
+    )
+    stop = next(i for i, n in enumerate(owner.body) if assigned(n, "work"))
+    function = ast.parse("def select():\n    pass").body[0]
+    function.body = (
+        owner.body[start:stop] + ast.parse("return native_fitted_integrals").body
+    )
+    code = compile(
+        ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+        str(path),
+        "exec",
+    )
+    compiled = next(
+        c for c in code.co_consts if isinstance(c, CodeType) and c.co_name == "select"
+    )
+    return FunctionType(
+        compiled,
+        {
+            "__builtins__": builtins.__dict__,
+            "state": SimpleNamespace(_source=source),
+            "execution": execution,
+        },
+    )()
+
+
+def test_cpu_reference_derivatives_reject_a_fitted_hamiltonian() -> None:
+    with pytest.raises(NotImplementedError, match="change the Hamiltonian"):
+        _cpu_selection(SimpleNamespace(density_fitted=True), "reference")
+    assert _cpu_selection(SimpleNamespace(density_fitted=True), "native")
+    assert not _cpu_selection(SimpleNamespace(density_fitted=False), "reference")
+    assert not _cpu_selection(SimpleNamespace(), "native")

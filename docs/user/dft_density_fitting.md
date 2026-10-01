@@ -1,4 +1,4 @@
-# Density-fitted DFT energy interface
+# Density-fitted DFT energy and force interface
 
 `Calculator(method="pbe-rks", device="cuda", density_fitting="auto",
 auxiliary_basis="def2-svp")` selects the shared native DF Coulomb provider for
@@ -40,12 +40,15 @@ Prepared CUDA batches expose the provider's metric diagnostics. Whole-KS
 `estimate_resources`/resource-plan admission is rejected for DF until its
 combined inventory is qualified; conventional inventories must not describe DF.
 
-DF energy capability excludes forces. The conventional derivative-snapshot
-export is also rejected natively because it lacks auxiliary/metric response.
+Qualified force calculations use token-checked derivative snapshots and the
+prepared DF response provider. The CPU diagnostic requires `execution="native"`
+for a fitted state; the Direct-only reference derivative path is rejected rather
+than differentiating a different Hamiltonian.
 
 `tests/python/test_dft_df_public.py` compares independently converged PySCF
-energies with copied orbital/auxiliary primitives and identical quadrature
-(absolute energy gate `1e-8 Eh`, physical residual below `1e-9`). GPU acceptance
+energies and analytic gradients with copied orbital/auxiliary primitives and
+identical moving quadrature (absolute energy gate `1e-8 Eh`, force gate
+`3e-7 Eh/bohr`, physical residual below `1e-9`). GPU acceptance
 requires `GENERATIVEQC_DFT_CUDA_TEST=1` and a scheduler-allocated CUDA device.
 
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
