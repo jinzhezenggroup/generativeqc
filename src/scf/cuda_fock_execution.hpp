@@ -62,6 +62,27 @@ struct PreparedCudaOccupiedFockBinding {
 PreparedCudaOccupiedFockBinding prepared_cuda_occupied_fock_binding(
     const PreparedFockPlan& plan) noexcept;
 
+/** Complete resident U=B*C left by the most recently submitted restricted
+ * occupied-factor RI-K build. This binding carries execution provenance only:
+ * callers must prove that the corresponding C generated their exact current
+ * density before attaching a method-level final-state token. A subsequent J/K
+ * or response scratch writer revokes availability before it submits work. */
+struct PreparedCudaOccupiedProjectionBinding {
+  int device_id{-1};
+  cudaStream_t stream{};
+  const void* source_identity{};
+  const double* projection{};
+  std::size_t nbf{}, naux{}, rank{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && stream != nullptr && source_identity != nullptr &&
+           projection != nullptr && nbf != 0 && naux != 0 && rank != 0;
+  }
+};
+
+PreparedCudaOccupiedProjectionBinding prepared_cuda_occupied_projection_binding(
+    const PreparedFockPlan& plan, std::size_t rank) noexcept;
+
 /** Canonical occupied coefficients already resident on the prepared provider's
  * device. Coefficients are column-major AO x orbital matrices. Restricted
  * execution uses occupation two; unrestricted alpha/beta use occupation one. */
