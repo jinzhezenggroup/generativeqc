@@ -674,6 +674,118 @@ std::size_t eri_index(std::size_t i, std::size_t j, std::size_t k, std::size_t l
   return ((i * n + j) * n + k) * n + l;
 }
 
+void store_eri_symmetry(std::vector<Jet>& eri, std::size_t n,
+                        const std::array<std::size_t, 4>& indices, const Jet& value) {
+  const auto [i, j, k, l] = indices;
+  for (const auto& permutation : std::array<std::array<std::size_t, 4>, 8>{{{i, j, k, l},
+                                                                            {j, i, k, l},
+                                                                            {i, j, l, k},
+                                                                            {j, i, l, k},
+                                                                            {k, l, i, j},
+                                                                            {l, k, i, j},
+                                                                            {k, l, j, i},
+                                                                            {l, k, j, i}}})
+    eri[eri_index(permutation[0], permutation[1], permutation[2], permutation[3], n)] = value;
+}
+
+struct ValueEriComponent {
+  std::array<std::size_t, 4> indices{};
+  unsigned record{};
+  double normalization{};
+  double value{};
+};
+
+// Only scheduling/storage lives here. Product geometry, Boys values and every
+// Cartesian component are lowered from the same compiler-owned scalar DAG.
+// A dddd quartet has at most 6^4 components, independent of molecular size.
+using ValueEriComponents = std::array<ValueEriComponent, 6 * 6 * 6 * 6>;
+
+std::size_t prepare_value_eri_components(const std::vector<AoView>& aos,
+                                         const std::vector<std::size_t>& offsets,
+                                         const std::array<std::size_t, 4>& shells,
+                                         ValueEriComponents& components) {
+  const auto [si, sj, sk, sl] = shells;
+  const bool same_pair = si == sk && sj == sl;
+  std::size_t count = 0;
+  for (std::size_t i = offsets[si]; i < offsets[si + 1]; ++i) {
+    for (std::size_t j = offsets[sj]; j < offsets[sj + 1]; ++j) {
+      if (si == sj && j > i) continue;
+      for (std::size_t k = offsets[sk]; k < offsets[sk + 1]; ++k) {
+        for (std::size_t l = offsets[sl]; l < offsets[sl + 1]; ++l) {
+          if (sk == sl && l > k) continue;
+          if (same_pair && i * (i + 1) / 2 + j < k * (k + 1) / 2 + l) continue;
+          const std::array<std::size_t, 4> indices{i, j, k, l};
+          unsigned component_indices[4];
+          for (unsigned slot = 0; slot < 4; ++slot) {
+            const auto& angular = aos[indices[slot]].angular;
+            component_indices[slot] =
+                generated_eri_cpu::component_index(angular[0], angular[1], angular[2]);
+          }
+          const double normalization =
+              aos[i].component_normalization * aos[j].component_normalization *
+              aos[k].component_normalization * aos[l].component_normalization;
+          components[count++] = {indices, generated_eri_cpu::component_record(component_indices),
+                                 normalization, 0.0};
+        }
+      }
+    }
+  }
+  return count;
+}
+
+void build_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
+                                   const std::vector<std::size_t>& offsets,
+                                   const std::array<std::size_t, 4>& shell_indices,
+                                   ValueEriComponents& components, std::vector<Jet>& eri) {
+  const std::size_t count = prepare_value_eri_components(aos, offsets, shell_indices, components);
+  std::array<const core::Shell*, 4> shells;
+  double centers[4][3];
+  unsigned maximum_order = 0;
+  for (unsigned slot = 0; slot < 4; ++slot) {
+    shells[slot] = &system.shells[shell_indices[slot]];
+    maximum_order += shells[slot]->angular_momentum;
+    const auto& position = system.atoms[shells[slot]->atom_index].position;
+    for (unsigned axis = 0; axis < 3; ++axis) centers[slot][axis] = position[axis];
+  }
+  for (const core::Primitive& pi : shells[0]->primitives) {
+    for (const core::Primitive& pj : shells[1]->primitives) {
+      for (const core::Primitive& pk : shells[2]->primitives) {
+        for (const core::Primitive& pl : shells[3]->primitives) {
+          const double exponents[4]{pi.exponent, pj.exponent, pk.exponent, pl.exponent};
+          const auto geometry = generated_eri_cpu::make_geometry(exponents, centers, maximum_order);
+          for (std::size_t item = 0; item < count; ++item) {
+            auto& component = components[item];
+            const double weight = component.normalization * pi.coefficient * pj.coefficient *
+                                  pk.coefficient * pl.coefficient;
+            component.value +=
+                weight * generated_eri_cpu::prepared_primitive(geometry, component.record);
+          }
+        }
+      }
+    }
+  }
+  for (std::size_t item = 0; item < count; ++item)
+    store_eri_symmetry(eri, aos.size(), components[item].indices, Jet(components[item].value, 0));
+}
+
+void build_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
+                                    std::vector<Jet>& eri) {
+  std::vector<std::size_t> offsets{0};
+  for (const auto& shell : system.shells)
+    offsets.push_back(offsets.back() + molecule::cartesian_count(shell.angular_momentum));
+  ValueEriComponents components;
+  for (std::size_t i = 0; i < system.shells.size(); ++i) {
+    for (std::size_t j = 0; j <= i; ++j) {
+      for (std::size_t k = 0; k <= i; ++k) {
+        for (std::size_t l = 0; l <= k; ++l) {
+          if (i == k && j < l) continue;
+          build_value_eri_shell_quartet(system, aos, offsets, {i, j, k, l}, components, eri);
+        }
+      }
+    }
+  }
+}
+
 void unpack_jets(const std::vector<Jet>& source, std::vector<double>& values,
                  std::vector<double>& derivatives, std::size_t ncoord) {
   values.resize(source.size());
@@ -1677,7 +1789,13 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
     }
   }
 
-  if (include_eri) {
+  const bool shared_value_geometry =
+      !include_derivatives &&
+      std::all_of(system.shells.begin(), system.shells.end(),
+                  [](const core::Shell& shell) { return shell.angular_momentum <= 2; });
+  if (include_eri && shared_value_geometry) {
+    build_value_eri_shell_quartets(system, aos, eri);
+  } else if (include_eri) {
     for (std::size_t i = 0; i < n; ++i) {
       const AoView& ao_i = aos[i];
       const Vec3& a = atom_coordinates[ao_i.shell->atom_index];
@@ -1711,15 +1829,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
             }
             // Eightfold ERI symmetry also holds for derivatives with respect
             // to physical atoms. Compute each expensive high-l recurrence once.
-            for (const auto& indices : std::array<std::array<std::size_t, 4>, 8>{{{i, j, k, l},
-                                                                                  {j, i, k, l},
-                                                                                  {i, j, l, k},
-                                                                                  {j, i, l, k},
-                                                                                  {k, l, i, j},
-                                                                                  {l, k, i, j},
-                                                                                  {k, l, j, i},
-                                                                                  {l, k, j, i}}})
-              eri[eri_index(indices[0], indices[1], indices[2], indices[3], n)] = value;
+            store_eri_symmetry(eri, n, {i, j, k, l}, value);
           }
         }
       }

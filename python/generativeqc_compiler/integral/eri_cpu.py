@@ -105,13 +105,27 @@ def eri_cpu_inventory() -> dict[str, Any]:
     representatives, _ = eri_cpu_component_map()
     return {
         "schema": "generativeqc.eri_cpu",
-        "version": 1,
+        "version": 2,
         "precision": "fp64",
         "maximum_angular": 2,
         "maximum_coulomb_order": 8,
         "derivative_order": 0,
         "ordered_component_count": len(COMPONENTS) ** 4,
         "representative_count": len(representatives),
+        "primitive_geometry": {
+            "abi_version": 1,
+            "reuse_scope": "primitive_quartet",
+            "maximum_order": 8,
+            "required_order": "sum_shell_angular_momenta",
+            "scalar_count": len(_geometry_fields()) + 9,
+            "boys_value_count": 9,
+        },
+        "component_schedule": {
+            "kind": "prepared_geometry_symmetry_representatives",
+            "record_bits": 16,
+            "maximum_shell_component_count": len(cartesian_components(2)) ** 4,
+            "component_scratch_owner": "native_caller",
+        },
         "components": list(COMPONENTS),
         "values": [
             integral_to_payload(_value_integral(angular))
@@ -120,14 +134,33 @@ def eri_cpu_inventory() -> dict[str, Any]:
     }
 
 
-def _emit_component(index: int, component_indices: tuple[int, ...]) -> str:
-    components = tuple(COMPONENTS[item] for item in component_indices)
-    integral = _value_integral(tuple(map(len, components)))
+def _geometry_fields() -> dict[str, str]:
+    """Storage for exact common roots exported by the shared component DAG."""
+    return {
+        "inverse_two_p": "inverse_two[0]",
+        "inverse_two_q": "inverse_two[1]",
+        "rho": "rho",
+        **{
+            f"{pair}_{axis}": f"pair_shifts[{slot}][{coordinate}]"
+            for slot, pair in enumerate(("pa", "pb", "qc", "qd"))
+            for coordinate, axis in enumerate("xyz")
+        },
+        **{
+            f"difference_{axis}": f"difference[{coordinate}]"
+            for coordinate, axis in enumerate("xyz")
+        },
+        "boys_argument": "boys_argument",
+        "prefactor": "prefactor",
+    }
+
+
+def _emit_geometry() -> str:
+    integral = _value_integral((0, 0, 0, 0))
     kernel = build_shell_class_component_kernel(
-        integral.spec, components, integral=integral
+        integral.spec, ("", "", "", ""), integral=integral
     )
     graph, roots = kernel.graph.apply_algebra_form(
-        (kernel.boys_argument, kernel.value),
+        tuple(expression for _, expression in kernel.geometry_roots),
         AlgebraForm.FACTORED_NARY,
         PowerLowering.SMALL_INTEGER,
     )
@@ -143,20 +176,107 @@ def _emit_component(index: int, component_indices: tuple[int, ...]) -> str:
         }
     )
     variables["kPi"] = "3.141592653589793238462643383279502884"
-    variables.update({f"boys_{order}": f"boys[{order}]" for order in range(9)})
     emitter = ScalarCEmitter(graph, variables)
-    emitter.emit((roots[0],))
+    fields = _geometry_fields()
+    for (name, _), root in zip(kernel.geometry_roots, roots, strict=True):
+        emitter.emit_assignment(root, f"geometry.{fields[name]}")
     lines = [
-        f"// Cartesian representative {components!r}; value-only IntegralIR.",
-        f"static inline double component_{index}(const double* exponents, const double (*centers)[3]) {{",
+        "/** Component-independent primitive quartet; evaluate Boys only once. */",
+        "struct Geometry {",
+        "  double inverse_two[2], rho, pair_shifts[4][3], difference[3];",
+        "  double boys_argument, prefactor;",
+        "  double boys[9];",
+        "  unsigned maximum_order;",
+        "};",
+        "/** Positive finite inputs are caller-validated; maximum_order must be in [0,8]. */",
+        "inline Geometry make_geometry(const double (&exponents)[4], const double (&centers)[4][3],",
+        "                              unsigned maximum_order) {",
+        "  Geometry geometry{};",
+        "  geometry.maximum_order = maximum_order;",
+        "  if (maximum_order > 8U) return geometry;",
         *emitter.lines,
-        f"  double boys[{integral.maximum_coulomb_order + 1}];",
-        f"  boys_values<{integral.maximum_coulomb_order}>({emitter.reference(roots[0])}, boys);",
+        "  switch (maximum_order) {",
     ]
-    emitter.lines.clear()
-    emitter.emit((roots[1],))
-    lines.extend((*emitter.lines, f"  return {emitter.reference(roots[1])};", "}"))
+    lines.extend(
+        f"    case {order}: boys_values<{order}>(geometry.boys_argument, geometry.boys); break;"
+        for order in range(9)
+    )
+    lines.extend(("  }", "  return geometry;", "}"))
     return "\n".join(lines)
+
+
+def _emit_component(index: int, component_indices: tuple[int, ...]) -> str:
+    components = tuple(COMPONENTS[item] for item in component_indices)
+    integral = _value_integral(tuple(map(len, components)))
+    kernel = build_shell_class_component_kernel(
+        integral.spec, components, integral=integral
+    )
+    # Cut the original DAG at its exact shared geometry nodes before algebraic
+    # factoring. No recurrence or Gaussian-product equations live in this backend.
+    prepared_value = kernel.graph.replace_subexpressions(
+        (kernel.value,),
+        {
+            root: kernel.graph.variable(f"geometry_{name}")
+            for name, root in kernel.geometry_roots
+        },
+    )
+    graph, roots = kernel.graph.apply_algebra_form(
+        prepared_value,
+        AlgebraForm.FACTORED_NARY,
+        PowerLowering.SMALL_INTEGER,
+    )
+    variables = {
+        f"geometry_{name}": f"geometry.{field}"
+        for name, field in _geometry_fields().items()
+    }
+    variables.update(
+        {
+            "geometry_inverse_two_p": "geometry.inverse_two[center_order[0] / 2]",
+            "geometry_inverse_two_q": "geometry.inverse_two[center_order[2] / 2]",
+            **{
+                f"geometry_{pair}_{axis}": f"geometry.pair_shifts[center_order[{slot}]][axis_order[{coordinate}]]"
+                for slot, pair in enumerate(("pa", "pb", "qc", "qd"))
+                for coordinate, axis in enumerate("xyz")
+            },
+            **{
+                f"geometry_difference_{axis}": f"(difference_sign * geometry.difference[axis_order[{coordinate}]])"
+                for coordinate, axis in enumerate("xyz")
+            },
+        }
+    )
+    variables.update({f"boys_{order}": f"geometry.boys[{order}]" for order in range(9)})
+    required_variables = {
+        str(graph.nodes[identifier].payload)
+        for identifier in graph.topological_order(roots)
+        if graph.nodes[identifier].operation == "variable"
+    }
+    if not required_variables.issubset(variables):
+        raise ValueError(
+            "prepared CPU ERI component retained primitive geometry inputs"
+        )
+    # Name each used view field once rather than expanding permutation indexing
+    # throughout the recurrence. This also keeps the generated header bounded.
+    references = {
+        name: f"g{index}"
+        for index, name in enumerate(variables)
+        if name in required_variables
+    }
+    emitter = ScalarCEmitter(graph, references)
+    emitter.emit(roots)
+    return "\n".join(
+        [
+            f"// Cartesian representative {components!r}; value-only IntegralIR.",
+            f"static inline double component_{index}(const Geometry& geometry, [[maybe_unused]] const unsigned* center_order,",
+            "                                      [[maybe_unused]] const unsigned* axis_order, [[maybe_unused]] double difference_sign) {",
+            *(
+                f"  const double {reference} = {variables[name]};"
+                for name, reference in references.items()
+            ),
+            *emitter.lines,
+            f"  return {emitter.reference(roots[0])};",
+            "}",
+        ]
+    )
 
 
 def emit_eri_cpu() -> str:
@@ -171,6 +291,7 @@ def emit_eri_cpu() -> str:
         "#include <cstdint>",
         "namespace generativeqc::integrals::generated_eri_cpu {",
         boys,
+        _emit_geometry(),
         "/** CCA-ordered Cartesian s/p/d index; 10 denotes unsupported angular momentum. */",
         "constexpr unsigned component_index(unsigned x, unsigned y, unsigned z) {",
     ]
@@ -199,32 +320,46 @@ def emit_eri_cpu() -> str:
     lines.extend(
         (
             "};",
-            "/** Unnormalized, unscreened primitive. Positive finite inputs are caller-validated. */",
-            "inline double primitive(const double (&exponents)[4], const double (&centers)[4][3],",
-            "                        const unsigned (&components)[4]) {",
+            "inline constexpr unsigned representative_orders[313] = {",
+            "  "
+            + ", ".join(
+                str(sum(len(COMPONENTS[item]) for item in component))
+                for component in representatives
+            ),
+            "};",
+            "/** Hoist this lossless lookup outside the primitive-quartet contraction loop. */",
+            "inline unsigned component_record(const unsigned (&components)[4]) {",
             "  for (unsigned slot = 0; slot < 4; ++slot)",
-            "    if (components[slot] >= 10) return NAN;",
+            "    if (components[slot] >= 10) return 0xffffffffU;",
             "  const unsigned key = ((components[0] * 10 + components[1]) * 10 + components[2]) * 10 + components[3];",
-            "  const unsigned record = component_map[key];",
+            "  return component_map[key];",
+            "}",
+            "/** Unnormalized, unscreened component using previously prepared geometry. */",
+            "inline double prepared_primitive(const Geometry& geometry, unsigned record) {",
+            "  if ((record >> 6) >= 313U || (record & 7U) >= 6U ||",
+            "      geometry.maximum_order > 8U ||",
+            "      representative_orders[record >> 6] > geometry.maximum_order) return NAN;",
             "  const auto& center_order = center_permutations[(record >> 3) & 7U];",
             "  const auto& axis_order = axis_permutations[record & 7U];",
-            "  double ordered_exponents[4], ordered_centers[4][3];",
-            "  for (unsigned slot = 0; slot < 4; ++slot) {",
-            "    ordered_exponents[slot] = exponents[center_order[slot]];",
-            "    for (unsigned axis = 0; axis < 3; ++axis)",
-            "      ordered_centers[slot][axis] = centers[center_order[slot]][axis_order[axis]];",
-            "  }",
+            "  const double difference_sign = center_order[0] < 2U ? 1.0 : -1.0;",
             "  switch (record >> 6) {",
         )
     )
     lines.extend(
-        f"    case {index}: return component_{index}(ordered_exponents, ordered_centers);"
+        f"    case {index}: return component_{index}(geometry, center_order, axis_order, difference_sign);"
         for index in range(len(representatives))
     )
     lines.extend(
         (
             "  }",
             "  return NAN;",
+            "}",
+            "/** Compatibility wrapper for callers without a shell-quartet reuse schedule. */",
+            "inline double primitive(const double (&exponents)[4], const double (&centers)[4][3],",
+            "                        const unsigned (&components)[4]) {",
+            "  const unsigned record = component_record(components);",
+            "  if (record == 0xffffffffU) return NAN;",
+            "  return prepared_primitive(make_geometry(exponents, centers, representative_orders[record >> 6]), record);",
             "}",
             "}  // namespace generativeqc::integrals::generated_eri_cpu",
             "#endif",
