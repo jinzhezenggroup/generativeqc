@@ -1,40 +1,92 @@
-name: Round-two failure diagnostics
+name: Round-two acceptance and final-state audit
 on:
   push:
     branches: [agent/astra-review-round2-20261001]
     paths: [.github/workflows/astra-round2-logs.yml]
 permissions:
   contents: read
+  pull-requests: read
+  checks: read
   actions: read
 jobs:
-  diagnostics:
+  audit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: read
+      checks: read
+      actions: read
     steps:
-      - name: Read selected job diagnostics
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9
+      - name: Strengthen the exact-head AUTO force gate
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, tempfile
+          from pathlib import Path
+          root=Path.cwd();out=Path(os.environ['RUNNER_TEMP'])/'final-audit';out.mkdir()
+          head='616bad722898ee68a3b586a139ab8fc414f74e7d';branch='feat/dft-component-precision-auto'
+          report={'pr':1636,'before':head}
+          def run(*args,cwd=root,env=None,check=True):
+            p=subprocess.run(args,cwd=cwd,env=env,capture_output=True,text=True)
+            if check and p.returncode:raise RuntimeError((p.stderr+p.stdout)[-5000:])
+            return p
+          try:
+            live=run('git','ls-remote','origin','refs/heads/'+branch).stdout.split()
+            if not live or live[0]!=head:raise RuntimeError('head moved; no changes made')
+            with tempfile.TemporaryDirectory(prefix='auto-gate-') as temp:
+              work=Path(temp)/'source';run('git','worktree','add','--detach',str(work),head)
+              try:
+                path='tests/python/test_global_hybrid_cuda_forces.py';p=work/path;s=p.read_text()
+                replacements=[
+                  ('@pytest.mark.parametrize("spin", ("rks", "uks"))\ndef test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:', '@pytest.mark.parametrize("spin", ("rks", "uks"))\n@pytest.mark.parametrize("precision", ("fp64", "auto"))\ndef test_public_cuda_global_hybrid_force(\n    name: str, spin: str, precision: str\n) -> None:'),
+                  ('        method=method,\n        device="cuda",\n        basis="sto-3g",', '        method=method,\n        device="cuda",\n        basis="sto-3g",\n        precision=precision,'),
+                  ('        assert public.executed_backend == "cuda" and public.converged', '        assert public.executed_backend == "cuda" and public.converged\n        if precision == "auto":\n            assert public.precision is not None\n            assert public.precision["requested_mode"] == "auto"\n            assert public.precision["strict_refinement_applied"] is True\n            assert public.precision["refinement_iterations"] >= 1'),
+                  ('        f"{name.lower()}-{spin}",', '        f"{name.lower()}-{spin}-{precision}",'),
+                  ('            "reference_xc": reference_xc,','            "reference_xc": reference_xc,\n            "precision": precision,'),
+                ]
+                for old,new in replacements:
+                  if s.count(old)!=1:raise RuntimeError('unexpected test before-image')
+                  s=s.replace(old,new,1)
+                p.write_text(s)
+                run('python3','-m','ruff','check',path,cwd=work);run('python3','-m','ruff','format',path,cwd=work)
+                env=dict(os.environ);env['PYTHONPATH']=str(work/'python')+os.pathsep+str(work)
+                test=run('python3','-m','pytest','-q','-o','addopts=','--import-mode=importlib',path,'tests/python/test_r2scan_precision_boundary.py',cwd=work,env=env)
+                (out/'auto-tests.log').write_text(test.stdout+test.stderr);report['tests']=test.stdout
+                run('git','add','--',path,cwd=work);run('git','diff','--cached','--check',cwd=work)
+                message='test(dft): require independent hybrid-force acceptance under AUTO\n\nRun the same MethodIR/label/spin matrix, moving-grid oracle, replay,\nchanged geometry and reconverged finite-difference checks in both precision\nmodes. Retain tolerances and explicit GPU gates; separate evidence names\nprevent AUTO from overwriting FP64 results. Host checks only validate\ncollection and admission; NVIDIA numerical qualification remains pending.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','commit','-m',message,cwd=work)
+                report['commit']=run('git','rev-parse','HEAD',cwd=work).stdout.strip();report['tree']=run('git','rev-parse','HEAD^{tree}',cwd=work).stdout.strip()
+                (out/'auto-repair.patch').write_text(run('git','diff',head,report['commit'],cwd=work).stdout)
+                run('git','push','origin','HEAD:refs/heads/'+branch,cwd=work);report['pushed']=True
+              finally:run('git','worktree','remove','--force',str(work),check=False)
+          except Exception as e:report['error']=str(e)
+          (out/'auto-repair.json').write_text(json.dumps(report,indent=2));print(json.dumps(report))
+          PY
+      - name: Read current state and exact-head checks
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import json, os, re, subprocess
+          import json,os,urllib.request
           from pathlib import Path
-          out=Path(os.environ['RUNNER_TEMP'])/'round2-logs';out.mkdir()
-          base='https://api.github.com/repos/jinzhezenggroup/generativeqc/'
-          summary={}
-          for number,job in [(1510,109975875326),(1633,110167728482),(1634,110169636646),(1635,110169915286),(1637,110188749882),(1640,110212742455),(1641,110215733184),(1642,110215257740)]:
-            p=subprocess.run(['curl','--fail','--silent','--show-error','--location','-H','Authorization: Bearer '+os.environ['GH_TOKEN'],base+f'actions/jobs/{job}/logs'],capture_output=True,text=True)
-            if p.returncode:
-              summary[number]={'error':p.stderr};continue
-            log=re.sub(r'(?m)^\d{4}-\d\d-\d\dT\S+ ', '', p.stdout)
-            (out/f'{number}.log').write_text(log)
-            failed='\n'.join(l for l in log.splitlines() if l.startswith('FAILED ') or l.startswith('ERROR ') or re.search(r'^=+ .*(failed|passed)',l))
-            summary[number]={'job':job,'failures':failed}
-          (out/'summary.json').write_text(json.dumps(summary,indent=2))
-          print(json.dumps(summary),flush=True)
+          out=Path(os.environ['RUNNER_TEMP'])/'final-audit';out.mkdir(exist_ok=True)
+          def get(path):
+            req=urllib.request.Request('https://api.github.com/repos/jinzhezenggroup/generativeqc/'+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(req,timeout=60) as f:return json.load(f)
+          rows=[]
+          for n in [1510,1623,1632,1633,1634,1635,1636,1637,1638,1639,1640,1641,1642,1643]:
+            p=get(f'pulls/{n}');h=p['head']['sha'];checks=get(f'commits/{h}/check-runs?per_page=100')['check_runs']
+            rows.append({'number':n,'state':p['state'],'merged':p['merged'],'merge_sha':p['merge_commit_sha'],'merged_at':p['merged_at'],'head':h,'head_ref':p['head']['ref'],'base':p['base']['ref'],'draft':p['draft'],'mergeable':p['mergeable'],'mergeable_state':p['mergeable_state'],'auto_merge':p['auto_merge'] is not None,'checks':[{'id':c['id'],'name':c['name'],'status':c['status'],'conclusion':c['conclusion']} for c in checks]})
+          (out/'current.json').write_text(json.dumps(rows,indent=2))
+          print(json.dumps([{k:v for k,v in r.items() if k!='checks'} for r in rows]),flush=True)
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: astra-round2-failure-logs
-          path: ${{ runner.temp }}/round2-logs/
+          name: astra-round2-acceptance-audit
+          path: ${{ runner.temp }}/final-audit/
           retention-days: 1
