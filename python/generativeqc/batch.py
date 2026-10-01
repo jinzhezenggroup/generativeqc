@@ -700,7 +700,21 @@ class PreparedBatch:
             )
             and not ecp_force
         )
-        if calculator._device_name != "cpu" or not (ecp_force or direct_all_electron):
+        density_fitted_all_electron = (
+            calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE
+            and not ecp_force
+            and calculator._automatic_libxc_name is None
+            and calculator._dispersion_method_ir is None
+            and calculator._ks_options is not None
+            and calculator._ks_options.execution_plan.nonlocal_correlation is None
+            and all(
+                term.operator == "full-range"
+                for term in calculator._ks_options.execution_plan.exchange
+            )
+        )
+        if calculator._device_name != "cpu" or not (
+            ecp_force or direct_all_electron or density_fitted_all_electron
+        ):
             raise NotImplementedError(
                 "public CPU forces require a qualified ECP or named all-electron owner"
             )

@@ -7,10 +7,14 @@ KS energy calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
-CPU supports the existing local/semilocal RKS/UKS methods and full-range global
-hybrids (DF-JK). CUDA supports LDA, PBE and r2SCAN RKS/UKS (DF-J). CUDA hybrids,
-range-separated/nonlocal DF compositions, ECP DF and automatic mixed precision
-are rejected. This interface does not change the selected functional or grid.
+CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
+analytic forces. Full-range global hybrids use matching DF-JK on both backends;
+the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
+trajectory optimization. Analytic forces differentiate the same auxiliary
+basis and Coulomb metric used by the energy, including auxiliary-center and
+metric response. Range-separated/nonlocal DF compositions, ECP DF and
+automatic mixed precision remain rejected. This interface does not change the
+selected functional or grid.
 
 ```python
 from generativeqc import Calculator

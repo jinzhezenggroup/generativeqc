@@ -161,6 +161,7 @@ class NativeKsSnapshot:
         "atomic_weights",
         "backend",
         "coefficients",
+        "density_fitted",
         "ecp_cores",
         "ecp_terms",
         "export_work",
@@ -258,6 +259,10 @@ class NativeKsSnapshot:
             if (metadata[12] == 2**64 - 1) != cpu:
                 raise ValueError("native KS snapshot backend/device mismatch")
             self.backend = "cpu" if cpu else "cuda"
+            self.density_fitted = (
+                batch._calculator._density_fitting_mode
+                != _native.DENSITY_FITTING_NONE
+            )
             values = np.empty(metadata[15], dtype=np.float64)
             _native.check(
                 lib,
@@ -431,6 +436,66 @@ class NativeKsSnapshot:
         _native.check(self._library, status, context=self._batch._context)
         self.check_current()
         return immutable(output)
+
+    def density_fitted_integral_derivatives(
+        self,
+        atom_count: int,
+        maximum_bytes: int,
+    ) -> typing.Any:
+        """Execute prepared DF H'/Pulay/J'/K' sources on CPU or CUDA."""
+        if not self.density_fitted:
+            return None
+        if type(atom_count) is not int or atom_count < 1:
+            raise ValueError("stationary derivative atom count must be positive")
+        if type(maximum_bytes) is not int or maximum_bytes < 1:
+            raise ValueError("stationary derivative budget must be positive")
+        self.check_current()
+        evaluate = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_density_fitted_integral_gradient_v1",
+            None,
+        )
+        if evaluate is None:
+            return None
+        evaluate.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_double),
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        evaluate.restype = ct.c_int
+        output = np.empty((4, atom_count, 3), dtype=np.float64)
+        usage = np.zeros(9, dtype=np.uint64)
+        status = evaluate(
+            self._batch._batch,
+            self._handle,
+            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            output.size,
+            maximum_bytes,
+            usage.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            usage.size,
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        names = (
+            "retained_device_bytes",
+            "source_host_preparation_bytes",
+            "one_electron_device_peak_bytes",
+            "one_electron_host_peak_bytes",
+            "one_electron_h2d_bytes",
+            "one_electron_d2h_bytes",
+            "final_state_export_d2h_bytes",
+            "final_state_export_reads",
+            "final_state_export_synchronizations",
+        )
+        work = dict(zip(names, map(int, usage), strict=True))
+        work["density_fitted_provider"] = 1
+        return immutable(output), MappingProxyType(work)
 
     def cuda_integral_derivatives(
         self,

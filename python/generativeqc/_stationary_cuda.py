@@ -2406,14 +2406,27 @@ def _complete_rks_cuda_gradient_diagnostic(
                 source_before, grid_before = sources.metrics(), ao.metrics()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
-        integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
+        fitted_integral_provider = getattr(
+            state._source, "density_fitted_integral_derivatives", None
+        )
+        direct_integral_provider = getattr(
+            state._source, "cuda_integral_derivatives", None
+        )
+        use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
+        integral_provider = (
+            fitted_integral_provider if use_fitted_integrals else direct_integral_provider
+        )
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):
             with timeline.phase("prepared_stationary_integral_derivatives"):
-                native_integral = integral_provider(
-                    na,
-                    native_integral_budget,
-                    range_exchange=False,
+                native_integral = (
+                    integral_provider(na, native_integral_budget)
+                    if use_fitted_integrals
+                    else integral_provider(
+                        na,
+                        native_integral_budget,
+                        range_exchange=False,
+                    )
                 )
             if native_integral is not None:
                 native_integral_components, native_integral_resources = native_integral

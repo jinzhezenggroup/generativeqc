@@ -243,6 +243,7 @@ def _admit_work(
     max_grid_points: int,
     max_grid_pair_visits: int,
     max_ecp_pair_samples: int,
+    native_fitted_integrals: bool = False,
 ) -> dict[str, int]:
     """Metadata-only admission; no derivative compiler, provider or allocations.
 
@@ -278,8 +279,12 @@ def _admit_work(
     # Coulomb always traverses every ordered primitive quartet. Each full- or
     # range-separated exact-exchange source is an independently weighted ERI
     # derivative traversal over that same ordered quartet domain.
-    quartet_passes = 1 + int(exact_exchange) + range_exchange
-    records = quartet_passes * primitive_sum**4 + (natom + 2) * primitive_sum**2 + pairs
+    quartet_passes = 0 if native_fitted_integrals else 1 + int(exact_exchange) + range_exchange
+    records = (
+        pairs
+        if native_fitted_integrals
+        else quartet_passes * primitive_sum**4 + (natom + 2) * primitive_sum**2 + pairs
+    )
     points = len(state.grid.points)
     visits = (2 if execution == "native" else 3 * natom) * pairs * points
     validations = ((points + tile_points - 1) // tile_points) * pairs
@@ -323,7 +328,7 @@ def _admit_work(
             raise ValueError("ECP quadrature pair-sample work budget exceeded")
     return {
         "ordered_pairs": n * n,
-        "ordered_quartets": n**4,
+        "ordered_quartets": 0 if native_fitted_integrals else n**4,
         "primitive_record_bound": records,
         "primitive_record_budget": max_primitive_records,
         "xc_points": points,
@@ -416,6 +421,9 @@ def complete_rks_gradient_diagnostic(
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"{name} must be an integer in [1,{cap}]")
+    native_fitted_integrals = execution == "native" and bool(
+        getattr(state._source, "density_fitted", False)
+    )
     work = _admit_work(
         state,
         basis,
@@ -425,6 +433,7 @@ def complete_rks_gradient_diagnostic(
         max_grid_points,
         max_grid_pair_visits,
         max_ecp_pair_samples,
+        native_fitted_integrals=native_fitted_integrals,
     )
     if max_host_bytes is not None:
         from ._cpu_force_resources import cpu_force_inventory
@@ -498,6 +507,31 @@ def complete_rks_gradient_diagnostic(
         native = _PrimitiveExecutor(basis, cache, primitive_tile, compiler)
     natom, n = basis.natom, basis.nao
     components = {name: np.zeros((natom, 3)) for name in plan.source_names}
+    native_integral_components = None
+    native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
+    if native_fitted_integrals:
+        integral_provider = getattr(
+            state._source, "density_fitted_integral_derivatives", None
+        )
+        if not callable(integral_provider):
+            raise NotImplementedError(
+                "density-fitted stationary owner has no derivative provider"
+            )
+        publication_budget = max_host_bytes if max_host_bytes is not None else 256 << 20
+        native_integral = integral_provider(natom, publication_budget)
+        if native_integral is None:
+            raise NotImplementedError(
+                "density-fitted stationary derivative provider is unavailable"
+            )
+        native_integral_components, native_integral_resources = native_integral
+        native_integral_components = np.asarray(native_integral_components)
+        if (
+            native_integral_components.shape != (4, natom, 3)
+            or not np.isfinite(native_integral_components).all()
+        ):
+            raise RuntimeError(
+                "density-fitted stationary integral source returned invalid output"
+            )
     charges = np.asarray([atom.atomic_number for atom in basis.atoms]) - np.asarray(
         state._source.ecp_cores
     )
@@ -510,12 +544,16 @@ def complete_rks_gradient_diagnostic(
     # TensorIR AD supplies D, Coulomb D*D/2, exact-exchange same-spin
     # D[a,c]*D[b,d]*cK/2, and -W. Runtime only binds tuple-indexed state;
     # it never rebuilds method coefficients from a named-functional formula.
-    integral_sources = [
-        ("one_electron", 2),
-        ("overlap_pulay", 2),
-        ("coulomb", 4),
-    ]
-    if plan.exchange is not None:
+    integral_sources = (
+        []
+        if native_integral_components is not None
+        else [
+            ("one_electron", 2),
+            ("overlap_pulay", 2),
+            ("coulomb", 4),
+        ]
+    )
+    if native_integral_components is None and plan.exchange is not None:
         integral_sources.append(("exact_exchange", 4))
     for source, rank in integral_sources:
         iterator = product(range(n), repeat=rank)
@@ -565,6 +603,27 @@ def complete_rks_gradient_diagnostic(
                             "nuclear_attraction", indices, weight * charges[atom], atom
                         )
                         np.add.at(components[source], owners, values)
+
+    if native_integral_components is not None:
+        components["one_electron"] = np.ascontiguousarray(native_integral_components[0])
+        components["overlap_pulay"] = np.ascontiguousarray(native_integral_components[1])
+        components["coulomb"] = np.ascontiguousarray(native_integral_components[2])
+        if plan.exchange is not None:
+            components["exact_exchange"] = np.ascontiguousarray(
+                native_integral_components[3]
+            )
+        elif np.any(native_integral_components[3] != 0):
+            raise RuntimeError(
+                "semilocal density-fitted stationary source published unexpected K"
+            )
+        work["stationary_integral_derivative_route"] = "prepared-density-fitted"
+        work["stationary_native_integral_sources"] = (
+            "one_electron",
+            "overlap_pulay",
+            "coulomb",
+            *(("exact_exchange",) if plan.exchange is not None else ()),
+        )
+        work["native_integral_resources"] = dict(native_integral_resources)
 
     range_native = None
     if plan.range_exchange_primitives:

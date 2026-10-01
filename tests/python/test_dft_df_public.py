@@ -90,6 +90,55 @@ def pyscf_energy(
     return mf.e_tot
 
 
+def pyscf_force(
+    calc: Calculator, raw_atoms: Any, multiplicity: int, functional: str
+) -> np.ndarray:
+    """Independent DF analytic force on the identical AO/aux/grid model."""
+    pyscf = pytest.importorskip("pyscf")
+    from pyscf import dft, gto
+
+    pyscf.lib.num_threads(1)
+    atoms = tuple(Atom.from_value(a) for a in raw_atoms)
+    labels = [f"{symbol}{i}" for i, (symbol, _) in enumerate(raw_atoms)]
+
+    def basis_dict(selected: Any) -> dict:
+        result = {label: [] for label in labels}
+        for shell in calc._shells_for_atoms(atoms, selected):
+            result[labels[shell.atom_index]].append(
+                [
+                    shell.angular_momentum,
+                    *[(p.exponent, p.coefficient) for p in shell.primitives],
+                ]
+            )
+        return result
+
+    mol = gto.M(
+        atom=[(label, atom.position) for label, atom in zip(labels, atoms)],
+        basis=basis_dict(calc._basis),
+        unit="Bohr",
+        cart=True,
+        spin=multiplicity - 1,
+        verbose=0,
+    )
+    mf = (dft.RKS(mol) if multiplicity == 1 else dft.UKS(mol)).density_fit(
+        auxbasis=basis_dict(calc._auxiliary_basis)
+    )
+    grid = MolecularGrid(
+        atoms, spec=calc.ks_options.grid, multiplicity=multiplicity
+    ).explicit()
+    mf.xc = functional
+    mf.grids.coords = np.asarray(grid.points)
+    mf.grids.weights = np.asarray(grid.weights)
+    mf.small_rho_cutoff = 0
+    mf.conv_tol = 1e-13
+    mf.conv_tol_grad = 1e-10
+    mf.max_cycle = 200
+    mf.kernel()
+    assert mf.converged
+    # PySCF returns dE/dR; GenerativeQC's public contract is force = -dE/dR.
+    return -np.asarray(mf.nuc_grad_method().kernel())
+
+
 @pytest.mark.parametrize(
     "method,functional,atoms,multiplicity",
     [
@@ -109,6 +158,42 @@ def test_df_semilocal_matches_independent_reference(
     assert result.physical_residual_rms < 1e-9
     assert result.energy == pytest.approx(
         pyscf_energy(calc, atoms, multiplicity, functional), abs=1e-8
+    )
+
+
+@pytest.mark.parametrize(
+    "method,functional",
+    [
+        ("pbe-rks", "PBE"),
+        ("r2scan-rks", "R2SCAN"),
+    ],
+)
+def test_df_semilocal_force_matches_independent_reference(
+    device: str, method: str, functional: str
+) -> None:
+    calc = calculator(device, method)
+    result = calc.singlepoint(WATER, properties=("energy", "forces"))
+    assert result.converged and result.forces is not None
+    assert result.forces == pytest.approx(
+        pyscf_force(calc, WATER, 1, functional), abs=2e-7
+    )
+
+
+def test_df_cpu_global_hybrid_force_matches_independent_reference() -> None:
+    calc = calculator("cpu", "pbe0-rks")
+    result = calc.singlepoint(WATER, properties=("energy", "forces"))
+    assert result.forces == pytest.approx(
+        pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7
+    )
+
+
+def test_df_cuda_global_hybrid_force_matches_independent_reference(device: str) -> None:
+    if device != "cuda":
+        pytest.skip("CUDA fitted-hybrid qualification")
+    calc = calculator("cuda", "pbe0-rks")
+    result = calc.singlepoint(WATER, properties=("energy", "forces"))
+    assert result.forces == pytest.approx(
+        pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7
     )
 
 
@@ -133,20 +218,18 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
     ]
     expected = calc.singlepoint(moved, properties=("energy",)).energy
     with calc.prepare_batch([WATER, WATER], warm_start=True) as batch:
-        cold = batch.execute(strict=True)
-        # Private/native snapshots also reject the conventional force path.
-        from generativeqc._ks_snapshot import NativeKsSnapshot
-
-        with pytest.raises(NotImplementedError):
-            NativeKsSnapshot(batch, 0)
-        warm = batch.execute(strict=True)
+        cold = batch.execute(strict=True, properties=("energy",))
+        # The same final-state snapshot now carries the DF derivative owner.
+        warm = batch.execute(strict=True, properties=("energy",))
         if device == "cuda":
             # Ordinary SCF and same-geometry replay retain device matrices.
             assert all(
                 item.matrix_d2h_bytes == 0 for item in batch.ks_transport_diagnostics
             )
         updated = batch.execute(
-            coordinates=[None, [xyz for _, xyz in moved]], strict=True
+            coordinates=[None, [xyz for _, xyz in moved]],
+            strict=True,
+            properties=("energy",),
         )
         assert warm.energies == pytest.approx(cold.energies, abs=1e-9)
         assert all(item.warm_start_used for item in warm.items)
@@ -166,12 +249,11 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
             assert [item.matrix_d2h_bytes for item in transport] == [0, density_bytes]
 
 
-def test_df_rejects_unqualified_force_precision_and_resource_consumers(
+def test_df_rejects_unqualified_precision_and_resource_consumers(
     device: str,
 ) -> None:
     calc = calculator(device)
-    with pytest.raises(ValueError, match="does not support.*forces"):
-        calc.singlepoint(WATER, properties=("energy", "forces"))
+    assert "forces" in calc.capabilities.supported_properties
     with pytest.raises(NotImplementedError, match="resource plans"):
         calc.estimate_resources([WATER])
     if device == "cuda":
@@ -205,5 +287,5 @@ def test_df_default_auxiliary_ragged_batch(device: str) -> None:
     ]
     expected = [pyscf_energy(calc, atoms, 1, "PBE") for atoms in systems]
     with calc.prepare_batch(systems) as batch:
-        result = batch.execute(strict=True)
+        result = batch.execute(strict=True, properties=("energy",))
         assert result.energies == pytest.approx(expected, abs=1e-8)
