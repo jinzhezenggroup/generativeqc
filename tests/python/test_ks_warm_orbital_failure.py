@@ -36,12 +36,14 @@ def orbital_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         )
     )
     legacy = _method(source, "  bool finish_legacy()")
-    end = legacy.index("    previous_energy =")
-    begin = legacy.rfind("    try {\n", 0, end)
+    # Anchor whole top-level lines: an earlier retry branch also assigns
+    # previous_energy and must not truncate the publication owner.
+    end = legacy.index("\n    previous_energy = output.energy;")
+    begin = legacy.rfind("\n    try {\n", 0, end)
     assert begin >= 0
     # Compile the actual accepted-proposal copy/exception block and entry
     # guards. Only the CUDA calls and unrelated solver stages are test doubles.
-    publication = legacy[begin:end]
+    publication = legacy[begin + 1 : end]
     harness = (
         r"""
 #include <algorithm>
