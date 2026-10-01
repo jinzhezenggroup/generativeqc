@@ -128,8 +128,8 @@ std::size_t vector_capacity_bytes(const std::vector<double>& values) {
 
 namespace detail {
 
-response::LinearResponseProblem make_lambda_response_problem(
-    std::size_t dimension, response::LinearOperator apply) {
+response::LinearResponseProblem make_lambda_response_problem(std::size_t dimension,
+                                                             response::LinearOperator apply) {
   return {dimension, std::move(apply), response::LinearResponseSymmetry::General};
 }
 

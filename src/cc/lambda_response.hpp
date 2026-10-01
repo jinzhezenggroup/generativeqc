@@ -18,8 +18,8 @@ namespace detail {
  * RCCSD Lambda is deliberately a general operator: matching packed dimensions do
  * not certify Euclidean symmetry, and CPU/CUDA consumers share this same adapter.
  */
-response::LinearResponseProblem make_lambda_response_problem(
-    std::size_t dimension, response::LinearOperator apply);
+response::LinearResponseProblem make_lambda_response_problem(std::size_t dimension,
+                                                             response::LinearOperator apply);
 
 }  // namespace detail
 
